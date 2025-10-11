@@ -33,13 +33,14 @@ jobs:
         
       - name: Verify Test Coverage
         run: |
-          TEST_COUNT=$(opa test policies/ --verbose 2>&1 | grep -c "PASS:")
+          TEST_OUTPUT=$(opa test policies/ --verbose 2>&1)
+          TEST_COUNT=$(echo "$TEST_OUTPUT" | grep "PASS:" | sed 's/PASS: \([0-9]*\)\/\([0-9]*\)/\1/')
           echo "✅ OPA Tests Passed: $TEST_COUNT"
-          if [ "$TEST_COUNT" -lt "53" ]; then
-            echo "❌ Expected at least 53 tests, got $TEST_COUNT"
+          if [ "$TEST_COUNT" -lt "78" ]; then
+            echo "❌ Expected at least 78 tests (53 comprehensive + 22 negative + 3 validation), got $TEST_COUNT"
             exit 1
           fi
-          echo "✅ All 53+ OPA tests passed"
+          echo "✅ All 78 OPA tests passed (Week 2: 53 comprehensive + Week 3: 25 additional)"
 
   # ============================================
   # Backend Tests
