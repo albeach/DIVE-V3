@@ -62,6 +62,57 @@ is_missing_required_attributes := msg if {
 	msg := "Missing required attribute: resource.releasabilityTo"
 }
 
+is_missing_required_attributes := msg if {
+	input.resource.releasabilityTo == null
+	msg := "Null releasabilityTo is not allowed"
+}
+
+# Check 2b: Empty String Attributes (Week 3 validation)
+is_missing_required_attributes := msg if {
+	input.subject.uniqueID == ""
+	msg := "Empty uniqueID is not allowed"
+}
+
+is_missing_required_attributes := msg if {
+	input.subject.clearance == ""
+	msg := "Empty clearance is not allowed"
+}
+
+is_missing_required_attributes := msg if {
+	input.subject.countryOfAffiliation == ""
+	msg := "Empty countryOfAffiliation is not allowed"
+}
+
+# Check 2c: Invalid Country Codes (Week 3 validation)
+# Validate ISO 3166-1 alpha-3 country codes
+# Check subject country first (priority)
+is_missing_required_attributes := msg if {
+	input.subject.countryOfAffiliation
+	input.subject.countryOfAffiliation != ""
+	not valid_country_codes[input.subject.countryOfAffiliation]
+	msg := sprintf("Invalid country code: %s (must be ISO 3166-1 alpha-3)", [input.subject.countryOfAffiliation])
+}
+
+# Only check resource countries if subject country is valid (avoid multiple violations)
+is_missing_required_attributes := msg if {
+	# Subject country must be valid or missing (don't double-report)
+	valid_country_codes[input.subject.countryOfAffiliation]
+	# Now check resource countries
+	input.resource.releasabilityTo
+	count(input.resource.releasabilityTo) > 0
+	some country in input.resource.releasabilityTo
+	not valid_country_codes[country]
+	msg := sprintf("Invalid country code in releasabilityTo: %s (must be ISO 3166-1 alpha-3)", [country])
+}
+
+# Valid ISO 3166-1 alpha-3 country codes (NATO + common partners)
+valid_country_codes := {
+	"USA", "CAN", "GBR", "FRA", "DEU", "ITA", "ESP", "NLD", "BEL", "LUX",
+	"PRT", "DNK", "NOR", "ISL", "TUR", "GRC", "POL", "CZE", "HUN", "SVK",
+	"SVN", "EST", "LVA", "LTU", "BGR", "ROU", "HRV", "ALB", "MKD", "MNE",
+	"AUS", "NZL", "JPN", "KOR", "FIN", "SWE", "AUT", "CHE", "IRL"
+}
+
 # Check 3: Clearance Level
 is_insufficient_clearance := msg if {
 	# Get numeric clearance levels

@@ -11,28 +11,37 @@ export function SecureLogoutButton() {
     try {
       setIsLoggingOut(true);
       
-      // Step 1: Get the Keycloak logout URL from our API
+      console.log('[DIVE] User-initiated logout - starting...');
+      
+      // Step 1: Get Keycloak logout URL (includes id_token_hint)
       const keycloakLogoutUrl = await getKeycloakLogoutUrl();
       
-      // Step 2: Clear client-side storage
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // Step 3: Sign out from NextAuth (clears session and cookies)
-      // Use redirect: false so we can control the flow
-      await signOut({ redirect: false });
-      
-      // Step 4: Redirect to Keycloak logout endpoint
-      // This terminates the Keycloak session and redirects back to our app
       if (keycloakLogoutUrl) {
+        console.log('[DIVE] Redirecting to Keycloak logout endpoint');
+        console.log('[DIVE] Keycloak will call frontchannel logout callback');
+        console.log('[DIVE] Callback will send postMessage to parent');
+        console.log('[DIVE] Parent LogoutListener will complete cleanup');
+        
+        // Redirect to Keycloak logout
+        // Keycloak will:
+        // 1. Terminate Keycloak SSO session
+        // 2. Load /api/auth/logout-callback in iframe (frontchannel logout)
+        // 3. Iframe deletes cookies and sends postMessage
+        // 4. LogoutListener receives message and redirects to home
         window.location.href = keycloakLogoutUrl;
+        
       } else {
-        // Fallback: just go to home page
+        console.warn('[DIVE] No Keycloak logout URL, doing local logout only');
+        
+        // Fallback: Local logout without Keycloak
+        localStorage.clear();
+        sessionStorage.clear();
+        await signOut({ redirect: false });
         window.location.href = "/";
       }
       
     } catch (error) {
-      console.error("Logout error:", error);
+      console.error("[DIVE] Logout error:", error);
       // Force redirect to home even if error
       window.location.href = "/";
     }
@@ -40,15 +49,30 @@ export function SecureLogoutButton() {
   
   const getKeycloakLogoutUrl = async (): Promise<string | null> => {
     try {
+      console.log('[DIVE] Building Keycloak logout URL...');
+      console.log('[DIVE] Session state:', {
+        hasSession: !!session,
+        hasIdToken: !!session?.idToken,
+        idTokenLength: session?.idToken?.length || 0
+      });
+      
       // Use the session's idToken to construct Keycloak logout URL
       if (!session?.idToken) {
-        console.warn("No idToken found in session");
+        console.error("[DIVE] CRITICAL: No idToken found in session - cannot logout from Keycloak!");
+        console.error("[DIVE] Will do local logout only (Keycloak session will persist)");
         return null;
       }
       
       const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
       const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-pilot";
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+      
+      console.log('[DIVE] Keycloak logout config:', {
+        keycloakUrl,
+        realm,
+        baseUrl,
+        idTokenPreview: session.idToken.substring(0, 20) + '...'
+      });
       
       // Build the Keycloak end_session_endpoint URL
       const logoutUrl = new URL(
@@ -59,10 +83,14 @@ export function SecureLogoutButton() {
       logoutUrl.searchParams.set("id_token_hint", session.idToken);
       logoutUrl.searchParams.set("post_logout_redirect_uri", baseUrl);
       
-      return logoutUrl.toString();
+      const finalUrl = logoutUrl.toString();
+      console.log('[DIVE] Keycloak logout URL constructed:', finalUrl.substring(0, 100) + '...');
+      console.log('[DIVE] This should clear Keycloak cookies: AUTH_SESSION_ID, KEYCLOAK_SESSION, etc.');
+      
+      return finalUrl;
       
     } catch (error) {
-      console.error("Error building Keycloak logout URL:", error);
+      console.error("[DIVE] Error building Keycloak logout URL:", error);
       return null;
     }
   };

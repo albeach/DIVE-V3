@@ -369,41 +369,46 @@ export const authzMiddleware = async (
 
         // ============================================
         // Step 2: Extract identity attributes
+        // Week 3: Use enriched claims if available (from enrichmentMiddleware)
         // ============================================
 
-        const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
-        const clearance = decodedToken.clearance;
-        const countryOfAffiliation = decodedToken.countryOfAffiliation;
+        // Check if enrichment middleware ran and provided enriched claims
+        const tokenData = (req as any).enrichedUser || decodedToken;
+        const wasEnriched = (req as any).wasEnriched || false;
+
+        const uniqueID = tokenData.uniqueID || tokenData.preferred_username || tokenData.sub;
+        const clearance = tokenData.clearance;
+        const countryOfAffiliation = tokenData.countryOfAffiliation;
 
         // Handle acpCOI - might be double-encoded from Keycloak mapper
         let acpCOI: string[] = [];
-        if (decodedToken.acpCOI) {
-            if (Array.isArray(decodedToken.acpCOI)) {
+        if (tokenData.acpCOI) {
+            if (Array.isArray(tokenData.acpCOI)) {
                 // If it's an array, check if first element is a JSON string
-                if (decodedToken.acpCOI.length > 0 && typeof decodedToken.acpCOI[0] === 'string') {
+                if (tokenData.acpCOI.length > 0 && typeof tokenData.acpCOI[0] === 'string') {
                     try {
                         // Try to parse the first element as JSON (handle double-encoding)
-                        const parsed = JSON.parse(decodedToken.acpCOI[0]);
+                        const parsed = JSON.parse(tokenData.acpCOI[0]);
                         if (Array.isArray(parsed)) {
                             acpCOI = parsed;
-                            logger.debug('Parsed double-encoded acpCOI', { original: decodedToken.acpCOI, parsed: acpCOI });
+                            logger.debug('Parsed double-encoded acpCOI', { original: tokenData.acpCOI, parsed: acpCOI });
                         } else {
-                            acpCOI = decodedToken.acpCOI;
+                            acpCOI = tokenData.acpCOI;
                         }
                     } catch {
                         // Not JSON, use as-is
-                        acpCOI = decodedToken.acpCOI;
+                        acpCOI = tokenData.acpCOI;
                     }
                 } else {
-                    acpCOI = decodedToken.acpCOI;
+                    acpCOI = tokenData.acpCOI;
                 }
             } else {
                 // Not an array, try to parse as JSON
                 try {
-                    const parsed = JSON.parse(decodedToken.acpCOI as any);
+                    const parsed = JSON.parse(tokenData.acpCOI as any);
                     acpCOI = Array.isArray(parsed) ? parsed : [parsed];
                 } catch {
-                    acpCOI = [decodedToken.acpCOI as any];
+                    acpCOI = [tokenData.acpCOI as any];
                 }
             }
         }
@@ -416,6 +421,7 @@ export const authzMiddleware = async (
             coi: acpCOI,
             coiType: typeof acpCOI,
             coiLength: acpCOI.length,
+            wasEnriched,
         });
 
         // ============================================

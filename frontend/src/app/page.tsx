@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { IdpSelector } from "@/components/auth/idp-selector";
 
 export default async function Home() {
   const session = await auth();
@@ -38,100 +38,7 @@ export default async function Home() {
             Select Your Identity Provider
           </h2>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* U.S. DoD IdP */}
-            <Link
-              href="/login?idp=us-idp"
-              className="group p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all duration-200"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="text-4xl">🇺🇸</div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-                    U.S. DoD
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Department of Defense
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    OIDC • CAC/PKI
-                  </p>
-                </div>
-              </div>
-            </Link>
-
-            {/* France IdP */}
-            <Link
-              href="/login?idp=france-idp"
-              className="group p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all duration-200"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="text-4xl">🇫🇷</div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-                    France
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Ministry of Defense
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    SAML • FranceConnect
-                  </p>
-                </div>
-              </div>
-            </Link>
-
-            {/* Canada IdP */}
-            <Link
-              href="/login?idp=canada-idp"
-              className="group p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all duration-200"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="text-4xl">🇨🇦</div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-                    Canada
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Dep't of National Defence
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    OIDC • GCKey
-                  </p>
-                </div>
-              </div>
-            </Link>
-
-            {/* Industry Partner IdP */}
-            <Link
-              href="/login?idp=industry-idp"
-              className="group p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all duration-200"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="text-4xl">🏢</div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
-                    Industry Partner
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Approved Contractors
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    OIDC • Azure AD / Okta
-                  </p>
-                </div>
-              </div>
-            </Link>
-          </div>
-          
-          <div className="mt-6 text-center">
-            <Link
-              href="/login"
-              className="text-blue-600 hover:text-blue-800 text-sm underline"
-            >
-              Continue without selecting (auto-detect)
-            </Link>
-          </div>
+          <IdpSelector />
         </div>
 
         <div className="border-t border-gray-200 pt-6 mt-8">
