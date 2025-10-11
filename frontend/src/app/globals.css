@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --background: #ffffff;
+    --foreground: #171717;
+    --primary: #1A73E8;
+    --secondary: #FF7043;
+    --accent-green: #34A853;
+    --accent-red: #EA4335;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-primary: var(--primary);
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+}
+
+body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Classification color coding (NATO/ACP-240 style) */
+.classification-unclassified {
+    border-left: 4px solid #4CAF50;
+    /* Green */
+}
+
+.classification-confidential {
+    border-left: 4px solid #2196F3;
+    /* Blue */
+}
+
+.classification-secret {
+    border-left: 4px solid #FF9800;
+    /* Orange */
+}
+
+.classification-top-secret {
+    border-left: 4px solid #F44336;
+    /* Red */
+}

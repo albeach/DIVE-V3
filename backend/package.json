@@ -1,0 +1,55 @@
+{
+    "name": "dive-v3-backend",
+    "version": "1.0.0",
+    "description": "DIVE V3 Backend API with PEP for ABAC authorization",
+    "main": "dist/server.js",
+    "scripts": {
+        "dev": "tsx watch src/server.ts",
+        "build": "tsc",
+        "start": "node dist/server.js",
+        "test": "jest",
+        "test:watch": "jest --watch",
+        "lint": "eslint src/**/*.ts",
+        "typecheck": "tsc --noEmit",
+        "seed-database": "tsx src/scripts/seed-resources.ts"
+    },
+    "keywords": [
+        "dive",
+        "icam",
+        "abac",
+        "opa",
+        "keycloak",
+        "nato"
+    ],
+    "author": "DIVE V3 Team",
+    "license": "MIT",
+    "dependencies": {
+        "express": "^4.18.2",
+        "cors": "^2.8.5",
+        "helmet": "^7.1.0",
+        "express-rate-limit": "^7.1.5",
+        "jsonwebtoken": "^9.0.2",
+        "jwks-rsa": "^3.1.0",
+        "axios": "^1.6.2",
+        "mongodb": "^6.3.0",
+        "dotenv": "^16.3.1",
+        "winston": "^3.11.0",
+        "joi": "^17.11.0",
+        "node-cache": "^5.1.2"
+    },
+    "devDependencies": {
+        "@types/express": "^4.17.21",
+        "@types/cors": "^2.8.17",
+        "@types/jsonwebtoken": "^9.0.5",
+        "@types/node": "^20.10.6",
+        "@types/jest": "^29.5.11",
+        "typescript": "^5.3.3",
+        "tsx": "^4.7.0",
+        "jest": "^29.7.0",
+        "ts-jest": "^29.1.1",
+        "eslint": "^8.56.0",
+        "@typescript-eslint/eslint-plugin": "^6.17.0",
+        "@typescript-eslint/parser": "^6.17.0",
+        "prettier": "^3.1.1"
+    }
+}

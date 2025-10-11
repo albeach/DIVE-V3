@@ -1,0 +1,402 @@
+# DIVE V3 Project Conventions
+
+## Overview
+DIVE V3 is a coalition-friendly ICAM web application demonstrating federated identity management across USA/NATO partners with policy-driven ABAC authorization. This 4-week pilot integrates Keycloak (IdP broker), Next.js (UI), Express.js (Backend API with PEP), OPA (PDP), MongoDB (resource metadata), and KAS (stretch: key access service).
+
+## Tech Stack
+- **Frontend**: Next.js 15+ (App Router), NextAuth.js v5, TypeScript, Tailwind CSS
+- **Backend**: Node.js 20+, Express.js 4.18, TypeScript
+- **Auth**: Keycloak (IdP broker), NextAuth.js, JWT (RS256)
+- **Authorization**: OPA (Open Policy Agent) v0.68.0+, Rego policies
+- **Database**: PostgreSQL 15 (Keycloak), MongoDB 7 (resource metadata)
+- **Infrastructure**: Docker Compose, Terraform (Keycloak IaC)
+- **Testing**: Jest, Playwright, OPA test framework
+- **Stretch**: KAS (Key Access Service) for encrypted resources
+
+## Architecture Pattern
+DIVE V3 follows the **PEP/PDP pattern**:
+1. **IdPs** (U.S./France/Canada/Industry) → **Keycloak Broker** (claim normalization)
+2. **Next.js + NextAuth** → **Backend API** (PEP: Policy Enforcement Point)
+3. **PEP** → **OPA** (PDP: Policy Decision Point) → ABAC decision
+4. **PEP** → **MongoDB** (resource metadata: classification, releasabilityTo, COI)
+5. (Stretch) **PEP** → **KAS** (policy-bound key release for encrypted content)
+
+## Code Conventions
+
+### TypeScript
+- Strictly typed interfaces for all API responses and OPA inputs/outputs
+- No `any` types allowed (use `unknown` if type is truly unknown)
+- Functional components with TypeScript for React
+- Explicit return types on all functions
+
+### Folder Structure
+```
+dive-v3/
+├── frontend/               # Next.js application
+│   ├── src/
+│   │   ├── app/           # Next.js App Router pages
+│   │   ├── components/    # React components
+│   │   │   ├── auth/      # Auth-specific components
+│   │   │   └── ui/        # Reusable UI components
+│   │   ├── lib/           # Utilities and helpers
+│   │   └── types/         # TypeScript type definitions
+├── backend/               # Express.js API
+│   ├── src/
+│   │   ├── controllers/   # Route controllers
+│   │   ├── middleware/    # PEP authz, logging, validation
+│   │   ├── services/      # Business logic (resource, authz)
+│   │   ├── models/        # MongoDB schemas
+│   │   ├── utils/         # Helpers (logger, crypto)
+│   │   └── types/         # TypeScript interfaces
+├── kas/                   # Key Access Service (stretch)
+│   ├── src/
+│   │   ├── server.ts      # KAS main service
+│   │   └── services/      # Key management logic
+├── policies/              # OPA Rego policies
+│   ├── fuel_inventory_abac_policy.rego
+│   └── tests/             # OPA unit tests
+├── terraform/             # Keycloak IaC configuration
+├── scripts/               # Setup and utility scripts
+└── docs/                  # Documentation
+```
+
+### Naming Conventions
+- **Files**: kebab-case (`authz.middleware.ts`, `resource.service.ts`)
+- **Components**: PascalCase (`AuthButton.tsx`, `ResourceList.tsx`)
+- **Functions/Variables**: camelCase (`getResourceMetadata`, `opaInput`)
+- **Constants**: UPPER_SNAKE_CASE (`OPA_URL`, `CLEARANCE_LEVELS`)
+- **Interfaces**: PascalCase with `I` prefix (`IOPAInput`, `IResourceMetadata`)
+
+### Environment Variables
+All sensitive data in `.env.local`:
+- Database connections (MongoDB, PostgreSQL)
+- Keycloak client secrets
+- JWT signing keys
+- OPA auth tokens
+- KAS endpoints
+
+Never commit `.env.local` or `.env.production` to Git.
+
+### Security Requirements
+
+#### Authentication
+- All API routes protected by JWT validation
+- Verify JWT signature using Keycloak JWKS
+- Check `exp` (expiration) and `iat` (issued at) claims
+- Short token lifetime: 15 minutes (access), 8 hours (refresh)
+
+#### Authorization
+- **Default deny**: OPA policy starts with `default allow := false`
+- **Fail-secure pattern**: Use `is_not_a_*` violation checks
+- All authorization decisions logged with: timestamp, subject, resource, decision, reason
+- PEP calls OPA on every request (with 60s decision cache)
+
+#### Data Protection
+- **PII minimization**: Log only `uniqueID`, not full name/email
+- **Secrets**: Use environment variables, never hardcode
+- **Input validation**: Validate all inputs against schemas (Joi/Zod)
+- **Output sanitization**: Filter sensitive fields based on clearance
+
+### OPA Policy Conventions
+
+#### Fail-Secure Pattern
+```rego
+package dive.authorization
+
+import rego.v1
+
+default allow := false
+
+# Define violations (what NOT to allow)
+is_not_authenticated := msg if {
+  not input.subject.authenticated
+  msg := "Subject is not authenticated"
+}
+
+# Allow only when no violations
+allow if {
+  not is_not_authenticated
+  not is_insufficient_clearance
+  # ... other checks
+}
+```
+
+#### Attribute Naming
+- Use **exact names from spec**: `uniqueID`, `clearance`, `countryOfAffiliation`, `acpCOI`
+- Resource attributes: `classification`, `releasabilityTo`, `COI`, `creationDate`
+- Context: `currentTime`, `sourceIP`, `deviceCompliant`, `requestId`
+
+#### Testing
+- Every policy rule must have unit tests
+- Test both positive (allow) and negative (deny) cases
+- Use `opa test` for automated testing
+- Target: 100% policy test coverage
+
+### API Design
+
+#### RESTful Endpoints
+- `GET /api/resources` - List resources (authenticated)
+- `GET /api/resources/:id` - Get resource (PEP enforces authz)
+- `POST /api/resources/request-key` - Request KAS key (stretch)
+
+#### Request/Response Format
+```typescript
+// Success response
+{
+  "resourceId": "doc-123",
+  "classification": "SECRET",
+  "content": "...",
+  "metadata": {
+    "releasabilityTo": ["USA", "GBR"],
+    "COI": ["FVEY"]
+  }
+}
+
+// Error response
+{
+  "error": "Forbidden",
+  "message": "Country FRA not in releasabilityTo: [USA]",
+  "details": {
+    "clearance_check": "PASS",
+    "releasability_check": "FAIL"
+  }
+}
+```
+
+#### HTTP Status Codes
+- `200` - Success
+- `401` - Unauthorized (invalid/missing token)
+- `403` - Forbidden (authorization denied)
+- `404` - Not Found
+- `500` - Internal Server Error
+
+### Logging Standards
+
+#### Structured JSON Logging
+Use Winston or Pino with consistent format:
+```json
+{
+  "timestamp": "2025-10-15T14:30:00.123Z",
+  "level": "info",
+  "service": "backend-api",
+  "requestId": "req-abc-123",
+  "message": "Authorization decision",
+  "subject": "john.doe@mil",
+  "resource": "doc-456",
+  "decision": "ALLOW",
+  "reason": "All conditions satisfied",
+  "latency_ms": 45
+}
+```
+
+#### Log Levels
+- `error`: Authorization failures, service errors, KAS denials
+- `warn`: Missing optional attributes, enrichment fallbacks, clock skew
+- `info`: Authorization decisions, IdP authentications, KAS key releases
+- `debug`: OPA inputs/outputs, detailed policy evaluation
+
+#### What NOT to Log
+- ❌ Full JWT tokens (log only `sub` or `uniqueID`)
+- ❌ Full names, emails (PII minimization)
+- ❌ Resource content (log only `resourceId`, `classification`)
+- ❌ Secrets, passwords, API keys
+
+### Testing Requirements
+
+#### Unit Tests
+- **Backend**: Jest with >80% coverage
+- **OPA**: All Rego rules must have `opa test` cases
+- **Frontend**: Component tests with React Testing Library
+
+#### Integration Tests
+- Federation: Each IdP (U.S./France/Canada/Industry) smoke test
+- PEP→OPA: Mock OPA responses, test decision enforcement
+- E2E: Playwright tests for full user flows
+
+#### Test Data
+- Use sample resources from `backend/scripts/seed-resources.ts`
+- Test users: `testuser-us`, `testuser-fra`, `testuser-can`, `bob.contractor`
+- Clearances: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
+- Countries: USA, FRA, CAN, GBR, DEU (ISO 3166-1 alpha-3)
+- COIs: NATO-COSMIC, FVEY, CAN-US, US-ONLY
+
+### Git Workflow
+- **Branches**: Feature branches from `main`
+- **Commits**: Conventional Commits format
+  - `feat(auth): add France SAML IdP configuration`
+  - `fix(opa): correct COI intersection logic`
+  - `test(e2e): add clearance denial scenario`
+- **PRs**: Require passing CI (OPA tests, TS compile, linting)
+
+### Performance Targets
+- **Latency**: p95 < 200ms for authz decisions
+- **Throughput**: 100 req/s sustained
+- **OPA**: Enable decision caching (60s TTL)
+- **Database**: Index on `resourceId`, `classification`, `releasabilityTo`
+
+### Compliance & Standards
+- **ACP-240**: NATO access control policy
+- **STANAG 4774/5636**: NATO labeling (exclude STANAG 4586)
+- **ISO 3166-1 alpha-3**: Country codes (USA, FRA, CAN, GBR, DEU)
+- **Clearance Levels**: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
+- **Audit**: All decisions logged for 90 days minimum
+
+### Attribute Specifications
+
+#### Identity Attributes (from Keycloak tokens)
+- `uniqueID` (required): Unique user identifier
+- `clearance` (required): UNCLASSIFIED | CONFIDENTIAL | SECRET | TOP_SECRET
+- `countryOfAffiliation` (required): ISO 3166-1 alpha-3 (USA, FRA, CAN, etc.)
+- `acpCOI` (optional): Array of Community of Interest tags (["NATO-COSMIC", "FVEY"])
+
+#### Resource Attributes (from MongoDB)
+- `resourceId` (required): Unique document identifier
+- `classification` (required): UNCLASSIFIED | CONFIDENTIAL | SECRET | TOP_SECRET
+- `releasabilityTo` (required): Array of countries (["USA", "GBR", "CAN"])
+- `COI` (optional): Array of COI tags (["FVEY"])
+- `creationDate` (optional): ISO 8601 timestamp (embargo enforcement)
+- `encrypted` (optional): Boolean flag for KAS integration
+
+### Edge Cases to Handle
+1. **Missing Attributes**: Deny if required attributes missing; enrich `countryOfAffiliation` from email for industry users
+2. **Empty `releasabilityTo`**: Deny (empty list = not releasable to anyone)
+3. **Multiple COI**: Allow if ANY user COI intersects with resource COI
+4. **Clock Skew**: Apply ±5 minute tolerance to `creationDate` embargo checks
+5. **KAS Mismatch**: Log security event if KAS denies while PDP allowed
+6. **SAML Attribute Names**: Map French SAML URN attributes to normalized claim names
+7. **Clearance Mapping**: Map French clearance levels (CONFIDENTIEL_DEFENSE → CONFIDENTIAL)
+
+### Important Instructions
+- **Do what has been asked; nothing more, nothing less**
+- **NEVER create files unless absolutely necessary** for achieving your goal
+- **ALWAYS prefer editing an existing file** to creating a new one
+- **NEVER proactively create documentation files** (*.md) or README files unless explicitly requested
+- **Follow the 4-week plan strictly**: Week 1 focuses on Keycloak + U.S. IdP + basic UI
+- **Start simple**: Get U.S. IdP working before adding France/Canada
+- **Test incrementally**: Each component must have passing tests before moving to next
+- **Reference existing patterns**: Use `resources/keycloak-react-main` as Next.js/Keycloak template
+- **Reference existing patterns**: Use `resources/mpe-experiment-main` for OPA policy patterns
+
+### AI Coding Assistant Guidelines
+When implementing DIVE V3:
+1. **Read before writing**: Always read existing files to understand current state
+2. **Incremental changes**: Small, focused commits per feature
+3. **Test-driven**: Write OPA tests before policy rules
+4. **Security-first**: Validate inputs, check authentication, log decisions
+5. **Reference architecture**: Follow the ASCII diagrams and sequence flows exactly
+6. **Use provided templates**: Adapt keycloak-react-main for frontend, mpe-experiment for OPA
+7. **Handle errors gracefully**: Return structured error responses with reasons
+8. **Document complex logic**: Add comments for claim mapping, policy rules, enrichment
+
+### Week 1 Focus (Current)
+Priority tasks for immediate implementation:
+1. ✅ Initialize project structure (frontend, backend, policies, terraform)
+2. ✅ Deploy Keycloak with dive-v3-pilot realm (adapt from keycloak-react-main)
+3. ✅ Configure U.S. IdP (OIDC) with protocol mappers
+4. ✅ Deploy Next.js with IdP selection page
+5. ✅ Deploy MongoDB and seed sample resources
+6. ✅ Create backend API skeleton with /resources endpoint
+7. ✅ Setup docker-compose.yml for entire stack
+
+### Critical Path
+```
+Keycloak + U.S. IdP → Next.js UI → MongoDB → Backend API → OPA → Core Policies → Multi-IdP → KAS
+```
+
+### Helpful Commands
+```bash
+# Start development stack
+./scripts/dev-start.sh
+
+# Run OPA policy tests
+opa test policies/fuel_inventory_abac_policy.rego policies/tests/
+
+# Backend tests
+cd backend && npm test
+
+# Frontend dev server
+cd frontend && npm run dev
+
+# View logs
+docker-compose logs -f [service]
+
+# Reset environment
+docker-compose down -v && ./scripts/dev-start.sh
+```
+
+### References
+- Implementation Plan: `dive-v3-implementation-plan.md`
+- Backend Spec: `dive-v3-backend.md`
+- Frontend Spec: `dive-v3-frontend.md`
+- Requirements: `dive-v3-requirements.md`
+- Security: `dive-v3-security.md`
+- Tech Stack: `dive-v3-techStack.md`
+
+### Compliance Notes
+- **ACP-240**: Attribute-based access control for coalition environments
+- **STANAG 4774/5636**: NATO security labeling standards (use where practical)
+- **ISO 3166-1 alpha-3**: Country codes (USA not US, FRA not FR, CAN not CA)
+- **Default Deny**: All OPA policies start with `default allow := false`
+- **Audit Trail**: Every authorization decision logged for compliance
+
+### Common Pitfalls to Avoid
+1. ❌ Don't use `US` for USA - always use ISO 3166-1 alpha-3 (USA, FRA, CAN)
+2. ❌ Don't assume attributes exist - check for missing and deny/enrich
+3. ❌ Don't log PII - use uniqueID only, not full names
+4. ❌ Don't skip JWT signature validation - always verify with JWKS
+5. ❌ Don't cache decisions longer than token lifetime (max 60s)
+6. ❌ Don't mix SAML and OIDC claim names - normalize in Keycloak mappers
+7. ❌ Don't allow empty `releasabilityTo` - empty means deny all
+8. ❌ Don't skip clock skew tolerance - use ±5 minutes for embargo checks
+
+### Keycloak Specific
+- **Realm**: `dive-v3-pilot`
+- **Client ID**: `dive-v3-client`
+- **IdP Aliases**: `us-idp`, `france-idp`, `canada-idp`, `industry-idp`
+- **Protocol Mappers**: Map IdP claims → `uniqueID`, `clearance`, `countryOfAffiliation`, `acpCOI`
+- **Admin Console**: http://localhost:8081/admin (admin/admin)
+
+### OPA Specific
+- **Package**: `package dive.authorization`
+- **Main Rule**: `allow` (boolean decision)
+- **Decision Endpoint**: `POST /v1/data/dive/authorization/decision`
+- **Input Schema**: `{ input: { subject, action, resource, context } }`
+- **Output Schema**: `{ result: { allow, reason, obligations, evaluation_details } }`
+- **Testing**: `opa test` with comprehensive test matrix (41+ tests)
+
+### MongoDB Schema
+```typescript
+interface IResource {
+  resourceId: string;           // Unique ID
+  title: string;                // Human-readable title
+  classification: string;       // UNCLASSIFIED | CONFIDENTIAL | SECRET | TOP_SECRET
+  releasabilityTo: string[];    // ["USA", "GBR", "CAN"]
+  COI: string[];                // ["FVEY", "NATO-COSMIC"]
+  creationDate?: string;        // ISO 8601 (embargo)
+  encrypted: boolean;           // Triggers KAS obligation
+  content?: string;             // Plaintext (if not encrypted)
+  encryptedContent?: string;    // Ciphertext (if encrypted)
+}
+```
+
+### KAS (Stretch Goal)
+- **Port**: 8080
+- **Endpoint**: `POST /request-key`
+- **Logic**: Re-evaluate OPA policy before releasing key
+- **Key Format**: Base64-encoded AES-256-GCM key
+- **Security**: KAS can deny even if PDP allowed (audit mismatch)
+
+### Development Workflow
+1. **Week 1**: Foundation (Keycloak, U.S. IdP, Next.js, MongoDB)
+2. **Week 2**: Authorization (OPA, PEP/PDP, core policies, decision UI)
+3. **Week 3**: Multi-IdP (France SAML, Canada OIDC, Industry, enrichment)
+4. **Week 4**: KAS stretch, E2E demos, performance testing, pilot report
+
+### Success Criteria
+- ✅ 4 IdPs working (U.S., France, Canada, Industry)
+- ✅ 41+ OPA tests passing (clearance × classification × releasability × COI × embargo)
+- ✅ 6+ E2E scenarios demonstrated
+- ✅ Decision logs captured for audit
+- ✅ Demo video recorded
+- ✅ Pilot report completed
+

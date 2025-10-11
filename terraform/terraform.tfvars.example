@@ -1,0 +1,20 @@
+# ============================================
+# DIVE V3 Terraform Configuration Example
+# ============================================
+# Copy to terraform.tfvars and customize
+
+# Keycloak Connection
+keycloak_url            = "http://localhost:8081"
+keycloak_admin_username = "admin"
+keycloak_admin_password = "admin"
+
+# Realm Configuration
+realm_name = "dive-v3-pilot"
+
+# Client Configuration
+client_id = "dive-v3-client"
+app_url   = "http://localhost:3000"
+
+# Test Users
+create_test_users = true
+

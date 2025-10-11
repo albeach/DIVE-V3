@@ -1,0 +1,134 @@
+# ============================================
+# DIVE V3 Git Ignore
+# ============================================
+
+# Environment files
+.env
+.env.local
+.env*.local
+.env.production
+.env.development
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Testing
+/coverage
+test-results/
+playwright-report/
+.nyc_output/
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
+.claude
+
+# Docker
+.docker/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/crash.log
+terraform/crash.*.log
+terraform/*.tfvars
+terraform/*.tfvars.json
+!terraform/terraform.tfvars.example
+terraform/.terraform.lock.hcl
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.temp
+*.tmp
+/tmp/
+.cache/
+
+# Secrets and keys (CRITICAL - Never commit)
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# OPA bundles
+bundle.tar.gz
+policies/.bundle/
+
+# Database backups
+*.sql
+*.dump
+*.backup
+
+# Generated documentation
+api-docs/generated/
+
+# Python (if any scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+
+# Keep important empty directories
+!backend/logs/.gitkeep
+!kas/logs/.gitkeep
+!frontend/public/.gitkeep
+
+# Resources for reference
+resources/
+
