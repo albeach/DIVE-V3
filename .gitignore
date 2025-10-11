@@ -129,6 +129,6 @@ env/
 !kas/logs/.gitkeep
 !frontend/public/.gitkeep
 
-# Resources for reference
-resources/
+# Resources for reference (exclude root-level resources directory only)
+/resources/
 
