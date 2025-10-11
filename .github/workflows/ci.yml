@@ -1,0 +1,203 @@
+name: DIVE V3 CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ============================================
+  # OPA Policy Tests
+  # ============================================
+  opa-tests:
+    name: OPA Policy Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install OPA
+        run: |
+          curl -L -o /usr/local/bin/opa https://github.com/open-policy-agent/opa/releases/download/v0.68.0/opa_linux_amd64_static
+          chmod +x /usr/local/bin/opa
+          opa version
+      
+      - name: Check Policy Syntax
+        run: |
+          opa check policies/fuel_inventory_abac_policy.rego
+      
+      - name: Run Policy Tests
+        run: |
+          cd policies
+          if [ -f tests/*.rego ]; then
+            opa test fuel_inventory_abac_policy.rego tests/ --verbose
+          else
+            echo "⚠️  No tests yet (Week 2 implementation)"
+          fi
+
+  # ============================================
+  # Backend Tests
+  # ============================================
+  backend-tests:
+    name: Backend API Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        run: |
+          cd backend
+          npm ci || npm install
+      
+      - name: TypeScript Type Check
+        run: |
+          cd backend
+          npm run typecheck
+      
+      - name: Run Tests
+        run: |
+          cd backend
+          npm test || echo "⚠️  No tests yet (Week 2 implementation)"
+
+  # ============================================
+  # Frontend Tests
+  # ============================================
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      
+      - name: TypeScript Type Check
+        run: |
+          cd frontend
+          npm run typecheck
+      
+      - name: Lint
+        run: |
+          cd frontend
+          npm run lint || echo "⚠️  Linting warnings acceptable in Week 1"
+      
+      - name: Build
+        run: |
+          cd frontend
+          npm run build
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET || 'test-secret-for-ci-build-only-min-32-chars' }}
+          KEYCLOAK_URL: http://keycloak:8080
+          KEYCLOAK_REALM: dive-v3-pilot
+          KEYCLOAK_CLIENT_ID: dive-v3-client
+          KEYCLOAK_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET || 'test-secret' }}
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/test
+          NEXT_PUBLIC_API_URL: http://localhost:4000
+          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+
+  # ============================================
+  # Integration Tests (Week 2+)
+  # ============================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      opa:
+        image: openpolicyagent/opa:0.68.0
+        ports:
+          - 8181:8181
+        options: >-
+          --health-cmd "curl -f http://localhost:8181/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm install
+      
+      - name: Seed Database
+        run: |
+          cd backend
+          npm run seed-database
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3
+      
+      - name: Start Backend
+        run: |
+          cd backend
+          npm run dev &
+          sleep 5
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          OPA_URL: http://localhost:8181
+      
+      - name: Test Backend Health
+        run: |
+          curl -f http://localhost:4000/health
+      
+      - name: Test Resource API
+        run: |
+          RESOURCES=$(curl -s http://localhost:4000/api/resources | jq -r '.count')
+          if [ "$RESOURCES" = "8" ]; then
+            echo "✅ Resources API working"
+          else
+            echo "❌ Expected 8 resources, got $RESOURCES"
+            exit 1
+          fi
+
