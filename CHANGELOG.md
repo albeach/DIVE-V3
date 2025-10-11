@@ -131,18 +131,27 @@ All notable changes to the DIVE V3 project will be documented in this file.
 - [x] Color-coded classification badges in UI
 - [x] Comprehensive error messages for authorization failures
 
-## Manual Testing Status
+## Manual Testing Status - ✅ ALL 8 SCENARIOS VERIFIED
 
-### Test Scenarios - ✅ VERIFIED WORKING
+**Allow Scenarios:**
+1. ✅ testuser-us (SECRET, USA, FVEY) → doc-nato-ops-001 - ALLOWED (all checks pass)
+2. ✅ testuser-us-unclass (UNCLASSIFIED, USA) → doc-unclass-public - ALLOWED  
+3. ✅ testuser-us (SECRET, USA, FVEY) → doc-industry-partner - ALLOWED (clearance sufficient)
 
-**Scenario 1 - ALLOW:**
-- ✅ testuser-us (SECRET, USA, FVEY) → doc-nato-ops-001 (SECRET, USA+, NATO-COSMIC)
-- Result: Green "Access Granted" banner, document content displayed
-- Policy checks: All PASS
+**Deny Scenarios:**
+4. ✅ testuser-us-confid (CONFIDENTIAL) → doc-fvey-intel (TOP_SECRET) - DENIED (insufficient clearance)
+5. ✅ testuser-us (USA) → doc-fra-defense (FRA-only) - DENIED (country mismatch)
+6. ✅ testuser-us-confid (FVEY) → doc-us-only-tactical (US-ONLY) - DENIED (clearance + COI)
+7. ✅ testuser-us → doc-future-embargo (2025-11-01) - DENIED (embargo)
+8. ✅ testuser-us-unclass (no COI) → doc-nato-ops-001 (NATO-COSMIC) - DENIED (clearance + COI)
 
-**Additional scenarios ready for testing** (see WEEK2-MANUAL-TESTING-GUIDE.md)
+**Results:**
+- All allow scenarios showed green "Access Granted" banner with document content
+- All deny scenarios showed red "Access Denied" banner with specific policy violation reasons
+- Policy evaluation details displayed correctly for all scenarios
+- Authorization audit logs captured for all decisions
 
-**Status:** ✅ Authorization flow verified end-to-end
+**Status:** ✅ Complete authorization flow verified end-to-end with all 8 test scenarios
 
 ## Week 3 Objectives (Oct 24-30, 2025)
 

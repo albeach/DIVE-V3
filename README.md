@@ -47,19 +47,25 @@ IdPs (US/FRA/CAN) → Keycloak Broker → Next.js + NextAuth
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/<your-username>/DIVE-V3.git
+git clone https://github.com/albeach/DIVE-V3.git
 cd DIVE-V3
 
 # 2. Start infrastructure services
 ./scripts/dev-start.sh
 
-# 3. In new terminal - Start backend
+# 3. Verify all services healthy (IMPORTANT!)
+./scripts/preflight-check.sh
+
+# 4. In new terminal - Start backend
 cd backend && npm install && npm run seed-database && npm run dev
 
-# 4. In new terminal - Start frontend
+# 5. In new terminal - Start frontend
 cd frontend && npm install --legacy-peer-deps && npm run dev
 
-# 5. Open browser
+# 6. Verify application ready
+./scripts/preflight-check.sh
+
+# 7. Open browser
 open http://localhost:3000
 ```
 
@@ -187,11 +193,15 @@ cd frontend && npm run lint
 - [x] Authentication flow working
 - [x] Session management functional
 
-### 🔄 Week 2: Authorization (Oct 17-23, 2025) - IN PROGRESS
-- [ ] OPA integration with PEP/PDP pattern
-- [ ] Core Rego policies (clearance, releasability, COI)
-- [ ] Decision UI showing allow/deny reasons
-- [ ] 15+ OPA unit tests
+### ✅ Week 2: Authorization (Oct 11, 2025) - COMPLETE
+- [x] OPA integration with PEP/PDP pattern
+- [x] Complete Rego policies (5 rules: clearance, releasability, COI, embargo, attributes)
+- [x] Decision UI with detailed allow/deny reasons and policy evaluation
+- [x] 53 OPA unit tests (130% of target, 100% passing)
+- [x] PEP middleware with JWT validation, JWKS verification, decision caching
+- [x] Database session management with OAuth 2.0 token refresh
+- [x] All 8 manual test scenarios verified working
+- [x] Structured audit logging for compliance
 
 ### ⏳ Week 3: Multi-IdP (Oct 24-30, 2025)
 - [ ] France IdP (SAML)
@@ -209,33 +219,59 @@ cd frontend && npm run lint
 
 ## 🧪 Testing
 
-### Policy Tests (Week 2+)
+### Pre-Flight Check (ALWAYS RUN FIRST)
 ```bash
-# Run all OPA tests
-opa test policies/ -v
-
-# Test specific scenario
-opa eval --data policies/fuel_inventory_abac_policy.rego \
-  --input test-data/us-secret-user.json \
-  'data.dive.authorization.decision'
+# Verify all services healthy before testing
+./scripts/preflight-check.sh
 ```
 
-### E2E Test Scenarios (Week 4)
-1. U.S. SECRET user accesses SECRET/USA resource → ✅ ALLOW
-2. U.S. SECRET user accesses TOP_SECRET resource → ❌ DENY (clearance)
-3. FRA user accesses USA-only resource → ❌ DENY (releasability)
-4. User without FVEY COI accesses FVEY resource → ❌ DENY (COI)
-5. Any user accesses embargoed resource → ❌ DENY (embargo)
-6. Encrypted resource triggers KAS flow → 🔐 KEY GATING
+### Policy Tests (Week 2)
+```bash
+# Run all OPA tests (53 tests)
+docker-compose exec opa opa test /policies/ -v
+
+# Check policy syntax
+docker-compose exec opa opa check /policies/fuel_inventory_abac_policy.rego
+
+# Test OPA decision directly
+curl -X POST http://localhost:8181/v1/data/dive/authorization \
+  -H "Content-Type: application/json" \
+  -d @test-data/allow-scenario.json | jq
+```
+
+### Manual Test Scenarios (Week 2) - ✅ ALL VERIFIED
+1. ✅ U.S. SECRET user accesses SECRET/USA resource → ALLOW
+2. ✅ UNCLASSIFIED user accesses UNCLASSIFIED resource → ALLOW
+3. ✅ SECRET user accesses CONFIDENTIAL resource → ALLOW
+4. ✅ CONFIDENTIAL user accesses TOP_SECRET resource → DENY (insufficient clearance)
+5. ✅ USA user accesses FRA-only resource → DENY (country mismatch)
+6. ✅ User with FVEY COI accesses US-ONLY resource → DENY (COI + clearance)
+7. ✅ Any user accesses future-embargoed resource → DENY (embargo date)
+8. ✅ UNCLASSIFIED user without COI accesses NATO resource → DENY (clearance + COI)
+
+**Detailed test guide:** See `WEEK2-MANUAL-TESTING-GUIDE.md`
 
 ## 📚 Documentation
 
+### Core Documentation
 - **[Implementation Plan](dive-v3-implementation-plan.md)** - Complete 4-week plan with architecture
 - **[Requirements](dive-v3-requirements.md)** - Project requirements and scope
 - **[Backend Spec](dive-v3-backend.md)** - API endpoints and controllers
 - **[Frontend Spec](dive-v3-frontend.md)** - UI pages and components
 - **[Security Guidelines](dive-v3-security.md)** - Security best practices
 - **[Tech Stack](dive-v3-techStack.md)** - Technology choices
+- **[CHANGELOG](CHANGELOG.md)** - All changes with dates and details
+
+### Week 2 Deliverables
+- **[WEEK2-STATUS.md](WEEK2-STATUS.md)** - Complete implementation status with all deliverables
+- **[WEEK2-COMPLETE.md](WEEK2-COMPLETE.md)** - Final summary and statistics
+- **[Testing Guide](docs/testing/WEEK2-MANUAL-TESTING-GUIDE.md)** - 8 manual test scenarios (all verified)
+- **[Startup Guide](docs/testing/WEEK2-STARTUP-GUIDE.md)** - Service startup procedures
+
+### Troubleshooting Guides
+- **[Documentation Index](docs/README.md)** - Complete documentation index
+- **[Troubleshooting](docs/troubleshooting/)** - 10 technical guides for common issues
+- **[Scripts](scripts/)** - Diagnostic and utility scripts
 
 ## 🔒 Security Features
 
