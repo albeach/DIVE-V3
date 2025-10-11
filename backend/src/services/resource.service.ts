@@ -23,15 +23,15 @@ let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
 
 async function getMongoClient(): Promise<MongoClient> {
-  if (cachedClient) {
-    // Try to ping to check if still connected
-    try {
-      await cachedClient.db().admin().ping();
-      return cachedClient;
-    } catch {
-      // Connection lost, will reconnect below
+    if (cachedClient) {
+        // Try to ping to check if still connected
+        try {
+            await cachedClient.db().admin().ping();
+            return cachedClient;
+        } catch {
+            // Connection lost, will reconnect below
+        }
     }
-  }
 
     try {
         const client = new MongoClient(MONGODB_URL);
