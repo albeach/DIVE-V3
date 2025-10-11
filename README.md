@@ -203,12 +203,15 @@ cd frontend && npm run lint
 - [x] All 8 manual test scenarios verified working
 - [x] Structured audit logging for compliance
 
-### ⏳ Week 3: Multi-IdP (Oct 24-30, 2025)
-- [ ] France IdP (SAML)
-- [ ] Canada IdP (OIDC)
-- [ ] Industry IdP (OIDC)
-- [ ] Claim enrichment
-- [ ] Embargo rules
+### ✅ Week 3: Multi-IdP Federation (Oct 11, 2025)
+- [x] France IdP (SAML) with URN attribute mapping
+- [x] Canada IdP (OIDC) with protocol mappers
+- [x] Industry IdP (OIDC) for contractor authentication
+- [x] Claim enrichment middleware (email domain → country, default clearance)
+- [x] Embargo rules (already implemented in Week 2, 6 tests)
+- [x] 22 negative OPA test cases for edge cases
+- [x] Country code validation (ISO 3166-1 alpha-3)
+- [x] 78/78 OPA tests passing (53 comprehensive + 22 negative + 3 validation)
 
 ### ⏳ Week 4: KAS & Demo (Oct 31-Nov 6, 2025)
 - [ ] KAS integration

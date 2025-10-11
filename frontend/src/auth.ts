@@ -6,6 +6,44 @@ import { accounts, sessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
+ * Email domain to country mapping for enrichment
+ * Week 3: Infer countryOfAffiliation from email domain
+ */
+const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
+    'mil': 'USA', 'army.mil': 'USA', 'navy.mil': 'USA', 'af.mil': 'USA',
+    'gouv.fr': 'FRA', 'defense.gouv.fr': 'FRA',
+    'gc.ca': 'CAN', 'forces.gc.ca': 'CAN',
+    'mod.uk': 'GBR',
+    'lockheed.com': 'USA', 'northropgrumman.com': 'USA', 'raytheon.com': 'USA',
+    'boeing.com': 'USA', 'l3harris.com': 'USA',
+};
+
+/**
+ * Infer country from email domain
+ */
+function inferCountryFromEmail(email: string): { country: string; confidence: 'high' | 'low' } {
+    if (!email) return { country: 'USA', confidence: 'low' };
+
+    const domain = email.toLowerCase().split('@')[1];
+    if (!domain) return { country: 'USA', confidence: 'low' };
+
+    // Check exact match
+    if (EMAIL_DOMAIN_COUNTRY_MAP[domain]) {
+        return { country: EMAIL_DOMAIN_COUNTRY_MAP[domain], confidence: 'high' };
+    }
+
+    // Check subdomain match
+    for (const [mappedDomain, country] of Object.entries(EMAIL_DOMAIN_COUNTRY_MAP)) {
+        if (domain.endsWith(`.${mappedDomain}`)) {
+            return { country, confidence: 'high' };
+        }
+    }
+
+    // Default
+    return { country: 'USA', confidence: 'low' };
+}
+
+/**
  * Refresh access token using refresh token
  */
 async function refreshAccessToken(account: any) {
@@ -80,9 +118,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientId: process.env.KEYCLOAK_CLIENT_ID as string,
             clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
             issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
+            authorization: {
+                params: {
+                    scope: "openid profile email",
+                }
+            }
         }),
     ],
     debug: process.env.NODE_ENV === "development",
+
     callbacks: {
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
@@ -208,8 +252,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                                     // Extract DIVE custom attributes
                                     session.user.uniqueID = payload.uniqueID || payload.preferred_username || payload.sub;
-                                    session.user.clearance = payload.clearance;
-                                    session.user.countryOfAffiliation = payload.countryOfAffiliation;
+
+                                    // ENRICHMENT LOGIC: Fill missing attributes (Week 3)
+                                    // This handles Industry users or any IdP with incomplete attributes
+
+                                    // Clearance: Default to UNCLASSIFIED if missing
+                                    if (!payload.clearance || payload.clearance === '') {
+                                        session.user.clearance = 'UNCLASSIFIED';
+                                        console.log('[DIVE] Enriched clearance to UNCLASSIFIED (missing from IdP)');
+                                    } else {
+                                        session.user.clearance = payload.clearance;
+                                    }
+
+                                    // Country: Infer from email if missing
+                                    if (!payload.countryOfAffiliation || payload.countryOfAffiliation === '') {
+                                        const email = payload.email || user.email || '';
+                                        const inferredCountry = inferCountryFromEmail(email);
+                                        session.user.countryOfAffiliation = inferredCountry.country;
+                                        console.log('[DIVE] Enriched countryOfAffiliation:', {
+                                            email,
+                                            country: inferredCountry.country,
+                                            confidence: inferredCountry.confidence
+                                        });
+                                    } else {
+                                        session.user.countryOfAffiliation = payload.countryOfAffiliation;
+                                    }
 
                                     // Parse acpCOI - might be JSON string or array
                                     if (payload.acpCOI) {
@@ -319,9 +386,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     events: {
         async signOut(message) {
+            console.log('[DIVE] signOut event triggered');
+
+            // CRITICAL: Delete session from database (required with database strategy)
+            // From https://authjs.dev/getting-started/database
+            // DrizzleAdapter doesn't auto-delete sessions on signOut()
+            const sessionData = 'session' in message ? message.session : null;
+
+            if (sessionData) {
+                try {
+                    await db
+                        .delete(sessions)
+                        .where(eq(sessions.sessionToken, sessionData.sessionToken));
+                    console.log('[DIVE] Database session deleted:', sessionData.sessionToken.substring(0, 8) + '...');
+                } catch (error) {
+                    console.error('[DIVE] Error deleting session from database:', error);
+                }
+            }
+
             // Log signout event
             if ('token' in message && message.token) {
-                console.log("User signed out:", message.token.sub);
+                console.log("[DIVE] User signed out:", message.token.sub);
             }
         },
         async signIn({ user, account, profile }) {

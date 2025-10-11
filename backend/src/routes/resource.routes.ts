@@ -4,6 +4,7 @@ import {
     getResourceHandler
 } from '../controllers/resource.controller';
 import { authzMiddleware } from '../middleware/authz.middleware';
+import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
 
 const router = Router();
 
@@ -18,8 +19,9 @@ router.get('/', listResourcesHandler);
  * GET /api/resources/:id
  * Get a specific resource
  * Week 2: PEP middleware enforces ABAC authorization via OPA
+ * Week 3: Enrichment middleware fills missing attributes BEFORE authz
  */
-router.get('/:id', authzMiddleware, getResourceHandler);
+router.get('/:id', enrichmentMiddleware, authzMiddleware, getResourceHandler);
 
 /**
  * POST /api/resources/request-key
