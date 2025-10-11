@@ -7,8 +7,8 @@ import { errorHandler } from './middleware/error.middleware';
 import resourceRoutes from './routes/resource.routes';
 import healthRoutes from './routes/health.routes';
 
-// Load environment variables
-config({ path: '.env.local' });
+// Load environment variables from parent directory
+config({ path: '../.env.local' });
 
 const app: Application = express();
 const PORT = process.env.PORT || 4000;
@@ -19,24 +19,24 @@ const PORT = process.env.PORT || 4000;
 
 // Security headers
 app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            connectSrc: ["'self'", process.env.KEYCLOAK_BASE_URL || 'http://localhost:8081']
-        }
-    },
-    hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", process.env.KEYCLOAK_BASE_URL || 'http://localhost:8081']
     }
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true
+  }
 }));
 
 // CORS
 app.use(cors({
-    origin: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
+  origin: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
 }));
 
 // Body parsing
@@ -45,8 +45,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging
 app.use((req, _res, next) => {
-    const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    req.headers['x-request-id'] = requestId as string;
+  const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+  req.headers['x-request-id'] = requestId as string;
 
   logger.info('Incoming request', {
     requestId,
@@ -55,7 +55,7 @@ app.use((req, _res, next) => {
     ip: req.ip
   });
 
-    next();
+  next();
 });
 
 // ============================================
@@ -67,12 +67,12 @@ app.use('/api/resources', resourceRoutes);
 
 // Root endpoint
 app.get('/', (_req, res) => {
-    res.json({
-        service: 'DIVE V3 Backend API',
-        version: '1.0.0',
-        status: 'running',
-        timestamp: new Date().toISOString()
-    });
+  res.json({
+    service: 'DIVE V3 Backend API',
+    version: '1.0.0',
+    status: 'running',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ============================================

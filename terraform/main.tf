@@ -206,7 +206,7 @@ resource "keycloak_generic_protocol_mapper" "country_mapper" {
   }
 }
 
-# acpCOI mapper (multi-valued)
+# acpCOI mapper (multi-valued attribute)
 resource "keycloak_generic_protocol_mapper" "coi_mapper" {
   realm_id   = keycloak_realm.dive_v3.id
   client_id  = keycloak_openid_client.dive_v3_app.id
@@ -218,7 +218,7 @@ resource "keycloak_generic_protocol_mapper" "coi_mapper" {
     "user.attribute"       = "acpCOI"
     "claim.name"           = "acpCOI"
     "jsonType.label"       = "String"
-    "multivalued"          = "true"
+    "multivalued"          = "false"
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -260,7 +260,7 @@ resource "keycloak_user" "test_user_us_secret" {
     uniqueID               = "john.doe@mil"
     clearance              = "SECRET"
     countryOfAffiliation   = "USA"
-    acpCOI                 = jsonencode(["NATO-COSMIC", "FVEY"])
+    acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\"]"
   }
 
   initial_password {
@@ -284,7 +284,7 @@ resource "keycloak_user" "test_user_us_confid" {
     uniqueID               = "jane.smith@mil"
     clearance              = "CONFIDENTIAL"
     countryOfAffiliation   = "USA"
-    acpCOI                 = jsonencode(["FVEY"])
+    acpCOI                 = "[\"FVEY\"]"
   }
 
   initial_password {
@@ -308,7 +308,7 @@ resource "keycloak_user" "test_user_us_unclass" {
     uniqueID               = "bob.jones@mil"
     clearance              = "UNCLASSIFIED"
     countryOfAffiliation   = "USA"
-    acpCOI                 = jsonencode([])
+    acpCOI                 = "[]"
   }
 
   initial_password {
