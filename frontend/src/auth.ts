@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Keycloak from "next-auth/providers/keycloak";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/lib/db";
-import { accounts } from "@/lib/db/schema";
+import { accounts, sessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -168,11 +168,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
                                 console.error('[DIVE] Token refresh failed:', errorMsg);
 
-                                // If refresh token expired, clear tokens from session
-                                // This will cause frontend to show "no token" error and user can re-login
+                                // If refresh token expired, user needs to re-authenticate
                                 if (errorMsg.includes('RefreshTokenExpired') || errorMsg.includes('invalid_grant')) {
-                                    console.log('[DIVE] Refresh token invalid - session will have no tokens');
-                                    // Don't add tokens to session - user will need to re-login
+                                    console.log('[DIVE] Refresh token invalid - session expired, user needs to re-login');
+
+                                    // Return session without tokens
+                                    // The authorized callback and pages will handle redirect to login
+                                    // when they detect missing accessToken
+                                    session.accessToken = undefined;
+                                    session.idToken = undefined;
+                                    session.refreshToken = undefined;
+
                                     return session;
                                 }
 
@@ -316,6 +322,38 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Log signout event
             if ('token' in message && message.token) {
                 console.log("User signed out:", message.token.sub);
+            }
+        },
+        async signIn({ user, account, profile }) {
+            // On fresh sign-in, manually update account tokens in database
+            // DrizzleAdapter creates account on first login but doesn't always update on re-login
+            if (account && user?.id) {
+                try {
+                    console.log('[DIVE] Sign-in event - updating account tokens', {
+                        userId: user.id,
+                        provider: account.provider,
+                        hasAccessToken: !!account.access_token,
+                        expiresAt: account.expires_at,
+                    });
+                    
+                    // Manually update the account record to ensure fresh tokens
+                    await db.update(accounts)
+                        .set({
+                            access_token: account.access_token as string || null,
+                            id_token: account.id_token as string || null,
+                            refresh_token: account.refresh_token as string || null,
+                            expires_at: account.expires_at as number || null,
+                            token_type: account.token_type as string || null,
+                            scope: account.scope as string || null,
+                            session_state: account.session_state as string || null,
+                        })
+                        .where(eq(accounts.userId, user.id));
+                    
+                    console.log('[DIVE] Account tokens updated in database');
+                } catch (error) {
+                    console.error('[DIVE] Failed to update account tokens:', error);
+                    // Don't fail the login, just log the error
+                }
             }
         },
     },
