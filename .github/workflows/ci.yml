@@ -114,5 +114,155 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:4000
           NEXT_PUBLIC_BASE_URL: http://localhost:3000
 
-  # Integration tests disabled for Week 1 - will enable in Week 2
+  # ============================================
+  # Integration Tests
+  # ============================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [opa-tests, backend-tests, frontend-tests]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm install
+      
+      - name: Create PostgreSQL Schema
+        run: |
+          PGPASSWORD=password psql -h localhost -U postgres -d postgres -c "CREATE DATABASE dive_v3_app;" || true
+          PGPASSWORD=password psql -h localhost -U postgres -d dive_v3_app << 'EOSQL'
+          CREATE TABLE IF NOT EXISTS public.user (
+            id TEXT PRIMARY KEY NOT NULL,
+            name TEXT,
+            email TEXT NOT NULL,
+            "emailVerified" TIMESTAMP,
+            image TEXT
+          );
+          CREATE TABLE IF NOT EXISTS public.account (
+            "userId" TEXT NOT NULL,
+            type TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            "providerAccountId" TEXT NOT NULL,
+            refresh_token TEXT,
+            access_token TEXT,
+            expires_at INTEGER,
+            token_type TEXT,
+            scope TEXT,
+            id_token TEXT,
+            session_state TEXT,
+            PRIMARY KEY (provider, "providerAccountId")
+          );
+          CREATE TABLE IF NOT EXISTS public.session (
+            "sessionToken" TEXT PRIMARY KEY NOT NULL,
+            "userId" TEXT NOT NULL,
+            expires TIMESTAMP NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS public."verificationToken" (
+            identifier TEXT NOT NULL,
+            token TEXT NOT NULL,
+            expires TIMESTAMP NOT NULL,
+            PRIMARY KEY (identifier, token)
+          );
+          EOSQL
+      
+      - name: Seed MongoDB
+        run: |
+          cd backend
+          npm run seed-database
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3
+      
+      - name: Start Backend API
+        run: |
+          cd backend
+          npm run dev &
+          sleep 10
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3
+          PORT: 4000
+          OPA_URL: http://localhost:8181
+          LOG_LEVEL: error
+      
+      - name: Test Backend Health
+        run: |
+          curl -f http://localhost:4000/health
+          curl -f http://localhost:4000/health/ready || echo "OPA not running in this test, expected"
+      
+      - name: Test Resources API
+        run: |
+          # Test list endpoint
+          RESOURCES=$(curl -s http://localhost:4000/api/resources)
+          COUNT=$(echo "$RESOURCES" | jq -r '.count')
+          if [ "$COUNT" != "8" ]; then
+            echo "❌ Expected 8 resources, got $COUNT"
+            echo "$RESOURCES" | jq
+            exit 1
+          fi
+          echo "✅ Resources API: $COUNT resources"
+          
+          # Test specific resource endpoint
+          RESOURCE=$(curl -s http://localhost:4000/api/resources/doc-nato-ops-001)
+          RESOURCE_ID=$(echo "$RESOURCE" | jq -r '.resourceId')
+          if [ "$RESOURCE_ID" != "doc-nato-ops-001" ]; then
+            echo "❌ Resource not found"
+            exit 1
+          fi
+          echo "✅ Specific resource API working"
+          
+          # Test classification levels
+          SECRET_COUNT=$(echo "$RESOURCES" | jq '[.resources[] | select(.classification == "SECRET")] | length')
+          echo "✅ SECRET resources: $SECRET_COUNT"
+          
+          # Test releasability
+          USA_COUNT=$(echo "$RESOURCES" | jq '[.resources[] | select(.releasabilityTo | contains(["USA"]))] | length')
+          echo "✅ USA-releasable resources: $USA_COUNT"
+          
+          # Test COI
+          FVEY_COUNT=$(echo "$RESOURCES" | jq '[.resources[] | select(.COI | contains(["FVEY"]))] | length')
+          echo "✅ FVEY resources: $FVEY_COUNT"
+      
+      - name: Verify Database Content
+        run: |
+          # Verify MongoDB resources
+          MONGO_COUNT=$(docker exec $(docker ps -qf "ancestor=mongo:7.0") mongosh --quiet --eval "use dive-v3; db.resources.count()")
+          echo "MongoDB resources: $MONGO_COUNT"
+          
+          # Verify PostgreSQL tables
+          TABLE_COUNT=$(PGPASSWORD=password psql -h localhost -U postgres -d dive_v3_app -t -c "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';")
+          echo "PostgreSQL tables: $TABLE_COUNT"
 
