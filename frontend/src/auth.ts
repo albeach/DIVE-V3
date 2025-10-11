@@ -100,11 +100,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         strategy: "jwt",
         maxAge: 8 * 60 * 60, // 8 hours
     },
-    events: {
-        async signOut({ token }) {
-            // Log signout event
-            console.log("User signed out:", token?.sub);
-        },
+  events: {
+    async signOut(message) {
+      // Log signout event
+      if ('token' in message && message.token) {
+        console.log("User signed out:", message.token.sub);
+      }
     },
+  },
 });
 
