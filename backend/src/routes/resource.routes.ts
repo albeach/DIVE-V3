@@ -3,22 +3,23 @@ import {
     listResourcesHandler,
     getResourceHandler
 } from '../controllers/resource.controller';
+import { authzMiddleware } from '../middleware/authz.middleware';
 
 const router = Router();
 
 /**
  * GET /api/resources
  * List all resources (no fine-grained authz in Week 1)
- * Week 2: Add filtering based on user clearance
+ * Week 2: Returns basic metadata for all resources
  */
 router.get('/', listResourcesHandler);
 
 /**
  * GET /api/resources/:id
  * Get a specific resource
- * Week 2: Add PEP middleware for authorization
+ * Week 2: PEP middleware enforces ABAC authorization via OPA
  */
-router.get('/:id', getResourceHandler);
+router.get('/:id', authzMiddleware, getResourceHandler);
 
 /**
  * POST /api/resources/request-key

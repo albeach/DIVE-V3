@@ -29,12 +29,17 @@ jobs:
       
       - name: Run Policy Tests
         run: |
-          cd policies
-          if [ -f tests/*.rego ]; then
-            opa test fuel_inventory_abac_policy.rego tests/ --verbose
-          else
-            echo "⚠️  No tests yet (Week 2 implementation)"
+          opa test policies/ --verbose
+        
+      - name: Verify Test Coverage
+        run: |
+          TEST_COUNT=$(opa test policies/ --verbose 2>&1 | grep -c "PASS:")
+          echo "✅ OPA Tests Passed: $TEST_COUNT"
+          if [ "$TEST_COUNT" -lt "53" ]; then
+            echo "❌ Expected at least 53 tests, got $TEST_COUNT"
+            exit 1
           fi
+          echo "✅ All 53+ OPA tests passed"
 
   # ============================================
   # Backend Tests

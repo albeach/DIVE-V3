@@ -1,9 +1,14 @@
-import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export default auth((req) => {
-    const { auth: session, nextUrl } = req;
-
+/**
+ * Edge Middleware for Security Headers
+ * 
+ * NOTE: Database sessions cannot use auth() in middleware (Edge runtime limitation)
+ * Authentication/authorization handled by authorized() callback in auth.ts
+ * This middleware only sets security headers (CSP, etc.)
+ */
+export function middleware(req: NextRequest) {
     const response = NextResponse.next();
 
     // Content Security Policy
@@ -23,7 +28,7 @@ export default auth((req) => {
     response.headers.set("Content-Security-Policy", csp);
 
     return response;
-});
+}
 
 export const config = {
     matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
