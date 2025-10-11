@@ -7,23 +7,23 @@ export interface ApiError extends Error {
 }
 
 export const errorHandler = (
-    err: ApiError,
-    req: Request,
-    res: Response,
-    next: NextFunction
+  err: ApiError,
+  req: Request,
+  res: Response,
+  _next: NextFunction
 ): void => {
     const requestId = req.headers['x-request-id'] as string;
     const statusCode = err.statusCode || 500;
 
-    // Log error
-    logger.error({
-        requestId,
-        error: err.message,
-        stack: err.stack,
-        path: req.path,
-        method: req.method,
-        statusCode
-    }, 'Request error');
+  // Log error
+  logger.error('Request error', {
+    requestId,
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    statusCode
+  });
 
     // Send error response
     res.status(statusCode).json({

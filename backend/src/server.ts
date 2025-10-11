@@ -44,16 +44,16 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
     const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     req.headers['x-request-id'] = requestId as string;
 
-    logger.info({
-        requestId,
-        method: req.method,
-        path: req.path,
-        ip: req.ip
-    }, 'Incoming request');
+  logger.info('Incoming request', {
+    requestId,
+    method: req.method,
+    path: req.path,
+    ip: req.ip
+  });
 
     next();
 });
@@ -66,7 +66,7 @@ app.use('/health', healthRoutes);
 app.use('/api/resources', resourceRoutes);
 
 // Root endpoint
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
     res.json({
         service: 'DIVE V3 Backend API',
         version: '1.0.0',
@@ -86,13 +86,13 @@ app.use(errorHandler);
 // ============================================
 
 app.listen(PORT, () => {
-    logger.info({
-        port: PORT,
-        env: process.env.NODE_ENV,
-        keycloak: process.env.KEYCLOAK_URL,
-        opa: process.env.OPA_URL,
-        mongodb: process.env.MONGODB_URL
-    }, 'DIVE V3 Backend API started');
+  logger.info('DIVE V3 Backend API started', {
+    port: PORT,
+    env: process.env.NODE_ENV,
+    keycloak: process.env.KEYCLOAK_URL,
+    opa: process.env.OPA_URL,
+    mongodb: process.env.MONGODB_URL
+  });
 });
 
 export default app;

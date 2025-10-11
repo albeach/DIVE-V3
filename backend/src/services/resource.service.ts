@@ -23,9 +23,15 @@ let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
 
 async function getMongoClient(): Promise<MongoClient> {
-    if (cachedClient && cachedClient.topology?.isConnected()) {
-        return cachedClient;
+  if (cachedClient) {
+    // Try to ping to check if still connected
+    try {
+      await cachedClient.db().admin().ping();
+      return cachedClient;
+    } catch {
+      // Connection lost, will reconnect below
     }
+  }
 
     try {
         const client = new MongoClient(MONGODB_URL);
@@ -34,7 +40,7 @@ async function getMongoClient(): Promise<MongoClient> {
         logger.info('Connected to MongoDB');
         return client;
     } catch (error) {
-        logger.error({ error }, 'Failed to connect to MongoDB');
+        logger.error('Failed to connect to MongoDB', { error });
         throw error;
     }
 }
@@ -60,7 +66,7 @@ export async function getAllResources(): Promise<IResource[]> {
         const resources = await collection.find({}).toArray();
         return resources;
     } catch (error) {
-        logger.error({ error }, 'Failed to fetch resources');
+        logger.error('Failed to fetch resources', { error });
         throw error;
     }
 }
@@ -71,7 +77,7 @@ export async function getResourceById(resourceId: string): Promise<IResource | n
         const resource = await collection.findOne({ resourceId });
         return resource;
     } catch (error) {
-        logger.error({ error, resourceId }, 'Failed to fetch resource by ID');
+        logger.error('Failed to fetch resource by ID', { error, resourceId });
         throw error;
     }
 }
@@ -88,11 +94,11 @@ export async function createResource(resource: IResource): Promise<IResource> {
         };
 
         await collection.insertOne(resourceWithTimestamps as any);
-        logger.info({ resourceId: resource.resourceId }, 'Resource created');
+        logger.info('Resource created', { resourceId: resource.resourceId });
 
         return resourceWithTimestamps;
     } catch (error) {
-        logger.error({ error, resourceId: resource.resourceId }, 'Failed to create resource');
+        logger.error('Failed to create resource', { error, resourceId: resource.resourceId });
         throw error;
     }
 }

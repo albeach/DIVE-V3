@@ -16,7 +16,7 @@ export const listResourcesHandler = async (
     const requestId = req.headers['x-request-id'] as string;
 
     try {
-        logger.info({ requestId }, 'Listing resources');
+        logger.info('Listing resources', { requestId });
 
         const resources = await getAllResources();
 
@@ -56,7 +56,7 @@ export const getResourceHandler = async (
     const { id } = req.params;
 
     try {
-        logger.info({ requestId, resourceId: id }, 'Fetching resource');
+        logger.info('Fetching resource', { requestId, resourceId: id });
 
         const resource = await getResourceById(id);
 

@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
     const health = {
         status: 'healthy',
         service: 'dive-v3-backend',
@@ -15,7 +15,7 @@ router.get('/', async (req: Request, res: Response) => {
     res.json(health);
 });
 
-router.get('/ready', async (req: Request, res: Response) => {
+router.get('/ready', async (_req: Request, res: Response) => {
     // Check dependencies
     const checks = {
         opa: false,
@@ -31,7 +31,7 @@ router.get('/ready', async (req: Request, res: Response) => {
             checks.opa = opaHealth.status === 200;
         }
     } catch (error) {
-        logger.warn({ error }, 'OPA health check failed');
+        logger.warn('OPA health check failed', { error });
     }
 
     try {
@@ -43,7 +43,7 @@ router.get('/ready', async (req: Request, res: Response) => {
         await client.close();
         checks.mongodb = true;
     } catch (error) {
-        logger.warn({ error }, 'MongoDB health check failed');
+        logger.warn('MongoDB health check failed', { error });
     }
 
     const ready = checks.opa && checks.mongodb;
