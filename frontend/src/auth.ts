@@ -335,7 +335,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         hasAccessToken: !!account.access_token,
                         expiresAt: account.expires_at,
                     });
-                    
+
                     // Manually update the account record to ensure fresh tokens
                     await db.update(accounts)
                         .set({
@@ -348,7 +348,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             session_state: account.session_state as string || null,
                         })
                         .where(eq(accounts.userId, user.id));
-                    
+
                     console.log('[DIVE] Account tokens updated in database');
                 } catch (error) {
                     console.error('[DIVE] Failed to update account tokens:', error);
