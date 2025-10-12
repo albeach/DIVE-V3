@@ -11,6 +11,8 @@ interface IResource {
   COI: string[];
   encrypted: boolean;
   creationDate?: string;
+  displayMarking?: string; // ACP-240 STANAG 4774 display marking
+  ztdfVersion?: string;
 }
 
 async function getResources(): Promise<IResource[]> {
@@ -80,6 +82,14 @@ export default async function ResourcesPage() {
               Click on a document to request access. Authorization will be determined by your clearance level, 
               country affiliation, and communities of interest.
             </p>
+            <div className="mt-3 flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 font-semibold">
+                🛡️ ACP-240 Compliant
+              </span>
+              <span className="text-gray-600">
+                NATO Data-Centric Security | STANAG 4774 Labels | ZTDF Encryption
+              </span>
+            </div>
           </div>
 
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
@@ -98,20 +108,34 @@ export default async function ResourcesPage() {
                       <div className="px-6 py-4">
                         <div className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
+                            {/* ACP-240 STANAG 4774 Display Marking (Prominent) */}
+                            {resource.displayMarking && (
+                              <div className={`inline-flex items-center px-4 py-2 rounded-md text-sm font-bold border-2 mb-3 ${
+                                classificationColors[resource.classification] || 'bg-gray-100 text-gray-800 border-gray-300'
+                              }`}>
+                                <span className="mr-2">🛡️</span>
+                                <span className="font-mono tracking-wide">{resource.displayMarking}</span>
+                                {resource.ztdfVersion && (
+                                  <span className="ml-3 text-xs opacity-75">(ZTDF v{resource.ztdfVersion})</span>
+                                )}
+                              </div>
+                            )}
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="text-lg font-semibold text-gray-900 truncate">
                                 {resource.title}
                               </h3>
-                              <span
-                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
-                                  classificationColors[resource.classification] || 'bg-gray-100 text-gray-800 border-gray-300'
-                                }`}
-                              >
-                                {resource.classification}
-                              </span>
+                              {!resource.displayMarking && (
+                                <span
+                                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
+                                    classificationColors[resource.classification] || 'bg-gray-100 text-gray-800 border-gray-300'
+                                  }`}
+                                >
+                                  {resource.classification}
+                                </span>
+                              )}
                               {resource.encrypted && (
                                 <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
-                                  🔐 Encrypted
+                                  🔐 ZTDF Encrypted
                                 </span>
                               )}
                             </div>

@@ -3,12 +3,17 @@ package dive.authorization
 import rego.v1
 
 # ============================================
-# DIVE V3 Authorization Policy - Week 2
+# DIVE V3 Authorization Policy - Week 3.1 (ACP-240 Enhanced)
 # ============================================
 # Coalition ICAM Authorization Policy
 # Based on ACP-240 and NATO STANAG 4774/5636
-# Implements: Clearance, Releasability, COI, Embargo checks
+# Implements: Clearance, Releasability, COI, Embargo, ZTDF Integrity, KAS Obligations
 # Pattern: Fail-secure with is_not_a_* violations
+#
+# ACP-240 Enhancements:
+# - ZTDF integrity validation (STANAG 4778 binding)
+# - Enhanced KAS obligations for encrypted resources
+# - Data-centric security policy enforcement
 
 default allow := false
 
@@ -24,6 +29,7 @@ allow if {
 	not is_not_releasable_to_country
 	not is_coi_violation
 	not is_under_embargo
+	not is_ztdf_integrity_violation
 }
 
 # ============================================
@@ -205,6 +211,43 @@ is_under_embargo := msg if {
 }
 
 # ============================================
+# ACP-240: ZTDF Integrity Validation
+# ============================================
+# Enforce STANAG 4778 cryptographic binding
+# CRITICAL: Fail-closed on integrity failure
+
+is_ztdf_integrity_violation := msg if {
+	# Check if resource has ZTDF metadata
+	input.resource.ztdf
+	
+	# Priority 1: Check for explicitly failed validation
+	input.resource.ztdf.integrityValidated == false
+	
+	msg := "ZTDF integrity validation failed (cryptographic binding compromised)"
+} else := msg if {
+	# Priority 2: Check for missing policy hash (STANAG 4778 requirement)
+	input.resource.ztdf
+	not input.resource.ztdf.policyHash
+	
+	msg := "ZTDF policy hash missing (STANAG 4778 binding required)"
+} else := msg if {
+	# Priority 3: Check for missing payload hash
+	input.resource.ztdf
+	input.resource.ztdf.policyHash # policy hash exists
+	not input.resource.ztdf.payloadHash
+	
+	msg := "ZTDF payload hash missing (integrity protection required)"
+} else := msg if {
+	# Priority 4: Check if integrity validation flag is missing (when hashes are present)
+	input.resource.ztdf
+	input.resource.ztdf.policyHash
+	input.resource.ztdf.payloadHash
+	not input.resource.ztdf.integrityValidated
+	
+	msg := "ZTDF integrity not validated (STANAG 4778 binding required)"
+}
+
+# ============================================
 # Decision Output
 # ============================================
 
@@ -219,7 +262,7 @@ decision := {
 reason := "Access granted - all conditions satisfied" if {
 	allow
 } else := msg if {
-	# Return first violation found
+	# Return first violation found (priority order)
 	msg := is_not_authenticated
 } else := msg if {
 	msg := is_missing_required_attributes
@@ -231,15 +274,43 @@ reason := "Access granted - all conditions satisfied" if {
 	msg := is_coi_violation
 } else := msg if {
 	msg := is_under_embargo
+} else := msg if {
+	msg := is_ztdf_integrity_violation
 } else := "Access denied"
 
-# Obligations (e.g., call KAS for encrypted resources)
-obligations := [{"type": "kas_key_required", "resourceId": input.resource.resourceId}] if {
+# ============================================
+# ACP-240: Enhanced KAS Obligations
+# ============================================
+# Generate KAS obligation for encrypted resources
+# KAS will re-evaluate policy before key release (defense in depth)
+
+obligations := kas_obligations if {
 	allow
 	input.resource.encrypted == true
+	count(kas_obligations) > 0
 } else := []
 
-# Evaluation details for debugging
+# Build KAS obligation with full context
+kas_obligations contains obligation if {
+	allow
+	input.resource.encrypted == true
+	
+	obligation := {
+		"type": "kas",
+		"action": "request_key",
+		"resourceId": input.resource.resourceId,
+		"kaoId": sprintf("kao-%s", [input.resource.resourceId]),
+		"kasEndpoint": object.get(input.resource, "kasUrl", "http://localhost:8080/request-key"),
+		"reason": "Encrypted resource requires KAS key release",
+		"policyContext": {
+			"clearanceRequired": input.resource.classification,
+			"countriesAllowed": input.resource.releasabilityTo,
+			"coiRequired": object.get(input.resource, "COI", []),
+		},
+	}
+}
+
+# Evaluation details for debugging (ACP-240 enhanced)
 evaluation_details := {
 	"checks": {
 		"authenticated": check_authenticated,
@@ -248,6 +319,7 @@ evaluation_details := {
 		"country_releasable": check_country_releasable,
 		"coi_satisfied": check_coi_satisfied,
 		"embargo_passed": check_embargo_passed,
+		"ztdf_integrity_valid": check_ztdf_integrity_valid,
 	},
 	"subject": {
 		"uniqueID": object.get(input.subject, "uniqueID", ""),
@@ -257,6 +329,13 @@ evaluation_details := {
 	"resource": {
 		"resourceId": object.get(input.resource, "resourceId", ""),
 		"classification": object.get(input.resource, "classification", ""),
+		"encrypted": object.get(input.resource, "encrypted", false),
+		"ztdfEnabled": ztdf_enabled,
+	},
+	"acp240_compliance": {
+		"ztdf_validation": ztdf_enabled,
+		"kas_obligations": count(obligations) > 0,
+		"fail_closed_enforcement": true,
 	},
 }
 
@@ -284,4 +363,13 @@ check_coi_satisfied if {
 check_embargo_passed if {
 	not is_under_embargo
 }
+
+check_ztdf_integrity_valid if {
+	not is_ztdf_integrity_violation
+}
+
+# Helper: Check if ZTDF is enabled for this resource
+ztdf_enabled := true if {
+	input.resource.ztdf
+} else := false
 

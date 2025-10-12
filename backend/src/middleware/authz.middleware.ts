@@ -474,6 +474,22 @@ export const authzMiddleware = async (
         // Step 5: Construct OPA input
         // ============================================
 
+        // Extract legacy fields from ZTDF resource
+        const isZTDF = resource && 'ztdf' in resource;
+        const classification = isZTDF 
+            ? resource.ztdf.policy.securityLabel.classification 
+            : (resource as any).classification;
+        const releasabilityTo = isZTDF 
+            ? resource.ztdf.policy.securityLabel.releasabilityTo 
+            : (resource as any).releasabilityTo;
+        const COI = isZTDF 
+            ? (resource.ztdf.policy.securityLabel.COI || []) 
+            : ((resource as any).COI || []);
+        const creationDate = isZTDF 
+            ? resource.ztdf.policy.securityLabel.creationDate 
+            : (resource as any).creationDate;
+        const encrypted = isZTDF ? true : ((resource as any).encrypted || false);
+
         const opaInput: IOPAInput = {
             input: {
                 subject: {
@@ -488,11 +504,11 @@ export const authzMiddleware = async (
                 },
                 resource: {
                     resourceId: resource.resourceId,
-                    classification: resource.classification,
-                    releasabilityTo: resource.releasabilityTo,
-                    COI: resource.COI || [],
-                    creationDate: resource.creationDate,
-                    encrypted: resource.encrypted || false,
+                    classification,
+                    releasabilityTo,
+                    COI,
+                    creationDate,
+                    encrypted,
                 },
                 context: {
                     currentTime: new Date().toISOString(),
@@ -558,7 +574,7 @@ export const authzMiddleware = async (
         decisionCache.set(cacheKey, opaDecision);
 
         // ============================================
-        // Step 8: Log decision
+        // Step 8: Log decision (ACP-240 compliance)
         // ============================================
 
         const latencyMs = Date.now() - startTime;
@@ -571,11 +587,55 @@ export const authzMiddleware = async (
             latencyMs
         );
 
+        // ACP-240: Log DECRYPT event on successful access
+        if (opaDecision.result.allow) {
+            const { logDecryptEvent } = await import('../utils/acp240-logger');
+            logDecryptEvent({
+                requestId,
+                subject: uniqueID,
+                resourceId,
+                classification: classification || 'UNCLASSIFIED',
+                releasabilityTo: releasabilityTo || [],
+                subjectAttributes: {
+                    clearance,
+                    countryOfAffiliation,
+                    acpCOI
+                },
+                reason: opaDecision.result.reason,
+                latencyMs
+            });
+        }
+
         // ============================================
         // Step 9: Enforce decision
         // ============================================
 
         if (!opaDecision.result.allow) {
+            // ACP-240: Log ACCESS_DENIED event
+            const { logAccessDeniedEvent } = await import('../utils/acp240-logger');
+            logAccessDeniedEvent({
+                requestId,
+                subject: uniqueID,
+                resourceId,
+                reason: opaDecision.result.reason,
+                subjectAttributes: {
+                    clearance,
+                    countryOfAffiliation,
+                    acpCOI
+                },
+                resourceAttributes: {
+                    classification,
+                    releasabilityTo,
+                    COI
+                },
+                policyEvaluation: {
+                    allow: false,
+                    reason: opaDecision.result.reason,
+                    evaluation_details: opaDecision.result.evaluation_details
+                },
+                latencyMs: Date.now() - startTime
+            });
+
             res.status(403).json({
                 error: 'Forbidden',
                 message: 'Access denied',

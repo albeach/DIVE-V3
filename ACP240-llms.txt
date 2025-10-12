@@ -1,0 +1,207 @@
+TITLE: NATO ACP‑240 (A) Data‑Centric Security — Developer & Architect Cheat Sheet (LLM‑Optimized)
+
+SOURCE: Reformatted from “NATO ACP‑240 (A) Data‑Centric Security – Developer & Architect Cheat Sheet (1).docx” to preserve context while improving structure for Claude Sonnet.
+
+READ THIS FIRST (LLM INGESTION NOTES)
+- This is a faithful, lossless restructuring with clearer sectioning, consistent terminology, and bullet normalization.
+- All normative/definitional statements are preserved in substance. Wording has been lightly edited for clarity.
+- Abbreviations: DCS = Data‑Centric Security; ZTA = Zero Trust Architecture; ABAC = Attribute‑Based Access Control; IdP = Identity Provider; RP = Relying Party; ZTDF = Zero Trust Data Format; KAS = Key Access Service; COI = Community of Interest; PDP = Policy Decision Point; PEP = Policy Enforcement Point; SIEM = Security Information and Event Management.
+- Related NATO standards referenced: STANAG 4774, STANAG 4778, STANAG 5636; NIST SP 800‑63B/C, NIST SP 800‑207; ISO 3166; RFC 4122.
+- Use this file as authoritative guidance for implementation discussions, policy design, and interoperability planning.
+
+==================================================
+1) KEY CONCEPTS & TERMINOLOGY
+==================================================
+• Data‑Centric Security (DCS)
+  - Protects data objects themselves (embedded metadata + encryption), not just networks/perimeters.
+  - Every object carries metadata (classification, owner, caveats) to drive fine‑grained access even after data leaves origin.
+• Zero Trust Architecture (ZTA)
+  - “Never trust, always verify.” Continuous verification of identity, context, and policy for each access.
+  - DCS complements ZTA by shifting the perimeter to the object (micro‑perimeters around data); federation added in NATO ZT model.
+• Federated Identity
+  - Cross‑domain identity so one nation’s IdP can authenticate a user and share attributes to a partner’s RP.
+  - Mandatory for DCS interoperability; enables SSO across domains.
+• Attribute‑Based Access Control (ABAC)
+  - Primary mechanism: decisions use subject, resource, and environment attributes (e.g., clearance, nationality, classification, time).
+  - Enforces ZT principles at every access point; dynamic, fine‑grained, need‑to‑know.
+• Zero Trust Data Format (ZTDF)
+  - Self‑contained encrypted object: payload + metadata assertions (security labels, policies) bound together.
+  - Incorporates STANAG 4774 (labels) and 4778 (binding) in a JSON‑based container.
+
+==================================================
+2) IDENTITY SPECIFICATIONS & FEDERATED IDENTITY
+==================================================
+2.1 Identity Attributes (must be shared consistently for federated ABAC)
+• Unique Identifier
+  - Globally unique (e.g., UUID per RFC 4122) for identities; enables correlation and audit across domains.
+• Country of Affiliation
+  - ISO 3166 alpha‑3 codes (USA, GBR, etc.) to enforce national caveats and release policies.
+• Clearance Level
+  - Maps to classification levels (aligned with STANAG 4774 labels) for authorization.
+• Organization/Unit & Role
+  - dutyOrg / COI membership support need‑to‑know and collaborative access.
+• Authentication Context
+  - Assurance details carried in SAML/OIDC (maps to NIST SP 800‑63B AAL and SP 800‑63C FAL).
+
+2.2 IdPs, Protocols, and Assertions
+• Protocols
+  - SAML 2.0 (widely deployed) and OIDC/OAuth2 (recommended migration for UX and ZT alignment).
+• Assertions
+  - Must be signed/encrypted using IdP PKI.
+  - Prefer back‑channel (server‑to‑server) pass‑through.
+  - RP validation: verify issuer, signature, expiry, and audience.
+• Trust Framework
+  - Common assurance for identity proofing and credential issuance; only adequately‑assured identities should be federated.
+• Directory Integration
+  - IdPs source attributes from AD/LDAP, transform to agreed federation claims; consistent names/syntax are critical.
+
+==================================================
+3) ACCESS CONTROL (ABAC) & ENFORCEMENT
+==================================================
+3.1 ABAC as Default
+• Every request evaluated against policies considering subject, resource, and environment attributes.
+• Enables dynamic need‑to‑know and responsive restriction on context change.
+
+3.2 Policy Decision / Enforcement
+• Policy Engines (PDPs): XACML or OPA (Rego). Interoperability requires shared logic despite different languages.
+• Trend: OPA/Rego favored for cloud‑native integration.
+• Policy Propagation: Distribute centrally authored bundles (e.g., OPA) to all enforcement points for uniformity.
+• PEPs Everywhere: All access (microservices, APIs, data interfaces) must call PDPs.
+• Fail‑Closed: If PDP or attributes unavailable, DENY by default.
+
+3.3 Verification & Testing
+• Two‑person review rule and formal V&V before deployment.
+• Normalize attribute names across data types (e.g., classification="SECRET" consistently).
+• Attribute Freshness: Short cache TTL (seconds) at enterprise; quick revocation detection (~<1 minute). Tactical edge can extend with documented risk.
+
+==================================================
+4) DATA MARKINGS & INTEROPERABILITY
+==================================================
+4.1 Mandatory Labeling
+• Every object labeled with classification, releasability, caveats, and handling instructions.
+• Common schema across allies prevents misinterpretation.
+
+4.2 NATO Classification Standards
+• STANAG 4774 defines confidentiality labels (fields/semantics); adapted into ZTDF’s JSON with same core elements.
+• STANAG 4778 binds metadata cryptographically to the object to prevent stripping/downgrade.
+
+4.3 Classification Equivalency
+• Mappings across nations (e.g., US SECRET = UK SECRET = DE GEHEIM). Carry original + standardized tags for recipients to enforce equivalents.
+
+4.4 Resource Attributes
+• Include data type, origin, created‑at, owner organization, etc.
+• Consistent markings across media (chat, email, voice/video, subject labels and X‑headers).
+
+==================================================
+5) ZTDF & CRYPTOGRAPHY
+==================================================
+5.1 ZTDF Structure
+• Policy Section: Security metadata + policy assertions (derived from STANAG 4774/5636), cryptographically bound.
+• Payload Section: Encrypted data (DEK‑based); supports multiple payload chunks.
+• Encryption Info: DEK wrapped in one or more Key Access Objects (KAOs) for recipients/policies; integrity over policy is protected.
+
+5.2 Hybrid Encryption & Key Management
+• Hybrid model: Symmetric content encryption + asymmetric key wrapping.
+• Key Access Service (KAS)
+  - Holds private keys; mediates wrapped‑key access.
+  - On request, evaluates requester’s attributes/policy and rewraps the DEK if authorized; all actions auditable.
+
+5.3 Multi‑KAS & Community Keys
+• Multi‑KAS: Multiple KASs (per nation/COI) can provide access without re‑encrypting historical data.
+• Prefer COI keys over per‑nation keys to support coalition growth without mass reprocessing.
+
+5.4 Cryptographic Binding & Integrity
+• Use strong hashes (≥ SHA‑384) and digital signatures (X.509 PKI; HMAC possible for symmetric contexts).
+• Verify signatures before decryption; if label/policy integrity fails, DO NOT decrypt and alert SOC.
+
+==================================================
+6) LOGGING & AUDITING
+==================================================
+6.1 Mandatory Event Categories (Suppl. 6)
+• Encrypt — when data is sealed/protected.
+• Decrypt — when data is accessed.
+• Access Denied — policy denies access.
+• Access Modified — object content or permissions changed.
+• Data Shared — release outside original COI/domain.
+
+6.2 Event Details
+• Who (user/service ID), What (object/resource), Action & Outcome, When (timestamp), Relevant attributes/policy used.
+• Include KAS actions (unwrap/rewrap requests and results).
+
+6.3 Cyber Defense Integration
+• Feed to SIEM for correlation and anomaly detection.
+• Since payloads are encrypted, application/authorization logs become primary detection sources; keep network logs too.
+
+==================================================
+7) STANDARDS & PROTOCOLS SUMMARY
+==================================================
+• SAML 2.0 / OIDC: Federation protocols; OIDC recommended forward path.
+• ISO 3166: Country codes for attributes and system identifiers.
+• RFC 4122: UUIDs for globally unique identity/object IDs.
+• NIST SP 800‑63B/C: AAL/FAL mapping to authentication context.
+• STANAG 4774/4778: Label semantics + cryptographic binding.
+• STANAG 5636: Identity/metadata subset used for exchange.
+• OPA/Rego and XACML: ABAC policy engines/languages.
+• NIST SP 800‑207: Zero Trust Architecture reference (NATO adds Federation layer).
+
+==================================================
+8) BEST PRACTICES & COMMON PITFALLS
+==================================================
+Best Practices
+• Fail‑Closed Enforcement: Deny on uncertainty (PDP down, attributes unavailable).
+• Strong AuthN: MFA; include auth context in decisions; short‑lived signed tokens.
+• Consistent Attribute Schema: Agree on names/values; govern updates.
+• Policy Lifecycle as Code: Version control, peer review, staging tests, decision logging (non‑prod) for tuning.
+• Monitor & Audit: Ship DCS events to SIEM; baseline behaviors; alert on anomalies and spikes (e.g., Access Denied).
+
+Common Pitfalls
+• Stale/Orphaned Access: Use short TTLs; immediate revocation messaging from IdP to PDP; invalidate keys/tokens at exit.
+• Over‑Reliance on Network Security: Maintain segmentation; never infer data access from network location alone.
+• Proprietary Extensions: Stick to defined schemas/fields and sanctioned extension points (e.g., encrypted metadata in KAS protocol).
+• Insufficient Key Protection: Use HSMs for key custody; enforce ABAC around KAS operations; monitor unusual key‑access patterns.
+
+==================================================
+9) IMPLEMENTATION CHECKLIST (QUICK REF)
+==================================================
+Identity & Federation
+[ ] IdP supports signed+encrypted SAML/OIDC; back‑channel flow preferred.
+[ ] Identity attributes aligned to spec (UUID, ISO 3166 country, clearance, dutyOrg/COI, auth context).
+[ ] Trust framework aligned to NIST SP 800‑63 AAL/FAL; onboarding proofing consistent.
+
+Policy & Enforcement
+[ ] ABAC engine selected (OPA/Rego recommended); XACML interop mapped if needed.
+[ ] PEP integrated in every service/API/data access point.
+[ ] Fail‑closed posture validated; PDP outage tests performed.
+[ ] Policy bundles centrally authored, versioned, and distributed.
+[ ] Two‑person review + V&V complete; unit tests for policy scenarios.
+
+Data Labeling & ZTDF
+[ ] STANAG 4774 labels applied to all objects; 4778 binding enforced.
+[ ] ZTDF manifests include policy + integrity protections.
+[ ] Classification equivalence tables configured for coalition partners.
+
+Keys & KAS
+[ ] DEK hybrid scheme implemented; KAOs per recipient/policy segment.
+[ ] KAS mediates unwrap/rewrap with ABAC; full audit trails.
+[ ] HSM‑backed key custody; monitoring for anomalies.
+
+Audit & Monitoring
+[ ] Mandatory event categories emitted (Encrypt/Decrypt/Denied/Modified/Shared).
+[ ] Rich context in logs (who/what/when/why); KAS events included.
+[ ] SIEM correlation rules tuned for DCS realities (encrypted payloads).
+
+==================================================
+10) GLOSSARY (SELECT)
+==================================================
+• ABAC — Attribute‑Based Access Control: authorization based on subject/resource/environment attributes.
+• AAL/FAL — Authenticator/Federation Assurance Levels (NIST SP 800‑63).
+• COI — Community of Interest: mission or group membership attribute set.
+• DCS — Data‑Centric Security: security model focusing on protecting data objects.
+• IdP — Identity Provider: authenticates subjects and issues assertions.
+• KAS — Key Access Service: mediates access to wrapped DEKs based on policy.
+• PDP/PEP — Policy Decision/Enforcement Point components.
+• STANAG — Standardization Agreement (NATO).
+• ZTDF — Zero Trust Data Format: self‑contained encrypted object with bound policy.
+• ZTA — Zero Trust Architecture: continuous verification; assume breach.
+
+END OF FILE — ACP‑240 (A) Cheat Sheet (LLM‑Optimized)
