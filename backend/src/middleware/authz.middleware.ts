@@ -476,17 +476,17 @@ export const authzMiddleware = async (
 
         // Extract legacy fields from ZTDF resource
         const isZTDF = resource && 'ztdf' in resource;
-        const classification = isZTDF 
-            ? resource.ztdf.policy.securityLabel.classification 
+        const classification = isZTDF
+            ? resource.ztdf.policy.securityLabel.classification
             : (resource as any).classification;
-        const releasabilityTo = isZTDF 
-            ? resource.ztdf.policy.securityLabel.releasabilityTo 
+        const releasabilityTo = isZTDF
+            ? resource.ztdf.policy.securityLabel.releasabilityTo
             : (resource as any).releasabilityTo;
-        const COI = isZTDF 
-            ? (resource.ztdf.policy.securityLabel.COI || []) 
+        const COI = isZTDF
+            ? (resource.ztdf.policy.securityLabel.COI || [])
             : ((resource as any).COI || []);
-        const creationDate = isZTDF 
-            ? resource.ztdf.policy.securityLabel.creationDate 
+        const creationDate = isZTDF
+            ? resource.ztdf.policy.securityLabel.creationDate
             : (resource as any).creationDate;
         const encrypted = isZTDF ? true : ((resource as any).encrypted || false);
 
