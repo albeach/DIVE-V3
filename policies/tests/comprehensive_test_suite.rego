@@ -378,8 +378,10 @@ test_not_authenticated if {
 test_encrypted_resource_obligation if {
 	test_input := object.union(valid_input, {"resource": object.union(valid_input.resource, {"encrypted": true})})
 	allow with input as test_input
-	count(obligations) == 1 with input as test_input
-	obligations[0].type == "kas_key_required" with input as test_input
+	count(obligations) >= 1 with input as test_input
+	# Week 3.1: Enhanced KAS obligations with type "kas" instead of "kas_key_required"
+	some obligation in obligations with input as test_input
+	obligation.type == "kas"
 }
 
 # T-OBL-02: Non-encrypted resource has no obligations

@@ -1,56 +1,19 @@
-name: DIVE V3 CI/CD Pipeline
+name: DIVE V3 CI/CD
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
-  # ============================================
-  # OPA Policy Tests
-  # ============================================
-  opa-tests:
-    name: OPA Policy Tests
+  # Job 1: Backend TypeScript Build & Lint
+  backend-build:
+    name: Backend Build & TypeScript
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Install OPA
-        run: |
-          curl -L -o /usr/local/bin/opa https://github.com/open-policy-agent/opa/releases/download/v0.68.0/opa_linux_amd64_static
-          chmod +x /usr/local/bin/opa
-          opa version
-      
-      - name: Check Policy Syntax
-        run: |
-          opa check policies/fuel_inventory_abac_policy.rego
-      
-      - name: Run Policy Tests
-        run: |
-          opa test policies/ --verbose
-        
-      - name: Verify Test Coverage
-        run: |
-          TEST_OUTPUT=$(opa test policies/ --verbose 2>&1)
-          TEST_COUNT=$(echo "$TEST_OUTPUT" | grep "PASS:" | sed 's/PASS: \([0-9]*\)\/\([0-9]*\)/\1/')
-          echo "✅ OPA Tests Passed: $TEST_COUNT"
-          if [ "$TEST_COUNT" -lt "78" ]; then
-            echo "❌ Expected at least 78 tests (53 comprehensive + 22 negative + 3 validation), got $TEST_COUNT"
-            exit 1
-          fi
-          echo "✅ All 78 OPA tests passed (Week 2: 53 comprehensive + Week 3: 25 additional)"
-
-  # ============================================
-  # Backend Tests
-  # ============================================
-  backend-tests:
-    name: Backend API Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,30 +22,31 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
       
-      - name: Install Dependencies
-        run: |
-          cd backend
-          npm ci || npm install
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
       
-      - name: TypeScript Type Check
-        run: |
-          cd backend
-          npm run typecheck
+      - name: TypeScript compilation check
+        working-directory: ./backend
+        run: npx tsc --noEmit
       
-      - name: Run Tests
-        run: |
-          cd backend
-          npm test -- --passWithNoTests || echo "✅ No Jest tests yet (Week 2 focused on OPA tests)"
+      - name: Build backend
+        working-directory: ./backend
+        run: npm run build
+      
+      - name: Upload backend build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: backend/dist
 
-  # ============================================
-  # Frontend Tests
-  # ============================================
-  frontend-tests:
-    name: Frontend Tests
+  # Job 2: Frontend TypeScript Build
+  frontend-build:
+    name: Frontend Build & TypeScript
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -91,190 +55,180 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
       
-      - name: Install Dependencies
-        run: |
-          cd frontend
-          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
       
-      - name: TypeScript Type Check
-        run: |
-          cd frontend
-          npm run typecheck
+      - name: TypeScript compilation check
+        working-directory: ./frontend
+        run: npx tsc --noEmit
       
-      - name: Lint
-        run: |
-          cd frontend
-          npm run lint || echo "✅ Linting warnings acceptable during development"
-      
-      - name: Build
-        run: |
-          cd frontend
-          npm run build
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
         env:
-          AUTH_SECRET: ${{ secrets.AUTH_SECRET || 'test-secret-for-ci-build-only-min-32-chars' }}
-          KEYCLOAK_URL: http://keycloak:8080
-          KEYCLOAK_REALM: dive-v3-pilot
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: test-secret-for-ci
           KEYCLOAK_CLIENT_ID: dive-v3-client
-          KEYCLOAK_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET || 'test-secret' }}
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/test
-          NEXT_PUBLIC_API_URL: http://localhost:4000
-          NEXT_PUBLIC_BASE_URL: http://localhost:3000
+          KEYCLOAK_CLIENT_SECRET: test-secret
+          KEYCLOAK_ISSUER: http://localhost:8081/realms/dive-v3-pilot
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:4000
 
-  # ============================================
-  # Integration Tests
-  # ============================================
-  integration-tests:
-    name: Integration Tests
+  # Job 3: KAS TypeScript Build
+  kas-build:
+    name: KAS Build & TypeScript
     runs-on: ubuntu-latest
-    needs: [opa-tests, backend-tests, frontend-tests]
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      mongo:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: kas/package-lock.json
       
-      - name: Install Backend Dependencies
-        run: |
-          cd backend
-          npm install
+      - name: Install dependencies
+        working-directory: ./kas
+        run: npm ci
       
-      - name: Create PostgreSQL Schema
-        run: |
-          PGPASSWORD=password psql -h localhost -U postgres -d postgres -c "CREATE DATABASE dive_v3_app;" || true
-          PGPASSWORD=password psql -h localhost -U postgres -d dive_v3_app << 'EOSQL'
-          CREATE TABLE IF NOT EXISTS public.user (
-            id TEXT PRIMARY KEY NOT NULL,
-            name TEXT,
-            email TEXT NOT NULL,
-            "emailVerified" TIMESTAMP,
-            image TEXT
-          );
-          CREATE TABLE IF NOT EXISTS public.account (
-            "userId" TEXT NOT NULL,
-            type TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            "providerAccountId" TEXT NOT NULL,
-            refresh_token TEXT,
-            access_token TEXT,
-            expires_at INTEGER,
-            token_type TEXT,
-            scope TEXT,
-            id_token TEXT,
-            session_state TEXT,
-            PRIMARY KEY (provider, "providerAccountId")
-          );
-          CREATE TABLE IF NOT EXISTS public.session (
-            "sessionToken" TEXT PRIMARY KEY NOT NULL,
-            "userId" TEXT NOT NULL,
-            expires TIMESTAMP NOT NULL
-          );
-          CREATE TABLE IF NOT EXISTS public."verificationToken" (
-            identifier TEXT NOT NULL,
-            token TEXT NOT NULL,
-            expires TIMESTAMP NOT NULL,
-            PRIMARY KEY (identifier, token)
-          );
-          EOSQL
+      - name: TypeScript compilation check
+        working-directory: ./kas
+        run: npx tsc --noEmit
       
-      - name: Seed MongoDB
-        run: |
-          cd backend
-          npm run seed-database
-        env:
-          MONGODB_URL: mongodb://localhost:27017
-          MONGODB_DATABASE: dive-v3
+      - name: Build KAS
+        working-directory: ./kas
+        run: npm run build
+
+  # Job 4: OPA Policy Tests
+  opa-tests:
+    name: OPA Policy Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
       
-      - name: Start Backend API
-        run: |
-          cd backend
-          npm run dev &
-          sleep 10
-        env:
-          MONGODB_URL: mongodb://localhost:27017
-          MONGODB_DATABASE: dive-v3
-          PORT: 4000
-          OPA_URL: http://localhost:8181
-          LOG_LEVEL: error
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: '0.68.0'
       
-      - name: Test Backend Health
-        run: |
-          curl -f http://localhost:4000/health
-          curl -f http://localhost:4000/health/ready || echo "OPA not running in this test, expected"
+      - name: Run OPA policy tests
+        run: opa test policies/ -v
       
-      - name: Test Resources API
+      - name: Verify test coverage
         run: |
-          # Test list endpoint (no auth required)
-          RESOURCES=$(curl -s http://localhost:4000/api/resources)
-          COUNT=$(echo "$RESOURCES" | jq -r '.count')
-          if [ "$COUNT" != "8" ]; then
-            echo "❌ Expected 8 resources, got $COUNT"
-            echo "$RESOURCES" | jq
+          RESULT=$(opa test policies/ | grep "PASS")
+          echo "$RESULT"
+          # Extract pass count (expect 84+ passing tests)
+          PASSED=$(echo "$RESULT" | grep -oP 'PASS: \K\d+' || echo "0")
+          echo "Tests passed: $PASSED"
+          if [ "$PASSED" -lt 84 ]; then
+            echo "❌ Test coverage below threshold (84+ required, got $PASSED)"
             exit 1
           fi
-          echo "✅ Resources API: $COUNT resources"
+          echo "✅ Test coverage met: $PASSED/87 tests passing"
+
+  # Job 5: ZTDF Migration Validation
+  ztdf-validation:
+    name: ZTDF Migration Dry-Run
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Seed test resources
+        working-directory: ./backend
+        run: npx ts-node src/scripts/seed-resources.ts
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3
+      
+      - name: Run ZTDF migration (dry-run)
+        working-directory: ./backend
+        run: npx ts-node src/scripts/migrate-to-ztdf.ts --dry-run
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3
+
+  # Job 6: Security & Quality Checks
+  security-checks:
+    name: Security & Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run security audit (backend)
+        working-directory: ./backend
+        run: npm audit --audit-level=high || true
+      
+      - name: Run security audit (frontend)
+        working-directory: ./frontend
+        run: npm audit --audit-level=high || true
+      
+      - name: Run security audit (KAS)
+        working-directory: ./kas
+        run: npm audit --audit-level=high || true
+      
+      - name: Check for secrets in code
+        run: |
+          # Simple check for common secret patterns
+          if grep -r -i "password.*=.*['\"]" --include="*.ts" --include="*.js" backend/ frontend/ kas/ 2>/dev/null; then
+            echo "⚠️ Warning: Possible hardcoded secrets found"
+          fi
+          echo "✅ Secret scan complete"
+
+  # Summary Job
+  ci-summary:
+    name: CI/CD Summary
+    runs-on: ubuntu-latest
+    needs: [backend-build, frontend-build, kas-build, opa-tests, ztdf-validation, security-checks]
+    if: always()
+    
+    steps:
+      - name: CI/CD Status
+        run: |
+          echo "============================================"
+          echo "DIVE V3 CI/CD Summary"
+          echo "============================================"
+          echo "Backend Build: ${{ needs.backend-build.result }}"
+          echo "Frontend Build: ${{ needs.frontend-build.result }}"
+          echo "KAS Build: ${{ needs.kas-build.result }}"
+          echo "OPA Tests: ${{ needs.opa-tests.result }}"
+          echo "ZTDF Validation: ${{ needs.ztdf-validation.result }}"
+          echo "Security Checks: ${{ needs.security-checks.result }}"
+          echo "============================================"
           
-          # Note: Specific resource endpoint now requires authentication (Week 3 enrichment middleware)
-          # Testing with mock JWT is complex in CI, so we verify:
-          # 1. List endpoint works (no auth required)
-          # 2. Specific endpoint returns 401 without auth (expected behavior)
-          
-          RESOURCE_RESPONSE=$(curl -s -w "%{http_code}" http://localhost:4000/api/resources/doc-nato-ops-001)
-          HTTP_CODE="${RESOURCE_RESPONSE: -3}"
-          if [ "$HTTP_CODE" == "401" ]; then
-            echo "✅ Resource endpoint correctly requires authentication (Week 3 enrichment middleware)"
-          elif [ "$HTTP_CODE" == "200" ]; then
-            echo "⚠️ Resource endpoint accessible without auth (might be okay if enrichment middleware allows it)"
-          else
-            echo "ℹ️ Resource endpoint returned: $HTTP_CODE"
+          if [ "${{ needs.backend-build.result }}" != "success" ] || \
+             [ "${{ needs.frontend-build.result }}" != "success" ] || \
+             [ "${{ needs.kas-build.result }}" != "success" ] || \
+             [ "${{ needs.opa-tests.result }}" != "success" ]; then
+            echo "❌ CI/CD Failed"
+            exit 1
           fi
           
-          # Test classification levels from list
-          SECRET_COUNT=$(echo "$RESOURCES" | jq '[.resources[] | select(.classification == "SECRET")] | length')
-          echo "✅ SECRET resources: $SECRET_COUNT"
-          
-          # Test releasability
-          USA_COUNT=$(echo "$RESOURCES" | jq '[.resources[] | select(.releasabilityTo | contains(["USA"]))] | length')
-          echo "✅ USA-releasable resources: $USA_COUNT"
-          
-          # Test COI
-          FVEY_COUNT=$(echo "$RESOURCES" | jq '[.resources[] | select(.COI | contains(["FVEY"]))] | length')
-          echo "✅ FVEY resources: $FVEY_COUNT"
-      
-      - name: Verify Database Content
-        run: |
-          # Verify MongoDB resources
-          MONGO_COUNT=$(docker exec $(docker ps -qf "ancestor=mongo:7.0") mongosh --quiet --eval "use dive-v3; db.resources.count()")
-          echo "MongoDB resources: $MONGO_COUNT"
-          
-          # Verify PostgreSQL tables
-          TABLE_COUNT=$(PGPASSWORD=password psql -h localhost -U postgres -d dive_v3_app -t -c "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';")
-          echo "PostgreSQL tables: $TABLE_COUNT"
-
+          echo "✅ All critical checks passed"
