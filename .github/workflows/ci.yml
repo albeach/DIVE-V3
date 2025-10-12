@@ -57,7 +57,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: ./frontend
-        run: npm ci
+        run: npm ci --legacy-peer-deps
       
       - name: TypeScript compilation check
         working-directory: ./frontend
@@ -65,12 +65,12 @@ jobs:
       
       - name: Build frontend
         working-directory: ./frontend
-        run: npm run build
+        run: npm run build --legacy-peer-deps || npm run build
         env:
           NEXTAUTH_URL: http://localhost:3000
-          NEXTAUTH_SECRET: test-secret-for-ci
+          NEXTAUTH_SECRET: test-secret-for-ci-build-only-not-production
           KEYCLOAK_CLIENT_ID: dive-v3-client
-          KEYCLOAK_CLIENT_SECRET: test-secret
+          KEYCLOAK_CLIENT_SECRET: test-secret-for-ci
           KEYCLOAK_ISSUER: http://localhost:8081/realms/dive-v3-pilot
           NEXT_PUBLIC_BACKEND_URL: http://localhost:4000
 
