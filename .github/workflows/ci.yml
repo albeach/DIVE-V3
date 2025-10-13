@@ -121,14 +121,14 @@ jobs:
         run: |
           RESULT=$(opa test policies/ | grep "PASS")
           echo "$RESULT"
-          # Extract pass count (expect 106+ passing tests - Week 3.2)
+          # Extract pass count (expect 126+ passing tests - Week 3.3: 106 existing + 20 admin)
           PASSED=$(echo "$RESULT" | grep -oP 'PASS: \K\d+' || echo "0")
           echo "Tests passed: $PASSED"
-          if [ "$PASSED" -lt 106 ]; then
-            echo "❌ Test coverage below threshold (106+ required, got $PASSED)"
+          if [ "$PASSED" -lt 126 ]; then
+            echo "❌ Test coverage below threshold (126+ required, got $PASSED)"
             exit 1
           fi
-          echo "✅ Test coverage met: $PASSED/106 tests passing"
+          echo "✅ Test coverage met: $PASSED/126 tests passing"
 
   # Job 5: ZTDF Migration Validation
   ztdf-validation:
