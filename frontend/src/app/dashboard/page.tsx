@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { SecureLogoutButton } from "@/components/auth/secure-logout-button";
 import { UserInfo } from "@/components/auth/user-info";
+import Navigation from "@/components/navigation";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -13,39 +13,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <h1 className="text-xl font-bold text-gray-900">DIVE V3 Dashboard</h1>
-              <Link
-                href="/resources"
-                className="text-gray-600 hover:text-gray-900 font-medium"
-              >
-                Documents
-              </Link>
-              <Link
-                href="/policies"
-                className="text-gray-600 hover:text-gray-900 font-medium"
-              >
-                Policies
-              </Link>
-              <Link
-                href="/upload"
-                className="text-gray-600 hover:text-gray-900 font-medium"
-              >
-                Upload
-              </Link>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                {session.user?.uniqueID || session.user?.email}
-              </div>
-              <SecureLogoutButton />
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navigation user={session.user} />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">

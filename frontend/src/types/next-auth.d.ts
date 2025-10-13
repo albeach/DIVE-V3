@@ -11,6 +11,7 @@ declare module "next-auth" {
             clearance?: string;
             countryOfAffiliation?: string;
             acpCOI?: string[];
+            roles?: string[];
         } & DefaultSession["user"];
     }
 
@@ -31,6 +32,7 @@ declare module "next-auth/jwt" {
         clearance?: string;
         countryOfAffiliation?: string;
         acpCOI?: string[];
+        roles?: string[];
     }
 }
 

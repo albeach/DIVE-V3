@@ -222,6 +222,24 @@ resource "keycloak_generic_protocol_mapper" "coi_mapper" {
   }
 }
 
+# Roles mapper (for super_admin role)
+resource "keycloak_generic_protocol_mapper" "roles_mapper" {
+  realm_id   = keycloak_realm.dive_v3.id
+  client_id  = keycloak_openid_client.dive_v3_app.id
+  name       = "realm-roles"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-realm-role-mapper"
+
+  config = {
+    "claim.name"           = "realm_access.roles"
+    "jsonType.label"       = "String"
+    "multivalued"          = "true"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
 # ============================================
 # Realm Roles
 # ============================================
@@ -236,6 +254,12 @@ resource "keycloak_role" "admin_role" {
   realm_id    = keycloak_realm.dive_v3.id
   name        = "admin"
   description = "Administrator role for system management"
+}
+
+resource "keycloak_role" "super_admin_role" {
+  realm_id    = keycloak_realm.dive_v3.id
+  name        = "super_admin"
+  description = "Super Administrator role with full system access including IdP management"
 }
 
 # ============================================
@@ -321,7 +345,8 @@ resource "keycloak_user_roles" "test_user_us_secret_roles" {
   user_id  = keycloak_user.test_user_us_secret[0].id
 
   role_ids = [
-    keycloak_role.user_role.id
+    keycloak_role.user_role.id,
+    keycloak_role.super_admin_role.id  # Assign super_admin for testing
   ]
 }
 

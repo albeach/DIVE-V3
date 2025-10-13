@@ -8,6 +8,7 @@ import resourceRoutes from './routes/resource.routes';
 import healthRoutes from './routes/health.routes';
 import policyRoutes from './routes/policy.routes';
 import uploadRoutes from './routes/upload.routes';
+import adminRoutes from './routes/admin.routes';
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -68,6 +69,7 @@ app.use('/health', healthRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/policies', policyRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Root endpoint
 app.get('/', (_req, res) => {

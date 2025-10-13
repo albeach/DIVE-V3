@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Navigation from '@/components/navigation';
 import FileUploader from '@/components/upload/file-uploader';
 import SecurityLabelForm from '@/components/upload/security-label-form';
 
@@ -124,29 +125,7 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <Link href="/dashboard" className="text-xl font-bold text-gray-900 hover:text-gray-700">
-                DIVE V3
-              </Link>
-              <Link href="/resources" className="text-gray-600 hover:text-gray-900 font-medium">
-                Documents
-              </Link>
-              <Link href="/policies" className="text-gray-600 hover:text-gray-900 font-medium">
-                Policies
-              </Link>
-              <span className="text-gray-900 font-medium">Upload</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                {session.user?.uniqueID || session.user?.email}
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
+      {session?.user && <Navigation user={session.user} />}
 
       <main className="max-w-5xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
