@@ -24,6 +24,18 @@ export default async function DashboardPage() {
               >
                 Documents
               </Link>
+              <Link
+                href="/policies"
+                className="text-gray-600 hover:text-gray-900 font-medium"
+              >
+                Policies
+              </Link>
+              <Link
+                href="/upload"
+                className="text-gray-600 hover:text-gray-900 font-medium"
+              >
+                Upload
+              </Link>
             </div>
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
@@ -49,7 +61,7 @@ export default async function DashboardPage() {
 
           <UserInfo />
 
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Link
               href="/resources"
               className="p-6 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
@@ -59,6 +71,30 @@ export default async function DashboardPage() {
               </h3>
               <p className="text-sm text-gray-600">
                 Access classified documents based on your clearance level and country affiliation
+              </p>
+            </Link>
+
+            <Link
+              href="/policies"
+              className="p-6 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                📜 Authorization Policies
+              </h3>
+              <p className="text-sm text-gray-600">
+                View OPA Rego policies and test authorization decisions interactively
+              </p>
+            </Link>
+
+            <Link
+              href="/upload"
+              className="p-6 bg-white border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                📤 Upload Document
+              </h3>
+              <p className="text-sm text-gray-600">
+                Upload files with automatic ZTDF encryption and ACP-240 compliance
               </p>
             </Link>
             

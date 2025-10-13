@@ -18,7 +18,8 @@
         "next-auth": "^5.0.0-beta.25",
         "postgres": "^3.4.4",
         "react": "^19.0.0",
-        "react-dom": "^19.0.0"
+        "react-dom": "^19.0.0",
+        "react-dropzone": "^14.3.8"
     },
     "devDependencies": {
         "@types/node": "^20.10.0",

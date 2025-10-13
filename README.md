@@ -187,6 +187,327 @@ cd backend && npm test
 cd frontend && npm run lint
 ```
 
+## 🌟 Key Features (Week 3.2)
+
+### 📜 OPA Policy Viewer
+
+**View and understand authorization policies through web interface:**
+
+- **Policy List** (`/policies`)
+  - View all OPA Rego policies with metadata
+  - Statistics: Total policies, active rules, test count
+  - Policy version, package, and status information
+  - Last modified timestamps
+
+- **Policy Detail** (`/policies/[id]`)
+  - Full Rego source code with line numbers
+  - Syntax-highlighted display (dark theme)
+  - Policy rules overview (15 authorization rules)
+  - Test coverage information
+
+- **Interactive Policy Tester**
+  - Test authorization decisions with custom inputs
+  - Subject attributes (clearance, country, COI)
+  - Resource attributes (classification, releasability)
+  - Real-time evaluation details display
+  - All 9 authorization checks shown (authenticated, clearance, releasability, COI, embargo, ZTDF, upload)
+  - Color-coded results (green=PASS, red=FAIL)
+  - Execution time displayed
+
+**Use Cases:**
+- 🎓 **Learning:** Understand how ABAC policies work
+- 🔍 **Debugging:** Test why access was denied
+- 🧪 **Testing:** Validate policy changes before deployment
+- 📚 **Documentation:** Policy logic visible to all users
+
+---
+
+### 📤 Secure File Upload
+
+**Upload classified documents with automatic ACP-240 compliance:**
+
+- **File Upload** (`/upload`)
+  - Drag-and-drop interface (or browse to select)
+  - Accepted formats: PDF, DOCX, TXT, Markdown, Images (PNG, JPG, GIF)
+  - Maximum file size: 10MB (configurable)
+  - Client-side validation (type, size)
+  - Upload progress indicator
+
+- **Security Classification Form**
+  - Classification selector (UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET)
+    - Buttons disabled above user clearance
+    - Warning if selecting above your level
+  - Country releasability multi-selector (ISO 3166-1 alpha-3)
+    - USA, GBR, FRA, CAN, DEU, AUS, NZL
+    - Warning if your country not included
+  - COI multi-selector (FVEY, NATO-COSMIC, CAN-US, US-ONLY)
+  - Caveat selector (NOFORN, RELIDO, PROPIN, ORCON, IMCON)
+  - Title input (required, max 200 characters)
+  - Description textarea (optional)
+
+- **Real-Time Display Marking Preview**
+  - STANAG 4774 format: `CLASSIFICATION//COI//REL COUNTRIES//CAVEATS`
+  - Example: `SECRET//FVEY//REL USA, GBR//NOFORN`
+  - Color-coded by classification level
+  - Updates as you select options
+
+- **Automatic ZTDF Conversion**
+  - All uploads converted to Zero Trust Data Format
+  - AES-256-GCM encryption with random DEK
+  - STANAG 4774 security labels applied
+  - STANAG 4778 cryptographic binding (SHA-384 hashes)
+  - Key Access Object (KAO) created for KAS
+  - Stored in MongoDB as ZTDF resource
+
+- **Upload Authorization**
+  - Enforced via OPA policy engine
+  - User can only upload at or below their clearance
+  - Upload must be releasable to uploader's country
+  - Fail-closed enforcement (deny on any error)
+  - ACCESS_DENIED events logged for audit
+
+- **Audit Logging (ACP-240)**
+  - ENCRYPT event on successful upload
+  - ACCESS_DENIED event on authorization failure
+  - Comprehensive metadata logged:
+    - Uploader identity (uniqueID)
+    - Classification and display marking
+    - File size, type, and original filename
+    - Upload timestamp
+    - Resource ID
+
+**Use Cases:**
+- 📝 **Content Creation:** Users add their own classified documents
+- 🔒 **Automatic Security:** No manual encryption needed
+- 🛡️ **Compliance:** All uploads ACP-240 compliant
+- 📊 **Audit Trail:** Complete upload history
+
+---
+
+## 📡 API Documentation
+
+### Policy Management API
+
+**GET /api/policies**
+```bash
+curl http://localhost:4000/api/policies
+
+# Response:
+{
+  "policies": [{
+    "policyId": "fuel_inventory_abac_policy",
+    "name": "Fuel Inventory ABAC Policy",
+    "version": "1.0",
+    "ruleCount": 15,
+    "testCount": 106,
+    "status": "active"
+  }],
+  "stats": {
+    "totalPolicies": 1,
+    "activeRules": 15,
+    "totalTests": 106
+  }
+}
+```
+
+**GET /api/policies/:id**
+```bash
+curl http://localhost:4000/api/policies/fuel_inventory_abac_policy
+
+# Response:
+{
+  "policyId": "fuel_inventory_abac_policy",
+  "content": "package dive.authorization\n\ndefault allow := false\n...",
+  "lines": 402,
+  "rules": ["allow", "is_not_authenticated", ...]
+}
+```
+
+**POST /api/policies/:id/test**
+```bash
+curl -X POST http://localhost:4000/api/policies/fuel_inventory_abac_policy/test \
+  -H "Authorization: Bearer <JWT>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": {
+      "subject": {
+        "authenticated": true,
+        "uniqueID": "test.user",
+        "clearance": "SECRET",
+        "countryOfAffiliation": "USA"
+      },
+      "action": {"operation": "view"},
+      "resource": {
+        "resourceId": "doc-001",
+        "classification": "SECRET",
+        "releasabilityTo": ["USA"]
+      },
+      "context": {
+        "currentTime": "2025-10-13T10:00:00Z",
+        "requestId": "test-123"
+      }
+    }
+  }'
+
+# Response:
+{
+  "decision": {
+    "allow": true,
+    "reason": "Access granted - all conditions satisfied",
+    "evaluation_details": { ... }
+  },
+  "executionTime": "45ms"
+}
+```
+
+### Upload API
+
+**POST /api/upload**
+```bash
+curl -X POST http://localhost:4000/api/upload \
+  -H "Authorization: Bearer <JWT>" \
+  -F "file=@document.pdf" \
+  -F "classification=SECRET" \
+  -F "releasabilityTo=[\"USA\",\"GBR\"]" \
+  -F "COI=[\"FVEY\"]" \
+  -F "caveats=[\"NOFORN\"]" \
+  -F "title=Operational Report October 2025" \
+  -F "description=Monthly intelligence summary"
+
+# Response 201:
+{
+  "success": true,
+  "resourceId": "doc-upload-1697234567890-a1b2c3d4",
+  "ztdfObjectId": "doc-upload-1697234567890-a1b2c3d4",
+  "displayMarking": "SECRET//FVEY//REL USA, GBR//NOFORN",
+  "metadata": {
+    "fileSize": 524288,
+    "mimeType": "application/pdf",
+    "uploadedAt": "2025-10-13T14:30:00Z",
+    "uploadedBy": "john.doe@mil",
+    "encrypted": true,
+    "ztdf": {
+      "version": "1.0",
+      "policyHash": "abc123...",
+      "payloadHash": "def456...",
+      "kaoCount": 1
+    }
+  }
+}
+```
+
+**Upload Error Responses:**
+
+```bash
+# 400 Bad Request - Invalid file type
+{
+  "error": "Bad Request",
+  "message": "Invalid file type: application/x-executable"
+}
+
+# 403 Forbidden - Upload above clearance
+{
+  "error": "Forbidden",
+  "message": "Insufficient clearance: CONFIDENTIAL < SECRET"
+}
+
+# 413 Payload Too Large
+{
+  "error": "Payload Too Large",
+  "message": "File size exceeds maximum allowed (10MB)"
+}
+```
+
+---
+
+## 👤 User Guide
+
+### Viewing Authorization Policies
+
+1. **Navigate to Policies:**
+   - Click "Policies" in the navigation bar
+   - Or visit: http://localhost:3000/policies
+
+2. **Browse Policies:**
+   - View policy statistics (1 policy, 15 rules, 106 tests)
+   - Click on policy card to view details
+
+3. **View Policy Source:**
+   - Rego source code displayed with line numbers
+   - 402 lines of policy logic
+   - 15 authorization rules listed
+
+4. **Test Policy Decisions:**
+   - Click "Test This Policy" button
+   - Fill in subject attributes (or click "Load My Attributes")
+   - Enter resource attributes
+   - Click "Test Policy Decision"
+   - View allow/deny decision with detailed evaluation
+
+**Example Test:**
+- Subject: SECRET clearance, USA, FVEY
+- Resource: SECRET, releasable to USA
+- Result: ✅ ALLOW with all checks passing
+
+---
+
+### Uploading Classified Documents
+
+1. **Navigate to Upload:**
+   - Click "Upload" in the navigation bar
+   - Or visit: http://localhost:3000/upload
+
+2. **Select File (Step 1):**
+   - Drag and drop file into upload zone
+   - Or click to browse and select file
+   - Supported: PDF, DOCX, TXT, MD, PNG, JPG, GIF
+   - Maximum size: 10MB
+
+3. **Set Security Classification (Step 2):**
+   - **Classification:** Select level (≤ your clearance)
+     - UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
+     - Levels above your clearance are locked 🔒
+   - **Releasability To:** Select countries (ISO 3166-1 alpha-3)
+     - ⚠️ Must include your country
+     - Multiple selection allowed
+   - **COI:** Select communities (optional)
+     - FVEY, NATO-COSMIC, CAN-US, US-ONLY
+   - **Caveats:** Select handling instructions (optional)
+     - NOFORN, RELIDO, PROPIN, ORCON, IMCON
+   - **Title:** Enter document title (required, max 200 chars)
+   - **Description:** Enter description (optional)
+
+4. **Review Display Marking:**
+   - Preview STANAG 4774 marking in real-time
+   - Format: `CLASSIFICATION//COI//REL COUNTRIES//CAVEATS`
+   - Color-coded by classification level
+
+5. **Upload Document:**
+   - Click "🔒 Upload Document"
+   - Progress indicator shows encryption status
+   - Automatic redirect to uploaded resource
+
+6. **Access Your Document:**
+   - Find in resource list at `/resources`
+   - ZTDF encrypted with your security labels
+   - Accessible to users meeting authorization requirements
+
+**Upload Restrictions:**
+- ⚠️ You can only classify up to your clearance level
+- ⚠️ Your country must be in the releasability list
+- ⚠️ File size limited to 10MB
+- ⚠️ Only allowed file types accepted
+
+**What Happens:**
+- 🔐 File encrypted with AES-256-GCM
+- 🛡️ STANAG 4774 security label applied
+- 🔗 SHA-384 integrity hashes computed
+- 📝 ENCRYPT event logged for audit
+- 💾 Stored as ZTDF resource in MongoDB
+- ✅ Available immediately in resource list
+
+---
+
 ## 📅 Implementation Timeline
 
 ### ✅ Week 1: Foundation (Oct 10-16, 2025) - COMPLETE
@@ -228,6 +549,34 @@ cd frontend && npm run lint
 - [x] 87/87 OPA tests passing (78 existing + 9 ACP-240 = 100% coverage)
 - [x] GitHub Actions CI/CD with 6 automated jobs
 - [x] Repository cleanup (45+ temporary files removed)
+
+### ✅ Week 3.2: Policy Viewer & Secure Upload (Oct 13, 2025) - COMPLETE
+- [x] **OPA Policy Viewer:** Web UI for viewing Rego policies and testing decisions interactively
+  - GET /api/policies - List all policies with metadata (version, rules, tests)
+  - GET /api/policies/:id - View policy source code
+  - POST /api/policies/:id/test - Test policy decisions with custom inputs
+  - Interactive policy tester with evaluation details display
+- [x] **Secure File Upload:** ACP-240-compliant file upload with automatic ZTDF conversion
+  - POST /api/upload - Upload files with multipart/form-data
+  - Automatic ZTDF conversion (AES-256-GCM encryption)
+  - STANAG 4774 security label generation
+  - STANAG 4778 cryptographic binding (SHA-384 hashes)
+  - File type validation (magic number + MIME type)
+  - File size limits (10MB, configurable)
+  - Upload authorization via OPA (user can only upload ≤ clearance)
+  - ACP-240 audit logging (ENCRYPT events)
+  - Drag-and-drop UI with real-time display marking preview
+- [x] **OPA Policy Updates:** Upload authorization rule (releasability validation)
+- [x] **Testing:** 106/106 OPA tests passing (87 + 19 new), 45/45 integration tests
+- [x] **CI/CD:** Updated GitHub Actions with new test thresholds
+- [x] **Zero TypeScript Errors:** Backend, Frontend, KAS all clean
+
+**New Files Created (17):**
+- Backend: 7 files (~1,200 lines) - policy service, upload service, middleware, controllers, routes
+- Frontend: 5 files (~1,350 lines) - policy viewer pages, upload page, components  
+- OPA: 2 files (~500 lines) - upload & policy management tests
+- Tests: 1 file (upload integration tests)
+- CI/CD: Updated test thresholds
 
 ### ⏳ Week 4: E2E Testing & Demo (Oct 31-Nov 6, 2025)
 - [ ] Manual E2E testing with all 4 IdPs
@@ -324,15 +673,19 @@ This is a pilot project for demonstration purposes. Follow the [.cursorrules](.c
 **Week 2:** ✅ Complete (Authorization - OPA, PEP/PDP, 78 tests passing)  
 **Week 3:** ✅ Complete (Multi-IdP - SAML + OIDC, claim enrichment, 4 IdPs)  
 **Week 3.1:** ✅ Complete (NATO ACP-240 - ZTDF, KAS, STANAG 4774/4778, 87 tests)  
+**Week 3.2:** ✅ Complete (Policy Viewer + Secure Upload, 106 tests passing)  
 **Week 4:** 🔄 In Progress (E2E testing, demos, pilot report)
 
-### Latest Achievement: 100% Test Coverage ✅
+### Latest Achievement: Policy Management & Secure Upload ✅
 
-- ✅ **87/87 OPA tests passing** (100%)
-- ✅ **8/8 resources migrated to ZTDF** (100%)
+- ✅ **106/106 OPA tests passing** (100% coverage)
+- ✅ **45/45 integration tests passing** (100%)
 - ✅ **0 TypeScript errors** (Backend, Frontend, KAS)
+- ✅ **Policy viewer with interactive tester**
+- ✅ **Secure file upload with automatic ZTDF conversion**
+- ✅ **Upload authorization enforced** (clearance limits)
+- ✅ **ACP-240 audit logging** (ENCRYPT events)
 - ✅ **GitHub Actions CI/CD** (6 automated jobs)
-- ✅ **NATO ACP-240 compliant** (ZTDF, STANAG 4774/4778)
 
 **Next Steps:**
 - Manual E2E testing with all 4 IdPs

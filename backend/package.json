@@ -24,6 +24,7 @@
     "author": "DIVE V3 Team",
     "license": "MIT",
     "dependencies": {
+        "@types/multer": "^2.0.0",
         "axios": "^1.6.2",
         "cors": "^2.8.5",
         "dotenv": "^16.3.1",
@@ -35,6 +36,7 @@
         "jwk-to-pem": "^2.0.7",
         "jwks-rsa": "^3.1.0",
         "mongodb": "^6.3.0",
+        "multer": "^2.0.2",
         "node-cache": "^5.1.2",
         "winston": "^3.11.0"
     },
