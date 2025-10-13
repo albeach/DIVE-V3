@@ -296,10 +296,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                         session.user.acpCOI = [];
                                     }
 
+                                    // Extract roles (Week 3.3: Super Admin)
+                                    // Roles can be in: realm_access.roles, resource_access.{client}.roles, or roles claim
+                                    let roles: string[] = [];
+                                    if (payload.realm_access && Array.isArray(payload.realm_access.roles)) {
+                                        roles = payload.realm_access.roles;
+                                    } else if (Array.isArray(payload.roles)) {
+                                        roles = payload.roles;
+                                    }
+                                    session.user.roles = roles;
+
                                     console.log('[DIVE] Custom claims extracted:', {
                                         uniqueID: session.user.uniqueID,
                                         clearance: session.user.clearance,
                                         country: session.user.countryOfAffiliation,
+                                        roles: session.user.roles,
                                     });
                                 }
                             } catch (error) {

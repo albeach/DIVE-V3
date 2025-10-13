@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { SecureLogoutButton } from "@/components/auth/secure-logout-button";
+import Navigation from "@/components/navigation";
 import Link from "next/link";
 
 interface IPolicyMetadata {
@@ -65,24 +65,7 @@ export default async function PoliciesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center space-x-8">
-              <Link href="/dashboard" className="text-xl font-bold text-gray-900 hover:text-gray-700">
-                DIVE V3
-              </Link>
-              <span className="text-gray-600 font-medium">Authorization Policies</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                {session.user?.uniqueID || session.user?.email}
-              </div>
-              <SecureLogoutButton />
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navigation user={session.user} />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">

@@ -2,6 +2,134 @@
 
 All notable changes to the DIVE V3 project will be documented in this file.
 
+## [Week 3.3] - 2025-10-13
+
+### Added - IdP Onboarding Wizard & Super Administrator Console
+
+**IdP Onboarding Wizard:**
+- Keycloak Admin API service for dynamic IdP management (`backend/src/services/keycloak-admin.service.ts`, 600 lines)
+  - Create/update/delete OIDC and SAML identity providers
+  - Protocol mapper creation for DIVE attributes (uniqueID, clearance, country, COI)
+  - IdP connectivity testing (OIDC discovery, SAML SSO validation)
+  - Realm and user management capabilities
+- 6-step wizard UI (`frontend/src/app/admin/idp/new/page.tsx`, 750 lines)
+  - Step 1: Protocol selection (OIDC/SAML with visual cards)
+  - Step 2: Basic configuration (alias validation, display name, description)
+  - Step 3: Protocol-specific config (OIDC issuer/URLs or SAML entity/certificate)
+  - Step 4: DIVE attribute mapping (table-based mapper)
+  - Step 5: Review & test (configuration summary + connectivity test)
+  - Step 6: Submit for approval (confirmation + backend submission)
+- Wizard components: `wizard-steps.tsx`, `oidc-config-form.tsx`, `saml-config-form.tsx`, `attribute-mapper.tsx`
+- Form validation with per-step error checking
+- Backend API integration with JWT authentication
+
+**Super Administrator Console:**
+- Admin authentication middleware (`backend/src/middleware/admin-auth.middleware.ts`, 200 lines)
+  - super_admin role enforcement (extracted from JWT realm_access.roles)
+  - Fail-closed security (deny if role missing)
+  - Admin action logging with ACP-240 compliance
+  - Reuses authenticateJWT for token verification
+- Audit log service (`backend/src/services/audit-log.service.ts`, 300 lines)
+  - MongoDB query with multi-criteria filtering (eventType, subject, outcome, date range)
+  - Statistics calculation (events by type, denied access, top resources, trends)
+  - Indexed queries for performance
+  - JSON export capability
+- Admin dashboard UI (`frontend/src/app/admin/dashboard/page.tsx`, 230 lines)
+  - Quick stats cards (total events, successful/denied access, violations)
+  - Top denied resources table
+  - Events by type breakdown
+  - Quick action buttons (view logs, violations, manage IdPs)
+- Log viewer UI (`frontend/src/app/admin/logs/page.tsx`, 280 lines)
+  - Filterable table (event type, outcome, subject)
+  - Color-coded events (red for ACCESS_DENIED, green for DECRYPT)
+  - Pagination support
+  - Export to JSON button
+- IdP list page (`frontend/src/app/admin/idp/page.tsx`, 310 lines)
+  - Search and filter
+  - Status indicators (Active/Inactive)
+  - Test and Delete actions
+  - Success/error messaging
+
+**IdP Approval Workflow:**
+- Approval service (`backend/src/services/idp-approval.service.ts`, 250 lines)
+  - Submit IdP for approval (created in Keycloak as disabled)
+  - Get pending submissions (from MongoDB)
+  - Approve IdP (enable in Keycloak)
+  - Reject IdP (delete from Keycloak with reason)
+  - Approval history tracking
+- Approval UI (`frontend/src/app/admin/approvals/page.tsx`, 230 lines)
+  - Pending submissions list
+  - Expandable configuration details
+  - Approve/Reject actions with confirmation
+  - Rejection reason input
+
+**Admin Authorization:**
+- Admin controller (`backend/src/controllers/admin.controller.ts`, 670 lines)
+  - IdP management handlers: list, get, create, update, delete, test
+  - Approval handlers: get pending, approve, reject
+  - Comprehensive error handling and logging
+- Admin log controller (`backend/src/controllers/admin-log.controller.ts`, 280 lines)
+  - Query logs, get violations, get stats, export
+- Admin routes (`backend/src/routes/admin.routes.ts`, 130 lines)
+  - 13 new endpoints under /api/admin/*
+  - All protected by adminAuthMiddleware
+- Admin types (`backend/src/types/admin.types.ts`, 170 lines)
+- Keycloak types (`backend/src/types/keycloak.types.ts`, 200 lines)
+
+**OPA Admin Policy:**
+- Admin authorization policy (`policies/admin_authorization_policy.rego`, 100 lines)
+  - Default deny pattern
+  - super_admin role check
+  - 10 allowed admin operations (view_logs, approve_idp, etc.)
+  - Fail-secure violations pattern
+- 20 new OPA admin tests (`policies/tests/admin_authorization_tests.rego`, 200 lines)
+  - 10 positive tests (super_admin can perform operations)
+  - 10 negative tests (non-admin denied, validation)
+  - 100% test coverage for admin operations
+
+**Infrastructure:**
+- Terraform: super_admin role creation (`terraform/main.tf`)
+- Terraform: realm roles protocol mapper (includes roles in JWT)
+- Test user assigned super_admin role (testuser-us)
+- Admin routes integrated into main server (`backend/src/server.ts`)
+
+**Testing:**
+- 25 new integration tests (admin API, auth, logs, approvals)
+  - Total integration tests: 70 (45 existing + 25 new)
+- 20 new OPA tests (admin authorization)
+  - Total OPA tests: 126 (106 existing + 20 new)
+- All tests passing (196/196, 100%)
+
+### Changed
+- Dashboard navigation: Added "Admin" link for users with super_admin role
+- Backend server: Integrated admin routes under /api/admin/*
+- Terraform: super_admin role + roles mapper added
+
+### Security
+- All admin endpoints protected by adminAuthMiddleware
+- JWT realm_access.roles extraction and validation
+- Fail-closed security (default deny if role missing)
+- All admin actions logged for ACP-240 compliance
+- IdP submissions require super admin approval before activation
+
+### Performance
+- MongoDB query indexes for audit logs (eventType, outcome, subject, timestamp)
+- Efficient aggregation pipelines for statistics
+- Keycloak Admin Client token caching
+- Paginated queries for scalability
+
+### Documentation
+- WEEK3.3-IMPLEMENTATION-COMPLETE.md (comprehensive guide)
+- WEEK3.3-QA-RESULTS.md (test results and verification)
+- WEEK3.3-DELIVERY-SUMMARY.md (executive summary)
+- WEEK3.3-DAY1-COMPLETE.md (backend details)
+- WEEK3.3-DAY2-COMPLETE.md (frontend wizard)
+
+**Files Created:** 25 (~6,700 lines)
+**Files Modified:** 3
+**Total Tests:** 196 (126 OPA + 70 integration)
+**Build Status:** ✅ 0 errors
+
 ## [Week 3.2] - 2025-10-13
 
 ### Added - Policy Viewer & Secure Upload
