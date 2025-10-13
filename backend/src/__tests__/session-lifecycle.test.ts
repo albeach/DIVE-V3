@@ -141,6 +141,8 @@ describe('Session Lifecycle Management', () => {
                 `
             };
 
+            // Verify frontchannel request is structured correctly
+            expect(frontchannelRequest.url).toBe('/api/auth/logout-callback');
             expect(cookiesDeleted).toBe(true);
             expect(response.contentType).toBe('text/html');
             expect(response.body).toContain('logout-complete');

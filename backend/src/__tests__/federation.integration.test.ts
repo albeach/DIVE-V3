@@ -54,7 +54,7 @@ describe('Federation Integration Tests', () => {
         });
 
         test('should reject SAML with missing required attributes', () => {
-            const incompleteSamlAssertion = {
+            const incompleteSamlAssertion: any = {
                 email: 'user@example.com'
                 // Missing: uniqueID, clearance, countryOfAffiliation
             };
@@ -87,7 +87,7 @@ describe('Federation Integration Tests', () => {
 
         test('should handle OIDC token with minimal claims (triggers enrichment)', () => {
             // Simulates Industry IdP with minimal claims
-            const minimalClaims = {
+            const minimalClaims: any = {
                 sub: '67890',
                 email: 'bob.contractor@lockheed.com',
                 name: 'Bob Contractor'
@@ -109,7 +109,7 @@ describe('Federation Integration Tests', () => {
                 'TRES_SECRET_DEFENSE': 'TOP_SECRET'
             };
 
-            Object.entries(frenchClearanceLevels).forEach(([french, dive]) => {
+            Object.entries(frenchClearanceLevels).forEach(([_french, dive]) => {
                 expect(dive).toMatch(/^(UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP_SECRET)$/);
             });
         });
@@ -124,7 +124,7 @@ describe('Federation Integration Tests', () => {
                 'DE': 'DEU'
             };
 
-            Object.entries(countryMapping).forEach(([alpha2, alpha3]) => {
+            Object.entries(countryMapping).forEach(([_alpha2, alpha3]) => {
                 expect(alpha3.length).toBe(3);
                 expect(alpha3).toMatch(/^[A-Z]{3}$/);
             });
@@ -171,10 +171,9 @@ describe('Federation Integration Tests', () => {
 
             militaryDomains.forEach(email => {
                 const domain = email.split('@')[1];
-                const expectedCountry = 'USA';
 
                 expect(domain).toMatch(/\.?mil$/);
-                // Should map to USA
+                // Should map to USA (expectedCountry: 'USA')
             });
         });
 
@@ -187,9 +186,9 @@ describe('Federation Integration Tests', () => {
 
             frenchDomains.forEach(email => {
                 const domain = email.split('@')[1];
-                const shouldMapTo = 'FRA';
 
                 expect(domain).toMatch(/gouv\.fr$/);
+                // Should map to 'FRA'
             });
         });
 
@@ -202,9 +201,9 @@ describe('Federation Integration Tests', () => {
 
             canadianDomains.forEach(email => {
                 const domain = email.split('@')[1];
-                const shouldMapTo = 'CAN';
 
                 expect(domain).toMatch(/gc\.ca$/);
+                // Should map to 'CAN'
             });
         });
 
@@ -218,15 +217,15 @@ describe('Federation Integration Tests', () => {
 
             contractorDomains.forEach(email => {
                 const domain = email.split('@')[1];
-                const shouldMapTo = 'USA';
                 const knownContractors = ['lockheed.com', 'northropgrumman.com', 'raytheon.com', 'boeing.com'];
 
                 expect(knownContractors).toContain(domain);
+                // Should map to 'USA'
             });
         });
 
         test('should default clearance to UNCLASSIFIED when missing', () => {
-            const userWithoutClearance = {
+            const userWithoutClearance: any = {
                 uniqueID: 'contractor@company.com',
                 email: 'contractor@company.com',
                 countryOfAffiliation: 'USA'
@@ -238,7 +237,7 @@ describe('Federation Integration Tests', () => {
         });
 
         test('should default COI to empty array when missing', () => {
-            const userWithoutCOI = {
+            const userWithoutCOI: any = {
                 uniqueID: 'user@example.com',
                 clearance: 'CONFIDENTIAL',
                 countryOfAffiliation: 'USA'

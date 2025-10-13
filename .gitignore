@@ -132,3 +132,4 @@ env/
 # Resources for reference (exclude root-level resources directory only)
 /resources/
 
+bin/

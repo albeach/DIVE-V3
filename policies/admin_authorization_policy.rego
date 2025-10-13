@@ -85,18 +85,30 @@ reason := msg if {
 # Decision Output (for PEP consumption)
 # ============================================
 
-decision := result if {
-    result := {
-        "allow": allow,
-        "reason": reason,
-        "evaluation_details": {
-            "authenticated": not is_not_authenticated,
-            "has_super_admin_role": not is_not_super_admin,
-            "valid_operation": not is_invalid_operation,
-            "requested_operation": input.action.operation,
-            "user_roles": input.subject.roles,
-            "violations": violations
-        }
-    }
+decision := {
+	"allow": allow,
+	"reason": reason,
+	"evaluation_details": evaluation_details,
 }
 
+evaluation_details := {
+	"authenticated": check_authenticated,
+	"has_super_admin_role": check_has_super_admin,
+	"valid_operation": check_valid_operation,
+	"requested_operation": input.action.operation,
+	"user_roles": input.subject.roles,
+	"violations": violations,
+}
+
+# Helper rules for evaluation details (always return boolean)
+check_authenticated := true if {
+	not is_not_authenticated
+} else := false
+
+check_has_super_admin := true if {
+	not is_not_super_admin
+} else := false
+
+check_valid_operation := true if {
+	not is_invalid_operation
+} else := false
