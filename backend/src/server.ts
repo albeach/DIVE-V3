@@ -6,6 +6,8 @@ import { logger } from './utils/logger';
 import { errorHandler } from './middleware/error.middleware';
 import resourceRoutes from './routes/resource.routes';
 import healthRoutes from './routes/health.routes';
+import policyRoutes from './routes/policy.routes';
+import uploadRoutes from './routes/upload.routes';
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -64,6 +66,8 @@ app.use((req, _res, next) => {
 
 app.use('/health', healthRoutes);
 app.use('/api/resources', resourceRoutes);
+app.use('/api/policies', policyRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Root endpoint
 app.get('/', (_req, res) => {

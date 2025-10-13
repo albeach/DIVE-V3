@@ -30,6 +30,7 @@ allow if {
 	not is_coi_violation
 	not is_under_embargo
 	not is_ztdf_integrity_violation
+	not is_upload_not_releasable_to_uploader
 }
 
 # ============================================
@@ -248,6 +249,23 @@ is_ztdf_integrity_violation := msg if {
 }
 
 # ============================================
+# Check 8: Upload Releasability Validation (Week 3.2)
+# ============================================
+# Uploaded resource must be releasable to uploader's country
+is_upload_not_releasable_to_uploader := msg if {
+	# Only check for upload operations
+	input.action.operation == "upload"
+	
+	# Ensure releasabilityTo includes uploader's country
+	count(input.resource.releasabilityTo) > 0
+	not input.subject.countryOfAffiliation in input.resource.releasabilityTo
+	
+	msg := sprintf("Upload releasabilityTo must include uploader country: %s", [
+		input.subject.countryOfAffiliation
+	])
+}
+
+# ============================================
 # Decision Output
 # ============================================
 
@@ -268,6 +286,9 @@ reason := "Access granted - all conditions satisfied" if {
 	msg := is_missing_required_attributes
 } else := msg if {
 	msg := is_insufficient_clearance
+} else := msg if {
+	# Upload-specific checks (higher priority for upload operations)
+	msg := is_upload_not_releasable_to_uploader
 } else := msg if {
 	msg := is_not_releasable_to_country
 } else := msg if {
@@ -320,6 +341,7 @@ evaluation_details := {
 		"coi_satisfied": check_coi_satisfied,
 		"embargo_passed": check_embargo_passed,
 		"ztdf_integrity_valid": check_ztdf_integrity_valid,
+		"upload_releasability_valid": check_upload_releasability_valid,
 	},
 	"subject": {
 		"uniqueID": object.get(input.subject, "uniqueID", ""),
@@ -339,34 +361,38 @@ evaluation_details := {
 	},
 }
 
-# Helper rules for evaluation details
-check_authenticated if {
+# Helper rules for evaluation details (always return boolean)
+check_authenticated := true if {
 	not is_not_authenticated
-}
+} else := false
 
-check_required_attributes if {
+check_required_attributes := true if {
 	not is_missing_required_attributes
-}
+} else := false
 
-check_clearance_sufficient if {
+check_clearance_sufficient := true if {
 	not is_insufficient_clearance
-}
+} else := false
 
-check_country_releasable if {
+check_country_releasable := true if {
 	not is_not_releasable_to_country
-}
+} else := false
 
-check_coi_satisfied if {
+check_coi_satisfied := true if {
 	not is_coi_violation
-}
+} else := false
 
-check_embargo_passed if {
+check_embargo_passed := true if {
 	not is_under_embargo
-}
+} else := false
 
-check_ztdf_integrity_valid if {
+check_ztdf_integrity_valid := true if {
 	not is_ztdf_integrity_violation
-}
+} else := false
+
+check_upload_releasability_valid := true if {
+	not is_upload_not_releasable_to_uploader
+} else := false
 
 # Helper: Check if ZTDF is enabled for this resource
 ztdf_enabled := true if {

@@ -287,6 +287,116 @@ const logDecision = (
 };
 
 /**
+ * JWT Authentication middleware (Week 3.2)
+ * Verifies JWT token and attaches user info to request
+ * Does NOT call OPA - use for endpoints that need auth but handle authz separately
+ */
+export const authenticateJWT = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+
+    try {
+        // Extract JWT token from Authorization header
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            logger.warn('Missing Authorization header', { requestId });
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Missing or invalid Authorization header',
+                details: {
+                    expected: 'Bearer <token>',
+                    received: authHeader ? 'Invalid format' : 'Missing',
+                },
+                requestId
+            });
+            return;
+        }
+
+        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+        // Verify token
+        let decodedToken: IKeycloakToken;
+        try {
+            decodedToken = await verifyToken(token);
+        } catch (error) {
+            logger.warn('JWT verification failed', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Invalid or expired JWT token',
+                details: {
+                    reason: error instanceof Error ? error.message : 'Token verification failed',
+                },
+                requestId
+            });
+            return;
+        }
+
+        // Extract user attributes
+        const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
+        const clearance = decodedToken.clearance;
+        const countryOfAffiliation = decodedToken.countryOfAffiliation;
+
+        // Handle acpCOI
+        let acpCOI: string[] = [];
+        if (decodedToken.acpCOI) {
+            if (Array.isArray(decodedToken.acpCOI)) {
+                if (decodedToken.acpCOI.length > 0 && typeof decodedToken.acpCOI[0] === 'string') {
+                    try {
+                        const parsed = JSON.parse(decodedToken.acpCOI[0]);
+                        if (Array.isArray(parsed)) {
+                            acpCOI = parsed;
+                        } else {
+                            acpCOI = decodedToken.acpCOI;
+                        }
+                    } catch {
+                        acpCOI = decodedToken.acpCOI;
+                    }
+                } else {
+                    acpCOI = decodedToken.acpCOI;
+                }
+            }
+        }
+
+        // Attach user info to request
+        (req as any).user = {
+            sub: decodedToken.sub,
+            uniqueID,
+            clearance,
+            countryOfAffiliation,
+            acpCOI,
+            email: decodedToken.email,
+            preferred_username: decodedToken.preferred_username
+        };
+
+        logger.info('JWT authentication successful', {
+            requestId,
+            uniqueID,
+            clearance,
+            countryOfAffiliation
+        });
+
+        next();
+
+    } catch (error) {
+        logger.error('Authentication middleware error', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Authentication failed',
+            requestId
+        });
+    }
+};
+
+/**
  * PEP Authorization Middleware
  * Enforces ABAC policy via OPA before allowing resource access
  */
