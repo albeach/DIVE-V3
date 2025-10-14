@@ -184,7 +184,7 @@ function generateZTDFResource(index: number) {
     const resourceId = `doc-ztdf-${String(index).padStart(4, '0')}`;
     const resourceType = randomItem(RESOURCE_TYPES);
     const classification = randomItem(CLASSIFICATIONS);
-    const encrypted = Math.random() > 0.3; // 70% encrypted
+    const encrypted = true; // All ZTDF resources encrypted for KAS demo consistency
 
     // Determine releasability based on classification
     let releasabilityTo: string[];
@@ -204,25 +204,15 @@ function generateZTDFResource(index: number) {
     // Generate content
     const plainContent = generateContent(resourceId, classification, resourceType);
 
-    // Encrypt if necessary
-    let encryptedChunk;
-    let dek: string | undefined;
-    let iv: string;
-    let authTag: string;
+    // Encrypt content (all resources encrypted for demo)
+    const encResult = encryptContent(plainContent, resourceId);
+    const encryptedChunk = encResult.encryptedData;
+    const dek = encResult.dek;
+    const iv = encResult.iv;
+    const authTag = encResult.authTag;
 
-    if (encrypted) {
-        const encResult = encryptContent(plainContent, resourceId);
-        encryptedChunk = encResult.encryptedData;
-        dek = encResult.dek;
-        iv = encResult.iv;
-        authTag = encResult.authTag;
-    } else {
-        iv = generateBase64(12);
-        authTag = generateBase64(16);
-    }
-
-    // Generate KAO if encrypted
-    const keyAccessObjects = encrypted && dek ? [{
+    // Generate KAO (all resources have KAOs since all are encrypted)
+    const keyAccessObjects = [{
         kaoId: `kao-${resourceId}`,
         kasUrl: 'http://localhost:8080',
         kasId: 'dive-v3-kas',
@@ -234,7 +224,7 @@ function generateZTDFResource(index: number) {
             coiRequired: coi
         },
         createdAt: new Date().toISOString()
-    }] : [];
+    }];
 
     // Create STANAG 4774 display marking
     const displayMarking = generateClassificationMarking(classification, releasabilityTo, coi);
@@ -268,13 +258,13 @@ function generateZTDFResource(index: number) {
     // Compute policy hash from the complete policy object (matches validation logic)
     const policyHash = computeObjectHash(policyWithoutHash);
 
-    // Build encrypted chunks array
-    const encryptedChunks = encrypted ? [{
+    // Build encrypted chunks array (all resources have chunks)
+    const encryptedChunks = [{
         chunkId: 1,
-        encryptedData: encryptedChunk!,
-        size: encryptedChunk!.length,
-        integrityHash: computeSHA384(encryptedChunk!) // Compute chunk hash
-    }] : [];
+        encryptedData: encryptedChunk,
+        size: encryptedChunk.length,
+        integrityHash: computeSHA384(encryptedChunk) // Compute chunk hash
+    }];
 
     // Compute payload hash from concatenated chunk data (matches validation logic lines 113-116)
     // The validation function does: chunksData = chunks.map(c => c.encryptedData).join('')
@@ -323,7 +313,7 @@ function generateZTDFResource(index: number) {
         ztdf,
         // Legacy fields for backward compatibility
         legacy: {
-            content: encrypted ? null : plainContent
+            content: null // All encrypted, no plaintext
         },
         createdAt: new Date(),
         updatedAt: new Date()
