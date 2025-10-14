@@ -131,27 +131,12 @@ jobs:
         working-directory: ./backend
         run: npm ci
       
-      - name: Run backend tests
+      - name: Run backend tests with coverage
         working-directory: ./backend
-        run: npm test
+        run: npm run test:ci
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017
-          MONGODB_DATABASE: dive-v3-test
-      
-      - name: Run audit log integration tests
-        working-directory: ./backend
-        run: npm run test:audit-logs
-        env:
-          NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017
-          MONGODB_DATABASE: dive-v3-test
-      
-      - name: Generate test coverage
-        working-directory: ./backend
-        run: npm run test:coverage
-        env:
-          NODE_ENV: test
+          CI: true
           MONGODB_URL: mongodb://localhost:27017
           MONGODB_DATABASE: dive-v3-test
       
