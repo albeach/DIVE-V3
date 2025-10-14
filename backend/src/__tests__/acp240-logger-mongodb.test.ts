@@ -7,7 +7,7 @@
  */
 
 import { MongoClient, Db } from 'mongodb';
-import { logACP240Event, logDecryptEvent, logAccessDeniedEvent, logEncryptEvent } from '../utils/acp240-logger';
+import { logACP240Event, logDecryptEvent, logAccessDeniedEvent, logEncryptEvent, closeAuditLogConnection } from '../utils/acp240-logger';
 import { IACP240AuditEvent } from '../utils/acp240-logger';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
@@ -26,9 +26,8 @@ describe('ACP-240 Logger MongoDB Integration', () => {
     });
 
     afterAll(async () => {
-        // Clean up
-        // Note: Don't call closeAuditLogConnection() here as it might interfere with other tests
-        // The singleton connection will be reused across tests
+        // Clean up - close both test client and singleton logger connection
+        await closeAuditLogConnection();
         await client.close();
     });
 
@@ -295,7 +294,7 @@ describe('ACP-240 Logger MongoDB Integration', () => {
         it('should handle invalid MongoDB connection gracefully', async () => {
             // This test verifies that logging doesn't throw even if MongoDB fails
             // The file-based logging should still work
-            
+
             const event: IACP240AuditEvent = {
                 eventType: 'DECRYPT',
                 timestamp: new Date().toISOString(),
@@ -359,7 +358,7 @@ describe('ACP-240 Logger MongoDB Integration', () => {
             const documents = await collection.find({ requestId: 'integrity-test-001' }).toArray();
 
             expect(documents).toHaveLength(1);
-            
+
             const doc = documents[0];
             expect(doc.acp240EventType).toBe('DECRYPT');
             expect(doc.timestamp).toBe('2025-10-14T12:00:00.000Z');
