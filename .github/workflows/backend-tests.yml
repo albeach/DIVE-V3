@@ -1,11 +1,18 @@
-# NOTE: This workflow is DISABLED - use ci.yml instead
-# The main CI/CD workflow (ci.yml) includes comprehensive backend tests
-# This file kept for reference only
-
-name: Backend Tests (DISABLED)
+# Backend-Only Fast Feedback Workflow
+# Provides quick test results for backend changes without running full CI/CD
+# For comprehensive multi-service validation, see ci.yml (runs on all changes)
+name: Backend Tests
 
 on:
-  workflow_dispatch:  # Only run manually, not on push/PR
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
 
 jobs:
   backend-tests:
@@ -22,28 +29,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: keycloak
-          POSTGRES_USER: keycloak
-          POSTGRES_PASSWORD: password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      # Note: OPA service commented out - tests use mocked OPA responses
-      # Uncomment when integration tests are enabled
-      # opa:
-      #   image: openpolicyagent/opa:0.68.0
-      #   ports:
-      #     - 8181:8181
-      #   options: >-
-      #     --cmd "run --server --addr :8181"
+      # PostgreSQL not needed for unit tests (only for Keycloak integration tests)
+      # OPA not needed - unit tests use mocked OPA responses
 
     steps:
       - name: Checkout code
@@ -67,10 +54,13 @@ jobs:
         run: cd backend && npm run typecheck
         continue-on-error: false
 
-      - name: Run unit tests
-        run: cd backend && npm run test:unit
+      - name: Run tests with coverage
+        run: cd backend && npm run test:ci
         env:
           NODE_ENV: test
+          CI: true
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3-test
           MONGODB_URI: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           KEYCLOAK_URL: http://localhost:8081
@@ -79,24 +69,8 @@ jobs:
           KEYCLOAK_CLIENT_SECRET: test-secret
         continue-on-error: true
 
-      - name: Run integration tests
-        run: cd backend && npm run test:integration
-        env:
-          NODE_ENV: test
-          MONGODB_URI: mongodb://localhost:27017/dive-v3-test
-          OPA_URL: http://localhost:8181
-          SKIP_INTEGRATION_TESTS: 'false'
-        continue-on-error: true
-
-      - name: Generate coverage report
-        run: cd backend && npm run test:coverage
-        env:
-          NODE_ENV: test
-          MONGODB_URI: mongodb://localhost:27017/dive-v3-test
-          OPA_URL: http://localhost:8181
-        continue-on-error: true
-
       - name: Upload coverage to Codecov
+        if: always()
         uses: codecov/codecov-action@v3
         with:
           files: ./backend/coverage/lcov.info
@@ -105,29 +79,22 @@ jobs:
           fail_ci_if_error: false
 
       - name: Comment coverage on PR
-        uses: romeovs/lcov-reporter-action@v0.3.1
         if: github.event_name == 'pull_request'
+        uses: romeovs/lcov-reporter-action@v0.3.1
         with:
           lcov-file: ./backend/coverage/lcov.info
           github-token: ${{ secrets.GITHUB_TOKEN }}
           delete-old-comments: true
+        continue-on-error: true
 
-      - name: Archive test results
+      - name: Archive test results and coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: backend-test-results
           path: |
             backend/coverage/
             backend/logs/
-          retention-days: 30
-
-      - name: Archive coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: backend/coverage/
           retention-days: 30
 
   backend-lint:
