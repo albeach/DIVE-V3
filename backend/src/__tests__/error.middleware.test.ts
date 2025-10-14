@@ -16,8 +16,21 @@ import {
     ApiError
 } from '../middleware/error.middleware';
 
-// Mock logger
-jest.mock('../utils/logger');
+// Mock logger module
+jest.mock('../utils/logger', () => ({
+    logger: {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        child: jest.fn().mockReturnValue({
+            debug: jest.fn(),
+            info: jest.fn(),
+            warn: jest.fn(),
+            error: jest.fn()
+        })
+    }
+}));
 
 describe('Error Middleware', () => {
     let req: Partial<Request>;
@@ -190,9 +203,10 @@ describe('Error Middleware', () => {
 
         it('should use error name as fallback for error field', () => {
             const error = new Error('Test error');
-            delete error.name;
+            // Create error without name property
+            const errorWithoutName = { message: error.message };
 
-            errorHandler(error as ApiError, req as Request, res as Response, next);
+            errorHandler(errorWithoutName as ApiError, req as Request, res as Response, next);
 
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 error: 'Internal Server Error'
@@ -429,13 +443,13 @@ describe('Error Middleware', () => {
         it('should handle errors from different endpoints', () => {
             const error = new NotFoundError('Resource not found');
 
-            req.path = '/api/resources/123';
+            (req as any).path = '/api/resources/123';
             errorHandler(error, req as Request, res as Response, next);
             expect(res.status).toHaveBeenCalledWith(404);
 
             jest.clearAllMocks();
 
-            req.path = '/api/policies/456';
+            (req as any).path = '/api/policies/456';
             errorHandler(error, req as Request, res as Response, next);
             expect(res.status).toHaveBeenCalledWith(404);
         });

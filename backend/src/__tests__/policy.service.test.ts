@@ -6,8 +6,7 @@
  * Priority: MEDIUM (Policy transparency)
  */
 
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
 import axios from 'axios';
 import {
     listPolicies,
@@ -20,7 +19,22 @@ import { createOPAInput, mockOPAAllow, mockOPADeny } from './helpers/mock-opa';
 // Mock dependencies
 jest.mock('axios');
 jest.mock('fs');
-jest.mock('../utils/logger');
+
+// Mock logger module
+jest.mock('../utils/logger', () => ({
+    logger: {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        child: jest.fn().mockReturnValue({
+            debug: jest.fn(),
+            info: jest.fn(),
+            warn: jest.fn(),
+            error: jest.fn()
+        })
+    }
+}));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedFs = fs as jest.Mocked<typeof fs>;
@@ -80,14 +94,14 @@ test_deny_without_clearance {
         jest.clearAllMocks();
 
         // Mock fs.existsSync
-        mockedFs.existsSync = jest.fn((path: any) => {
+        (mockedFs.existsSync as any) = jest.fn((path: any) => {
             if (path.includes('fuel_inventory_abac_policy.rego')) return true;
             if (path.includes('policies/tests')) return true;
             return false;
         });
 
         // Mock fs.readFileSync
-        mockedFs.readFileSync = jest.fn((path: any) => {
+        (mockedFs.readFileSync as any) = jest.fn((path: any) => {
             if (path.includes('.rego')) {
                 return mockPolicyContent;
             }
@@ -95,12 +109,12 @@ test_deny_without_clearance {
         });
 
         // Mock fs.statSync
-        mockedFs.statSync = jest.fn(() => ({
+        (mockedFs.statSync as any) = jest.fn(() => ({
             mtime: new Date('2025-10-14T12:00:00Z')
         } as any));
 
         // Mock fs.readdirSync
-        mockedFs.readdirSync = jest.fn(() => ['policy_test.rego']);
+        (mockedFs.readdirSync as any) = jest.fn(() => ['policy_test.rego']);
     });
 
     // ============================================
@@ -145,7 +159,7 @@ test_deny_without_clearance {
         });
 
         it('should count tests correctly', async () => {
-            mockedFs.readFileSync = jest.fn((filePath: any) => {
+            (mockedFs.readFileSync as any) = jest.fn((filePath: any) => {
                 if (filePath.includes('policy_test.rego')) {
                     return mockTestContent;
                 }
@@ -160,7 +174,7 @@ test_deny_without_clearance {
         });
 
         it('should handle missing policy file gracefully', async () => {
-            mockedFs.existsSync = jest.fn(() => false);
+            (mockedFs.existsSync as any) = jest.fn(() => false);
 
             const policies = await listPolicies();
 
@@ -176,8 +190,8 @@ test_deny_without_clearance {
         });
 
         it('should handle file read errors', async () => {
-            mockedFs.existsSync = jest.fn(() => true);
-            mockedFs.readFileSync = jest.fn(() => {
+            (mockedFs.existsSync as any) = jest.fn(() => true);
+            (mockedFs.readFileSync as any) = jest.fn(() => {
                 throw new Error('File read error');
             });
 
@@ -236,7 +250,7 @@ test_deny_without_clearance {
         });
 
         it('should throw error for non-existent policy', async () => {
-            mockedFs.existsSync = jest.fn(() => false);
+            (mockedFs.existsSync as any) = jest.fn(() => false);
 
             await expect(getPolicyById('non-existent')).rejects.toThrow(
                 'Policy non-existent not found'
@@ -252,8 +266,8 @@ test_deny_without_clearance {
         });
 
         it('should handle file read errors', async () => {
-            mockedFs.existsSync = jest.fn(() => true);
-            mockedFs.readFileSync = jest.fn(() => {
+            (mockedFs.existsSync as any) = jest.fn(() => true);
+            (mockedFs.readFileSync as any) = jest.fn(() => {
                 throw new Error('Read error');
             });
 
@@ -526,7 +540,7 @@ test_deny_without_clearance {
         });
 
         it('should count total tests', async () => {
-            mockedFs.readFileSync = jest.fn((filePath: any) => {
+            (mockedFs.readFileSync as any) = jest.fn((filePath: any) => {
                 if (filePath.includes('policy_test.rego')) {
                     return mockTestContent;
                 }
@@ -546,7 +560,7 @@ test_deny_without_clearance {
         });
 
         it('should handle errors gracefully', async () => {
-            mockedFs.existsSync = jest.fn(() => {
+            (mockedFs.existsSync as any) = jest.fn(() => {
                 throw new Error('Filesystem error');
             });
 
@@ -639,7 +653,7 @@ test_deny_without_clearance {
     // ============================================
     describe('Edge Cases', () => {
         it('should handle empty policy directory', async () => {
-            mockedFs.existsSync = jest.fn(() => false);
+            (mockedFs.existsSync as any) = jest.fn(() => false);
 
             const policies = await listPolicies();
 
@@ -647,7 +661,7 @@ test_deny_without_clearance {
         });
 
         it('should handle missing test directory', async () => {
-            mockedFs.existsSync = jest.fn((path: any) => {
+            (mockedFs.existsSync as any) = jest.fn((path: any) => {
                 if (path.includes('tests')) return false;
                 return true;
             });
@@ -659,7 +673,7 @@ test_deny_without_clearance {
         });
 
         it('should handle malformed policy files', async () => {
-            mockedFs.readFileSync = jest.fn(() => 'invalid rego content ###');
+            (mockedFs.readFileSync as any) = jest.fn(() => 'invalid rego content ###') as any;
 
             const policies = await listPolicies();
 
@@ -669,7 +683,7 @@ test_deny_without_clearance {
 
         it('should handle very large policy files', async () => {
             const largePolicyContent = 'package test\n' + 'rule := true\n'.repeat(10000);
-            mockedFs.readFileSync = jest.fn(() => largePolicyContent);
+            (mockedFs.readFileSync as any) = jest.fn(() => largePolicyContent) as any;
 
             const policy = await getPolicyById('fuel_inventory_abac_policy');
 
@@ -677,7 +691,7 @@ test_deny_without_clearance {
         });
 
         it('should handle policy files with no rules', async () => {
-            mockedFs.readFileSync = jest.fn(() => 'package test\n# Just comments');
+            (mockedFs.readFileSync as any) = jest.fn(() => 'package test\n# Just comments') as any;
 
             const policy = await getPolicyById('fuel_inventory_abac_policy');
 
@@ -686,7 +700,7 @@ test_deny_without_clearance {
 
         it('should handle special characters in policy content', async () => {
             const specialContent = mockPolicyContent + '\n# Special: 你好 🔒';
-            mockedFs.readFileSync = jest.fn(() => specialContent);
+            (mockedFs.readFileSync as any) = jest.fn(() => specialContent) as any;
 
             const policy = await getPolicyById('fuel_inventory_abac_policy');
 

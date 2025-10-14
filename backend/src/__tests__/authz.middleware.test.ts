@@ -18,11 +18,39 @@ import { TEST_RESOURCES } from './helpers/test-fixtures';
 // Mock dependencies
 jest.mock('axios');
 jest.mock('../services/resource.service');
-jest.mock('../utils/logger');
-jest.mock('../utils/acp240-logger');
+jest.mock('jwk-to-pem');
+
+// Mock logger module
+jest.mock('../utils/logger', () => ({
+    logger: {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        child: jest.fn().mockReturnValue({
+            debug: jest.fn(),
+            info: jest.fn(),
+            warn: jest.fn(),
+            error: jest.fn()
+        })
+    }
+}));
+
+// Mock ACP-240 logger
+jest.mock('../utils/acp240-logger', () => ({
+    logACP240Event: jest.fn(),
+    logEncryptEvent: jest.fn(),
+    logDecryptEvent: jest.fn(),
+    logAccessDeniedEvent: jest.fn(),
+    logAccessModifiedEvent: jest.fn(),
+    logDataSharedEvent: jest.fn()
+}));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedGetResourceById = getResourceById as jest.MockedFunction<typeof getResourceById>;
+
+// Import jwk-to-pem after mocking
+import jwkToPem from 'jwk-to-pem';
 
 describe('Authorization Middleware (PEP)', () => {
     let req: Partial<Request>;
@@ -65,6 +93,47 @@ describe('Authorization Middleware (PEP)', () => {
                 ]
             }
         });
+
+        // Mock jwk-to-pem to return a fake public key
+        (jwkToPem as jest.MockedFunction<typeof jwkToPem>).mockReturnValue('-----BEGIN PUBLIC KEY-----\nMOCK_PUBLIC_KEY\n-----END PUBLIC KEY-----');
+
+        // Mock jwt.decode to return proper token structure
+        jest.spyOn(jwt, 'decode').mockReturnValue({
+            header: {
+                kid: 'test-key-id',
+                alg: 'RS256',
+                typ: 'JWT'
+            },
+            payload: {
+                sub: 'testuser-us',
+                uniqueID: 'testuser-us',
+                clearance: 'SECRET',
+                countryOfAffiliation: 'USA',
+                acpCOI: ['FVEY']
+            },
+            signature: 'mock-signature'
+        } as any);
+
+        // Mock jwt.verify - default to successful verification
+        jest.spyOn(jwt, 'verify').mockImplementation(((_token: any, _key: any, _options: any, callback: any) => {
+            callback(null, {
+                sub: 'testuser-us',
+                uniqueID: 'testuser-us',
+                clearance: 'SECRET',
+                countryOfAffiliation: 'USA',
+                acpCOI: ['FVEY'],
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                iat: Math.floor(Date.now() / 1000)
+            });
+        }) as any);
+
+        // Mock OPA responses - default to allow
+        mockedAxios.post.mockResolvedValue({
+            data: mockOPAAllow()
+        });
+
+        // Mock resource service
+        mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
     });
 
     // ============================================
@@ -213,13 +282,17 @@ describe('Authorization Middleware (PEP)', () => {
     // ============================================
     describe('authzMiddleware', () => {
         beforeEach(() => {
+            // Clear call history but keep mock implementations
+            jest.clearAllMocks();
+
             // Mock valid JWT for authz tests
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
             req.headers!['x-request-id'] = 'test-req-123';
-            req.params!.id = 'doc-fvey-001';
+            Object.assign(req, { params: { id: 'doc-fvey-001' } });
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            // Override default jwt.verify mock for authz tests
+            jest.spyOn(jwt, 'verify').mockImplementation(((_token: any, _key: any, _options: any, callback: any) => {
                 callback(null, {
                     sub: 'testuser-us',
                     uniqueID: 'testuser-us',
@@ -229,7 +302,13 @@ describe('Authorization Middleware (PEP)', () => {
                     exp: Math.floor(Date.now() / 1000) + 3600,
                     iat: Math.floor(Date.now() / 1000)
                 });
-            });
+            }) as any);
+
+            // Clear resource service mock (will be set per test)
+            mockedGetResourceById.mockClear();
+
+            // Clear axios post mock (will be set per test)
+            mockedAxios.post.mockClear();
         });
 
         it('should allow access when OPA permits', async () => {
