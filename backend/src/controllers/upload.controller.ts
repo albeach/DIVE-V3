@@ -150,9 +150,9 @@ async function enforceUploadAuthorization(
             }
         };
 
-        // Call OPA decision endpoint
+        // Call OPA decision endpoint (same as authz middleware)
         const response = await axios.post(
-            `${OPA_URL}/v1/data/dive/authorization/decision`,
+            `${OPA_URL}/v1/data/dive/authorization`,
             opaInput,
             {
                 headers: { 'Content-Type': 'application/json' },
@@ -160,7 +160,19 @@ async function enforceUploadAuthorization(
             }
         );
 
-        const decision = response.data.result;
+        // Extract decision from OPA response
+        // OPA returns: { result: { decision: { allow, reason, ... } } }
+        const decision = response.data.result?.decision || response.data.result;
+
+        // Validate OPA response structure
+        if (!decision || typeof decision.allow === 'undefined') {
+            logger.error('Invalid OPA response structure', {
+                requestId,
+                response: response.data,
+                expected: 'result.decision.allow property'
+            });
+            throw new Error('Invalid OPA response: missing decision.allow');
+        }
 
         // Log authorization decision
         logger.info('Upload authorization decision', {

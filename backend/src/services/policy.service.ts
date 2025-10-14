@@ -202,9 +202,9 @@ export async function testPolicyDecision(input: IOPAInput): Promise<IPolicyTestR
             operation: input.input.action.operation
         });
 
-        // Call OPA decision endpoint
+        // Call OPA decision endpoint (same as authz middleware)
         const response = await axios.post(
-            `${OPA_URL}/v1/data/dive/authorization/decision`,
+            `${OPA_URL}/v1/data/dive/authorization`,
             input,
             {
                 headers: {
@@ -214,7 +214,9 @@ export async function testPolicyDecision(input: IOPAInput): Promise<IPolicyTestR
             }
         );
 
-        const decision: IOPADecision = response.data.result;
+        // Extract decision from OPA response
+        // OPA returns: { result: { decision: { allow, reason, ... } } }
+        const decision: IOPADecision = response.data.result?.decision || response.data.result;
         const executionTime = `${Date.now() - startTime}ms`;
 
         logger.info('Policy decision tested', {

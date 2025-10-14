@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import {
     listResourcesHandler,
-    getResourceHandler
+    getResourceHandler,
+    getZTDFDetailsHandler
 } from '../controllers/resource.controller';
-import { authzMiddleware } from '../middleware/authz.middleware';
+import { authzMiddleware, authenticateJWT } from '../middleware/authz.middleware';
 import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
 
 const router = Router();
@@ -22,6 +23,13 @@ router.get('/', listResourcesHandler);
  * Week 3: Enrichment middleware fills missing attributes BEFORE authz
  */
 router.get('/:id', enrichmentMiddleware, authzMiddleware, getResourceHandler);
+
+/**
+ * GET /api/resources/:id/ztdf
+ * Get ZTDF details for a resource (Week 3.4.3 UI/UX transparency)
+ * Returns full ZTDF structure with integrity validation results
+ */
+router.get('/:id/ztdf', authenticateJWT, getZTDFDetailsHandler);
 
 /**
  * POST /api/resources/request-key
