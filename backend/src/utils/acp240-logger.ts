@@ -12,6 +12,78 @@
  */
 
 import { logger } from './logger';
+import { MongoClient, Db } from 'mongodb';
+
+// MongoDB connection configuration
+const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
+const LOGS_COLLECTION = 'audit_logs';
+
+// MongoDB client (singleton)
+let mongoClient: MongoClient | null = null;
+let db: Db | null = null;
+
+/**
+ * Initialize MongoDB connection for audit logging
+ */
+async function initMongoDB(): Promise<void> {
+    if (mongoClient && db) {
+        return;
+    }
+
+    try {
+        mongoClient = new MongoClient(MONGODB_URL);
+        await mongoClient.connect();
+        db = mongoClient.db(DB_NAME);
+        logger.debug('ACP-240 logger: Connected to MongoDB for audit persistence');
+    } catch (error) {
+        logger.error('ACP-240 logger: Failed to connect to MongoDB', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        // Don't throw - allow file logging to continue even if MongoDB fails
+    }
+}
+
+/**
+ * Write audit event to MongoDB
+ */
+async function writeToMongoDB(event: IACP240AuditEvent): Promise<void> {
+    try {
+        await initMongoDB();
+
+        if (!db) {
+            logger.warn('MongoDB not available for audit logging - event written to file only');
+            return;
+        }
+
+        const collection = db.collection(LOGS_COLLECTION);
+
+        // Insert the event with all fields
+        await collection.insertOne({
+            acp240EventType: event.eventType,
+            timestamp: event.timestamp,
+            requestId: event.requestId,
+            subject: event.subject,
+            action: event.action,
+            resourceId: event.resourceId,
+            outcome: event.outcome,
+            reason: event.reason,
+            subjectAttributes: event.subjectAttributes,
+            resourceAttributes: event.resourceAttributes,
+            policyEvaluation: event.policyEvaluation,
+            context: event.context,
+            latencyMs: event.latencyMs,
+            _createdAt: new Date() // MongoDB timestamp for indexing
+        });
+    } catch (error) {
+        // Log error but don't throw - file logging should still work
+        logger.error('Failed to write audit event to MongoDB', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            eventType: event.eventType,
+            requestId: event.requestId
+        });
+    }
+}
 
 // ============================================
 // ACP-240 Audit Event Types
@@ -92,11 +164,14 @@ export interface IACP240AuditEvent {
 
 /**
  * Log ACP-240 audit event
- * Writes to dedicated authz.log file for compliance
+ * Writes to BOTH:
+ * 1. Log file (authz.log) for file-based audit trail
+ * 2. MongoDB (audit_logs collection) for dashboard queries
  */
 export function logACP240Event(event: IACP240AuditEvent): void {
     const authzLogger = logger.child({ service: 'acp240-audit' });
 
+    // Write to file (synchronous)
     authzLogger.info('ACP-240 Audit Event', {
         acp240EventType: event.eventType,
         timestamp: event.timestamp,
@@ -111,6 +186,15 @@ export function logACP240Event(event: IACP240AuditEvent): void {
         policyEvaluation: event.policyEvaluation,
         context: event.context,
         latencyMs: event.latencyMs
+    });
+
+    // Write to MongoDB (async, fire-and-forget)
+    // Don't await to avoid blocking the request
+    writeToMongoDB(event).catch((error) => {
+        logger.error('Unhandled error in MongoDB audit write', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            requestId: event.requestId
+        });
     });
 }
 
@@ -278,5 +362,23 @@ export function logDataSharedEvent(params: {
     };
 
     logACP240Event(event);
+}
+
+/**
+ * Close MongoDB connection (for graceful shutdown)
+ */
+export async function closeAuditLogConnection(): Promise<void> {
+    if (mongoClient) {
+        try {
+            await mongoClient.close();
+            mongoClient = null;
+            db = null;
+            logger.info('ACP-240 logger: MongoDB connection closed');
+        } catch (error) {
+            logger.error('Failed to close MongoDB connection', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
 }
 

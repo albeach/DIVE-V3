@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 import { MongoClient, Db, Collection } from 'mongodb';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = 'dive-v3';
+const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
 const LOGS_COLLECTION = 'audit_logs';
 
 interface IAuditLogQuery {

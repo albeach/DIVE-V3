@@ -334,7 +334,7 @@ class KeycloakAdminService {
 
             const realm = process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
-            const mapperUrl = `${baseUrl}/admin/realms/${realm}/identity-providers/instances/${idpAlias}/mappers`;
+            const mapperUrl = `${baseUrl}/admin/realms/${realm}/identity-provider/instances/${idpAlias}/mappers`;
 
             // Get admin token for REST API calls
             const token = this.client.accessToken;
