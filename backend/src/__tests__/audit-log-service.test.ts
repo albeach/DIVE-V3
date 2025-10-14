@@ -22,8 +22,11 @@ describe('Audit Log Service', () => {
     });
 
     afterAll(async () => {
+        // Close service connection first, then test client
         await auditLogService.close();
-        await client.close();
+        if (client) {
+            await client.close();
+        }
     });
 
     beforeEach(async () => {
