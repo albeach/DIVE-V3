@@ -5,7 +5,16 @@
  * after all tests complete, preventing "force exit" warnings.
  */
 
+import { closeAuditLogConnection } from '../utils/acp240-logger';
+
 export default async function globalTeardown() {
+    try {
+        // Close ACP-240 logger MongoDB connection
+        await closeAuditLogConnection();
+    } catch (error) {
+        // Ignore errors if connection wasn't established
+    }
+
     // Give async operations time to complete
     // Longer delay in CI environments which can be slower
     const delay = process.env.CI ? 2000 : 500;
