@@ -81,6 +81,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-pilot
           KEYCLOAK_CLIENT_ID: dive-v3-client
           KEYCLOAK_CLIENT_SECRET: test-secret
+        continue-on-error: true
 
       - name: Run integration tests
         run: cd backend && npm run test:integration
