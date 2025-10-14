@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { LogoutListener } from "@/components/providers/logout-listener";
 import { TokenExpiryChecker } from "@/components/auth/token-expiry-checker";
+import { SessionErrorBoundary } from "@/components/auth/session-error-boundary";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,12 +34,14 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${inter.variable} ${robotoMono.variable} antialiased`}
       >
-        <Providers>
-          <TokenExpiryChecker />
-          <LogoutListener>
-            {children}
-          </LogoutListener>
-        </Providers>
+        <SessionErrorBoundary>
+          <Providers>
+            <TokenExpiryChecker />
+            <LogoutListener>
+              {children}
+            </LogoutListener>
+          </Providers>
+        </SessionErrorBoundary>
       </body>
     </html>
   );

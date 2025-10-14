@@ -15,6 +15,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
+import { SessionStatusIndicator } from '@/components/auth/session-status-indicator';
 
 interface INavigationProps {
     user: {
@@ -150,6 +151,9 @@ export default function Navigation({ user }: INavigationProps) {
 
                     {/* User Info & Logout (Desktop) */}
                     <div className="hidden md:flex md:items-center md:space-x-3">
+                        {/* Session Status Indicator */}
+                        <SessionStatusIndicator />
+
                         {/* User Badge */}
                         <div className="text-right">
                             <div className="text-sm font-medium text-gray-900">
@@ -235,6 +239,9 @@ export default function Navigation({ user }: INavigationProps) {
 
                     {/* Mobile User Info */}
                     <div className="pt-4 pb-3 border-t border-gray-200">
+                        <div className="px-4 mb-3">
+                            <SessionStatusIndicator />
+                        </div>
                         <div className="flex items-center px-4">
                             <div className="flex-1">
                                 <div className="text-base font-medium text-gray-800">
