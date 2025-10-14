@@ -2,6 +2,7 @@
 
 import { signOut, useSession } from "next-auth/react";
 import { useState } from "react";
+import { getSessionSyncManager } from "@/lib/session-sync-manager";
 
 export function SecureLogoutButton() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -12,6 +13,10 @@ export function SecureLogoutButton() {
       setIsLoggingOut(true);
       
       console.log('[DIVE] User-initiated logout - starting...');
+      
+      // Notify other tabs before logout
+      const syncManager = getSessionSyncManager();
+      syncManager.notifyUserLogout();
       
       // Step 1: Get Keycloak logout URL (includes id_token_hint)
       const keycloakLogoutUrl = await getKeycloakLogoutUrl();

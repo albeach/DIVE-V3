@@ -12,6 +12,7 @@
     },
     "dependencies": {
         "@auth/drizzle-adapter": "^1.10.0",
+        "@headlessui/react": "^2.2.9",
         "axios": "^1.7.0",
         "drizzle-orm": "^0.33.0",
         "next": "15.0.3",

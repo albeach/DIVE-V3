@@ -187,27 +187,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             isExpired: account.expires_at ? account.expires_at < Math.floor(Date.now() / 1000) : false,
                         });
 
-                        // Check if access token is expired and needs refresh
+                        // Check if access token needs refresh (proactive refresh)
                         const currentTime = Math.floor(Date.now() / 1000);
-                        const isExpired = account.expires_at && account.expires_at < currentTime;
                         const hasRefreshToken = !!account.refresh_token;
 
-                        // Only refresh if:
-                        // 1. Token is actually expired
-                        // 2. We have a refresh token
-                        // 3. Token expired more than 5 minutes ago (avoid refreshing during login)
-                        const needsRefresh = isExpired && hasRefreshToken &&
-                            account.expires_at && (currentTime - account.expires_at) > 300;
+                        // Calculate time until expiry
+                        const timeUntilExpiry = (account.expires_at || 0) - currentTime;
+                        const isExpired = timeUntilExpiry <= 0;
 
-                        if (needsRefresh) {
-                            console.log('[DIVE] Access token expired, refreshing...', {
-                                expiredSince: currentTime - (account.expires_at || 0),
-                                secondsAgo: currentTime - (account.expires_at || 0),
+                        // PROACTIVE REFRESH: Refresh when token has 20% of lifetime left
+                        // For 15-minute tokens (900s), this means refresh at 3 minutes remaining
+                        // This prevents API failures from expired tokens
+                        const shouldRefresh = hasRefreshToken && (
+                            isExpired || // Token is expired
+                            timeUntilExpiry < 180 // Less than 3 minutes remaining (proactive)
+                        );
+
+                        if (shouldRefresh && account.expires_at) {
+                            const isProactive = !isExpired;
+                            console.log(`[DIVE] ${isProactive ? 'Proactive' : 'Reactive'} token refresh`, {
+                                timeUntilExpiry,
+                                expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
+                                currentTime: new Date(currentTime * 1000).toISOString(),
                             });
 
                             try {
                                 account = await refreshAccessToken(account);
-                                console.log('[DIVE] Token refreshed, new expiry:', account.expires_at);
+                                console.log('[DIVE] Token refreshed successfully, new expiry:',
+                                    new Date((account.expires_at || 0) * 1000).toISOString());
                             } catch (error) {
                                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
                                 console.error('[DIVE] Token refresh failed:', errorMsg);
@@ -226,13 +233,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     return session;
                                 }
 
-                                // For other errors, continue with existing tokens and hope they work
-                                console.log('[DIVE] Using existing tokens despite refresh failure');
+                                // For other errors, continue with existing tokens if not expired
+                                if (!isExpired) {
+                                    console.log('[DIVE] Using existing tokens despite refresh failure (token still valid)');
+                                } else {
+                                    console.warn('[DIVE] Token expired and refresh failed - session invalid');
+                                    session.accessToken = undefined;
+                                    session.idToken = undefined;
+                                    session.refreshToken = undefined;
+                                    return session;
+                                }
                             }
-                        } else if (isExpired && !hasRefreshToken) {
+                        } else if (!hasRefreshToken && isExpired) {
                             console.warn('[DIVE] Token expired but no refresh_token available');
-                        } else if (isExpired) {
-                            console.log('[DIVE] Token recently expired, waiting for DrizzleAdapter update from fresh login');
+                            session.accessToken = undefined;
+                            session.idToken = undefined;
+                            session.refreshToken = undefined;
+                            return session;
+                        } else {
+                            console.log('[DIVE] Token valid, no refresh needed', {
+                                timeUntilExpiry,
+                                expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
+                            });
                         }
 
                         // Add Keycloak tokens to session
