@@ -78,6 +78,16 @@ const statusLabels: Record<StepStatus, string> = {
     FAILED: 'FAILED'
 };
 
+// Educational tooltips for each step
+const stepTooltips: Record<number, string> = {
+    1: 'You clicked to access an encrypted document. This initiates the secure access flow.',
+    2: 'The Policy Engine (OPA) checks if you have permission to see this document based on your clearance, country, and COI.',
+    3: 'Your browser contacts the Key Access Service (KAS) and requests the decryption key for this specific document.',
+    4: 'KAS independently re-checks your permissions (defense in depth). It verifies your clearance ≥ classification, your country is in releasability list, and your COI matches requirements.',
+    5: 'KAS releases the Data Encryption Key (DEK) to your browser only if all policy checks pass.',
+    6: 'Your browser uses the released DEK to decrypt the encrypted content locally and displays it to you.'
+};
+
 // ============================================
 // Component
 // ============================================
@@ -88,9 +98,38 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [polling, setPolling] = useState<boolean>(false);
+    const [showingCachedFlow, setShowingCachedFlow] = useState<boolean>(false);
 
     // Fetch KAS flow data
     const fetchFlowData = async () => {
+        // First check sessionStorage for completed flow
+        try {
+            const cachedFlow = sessionStorage.getItem(`kas-flow-${resourceId}`);
+            if (cachedFlow) {
+                const parsed = JSON.parse(cachedFlow);
+                // Show cached completed flow
+                setFlowData({
+                    resourceId: parsed.resourceId,
+                    encrypted: true,
+                    kasRequired: true,
+                    flow: {
+                        step1: parsed.steps[0] || { name: 'Step 1', status: 'COMPLETE', timestamp: parsed.completedAt, details: 'Completed' },
+                        step2: parsed.steps[1] || { name: 'Step 2', status: 'COMPLETE', timestamp: parsed.completedAt, details: 'Completed' },
+                        step3: parsed.steps[2] || { name: 'Step 3', status: 'COMPLETE', timestamp: parsed.completedAt, details: 'Completed' },
+                        step4: parsed.steps[3] || { name: 'Step 4', status: 'COMPLETE', timestamp: parsed.completedAt, details: 'Completed' },
+                        step5: parsed.steps[4] || { name: 'Step 5', status: 'COMPLETE', timestamp: parsed.completedAt, details: 'Completed' },
+                        step6: parsed.steps[5] || { name: 'Step 6', status: 'COMPLETE', timestamp: parsed.completedAt, details: 'Completed' }
+                    },
+                    kaoDetails: null
+                });
+                setShowingCachedFlow(true);
+                setLoading(false);
+                return;
+            }
+        } catch (e) {
+            // If parsing fails, continue to fetch from API
+            console.warn('Failed to load cached KAS flow:', e);
+        }
         try {
             const token = (session as any)?.accessToken;
             if (!token) {
@@ -231,6 +270,12 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
 
                                 <p className="text-sm mb-2">{data.details}</p>
 
+                                {/* Educational Tooltip */}
+                                <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-600 text-xs text-blue-800">
+                                    <span className="font-semibold">💡 What's happening: </span>
+                                    {stepTooltips[number]}
+                                </div>
+
                                 {/* Timestamp */}
                                 {data.timestamp && (
                                     <p className="text-xs opacity-75">
@@ -346,6 +391,34 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Cached Flow Notice */}
+            {showingCachedFlow && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="text-2xl">✅</span>
+                            <div>
+                                <p className="text-green-800 font-semibold">Showing Completed Key Request</p>
+                                <p className="text-green-700 text-sm">
+                                    This shows your most recent successful key request for this resource. 
+                                    The flow completed and content was decrypted.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                sessionStorage.removeItem(`kas-flow-${resourceId}`);
+                                setShowingCachedFlow(false);
+                                fetchFlowData();
+                            }}
+                            className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                            Clear History
+                        </button>
                     </div>
                 </div>
             )}

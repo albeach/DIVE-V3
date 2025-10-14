@@ -69,6 +69,16 @@ export default function ResourceDetailPage() {
   const [kasError, setKasError] = useState<string | null>(null);
   const [kaoId, setKaoId] = useState<string>('');
 
+  // Check sessionStorage for decrypted content on mount
+  useEffect(() => {
+    if (resourceId) {
+      const cached = sessionStorage.getItem(`decrypted-${resourceId}`);
+      if (cached) {
+        setDecryptedContent(cached);
+      }
+    }
+  }, [resourceId]);
+
   useEffect(() => {
     if (status === 'loading') return;
     
@@ -450,13 +460,27 @@ export default function ResourceDetailPage() {
                   {decryptedContent ? (
                     <div>
                       <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex items-center gap-2 text-green-800">
-                          <span className="text-xl">✅</span>
-                          <span className="font-semibold">Content Decrypted Successfully</span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-green-800">
+                            <span className="text-xl">✅</span>
+                            <div>
+                              <span className="font-semibold block">Content Decrypted Successfully</span>
+                              <span className="text-sm text-green-700">
+                                KAS released decryption key. Content persisted for this session.
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              sessionStorage.removeItem(`decrypted-${resourceId}`);
+                              sessionStorage.removeItem(`kas-flow-${resourceId}`);
+                              setDecryptedContent(null);
+                            }}
+                            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            🗑️ Clear Decrypted Content
+                          </button>
                         </div>
-                        <p className="text-sm text-green-700 mt-1">
-                          KAS released decryption key and content has been decrypted.
-                        </p>
                       </div>
                       <div className="prose prose-sm max-w-none">
                         <p className="whitespace-pre-wrap text-gray-700">{decryptedContent}</p>
