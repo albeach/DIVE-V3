@@ -485,3 +485,4 @@ npm run dev
 **Action:** Restart frontend and test in NEW incognito window  
 **Expected:** Full federation working with proper attribute mapping ✅
 
+

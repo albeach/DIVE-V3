@@ -7,11 +7,16 @@
         "dev": "tsx watch src/server.ts",
         "build": "tsc",
         "start": "node dist/server.js",
-        "test": "jest",
-        "test:watch": "jest --watch",
+        "test": "NODE_ENV=test jest --testTimeout=15000",
+        "test:unit": "NODE_ENV=test jest --testPathIgnorePatterns=integration --testTimeout=15000",
+        "test:integration": "NODE_ENV=test jest --testPathPattern=integration --testTimeout=15000 --runInBand",
+        "test:audit-logs": "NODE_ENV=test jest --testPathPattern=audit-log --testTimeout=15000 --runInBand",
+        "test:watch": "NODE_ENV=test jest --watch",
+        "test:coverage": "NODE_ENV=test jest --coverage --testTimeout=15000",
         "lint": "eslint src/**/*.ts",
         "typecheck": "tsc --noEmit",
-        "seed-database": "tsx src/scripts/seed-resources.ts"
+        "seed-database": "tsx src/scripts/seed-resources.ts",
+        "migrate-logs": "tsx src/scripts/migrate-logs-to-mongodb.ts"
     },
     "keywords": [
         "dive",
