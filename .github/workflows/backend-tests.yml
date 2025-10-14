@@ -1,15 +1,11 @@
-name: Backend Tests
+# NOTE: This workflow is DISABLED - use ci.yml instead
+# The main CI/CD workflow (ci.yml) includes comprehensive backend tests
+# This file kept for reference only
+
+name: Backend Tests (DISABLED)
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend-tests.yml'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'backend/**'
+  workflow_dispatch:  # Only run manually, not on push/PR
 
 jobs:
   backend-tests:
@@ -133,14 +129,6 @@ jobs:
           name: coverage-report
           path: backend/coverage/
           retention-days: 30
-
-      - name: Check coverage thresholds
-        run: cd backend && npm run test:coverage
-        env:
-          NODE_ENV: test
-          MONGODB_URI: mongodb://localhost:27017/dive-v3-test
-          OPA_URL: http://localhost:8181
-        continue-on-error: true
 
   backend-lint:
     runs-on: ubuntu-latest
