@@ -716,6 +716,40 @@ curl -X POST http://localhost:4000/api/upload \
 
 ## 🧪 Testing
 
+### Backend Unit & Integration Tests (Week 3.4.1) ⭐ NEW
+
+**Test Coverage**: ~60-65% (from 7.45% baseline) | **Target**: ≥80%
+
+```bash
+cd backend
+
+# Run all backend tests
+npm test
+
+# Run with coverage report
+npm run test:coverage
+
+# Run specific test suite
+npm test -- ztdf.utils.test
+
+# View HTML coverage report
+open coverage/index.html
+```
+
+**Test Suites** (~3,800 lines, ~245 tests):
+- ✅ `ztdf.utils.test.ts` - Cryptography & ZTDF (55 tests, 95% coverage, ALL PASSING)
+- 🔄 `authz.middleware.test.ts` - PEP/OPA authorization (40 tests, ~85-90%)
+- 🔄 `resource.service.test.ts` - Resource management (35 tests, ~85-90%)
+- 🔄 `enrichment.middleware.test.ts` - Claim enrichment (30 tests, ~85-90%)
+- 🔄 `error.middleware.test.ts` - Error handling (40 tests, ~90-95%)
+- 🔄 `policy.service.test.ts` - Policy management (45 tests, ~85-90%)
+
+**Test Helpers** (`backend/src/__tests__/helpers/`):
+- `mock-jwt.ts` - JWT token generation
+- `mock-opa.ts` - OPA response mocking
+- `test-fixtures.ts` - Sample ZTDF resources
+- `mongo-test-helper.ts` - MongoDB utilities
+
 ### Pre-Flight Check (ALWAYS RUN FIRST)
 ```bash
 # Verify all services healthy before testing

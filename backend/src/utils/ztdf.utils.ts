@@ -143,14 +143,14 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
 
     if (!ztdf.policy.securityLabel) {
         errors.push('Missing required field: policy.securityLabel');
-    }
+    } else {
+        if (!ztdf.policy.securityLabel.classification) {
+            errors.push('Missing required field: policy.securityLabel.classification');
+        }
 
-    if (!ztdf.policy.securityLabel.classification) {
-        errors.push('Missing required field: policy.securityLabel.classification');
-    }
-
-    if (!ztdf.policy.securityLabel.releasabilityTo || ztdf.policy.securityLabel.releasabilityTo.length === 0) {
-        errors.push('Empty releasabilityTo list (deny all access)');
+        if (!ztdf.policy.securityLabel.releasabilityTo || ztdf.policy.securityLabel.releasabilityTo.length === 0) {
+            errors.push('Empty releasabilityTo list (deny all access)');
+        }
     }
 
     if (ztdf.payload.keyAccessObjects.length === 0) {
