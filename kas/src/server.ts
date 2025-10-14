@@ -308,6 +308,30 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 error: 'Forbidden',
                 denialReason: opaDecision.reason,
                 authzDecision: opaDecision,
+                kasDecision: {
+                    allow: false,
+                    reason: opaDecision.reason,
+                    timestamp: new Date().toISOString(),
+                    evaluationDetails: {
+                        clearanceCheck: opaDecision.evaluation_details?.checks?.clearance_sufficient ? 'PASS' : 'FAIL',
+                        releasabilityCheck: opaDecision.evaluation_details?.checks?.country_releasable ? 'PASS' : 'FAIL',
+                        coiCheck: opaDecision.evaluation_details?.checks?.coi_satisfied ? 'PASS' : 'FAIL',
+                        policyBinding: {
+                            required: {
+                                clearance: resource.classification,
+                                countries: resource.releasabilityTo,
+                                coi: resource.COI || []
+                            },
+                            provided: {
+                                clearance: clearance,
+                                country: countryOfAffiliation,
+                                coi: acpCOI
+                            }
+                        }
+                    }
+                },
+                auditEventId: requestId,
+                executionTimeMs: Date.now() - startTime,
                 responseTimestamp: new Date().toISOString()
             } as IKASKeyResponse);
             return;
@@ -316,13 +340,17 @@ app.post('/request-key', async (req: Request, res: Response) => {
         // ============================================
         // 6. Retrieve/Unwrap DEK
         // ============================================
-        // In pilot: Mock DEK retrieval (production: HSM-backed unwrap)
+        // In pilot: Deterministic DEK generation (production: HSM-backed unwrap)
         const cacheKey = `dek:${keyRequest.resourceId}:${keyRequest.kaoId}`;
         let dekEntry: IDEKCacheEntry | undefined = dekCache.get(cacheKey);
 
         if (!dekEntry) {
-            // Generate mock DEK (in production: retrieve from HSM)
-            const dek = crypto.randomBytes(32).toString('base64');
+            // Generate DETERMINISTIC DEK based on resourceId (matches seed script)
+            // In production, this would unwrap the actual wrappedKey from KAO using KEK
+            // For pilot: Use SHA256(resourceId + salt) to match seed script encryption
+            const salt = 'dive-v3-pilot-dek-salt';
+            const dekHash = crypto.createHash('sha256').update(keyRequest.resourceId + salt).digest();
+            const dek = dekHash.toString('base64');
 
             dekEntry = {
                 resourceId: keyRequest.resourceId,
@@ -335,7 +363,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
             };
 
             dekCache.set(cacheKey, dekEntry);
-            kasLogger.info('DEK generated and cached (mock)', { requestId, resourceId: keyRequest.resourceId });
+            kasLogger.info('DEK generated and cached (deterministic for pilot)', { requestId, resourceId: keyRequest.resourceId });
         } else {
             kasLogger.info('DEK retrieved from cache', { requestId, resourceId: keyRequest.resourceId });
         }
@@ -373,10 +401,35 @@ app.post('/request-key', async (req: Request, res: Response) => {
         res.json({
             success: true,
             dek: dekEntry.dek,
+            kaoId: keyRequest.kaoId,
             authzDecision: {
                 allow: true,
                 reason: opaDecision.reason
             },
+            kasDecision: {
+                allow: true,
+                reason: opaDecision.reason,
+                timestamp: new Date().toISOString(),
+                evaluationDetails: {
+                    clearanceCheck: opaDecision.evaluation_details?.checks?.clearance_sufficient ? 'PASS' : 'FAIL',
+                    releasabilityCheck: opaDecision.evaluation_details?.checks?.country_releasable ? 'PASS' : 'FAIL',
+                    coiCheck: opaDecision.evaluation_details?.checks?.coi_satisfied ? 'PASS' : 'FAIL',
+                    policyBinding: {
+                        required: {
+                            clearance: resource.classification,
+                            countries: resource.releasabilityTo,
+                            coi: resource.COI || []
+                        },
+                        provided: {
+                            clearance: clearance,
+                            country: countryOfAffiliation,
+                            coi: acpCOI
+                        }
+                    }
+                }
+            },
+            auditEventId: requestId,
+            executionTimeMs: Date.now() - startTime,
             responseTimestamp: new Date().toISOString()
         } as IKASKeyResponse);
 

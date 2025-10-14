@@ -3,7 +3,8 @@ import { logger } from '../utils/logger';
 import { getResourceById, getAllResources } from '../services/resource.service';
 import { NotFoundError } from '../middleware/error.middleware';
 import { IZTDFResource } from '../types/ztdf.types';
-import { validateZTDFIntegrity } from '../utils/ztdf.utils';
+import { validateZTDFIntegrity, decryptContent } from '../utils/ztdf.utils';
+import axios from 'axios';
 
 /**
  * Check if resource is ZTDF-enhanced
@@ -305,6 +306,299 @@ export const getZTDFDetailsHandler = async (
         logger.error('Failed to get ZTDF details', {
             requestId,
             resourceId: id,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        next(error);
+    }
+};
+
+/**
+ * Get KAS flow status for a resource
+ * Week 3.4.3: KAS Flow Visualizer - shows 6-step access flow
+ */
+export const getKASFlowHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+    const { id } = req.params;
+
+    try {
+        logger.info('Fetching KAS flow status', { requestId, resourceId: id });
+
+        const resource = await getResourceById(id);
+
+        if (!resource) {
+            throw new NotFoundError(`Resource ${id} not found`);
+        }
+
+        if (!isZTDFResource(resource)) {
+            res.status(400).json({
+                error: 'Bad Request',
+                message: 'This resource is not in ZTDF format'
+            });
+            return;
+        }
+
+        const encrypted = resource.ztdf.payload.keyAccessObjects.length > 0;
+        const kasRequired = encrypted;
+
+        // Build 6-step KAS flow
+        const flow = {
+            step1: {
+                name: 'Resource Access Request',
+                status: 'COMPLETE' as const,
+                timestamp: new Date().toISOString(),
+                details: 'User requested access to encrypted resource'
+            },
+            step2: {
+                name: 'OPA Policy Evaluation',
+                status: 'COMPLETE' as const,
+                timestamp: new Date().toISOString(),
+                details: 'OPA detected KAS obligation',
+                opaDecision: {
+                    allow: true,
+                    obligations: [
+                        { type: 'kas', resourceId: resource.resourceId }
+                    ]
+                }
+            },
+            step3: {
+                name: 'Key Request to KAS',
+                status: 'PENDING' as const,
+                timestamp: null,
+                details: 'Ready to request key from KAS',
+                kasUrl: encrypted ? resource.ztdf.payload.keyAccessObjects[0].kasUrl : null
+            },
+            step4: {
+                name: 'KAS Policy Re-evaluation',
+                status: 'PENDING' as const,
+                timestamp: null,
+                details: 'Awaiting policy re-evaluation',
+                policyCheck: null
+            },
+            step5: {
+                name: 'Key Release',
+                status: 'PENDING' as const,
+                timestamp: null,
+                details: 'Awaiting key release from KAS'
+            },
+            step6: {
+                name: 'Content Decryption',
+                status: 'PENDING' as const,
+                timestamp: null,
+                details: 'Will decrypt content with released key'
+            }
+        };
+
+        // Get KAO details if available
+        const kaoDetails = encrypted ? {
+            kaoId: resource.ztdf.payload.keyAccessObjects[0].kaoId,
+            kasUrl: resource.ztdf.payload.keyAccessObjects[0].kasUrl,
+            policyBinding: resource.ztdf.payload.keyAccessObjects[0].policyBinding
+        } : null;
+
+        const response = {
+            resourceId: resource.resourceId,
+            encrypted,
+            kasRequired,
+            flow,
+            kaoDetails
+        };
+
+        res.json(response);
+
+    } catch (error) {
+        logger.error('Failed to get KAS flow status', {
+            requestId,
+            resourceId: id,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        next(error);
+    }
+};
+
+/**
+ * Request decryption key from KAS
+ * Week 3.4.3: KAS Request Modal - handles live key request and decryption
+ */
+export const requestKeyHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+    const { resourceId, kaoId } = req.body;
+    const startTime = Date.now();
+
+    try {
+        logger.info('Key request initiated', { requestId, resourceId, kaoId });
+
+        // Validate inputs
+        if (!resourceId || !kaoId) {
+            res.status(400).json({
+                success: false,
+                error: 'Bad Request',
+                message: 'resourceId and kaoId are required'
+            });
+            return;
+        }
+
+        // Get bearer token from request
+        const bearerToken = req.headers.authorization?.replace('Bearer ', '');
+        if (!bearerToken) {
+            res.status(401).json({
+                success: false,
+                error: 'Unauthorized',
+                message: 'JWT token required'
+            });
+            return;
+        }
+
+        // Fetch resource
+        const resource = await getResourceById(resourceId);
+        if (!resource) {
+            throw new NotFoundError(`Resource ${resourceId} not found`);
+        }
+
+        if (!isZTDFResource(resource)) {
+            res.status(400).json({
+                success: false,
+                error: 'Bad Request',
+                message: 'Resource is not in ZTDF format'
+            });
+            return;
+        }
+
+        // Find the KAO
+        const kao = resource.ztdf.payload.keyAccessObjects.find(k => k.kaoId === kaoId);
+        if (!kao) {
+            res.status(404).json({
+                success: false,
+                error: 'Not Found',
+                message: `KAO ${kaoId} not found in resource`
+            });
+            return;
+        }
+
+        // Call KAS to request key
+        const kasUrl = kao.kasUrl || 'http://localhost:8080';
+        logger.info('Calling KAS', { requestId, kasUrl, kaoId });
+
+        let kasResponse;
+        try {
+            kasResponse = await axios.post(
+                `${kasUrl}/request-key`,
+                {
+                    resourceId,
+                    kaoId,
+                    bearerToken,
+                    requestTimestamp: new Date().toISOString(),
+                    requestId
+                },
+                {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 10000 // 10 seconds
+                }
+            );
+        } catch (error) {
+            logger.error('KAS request failed', {
+                requestId,
+                resourceId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+
+            // Check if it's a 403 (denial) vs network error
+            if (axios.isAxiosError(error) && error.response?.status === 403) {
+                // KAS denied - return detailed denial info
+                const kasData = error.response.data;
+                res.status(403).json({
+                    success: false,
+                    error: 'Forbidden',
+                    denialReason: kasData.denialReason || 'Access denied by KAS',
+                    kasDecision: kasData.kasDecision,
+                    executionTimeMs: Date.now() - startTime
+                });
+                return;
+            }
+
+            // Network error or KAS unavailable
+            res.status(503).json({
+                success: false,
+                error: 'Service Unavailable',
+                message: 'KAS service is unavailable or timed out',
+                executionTimeMs: Date.now() - startTime
+            });
+            return;
+        }
+
+        // KAS allowed - decrypt content
+        if (kasResponse.data.success && kasResponse.data.dek) {
+            logger.info('Key released by KAS', { requestId, resourceId });
+
+            // Decrypt content using DEK
+            const encryptedChunk = resource.ztdf.payload.encryptedChunks[0];
+            if (!encryptedChunk) {
+                res.status(500).json({
+                    success: false,
+                    error: 'Internal Server Error',
+                    message: 'No encrypted chunks found in resource'
+                });
+                return;
+            }
+
+            try {
+                const decryptedContent = decryptContent({
+                    encryptedData: encryptedChunk.encryptedData,
+                    iv: resource.ztdf.payload.iv,
+                    authTag: resource.ztdf.payload.authTag,
+                    dek: kasResponse.data.dek
+                });
+
+                logger.info('Content decrypted successfully', { requestId, resourceId });
+
+                res.json({
+                    success: true,
+                    content: decryptedContent,
+                    kasDecision: kasResponse.data.kasDecision,
+                    executionTimeMs: Date.now() - startTime
+                });
+
+            } catch (decryptError) {
+                logger.error('Decryption failed', {
+                    requestId,
+                    resourceId,
+                    error: decryptError instanceof Error ? decryptError.message : 'Unknown error'
+                });
+
+                res.status(500).json({
+                    success: false,
+                    error: 'Internal Server Error',
+                    message: 'Failed to decrypt content',
+                    executionTimeMs: Date.now() - startTime
+                });
+            }
+        } else {
+            // Unexpected response from KAS
+            logger.error('Unexpected KAS response', {
+                requestId,
+                resourceId,
+                kasResponse: kasResponse.data
+            });
+
+            res.status(500).json({
+                success: false,
+                error: 'Internal Server Error',
+                message: 'Unexpected response from KAS',
+                executionTimeMs: Date.now() - startTime
+            });
+        }
+
+    } catch (error) {
+        logger.error('Key request handler error', {
+            requestId,
+            resourceId,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
         next(error);

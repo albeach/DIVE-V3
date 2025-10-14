@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import KASRequestModal from '@/components/ztdf/KASRequestModal';
 
 interface IResource {
   resourceId: string;
@@ -63,6 +64,10 @@ export default function ResourceDetailPage() {
   const [resource, setResource] = useState<IResource | null>(null);
   const [error, setError] = useState<IAuthzError | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showKASModal, setShowKASModal] = useState(false);
+  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [kasError, setKasError] = useState<string | null>(null);
+  const [kaoId, setKaoId] = useState<string>('');
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -440,7 +445,78 @@ export default function ResourceDetailPage() {
 
                 <div className="px-6 py-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Content</h3>
-                  {resource.content ? (
+                  
+                  {/* Show decrypted content if available */}
+                  {decryptedContent ? (
+                    <div>
+                      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center gap-2 text-green-800">
+                          <span className="text-xl">✅</span>
+                          <span className="font-semibold">Content Decrypted Successfully</span>
+                        </div>
+                        <p className="text-sm text-green-700 mt-1">
+                          KAS released decryption key and content has been decrypted.
+                        </p>
+                      </div>
+                      <div className="prose prose-sm max-w-none">
+                        <p className="whitespace-pre-wrap text-gray-700">{decryptedContent}</p>
+                      </div>
+                    </div>
+                  ) : resource.encrypted && 
+                     resource.content === '[Encrypted - KAS key request required]' ? (
+                    /* Show KAS request button for encrypted resources */
+                    <div className="text-center py-8 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                      <div className="mb-4">
+                        <span className="text-6xl">🔐</span>
+                      </div>
+                      <p className="text-gray-800 font-semibold mb-2">
+                        This resource is encrypted and requires KAS mediation
+                      </p>
+                      <p className="text-gray-600 text-sm mb-6 max-w-md mx-auto">
+                        Zero Trust Data Format (ZTDF) policy-driven key access service will 
+                        re-evaluate authorization before releasing the decryption key.
+                      </p>
+                      {kasError && (
+                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+                          <p className="text-red-800 font-semibold mb-1">Access Denied</p>
+                          <p className="text-red-700 text-sm">{kasError}</p>
+                        </div>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setKasError(null);
+                          // Fetch ZTDF details to get KAO ID
+                          try {
+                            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+                            const accessToken = (session as any)?.accessToken;
+                            const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
+                              headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                              }
+                            });
+                            if (ztdfResponse.ok) {
+                              const ztdfData = await ztdfResponse.json();
+                              const kaoIdValue = ztdfData.ztdfDetails?.payload?.keyAccessObjects?.[0]?.kaoId || '';
+                              setKaoId(kaoIdValue);
+                              setShowKASModal(true);
+                            } else {
+                              setKasError('Failed to fetch ZTDF details');
+                            }
+                          } catch (err) {
+                            setKasError('Failed to fetch ZTDF details');
+                          }
+                        }}
+                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
+                                 transition-colors font-semibold shadow-md hover:shadow-lg 
+                                 flex items-center gap-2 mx-auto"
+                      >
+                        <span>🔑</span>
+                        <span>Request Key from KAS to View Content</span>
+                      </button>
+                    </div>
+                  ) : resource.content ? (
+                    /* Show regular content */
                     <div className="prose prose-sm max-w-none">
                       <p className="whitespace-pre-wrap text-gray-700">{resource.content}</p>
                     </div>
@@ -483,6 +559,25 @@ export default function ResourceDetailPage() {
           )}
         </div>
       </main>
+
+      {/* KAS Request Modal */}
+      {resource && resource.ztdf && showKASModal && kaoId && (
+        <KASRequestModal
+          resourceId={resource.resourceId}
+          kaoId={kaoId}
+          isOpen={showKASModal}
+          onClose={() => setShowKASModal(false)}
+          onSuccess={(content) => {
+            setDecryptedContent(content);
+            setShowKASModal(false);
+            setKasError(null);
+          }}
+          onFailure={(reason, details) => {
+            setKasError(reason);
+            setShowKASModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

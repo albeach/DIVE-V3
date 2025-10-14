@@ -6,7 +6,7 @@
  */
 
 // Classification level type (duplicated to avoid cross-project imports)
-export type ClassificationLevel = 
+export type ClassificationLevel =
     | 'UNCLASSIFIED'
     | 'CONFIDENTIAL'
     | 'SECRET'
@@ -48,18 +48,51 @@ export interface IKASKeyResponse {
     /** Unwrapped DEK (Base64) if authorized */
     dek?: string;
 
+    /** KAO ID (for confirmation) */
+    kaoId?: string;
+
     /** Error message if denied */
     error?: string;
 
     /** Denial reason (for audit) */
     denialReason?: string;
 
-    /** OPA decision details */
+    /** OPA decision details (legacy field) */
     authzDecision?: {
         allow: boolean;
         reason: string;
         evaluation_details?: Record<string, unknown>;
     };
+
+    /** Enhanced KAS decision details (Week 3.4.3) */
+    kasDecision?: {
+        allow: boolean;
+        reason: string;
+        timestamp: string;
+        evaluationDetails?: {
+            clearanceCheck: 'PASS' | 'FAIL';
+            releasabilityCheck: 'PASS' | 'FAIL';
+            coiCheck: 'PASS' | 'FAIL';
+            policyBinding: {
+                required: {
+                    clearance: string;
+                    countries: string[];
+                    coi: string[];
+                };
+                provided: {
+                    clearance: string;
+                    country: string;
+                    coi: string[];
+                };
+            };
+        };
+    };
+
+    /** Audit event ID (for correlation) */
+    auditEventId?: string;
+
+    /** Execution time in milliseconds */
+    executionTimeMs?: number;
 
     /** Response timestamp */
     responseTimestamp: string;

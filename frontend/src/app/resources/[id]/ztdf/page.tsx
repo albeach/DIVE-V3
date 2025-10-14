@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Tab } from '@headlessui/react';
+import KASFlowVisualizer from '@/components/ztdf/KASFlowVisualizer';
 
 // ============================================
 // Type Definitions
@@ -834,7 +835,7 @@ export default function ZTDFInspectorPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tab.Group>
           <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1 mb-6">
-            {['Manifest', 'Policy', 'Payload', 'Integrity'].map((category) => (
+            {['Manifest', 'Policy', 'Payload', 'Integrity', 'KAS Flow'].map((category) => (
               <Tab
                 key={category}
                 className={({ selected }) =>
@@ -861,6 +862,9 @@ export default function ZTDFInspectorPage() {
             </Tab.Panel>
             <Tab.Panel>
               <IntegrityPanel integrityStatus={details.integrityStatus} />
+            </Tab.Panel>
+            <Tab.Panel>
+              <KASFlowVisualizer resourceId={ztdfDetails.resourceId} />
             </Tab.Panel>
           </Tab.Panels>
         </Tab.Group>
