@@ -41,14 +41,11 @@ jobs:
           --health-retries 5
       
       opa:
-        image: openpolicyagent/opa:latest-rootless
+        image: openpolicyagent/opa:0.68.0
         ports:
           - 8181:8181
         options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --entrypoint "opa run --server --addr :8181"
 
     steps:
       - name: Checkout code
