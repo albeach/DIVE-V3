@@ -216,6 +216,22 @@ export default function KASRequestModal({
 
                 // Success - auto-close after 2 seconds
                 setIsDismissible(true);
+                
+                // Save completed flow state to sessionStorage for KAS Flow tab
+                const completedFlow = {
+                    resourceId,
+                    completedAt: new Date().toISOString(),
+                    steps: steps.map(s => ({
+                        ...s,
+                        status: 'COMPLETE' as const
+                    })),
+                    kasDecision: data.kasDecision
+                };
+                sessionStorage.setItem(`kas-flow-${resourceId}`, JSON.stringify(completedFlow));
+                
+                // Save decrypted content to sessionStorage (expires on browser close)
+                sessionStorage.setItem(`decrypted-${resourceId}`, data.content);
+                
                 setTimeout(() => {
                     onSuccess(data.content);
                     onClose();

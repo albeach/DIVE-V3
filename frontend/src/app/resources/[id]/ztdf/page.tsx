@@ -6,6 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Tab } from '@headlessui/react';
 import KASFlowVisualizer from '@/components/ztdf/KASFlowVisualizer';
+import KASExplainer from '@/components/ztdf/KASExplainer';
 
 // ============================================
 // Type Definitions
@@ -864,7 +865,10 @@ export default function ZTDFInspectorPage() {
               <IntegrityPanel integrityStatus={details.integrityStatus} />
             </Tab.Panel>
             <Tab.Panel>
-              <KASFlowVisualizer resourceId={ztdfDetails.resourceId} />
+              <div className="space-y-6">
+                <KASExplainer />
+                <KASFlowVisualizer resourceId={ztdfDetails.resourceId} />
+              </div>
             </Tab.Panel>
           </Tab.Panels>
         </Tab.Group>
