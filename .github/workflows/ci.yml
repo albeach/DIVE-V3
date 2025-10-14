@@ -1,3 +1,6 @@
+# Comprehensive CI/CD Pipeline for DIVE V3
+# Runs all builds, tests, and quality checks across all services
+# Note: backend-tests.yml provides faster feedback for backend-only changes
 name: DIVE V3 CI/CD
 
 on:
