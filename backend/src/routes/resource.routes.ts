@@ -2,7 +2,9 @@ import { Router } from 'express';
 import {
     listResourcesHandler,
     getResourceHandler,
-    getZTDFDetailsHandler
+    getZTDFDetailsHandler,
+    getKASFlowHandler,
+    requestKeyHandler
 } from '../controllers/resource.controller';
 import { authzMiddleware, authenticateJWT } from '../middleware/authz.middleware';
 import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
@@ -32,10 +34,18 @@ router.get('/:id', enrichmentMiddleware, authzMiddleware, getResourceHandler);
 router.get('/:id/ztdf', authenticateJWT, getZTDFDetailsHandler);
 
 /**
- * POST /api/resources/request-key
- * Request decryption key from KAS (Week 4 stretch)
+ * GET /api/resources/:id/kas-flow
+ * Get KAS flow status for a resource (Week 3.4.3 KAS Flow Visualizer)
+ * Returns 6-step KAS access flow with current status
  */
-// router.post('/request-key', requestKeyHandler);
+router.get('/:id/kas-flow', authenticateJWT, getKASFlowHandler);
+
+/**
+ * POST /api/resources/request-key
+ * Request decryption key from KAS (Week 3.4.3 KAS Request Modal)
+ * Calls KAS service and decrypts content if approved
+ */
+router.post('/request-key', authenticateJWT, requestKeyHandler);
 
 export default router;
 

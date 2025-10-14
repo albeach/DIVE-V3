@@ -169,6 +169,7 @@ services:
     environment:
       NODE_ENV: development
       KAS_PORT: 8080
+      BACKEND_URL: http://host.docker.internal:4000
       OPA_URL: http://opa:8181
       MONGODB_URL: mongodb://admin:password@mongo:27017
       MONGODB_DATABASE: dive-v3

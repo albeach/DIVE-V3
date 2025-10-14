@@ -17,6 +17,7 @@
         "lint": "eslint src/**/*.ts",
         "typecheck": "tsc --noEmit",
         "seed-database": "tsx src/scripts/seed-resources.ts",
+        "seed-ztdf": "tsx src/scripts/seed-ztdf-resources.ts",
         "migrate-logs": "tsx src/scripts/migrate-logs-to-mongodb.ts"
     },
     "keywords": [
