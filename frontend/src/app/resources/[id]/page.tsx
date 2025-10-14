@@ -14,6 +14,15 @@ interface IResource {
   encrypted: boolean;
   creationDate?: string;
   content?: string;
+  displayMarking?: string;
+  ztdf?: {
+    version: string;
+    objectType: string;
+    contentType: string;
+    policyVersion: string;
+    encryptionAlgorithm: string;
+    kaoCount: number;
+  };
   metadata?: {
     createdAt?: string;
     updatedAt?: string;
@@ -313,6 +322,79 @@ export default function ResourceDetailPage() {
                   </div>
                 </div>
               </div>
+
+              {/* ZTDF Summary Card */}
+              {resource.ztdf && (
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-blue-900">Zero Trust Data Format (ZTDF)</h3>
+                        <p className="text-sm text-blue-800">Data-centric security with embedded policy</p>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/resources/${resourceId}/ztdf`}
+                      className="inline-flex items-center px-4 py-2 border border-blue-300 shadow-sm text-sm font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      View ZTDF Details
+                    </Link>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                      <dt className="text-xs font-medium text-gray-500 mb-1">ZTDF Version</dt>
+                      <dd className="text-lg font-bold text-gray-900">{resource.ztdf.version}</dd>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                      <dt className="text-xs font-medium text-gray-500 mb-1">Encryption</dt>
+                      <dd className="text-sm font-semibold text-gray-900">{resource.ztdf.encryptionAlgorithm}</dd>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                      <dt className="text-xs font-medium text-gray-500 mb-1">Key Access Objects</dt>
+                      <dd className="text-lg font-bold text-gray-900">{resource.ztdf.kaoCount}</dd>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 border border-blue-200">
+                      <dt className="text-xs font-medium text-gray-500 mb-1">Content Type</dt>
+                      <dd className="text-sm font-semibold text-gray-900">{resource.ztdf.contentType}</dd>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-start space-x-2 text-xs text-blue-800">
+                    <svg className="h-4 w-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <p>
+                      This resource is protected using ZTDF (ACP-240 compliant). Security policy is embedded and travels 
+                      with the data. Cryptographic integrity ensures tamper detection (STANAG 4778).
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Display Marking (STANAG 4774) */}
+              {resource.displayMarking && (
+                <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-500 uppercase mb-1">STANAG 4774 Display Marking</p>
+                      <p className="text-xl font-bold text-gray-900 font-mono">{resource.displayMarking}</p>
+                    </div>
+                    <div className="text-xs text-gray-600 text-right">
+                      <p>Must appear on all</p>
+                      <p>extractions & copies</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="bg-white shadow rounded-lg overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-200">

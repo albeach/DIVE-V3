@@ -55,6 +55,11 @@ export interface IZTDFValidationResult {
     valid: boolean;
     errors: string[];
     warnings: string[];
+    policyHashValid: boolean;
+    payloadHashValid: boolean;
+    chunkHashesValid: boolean[];
+    allChunksValid: boolean;
+    issues: string[];
 }
 
 /**
@@ -70,6 +75,10 @@ export interface IZTDFValidationResult {
 export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
+    const issues: string[] = [];
+    let policyHashValid = false;
+    let payloadHashValid = false;
+    const chunkHashesValid: boolean[] = [];
 
     // ============================================
     // 1. Validate Policy Hash (STANAG 4778)
@@ -85,9 +94,15 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
             errors.push(
                 `Policy hash mismatch: expected ${ztdf.policy.policyHash}, got ${computedHash}`
             );
+            issues.push('Policy section modified after signing');
+            policyHashValid = false;
+        } else {
+            policyHashValid = true;
         }
     } else {
         warnings.push('Policy hash not present (integrity cannot be verified)');
+        issues.push('Policy hash missing - cannot verify integrity');
+        policyHashValid = false;
     }
 
     // ============================================
@@ -104,9 +119,15 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
             errors.push(
                 `Payload hash mismatch: expected ${ztdf.payload.payloadHash}, got ${computedHash}`
             );
+            issues.push('Payload section modified or corrupted');
+            payloadHashValid = false;
+        } else {
+            payloadHashValid = true;
         }
     } else {
         warnings.push('Payload hash not present (integrity cannot be verified)');
+        issues.push('Payload hash missing - cannot verify integrity');
+        payloadHashValid = false;
     }
 
     // ============================================
@@ -119,11 +140,18 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
                 errors.push(
                     `Chunk ${index} hash mismatch: expected ${chunk.integrityHash}, got ${computedHash}`
                 );
+                issues.push(`Chunk ${index} modified or corrupted`);
+                chunkHashesValid.push(false);
+            } else {
+                chunkHashesValid.push(true);
             }
         } else {
             warnings.push(`Chunk ${index} missing integrity hash`);
+            chunkHashesValid.push(false);
         }
     });
+
+    const allChunksValid = chunkHashesValid.length > 0 && chunkHashesValid.every(v => v);
 
     // ============================================
     // 4. Validate Policy Signature (if present)
@@ -139,17 +167,21 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
     // ============================================
     if (!ztdf.manifest.objectId) {
         errors.push('Missing required field: manifest.objectId');
+        issues.push('Invalid ZTDF: missing object ID');
     }
 
     if (!ztdf.policy.securityLabel) {
         errors.push('Missing required field: policy.securityLabel');
+        issues.push('Invalid ZTDF: missing security label');
     } else {
         if (!ztdf.policy.securityLabel.classification) {
             errors.push('Missing required field: policy.securityLabel.classification');
+            issues.push('Invalid ZTDF: missing classification');
         }
 
         if (!ztdf.policy.securityLabel.releasabilityTo || ztdf.policy.securityLabel.releasabilityTo.length === 0) {
             errors.push('Empty releasabilityTo list (deny all access)');
+            issues.push('Invalid ZTDF: empty releasability list');
         }
     }
 
@@ -157,10 +189,20 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
         warnings.push('No Key Access Objects (cannot decrypt payload)');
     }
 
+    // Add STANAG 4778 cryptographic binding note if any hash fails
+    if (!policyHashValid || !payloadHashValid || !allChunksValid) {
+        issues.push('STANAG 4778 cryptographic binding broken - access should be denied');
+    }
+
     return {
         valid: errors.length === 0,
         errors,
-        warnings
+        warnings,
+        policyHashValid,
+        payloadHashValid,
+        chunkHashesValid,
+        allChunksValid,
+        issues
     };
 }
 
