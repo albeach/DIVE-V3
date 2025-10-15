@@ -17,6 +17,7 @@ import { Request, Response } from 'express';
 import { keycloakAdminService } from '../services/keycloak-admin.service';
 import { idpApprovalService } from '../services/idp-approval.service';
 import { auth0Service } from '../services/auth0.service';
+import { metricsService } from '../services/metrics.service';
 import { logger } from '../utils/logger';
 import { logAdminAction } from '../middleware/admin-auth.middleware';
 import {
@@ -562,6 +563,7 @@ export const approveIdPHandler = async (
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
     const authReq = req as IAuthenticatedRequest;
     const { alias } = req.params;
+    const startTime = Date.now();
 
     try {
         logger.info('Admin: Approve IdP request', {
@@ -574,6 +576,10 @@ export const approveIdPHandler = async (
             alias,
             authReq.user?.uniqueID || 'unknown'
         );
+
+        // Record approval duration metric
+        const durationMs = Date.now() - startTime;
+        metricsService.recordApprovalDuration(durationMs);
 
         logAdminAction({
             requestId,
