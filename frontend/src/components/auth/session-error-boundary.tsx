@@ -38,6 +38,12 @@ export class SessionErrorBoundary extends Component<Props, State> {
 
     static getDerivedStateFromError(error: Error): State {
         // Update state so the next render will show the fallback UI
+        console.error('[SessionErrorBoundary] getDerivedStateFromError:', {
+            hasError: !!error,
+            errorName: error?.name,
+            errorMessage: error?.message,
+        });
+        
         return {
             hasError: true,
             error,
@@ -46,9 +52,14 @@ export class SessionErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-        // Log error to console
-        console.error('[SessionErrorBoundary] Caught error:', error);
-        console.error('[SessionErrorBoundary] Error info:', errorInfo);
+        // Log error to console with more context
+        console.error('[SessionErrorBoundary] Caught error:', {
+            name: error?.name || 'Unknown',
+            message: error?.message || 'No message',
+            stack: error?.stack || 'No stack',
+            errorInfo: errorInfo,
+            componentStack: errorInfo?.componentStack || 'No component stack'
+        });
 
         // Update state with error info
         this.setState({
@@ -57,13 +68,15 @@ export class SessionErrorBoundary extends Component<Props, State> {
         });
 
         // Check if it's a session-related error
-        const errorMessage = error.message.toLowerCase();
+        const errorMessage = error?.message?.toLowerCase() || '';
         const isSessionError = 
             errorMessage.includes('session') ||
             errorMessage.includes('token') ||
             errorMessage.includes('auth') ||
             errorMessage.includes('database') ||
-            errorMessage.includes('fetch');
+            errorMessage.includes('fetch') ||
+            errorMessage.includes('cannot read') ||
+            errorMessage.includes('undefined');
 
         if (isSessionError) {
             console.error('[SessionErrorBoundary] Session-related error detected');
@@ -93,6 +106,14 @@ export class SessionErrorBoundary extends Component<Props, State> {
     render() {
         if (this.state.hasError) {
             const errorMessage = this.state.error?.message || 'An unexpected error occurred';
+            const errorStack = this.state.error?.stack;
+            
+            // Log render state for debugging
+            console.log('[SessionErrorBoundary] Rendering error state:', {
+                hasError: this.state.hasError,
+                errorMessage,
+                hasStack: !!errorStack,
+            });
             
             return (
                 <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">

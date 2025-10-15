@@ -73,7 +73,13 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
     const accessToken = (session as any)?.accessToken;
 
     if (!accessToken) {
-      setError('No access token available');
+      setError('No access token available. Please ensure you are logged in.');
+      setLoading(false);
+      return;
+    }
+
+    if (!session?.user) {
+      setError('Session not fully loaded. Please refresh the page.');
       setLoading(false);
       return;
     }
@@ -122,9 +128,48 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
       }
 
       const data: IPolicyTestResult = await response.json();
+      
+      // Validate response structure
+      if (!data.decision || typeof data.decision !== 'object') {
+        throw new Error('Invalid response structure: missing decision object');
+      }
+      
+      if (!data.decision.evaluation_details) {
+        console.warn('[PolicyTester] Response missing evaluation_details, using defaults');
+        // Add default evaluation_details if missing
+        data.decision.evaluation_details = {
+          checks: {
+            authenticated: false,
+            required_attributes: false,
+            clearance_sufficient: false,
+            country_releasable: false,
+            coi_satisfied: false,
+            embargo_passed: false,
+            ztdf_integrity_valid: false,
+          },
+          subject: {
+            uniqueID: subjectUniqueID,
+            clearance: subjectClearance,
+            country: subjectCountry,
+          },
+          resource: {
+            resourceId,
+            classification: resourceClassification,
+            encrypted: resourceEncrypted,
+            ztdfEnabled: false,
+          },
+          acp240_compliance: {
+            ztdf_validation: false,
+            kas_obligations: false,
+            fail_closed_enforcement: true,
+          },
+        };
+      }
+      
       setResult(data);
 
     } catch (err) {
+      console.error('[PolicyTester] Error during test:', err);
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
@@ -136,7 +181,10 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
       setSubjectUniqueID(session.user.uniqueID || session.user.email || '');
       setSubjectClearance(session.user.clearance || 'SECRET');
       setSubjectCountry(session.user.countryOfAffiliation || 'USA');
-      setSubjectCOI((session.user.acpCOI || []).join(','));
+      const coi = session.user.acpCOI;
+      setSubjectCOI(Array.isArray(coi) ? coi.join(',') : (coi || ''));
+    } else {
+      alert('Session not available. Please ensure you are logged in.');
     }
   };
 
@@ -307,21 +355,21 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
         <div className="mt-6 space-y-4">
           {/* Decision Summary */}
           <div className={`border-2 rounded-lg p-4 ${
-            result.decision.allow
+            result.decision?.allow
               ? 'bg-green-50 border-green-300'
               : 'bg-red-50 border-red-300'
           }`}>
             <div className="flex items-center justify-between">
               <div>
                 <h4 className={`text-lg font-bold ${
-                  result.decision.allow ? 'text-green-900' : 'text-red-900'
+                  result.decision?.allow ? 'text-green-900' : 'text-red-900'
                 }`}>
-                  {result.decision.allow ? '✅ ALLOW' : '❌ DENY'}
+                  {result.decision?.allow ? '✅ ALLOW' : '❌ DENY'}
                 </h4>
                 <p className={`text-sm mt-1 ${
-                  result.decision.allow ? 'text-green-800' : 'text-red-800'
+                  result.decision?.allow ? 'text-green-800' : 'text-red-800'
                 }`}>
-                  {result.decision.reason}
+                  {result.decision?.reason || 'No reason provided'}
                 </p>
               </div>
               <div className="text-xs text-gray-600">
@@ -331,12 +379,13 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
           </div>
 
           {/* Evaluation Details */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-900 mb-3">
-              Evaluation Details
-            </h4>
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(result.decision.evaluation_details.checks).map(([key, passed]) => (
+          {result.decision?.evaluation_details?.checks && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                Evaluation Details
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(result.decision.evaluation_details.checks).map(([key, passed]) => (
                 <div
                   key={key}
                   className={`flex items-center justify-between p-2 rounded text-xs ${
@@ -352,12 +401,13 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
                     {passed ? '✓ PASS' : '✗ FAIL'}
                   </span>
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ACP-240 Compliance */}
-          {result.decision.evaluation_details?.acp240_compliance && (
+          {result.decision?.evaluation_details?.acp240_compliance && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-blue-900 mb-2">
                 🛡️ ACP-240 Compliance
