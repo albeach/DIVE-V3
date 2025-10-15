@@ -843,12 +843,71 @@ This is a pilot project for demonstration purposes. Follow the [.cursorrules](.c
 **Week 3.2:** ✅ Complete (Policy Viewer + Secure Upload, 106 tests passing)  
 **Week 3.3:** ✅ Complete (IdP Wizard + Super Admin Console, 126 tests passing)  
 **Week 3.4:** ✅ Complete (Advanced Session Management + Backend Testing)  
-**Week 3.4.3:** ✅ Complete (ZTDF/KAS UI/UX Enhancement - See below)  
+**Week 3.4.3:** ✅ Complete (ZTDF/KAS UI/UX Enhancement)  
+**Week 3.4.5:** ✅ Complete (UI/UX Polish & Navigation Consistency - See below)  
 **Week 4:** 🔄 Ready to Start (E2E testing, demos, pilot report)
 
-### Latest Achievements: Week 3.4.3 Complete ✅
+### Latest Achievements: Week 3.4.5 Complete ✅
 
-#### Week 3.4.3: ZTDF/KAS UI/UX Enhancement + Educational Content ✅
+#### Week 3.4.5: UI/UX Polish & Navigation Consistency ✅
+
+**Making DIVE V3 Intuitive, Consistent, and Professional**
+
+- ✅ **Unified Navigation** across all pages
+  - PageLayout component wrapping Navigation + Breadcrumbs
+  - Consistent header on Resources, Policies, Admin, ZTDF Inspector
+  - Breadcrumbs showing hierarchy (Home / Resources / doc-ztdf-0001 / ZTDF Inspector)
+  - Mobile-responsive hamburger menu
+  
+- ✅ **Faceted Search & Filtering** for 500 resources
+  - Full-text search by title or resource ID (real-time)
+  - Multi-select filters: Classification, Country, COI
+  - Encryption status filter (All/Encrypted/Unencrypted)
+  - Sort options (Title, Classification, Date)
+  - Quick filters: My Country, My Clearance, FVEY Only, Encrypted Only
+  - URL persistence for shareable filter links
+  - Pagination (25/50/100 per page)
+  - Client-side filtering: <50ms performance
+  
+- ✅ **Enhanced Access Denied UX**
+  - Professional error page with clear denial explanation
+  - Visual policy check breakdown (✓ PASS / ✗ FAIL)
+  - Your attributes vs. Required attributes comparison
+  - Action buttons: Back to Resources, Find Accessible, Request Access
+  - Suggested resources: Top 5 resources user CAN access
+  - Help section with links to policies and admin
+  
+- ✅ **Admin Log Enhancements**
+  - Dashboard statistics cards (Total, Success, Denied, Errors)
+  - Advanced filters: Date range, Event type multi-select, Resource search
+  - Expandable event rows with full JSON view
+  - CSV export + JSON export (filtered events only)
+  - Professional log analysis interface
+
+**Technical Highlights:**
+- 7 new components (~2,500 lines)
+- 4 pages updated with consistent navigation
+- Client-side filtering handles 500 resources smoothly
+- URL query params for shareable filter links
+- TypeScript: 0 errors, ESLint: 0 warnings
+- Manual QA: 5 scenarios tested ✅
+
+**User Experience Impact:**
+- Before: Users lost on nested pages, no way to filter 500 resources
+- After: Consistent navigation, filter to relevant resources in seconds ✅
+- Before: Access denied = dead end
+- After: Clear recovery with suggested resources ✅
+- Before: Basic admin logs table
+- After: Professional analytics dashboard ✅
+
+**Documentation:**
+- Implementation Summary: `notes/WEEK3.4.5-IMPLEMENTATION-SUMMARY.md`
+- Updated CHANGELOG.md with comprehensive Week 3.4.5 entry
+- All 15 success criteria met ✅
+
+---
+
+### Week 3.4.3: ZTDF/KAS UI/UX Enhancement + Educational Content ✅
 
 **Making Data-Centric Security Visible, Understandable, and User-Friendly**
 

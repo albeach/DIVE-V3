@@ -356,9 +356,19 @@ export interface IEncryptionResult {
  * Encrypt plaintext with AES-256-GCM
  * Returns: Encrypted data + IV + auth tag + DEK
  */
-export function encryptContent(plaintext: string): IEncryptionResult {
-    // Generate random DEK (256 bits)
-    const dek = crypto.randomBytes(32);
+export function encryptContent(plaintext: string, resourceId?: string): IEncryptionResult {
+    // Generate DETERMINISTIC DEK if resourceId provided (for KAS pilot)
+    // This matches the seed script pattern so KAS can regenerate the same DEK
+    let dek: Buffer;
+    if (resourceId) {
+        // Deterministic DEK for KAS compatibility
+        const salt = 'dive-v3-pilot-dek-salt';
+        const dekHash = crypto.createHash('sha256').update(resourceId + salt).digest();
+        dek = dekHash; // 32 bytes (256 bits) for AES-256-GCM
+    } else {
+        // Random DEK for non-KAS resources
+        dek = crypto.randomBytes(32);
+    }
 
     // Generate random IV (96 bits for GCM)
     const iv = crypto.randomBytes(12);
@@ -475,11 +485,11 @@ export function migrateLegacyResourceToZTDF(resource: IResource): IZTDFObject {
             dek: crypto.randomBytes(32).toString('base64')
         };
     } else if (resource.content) {
-        // Encrypt plaintext content
-        encryptionResult = encryptContent(resource.content);
+        // Encrypt plaintext content (deterministic DEK for KAS)
+        encryptionResult = encryptContent(resource.content, resource.resourceId);
     } else {
         // No content (empty document)
-        encryptionResult = encryptContent('');
+        encryptionResult = encryptContent('', resource.resourceId);
     }
 
     // ============================================

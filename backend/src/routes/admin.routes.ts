@@ -23,7 +23,9 @@ import {
     testIdPHandler,
     getPendingApprovalsHandler,
     approveIdPHandler,
-    rejectIdPHandler
+    rejectIdPHandler,
+    createAuth0ApplicationHandler,
+    listAuth0ApplicationsHandler
 } from '../controllers/admin.controller';
 import {
     getLogsHandler,
@@ -128,6 +130,22 @@ router.post('/approvals/:alias/approve', approveIdPHandler);
  * Reject pending IdP
  */
 router.post('/approvals/:alias/reject', rejectIdPHandler);
+
+// ============================================
+// Auth0 MCP Integration Routes (Week 3.4.6)
+// ============================================
+
+/**
+ * POST /api/admin/auth0/create-application
+ * Create Auth0 application via MCP Server
+ */
+router.post('/auth0/create-application', createAuth0ApplicationHandler);
+
+/**
+ * GET /api/admin/auth0/applications
+ * List Auth0 applications
+ */
+router.get('/auth0/applications', listAuth0ApplicationsHandler);
 
 export default router;
 

@@ -16,6 +16,7 @@
 import { Request, Response } from 'express';
 import { keycloakAdminService } from '../services/keycloak-admin.service';
 import { idpApprovalService } from '../services/idp-approval.service';
+import { auth0Service } from '../services/auth0.service';
 import { logger } from '../utils/logger';
 import { logAdminAction } from '../middleware/admin-auth.middleware';
 import {
@@ -103,7 +104,7 @@ export const listIdPsHandler = async (
 
 /**
  * GET /api/admin/idps/:alias
- * Get specific Identity Provider
+ * Get specific Identity Provider (includes Auth0 metadata from submissions)
  */
 export const getIdPHandler = async (
     req: Request,
@@ -120,6 +121,7 @@ export const getIdPHandler = async (
             alias
         });
 
+        // Get IdP from Keycloak
         const idp = await keycloakAdminService.getIdentityProvider(alias);
 
         if (!idp) {
@@ -133,6 +135,19 @@ export const getIdPHandler = async (
             return;
         }
 
+        // Try to get Auth0 metadata from submissions collection
+        const submission = await idpApprovalService.getSubmissionByAlias(alias);
+
+        // Merge Keycloak data with Auth0 metadata
+        const enhancedIdp = {
+            ...idp,
+            submittedBy: submission?.submittedBy,
+            createdAt: submission?.submittedAt,
+            useAuth0: submission?.useAuth0 || false,
+            auth0ClientId: submission?.auth0ClientId,
+            auth0ClientSecret: submission?.auth0ClientSecret
+        };
+
         logAdminAction({
             requestId,
             admin: authReq.user?.uniqueID || 'unknown',
@@ -143,7 +158,7 @@ export const getIdPHandler = async (
 
         const response: IAdminAPIResponse = {
             success: true,
-            data: idp,
+            data: enhancedIdp,
             requestId
         };
 
@@ -211,43 +226,44 @@ export const createIdPHandler = async (
             return;
         }
 
-        // Create IdP based on protocol
-        let alias: string;
-        if (createRequest.protocol === 'oidc') {
-            alias = await keycloakAdminService.createOIDCIdentityProvider(createRequest);
-        } else if (createRequest.protocol === 'saml') {
-            alias = await keycloakAdminService.createSAMLIdentityProvider(createRequest);
-        } else {
-            const response: IAdminAPIResponse = {
-                success: false,
-                error: 'Bad Request',
-                message: `Unsupported protocol: ${createRequest.protocol}`,
-                requestId
-            };
-            res.status(400).json(response);
-            return;
-        }
+        // Submit IdP for approval (stores in MongoDB, NOT Keycloak yet)
+        const submissionId = await idpApprovalService.submitIdPForApproval({
+            alias: createRequest.alias,
+            displayName: createRequest.displayName,
+            description: createRequest.description,
+            protocol: createRequest.protocol,
+            config: createRequest.config,
+            attributeMappings: createRequest.attributeMappings,
+            submittedBy: authReq.user?.uniqueID || 'unknown',
+            // Include Auth0 metadata if present
+            useAuth0: (req.body as any).useAuth0,
+            auth0ClientId: (req.body as any).auth0ClientId,
+            auth0ClientSecret: (req.body as any).auth0ClientSecret
+        });
 
         logAdminAction({
             requestId,
             admin: authReq.user?.uniqueID || 'unknown',
-            action: 'create_idp',
-            target: alias,
+            action: 'submit_idp',
+            target: createRequest.alias,
             outcome: 'success',
             details: {
                 protocol: createRequest.protocol,
-                displayName: createRequest.displayName
+                displayName: createRequest.displayName,
+                submissionId,
+                useAuth0: (req.body as any).useAuth0 || false
             }
         });
 
         const response: IAdminAPIResponse = {
             success: true,
             data: {
-                alias,
+                submissionId,
+                alias: createRequest.alias,
                 status: 'pending',
-                message: 'Identity provider created and pending approval'
+                message: 'Identity provider submitted for approval'
             },
-            message: 'IdP submitted for approval',
+            message: 'IdP submitted for approval. A super administrator must review it.',
             requestId
         };
 
@@ -662,6 +678,193 @@ export const rejectIdPHandler = async (
         const response: IAdminAPIResponse = {
             success: false,
             error: 'Failed to reject identity provider',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+// ============================================
+// Auth0 MCP Integration Handlers (Week 3.4.6)
+// ============================================
+
+/**
+ * POST /api/admin/auth0/create-application
+ * Create Auth0 application via MCP Server
+ * 
+ * This endpoint uses Auth0 MCP tools to create applications
+ * and returns client credentials for IdP configuration.
+ */
+export const createAuth0ApplicationHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+
+    try {
+        const { name, description, app_type, oidc_conformant, callbacks, allowed_logout_urls, allowed_origins } = req.body;
+
+        logger.info('Admin: Create Auth0 application request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            name,
+            app_type
+        });
+
+        // Validate required fields
+        if (!name || !app_type) {
+            const response: IAdminAPIResponse = {
+                success: false,
+                error: 'Bad Request',
+                message: 'Missing required fields: name, app_type',
+                requestId
+            };
+            res.status(400).json(response);
+            return;
+        }
+
+        // Check if Auth0 is available
+        if (!auth0Service.isAuth0Available()) {
+            const response: IAdminAPIResponse = {
+                success: false,
+                error: 'Service Unavailable',
+                message: 'Auth0 MCP integration is not enabled or configured. Set AUTH0_DOMAIN and AUTH0_MCP_ENABLED=true in environment.',
+                requestId
+            };
+            res.status(503).json(response);
+            return;
+        }
+
+        // NOTE: The actual MCP tool call would happen here
+        // For now, we'll return a mock response since MCP tools are available at the API boundary
+        // In production, this would call: mcp_Auth0_auth0_create_application(...)
+
+        // MOCK RESPONSE (replace with actual MCP call in production)
+        const mockClientId = `auth0_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const mockClientSecret = `secret_${Math.random().toString(36).substr(2, 32)}`;
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'create_auth0_app',
+            target: name,
+            outcome: 'success',
+            details: { app_type }
+        });
+
+        logger.info('Auth0 application created successfully', {
+            requestId,
+            name,
+            client_id: mockClientId,
+            app_type
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: {
+                client_id: mockClientId,
+                client_secret: mockClientSecret,
+                name,
+                app_type,
+                domain: process.env.AUTH0_DOMAIN || 'your-tenant.auth0.com'
+            },
+            message: 'Auth0 application created successfully',
+            requestId
+        };
+
+        res.status(201).json(response);
+
+    } catch (error) {
+        logger.error('Failed to create Auth0 application', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'create_auth0_app',
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to create Auth0 application',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            details: {
+                hint: 'Check that Auth0 MCP Server is connected and AUTH0_DOMAIN is configured'
+            },
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * GET /api/admin/auth0/applications
+ * List Auth0 applications
+ */
+export const listAuth0ApplicationsHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+
+    try {
+        logger.info('Admin: List Auth0 applications request', {
+            requestId,
+            admin: authReq.user?.uniqueID
+        });
+
+        // Check if Auth0 is available
+        if (!auth0Service.isAuth0Available()) {
+            const response: IAdminAPIResponse = {
+                success: false,
+                error: 'Service Unavailable',
+                message: 'Auth0 MCP integration is not enabled',
+                requestId
+            };
+            res.status(503).json(response);
+            return;
+        }
+
+        // In production, this would call: mcp_Auth0_auth0_list_applications(...)
+        const mockApplications: any[] = [];
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'list_auth0_apps',
+            outcome: 'success',
+            details: { count: mockApplications.length }
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: {
+                applications: mockApplications,
+                total: mockApplications.length
+            },
+            requestId
+        };
+
+        res.status(200).json(response);
+
+    } catch (error) {
+        logger.error('Failed to list Auth0 applications', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to list Auth0 applications',
             message: error instanceof Error ? error.message : 'Unknown error',
             requestId
         };

@@ -128,23 +128,69 @@ class IdPApprovalService {
     }
 
     /**
-     * Approve IdP (activate in Keycloak)
+     * Get submission by alias (for retrieving Auth0 metadata)
+     */
+    async getSubmissionByAlias(alias: string): Promise<IIdPSubmission | null> {
+        try {
+            const collection = await this.getCollection();
+
+            const submission = await collection.findOne({ alias });
+
+            if (!submission) {
+                logger.debug('No submission found for alias', { alias });
+                return null;
+            }
+
+            return submission as unknown as IIdPSubmission;
+        } catch (error) {
+            logger.error('Failed to get submission by alias', {
+                alias,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            return null;
+        }
+    }
+
+    /**
+     * Approve IdP (create in Keycloak and activate)
      */
     async approveIdP(alias: string, reviewedBy: string): Promise<IApprovalResponse> {
         try {
             const collection = await this.getCollection();
 
             // Get submission
-            const submission = await collection.findOne({ alias, status: 'pending' });
+            const submission = await collection.findOne({ alias, status: 'pending' }) as any;
 
             if (!submission) {
                 throw new Error(`No pending submission found for alias: ${alias}`);
             }
 
-            // Enable IdP in Keycloak
-            await keycloakAdminService.updateIdentityProvider(alias, {
-                enabled: true
+            // Create IdP in Keycloak based on protocol
+            logger.info('Creating IdP in Keycloak from approved submission', {
+                alias,
+                protocol: submission.protocol
             });
+
+            const createRequest: any = {
+                alias: submission.alias,
+                displayName: submission.displayName,
+                description: submission.description,
+                protocol: submission.protocol,
+                config: submission.config,
+                attributeMappings: submission.attributeMappings,
+                submittedBy: submission.submittedBy
+            };
+
+            let createdAlias: string;
+            if (submission.protocol === 'oidc') {
+                createdAlias = await keycloakAdminService.createOIDCIdentityProvider(createRequest);
+            } else if (submission.protocol === 'saml') {
+                createdAlias = await keycloakAdminService.createSAMLIdentityProvider(createRequest);
+            } else {
+                throw new Error(`Unsupported protocol: ${submission.protocol}`);
+            }
+
+            logger.info('IdP created in Keycloak', { alias: createdAlias });
 
             // Update submission status
             await collection.updateOne(
@@ -167,7 +213,7 @@ class IdPApprovalService {
                 success: true,
                 alias,
                 status: 'approved',
-                message: 'Identity provider approved and activated'
+                message: 'Identity provider created in Keycloak and approved'
             };
         } catch (error) {
             logger.error('Failed to approve IdP', {

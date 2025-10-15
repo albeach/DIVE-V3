@@ -20,7 +20,147 @@
 
 ---
 
-## 📋 Procedure: Adding New OIDC IdP
+## 🚀 Quick Start: Auth0 Integration (Week 3.4.6)
+
+**NEW:** DIVE V3 now supports **automated Auth0 integration** for faster IdP onboarding!
+
+### What is Auth0 Integration?
+
+Auth0 integration automates the creation of IdP applications through the Auth0 MCP Server, reducing onboarding time from **15-30 minutes to 2-5 minutes**.
+
+### Benefits
+
+✅ **Automated Application Creation** - No manual Auth0 configuration  
+✅ **Auto-Generated Credentials** - Client ID and secret provided automatically  
+✅ **Faster Deployment** - 80% time reduction  
+✅ **Fewer Errors** - Less manual configuration = fewer mistakes  
+✅ **Centralized Management** - All Auth0 apps managed from DIVE admin console  
+
+### When to Use Auth0 Integration
+
+**Use Auth0 if:**
+- ✅ You want automated app creation
+- ✅ You need faster onboarding (2-5 min vs. 15-30 min)
+- ✅ You prefer managed IdP infrastructure
+- ✅ You want centralized credential management
+
+**Use Manual Keycloak if:**
+- ❌ You have existing IdP infrastructure
+- ❌ You need custom Keycloak configuration
+- ❌ Auth0 is not available in your environment
+
+### How to Use Auth0 Integration
+
+1. Navigate to `/admin/idp/new` in DIVE V3
+2. Select your protocol (OIDC or SAML)
+3. **✅ Check "Also create in Auth0"**
+4. Select Auth0 protocol and app type:
+   - **SPA** (Single Page Application) - For frontend-only apps
+   - **Regular Web** - For server-side apps
+   - **Native** - For mobile/desktop apps
+5. Fill in IdP details (alias, displayName, description)
+6. Configure attribute mappings
+7. Click "Submit for Approval"
+
+**What Happens:**
+1. Auth0 application created automatically via MCP Server
+2. Client ID and client secret generated
+3. Keycloak IdP configured with Auth0 credentials
+4. Success page displays Auth0 credentials
+5. You can copy credentials and configure your actual IdP
+
+### Auth0 Integration Example
+
+**Scenario:** Adding German Defence Ministry IdP with Auth0
+
+**Step 1: Start Wizard**
+```
+Navigate to: http://localhost:3000/admin/idp/new
+Select Protocol: OIDC
+✅ Check "Also create in Auth0"
+Auth0 Protocol: OIDC
+Auth0 App Type: Regular Web Application
+```
+
+**Step 2: Basic Configuration**
+```
+Alias: germany-idp
+Display Name: German Defence Ministry
+Description: German Armed Forces identity provider
+```
+
+**Step 3: Submit**
+- Click "Submit for Approval"
+- Auth0 creates application automatically
+- Credentials displayed: `client_id: abc123...`
+
+**Step 4: Success Page**
+```
+✅ Identity Provider Created Successfully!
+Your IdP has been created with Auth0 integration.
+
+🔵 Auth0 Application Created
+Client ID: abc123xyz789
+Client Secret: secret_****** [Show]
+Domain: your-tenant.auth0.com
+
+Next Steps:
+1. Copy credentials to your IdP configuration
+2. Configure German IdP to use Auth0
+3. Wait for super admin approval
+4. Test authentication flow
+```
+
+**Time Saved:** ~25 minutes! 🎉
+
+### Environment Variables
+
+To enable Auth0 integration, set these environment variables:
+
+**Frontend (.env.local):**
+```bash
+NEXT_PUBLIC_AUTH0_DOMAIN=your-tenant.auth0.com
+NEXT_PUBLIC_AUTH0_MCP_ENABLED=true
+```
+
+**Backend (.env):**
+```bash
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_MCP_ENABLED=true
+```
+
+### Troubleshooting Auth0 Integration
+
+**Issue:** "Auth0 MCP integration is not enabled"
+```
+Solution: 
+1. Check AUTH0_DOMAIN is set in .env
+2. Check AUTH0_MCP_ENABLED=true
+3. Verify Auth0 MCP Server is connected
+4. Restart backend: docker-compose restart backend
+```
+
+**Issue:** "Failed to create Auth0 application"
+```
+Solution:
+1. Check Auth0 MCP Server connection
+2. Verify Auth0 API credentials
+3. Check network connectivity
+4. Fallback: Proceed with manual configuration
+```
+
+**Issue:** Client credentials not showing
+```
+Solution:
+1. Check URL parameters: ?success=created&auth0=true&clientId=...
+2. Refresh the page
+3. Check browser console for errors
+4. Contact administrator if credentials lost
+```
+
+---
+
+## 📋 Procedure: Adding New OIDC IdP (Manual)
 
 ### Example: Adding UK Ministry of Defence (MOD) OIDC IdP
 

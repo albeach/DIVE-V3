@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Navigation from '@/components/navigation';
+import PageLayout from '@/components/layout/page-layout';
 
 interface IStats {
     totalEvents: number;
@@ -91,18 +91,20 @@ export default function AdminDashboard() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <Navigation user={session?.user || {}} />
-            
-            <div className="py-8">
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    {/* Header */}
-                    <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-gray-900">👑 Super Administrator Console</h1>
-                    <p className="mt-2 text-sm text-gray-600">
-                        System overview, audit logs, and administrative tools.
-                    </p>
-                </div>
+        <PageLayout 
+            user={session?.user || {}}
+            breadcrumbs={[
+                { label: 'Admin', href: '/admin/dashboard' },
+                { label: 'Dashboard', href: null }
+            ]}
+        >
+            {/* Header */}
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-gray-900">👑 Super Administrator Console</h1>
+                <p className="mt-2 text-sm text-gray-600">
+                    System overview, audit logs, and administrative tools.
+                </p>
+            </div>
 
                 {/* Quick Stats */}
                 <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -327,11 +329,9 @@ export default function AdminDashboard() {
                         <div className="px-4 py-12 text-center">
                             <p className="text-gray-500">No statistics available yet. System activity will appear here.</p>
                         </div>
-                    </div>
-                )}
                 </div>
-            </div>
-        </div>
+            )}
+        </PageLayout>
     );
 }
 

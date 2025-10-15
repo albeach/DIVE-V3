@@ -14,6 +14,7 @@ import {
     validateUploadMetadata
 } from '../middleware/upload.middleware';
 import { authenticateJWT } from '../middleware/authz.middleware';
+import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
 
 const router = Router();
 
@@ -64,10 +65,11 @@ const router = Router();
 router.post(
     '/',
     authenticateJWT,                     // 1. Verify JWT token
-    upload.single('file'),               // 2. Parse multipart form (Multer)
-    handleUploadErrors,                  // 3. Handle Multer errors
-    validateUploadMetadata,              // 4. Validate metadata
-    uploadFileHandler                    // 5. Process upload
+    enrichmentMiddleware,                // 2. Enrich claims (COI, country) - CRITICAL!
+    upload.single('file'),               // 3. Parse multipart form (Multer)
+    handleUploadErrors,                  // 4. Handle Multer errors
+    validateUploadMetadata,              // 5. Validate metadata
+    uploadFileHandler                    // 6. Process upload
 );
 
 export default router;

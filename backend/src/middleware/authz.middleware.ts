@@ -342,10 +342,11 @@ export const authenticateJWT = async (
         const clearance = decodedToken.clearance;
         const countryOfAffiliation = decodedToken.countryOfAffiliation;
 
-        // Handle acpCOI
+        // Handle acpCOI - Keycloak often double-encodes this as JSON string
         let acpCOI: string[] = [];
         if (decodedToken.acpCOI) {
             if (Array.isArray(decodedToken.acpCOI)) {
+                // Check if first element is a JSON-encoded string (Keycloak mapper issue)
                 if (decodedToken.acpCOI.length > 0 && typeof decodedToken.acpCOI[0] === 'string') {
                     try {
                         const parsed = JSON.parse(decodedToken.acpCOI[0]);
@@ -355,10 +356,24 @@ export const authenticateJWT = async (
                             acpCOI = decodedToken.acpCOI;
                         }
                     } catch {
+                        // Not JSON, use as-is
                         acpCOI = decodedToken.acpCOI;
                     }
                 } else {
                     acpCOI = decodedToken.acpCOI;
+                }
+            } else if (typeof decodedToken.acpCOI === 'string') {
+                // Single string value - try to parse as JSON
+                try {
+                    const parsed = JSON.parse(decodedToken.acpCOI);
+                    if (Array.isArray(parsed)) {
+                        acpCOI = parsed;
+                    } else {
+                        acpCOI = [decodedToken.acpCOI];
+                    }
+                } catch {
+                    // Not JSON, wrap in array
+                    acpCOI = [decodedToken.acpCOI];
                 }
             }
         }
@@ -378,7 +393,9 @@ export const authenticateJWT = async (
             requestId,
             uniqueID,
             clearance,
-            countryOfAffiliation
+            countryOfAffiliation,
+            acpCOI,  // DEBUG: Log COI
+            acpCOI_raw: decodedToken.acpCOI  // DEBUG: Log raw COI from token
         });
 
         next();

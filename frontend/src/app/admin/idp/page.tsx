@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Navigation from '@/components/navigation';
+import PageLayout from '@/components/layout/page-layout';
 import { IIdPListItem, IAdminAPIResponse } from '@/types/admin.types';
 
 export default function IdPListPage() {
@@ -20,9 +20,13 @@ export default function IdPListPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [expandedIdP, setExpandedIdP] = useState<string | null>(null);
+    const [idpDetails, setIdpDetails] = useState<Record<string, any>>({});
 
     // Check for success message from URL
     const successMessage = searchParams.get('success');
+    const auth0Enabled = searchParams.get('auth0') === 'true';
+    const auth0ClientId = searchParams.get('clientId');
 
     useEffect(() => {
         if (status === 'authenticated' && session?.accessToken) {
@@ -112,6 +116,37 @@ export default function IdPListPage() {
         }
     };
 
+    const handleViewDetails = async (alias: string) => {
+        if (expandedIdP === alias) {
+            // Collapse if already expanded
+            setExpandedIdP(null);
+            return;
+        }
+
+        try {
+            const token = (session as any)?.accessToken;
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/idps/${alias}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                }
+            );
+
+            const result: IAdminAPIResponse = await response.json();
+            
+            if (result.success && result.data) {
+                setIdpDetails(prev => ({ ...prev, [alias]: result.data }));
+                setExpandedIdP(alias);
+            } else {
+                alert(`Failed to load details: ${result.message || 'Unknown error'}`);
+            }
+        } catch (err) {
+            alert(err instanceof Error ? err.message : 'Failed to load IdP details');
+        }
+    };
+
     const handleTest = async (alias: string) => {
         try {
             const token = (session as any)?.accessToken;
@@ -160,19 +195,21 @@ export default function IdPListPage() {
     );
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <Navigation user={session?.user || {}} />
-            
-            <div className="py-8">
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    {/* Header */}
-                    <div className="mb-8 flex items-center justify-between">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900">Identity Providers</h1>
-                        <p className="mt-2 text-sm text-gray-600">
-                            Manage OIDC and SAML identity providers for coalition authentication.
-                        </p>
-                    </div>
+        <PageLayout 
+            user={session?.user || {}}
+            breadcrumbs={[
+                { label: 'Admin', href: '/admin/dashboard' },
+                { label: 'IdP Management', href: null }
+            ]}
+        >
+            {/* Header */}
+            <div className="mb-8 flex items-center justify-between">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">Identity Providers</h1>
+                    <p className="mt-2 text-sm text-gray-600">
+                        Manage OIDC and SAML identity providers for coalition authentication.
+                    </p>
+                </div>
                     <button
                         onClick={() => router.push('/admin/idp/new')}
                         className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -186,17 +223,90 @@ export default function IdPListPage() {
 
                 {/* Success Message */}
                 {successMessage === 'created' && (
-                    <div className="mb-6 rounded-md bg-green-50 p-4">
+                    <div className="mb-6 rounded-md bg-green-50 border border-green-200 p-4">
                         <div className="flex">
                             <div className="flex-shrink-0">
                                 <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                                 </svg>
                             </div>
-                            <div className="ml-3">
-                                <p className="text-sm font-medium text-green-800">
-                                    Identity Provider submitted for approval successfully!
+                            <div className="ml-3 flex-1">
+                                <h3 className="text-sm font-bold text-green-800 mb-1">
+                                    Identity Provider Created Successfully!
+                                </h3>
+                                <p className="text-sm text-green-700 mb-2">
+                                    {auth0Enabled 
+                                        ? 'Your IdP has been created with Auth0 integration and submitted for approval.'
+                                        : 'Your IdP has been submitted for approval.'
+                                    }
                                 </p>
+
+                                {auth0Enabled && auth0ClientId && (
+                                    <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                        <div className="flex items-start mb-2">
+                                            <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                            </svg>
+                                            <div className="flex-1">
+                                                <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                                                    🔵 Auth0 Application Created
+                                                </h4>
+                                                <p className="text-xs text-blue-800 mb-2">
+                                                    Your Auth0 application was created automatically. Use these credentials in your IdP configuration:
+                                                </p>
+                                                <div className="bg-white rounded border border-blue-300 p-2 space-y-1">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-medium text-blue-700">Client ID:</span>
+                                                        <div className="flex items-center">
+                                                            <code className="text-xs font-mono text-blue-900 bg-blue-100 px-2 py-1 rounded">
+                                                                {auth0ClientId}
+                                                            </code>
+                                                            <button
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(auth0ClientId);
+                                                                    alert('Client ID copied to clipboard!');
+                                                                }}
+                                                                className="ml-2 text-blue-600 hover:text-blue-800"
+                                                                title="Copy Client ID"
+                                                            >
+                                                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-xs text-blue-700 mt-2">
+                                                        <strong>Note:</strong> Client secret was provided during creation. Check your email or Auth0 dashboard for the secret.
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 text-xs text-blue-700">
+                                                    <strong>Next steps:</strong>
+                                                    <ol className="list-decimal list-inside mt-1 space-y-1">
+                                                        <li>Configure your actual IdP to use these Auth0 credentials</li>
+                                                        <li>Wait for super admin approval in Keycloak</li>
+                                                        <li>Test the authentication flow</li>
+                                                    </ol>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="mt-3 flex items-center space-x-3">
+                                    <button
+                                        onClick={() => router.push('/admin/idp/new')}
+                                        className="text-sm font-medium text-green-700 hover:text-green-800 underline"
+                                    >
+                                        Create Another IdP
+                                    </button>
+                                    <span className="text-green-600">•</span>
+                                    <button
+                                        onClick={() => router.push('/admin/approvals')}
+                                        className="text-sm font-medium text-green-700 hover:text-green-800 underline"
+                                    >
+                                        View Pending Approvals
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -288,52 +398,149 @@ export default function IdPListPage() {
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredIdps.map((idp) => (
-                                    <tr key={idp.alias}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {idp.alias}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {idp.displayName}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                                {idp.protocol.toUpperCase()}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <span
-                                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                    idp.enabled
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : 'bg-gray-100 text-gray-800'
-                                                }`}
-                                            >
-                                                {idp.enabled ? 'Active' : 'Inactive'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                            <button
-                                                onClick={() => handleTest(idp.alias)}
-                                                className="text-blue-600 hover:text-blue-900"
-                                            >
-                                                Test
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(idp.alias)}
-                                                className="text-red-600 hover:text-red-900"
-                                            >
-                                                Delete
-                                            </button>
-                                        </td>
-                                    </tr>
+                                    <React.Fragment key={idp.alias}>
+                                        <tr className={expandedIdP === idp.alias ? 'bg-blue-50' : ''}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                {idp.alias}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {idp.displayName}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                    {idp.protocol.toUpperCase()}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                <span
+                                                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                        idp.enabled
+                                                            ? 'bg-green-100 text-green-800'
+                                                            : 'bg-gray-100 text-gray-800'
+                                                    }`}
+                                                >
+                                                    {idp.enabled ? 'Active' : 'Inactive'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button
+                                                    onClick={() => handleViewDetails(idp.alias)}
+                                                    className="text-blue-600 hover:text-blue-900"
+                                                >
+                                                    {expandedIdP === idp.alias ? 'Hide' : 'View'} Details
+                                                </button>
+                                                <button
+                                                    onClick={() => handleTest(idp.alias)}
+                                                    className="text-green-600 hover:text-green-900"
+                                                >
+                                                    Test
+                                                </button>
+                                                <button
+                                                    onClick={() => router.push(`/admin/idp/${idp.alias}/edit`)}
+                                                    className="text-indigo-600 hover:text-indigo-900"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(idp.alias)}
+                                                    className="text-red-600 hover:text-red-900"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {/* Expandable Details Row */}
+                                        {expandedIdP === idp.alias && idpDetails[idp.alias] && (
+                                            <tr className="bg-gray-50">
+                                                <td colSpan={5} className="px-6 py-4">
+                                                    <div className="space-y-4">
+                                                        <h4 className="text-sm font-semibold text-gray-900">Configuration Details</h4>
+                                                        
+                                                        {/* Auth0 Integration Info */}
+                                                        {idpDetails[idp.alias].useAuth0 && (
+                                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                                                <div className="flex items-start">
+                                                                    <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                    <div className="flex-1">
+                                                                        <h5 className="text-sm font-semibold text-blue-900 mb-1">
+                                                                            🔵 Auth0 Integration Active
+                                                                        </h5>
+                                                                        <p className="text-xs text-blue-800 mb-2">
+                                                                            This IdP was created with Auth0 integration
+                                                                        </p>
+                                                                        {idpDetails[idp.alias].auth0ClientId && (
+                                                                            <div className="bg-white rounded border border-blue-300 p-2 space-y-1">
+                                                                                <div className="text-xs text-blue-700">
+                                                                                    <strong>Client ID:</strong>
+                                                                                    <code className="ml-1 bg-blue-100 px-1 py-0.5 rounded">
+                                                                                        {idpDetails[idp.alias].auth0ClientId}
+                                                                                    </code>
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            navigator.clipboard.writeText(idpDetails[idp.alias].auth0ClientId);
+                                                                                            alert('Client ID copied!');
+                                                                                        }}
+                                                                                        className="ml-2 text-blue-600 hover:text-blue-800 text-xs underline"
+                                                                                    >
+                                                                                        Copy
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Protocol Config */}
+                                                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                                            <h5 className="text-sm font-semibold text-gray-900 mb-2">
+                                                                {idp.protocol.toUpperCase()} Configuration
+                                                            </h5>
+                                                            <pre className="text-xs text-gray-700 overflow-x-auto bg-gray-50 p-3 rounded">
+                                                                {JSON.stringify(idpDetails[idp.alias].config || {}, null, 2)}
+                                                            </pre>
+                                                        </div>
+
+                                                        {/* Attribute Mappings */}
+                                                        {idpDetails[idp.alias].attributeMappings && (
+                                                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                                                <h5 className="text-sm font-semibold text-gray-900 mb-2">
+                                                                    Attribute Mappings
+                                                                </h5>
+                                                                <div className="grid grid-cols-2 gap-3">
+                                                                    {Object.entries(idpDetails[idp.alias].attributeMappings).map(([attr, mapping]: [string, any]) => (
+                                                                        <div key={attr} className="text-xs">
+                                                                            <span className="font-medium text-gray-700">{attr}:</span>
+                                                                            <code className="ml-1 bg-gray-100 px-1 py-0.5 rounded">{mapping.claim || mapping}</code>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Metadata */}
+                                                        <div className="text-xs text-gray-600 space-y-1">
+                                                            {idpDetails[idp.alias].submittedBy && (
+                                                                <div><strong>Created by:</strong> {idpDetails[idp.alias].submittedBy}</div>
+                                                            )}
+                                                            {idpDetails[idp.alias].createdAt && (
+                                                                <div><strong>Created:</strong> {new Date(idpDetails[idp.alias].createdAt).toLocaleString()}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 )}
-                </div>
-            </div>
-        </div>
+        </PageLayout>
     );
 }
 

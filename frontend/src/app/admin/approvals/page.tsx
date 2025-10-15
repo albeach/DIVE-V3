@@ -9,7 +9,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import Navigation from '@/components/navigation';
+import PageLayout from '@/components/layout/page-layout';
 
 interface IIdPSubmission {
     submissionId: string;
@@ -22,6 +22,10 @@ interface IIdPSubmission {
     attributeMappings: any;
     submittedBy: string;
     submittedAt: string;
+    // Auth0 Integration (Week 3.4.6)
+    useAuth0?: boolean;
+    auth0ClientId?: string;
+    auth0ClientSecret?: string;
 }
 
 export default function ApprovalsPage() {
@@ -175,18 +179,20 @@ export default function ApprovalsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <Navigation user={session?.user || {}} />
-            
-            <div className="py-8">
-                <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-                    {/* Header */}
-                    <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
-                    <p className="mt-2 text-sm text-gray-600">
-                        Review and approve or reject pending identity provider submissions.
-                    </p>
-                </div>
+        <PageLayout 
+            user={session?.user || {}}
+            breadcrumbs={[
+                { label: 'Admin', href: '/admin/dashboard' },
+                { label: 'Approvals', href: null }
+            ]}
+        >
+            {/* Header */}
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
+                <p className="mt-2 text-sm text-gray-600">
+                    Review and approve or reject pending identity provider submissions.
+                </p>
+            </div>
 
                 {/* Error Message */}
                 {error && (
@@ -258,6 +264,39 @@ export default function ApprovalsPage() {
                                         <p className="text-sm text-gray-700">
                                             <strong>Submitted at:</strong> {new Date(submission.submittedAt).toLocaleString()}
                                         </p>
+                                        {submission.useAuth0 && (
+                                            <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                                <div className="flex items-start">
+                                                    <svg className="h-5 w-5 text-blue-600 mr-2 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <div className="flex-1">
+                                                        <h4 className="text-sm font-semibold text-blue-900 mb-1">
+                                                            🔵 Auth0 Integration Included
+                                                        </h4>
+                                                        <p className="text-xs text-blue-800 mb-2">
+                                                            This IdP was created with Auth0 integration. Credentials have been auto-generated:
+                                                        </p>
+                                                        {submission.auth0ClientId && (
+                                                            <div className="bg-white rounded border border-blue-300 p-2 space-y-1">
+                                                                <div className="text-xs text-blue-700">
+                                                                    <strong>Client ID:</strong>
+                                                                    <code className="ml-1 bg-blue-100 px-1 py-0.5 rounded">{submission.auth0ClientId}</code>
+                                                                </div>
+                                                                {submission.auth0ClientSecret && (
+                                                                    <div className="text-xs text-blue-700">
+                                                                        <strong>Client Secret:</strong>
+                                                                        <code className="ml-1 bg-blue-100 px-1 py-0.5 rounded">
+                                                                            {submission.auth0ClientSecret.substring(0, 20)}...
+                                                                        </code>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* View Details Button */}
@@ -326,9 +365,7 @@ export default function ApprovalsPage() {
                         ))}
                     </div>
                 )}
-                </div>
-            </div>
-        </div>
+        </PageLayout>
     );
 }
 
