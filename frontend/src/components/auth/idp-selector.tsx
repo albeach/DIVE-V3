@@ -19,12 +19,15 @@ interface IdPOption {
 
 // Flag mapping for known IdPs
 const getFlagForIdP = (alias: string): string => {
-  if (alias.includes('us') || alias.includes('dod')) return '🇺🇸';
+  // Match specific patterns (order matters - check specific before generic)
+  if (alias.includes('germany') || alias.includes('deu')) return '🇩🇪';
   if (alias.includes('france') || alias.includes('fra')) return '🇫🇷';
   if (alias.includes('canada') || alias.includes('can')) return '🇨🇦';
-  if (alias.includes('germany') || alias.includes('deu')) return '🇩🇪';
   if (alias.includes('uk') || alias.includes('gbr')) return '🇬🇧';
   if (alias.includes('industry') || alias.includes('contractor')) return '🏢';
+  // Check for US last (since "industry" doesn't contain "us")
+  if (alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return '🇺🇸';
+  
   return '🌐'; // Default globe icon
 };
 
@@ -112,6 +115,7 @@ export function IdpSelector() {
 
   return (
     <>
+      {/* Federated Identity Providers */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {idps.map((idp) => (
           <button
@@ -140,8 +144,33 @@ export function IdpSelector() {
         ))}
       </div>
 
+      {/* Direct Keycloak Login (for test users in dive-v3-pilot realm) */}
+      <div className="mt-6 pt-6 border-t border-gray-200">
+        <div className="text-center mb-4">
+          <p className="text-sm text-gray-600 mb-3">
+            <strong>For Testing:</strong> Direct login with dive-v3-pilot realm test users
+          </p>
+        </div>
+        <button
+          onClick={() => handleIdpClick(undefined)}
+          className="group w-full p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 text-center"
+        >
+          <div className="flex items-center justify-center space-x-3">
+            <div className="text-3xl">🔑</div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-700 group-hover:text-blue-600">
+                Direct Keycloak Login
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                dive-v3-pilot realm (testuser-us, testuser-fra, etc.)
+              </p>
+            </div>
+          </div>
+        </button>
+      </div>
+
       <div className="mt-6 text-center text-sm text-gray-500">
-        <p>Showing {idps.length} active identity provider{idps.length !== 1 ? 's' : ''}</p>
+        <p>Showing {idps.length} federated identity provider{idps.length !== 1 ? 's' : ''}</p>
       </div>
     </>
   );
