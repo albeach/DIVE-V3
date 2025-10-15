@@ -139,13 +139,16 @@ export const getIdPHandler = async (
         const submission = await idpApprovalService.getSubmissionByAlias(alias);
 
         // Merge Keycloak data with Auth0 metadata
+        // IMPORTANT: Normalize providerId to protocol for frontend consistency
         const enhancedIdp = {
             ...idp,
+            protocol: idp.providerId as string,  // Already 'oidc' or 'saml' from Keycloak
             submittedBy: submission?.submittedBy,
             createdAt: submission?.submittedAt,
             useAuth0: submission?.useAuth0 || false,
             auth0ClientId: submission?.auth0ClientId,
-            auth0ClientSecret: submission?.auth0ClientSecret
+            auth0ClientSecret: submission?.auth0ClientSecret,
+            attributeMappings: submission?.attributeMappings
         };
 
         logAdminAction({

@@ -95,16 +95,24 @@ class KeycloakAdminService {
             const idps = await this.client.identityProviders.find();
 
             logger.info('Retrieved identity providers', {
-                count: idps.length
+                count: idps.length,
+                idps: idps.map(i => ({
+                    alias: i.alias,
+                    providerId: i.providerId,
+                    enabled: i.enabled
+                }))
             });
 
             return {
                 idps: idps.map(idp => ({
                     alias: idp.alias!,
                     displayName: idp.displayName || idp.alias!,
-                    protocol: idp.providerId as IdPProtocol,
+                    protocol: (idp.providerId === 'oidc' || idp.providerId === 'saml'
+                        ? idp.providerId
+                        : (idp.providerId?.includes('oidc') ? 'oidc' : 'saml')
+                    ) as IdPProtocol,
                     status: (idp.enabled ? 'active' : 'disabled') as IdPStatus,
-                    enabled: idp.enabled!,
+                    enabled: idp.enabled !== undefined ? idp.enabled : false,
                     createdAt: idp.config?.createdAt,
                     submittedBy: idp.config?.submittedBy
                 })),
