@@ -62,7 +62,7 @@ describe('Admin IdP Enable/Disable Feature', () => {
 
             expect(response.body.success).toBe(true);
             expect(response.body.message).toContain('updated');
-            
+
             // Verify updateIdentityProvider was called with enabled: false
             expect(keycloakAdminService.updateIdentityProvider).toHaveBeenCalledWith(
                 'test-idp',
@@ -92,7 +92,7 @@ describe('Admin IdP Enable/Disable Feature', () => {
                 .expect(200);
 
             expect(response.body.success).toBe(true);
-            
+
             expect(keycloakAdminService.updateIdentityProvider).toHaveBeenCalledWith(
                 'disabled-idp',
                 expect.objectContaining({ enabled: true })

@@ -67,7 +67,7 @@ export interface IIdPFormData {
 export interface IIdPListItem {
     alias: string;
     displayName: string;
-    protocol: IdPProtocol;
+    protocol: IdPProtocol;  // Always present - backend normalizes providerId to protocol
     status: IdPStatus;
     enabled: boolean;
     createdAt?: string;

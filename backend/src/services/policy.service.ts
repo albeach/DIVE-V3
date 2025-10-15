@@ -30,14 +30,21 @@ export async function listPolicies(): Promise<IPolicyMetadata[]> {
     try {
         const policies: IPolicyMetadata[] = [];
 
-        // Main policy: fuel_inventory_abac_policy.rego
-        const mainPolicyPath = path.join(POLICY_DIR, 'fuel_inventory_abac_policy.rego');
-        if (fs.existsSync(mainPolicyPath)) {
-            const mainPolicy = await getPolicyMetadata(
-                'fuel_inventory_abac_policy',
-                mainPolicyPath
-            );
-            policies.push(mainPolicy);
+        // Scan policies directory for all .rego files (excluding tests subdirectory)
+        if (fs.existsSync(POLICY_DIR)) {
+            const files = fs.readdirSync(POLICY_DIR);
+
+            for (const file of files) {
+                const filePath = path.join(POLICY_DIR, file);
+                const stat = fs.statSync(filePath);
+
+                // Only process .rego files, skip directories
+                if (stat.isFile() && file.endsWith('.rego')) {
+                    const policyId = file.replace('.rego', '');
+                    const metadata = await getPolicyMetadata(policyId, filePath);
+                    policies.push(metadata);
+                }
+            }
         }
 
         logger.info('Listed policies', { count: policies.length });
@@ -72,13 +79,20 @@ async function getPolicyMetadata(
         const versionMatch = content.match(/#.*[Vv]ersion:?\s+([\d.]+)/);
         const version = versionMatch ? versionMatch[1] : '1.0';
 
+        // Extract policy name from comments (look for lines like "# Policy Name" or "# Policy:")
+        const nameMatch = content.match(/^#\s*([A-Z][A-Za-z\s]+(?:Policy|Authorization))\s*$/m);
+        const name = nameMatch ? nameMatch[1].trim() : formatPolicyName(policyId);
+
+        // Extract description from comments (look for multi-line comment blocks)
+        const description = extractPolicyDescription(content, policyId);
+
         // Count test files
         const testCount = await countPolicyTests(policyId);
 
         return {
             policyId,
-            name: 'Fuel Inventory ABAC Policy',
-            description: 'Coalition ICAM authorization with clearance, releasability, COI, embargo, and ZTDF integrity checks',
+            name,
+            description,
             version,
             package: packageName,
             ruleCount,
@@ -92,6 +106,44 @@ async function getPolicyMetadata(
         logger.error('Failed to get policy metadata', { error, policyId });
         throw error;
     }
+}
+
+/**
+ * Format policy ID into human-readable name
+ */
+function formatPolicyName(policyId: string): string {
+    return policyId
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+/**
+ * Extract policy description from comments
+ */
+function extractPolicyDescription(content: string, policyId: string): string {
+    // Look for description patterns in comments
+    const descriptionPatterns = [
+        /^#\s*Enforces?\s+(.+)$/m,
+        /^#\s*(.+authorization.+)$/im,
+        /^#\s*(.+policy.+)$/im
+    ];
+
+    for (const pattern of descriptionPatterns) {
+        const match = content.match(pattern);
+        if (match && match[1]) {
+            return match[1].trim();
+        }
+    }
+
+    // Fallback descriptions based on policy ID
+    if (policyId.includes('admin')) {
+        return 'Administrative operations authorization for super_admin role';
+    } else if (policyId.includes('fuel') || policyId.includes('inventory')) {
+        return 'Coalition ICAM authorization with clearance, releasability, COI, embargo, and ZTDF integrity checks';
+    }
+
+    return 'Authorization policy for access control decisions';
 }
 
 /**
