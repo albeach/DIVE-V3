@@ -12,7 +12,7 @@
  * - POST /api/admin/idps/:alias/test - Test IdP connectivity
  */
 
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { adminAuthMiddleware } from '../middleware/admin-auth.middleware';
 import {
     listIdPsHandler,
@@ -156,7 +156,7 @@ router.get('/auth0/applications', listAuth0ApplicationsHandler);
  * GET /api/admin/metrics
  * Prometheus-compatible metrics endpoint
  */
-router.get('/metrics', (req: Request, res: Response) => {
+router.get('/metrics', (_req: Request, res: Response) => {
     res.setHeader('Content-Type', 'text/plain; version=0.0.4');
     res.send(metricsService.exportPrometheus());
 });
@@ -165,7 +165,7 @@ router.get('/metrics', (req: Request, res: Response) => {
  * GET /api/admin/metrics/summary
  * Human-readable metrics summary (JSON)
  */
-router.get('/metrics/summary', (req: Request, res: Response) => {
+router.get('/metrics/summary', (_req: Request, res: Response) => {
     const summary = metricsService.getSummary();
     res.json({
         success: true,
