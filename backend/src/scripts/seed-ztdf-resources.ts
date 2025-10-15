@@ -207,7 +207,6 @@ function generateZTDFResource(index: number) {
     // Encrypt content (all resources encrypted for demo)
     const encResult = encryptContent(plainContent, resourceId);
     const encryptedChunk = encResult.encryptedData;
-    const dek = encResult.dek;
     const iv = encResult.iv;
     const authTag = encResult.authTag;
 
@@ -216,7 +215,7 @@ function generateZTDFResource(index: number) {
         kaoId: `kao-${resourceId}`,
         kasUrl: 'http://localhost:8080',
         kasId: 'dive-v3-kas',
-        wrappedKey: generateBase64(256), // Mock wrapped DEK
+        wrappedKey: generateBase64(256), // Mock wrapped DEK (in production would be encrypted DEK)
         wrappingAlgorithm: 'RSA-OAEP-256',
         policyBinding: {
             clearanceRequired: classification,

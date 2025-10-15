@@ -705,7 +705,8 @@ export const createAuth0ApplicationHandler = async (
     const authReq = req as IAuthenticatedRequest;
 
     try {
-        const { name, description, app_type, oidc_conformant, callbacks, allowed_logout_urls, allowed_origins } = req.body;
+        const { name, app_type } = req.body;
+        // For production MCP integration, also use: description, oidc_conformant, callbacks, allowed_logout_urls, allowed_origins
 
         logger.info('Admin: Create Auth0 application request', {
             requestId,
@@ -794,10 +795,7 @@ export const createAuth0ApplicationHandler = async (
         const response: IAdminAPIResponse = {
             success: false,
             error: 'Failed to create Auth0 application',
-            message: error instanceof Error ? error.message : 'Unknown error',
-            details: {
-                hint: 'Check that Auth0 MCP Server is connected and AUTH0_DOMAIN is configured'
-            },
+            message: error instanceof Error ? error.message : 'Unknown error. Check that Auth0 MCP Server is connected and AUTH0_DOMAIN is configured.',
             requestId
         };
 
