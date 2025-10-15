@@ -13,9 +13,10 @@ interface IOIDCConfigFormProps {
     config: IOIDCConfig;
     onChange: (config: IOIDCConfig) => void;
     errors?: Record<string, string>;
+    readonly?: boolean;  // NEW: For Auth0 auto-populated fields
 }
 
-export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCConfigFormProps) {
+export default function OIDCConfigForm({ config, onChange, errors = {}, readonly = false }: IOIDCConfigFormProps) {
     const handleChange = (field: keyof IOIDCConfig, value: string) => {
         onChange({
             ...config,
@@ -28,9 +29,38 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
             <div>
                 <h3 className="text-lg font-medium text-gray-900">OIDC Configuration</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                    Configure OpenID Connect settings for this identity provider.
+                    {readonly 
+                        ? '✨ Auth0 will automatically configure these settings' 
+                        : 'Configure OpenID Connect settings for this identity provider.'
+                    }
                 </p>
             </div>
+
+            {readonly && (
+                <div className="rounded-md bg-blue-50 border border-blue-200 p-4">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div className="ml-3 flex-1">
+                            <h3 className="text-sm font-bold text-blue-900 mb-1">
+                                🚀 Auto-Configured by Auth0
+                            </h3>
+                            <p className="text-sm text-blue-800 mb-2">
+                                These fields have been automatically populated with Auth0 standard endpoints. 
+                                Client credentials will be generated when you submit.
+                            </p>
+                            <p className="text-xs text-blue-700">
+                                <strong>What happens next:</strong> Auth0 will create the application and provide 
+                                <code className="mx-1 bg-blue-100 px-1 py-0.5 rounded">client_id</code> and 
+                                <code className="mx-1 bg-blue-100 px-1 py-0.5 rounded">client_secret</code> automatically.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Issuer URL */}
             <div>
@@ -42,39 +72,48 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
                     id="issuer"
                     value={config.issuer}
                     onChange={(e) => handleChange('issuer', e.target.value)}
+                    disabled={readonly}
                     placeholder="https://idp.example.com/oidc"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                        errors.issuer
+                        readonly 
+                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : errors.issuer
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.issuer && (
+                {errors.issuer && !readonly && (
                     <p className="mt-1 text-sm text-red-600">{errors.issuer}</p>
                 )}
-                <p className="mt-1 text-xs text-gray-500">
-                    The OIDC issuer URL (e.g., https://accounts.google.com)
-                </p>
+                {!readonly && (
+                    <p className="mt-1 text-xs text-gray-500">
+                        The OIDC issuer URL (e.g., https://accounts.google.com)
+                    </p>
+                )}
             </div>
 
             {/* Client ID */}
             <div>
                 <label htmlFor="clientId" className="block text-sm font-medium text-gray-700">
                     Client ID <span className="text-red-500">*</span>
+                    {readonly && <span className="ml-2 text-xs text-blue-600 font-normal">(Will be generated)</span>}
                 </label>
                 <input
                     type="text"
                     id="clientId"
                     value={config.clientId}
                     onChange={(e) => handleChange('clientId', e.target.value)}
+                    disabled={readonly}
                     placeholder="dive-v3-client"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                        errors.clientId
+                        readonly 
+                            ? 'bg-blue-50 cursor-not-allowed text-blue-700 border-blue-200 font-medium'
+                            : errors.clientId
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.clientId && (
+                {errors.clientId && !readonly && (
                     <p className="mt-1 text-sm text-red-600">{errors.clientId}</p>
                 )}
             </div>
@@ -83,20 +122,24 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
             <div>
                 <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700">
                     Client Secret <span className="text-red-500">*</span>
+                    {readonly && <span className="ml-2 text-xs text-blue-600 font-normal">(Will be generated)</span>}
                 </label>
                 <input
-                    type="password"
+                    type={readonly ? 'text' : 'password'}
                     id="clientSecret"
                     value={config.clientSecret}
                     onChange={(e) => handleChange('clientSecret', e.target.value)}
+                    disabled={readonly}
                     placeholder="••••••••••••••••"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                        errors.clientSecret
+                        readonly 
+                            ? 'bg-blue-50 cursor-not-allowed text-blue-700 border-blue-200 font-medium'
+                            : errors.clientSecret
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.clientSecret && (
+                {errors.clientSecret && !readonly && (
                     <p className="mt-1 text-sm text-red-600">{errors.clientSecret}</p>
                 )}
             </div>
@@ -111,14 +154,17 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
                     id="authorizationUrl"
                     value={config.authorizationUrl}
                     onChange={(e) => handleChange('authorizationUrl', e.target.value)}
+                    disabled={readonly}
                     placeholder="https://idp.example.com/oauth/authorize"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                        errors.authorizationUrl
+                        readonly 
+                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : errors.authorizationUrl
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.authorizationUrl && (
+                {errors.authorizationUrl && !readonly && (
                     <p className="mt-1 text-sm text-red-600">{errors.authorizationUrl}</p>
                 )}
             </div>
@@ -133,14 +179,17 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
                     id="tokenUrl"
                     value={config.tokenUrl}
                     onChange={(e) => handleChange('tokenUrl', e.target.value)}
+                    disabled={readonly}
                     placeholder="https://idp.example.com/oauth/token"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                        errors.tokenUrl
+                        readonly 
+                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : errors.tokenUrl
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.tokenUrl && (
+                {errors.tokenUrl && !readonly && (
                     <p className="mt-1 text-sm text-red-600">{errors.tokenUrl}</p>
                 )}
             </div>
@@ -155,10 +204,15 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
                     id="userInfoUrl"
                     value={config.userInfoUrl || ''}
                     onChange={(e) => handleChange('userInfoUrl', e.target.value)}
+                    disabled={readonly}
                     placeholder="https://idp.example.com/userinfo"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                        readonly 
+                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                    }`}
                 />
-                <p className="mt-1 text-xs text-gray-500">Optional: UserInfo endpoint URL</p>
+                {!readonly && <p className="mt-1 text-xs text-gray-500">Optional: UserInfo endpoint URL</p>}
             </div>
 
             {/* JWKS URL (Optional) */}
@@ -171,10 +225,15 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
                     id="jwksUrl"
                     value={config.jwksUrl || ''}
                     onChange={(e) => handleChange('jwksUrl', e.target.value)}
+                    disabled={readonly}
                     placeholder="https://idp.example.com/certs"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                        readonly 
+                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                    }`}
                 />
-                <p className="mt-1 text-xs text-gray-500">Optional: JSON Web Key Set URL</p>
+                {!readonly && <p className="mt-1 text-xs text-gray-500">Optional: JSON Web Key Set URL</p>}
             </div>
 
             {/* Default Scopes */}
@@ -187,43 +246,52 @@ export default function OIDCConfigForm({ config, onChange, errors = {} }: IOIDCC
                     id="defaultScopes"
                     value={config.defaultScopes || 'openid profile email'}
                     onChange={(e) => handleChange('defaultScopes', e.target.value)}
+                    disabled={readonly}
                     placeholder="openid profile email"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
+                        readonly 
+                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                    }`}
                 />
-                <p className="mt-1 text-xs text-gray-500">
-                    Space-separated list of OAuth scopes (default: openid profile email)
-                </p>
+                {!readonly && (
+                    <p className="mt-1 text-xs text-gray-500">
+                        Space-separated list of OAuth scopes (default: openid profile email)
+                    </p>
+                )}
             </div>
 
             {/* Help Text */}
-            <div className="rounded-md bg-blue-50 p-4">
-                <div className="flex">
-                    <div className="flex-shrink-0">
-                        <svg
-                            className="h-5 w-5 text-blue-400"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                        >
-                            <path
-                                fillRule="evenodd"
-                                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                                clipRule="evenodd"
-                            />
-                        </svg>
-                    </div>
-                    <div className="ml-3 flex-1">
-                        <h3 className="text-sm font-medium text-blue-800">OIDC Discovery</h3>
-                        <div className="mt-2 text-sm text-blue-700">
-                            <p>
-                                You can find these URLs at the OIDC Discovery endpoint:
-                                <code className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-xs">
-                                    /.well-known/openid-configuration
-                                </code>
-                            </p>
+            {!readonly && (
+                <div className="rounded-md bg-blue-50 p-4">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                            <svg
+                                className="h-5 w-5 text-blue-400"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                            >
+                                <path
+                                    fillRule="evenodd"
+                                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                    clipRule="evenodd"
+                                />
+                            </svg>
+                        </div>
+                        <div className="ml-3 flex-1">
+                            <h3 className="text-sm font-medium text-blue-800">OIDC Discovery</h3>
+                            <div className="mt-2 text-sm text-blue-700">
+                                <p>
+                                    You can find these URLs at the OIDC Discovery endpoint:
+                                    <code className="ml-1 rounded bg-blue-100 px-1 py-0.5 text-xs">
+                                        /.well-known/openid-configuration
+                                    </code>
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

@@ -137,13 +137,29 @@ app.post('/request-key', async (req: Request, res: Response) => {
         const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
         const clearance = decodedToken.clearance;
         const countryOfAffiliation = decodedToken.countryOfAffiliation;
-        const acpCOI = decodedToken.acpCOI || [];
+
+        // Parse acpCOI - handle string or array (same fix as upload controller)
+        let acpCOI: string[] = [];
+        if (decodedToken.acpCOI) {
+            if (typeof decodedToken.acpCOI === 'string') {
+                try {
+                    acpCOI = JSON.parse(decodedToken.acpCOI);
+                } catch {
+                    acpCOI = [decodedToken.acpCOI];
+                }
+            } else if (Array.isArray(decodedToken.acpCOI)) {
+                acpCOI = decodedToken.acpCOI;
+            }
+        }
 
         kasLogger.info('Token validated', {
             requestId,
             uniqueID,
             clearance,
-            country: countryOfAffiliation
+            country: countryOfAffiliation,
+            acpCOI,  // DEBUG: Log parsed COI
+            acpCOI_type: typeof acpCOI,
+            acpCOI_isArray: Array.isArray(acpCOI)
         });
 
         // ============================================
@@ -194,6 +210,10 @@ app.post('/request-key', async (req: Request, res: Response) => {
         // ============================================
         // 4. Re-Evaluate OPA Policy (Defense in Depth)
         // ============================================
+        // Ensure arrays are properly typed for OPA (same fix as upload)
+        const userCOI = Array.isArray(acpCOI) ? acpCOI : [];
+        const resourceCOI = Array.isArray(resource.COI) ? resource.COI : [];
+
         const opaInput = {
             input: {
                 subject: {
@@ -201,7 +221,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
                     uniqueID,
                     clearance,
                     countryOfAffiliation,
-                    acpCOI
+                    acpCOI: userCOI  // ✅ Guaranteed array
                 },
                 action: {
                     operation: 'decrypt' // KAS-specific action
@@ -210,7 +230,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
                     resourceId: resource.resourceId,
                     classification: resource.classification,
                     releasabilityTo: resource.releasabilityTo,
-                    COI: resource.COI || [],
+                    COI: resourceCOI,  // ✅ Guaranteed array
                     creationDate: resource.creationDate,
                     encrypted: true
                 },
@@ -222,6 +242,15 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 }
             }
         };
+
+        // DEBUG: Log OPA input to verify array types
+        kasLogger.debug('OPA input for KAS', {
+            requestId,
+            subject_acpCOI: userCOI,
+            subject_acpCOI_isArray: Array.isArray(userCOI),
+            resource_COI: resourceCOI,
+            resource_COI_isArray: Array.isArray(resourceCOI)
+        });
 
         let opaDecision: any;
         try {
@@ -292,11 +321,11 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 kaoId: keyRequest.kaoId,
                 outcome: 'DENY',
                 reason: opaDecision.reason,
-                subjectAttributes: { clearance, countryOfAffiliation, acpCOI },
+                subjectAttributes: { clearance, countryOfAffiliation, acpCOI: userCOI },
                 resourceAttributes: {
                     classification: resource.classification,
                     releasabilityTo: resource.releasabilityTo,
-                    COI: resource.COI
+                    COI: resourceCOI
                 },
                 opaEvaluation: opaDecision.evaluation_details,
                 latencyMs: Date.now() - startTime
@@ -320,12 +349,12 @@ app.post('/request-key', async (req: Request, res: Response) => {
                             required: {
                                 clearance: resource.classification,
                                 countries: resource.releasabilityTo,
-                                coi: resource.COI || []
+                                coi: resourceCOI
                             },
                             provided: {
                                 clearance: clearance,
                                 country: countryOfAffiliation,
-                                coi: acpCOI
+                                coi: userCOI
                             }
                         }
                     }
@@ -380,11 +409,11 @@ app.post('/request-key', async (req: Request, res: Response) => {
             kaoId: keyRequest.kaoId,
             outcome: 'ALLOW',
             reason: 'Policy authorization successful',
-            subjectAttributes: { clearance, countryOfAffiliation, acpCOI },
+            subjectAttributes: { clearance, countryOfAffiliation, acpCOI: userCOI },
             resourceAttributes: {
                 classification: resource.classification,
                 releasabilityTo: resource.releasabilityTo,
-                COI: resource.COI
+                COI: resourceCOI
             },
             opaEvaluation: opaDecision.evaluation_details,
             latencyMs: Date.now() - startTime

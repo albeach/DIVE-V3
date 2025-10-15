@@ -178,8 +178,8 @@ async function convertToZTDF(
     mimeType: string
 ): Promise<IZTDFObject> {
 
-    // 1. Encrypt content with AES-256-GCM
-    const encryptionResult = encryptContent(base64Content);
+    // 1. Encrypt content with AES-256-GCM (deterministic DEK for KAS compatibility)
+    const encryptionResult = encryptContent(base64Content, uploadId);
 
     // 2. Create ZTDF Manifest
     const currentTimestamp = new Date().toISOString();

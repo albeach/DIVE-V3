@@ -48,17 +48,33 @@ export const uploadFileHandler = async (
             description: req.body.description
         };
 
-        // 3. Extract uploader info from JWT
-        const user = (req as any).user;
+        // 3. Extract uploader info from JWT (prefer enriched data if available)
+        const enrichedUser = (req as any).enrichedUser;
+        const user = enrichedUser || (req as any).user;
+
         if (!user) {
             throw new UnauthorizedError('Authentication required. JWT token not found.');
+        }
+
+        // Parse acpCOI - handle string or array
+        let acpCOI: string[] = [];
+        if (user.acpCOI) {
+            if (typeof user.acpCOI === 'string') {
+                try {
+                    acpCOI = JSON.parse(user.acpCOI);
+                } catch {
+                    acpCOI = [user.acpCOI];
+                }
+            } else if (Array.isArray(user.acpCOI)) {
+                acpCOI = user.acpCOI;
+            }
         }
 
         const uploader: IUploaderInfo = {
             uniqueID: user.uniqueID || user.email || user.sub,
             clearance: user.clearance,
             countryOfAffiliation: user.countryOfAffiliation,
-            acpCOI: user.acpCOI
+            acpCOI
         };
 
         logger.info('Processing upload request', {
@@ -67,7 +83,12 @@ export const uploadFileHandler = async (
             mimetype: req.file.mimetype,
             size: req.file.size,
             classification: metadata.classification,
-            uploader: uploader.uniqueID
+            uploader: uploader.uniqueID,
+            uploaderCOI: uploader.acpCOI,  // DEBUG: Log COI
+            uploaderCOI_type: typeof uploader.acpCOI,  // DEBUG: Log type
+            uploaderCOI_isArray: Array.isArray(uploader.acpCOI),  // DEBUG: Check if array
+            uploaderClearance: uploader.clearance,
+            uploaderCountry: uploader.countryOfAffiliation
         });
 
         // 4. Enforce upload authorization via OPA
@@ -122,6 +143,10 @@ async function enforceUploadAuthorization(
 
     try {
         // Build OPA input for upload authorization
+        // Ensure arrays are properly typed for OPA
+        const uploaderCOI = Array.isArray(uploader.acpCOI) ? uploader.acpCOI : [];
+        const resourceCOI = Array.isArray(metadata.COI) ? metadata.COI : [];
+
         const opaInput = {
             input: {
                 subject: {
@@ -129,7 +154,7 @@ async function enforceUploadAuthorization(
                     uniqueID: uploader.uniqueID,
                     clearance: uploader.clearance,
                     countryOfAffiliation: uploader.countryOfAffiliation,
-                    acpCOI: uploader.acpCOI || []
+                    acpCOI: uploaderCOI
                 },
                 action: {
                     operation: 'upload'
@@ -138,7 +163,7 @@ async function enforceUploadAuthorization(
                     resourceId: 'pending-upload',
                     classification: metadata.classification,
                     releasabilityTo: metadata.releasabilityTo,
-                    COI: metadata.COI || [],
+                    COI: resourceCOI,
                     encrypted: true
                 },
                 context: {
@@ -149,6 +174,17 @@ async function enforceUploadAuthorization(
                 }
             }
         };
+
+        // DEBUG: Log OPA input to verify array types
+        logger.debug('OPA input for upload', {
+            requestId,
+            subject_acpCOI: uploaderCOI,
+            subject_acpCOI_type: typeof uploaderCOI,
+            subject_acpCOI_isArray: Array.isArray(uploaderCOI),
+            resource_COI: resourceCOI,
+            resource_COI_type: typeof resourceCOI,
+            resource_COI_isArray: Array.isArray(resourceCOI)
+        });
 
         // Call OPA decision endpoint (same as authz middleware)
         const response = await axios.post(

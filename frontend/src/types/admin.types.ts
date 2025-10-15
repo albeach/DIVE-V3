@@ -55,6 +55,13 @@ export interface IIdPFormData {
         countryOfAffiliation: IAttributeMapping;
         acpCOI: IAttributeMapping;
     };
+
+    // Auth0 Integration (Week 3.4.6)
+    useAuth0?: boolean;
+    auth0Protocol?: 'oidc' | 'saml';
+    auth0AppType?: 'spa' | 'regular_web' | 'native';
+    auth0ClientId?: string;
+    auth0ClientSecret?: string;
 }
 
 export interface IIdPListItem {

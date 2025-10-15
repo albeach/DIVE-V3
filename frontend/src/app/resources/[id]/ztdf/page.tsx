@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Tab } from '@headlessui/react';
+import PageLayout from '@/components/layout/page-layout';
 import KASFlowVisualizer from '@/components/ztdf/KASFlowVisualizer';
 import KASExplainer from '@/components/ztdf/KASExplainer';
 
@@ -791,21 +792,28 @@ export default function ZTDFInspectorPage() {
   const { ztdfDetails: details } = ztdfDetails;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <PageLayout
+      user={session?.user || {}}
+      breadcrumbs={[
+        { label: 'Resources', href: '/resources' },
+        { label: resourceId, href: `/resources/${resourceId}` },
+        { label: 'ZTDF Inspector', href: null }
+      ]}
+      maxWidth="7xl"
+    >
       {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link
-                href={`/resources/${resourceId}`}
-                className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-              >
-                <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back to Resource
-              </Link>
+      <div className="mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link
+              href={`/resources/${resourceId}`}
+              className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+            >
+              <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Resource
+            </Link>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">ZTDF Inspector</h1>
                 <p className="text-sm text-gray-600 mt-1">{ztdfDetails.title}</p>
@@ -830,11 +838,9 @@ export default function ZTDFInspectorPage() {
             </div>
           </div>
         </div>
-      </div>
 
       {/* Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tab.Group>
+      <Tab.Group>
           <Tab.List className="flex space-x-1 rounded-xl bg-blue-900/20 p-1 mb-6">
             {['Manifest', 'Policy', 'Payload', 'Integrity', 'KAS Flow'].map((category) => (
               <Tab
@@ -872,8 +878,7 @@ export default function ZTDFInspectorPage() {
             </Tab.Panel>
           </Tab.Panels>
         </Tab.Group>
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 

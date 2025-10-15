@@ -37,6 +37,10 @@ export interface IIdPSubmission {
     reviewedBy?: string;
     reviewedAt?: string;
     rejectionReason?: string;
+    // Auth0 Integration (Week 3.4.6)
+    useAuth0?: boolean;
+    auth0ClientId?: string;
+    auth0ClientSecret?: string;
 }
 
 export interface IApprovalRequest {
