@@ -800,5 +800,326 @@ describe('Authorization Middleware (PEP)', () => {
             expect(next).toHaveBeenCalled();
         });
     });
+
+    // ============================================
+    // Resource Metadata in Error Responses
+    // ============================================
+    describe('Resource Metadata in Error Responses', () => {
+        beforeEach(() => {
+            req.params = { id: 'doc-concurrent-1' };
+            req.headers!['x-request-id'] = 'test-req-123';
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'CONFIDENTIAL',
+                    countryOfAffiliation: 'USA',
+                    acpCOI: ['FVEY'],
+                    iss: 'http://localhost:8081/realms/dive-v3-pilot',
+                    aud: 'dive-v3-client',
+                    exp: Math.floor(Date.now() / 1000) + 3600
+                });
+            });
+        });
+
+        it('should include complete resource metadata in 403 response', async () => {
+            const testResource = {
+                resourceId: 'doc-concurrent-1',
+                title: 'Concurrent Operations Plan',
+                ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['USA', 'GBR'],
+                            COI: ['FVEY']
+                        }
+                    }
+                }
+            };
+
+            mockedGetResourceById.mockResolvedValue(testResource as any);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
+                            evaluation_details: {
+                                checks: {
+                                    clearance_check: false,
+                                    releasability_check: true
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                error: 'Forbidden',
+                message: 'Access denied',
+                reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
+                details: expect.objectContaining({
+                    resource: expect.objectContaining({
+                        resourceId: 'doc-concurrent-1',
+                        title: 'Concurrent Operations Plan',
+                        classification: 'SECRET',
+                        releasabilityTo: ['USA', 'GBR'],
+                        coi: ['FVEY']
+                    })
+                })
+            }));
+        });
+
+        it('should include subject attributes in 403 response', async () => {
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: mockOPADenyInsufficientClearance('CONFIDENTIAL', 'SECRET').result
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+                details: expect.objectContaining({
+                    subject: expect.objectContaining({
+                        uniqueID: 'testuser-us',
+                        clearance: 'CONFIDENTIAL',
+                        country: 'USA',
+                        coi: ['FVEY']
+                    })
+                })
+            }));
+        });
+
+        it('should include both subject and resource metadata in 403 response', async () => {
+            const testResource = {
+                resourceId: 'doc-test',
+                title: 'Test Document',
+                ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'TOP_SECRET',
+                            releasabilityTo: ['USA', 'GBR', 'CAN'],
+                            COI: ['FVEY', 'NATO-COSMIC']
+                        }
+                    }
+                }
+            };
+
+            mockedGetResourceById.mockResolvedValue(testResource as any);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Insufficient clearance',
+                            evaluation_details: {
+                                checks: {
+                                    clearance_check: false
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            
+            const jsonCall = (res.json as jest.Mock).mock.calls[0][0];
+            expect(jsonCall.details.subject).toBeDefined();
+            expect(jsonCall.details.resource).toBeDefined();
+            expect(jsonCall.details.subject.clearance).toBe('CONFIDENTIAL');
+            expect(jsonCall.details.resource.classification).toBe('TOP_SECRET');
+            expect(jsonCall.details.resource.title).toBe('Test Document');
+        });
+
+        it('should include resource metadata in cached denial response', async () => {
+            const testResource = {
+                resourceId: 'doc-cached',
+                title: 'Cached Resource',
+                ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['GBR'],
+                            COI: []
+                        }
+                    }
+                }
+            };
+
+            mockedGetResourceById.mockResolvedValue(testResource as any);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Country not in releasabilityTo',
+                            evaluation_details: {}
+                        }
+                    }
+                }
+            });
+
+            // First request - should call OPA and cache
+            await authzMiddleware(req as Request, res as Response, next);
+            
+            expect(res.status).toHaveBeenCalledWith(403);
+            const firstCall = (res.json as jest.Mock).mock.calls[0][0];
+            expect(firstCall.details.resource.title).toBe('Cached Resource');
+            
+            // Reset mocks for second request
+            jest.clearAllMocks();
+            mockedGetResourceById.mockResolvedValue(testResource as any);
+            
+            // Second request - should use cache (no OPA call)
+            await authzMiddleware(req as Request, res as Response, next);
+            
+            expect(res.status).toHaveBeenCalledWith(403);
+            expect(mockedAxios.post).not.toHaveBeenCalled(); // Verify cache was used
+            
+            const secondCall = (res.json as jest.Mock).mock.calls[0][0];
+            expect(secondCall.details.resource).toBeDefined();
+            expect(secondCall.details.resource.title).toBe('Cached Resource');
+            expect(secondCall.details.resource.classification).toBe('SECRET');
+        });
+
+        it('should handle legacy (non-ZTDF) resources in error response', async () => {
+            const legacyResource = {
+                resourceId: 'doc-legacy',
+                title: 'Legacy Document',
+                classification: 'CONFIDENTIAL',
+                releasabilityTo: ['USA'],
+                COI: ['US-ONLY'],
+                encrypted: false
+            };
+
+            mockedGetResourceById.mockResolvedValue(legacyResource as any);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Test denial',
+                            evaluation_details: {}
+                        }
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(403);
+            const jsonCall = (res.json as jest.Mock).mock.calls[0][0];
+            expect(jsonCall.details.resource.title).toBe('Legacy Document');
+            expect(jsonCall.details.resource.classification).toBe('CONFIDENTIAL');
+            expect(jsonCall.details.resource.releasabilityTo).toEqual(['USA']);
+            expect(jsonCall.details.resource.coi).toEqual(['US-ONLY']);
+        });
+
+        it('should merge evaluation_details with resource metadata', async () => {
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Multiple failures',
+                            evaluation_details: {
+                                checks: {
+                                    clearance_check: false,
+                                    releasability_check: false,
+                                    coi_check: true
+                                },
+                                violations: ['clearance', 'releasability']
+                            }
+                        }
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            const jsonCall = (res.json as jest.Mock).mock.calls[0][0];
+            // Should have both evaluation_details and new metadata
+            expect(jsonCall.details.checks).toBeDefined();
+            expect(jsonCall.details.subject).toBeDefined();
+            expect(jsonCall.details.resource).toBeDefined();
+            // Verify both old and new data are present
+            expect(jsonCall.details.checks.clearance_check).toBe(false);
+            expect(jsonCall.details.resource.resourceId).toBe('doc-fvey-001');
+            expect(jsonCall.details.resource.classification).toBe('SECRET');
+        });
+
+        it('should handle resource with empty COI array', async () => {
+            const testResource = {
+                resourceId: 'doc-no-coi',
+                title: 'No COI Document',
+                ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['USA'],
+                            COI: [] // Empty COI
+                        }
+                    }
+                }
+            };
+
+            mockedGetResourceById.mockResolvedValue(testResource as any);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Test',
+                            evaluation_details: {}
+                        }
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            const jsonCall = (res.json as jest.Mock).mock.calls[0][0];
+            expect(jsonCall.details.resource.coi).toEqual([]);
+        });
+
+        it('should include resource metadata even when evaluation_details is empty', async () => {
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument);
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: false,
+                            reason: 'Access denied',
+                            // No evaluation_details
+                        }
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            const jsonCall = (res.json as jest.Mock).mock.calls[0][0];
+            expect(jsonCall.details.subject).toBeDefined();
+            expect(jsonCall.details.resource).toBeDefined();
+            expect(jsonCall.details.resource.resourceId).toBe('doc-fvey-001');
+            expect(jsonCall.details.resource.title).toBe('FVEY Intelligence Report');
+        });
+    });
 });
 
