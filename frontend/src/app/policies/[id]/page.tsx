@@ -115,6 +115,11 @@ export default function PolicyDetailPage() {
   const [highlightedLine, setHighlightedLine] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Debug logging for session status
+  useEffect(() => {
+    console.log('[PolicyDetailPage] Session status:', { status, hasSession: !!session, hasUser: !!session?.user });
+  }, [session, status]);
+
   // Find rule locations in source code
   const ruleLocations = useMemo(() => {
     if (!policy) return [];
@@ -236,6 +241,11 @@ export default function PolicyDetailPage() {
   }
 
   if (!session) {
+    return null;
+  }
+
+  // Additional safety check for user object
+  if (!session?.user) {
     return null;
   }
 
