@@ -45,7 +45,7 @@ describe('Auth0 MCP Integration - Service Functions', () => {
         it('should return false when both are missing', () => {
             const originalDomain = process.env.AUTH0_DOMAIN;
             const originalEnabled = process.env.AUTH0_MCP_ENABLED;
-            
+
             delete process.env.AUTH0_DOMAIN;
             delete process.env.AUTH0_MCP_ENABLED;
 
@@ -68,14 +68,14 @@ describe('Auth0 MCP Integration - Service Functions', () => {
 
         it('should include IdP alias in Keycloak callback URL', () => {
             const urls = auth0Service.generateAuth0CallbackUrls('france-idp');
-            
+
             expect(urls[0]).toContain('/broker/france-idp/endpoint');
         });
 
         it('should use environment variables for callback URLs', () => {
             const originalKeycloak = process.env.KEYCLOAK_URL;
             const originalFrontend = process.env.FRONTEND_URL;
-            
+
             process.env.KEYCLOAK_URL = 'https://keycloak.example.com';
             process.env.FRONTEND_URL = 'https://app.example.com';
 
@@ -92,7 +92,7 @@ describe('Auth0 MCP Integration - Service Functions', () => {
         it('should use defaults when environment variables missing', () => {
             const originalKeycloak = process.env.KEYCLOAK_URL;
             const originalFrontend = process.env.FRONTEND_URL;
-            
+
             delete process.env.KEYCLOAK_URL;
             delete process.env.FRONTEND_URL;
 
@@ -120,7 +120,7 @@ describe('Auth0 MCP Integration - Service Functions', () => {
         it('should use environment variables', () => {
             const originalKeycloak = process.env.KEYCLOAK_URL;
             const originalFrontend = process.env.FRONTEND_URL;
-            
+
             process.env.KEYCLOAK_URL = 'https://keycloak.prod.com';
             process.env.FRONTEND_URL = 'https://app.prod.com';
 
@@ -138,14 +138,14 @@ describe('Auth0 MCP Integration - Service Functions', () => {
     describe('Integration Scenarios', () => {
         it('should generate all required URLs for IdP onboarding', () => {
             const idpAlias = 'germany-idp';
-            
+
             const callbackUrls = auth0Service.generateAuth0CallbackUrls(idpAlias);
             const logoutUrls = auth0Service.generateAuth0LogoutUrls();
 
             // Verify we have complete URL sets
             expect(callbackUrls.length).toBeGreaterThan(0);
             expect(logoutUrls.length).toBeGreaterThan(0);
-            
+
             // Verify callback URLs include IdP alias
             expect(callbackUrls.some((url: string) => url.includes(idpAlias))).toBe(true);
         });
