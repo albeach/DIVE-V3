@@ -583,11 +583,38 @@ export const authzMiddleware = async (
                 const latencyMs = Date.now() - startTime;
                 logDecision(requestId, uniqueID, resourceId, false, cachedDecision.result.reason, latencyMs);
 
+                // Extract resource metadata for error response
+                const isZTDF = resource && 'ztdf' in resource;
+                const classification = isZTDF
+                    ? resource.ztdf.policy.securityLabel.classification
+                    : (resource as any).classification;
+                const releasabilityTo = isZTDF
+                    ? resource.ztdf.policy.securityLabel.releasabilityTo
+                    : (resource as any).releasabilityTo;
+                const COI = isZTDF
+                    ? (resource.ztdf.policy.securityLabel.COI || [])
+                    : ((resource as any).COI || []);
+
                 res.status(403).json({
                     error: 'Forbidden',
                     message: 'Access denied',
                     reason: cachedDecision.result.reason,
-                    details: cachedDecision.result.evaluation_details || {},
+                    details: {
+                        ...(cachedDecision.result.evaluation_details || {}),
+                        subject: {
+                            uniqueID,
+                            clearance,
+                            country: countryOfAffiliation,
+                            coi: acpCOI
+                        },
+                        resource: {
+                            resourceId: resource.resourceId,
+                            title: resource.title,
+                            classification,
+                            releasabilityTo,
+                            coi: COI
+                        }
+                    },
                 });
                 return;
             }
@@ -767,7 +794,22 @@ export const authzMiddleware = async (
                 error: 'Forbidden',
                 message: 'Access denied',
                 reason: opaDecision.result.reason,
-                details: opaDecision.result.evaluation_details || {},
+                details: {
+                    ...(opaDecision.result.evaluation_details || {}),
+                    subject: {
+                        uniqueID,
+                        clearance,
+                        country: countryOfAffiliation,
+                        coi: acpCOI
+                    },
+                    resource: {
+                        resourceId: resource.resourceId,
+                        title: resource.title,
+                        classification,
+                        releasabilityTo,
+                        coi: COI
+                    }
+                },
             });
             return;
         }

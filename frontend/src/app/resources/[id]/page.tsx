@@ -46,6 +46,7 @@ interface IAuthzError {
     };
     resource?: {
       resourceId?: string;
+      title?: string;
       classification?: string;
       releasabilityTo?: string[];
       coi?: string[];
@@ -206,9 +207,10 @@ export default function ResourceDetailPage() {
   }
 
   // Get resource metadata from error for AccessDenied component
+  // Backend now provides complete resource metadata in error response
   const resourceMetadata = error ? {
     resourceId: error.details?.resource?.resourceId || resourceId,
-    title: 'Resource', // We don't have title in error, but that's ok
+    title: error.details?.resource?.title || 'Resource',
     classification: error.details?.resource?.classification || 'UNKNOWN',
     releasabilityTo: error.details?.resource?.releasabilityTo || [],
     COI: error.details?.resource?.coi || [],
