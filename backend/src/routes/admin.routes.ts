@@ -33,6 +33,7 @@ import {
     getStatsHandler,
     exportLogsHandler
 } from '../controllers/admin-log.controller';
+import { metricsService } from '../services/metrics.service';
 
 const router = Router();
 
@@ -146,6 +147,31 @@ router.post('/auth0/create-application', createAuth0ApplicationHandler);
  * List Auth0 applications
  */
 router.get('/auth0/applications', listAuth0ApplicationsHandler);
+
+// ============================================
+// Observability Routes (Phase 0)
+// ============================================
+
+/**
+ * GET /api/admin/metrics
+ * Prometheus-compatible metrics endpoint
+ */
+router.get('/metrics', (req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+    res.send(metricsService.exportPrometheus());
+});
+
+/**
+ * GET /api/admin/metrics/summary
+ * Human-readable metrics summary (JSON)
+ */
+router.get('/metrics/summary', (req: Request, res: Response) => {
+    const summary = metricsService.getSummary();
+    res.json({
+        success: true,
+        data: summary
+    });
+});
 
 export default router;
 
