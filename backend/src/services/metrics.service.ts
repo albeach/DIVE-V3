@@ -64,11 +64,39 @@ class MetricsService {
     }
 
     /**
-     * Record validation failure
+     * Record validation failure (Phase 1)
+     * 
+     * @param protocol - IdP protocol (oidc or saml)
+     * @param failures - Array of failure reasons
      */
-    recordValidationFailure(failureType: string): void {
-        const current = this.metrics.validationFailures.get(failureType) || 0;
-        this.metrics.validationFailures.set(failureType, current + 1);
+    recordValidationFailure(protocol: string, failures: string[]): void {
+        // Record by protocol
+        const protocolKey = `${protocol}_failure`;
+        const current = this.metrics.validationFailures.get(protocolKey) || 0;
+        this.metrics.validationFailures.set(protocolKey, current + 1);
+        
+        // Record by failure type
+        failures.forEach(failure => {
+            const key = failure.split(':')[0].trim(); // Extract failure type
+            const count = this.metrics.validationFailures.get(key) || 0;
+            this.metrics.validationFailures.set(key, count + 1);
+        });
+        
+        logger.debug('Recorded validation failure', { protocol, failureCount: failures.length });
+    }
+    
+    /**
+     * Record validation success (Phase 1)
+     * 
+     * @param protocol - IdP protocol (oidc or saml)
+     * @param score - Validation score
+     */
+    recordValidationSuccess(protocol: string, score: number): void {
+        const key = `${protocol}_success`;
+        const current = this.metrics.validationFailures.get(key) || 0;
+        this.metrics.validationFailures.set(key, current + 1);
+        
+        logger.debug('Recorded validation success', { protocol, score });
     }
 
     /**
