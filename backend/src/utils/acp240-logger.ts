@@ -168,7 +168,7 @@ export interface IACP240AuditEvent {
  * 1. Log file (authz.log) for file-based audit trail
  * 2. MongoDB (audit_logs collection) for dashboard queries
  */
-export function logACP240Event(event: IACP240AuditEvent): void {
+export function logACP240Event(event: IACP240AuditEvent): Promise<void> {
     const authzLogger = logger.child({ service: 'acp240-audit' });
 
     // Write to file (synchronous)
@@ -188,14 +188,8 @@ export function logACP240Event(event: IACP240AuditEvent): void {
         latencyMs: event.latencyMs
     });
 
-    // Write to MongoDB (async, fire-and-forget)
-    // Don't await to avoid blocking the request
-    writeToMongoDB(event).catch((error) => {
-        logger.error('Unhandled error in MongoDB audit write', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            requestId: event.requestId
-        });
-    });
+    // Write to MongoDB - return promise for tests to await
+    return writeToMongoDB(event);
 }
 
 /**
@@ -207,7 +201,7 @@ export function logEncryptEvent(params: {
     resourceId: string;
     classification: string;
     reason?: string;
-}): void {
+}): Promise<void> {
     const event: IACP240AuditEvent = {
         eventType: 'ENCRYPT',
         timestamp: new Date().toISOString(),
@@ -223,7 +217,7 @@ export function logEncryptEvent(params: {
         }
     };
 
-    logACP240Event(event);
+    return logACP240Event(event);
 }
 
 /**
@@ -242,7 +236,7 @@ export function logDecryptEvent(params: {
     };
     reason?: string;
     latencyMs?: number;
-}): void {
+}): Promise<void> {
     const event: IACP240AuditEvent = {
         eventType: 'DECRYPT',
         timestamp: new Date().toISOString(),
@@ -261,7 +255,7 @@ export function logDecryptEvent(params: {
         latencyMs: params.latencyMs
     };
 
-    logACP240Event(event);
+    return logACP240Event(event);
 }
 
 /**
@@ -288,7 +282,7 @@ export function logAccessDeniedEvent(params: {
         evaluation_details?: Record<string, unknown>;
     };
     latencyMs?: number;
-}): void {
+}): Promise<void> {
     const event: IACP240AuditEvent = {
         eventType: 'ACCESS_DENIED',
         timestamp: new Date().toISOString(),
@@ -304,7 +298,7 @@ export function logAccessDeniedEvent(params: {
         latencyMs: params.latencyMs
     };
 
-    logACP240Event(event);
+    return logACP240Event(event);
 }
 
 /**

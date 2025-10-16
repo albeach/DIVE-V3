@@ -11,8 +11,8 @@ export interface IOPAInput {
         subject: {
             authenticated: boolean;
             uniqueID: string;
-            clearance?: string;
-            countryOfAffiliation?: string;
+            clearance: string;
+            countryOfAffiliation: string;
             acpCOI?: string[];
         };
         action: {
@@ -20,11 +20,16 @@ export interface IOPAInput {
         };
         resource: {
             resourceId: string;
-            classification?: string;
-            releasabilityTo?: string[];
+            classification: string;
+            releasabilityTo: string[];
             COI?: string[];
             creationDate?: string;
-            encrypted?: boolean;
+            encrypted: boolean;
+            ztdf?: {
+                integrityValidated?: boolean;
+                policyHash?: string;
+                payloadHash?: string;
+            };
         };
         context: {
             currentTime: string;
