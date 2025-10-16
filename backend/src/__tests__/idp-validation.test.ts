@@ -10,15 +10,15 @@ import * as tls from 'tls';
 import axios from 'axios';
 
 // Mock external dependencies
-jest.mock('tls');
 jest.mock('axios');
-
-const mockedTls = tls as jest.Mocked<typeof tls>;
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+jest.mock('tls', () => ({
+  connect: jest.fn()
+}));
 
 describe('IdP Validation Service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   describe('TLS Validation', () => {
@@ -36,7 +36,7 @@ describe('IdP Validation Service', () => {
           on: jest.fn()
         };
 
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, callback: any) => {
           callback();
           return mockSocket as any;
         });
@@ -62,7 +62,7 @@ describe('IdP Validation Service', () => {
           on: jest.fn()
         };
 
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, callback: any) => {
           callback();
           return mockSocket as any;
         });
@@ -87,7 +87,7 @@ describe('IdP Validation Service', () => {
           on: jest.fn()
         };
 
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, callback: any) => {
           callback();
           return mockSocket as any;
         });
@@ -112,7 +112,7 @@ describe('IdP Validation Service', () => {
           on: jest.fn()
         };
 
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, callback: any) => {
           callback();
           return mockSocket as any;
         });
@@ -138,7 +138,7 @@ describe('IdP Validation Service', () => {
           on: jest.fn()
         };
 
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, callback: any) => {
           callback();
           return mockSocket as any;
         });
@@ -151,7 +151,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should handle connection timeout', async () => {
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, _callback: any) => {
           const mockSocket = {
             on: jest.fn((event: string, handler: any) => {
               if (event === 'timeout') {
@@ -171,7 +171,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should handle connection error', async () => {
-        mockedTls.connect = jest.fn().mockImplementation(() => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any) => {
           const mockSocket = {
             on: jest.fn((event: string, handler: any) => {
               if (event === 'error') {
@@ -200,7 +200,7 @@ describe('IdP Validation Service', () => {
           on: jest.fn()
         };
 
-        mockedTls.connect = jest.fn().mockImplementation((options: any, callback: any) => {
+        (tls.connect as jest.Mock).mockImplementation((_options: any, callback: any) => {
           callback();
           return mockSocket as any;
         });
@@ -217,7 +217,7 @@ describe('IdP Validation Service', () => {
   describe('Algorithm Validation', () => {
     describe('validateOIDCAlgorithms()', () => {
       it('should pass for RS256 algorithm', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           data: {
             keys: [
               { kid: 'key1', kty: 'RSA', use: 'sig', alg: 'RS256' }
@@ -234,7 +234,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should pass for multiple strong algorithms', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           data: {
             keys: [
               { kid: 'key1', kty: 'RSA', use: 'sig', alg: 'RS256' },
@@ -252,7 +252,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should fail for MD5 algorithm', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           data: {
             keys: [
               { kid: 'key1', kty: 'RSA', use: 'sig', alg: 'MD5' }
@@ -267,8 +267,8 @@ describe('IdP Validation Service', () => {
         expect(result.violations.length).toBeGreaterThan(0);
       });
 
-      it('should warn for SHA-1 in pilot mode', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+      it('should fail for RS1 (SHA-1) - in denied list', async () => {
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           data: {
             keys: [
               { kid: 'key1', kty: 'RSA', use: 'sig', alg: 'RS1' }
@@ -278,13 +278,13 @@ describe('IdP Validation Service', () => {
 
         const result = await idpValidationService.validateOIDCAlgorithms('https://sha1-idp.com/.well-known/jwks.json');
 
-        expect(result.pass).toBe(true); // Allowed in pilot mode
-        expect(result.score).toBe(10);
-        expect(result.violations.some(v => v.includes('SHA-1'))).toBe(true);
+        expect(result.pass).toBe(false); // RS1 is in denied list
+        expect(result.score).toBe(0);
+        expect(result.violations.some(v => v.includes('Denied algorithm'))).toBe(true);
       });
 
       it('should fail for "none" algorithm', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           data: {
             keys: [
               { kid: 'key1', kty: 'RSA', use: 'sig', alg: 'none' }
@@ -299,7 +299,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should handle JWKS fetch timeout', async () => {
-        mockedAxios.get = jest.fn().mockRejectedValue(new Error('timeout'));
+        (axios.get as jest.Mock) = jest.fn().mockRejectedValue(new Error('timeout'));
 
         const result = await idpValidationService.validateOIDCAlgorithms('https://timeout.com/.well-known/jwks.json');
 
@@ -308,7 +308,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should fail for invalid JWKS format', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           data: { invalid: 'format' }
         });
 
@@ -355,7 +355,7 @@ describe('IdP Validation Service', () => {
   describe('Endpoint Reachability', () => {
     describe('checkEndpointReachability()', () => {
       it('should pass for reachable endpoint', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           status: 200,
           data: {}
         });
@@ -369,7 +369,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should fail for unreachable endpoint', async () => {
-        mockedAxios.get = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+        (axios.get as jest.Mock) = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
         const result = await idpValidationService.checkEndpointReachability('https://unreachable.com');
 
@@ -379,7 +379,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should fail for 500 error', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           status: 500,
           data: {}
         });
@@ -392,7 +392,7 @@ describe('IdP Validation Service', () => {
       });
 
       it('should pass for 404 (client error, not server error)', async () => {
-        mockedAxios.get = jest.fn().mockResolvedValue({
+        (axios.get as jest.Mock) = jest.fn().mockResolvedValue({
           status: 404,
           data: {}
         });
