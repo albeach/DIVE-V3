@@ -18,6 +18,10 @@ import { keycloakAdminService } from '../services/keycloak-admin.service';
 import { idpApprovalService } from '../services/idp-approval.service';
 import { auth0Service } from '../services/auth0.service';
 import { metricsService } from '../services/metrics.service';
+import { idpValidationService } from '../services/idp-validation.service';
+import { samlMetadataParserService } from '../services/saml-metadata-parser.service';
+import { oidcDiscoveryService } from '../services/oidc-discovery.service';
+import { mfaDetectionService } from '../services/mfa-detection.service';
 import { logger } from '../utils/logger';
 import { logAdminAction } from '../middleware/admin-auth.middleware';
 import {
@@ -25,6 +29,7 @@ import {
     IIdPUpdateRequest
 } from '../types/keycloak.types';
 import { IAdminAPIResponse } from '../types/admin.types';
+import { IValidationResults, IPreliminaryScore } from '../types/validation.types';
 
 /**
  * Extended Request with authenticated user
@@ -197,6 +202,8 @@ export const getIdPHandler = async (
 /**
  * POST /api/admin/idps
  * Create new Identity Provider
+ * 
+ * Phase 1: Now includes automated security validation
  */
 export const createIdPHandler = async (
     req: Request,
@@ -211,7 +218,7 @@ export const createIdPHandler = async (
             submittedBy: authReq.user?.uniqueID || 'unknown'
         };
 
-        logger.info('Admin: Create IdP request', {
+        logger.info('Admin: Create IdP request (with validation)', {
             requestId,
             admin: authReq.user?.uniqueID,
             alias: createRequest.alias,
@@ -230,7 +237,173 @@ export const createIdPHandler = async (
             return;
         }
 
-        // Submit IdP for approval (stores in MongoDB, NOT Keycloak yet)
+        // ============================================
+        // PHASE 1: Automated Security Validation
+        // ============================================
+
+        logger.info('Running automated security validation', {
+            requestId,
+            alias: createRequest.alias,
+            protocol: createRequest.protocol
+        });
+
+        const validationStartTime = Date.now();
+        const validationResults: IValidationResults = {
+            tlsCheck: { pass: true, version: '', cipher: '', certificateValid: false, score: 0, errors: [], warnings: [] },
+            algorithmCheck: { pass: true, algorithms: [], violations: [], score: 0, recommendations: [] },
+            endpointCheck: { reachable: true, latency_ms: 0, score: 0, errors: [] },
+            mfaCheck: { detected: false, evidence: [], score: 0, confidence: 'low', recommendations: [] }
+        };
+
+        // Determine endpoint URL based on protocol
+        let endpointUrl = '';
+        
+        if (createRequest.protocol === 'oidc') {
+            // Type guard: config is IOIDCIdPConfig
+            const oidcConfig = createRequest.config as any;
+            endpointUrl = oidcConfig.issuer || '';
+            
+            // Validate OIDC discovery
+            if (endpointUrl) {
+                validationResults.discoveryCheck = await oidcDiscoveryService.validateOIDCDiscovery(endpointUrl);
+                
+                // Validate TLS
+                validationResults.tlsCheck = await idpValidationService.validateTLS(endpointUrl);
+                
+                // Validate algorithms from JWKS
+                if (validationResults.discoveryCheck.valid && validationResults.discoveryCheck.endpoints.jwks) {
+                    validationResults.algorithmCheck = await idpValidationService.validateOIDCAlgorithms(
+                        validationResults.discoveryCheck.endpoints.jwks
+                    );
+                }
+                
+                // Check endpoint reachability
+                validationResults.endpointCheck = await idpValidationService.checkEndpointReachability(endpointUrl);
+                
+                // Detect MFA
+                validationResults.mfaCheck = mfaDetectionService.detectOIDCMFA(
+                    validationResults.discoveryCheck,
+                    false // hasPolicyDoc - Phase 2 feature
+                );
+            }
+        } else if (createRequest.protocol === 'saml') {
+            // Type guard: config is ISAMLIdPConfig
+            const samlConfig = createRequest.config as any;
+            const metadataXML = samlConfig.metadata || samlConfig.metadataXml || '';
+            
+            if (metadataXML) {
+                validationResults.metadataCheck = await samlMetadataParserService.parseSAMLMetadata(metadataXML);
+                
+                // Validate TLS for SSO URL
+                if (validationResults.metadataCheck.valid && validationResults.metadataCheck.ssoUrl) {
+                    endpointUrl = validationResults.metadataCheck.ssoUrl;
+                    validationResults.tlsCheck = await idpValidationService.validateTLS(endpointUrl);
+                    validationResults.endpointCheck = await idpValidationService.checkEndpointReachability(endpointUrl);
+                }
+                
+                // Validate signature algorithm
+                if (validationResults.metadataCheck.signatureAlgorithm) {
+                    validationResults.algorithmCheck = idpValidationService.validateSAMLAlgorithm(
+                        validationResults.metadataCheck.signatureAlgorithm
+                    );
+                }
+                
+                // Detect MFA
+                validationResults.mfaCheck = mfaDetectionService.detectSAMLMFA(
+                    validationResults.metadataCheck,
+                    false // hasPolicyDoc - Phase 2 feature
+                );
+            }
+        }
+
+        const validationDuration = Date.now() - validationStartTime;
+
+        // Calculate preliminary score
+        const preliminaryScore: IPreliminaryScore = {
+            total: validationResults.tlsCheck.score + 
+                   validationResults.algorithmCheck.score + 
+                   validationResults.mfaCheck.score + 
+                   validationResults.endpointCheck.score,
+            maxScore: 70, // TLS(15) + Crypto(25) + MFA(20) + Endpoint(10)
+            breakdown: {
+                tlsScore: validationResults.tlsCheck.score,
+                cryptoScore: validationResults.algorithmCheck.score,
+                mfaScore: validationResults.mfaCheck.score,
+                endpointScore: validationResults.endpointCheck.score
+            },
+            computedAt: new Date().toISOString()
+        };
+
+        // Determine tier
+        const scorePercentage = (preliminaryScore.total / preliminaryScore.maxScore) * 100;
+        if (scorePercentage >= 85) {
+            preliminaryScore.tier = 'gold';
+        } else if (scorePercentage >= 70) {
+            preliminaryScore.tier = 'silver';
+        } else if (scorePercentage >= 50) {
+            preliminaryScore.tier = 'bronze';
+        } else {
+            preliminaryScore.tier = 'fail';
+        }
+
+        logger.info('Security validation complete', {
+            requestId,
+            alias: createRequest.alias,
+            score: preliminaryScore.total,
+            tier: preliminaryScore.tier,
+            durationMs: validationDuration
+        });
+
+        // Check for critical failures
+        const criticalFailures: string[] = [];
+
+        if (!validationResults.tlsCheck.pass) {
+            criticalFailures.push(...validationResults.tlsCheck.errors);
+        }
+
+        if (!validationResults.algorithmCheck.pass) {
+            criticalFailures.push(...validationResults.algorithmCheck.violations);
+        }
+
+        if (createRequest.protocol === 'saml' && validationResults.metadataCheck && !validationResults.metadataCheck.valid) {
+            criticalFailures.push(...validationResults.metadataCheck.errors);
+        }
+
+        if (createRequest.protocol === 'oidc' && validationResults.discoveryCheck && !validationResults.discoveryCheck.valid) {
+            criticalFailures.push(...validationResults.discoveryCheck.errors);
+        }
+
+        // Reject if critical failures
+        if (criticalFailures.length > 0) {
+            logger.warn('IdP submission rejected due to validation failures', {
+                requestId,
+                alias: createRequest.alias,
+                failures: criticalFailures
+            });
+
+            // Record metrics
+            metricsService.recordValidationFailure(createRequest.protocol, criticalFailures);
+
+            const response: IAdminAPIResponse = {
+                success: false,
+                error: 'Validation Failed',
+                message: 'IdP configuration contains critical security issues',
+                data: {
+                    validationResults,
+                    preliminaryScore,
+                    criticalFailures
+                },
+                requestId
+            };
+
+            res.status(400).json(response);
+            return;
+        }
+
+        // ============================================
+        // Submit IdP for approval (with validation results)
+        // ============================================
+
         const submissionId = await idpApprovalService.submitIdPForApproval({
             alias: createRequest.alias,
             displayName: createRequest.displayName,
@@ -242,8 +415,14 @@ export const createIdPHandler = async (
             // Include Auth0 metadata if present
             useAuth0: (req.body as any).useAuth0,
             auth0ClientId: (req.body as any).auth0ClientId,
-            auth0ClientSecret: (req.body as any).auth0ClientSecret
+            auth0ClientSecret: (req.body as any).auth0ClientSecret,
+            // Phase 1: Include validation results
+            validationResults,
+            preliminaryScore
         });
+
+        // Record metrics
+        metricsService.recordValidationSuccess(createRequest.protocol, preliminaryScore.total);
 
         logAdminAction({
             requestId,
@@ -255,6 +434,8 @@ export const createIdPHandler = async (
                 protocol: createRequest.protocol,
                 displayName: createRequest.displayName,
                 submissionId,
+                validationScore: preliminaryScore.total,
+                validationTier: preliminaryScore.tier,
                 useAuth0: (req.body as any).useAuth0 || false
             }
         });
@@ -265,9 +446,11 @@ export const createIdPHandler = async (
                 submissionId,
                 alias: createRequest.alias,
                 status: 'pending',
+                validationResults,
+                preliminaryScore,
                 message: 'Identity provider submitted for approval'
             },
-            message: 'IdP submitted for approval. A super administrator must review it.',
+            message: `IdP validated (${preliminaryScore.tier} tier, ${preliminaryScore.total}/${preliminaryScore.maxScore} points) and submitted for approval.`,
             requestId
         };
 

@@ -5,6 +5,7 @@
  */
 
 import { IdPProtocol, IdPStatus } from './keycloak.types';
+import { IValidationResults, IPreliminaryScore } from './validation.types';
 
 // ============================================
 // Super Admin Role Types
@@ -41,6 +42,9 @@ export interface IIdPSubmission {
     useAuth0?: boolean;
     auth0ClientId?: string;
     auth0ClientSecret?: string;
+    // Phase 1: Validation Results (Automated Security Checks)
+    validationResults?: IValidationResults;
+    preliminaryScore?: IPreliminaryScore;
 }
 
 export interface IApprovalRequest {
