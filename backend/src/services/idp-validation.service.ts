@@ -102,6 +102,11 @@ class IdPValidationService {
       result.certificateValid = tlsResult.certificateValid;
       result.certificateExpiry = tlsResult.certificateExpiry;
 
+      // Best Practice: Always warn about unauthorized certificates, even if we allow them
+      if (!tlsResult.authorized && this.config.allowSelfSigned) {
+        result.warnings.push('Certificate not authorized (self-signed or untrusted CA). Allowed for pilot.');
+      }
+
       // Check TLS version
       const tlsVersionNum = TLS_VERSION_MAP[tlsResult.version] || 0;
       const minVersionNum = TLS_VERSION_MAP[`TLSv${this.config.minTlsVersion}`] || 1.2;
@@ -193,6 +198,7 @@ class IdPValidationService {
     cipher: string;
     certificateValid: boolean;
     certificateExpiry?: Date;
+    authorized: boolean;
   }> {
     return new Promise((resolve, reject) => {
       const socket = tls.connect(
@@ -213,7 +219,7 @@ class IdPValidationService {
           let certificateExpiry: Date | undefined;
 
           if (cert && Object.keys(cert).length > 0) {
-            // Check if certificate is valid
+            // Check if certificate is valid (authorized by CA or allowed self-signed)
             certificateValid = socket.authorized || this.config.allowSelfSigned;
 
             // Extract expiry date
@@ -222,6 +228,8 @@ class IdPValidationService {
             }
           }
 
+          // Note: We'll check if self-signed later and add warning even if allowed
+
           socket.end();
 
           resolve({
@@ -229,6 +237,7 @@ class IdPValidationService {
             cipher,
             certificateValid,
             certificateExpiry,
+            authorized: socket.authorized,
           });
         }
       );
