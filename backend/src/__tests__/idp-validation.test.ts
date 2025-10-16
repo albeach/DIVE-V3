@@ -165,7 +165,7 @@ describe('IdP Validation Service', () => {
 
       it('should handle connection timeout', async () => {
         let timeoutHandler: any;
-        
+
         (tls.connect as jest.Mock).mockImplementation((_options: any, _callback: any) => {
           const mockSocket: any = {
             on: jest.fn((event: string, handler: any) => {
@@ -190,7 +190,7 @@ describe('IdP Validation Service', () => {
 
       it('should handle connection error', async () => {
         let errorHandler: any;
-        
+
         (tls.connect as jest.Mock).mockImplementation((_options: any) => {
           const mockSocket: any = {
             on: jest.fn((event: string, handler: any) => {
