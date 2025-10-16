@@ -22,6 +22,8 @@ import { idpValidationService } from '../services/idp-validation.service';
 import { samlMetadataParserService } from '../services/saml-metadata-parser.service';
 import { oidcDiscoveryService } from '../services/oidc-discovery.service';
 import { mfaDetectionService } from '../services/mfa-detection.service';
+import { riskScoringService } from '../services/risk-scoring.service';
+import { complianceValidationService } from '../services/compliance-validation.service';
 import { logger } from '../utils/logger';
 import { logAdminAction } from '../middleware/admin-auth.middleware';
 import {
@@ -203,7 +205,8 @@ export const getIdPHandler = async (
  * POST /api/admin/idps
  * Create new Identity Provider
  * 
- * Phase 1: Now includes automated security validation
+ * Phase 1: Automated security validation (TLS, crypto, MFA, endpoints)
+ * Phase 2: Comprehensive risk scoring & compliance validation
  */
 export const createIdPHandler = async (
     req: Request,
@@ -257,29 +260,29 @@ export const createIdPHandler = async (
 
         // Determine endpoint URL based on protocol
         let endpointUrl = '';
-        
+
         if (createRequest.protocol === 'oidc') {
             // Type guard: config is IOIDCIdPConfig
             const oidcConfig = createRequest.config as any;
             endpointUrl = oidcConfig.issuer || '';
-            
+
             // Validate OIDC discovery
             if (endpointUrl) {
                 validationResults.discoveryCheck = await oidcDiscoveryService.validateOIDCDiscovery(endpointUrl);
-                
+
                 // Validate TLS
                 validationResults.tlsCheck = await idpValidationService.validateTLS(endpointUrl);
-                
+
                 // Validate algorithms from JWKS
                 if (validationResults.discoveryCheck.valid && validationResults.discoveryCheck.endpoints.jwks) {
                     validationResults.algorithmCheck = await idpValidationService.validateOIDCAlgorithms(
                         validationResults.discoveryCheck.endpoints.jwks
                     );
                 }
-                
+
                 // Check endpoint reachability
                 validationResults.endpointCheck = await idpValidationService.checkEndpointReachability(endpointUrl);
-                
+
                 // Detect MFA
                 validationResults.mfaCheck = mfaDetectionService.detectOIDCMFA(
                     validationResults.discoveryCheck,
@@ -290,24 +293,24 @@ export const createIdPHandler = async (
             // Type guard: config is ISAMLIdPConfig
             const samlConfig = createRequest.config as any;
             const metadataXML = samlConfig.metadata || samlConfig.metadataXml || '';
-            
+
             if (metadataXML) {
                 validationResults.metadataCheck = await samlMetadataParserService.parseSAMLMetadata(metadataXML);
-                
+
                 // Validate TLS for SSO URL
                 if (validationResults.metadataCheck.valid && validationResults.metadataCheck.ssoUrl) {
                     endpointUrl = validationResults.metadataCheck.ssoUrl;
                     validationResults.tlsCheck = await idpValidationService.validateTLS(endpointUrl);
                     validationResults.endpointCheck = await idpValidationService.checkEndpointReachability(endpointUrl);
                 }
-                
+
                 // Validate signature algorithm
                 if (validationResults.metadataCheck.signatureAlgorithm) {
                     validationResults.algorithmCheck = idpValidationService.validateSAMLAlgorithm(
                         validationResults.metadataCheck.signatureAlgorithm
                     );
                 }
-                
+
                 // Detect MFA
                 validationResults.mfaCheck = mfaDetectionService.detectSAMLMFA(
                     validationResults.metadataCheck,
@@ -320,10 +323,10 @@ export const createIdPHandler = async (
 
         // Calculate preliminary score
         const preliminaryScore: IPreliminaryScore = {
-            total: validationResults.tlsCheck.score + 
-                   validationResults.algorithmCheck.score + 
-                   validationResults.mfaCheck.score + 
-                   validationResults.endpointCheck.score,
+            total: validationResults.tlsCheck.score +
+                validationResults.algorithmCheck.score +
+                validationResults.mfaCheck.score +
+                validationResults.endpointCheck.score,
             maxScore: 70, // TLS(15) + Crypto(25) + MFA(20) + Endpoint(10)
             breakdown: {
                 tlsScore: validationResults.tlsCheck.score,
@@ -401,7 +404,52 @@ export const createIdPHandler = async (
         }
 
         // ============================================
-        // Submit IdP for approval (with validation results)
+        // PHASE 2: Comprehensive Risk Scoring & Compliance
+        // ============================================
+
+        logger.info('Running comprehensive risk scoring and compliance validation', {
+            requestId,
+            alias: createRequest.alias
+        });
+
+        const riskScoringStartTime = Date.now();
+
+        // Prepare submission data for Phase 2
+        const submissionData: any = {
+            alias: createRequest.alias,
+            displayName: createRequest.displayName,
+            description: createRequest.description,
+            protocol: createRequest.protocol,
+            operationalData: (req.body as any).operationalData,
+            complianceDocuments: (req.body as any).complianceDocuments
+        };
+
+        // Calculate comprehensive risk score (100 points)
+        const comprehensiveRiskScore = await riskScoringService.calculateRiskScore(
+            validationResults,
+            submissionData
+        );
+
+        // Validate compliance (ACP-240, STANAG, NIST)
+        const complianceCheck = await complianceValidationService.validateCompliance(
+            submissionData
+        );
+
+        const riskScoringDuration = Date.now() - riskScoringStartTime;
+
+        logger.info('Phase 2 risk scoring and compliance validation complete', {
+            requestId,
+            alias: createRequest.alias,
+            comprehensiveScore: comprehensiveRiskScore.total,
+            riskLevel: comprehensiveRiskScore.riskLevel,
+            tier: comprehensiveRiskScore.tier,
+            complianceLevel: complianceCheck.overall,
+            complianceScore: complianceCheck.score,
+            durationMs: riskScoringDuration
+        });
+
+        // ============================================
+        // Submit IdP for approval (with Phase 1 + Phase 2 results)
         // ============================================
 
         const submissionId = await idpApprovalService.submitIdPForApproval({
@@ -418,7 +466,33 @@ export const createIdPHandler = async (
             auth0ClientSecret: (req.body as any).auth0ClientSecret,
             // Phase 1: Include validation results
             validationResults,
-            preliminaryScore
+            preliminaryScore,
+            // Phase 2: Include comprehensive risk score and compliance
+            comprehensiveRiskScore,
+            complianceCheck,
+            operationalData: (req.body as any).operationalData,
+            complianceDocuments: (req.body as any).complianceDocuments
+        });
+
+        // ============================================
+        // PHASE 2: Auto-Triage Decision
+        // ============================================
+
+        logger.info('Processing submission for auto-triage', {
+            requestId,
+            submissionId,
+            alias: createRequest.alias
+        });
+
+        // Process submission to determine approval decision
+        const approvalDecision = await idpApprovalService.processSubmission(submissionId);
+
+        logger.info('Auto-triage decision made', {
+            requestId,
+            submissionId,
+            alias: createRequest.alias,
+            decision: approvalDecision.action,
+            reason: approvalDecision.reason
         });
 
         // Record metrics
@@ -440,21 +514,46 @@ export const createIdPHandler = async (
             }
         });
 
+        // Determine response based on approval decision
+        let statusCode = 201;
+        let responseMessage = '';
+
+        if (approvalDecision.action === 'auto-approve') {
+            statusCode = 201;
+            responseMessage = `IdP auto-approved! Comprehensive risk score: ${comprehensiveRiskScore.total}/100 (${comprehensiveRiskScore.tier} tier). IdP is now active.`;
+        } else if (approvalDecision.action === 'fast-track') {
+            statusCode = 202;
+            responseMessage = `IdP submitted for fast-track review. Score: ${comprehensiveRiskScore.total}/100 (${comprehensiveRiskScore.tier} tier). Review SLA: ${process.env.FAST_TRACK_SLA_HOURS || 2}hr.`;
+        } else if (approvalDecision.action === 'standard-review') {
+            statusCode = 202;
+            responseMessage = `IdP submitted for standard review. Score: ${comprehensiveRiskScore.total}/100 (${comprehensiveRiskScore.tier} tier). Review SLA: ${process.env.STANDARD_REVIEW_SLA_HOURS || 24}hr.`;
+        } else if (approvalDecision.action === 'auto-reject') {
+            statusCode = 400;
+            responseMessage = `IdP auto-rejected due to critical security issues. Score: ${comprehensiveRiskScore.total}/100 (${comprehensiveRiskScore.tier} tier). Please address issues and resubmit.`;
+        }
+
         const response: IAdminAPIResponse = {
-            success: true,
+            success: approvalDecision.action !== 'auto-reject',
             data: {
                 submissionId,
                 alias: createRequest.alias,
-                status: 'pending',
+                status: approvalDecision.action === 'auto-approve' ? 'approved' :
+                    approvalDecision.action === 'auto-reject' ? 'rejected' : 'pending',
+                // Phase 1 results
                 validationResults,
                 preliminaryScore,
-                message: 'Identity provider submitted for approval'
+                // Phase 2 results
+                comprehensiveRiskScore,
+                complianceCheck,
+                approvalDecision,
+                // Next steps
+                nextSteps: approvalDecision.nextSteps
             },
-            message: `IdP validated (${preliminaryScore.tier} tier, ${preliminaryScore.total}/${preliminaryScore.maxScore} points) and submitted for approval.`,
+            message: responseMessage,
             requestId
         };
 
-        res.status(201).json(response);
+        res.status(statusCode).json(response);
     } catch (error) {
         logger.error('Failed to create IdP', {
             requestId,

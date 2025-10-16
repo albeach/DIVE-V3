@@ -6,6 +6,14 @@
 
 import { IdPProtocol, IdPStatus } from './keycloak.types';
 import { IValidationResults, IPreliminaryScore } from './validation.types';
+import {
+    IComprehensiveRiskScore,
+    IComplianceCheckResult,
+    IApprovalDecision,
+    IOperationalData,
+    IComplianceDocuments,
+    SLAStatus,
+} from './risk-scoring.types';
 
 // ============================================
 // Super Admin Role Types
@@ -45,6 +53,34 @@ export interface IIdPSubmission {
     // Phase 1: Validation Results (Automated Security Checks)
     validationResults?: IValidationResults;
     preliminaryScore?: IPreliminaryScore;
+
+    // Phase 2: Comprehensive Risk Scoring & Compliance (NEW)
+    /** Comprehensive risk score (100-point system) */
+    comprehensiveRiskScore?: IComprehensiveRiskScore;
+
+    /** Compliance validation results (ACP-240, STANAG, NIST) */
+    complianceCheck?: IComplianceCheckResult;
+
+    /** Approval decision (auto-approve, fast-track, standard, reject) */
+    approvalDecision?: IApprovalDecision;
+
+    /** SLA deadline for review (ISO 8601) */
+    slaDeadline?: string;
+
+    /** Current SLA status */
+    slaStatus?: SLAStatus;
+
+    /** Whether submission was auto-approved */
+    autoApproved?: boolean;
+
+    /** Whether submission is in fast-track queue */
+    fastTrack?: boolean;
+
+    /** Operational data provided by partner */
+    operationalData?: IOperationalData;
+
+    /** Compliance documents uploaded by partner */
+    complianceDocuments?: IComplianceDocuments;
 }
 
 export interface IApprovalRequest {

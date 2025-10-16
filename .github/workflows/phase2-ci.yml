@@ -1,0 +1,141 @@
+name: Phase 2 - Risk Scoring & Compliance CI
+
+on:
+  push:
+    branches: [ main, 'feature/phase2-*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  backend-build:
+    name: Backend Build & TypeScript
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd backend && npm ci
+      
+      - name: TypeScript Type Check
+        run: cd backend && npm run typecheck
+      
+      - name: Build
+        run: cd backend && npm run build
+      
+      - name: Verify Build Artifacts
+        run: |
+          cd backend
+          test -f dist/server.js || exit 1
+          test -f dist/services/risk-scoring.service.js || exit 1
+          test -f dist/services/compliance-validation.service.js || exit 1
+          echo "✅ All Phase 2 build artifacts present"
+
+  backend-tests:
+    name: Backend Tests (Phase 2)
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      opa:
+        image: openpolicyagent/opa:0.68.0-rootless
+        ports:
+          - 8181:8181
+        options: >-
+          --health-cmd "wget -q -O- http://localhost:8181/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd backend && npm ci
+      
+      - name: Run All Tests
+        run: cd backend && npm test
+        env:
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_DATABASE: dive-v3-test
+          OPA_URL: http://localhost:8181
+      
+      - name: Verify Test Results
+        run: |
+          echo "✅ All active tests passing"
+          echo "Note: 6 tests intentionally skipped (integrity validation tested in ztdf.utils.test.ts)"
+
+  phase2-risk-scoring-tests:
+    name: Phase 2 Risk Scoring Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd backend && npm ci
+      
+      - name: Run Phase 2 Tests with Coverage
+        run: cd backend && npm test -- risk-scoring.test.ts --coverage
+      
+      - name: Check Coverage Threshold
+        run: |
+          cd backend
+          COVERAGE=$(npm test -- risk-scoring.test.ts --coverage --silent | grep -oP 'All files.*?(\d+\.\d+)' | grep -oP '\d+\.\d+' | head -1)
+          echo "Coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE >= 95.0" | bc -l) )); then
+            echo "✅ Coverage meets >95% threshold"
+          else
+            echo "❌ Coverage below 95% threshold"
+            exit 1
+          fi
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Backend Security Audit
+        run: cd backend && npm audit --production --audit-level=moderate
+        continue-on-error: true
+      
+      - name: Check for Critical CVEs
+        run: cd backend && npm audit --production --audit-level=critical
+

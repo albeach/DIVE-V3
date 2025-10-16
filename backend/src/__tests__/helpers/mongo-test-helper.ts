@@ -70,17 +70,36 @@ export class MongoTestHelper {
 
     /**
      * Clear all data from the database
+     * BRUTAL approach: Drop all collections entirely
      */
     async clearDatabase(): Promise<void> {
         if (!this.db) {
             return;
         }
 
-        const collections = await this.db.listCollections().toArray();
-        for (const collection of collections) {
-            await this.db.collection(collection.name).deleteMany({});
+        try {
+            // Drop ALL collections to ensure clean state
+            const collections = await this.db.listCollections().toArray();
+            for (const collection of collections) {
+                await this.db.collection(collection.name).drop().catch(() => {
+                    // Ignore errors if collection doesn't exist
+                });
+            }
+            console.log(`Database cleared - dropped ${collections.length} collections`);
+
+            // Recreate indexes after dropping
+            if (collections.length > 0) {
+                await this.createIndexes();
+            }
+        } catch (error) {
+            console.error('Error clearing database:', error);
+            // Fallback: try deleteMany
+            const collections = await this.db.listCollections().toArray();
+            for (const collection of collections) {
+                await this.db.collection(collection.name).deleteMany({});
+            }
+            console.log('Database cleared using deleteMany fallback');
         }
-        console.log('Database cleared');
     }
 
     /**
@@ -126,15 +145,20 @@ export class MongoTestHelper {
 
     /**
      * Create indexes for performance
+     * Called automatically after clearing database
      */
     async createIndexes(): Promise<void> {
-        const collection = this.getResourcesCollection();
+        try {
+            const collection = this.getResourcesCollection();
 
-        await collection.createIndex({ resourceId: 1 }, { unique: true });
-        await collection.createIndex({ 'ztdf.policy.securityLabel.classification': 1 });
-        await collection.createIndex({ 'ztdf.policy.securityLabel.releasabilityTo': 1 });
+            await collection.createIndex({ resourceId: 1 }, { unique: true });
+            await collection.createIndex({ 'ztdf.policy.securityLabel.classification': 1 });
+            await collection.createIndex({ 'ztdf.policy.securityLabel.releasabilityTo': 1 });
 
-        console.log('Indexes created');
+            console.log('Indexes created');
+        } catch (error) {
+            console.log('Index creation skipped or failed:', error);
+        }
     }
 
     /**

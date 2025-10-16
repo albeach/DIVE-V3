@@ -32,8 +32,10 @@ describe('ACP-240 Logger MongoDB Integration', () => {
     });
 
     beforeEach(async () => {
-        // Clear collection before each test
+        // Clear collection before each test and WAIT for completion
         await db.collection(LOGS_COLLECTION).deleteMany({});
+        // Add delay to ensure deletion completes before test starts
+        await new Promise(resolve => setTimeout(resolve, 100));
     });
 
     describe('logACP240Event', () => {
@@ -60,10 +62,9 @@ describe('ACP-240 Logger MongoDB Integration', () => {
                 latencyMs: 25
             };
 
-            logACP240Event(event);
+            await logACP240Event(event);
 
-            // Wait for async write to complete
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Now event is guaranteed to be written
 
             // Verify document was inserted
             const collection = db.collection(LOGS_COLLECTION);
@@ -142,7 +143,7 @@ describe('ACP-240 Logger MongoDB Integration', () => {
 
     describe('logDecryptEvent', () => {
         it('should create and store DECRYPT event', async () => {
-            logDecryptEvent({
+            await logDecryptEvent({
                 requestId: 'test-decrypt-001',
                 subject: 'john.doe@mil',
                 resourceId: 'fuel-depot-001',
@@ -177,7 +178,7 @@ describe('ACP-240 Logger MongoDB Integration', () => {
 
     describe('logAccessDeniedEvent', () => {
         it('should create and store ACCESS_DENIED event', async () => {
-            logAccessDeniedEvent({
+            await logAccessDeniedEvent({
                 requestId: 'test-deny-001',
                 subject: 'jane.smith@fra',
                 resourceId: 'classified-doc-001',
@@ -221,7 +222,7 @@ describe('ACP-240 Logger MongoDB Integration', () => {
 
     describe('logEncryptEvent', () => {
         it('should create and store ENCRYPT event', async () => {
-            logEncryptEvent({
+            await logEncryptEvent({
                 requestId: 'test-encrypt-001',
                 subject: 'admin@mil',
                 resourceId: 'sensitive-doc-001',
