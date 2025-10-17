@@ -346,15 +346,15 @@ export default function NewIdPWizard() {
                 : formData.samlConfig;
 
             const requestBody = {
-                alias: formData.alias,
-                displayName: formData.displayName,
-                description: formData.description,
-                protocol: formData.protocol,
-                config: keycloakConfig,
-                attributeMappings: formData.attributeMappings,
-                // Include Auth0 metadata
-                useAuth0: formData.useAuth0,
-                auth0ClientId: formData.useAuth0 ? auth0ClientId : undefined,
+                    alias: formData.alias,
+                    displayName: formData.displayName,
+                    description: formData.description,
+                    protocol: formData.protocol,
+                    config: keycloakConfig,
+                    attributeMappings: formData.attributeMappings,
+                    // Include Auth0 metadata
+                    useAuth0: formData.useAuth0,
+                    auth0ClientId: formData.useAuth0 ? auth0ClientId : undefined,
                 auth0ClientSecret: formData.useAuth0 ? auth0ClientSecret : undefined,
                 // Phase 2: Operational data and compliance
                 operationalData: formData.operationalData,
@@ -439,67 +439,172 @@ export default function NewIdPWizard() {
                 { label: 'IdP Management', href: '/admin/idp' },
                 { label: 'Add New IdP', href: null }
             ]}
-            maxWidth="4xl"
+            maxWidth="5xl"
         >
-            {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Add New Identity Provider</h1>
-                <p className="mt-2 text-sm text-gray-600">
-                    Configure a new OIDC or SAML identity provider for coalition authentication.
-                </p>
+            {/* Modern Hero Header */}
+            <div className="mb-10">
+                <div className="flex items-start gap-6">
+                    <div className="flex-shrink-0">
+                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-xl shadow-blue-500/30 transform hover:scale-110 hover:rotate-3 transition-all duration-300">
+                            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                            </svg>
+                        </div>
+                    </div>
+                    <div className="flex-1">
+                        <h1 className="text-5xl font-black bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 bg-clip-text text-transparent tracking-tight">
+                            Add Identity Provider
+                        </h1>
+                        <p className="mt-3 text-lg text-gray-600 font-medium">
+                            Enterprise authentication with automated security validation
+                        </p>
+                    </div>
+                </div>
             </div>
 
-                {/* Wizard Steps Indicator */}
-                <div className="mb-8">
-                    <WizardSteps currentStep={currentStep} steps={WIZARD_STEPS} />
+            {/* Modern Progress Indicator */}
+            <div className="mb-10">
+                <div className="relative">
+                    {/* Background track */}
+                    <div className="absolute top-5 left-0 w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 opacity-50" />
                 </div>
 
-                {/* Wizard Content */}
-                <div className="bg-white shadow sm:rounded-lg">
-                    <div className="px-4 py-5 sm:p-6">
+                    {/* Animated progress */}
+                    <div 
+                        className="absolute top-5 left-0 h-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-full shadow-lg shadow-blue-500/40 transition-all duration-700 ease-out"
+                        style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }}
+                    >
+                        <div className="absolute inset-0 bg-white/30 animate-pulse" />
+                    </div>
+                    
+                    {/* Step indicators */}
+                    <div className="relative flex justify-between">
+                        {WIZARD_STEPS.map((step, idx) => (
+                            <div key={step.number} className="flex flex-col items-center" style={{ animationDelay: `${idx * 50}ms` }}>
+                                <div className={`relative w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-500 ${
+                                    step.number < currentStep 
+                                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50 scale-105' 
+                                        : step.number === currentStep
+                                        ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-2xl shadow-blue-600/70 scale-125 ring-4 ring-blue-200'
+                                        : 'bg-white border-2 border-gray-300 text-gray-400 scale-90'
+                                }`}>
+                                    {step.number < currentStep ? (
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    ) : (
+                                        step.number
+                                    )}
+                                    {step.number === currentStep && (
+                                        <div className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75" />
+                                    )}
+                                </div>
+                                <div className={`mt-2 text-center max-w-[90px] transition-opacity duration-300 ${
+                                    step.number === currentStep ? 'opacity-100' : 'opacity-60'
+                                }`}>
+                                    <p className={`text-[10px] font-bold leading-tight ${
+                                        step.number === currentStep ? 'text-blue-600' : 'text-gray-600'
+                                    }`}>
+                                        {step.title}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Wizard Card with subtle glow */}
+            <div className="relative">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl opacity-20 blur-xl" />
+                <div className="relative bg-white shadow-2xl rounded-2xl border border-gray-100">
+                    <div className="px-6 py-8 sm:p-10">
                         {/* Step 1: Protocol Selection */}
                         {currentStep === 1 && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Select Protocol</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        Choose the authentication protocol for this identity provider.
+                            <div className="space-y-8">
+                                <div className="text-center">
+                                    <h3 className="text-2xl font-bold text-gray-900">Choose Protocol</h3>
+                                    <p className="mt-2 text-gray-600">
+                                        Select your identity provider's authentication protocol
                                     </p>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    {/* OIDC Option */}
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                    {/* OIDC - Modern 3D Card */}
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, protocol: 'oidc' })}
-                                        className={`relative flex flex-col items-center rounded-lg border-2 p-6 hover:border-blue-500 focus:outline-none ${
-                                            formData.protocol === 'oidc'
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 bg-white'
-                                        }`}
+                                        className="group relative transform transition-all duration-300 hover:scale-105 focus:outline-none"
                                     >
-                                        <div className="text-4xl mb-3">🔷</div>
-                                        <span className="text-lg font-medium text-gray-900">OIDC</span>
-                                        <span className="mt-1 text-sm text-gray-500 text-center">
-                                            OpenID Connect (OAuth 2.0)
-                                        </span>
+                                        <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
+                                            formData.protocol === 'oidc' 
+                                                ? 'bg-gradient-to-r from-blue-600 to-cyan-500 opacity-75 blur-sm' 
+                                                : 'bg-gradient-to-r from-blue-400 to-cyan-400 opacity-0 group-hover:opacity-50 blur-sm'
+                                        }`} />
+                                        
+                                        <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
+                                            formData.protocol === 'oidc'
+                                                ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-2xl'
+                                                : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl'
+                                        }`}>
+                                            <div className={`text-6xl mb-3 transition-transform duration-300 ${
+                                                formData.protocol === 'oidc' ? 'scale-110' : 'group-hover:scale-110'
+                                            }`}>
+                                                🔷
+                                            </div>
+                                            <span className={`text-xl font-bold mb-1 ${formData.protocol === 'oidc' ? 'text-white' : 'text-gray-900'}`}>
+                                                OIDC
+                                            </span>
+                                            <span className={`text-sm ${formData.protocol === 'oidc' ? 'text-blue-100' : 'text-gray-600'}`}>
+                                                OpenID Connect
+                                            </span>
+                                            {formData.protocol === 'oidc' && (
+                                                <div className="absolute top-3 right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md">
+                                                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </div>
                                     </button>
 
-                                    {/* SAML Option */}
+                                    {/* SAML - Modern 3D Card */}
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, protocol: 'saml' })}
-                                        className={`relative flex flex-col items-center rounded-lg border-2 p-6 hover:border-blue-500 focus:outline-none ${
-                                            formData.protocol === 'saml'
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 bg-white'
-                                        }`}
+                                        className="group relative transform transition-all duration-300 hover:scale-105 focus:outline-none"
                                     >
-                                        <div className="text-4xl mb-3">🔶</div>
-                                        <span className="text-lg font-medium text-gray-900">SAML</span>
-                                        <span className="mt-1 text-sm text-gray-500 text-center">
-                                            SAML 2.0
-                                        </span>
+                                        <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
+                                            formData.protocol === 'saml' 
+                                                ? 'bg-gradient-to-r from-orange-600 to-pink-500 opacity-75 blur-sm' 
+                                                : 'bg-gradient-to-r from-orange-400 to-pink-400 opacity-0 group-hover:opacity-50 blur-sm'
+                                        }`} />
+                                        
+                                        <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
+                                            formData.protocol === 'saml'
+                                                ? 'bg-gradient-to-br from-orange-600 to-pink-600 text-white shadow-2xl'
+                                                : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl'
+                                        }`}>
+                                            <div className={`text-6xl mb-3 transition-transform duration-300 ${
+                                                formData.protocol === 'saml' ? 'scale-110' : 'group-hover:scale-110'
+                                            }`}>
+                                                🔶
+                                            </div>
+                                            <span className={`text-xl font-bold mb-1 ${formData.protocol === 'saml' ? 'text-white' : 'text-gray-900'}`}>
+                                                SAML
+                                            </span>
+                                            <span className={`text-sm ${formData.protocol === 'saml' ? 'text-orange-100' : 'text-gray-600'}`}>
+                                                SAML 2.0
+                                            </span>
+                                            {formData.protocol === 'saml' && (
+                                                <div className="absolute top-3 right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md">
+                                                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </div>
                                     </button>
                                 </div>
 
@@ -1007,7 +1112,7 @@ export default function NewIdPWizard() {
                                             : 'Your Identity Provider has been validated and assessed. Review the results below.'
                                         }
                                     </p>
-                                </div>
+                    </div>
 
                                 {/* Validation Failed Banner */}
                                 {submissionResult.status === 'validation-failed' && (
@@ -1164,27 +1269,27 @@ export default function NewIdPWizard() {
 
                     {/* Navigation Buttons - Hide on Step 8 (Results) */}
                     {currentStep < 8 && (
-                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
+                    <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
                             {currentStep < 7 ? (
-                                <button
-                                    type="button"
-                                    onClick={handleNext}
-                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
-                                >
-                                    Next →
-                                </button>
+                            <button
+                                type="button"
+                                onClick={handleNext}
+                                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                            >
+                                Next →
+                            </button>
                             ) : currentStep === 7 ? (
-                                <button
-                                    type="button"
-                                    onClick={handleSubmit}
-                                    disabled={isSubmitting}
-                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                                >
-                                    {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
-                                </button>
-                            ) : null}
+                            <button
+                                type="button"
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                            >
+                                {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
+                            </button>
+                        ) : null}
 
-                            {currentStep > 1 && (
+                        {currentStep > 1 && (
                             <button
                                 type="button"
                                 onClick={handleBack}
@@ -1194,15 +1299,16 @@ export default function NewIdPWizard() {
                             </button>
                         )}
 
-                            <button
-                                type="button"
-                                onClick={() => router.push('/admin/idp')}
-                                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:w-auto sm:text-sm"
-                            >
-                                Cancel
-                            </button>
+                        <button
+                            type="button"
+                            onClick={() => router.push('/admin/idp')}
+                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:w-auto sm:text-sm"
+                        >
+                            Cancel
+                        </button>
                         </div>
                     )}
+                    </div>
                 </div>
         </PageLayout>
     );
