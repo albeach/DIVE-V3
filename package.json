@@ -3,10 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "DIVE V3 - Coalition-Friendly ICAM Web Application",
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
   "scripts": {
     "prepare": "husky install"
   },
