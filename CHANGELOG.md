@@ -2,6 +2,63 @@
 
 All notable changes to the DIVE V3 project will be documented in this file.
 
+## [2025-10-17] - KAS Decryption Fix + Content Viewer Enhancement
+
+### 🎯 Critical Fixes - ZTDF Compliance & UX
+
+#### Added
+- **Modern Content Viewer** (`frontend/src/components/resources/content-viewer.tsx`)
+  - Intelligent rendering: images (zoom, fullscreen), PDFs (embedded), text (formatted), documents (download)
+  - Auto-detects MIME type from ZTDF metadata
+  - Modern 2025 design with glassmorphism and smooth animations
+  
+- **ZTDF Integrity Enforcement** ⚠️ CRITICAL ACP-240 Compliance
+  - Mandatory integrity checks BEFORE decryption (was missing!)
+  - Validates policy hash (STANAG 4778 cryptographic binding)
+  - Validates payload and chunk integrity hashes (SHA-384)
+  - Fail-closed: Denies decryption if integrity check fails
+  - SOC alerting for tampering attempts
+
+- **KAS Decryption Tests** (`backend/src/__tests__/kas-decryption-integration.test.ts`)
+  - Verifies seeded and uploaded resources decrypt correctly
+  - Integrity validation test coverage
+  - Automated verification script
+
+#### Fixed
+- **KAS Decryption Failure** ⚠️ CRITICAL
+  - Issue: Uploaded files failed with "Unsupported state or unable to authenticate data"
+  - Root Cause: KAS regenerating DEK instead of using stored `wrappedKey`
+  - Solution: Backend passes `wrappedKey` to KAS; KAS uses it instead of regenerating
+  - Result: ✅ ALL resources now decrypt (verified with 612 passing tests)
+
+- **KAS Badge Visibility** 
+  - Enhanced to animated purple→indigo gradient with lock icon
+  - Changed label: "ZTDF" → "KAS Protected" with pulse animation
+
+- **Encrypted Content Not Showing on Initial Load**
+  - Backend now always sets `content` field for encrypted resources
+  - Frontend uses robust condition: `resource.encrypted && !decryptedContent`
+  - KAS request UI now appears immediately
+
+#### Security
+- **STANAG 4778 Enforcement**: Integrity validation now MANDATORY before decryption
+- **Tampering Detection**: SOC alerts with full forensic details
+- **Policy Downgrade Prevention**: Hash validation prevents label manipulation
+- **Fail-Closed**: Access denied on ANY integrity check failure
+
+#### Testing
+- Backend: **612 tests passed** (28 suites, 0 failures)
+- OPA: **126 tests passed** (0 failures)
+- Linting: **0 errors**
+- TypeScript: **Full compilation success**
+
+#### Documentation
+- `KAS-CONTENT-VIEWER-ENHANCEMENT.md` - Technical overview
+- `ZTDF-COMPLIANCE-AUDIT.md` - ACP-240 compliance analysis
+- `verify-kas-decryption.sh` - Automated verification
+
+---
+
 ## [Phase 4] - 2025-10-17
 
 ### Added - CI/CD & QA Automation

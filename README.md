@@ -12,8 +12,9 @@ DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential,
 - **ABAC Authorization:** Policy-driven access control using OPA/Rego with NATO ACP-240 compliance
 - **PEP/PDP Pattern:** Backend API enforces authorization decisions from OPA policy engine
 - **Data-Centric Security:** ZTDF format with STANAG 4774/4778 cryptographic binding
-- **Key Access Service:** Policy-bound encryption with KAS mediation
+- **Key Access Service:** Policy-bound encryption with KAS mediation and integrity validation
 - **Secure Document Sharing:** Clearance-based, releasability-based, and COI-based access control
+- **Modern Content Viewer:** Intelligent rendering for images, PDFs, text with zoom/fullscreen capabilities
 
 ## 🏗️ Architecture
 

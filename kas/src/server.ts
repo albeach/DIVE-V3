@@ -374,25 +374,41 @@ app.post('/request-key', async (req: Request, res: Response) => {
         let dekEntry: IDEKCacheEntry | undefined = dekCache.get(cacheKey);
 
         if (!dekEntry) {
-            // Generate DETERMINISTIC DEK based on resourceId (matches seed script)
-            // In production, this would unwrap the actual wrappedKey from KAO using KEK
-            // For pilot: Use SHA256(resourceId + salt) to match seed script encryption
-            const salt = 'dive-v3-pilot-dek-salt';
-            const dekHash = crypto.createHash('sha256').update(keyRequest.resourceId + salt).digest();
-            const dek = dekHash.toString('base64');
+            // PILOT FIX: Use the wrappedKey provided in request (plaintext DEK in pilot)
+            // In production, this would unwrap the wrappedKey using KEK/HSM
+            let dek: string;
+
+            if (keyRequest.wrappedKey) {
+                // Use the provided wrappedKey (which is plaintext DEK in pilot)
+                dek = keyRequest.wrappedKey;
+                kasLogger.info('Using provided wrappedKey as DEK (pilot mode)', {
+                    requestId,
+                    resourceId: keyRequest.resourceId,
+                    wrappedKeyLength: keyRequest.wrappedKey.length
+                });
+            } else {
+                // Fallback: Generate deterministic DEK (for backward compatibility)
+                const salt = 'dive-v3-pilot-dek-salt';
+                const dekHash = crypto.createHash('sha256').update(keyRequest.resourceId + salt).digest();
+                dek = dekHash.toString('base64');
+                kasLogger.warn('No wrappedKey provided, using deterministic DEK (legacy mode)', {
+                    requestId,
+                    resourceId: keyRequest.resourceId
+                });
+            }
 
             dekEntry = {
                 resourceId: keyRequest.resourceId,
                 dek,
                 kekId: 'mock-kek-001',
-                wrappedDEK: crypto.randomBytes(256).toString('base64'), // Mock wrapped DEK
+                wrappedDEK: dek, // Store the actual DEK used
                 wrappingAlgorithm: 'RSA-OAEP-256',
                 createdAt: new Date().toISOString(),
                 expiresAt: new Date(Date.now() + 3600000).toISOString() // 1 hour
             };
 
             dekCache.set(cacheKey, dekEntry);
-            kasLogger.info('DEK generated and cached (deterministic for pilot)', { requestId, resourceId: keyRequest.resourceId });
+            kasLogger.info('DEK cached', { requestId, resourceId: keyRequest.resourceId });
         } else {
             kasLogger.info('DEK retrieved from cache', { requestId, resourceId: keyRequest.resourceId });
         }

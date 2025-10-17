@@ -91,7 +91,7 @@ export const compressionMiddleware = compression({
  * Logs compression ratio for monitoring
  * (Should be placed AFTER compression middleware)
  */
-export const compressionStats = (req: Request, res: Response, next: Function): void => {
+export const compressionStats = (req: Request, res: Response, next: express.NextFunction): void => {
     const requestId = req.headers['x-request-id'] as string;
 
     // Wrap res.end to calculate compression stats

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import PageLayout from '@/components/layout/page-layout';
 import AccessDenied from '@/components/authz/access-denied';
 import KASRequestModal from '@/components/ztdf/KASRequestModal';
+import ContentViewer from '@/components/resources/content-viewer';
 
 interface IResource {
   resourceId: string;
@@ -276,27 +277,35 @@ export default function ResourceDetailPage() {
                 </div>
               </div>
 
-              {/* ZTDF Summary Card */}
+              {/* ZTDF Summary Card - Enhanced with prominent KAS indicator */}
               {resource.ztdf && (
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+                <div className="bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 border-2 border-purple-300 rounded-xl p-6 shadow-lg">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="flex-shrink-0">
-                        <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
+                      <div className="flex-shrink-0 relative">
+                        <div className="absolute inset-0 bg-purple-400 rounded-full blur-md opacity-50 animate-pulse"></div>
+                        <div className="relative w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
+                          <svg className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
                       </div>
                       <div>
-                        <h3 className="text-lg font-bold text-blue-900">Zero Trust Data Format (ZTDF)</h3>
-                        <p className="text-sm text-blue-800">Data-centric security with embedded policy</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-xl font-bold text-gray-900">Zero Trust Data Format</h3>
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-purple-600 text-white animate-pulse">
+                            🔐 KAS Protected
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700 font-medium">Policy-bound encryption • Key Access Service mediation required</p>
                       </div>
                     </div>
                     <Link
                       href={`/resources/${resourceId}/ztdf`}
-                      className="inline-flex items-center px-4 py-2 border border-blue-300 shadow-sm text-sm font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      className="inline-flex items-center px-5 py-2.5 border-2 border-purple-300 shadow-md text-sm font-bold rounded-lg text-purple-700 bg-white hover:bg-purple-50 hover:border-purple-400 transition-all hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
                     >
-                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       View ZTDF Details
                     </Link>
@@ -396,15 +405,17 @@ export default function ResourceDetailPage() {
                   
                   {/* Show decrypted content if available */}
                   {decryptedContent ? (
-                    <div>
-                      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="space-y-4">
+                      <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl shadow-sm">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-green-800">
-                            <span className="text-xl">✅</span>
+                          <div className="flex items-center gap-3 text-green-800">
+                            <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                              <span className="text-2xl">✅</span>
+                            </div>
                             <div>
-                              <span className="font-semibold block">Content Decrypted Successfully</span>
+                              <span className="font-bold block text-lg">Content Decrypted Successfully</span>
                               <span className="text-sm text-green-700">
-                                KAS released decryption key. Content persisted for this session.
+                                KAS released decryption key • Content cached for this session
                               </span>
                             </div>
                           </div>
@@ -414,68 +425,110 @@ export default function ResourceDetailPage() {
                               sessionStorage.removeItem(`kas-flow-${resourceId}`);
                               setDecryptedContent(null);
                             }}
-                            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                            className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg hover:bg-red-700 transition-all hover:shadow-lg flex items-center gap-2"
                           >
-                            🗑️ Clear Decrypted Content
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Clear Cache
                           </button>
                         </div>
                       </div>
-                      <div className="prose prose-sm max-w-none">
-                        <p className="whitespace-pre-wrap text-gray-700">{decryptedContent}</p>
-                      </div>
+                      
+                      {/* Modern Content Viewer */}
+                      <ContentViewer
+                        content={decryptedContent}
+                        contentType={resource.ztdf?.contentType || 'text/plain'}
+                        title={resource.title}
+                        resourceId={resource.resourceId}
+                        classification={resource.classification}
+                      />
                     </div>
-                  ) : resource.encrypted && 
-                     resource.content === '[Encrypted - KAS key request required]' ? (
-                    /* Show KAS request button for encrypted resources */
-                    <div className="text-center py-8 bg-blue-50 border-2 border-blue-200 rounded-lg">
-                      <div className="mb-4">
-                        <span className="text-6xl">🔐</span>
-                      </div>
-                      <p className="text-gray-800 font-semibold mb-2">
-                        This resource is encrypted and requires KAS mediation
-                      </p>
-                      <p className="text-gray-600 text-sm mb-6 max-w-md mx-auto">
-                        Zero Trust Data Format (ZTDF) policy-driven key access service will 
-                        re-evaluate authorization before releasing the decryption key.
-                      </p>
-                      {kasError && (
-                        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
-                          <p className="text-red-800 font-semibold mb-1">Access Denied</p>
-                          <p className="text-red-700 text-sm">{kasError}</p>
+                  ) : resource.encrypted && !decryptedContent ? (
+                    /* Show KAS request button for encrypted resources - Modern 2025 Design */
+                    <div className="relative overflow-hidden">
+                      {/* Animated gradient background */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-purple-100 via-blue-100 to-indigo-100 opacity-60"></div>
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.3),rgba(255,255,255,0))]"></div>
+                      
+                      <div className="relative text-center py-12 px-6">
+                        {/* Lock icon with glow effect */}
+                        <div className="mb-6 inline-block relative">
+                          <div className="absolute inset-0 bg-purple-400 blur-2xl opacity-40 animate-pulse"></div>
+                          <div className="relative w-24 h-24 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl transform hover:scale-105 transition-transform">
+                            <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                          </div>
                         </div>
-                      )}
-                      <button
-                        onClick={async () => {
-                          setKasError(null);
-                          // Fetch ZTDF details to get KAO ID
-                          try {
-                            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-                            const accessToken = (session as any)?.accessToken;
-                            const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
-                              headers: {
-                                'Authorization': `Bearer ${accessToken}`,
-                                'Content-Type': 'application/json'
+                        
+                        <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                          Content Encrypted with KAS
+                        </h3>
+                        <p className="text-gray-700 font-medium mb-2 max-w-lg mx-auto">
+                          This resource requires Key Access Service (KAS) mediation
+                        </p>
+                        <p className="text-gray-600 text-sm mb-8 max-w-xl mx-auto leading-relaxed">
+                          Zero Trust Data Format (ZTDF) ensures that access policies are re-evaluated in real-time before releasing the decryption key. 
+                          Click below to request access from the KAS.
+                        </p>
+                        
+                        {kasError && (
+                          <div className="mb-6 p-5 bg-red-50 border-2 border-red-300 rounded-xl max-w-md mx-auto shadow-lg animate-in fade-in slide-in-from-top-2">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </div>
+                              <div className="text-left">
+                                <p className="text-red-900 font-bold mb-1">Access Denied</p>
+                                <p className="text-red-700 text-sm">{kasError}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <button
+                          onClick={async () => {
+                            setKasError(null);
+                            // Fetch ZTDF details to get KAO ID
+                            try {
+                              const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+                              const accessToken = (session as any)?.accessToken;
+                              const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
+                                headers: {
+                                  'Authorization': `Bearer ${accessToken}`,
+                                  'Content-Type': 'application/json'
+                                }
+                              });
+                              if (ztdfResponse.ok) {
+                                const ztdfData = await ztdfResponse.json();
+                                const kaoIdValue = ztdfData.ztdfDetails?.payload?.keyAccessObjects?.[0]?.kaoId || '';
+                                setKaoId(kaoIdValue);
+                                setShowKASModal(true);
+                              } else {
+                                setKasError('Failed to fetch ZTDF details');
                               }
-                            });
-                            if (ztdfResponse.ok) {
-                              const ztdfData = await ztdfResponse.json();
-                              const kaoIdValue = ztdfData.ztdfDetails?.payload?.keyAccessObjects?.[0]?.kaoId || '';
-                              setKaoId(kaoIdValue);
-                              setShowKASModal(true);
-                            } else {
+                            } catch (err) {
                               setKasError('Failed to fetch ZTDF details');
                             }
-                          } catch (err) {
-                            setKasError('Failed to fetch ZTDF details');
-                          }
-                        }}
-                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 
-                                 transition-colors font-semibold shadow-md hover:shadow-lg 
-                                 flex items-center gap-2 mx-auto"
-                      >
-                        <span>🔑</span>
-                        <span>Request Key from KAS to View Content</span>
-                      </button>
+                          }}
+                          className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 transition-all font-bold text-lg shadow-2xl hover:shadow-purple-500/50 hover:scale-105 transform"
+                        >
+                          <svg className="w-6 h-6 group-hover:rotate-12 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                          <span>Request Decryption Key</span>
+                          <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </button>
+                        
+                        <p className="mt-6 text-xs text-gray-500 max-w-md mx-auto">
+                          Protected by ACP-240 policy enforcement • Real-time authorization checks
+                        </p>
+                      </div>
                     </div>
                   ) : resource.content ? (
                     /* Show regular content */
