@@ -439,67 +439,193 @@ export default function NewIdPWizard() {
                 { label: 'IdP Management', href: '/admin/idp' },
                 { label: 'Add New IdP', href: null }
             ]}
-            maxWidth="4xl"
+            maxWidth="6xl"
         >
-            {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">Add New Identity Provider</h1>
-                <p className="mt-2 text-sm text-gray-600">
-                    Configure a new OIDC or SAML identity provider for coalition authentication.
-                </p>
+            {/* Modern Animated Header */}
+            <div className="mb-12 relative overflow-hidden">
+                {/* Gradient Background with Animation */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 opacity-5 rounded-3xl blur-3xl animate-pulse" />
+                
+                <div className="relative">
+                    <div className="flex items-center gap-4 mb-4">
+                        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/50 transform hover:scale-110 transition-transform duration-300">
+                            <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h1 className="text-4xl font-black bg-gradient-to-r from-gray-900 via-blue-900 to-indigo-900 bg-clip-text text-transparent">
+                                Add Identity Provider
+                            </h1>
+                            <p className="mt-2 text-lg text-gray-600 font-medium">
+                                Configure enterprise authentication with real-time validation
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-                {/* Wizard Steps Indicator */}
-                <div className="mb-8">
-                    <WizardSteps currentStep={currentStep} steps={WIZARD_STEPS} />
+            {/* Modern Progress Steps */}
+            <div className="mb-12">
+                <div className="relative">
+                    {/* Progress Bar Background */}
+                    <div className="absolute top-5 left-0 w-full h-1 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 rounded-full" />
+                    
+                    {/* Animated Progress Bar */}
+                    <div 
+                        className="absolute top-5 left-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-700 ease-out shadow-lg shadow-blue-500/50"
+                        style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }}
+                    />
+                    
+                    {/* Step Circles */}
+                    <div className="relative flex justify-between">
+                        {WIZARD_STEPS.map((step) => (
+                            <div key={step.number} className="flex flex-col items-center group">
+                                <div className={`relative w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm transition-all duration-500 transform ${
+                                    step.number < currentStep 
+                                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50 scale-100 rotate-0' 
+                                        : step.number === currentStep
+                                        ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-2xl shadow-blue-600/60 scale-110 animate-pulse'
+                                        : 'bg-white border-2 border-gray-300 text-gray-400 scale-90'
+                                } group-hover:scale-110 cursor-pointer`}>
+                                    {step.number < currentStep ? (
+                                        <svg className="w-6 h-6 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    ) : (
+                                        <span className="font-black">{step.number}</span>
+                                    )}
+                                </div>
+                                <div className={`mt-3 text-center transition-all duration-300 ${
+                                    step.number === currentStep ? 'opacity-100' : 'opacity-60'
+                                }`}>
+                                    <p className={`text-xs font-bold ${
+                                        step.number === currentStep ? 'text-blue-600' : 'text-gray-600'
+                                    }`}>
+                                        {step.title}
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-1 max-w-[100px]">{step.description}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
+            </div>
 
-                {/* Wizard Content */}
-                <div className="bg-white shadow sm:rounded-lg">
-                    <div className="px-4 py-5 sm:p-6">
-                        {/* Step 1: Protocol Selection */}
+            {/* Modern Glassmorphism Card */}
+            <div className="relative group">
+                {/* Gradient Glow */}
+                <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-3xl blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-500" />
+                
+                {/* Main Card */}
+                <div className="relative bg-white/80 backdrop-blur-xl shadow-2xl rounded-3xl border border-white/20 overflow-hidden">
+                    {/* Animated Background Pattern */}
+                    <div className="absolute inset-0 opacity-5">
+                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 animate-gradient" />
+                    </div>
+                    
+                    <div className="relative px-8 py-10 sm:p-12">
+                        {/* Step 1: Protocol Selection - Modern 3D Cards */}
                         {currentStep === 1 && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Select Protocol</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        Choose the authentication protocol for this identity provider.
+                            <div className="space-y-8 animate-fade-in">
+                                <div className="text-center">
+                                    <h3 className="text-3xl font-black bg-gradient-to-r from-gray-900 to-blue-900 bg-clip-text text-transparent">
+                                        Choose Authentication Protocol
+                                    </h3>
+                                    <p className="mt-3 text-gray-600">
+                                        Select the protocol your identity provider uses
                                     </p>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    {/* OIDC Option */}
+                                <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 mt-12">
+                                    {/* OIDC Option - 3D Elevated Card */}
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, protocol: 'oidc' })}
-                                        className={`relative flex flex-col items-center rounded-lg border-2 p-6 hover:border-blue-500 focus:outline-none ${
-                                            formData.protocol === 'oidc'
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 bg-white'
+                                        className={`group relative transform transition-all duration-500 hover:scale-105 hover:-translate-y-2 focus:outline-none ${
+                                            formData.protocol === 'oidc' ? 'scale-105 -translate-y-1' : ''
                                         }`}
                                     >
-                                        <div className="text-4xl mb-3">🔷</div>
-                                        <span className="text-lg font-medium text-gray-900">OIDC</span>
-                                        <span className="mt-1 text-sm text-gray-500 text-center">
-                                            OpenID Connect (OAuth 2.0)
-                                        </span>
+                                        <div className={`absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-3xl blur-xl transition-opacity duration-500 ${
+                                            formData.protocol === 'oidc' ? 'opacity-75 animate-pulse' : 'opacity-0 group-hover:opacity-60'
+                                        }`} />
+                                        
+                                        <div className={`relative flex flex-col items-center rounded-3xl p-10 transition-all duration-500 ${
+                                            formData.protocol === 'oidc'
+                                                ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-2xl shadow-blue-500/50'
+                                                : 'bg-white shadow-xl hover:shadow-2xl'
+                                        }`}>
+                                            <div className={`text-7xl mb-4 transform transition-all duration-500 ${
+                                                formData.protocol === 'oidc' ? 'scale-110 rotate-3 drop-shadow-2xl' : 'group-hover:scale-110 group-hover:rotate-6'
+                                            }`}>
+                                                🔷
+                                            </div>
+                                            
+                                            <span className={`text-2xl font-black mb-2 ${formData.protocol === 'oidc' ? 'text-white' : 'text-gray-900'}`}>
+                                                OIDC
+                                            </span>
+                                            
+                                            <span className={`text-sm font-semibold ${formData.protocol === 'oidc' ? 'text-blue-100' : 'text-gray-600'}`}>
+                                                OpenID Connect
+                                            </span>
+                                            
+                                            <span className={`mt-2 text-xs ${formData.protocol === 'oidc' ? 'text-blue-200' : 'text-gray-500'}`}>
+                                                Modern OAuth 2.0 Protocol
+                                            </span>
+                                            
+                                            {formData.protocol === 'oidc' && (
+                                                <div className="absolute top-4 right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                                                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </div>
                                     </button>
 
-                                    {/* SAML Option */}
+                                    {/* SAML Option - 3D Elevated Card */}
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, protocol: 'saml' })}
-                                        className={`relative flex flex-col items-center rounded-lg border-2 p-6 hover:border-blue-500 focus:outline-none ${
-                                            formData.protocol === 'saml'
-                                                ? 'border-blue-500 bg-blue-50'
-                                                : 'border-gray-200 bg-white'
+                                        className={`group relative transform transition-all duration-500 hover:scale-105 hover:-translate-y-2 focus:outline-none ${
+                                            formData.protocol === 'saml' ? 'scale-105 -translate-y-1' : ''
                                         }`}
                                     >
-                                        <div className="text-4xl mb-3">🔶</div>
-                                        <span className="text-lg font-medium text-gray-900">SAML</span>
-                                        <span className="mt-1 text-sm text-gray-500 text-center">
-                                            SAML 2.0
-                                        </span>
+                                        <div className={`absolute -inset-1 bg-gradient-to-r from-orange-600 to-pink-600 rounded-3xl blur-xl transition-opacity duration-500 ${
+                                            formData.protocol === 'saml' ? 'opacity-75 animate-pulse' : 'opacity-0 group-hover:opacity-60'
+                                        }`} />
+                                        
+                                        <div className={`relative flex flex-col items-center rounded-3xl p-10 transition-all duration-500 ${
+                                            formData.protocol === 'saml'
+                                                ? 'bg-gradient-to-br from-orange-600 to-pink-600 text-white shadow-2xl shadow-orange-500/50'
+                                                : 'bg-white shadow-xl hover:shadow-2xl'
+                                        }`}>
+                                            <div className={`text-7xl mb-4 transform transition-all duration-500 ${
+                                                formData.protocol === 'saml' ? 'scale-110 -rotate-3 drop-shadow-2xl' : 'group-hover:scale-110 group-hover:-rotate-6'
+                                            }`}>
+                                                🔶
+                                            </div>
+                                            
+                                            <span className={`text-2xl font-black mb-2 ${formData.protocol === 'saml' ? 'text-white' : 'text-gray-900'}`}>
+                                                SAML
+                                            </span>
+                                            
+                                            <span className={`text-sm font-semibold ${formData.protocol === 'saml' ? 'text-orange-100' : 'text-gray-600'}`}>
+                                                Security Assertion Markup Language
+                                            </span>
+                                            
+                                            <span className={`mt-2 text-xs ${formData.protocol === 'saml' ? 'text-orange-200' : 'text-gray-500'}`}>
+                                                Enterprise Standard
+                                            </span>
+                                            
+                                            {formData.protocol === 'saml' && (
+                                                <div className="absolute top-4 right-4 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg animate-bounce">
+                                                    <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </div>
                                     </button>
                                 </div>
 
