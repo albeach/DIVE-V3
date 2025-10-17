@@ -1,18 +1,19 @@
 # Backend-Only Fast Feedback Workflow
-# Provides quick test results for backend changes without running full CI/CD
-# For comprehensive multi-service validation, see ci.yml (runs on all changes)
+# DISABLED - Redundant with main CI Pipeline
+# Main ci.yml workflow covers all backend testing
 name: Backend Tests
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/backend-tests.yml'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'backend/**'
+  workflow_dispatch:  # Manual trigger only
+  # push:
+  #   branches: [ main, develop ]
+  #   paths:
+  #     - 'backend/**'
+  #     - '.github/workflows/backend-tests.yml'
+  # pull_request:
+  #   branches: [ main, develop ]
+  #   paths:
+  #     - 'backend/**'
 
 jobs:
   backend-tests:
