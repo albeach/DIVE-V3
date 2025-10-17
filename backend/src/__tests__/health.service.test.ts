@@ -12,7 +12,6 @@
  */
 
 import { healthService, HealthStatus } from '../services/health.service';
-import { MongoClient } from 'mongodb';
 import axios from 'axios';
 import { authzCacheService } from '../services/authz-cache.service';
 import { opaCircuitBreaker, keycloakCircuitBreaker } from '../utils/circuit-breaker';
