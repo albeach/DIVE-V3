@@ -1329,7 +1329,11 @@ export default function NewIdPWizard() {
                             </button>
                         </div>
                     )}
+                    </div>
+                    {/* Close glassmorphism card */}
                 </div>
+                {/* Close glow wrapper */}
+            </div>
         </PageLayout>
     );
 }
