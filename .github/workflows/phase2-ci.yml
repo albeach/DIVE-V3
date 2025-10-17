@@ -1,10 +1,13 @@
 name: Phase 2 - Risk Scoring & Compliance CI
 
+# DISABLED - Redundant with main CI Pipeline
+# Main ci.yml workflow covers all Phase 2 testing
 on:
-  push:
-    branches: [ main, 'feature/phase2-*' ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:  # Manual trigger only
+  # push:
+  #   branches: [ main, 'feature/phase2-*' ]
+  # pull_request:
+  #   branches: [ main ]
 
 jobs:
   backend-build:
