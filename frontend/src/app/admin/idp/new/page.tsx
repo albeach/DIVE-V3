@@ -519,12 +519,12 @@ export default function NewIdPWizard() {
                 
                 {/* Main Card */}
                 <div className="relative bg-white/80 backdrop-blur-xl shadow-2xl rounded-3xl border border-white/20 overflow-hidden">
-                    {/* Animated Background Pattern */}
-                    <div className="absolute inset-0 opacity-5">
+                    {/* Animated Background Pattern - self-closing */}
+                    <div className="absolute inset-0 opacity-5 pointer-events-none">
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-500 animate-gradient" />
                     </div>
                     
-                    <div className="relative px-8 py-10 sm:p-12">
+                    <div className="relative px-8 py-10 sm:p-12 z-10">
                         {/* Step 1: Protocol Selection - Modern 3D Cards */}
                         {currentStep === 1 && (
                             <div className="space-y-8 animate-fade-in">
