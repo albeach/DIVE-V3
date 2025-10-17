@@ -686,6 +686,7 @@ export default function NewIdPWizard() {
                                 onChange={(config) => setFormData({ ...formData, oidcConfig: config })}
                                 errors={errors}
                                 readonly={formData.useAuth0}
+                                accessToken={(session as any)?.accessToken}
                             />
                         )}
 
