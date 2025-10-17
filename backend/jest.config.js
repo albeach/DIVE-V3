@@ -30,6 +30,7 @@ module.exports = {
         '^@keycloak/keycloak-admin-client$': '<rootDir>/src/__mocks__/keycloak-admin-client.ts'
     },
     testTimeout: 15000,
+    maxWorkers: 1, // Run tests sequentially to prevent MongoDB interference
     forceExit: true,
     detectOpenHandles: false,
     globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',

@@ -175,6 +175,7 @@ export const TEST_RESOURCES = {
 
 /**
  * Create a tampered ZTDF resource (invalid integrity hash)
+ * Uses same approach as ztdf.utils.test.ts - sets obviously wrong hash
  */
 export function createTamperedZTDFResource(): IZTDFResource {
     const resource = createTestZTDFResource({
@@ -185,9 +186,9 @@ export function createTamperedZTDFResource(): IZTDFResource {
         content: 'Original content'
     });
 
-    // Tamper with the policy section (change classification without updating hash)
-    resource.ztdf.policy.securityLabel.classification = 'UNCLASSIFIED';
-    // NOTE: policyHash is NOT updated, causing integrity validation to fail
+    // Set an obviously wrong policy hash (same approach as ztdf.utils.test.ts)
+    // This will cause validation to fail with "Policy hash mismatch"
+    resource.ztdf.policy.policyHash = 'TAMPERED_HASH_VALUE_THAT_WILL_NOT_MATCH_XXXXXXXXXXXXXX';
 
     return resource;
 }

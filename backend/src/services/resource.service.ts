@@ -27,6 +27,15 @@ export interface IResource {
 let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
 
+/**
+ * Clear cached MongoDB connections (for testing)
+ * @internal
+ */
+export function clearResourceServiceCache(): void {
+    cachedClient = null;
+    cachedDb = null;
+}
+
 async function getMongoClient(): Promise<MongoClient> {
     if (cachedClient) {
         // Try to ping to check if still connected

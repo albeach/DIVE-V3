@@ -138,7 +138,47 @@ jobs:
           path: kas/coverage/
           retention-days: 30
 
-  # Job 4: Backend Tests with MongoDB
+  # Job 4: Phase 1 Validation Tests (NEW)
+  phase1-validation-tests:
+    name: Phase 1 - IdP Validation Tests
+    runs-on: ubuntu-latest
+    needs: [backend-build]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+      
+      - name: Run Phase 1 Validation Tests
+        working-directory: ./backend
+        run: npm test -- idp-validation.test.ts --coverage
+        env:
+          NODE_ENV: test
+          CI: true
+      
+      - name: Verify 100% Pass Rate
+        working-directory: ./backend
+        run: |
+          echo "Validating 22/22 tests passed..."
+          npm test -- idp-validation.test.ts --silent | grep "Tests:.*22 passed"
+      
+      - name: Upload test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-validation-coverage
+          path: backend/coverage/
+          retention-days: 30
+
+  # Job 5: Backend Tests with MongoDB
   backend-tests:
     name: Backend Unit & Integration Tests
     runs-on: ubuntu-latest
@@ -306,7 +346,7 @@ jobs:
   ci-summary:
     name: CI/CD Summary
     runs-on: ubuntu-latest
-    needs: [backend-build, backend-tests, frontend-build, kas-build, kas-tests, opa-tests, ztdf-validation, security-checks]
+    needs: [backend-build, backend-tests, phase1-validation-tests, frontend-build, kas-build, kas-tests, opa-tests, ztdf-validation, security-checks]
     if: always()
     
     steps:
@@ -317,6 +357,7 @@ jobs:
           echo "============================================"
           echo "Backend Build: ${{ needs.backend-build.result }}"
           echo "Backend Tests: ${{ needs.backend-tests.result }}"
+          echo "Phase 1 Validation Tests: ${{ needs.phase1-validation-tests.result }}"
           echo "Frontend Build: ${{ needs.frontend-build.result }}"
           echo "KAS Build: ${{ needs.kas-build.result }}"
           echo "KAS Tests: ${{ needs.kas-tests.result }}"
@@ -326,8 +367,9 @@ jobs:
           echo "============================================"
           
           # backend-tests can have failures during development (continue-on-error: true)
-          # All other jobs must pass
+          # All other jobs must pass (including Phase 1 validation tests)
           if [ "${{ needs.backend-build.result }}" != "success" ] || \
+             [ "${{ needs.phase1-validation-tests.result }}" != "success" ] || \
              [ "${{ needs.frontend-build.result }}" != "success" ] || \
              [ "${{ needs.kas-build.result }}" != "success" ] || \
              [ "${{ needs.kas-tests.result }}" != "success" ] || \
