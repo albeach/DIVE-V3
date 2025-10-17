@@ -1330,9 +1330,7 @@ export default function NewIdPWizard() {
                         </div>
                     )}
                     </div>
-                    {/* Close glassmorphism card */}
                 </div>
-                {/* Close glow wrapper */}
             </div>
         </PageLayout>
     );
