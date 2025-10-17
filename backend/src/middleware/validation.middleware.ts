@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { body, param, query, validationResult, ValidationChain } from 'express-validator';
+import { body, param, query, validationResult } from 'express-validator';
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -55,21 +55,6 @@ export const handleValidationErrors = (
     }
 
     next();
-};
-
-/**
- * Sanitize string input
- * - Trim whitespace
- * - Escape HTML to prevent XSS
- * - Limit length
- */
-const sanitizeString = (maxLength: number = MAX_STRING_LENGTH): ValidationChain => {
-    return body('*')
-        .optional()
-        .trim()
-        .isLength({ max: maxLength })
-        .withMessage(`Field must not exceed ${maxLength} characters`)
-        .escape();
 };
 
 /**
@@ -347,7 +332,7 @@ export const validateApprovalDecision = [
  */
 export const sanitizeAllStrings = (
     req: Request,
-    res: Response,
+    _res: Response,
     next: NextFunction
 ): void => {
     if (req.body && typeof req.body === 'object') {
@@ -391,7 +376,7 @@ export const sanitizeAllStrings = (
  */
 export const validateRegexQuery = (
     req: Request,
-    res: Response,
+    _res: Response,
     next: NextFunction
 ): void => {
     const regexFields = ['search', 'filter', 'pattern'];
@@ -410,18 +395,18 @@ export const validateRegexQuery = (
             for (const pattern of dangerousPatterns) {
                 try {
                     if (pattern.test(value)) {
-                        logger.warn('Potential regex DoS pattern detected', {
-                            requestId,
-                            field,
-                            value: value.substring(0, 100),
-                        });
+                logger.warn('Potential regex DoS pattern detected', {
+                    requestId,
+                    field,
+                    value: value.substring(0, 100),
+                });
 
-                        res.status(400).json({
-                            error: 'Validation Error',
-                            message: 'Invalid search pattern detected',
-                            requestId,
-                        });
-                        return;
+                _res.status(400).json({
+                    error: 'Validation Error',
+                    message: 'Invalid search pattern detected',
+                    requestId,
+                });
+                return;
                     }
                 } catch (error) {
                     // Pattern itself might be invalid, skip
@@ -436,7 +421,7 @@ export const validateRegexQuery = (
                     length: value.length,
                 });
 
-                res.status(400).json({
+                _res.status(400).json({
                     error: 'Validation Error',
                     message: 'Search pattern too long (max 200 characters)',
                     requestId,

@@ -83,7 +83,7 @@ export default function RiskDistributionChart({ data }: Props) {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={(entry) => {
+                        label={(entry: any) => {
                             const percentage = ((entry.value / total) * 100).toFixed(1);
                             return `${percentage}%`;
                         }}

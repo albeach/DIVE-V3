@@ -149,6 +149,98 @@ router.post('/auth0/create-application', createAuth0ApplicationHandler);
 router.get('/auth0/applications', listAuth0ApplicationsHandler);
 
 // ============================================
+// Analytics Routes (Phase 3)
+// ============================================
+
+import { analyticsService } from '../services/analytics.service';
+
+/**
+ * GET /api/admin/analytics/risk-distribution
+ * Get risk distribution by tier
+ */
+router.get('/analytics/risk-distribution', async (_req: Request, res: Response) => {
+    try {
+        const distribution = await analyticsService.getRiskDistribution();
+        res.json(distribution);
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to fetch risk distribution',
+        });
+    }
+});
+
+/**
+ * GET /api/admin/analytics/compliance-trends
+ * Get compliance trends over time
+ */
+router.get('/analytics/compliance-trends', async (req: Request, res: Response) => {
+    try {
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+        
+        const trends = await analyticsService.getComplianceTrends({ startDate, endDate });
+        res.json(trends);
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to fetch compliance trends',
+        });
+    }
+});
+
+/**
+ * GET /api/admin/analytics/sla-metrics
+ * Get SLA performance metrics
+ */
+router.get('/analytics/sla-metrics', async (_req: Request, res: Response) => {
+    try {
+        const metrics = await analyticsService.getSLAMetrics();
+        res.json(metrics);
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to fetch SLA metrics',
+        });
+    }
+});
+
+/**
+ * GET /api/admin/analytics/authz-metrics
+ * Get authorization decision metrics
+ */
+router.get('/analytics/authz-metrics', async (req: Request, res: Response) => {
+    try {
+        const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+        const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+        
+        const metrics = await analyticsService.getAuthzMetrics({ startDate, endDate });
+        res.json(metrics);
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to fetch authorization metrics',
+        });
+    }
+});
+
+/**
+ * GET /api/admin/analytics/security-posture
+ * Get security posture overview
+ */
+router.get('/analytics/security-posture', async (_req: Request, res: Response) => {
+    try {
+        const posture = await analyticsService.getSecurityPosture();
+        res.json(posture);
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to fetch security posture',
+        });
+    }
+});
+
+// ============================================
 // Observability Routes (Phase 0)
 // ============================================
 
