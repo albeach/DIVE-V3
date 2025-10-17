@@ -15,7 +15,7 @@
  * Data: Fetched from analytics service with 5-minute caching
  */
 
-import { use Effect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { redirect } from 'next/navigation';
 

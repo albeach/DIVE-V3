@@ -84,9 +84,6 @@ export const compressionMiddleware = compression({
     // Memory level (1-9)
     // Higher = more memory, better compression
     memLevel: 8,
-
-    // Strategy: optimize for text (JSON, HTML, CSS, JS)
-    strategy: compression.Z_DEFAULT_STRATEGY,
 });
 
 /**

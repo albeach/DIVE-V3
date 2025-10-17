@@ -249,10 +249,8 @@ async function getCollectionStats(db: Db, collectionName: string): Promise<void>
     console.log(`\n📊 Collection Statistics: ${collectionName}`);
     console.log('─'.repeat(60));
 
-    const collection = db.collection(collectionName);
-
     try {
-        const stats = await collection.stats();
+        const stats = await db.command({ collStats: collectionName });
         const docCount = stats.count || 0;
         const avgDocSize = stats.avgObjSize ? (stats.avgObjSize / 1024).toFixed(2) : 0;
         const totalSize = stats.size ? (stats.size / 1024 / 1024).toFixed(2) : 0;

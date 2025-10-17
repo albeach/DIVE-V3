@@ -10,6 +10,10 @@ import { authzCacheService } from './authz-cache.service';
 // Purpose: Monitor system health and dependencies
 // Endpoints: /health, /health/detailed, /health/ready, /health/live
 
+// MongoDB configuration
+const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
+
 /**
  * Overall health status
  */
@@ -251,13 +255,21 @@ class HealthService {
         try {
             if (!this.mongoClient) {
                 // Try to connect
-                const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/dive-v3';
-                this.mongoClient = new MongoClient(uri);
+                this.mongoClient = new MongoClient(MONGODB_URL);
                 await this.mongoClient.connect();
+            } else {
+                // Verify existing connection
+                try {
+                    await this.mongoClient.db().admin().ping();
+                } catch {
+                    // Connection lost, reconnect
+                    this.mongoClient = new MongoClient(MONGODB_URL);
+                    await this.mongoClient.connect();
+                }
             }
 
             // Ping the database
-            await this.mongoClient.db().admin().ping();
+            await this.mongoClient.db(DB_NAME).admin().ping();
 
             const responseTime = Date.now() - startTime;
 
@@ -420,7 +432,7 @@ class HealthService {
 
             if (this.mongoClient) {
                 try {
-                    const db = this.mongoClient.db();
+                    const db = this.mongoClient.db(DB_NAME);
                     
                     // Count active IdPs (approved submissions)
                     activeIdPs = await db.collection('idp_submissions').countDocuments({

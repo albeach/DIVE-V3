@@ -13,6 +13,10 @@ import NodeCache from 'node-cache';
 // - Authorization decision metrics
 // - Security posture overview
 
+// MongoDB configuration
+const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
+
 /**
  * Cache for analytics data (5-minute TTL)
  */
@@ -89,7 +93,37 @@ class AnalyticsService {
     }
 
     /**
-     * Set MongoDB client
+     * Connect to MongoDB
+     */
+    private async connect(): Promise<void> {
+        if (this.mongoClient && this.db) {
+            // Try to ping to check if still connected
+            try {
+                await this.mongoClient.db().admin().ping();
+                return;
+            } catch {
+                // Connection lost, will reconnect below
+                this.mongoClient = null;
+                this.db = null;
+            }
+        }
+
+        try {
+            this.mongoClient = new MongoClient(MONGODB_URL);
+            await this.mongoClient.connect();
+            this.db = this.mongoClient.db(DB_NAME);
+
+            logger.debug('Analytics service connected to MongoDB');
+        } catch (error) {
+            logger.error('Analytics service failed to connect to MongoDB', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw new Error('Database connection failed');
+        }
+    }
+
+    /**
+     * Set MongoDB client (for testing)
      */
     setMongoClient(client: MongoClient): void {
         this.mongoClient = client;
@@ -99,7 +133,8 @@ class AnalyticsService {
     /**
      * Get MongoDB database instance
      */
-    private getDb(): Db {
+    private async getDb(): Promise<Db> {
+        await this.connect();
         if (!this.db) {
             throw new Error('MongoDB client not initialized');
         }
@@ -120,7 +155,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = this.getDb();
+            const db = await this.getDb();
             const collection = db.collection('idp_submissions');
 
             // Count submissions by tier
@@ -164,7 +199,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = this.getDb();
+            const db = await this.getDb();
             const collection = db.collection('idp_submissions');
 
             // Default to last 30 days
@@ -257,7 +292,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = this.getDb();
+            const db = await this.getDb();
             const collection = db.collection('idp_submissions');
 
             // Get completed submissions (approved or rejected)
@@ -344,7 +379,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = this.getDb();
+            const db = await this.getDb();
             const collection = db.collection('audit_logs');
 
             // Default to last 7 days
@@ -419,7 +454,7 @@ class AnalyticsService {
         }
 
         try {
-            const db = this.getDb();
+            const db = await this.getDb();
             const collection = db.collection('idp_submissions');
 
             // Get approved submissions
