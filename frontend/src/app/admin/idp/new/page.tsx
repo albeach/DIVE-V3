@@ -929,7 +929,7 @@ export default function NewIdPWizard() {
                                             </p>
                                         </div>
                                     </div>
-                                    </div>
+                                </div>
                                 )}
 
                                 {/* Phase 2: Risk Score Badge */}

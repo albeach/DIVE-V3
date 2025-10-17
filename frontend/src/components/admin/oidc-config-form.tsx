@@ -18,6 +18,7 @@ interface IOIDCConfigFormProps {
 
 export default function OIDCConfigForm({ config, onChange, errors = {}, readonly = false }: IOIDCConfigFormProps) {
     const [localErrors, setLocalErrors] = React.useState<Record<string, string>>({});
+    const [validationStatus, setValidationStatus] = React.useState<Record<string, 'validating' | 'valid' | 'invalid' | null>>({});
 
     const validateURL = (url: string): string | null => {
         if (!url) return null;
@@ -32,6 +33,67 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
             return '❌ Invalid URL (must be https://...)';
         }
     };
+
+    // REAL validation - test OIDC discovery endpoint
+    const validateOIDCDiscovery = async (issuer: string) => {
+        if (!issuer) return;
+        
+        const urlError = validateURL(issuer);
+        if (urlError) return; // Don't test if URL format is invalid
+
+        setValidationStatus(prev => ({ ...prev, issuer: 'validating' }));
+
+        try {
+            const wellKnownUrl = issuer.endsWith('/') 
+                ? `${issuer}.well-known/openid-configuration`
+                : `${issuer}/.well-known/openid-configuration`;
+
+            const response = await fetch(wellKnownUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.issuer && data.authorization_endpoint && data.token_endpoint) {
+                    setValidationStatus(prev => ({ ...prev, issuer: 'valid' }));
+                    setLocalErrors(prev => {
+                        const { issuer: removed, ...rest } = prev;
+                        return rest;
+                    });
+                } else {
+                    setValidationStatus(prev => ({ ...prev, issuer: 'invalid' }));
+                    setLocalErrors(prev => ({ 
+                        ...prev, 
+                        issuer: '❌ Invalid OIDC discovery document (missing required endpoints)' 
+                    }));
+                }
+            } else {
+                setValidationStatus(prev => ({ ...prev, issuer: 'invalid' }));
+                setLocalErrors(prev => ({ 
+                    ...prev, 
+                    issuer: `❌ OIDC discovery endpoint not found (HTTP ${response.status})` 
+                }));
+            }
+        } catch (error) {
+            setValidationStatus(prev => ({ ...prev, issuer: 'invalid' }));
+            setLocalErrors(prev => ({ 
+                ...prev, 
+                issuer: `❌ Cannot reach OIDC discovery endpoint (${error instanceof Error ? error.message : 'Network error'})` 
+            }));
+        }
+    };
+
+    // Debounced validation
+    React.useEffect(() => {
+        if (!readonly && config.issuer) {
+            const timer = setTimeout(() => {
+                validateOIDCDiscovery(config.issuer);
+            }, 1000); // Wait 1 second after user stops typing
+
+            return () => clearTimeout(timer);
+        }
+    }, [config.issuer, readonly]);
 
     const handleChange = (field: keyof IOIDCConfig, value: string) => {
         // Validate URLs in real-time
@@ -96,32 +158,74 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                 <label htmlFor="issuer" className="block text-sm font-medium text-gray-700">
                     Issuer URL <span className="text-red-500">*</span>
                 </label>
-                <input
-                    type="url"
-                    id="issuer"
-                    value={config.issuer}
-                    onChange={(e) => handleChange('issuer', e.target.value)}
-                    disabled={readonly}
-                    placeholder="https://login.microsoftonline.com/tenant-id"
-                    className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
-                        readonly 
-                            ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
-                            : (errors.issuer || localErrors.issuer)
-                            ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
-                            : config.issuer && !localErrors.issuer
-                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
-                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
-                    }`}
-                />
+                <div className="relative">
+                    <input
+                        type="url"
+                        id="issuer"
+                        value={config.issuer}
+                        onChange={(e) => handleChange('issuer', e.target.value)}
+                        disabled={readonly}
+                        placeholder="https://login.microsoftonline.com/tenant-id"
+                        className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm pr-10 ${
+                            readonly 
+                                ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                                : (errors.issuer || localErrors.issuer)
+                                ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                                : validationStatus.issuer === 'valid'
+                                ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
+                                : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+                        }`}
+                    />
+                    {/* Validation Indicator */}
+                    {!readonly && config.issuer && (
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                            {validationStatus.issuer === 'validating' && (
+                                <svg className="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                            )}
+                            {validationStatus.issuer === 'valid' && (
+                                <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                            )}
+                            {validationStatus.issuer === 'invalid' && (
+                                <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            )}
+                        </div>
+                    )}
+                </div>
                 {(errors.issuer || localErrors.issuer) && !readonly && (
-                    <p className="mt-1 text-sm text-red-600">{errors.issuer || localErrors.issuer}</p>
+                    <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {errors.issuer || localErrors.issuer}
+                    </p>
                 )}
-                {!readonly && !errors.issuer && !localErrors.issuer && config.issuer && (
-                    <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
+                {!readonly && validationStatus.issuer === 'validating' && (
+                    <p className="mt-1 text-sm text-blue-600 flex items-center gap-1">
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Testing OIDC discovery endpoint...
+                    </p>
+                )}
+                {!readonly && validationStatus.issuer === 'valid' && !errors.issuer && !localErrors.issuer && (
+                    <p className="mt-1 text-sm text-green-600 flex items-center gap-1">
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        ✓ OIDC discovery endpoint verified
+                    </p>
                 )}
                 {!readonly && !config.issuer && (
                     <p className="mt-1 text-xs text-gray-500">
-                        Must be HTTPS URL (e.g., https://login.microsoftonline.com/common/v2.0)
+                        Example: https://login.microsoftonline.com/common/v2.0
                     </p>
                 )}
             </div>
