@@ -272,8 +272,14 @@ export default function NewIdPWizard() {
         try {
             const token = (session as any).accessToken;
             if (!token) {
-                throw new Error('No access token available');
+                throw new Error('No access token available - please logout and login again');
             }
+
+            console.log('[DEBUG] Starting IdP submission...', {
+                alias: formData.alias,
+                protocol: formData.protocol,
+                hasToken: !!token
+            });
 
             let auth0ClientId = '';
             let auth0ClientSecret = '';
@@ -341,37 +347,52 @@ export default function NewIdPWizard() {
                 }
                 : formData.samlConfig;
 
+            const requestBody = {
+                alias: formData.alias,
+                displayName: formData.displayName,
+                description: formData.description,
+                protocol: formData.protocol,
+                config: keycloakConfig,
+                attributeMappings: formData.attributeMappings,
+                // Include Auth0 metadata
+                useAuth0: formData.useAuth0,
+                auth0ClientId: formData.useAuth0 ? auth0ClientId : undefined,
+                auth0ClientSecret: formData.useAuth0 ? auth0ClientSecret : undefined,
+                // Phase 2: Operational data and compliance
+                operationalData: formData.operationalData,
+                complianceDocuments: formData.complianceDocuments,
+                metadata: {
+                    ...(formData.metadata || {}),
+                    contactEmail: formData.metadata?.contactEmail || session?.user?.email || 'admin@example.com',
+                    organization: formData.metadata?.organization || formData.displayName
+                }
+            };
+
+            console.log('[DEBUG] Request body:', JSON.stringify(requestBody, null, 2));
+
             const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/idps`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    alias: formData.alias,
-                    displayName: formData.displayName,
-                    description: formData.description,
-                    protocol: formData.protocol,
-                    config: keycloakConfig,
-                    attributeMappings: formData.attributeMappings,
-                    // Include Auth0 metadata
-                    useAuth0: formData.useAuth0,
-                    auth0ClientId: formData.useAuth0 ? auth0ClientId : undefined,
-                    auth0ClientSecret: formData.useAuth0 ? auth0ClientSecret : undefined,
-                    // Phase 2: Operational data and compliance
-                    operationalData: formData.operationalData,
-                    complianceDocuments: formData.complianceDocuments,
-                    metadata: {
-                        ...(formData.metadata || {}),
-                        contactEmail: formData.metadata?.contactEmail || session?.user?.email || 'admin@example.com',
-                        organization: formData.metadata?.organization || formData.displayName
-                    }
-                })
+                body: JSON.stringify(requestBody)
             });
 
+            console.log('[DEBUG] Response status:', response.status);
+
             const result: IAdminAPIResponse = await response.json();
+            console.log('[DEBUG] Response body:', result);
 
             if (!response.ok) {
+                console.error('[DEBUG] Submission failed!', {
+                    status: response.status,
+                    error: result.error,
+                    message: result.message,
+                    hasValidationResults: !!result.data?.validationResults,
+                    hasCriticalFailures: !!result.data?.criticalFailures
+                });
+
                 // DETAILED ERROR HANDLING
                 if (result.data?.validationResults) {
                     // Phase 1 validation failed - show detailed results
@@ -384,11 +405,15 @@ export default function NewIdPWizard() {
                     });
                     setCurrentStep(7); // Show results page with errors
                 } else {
-                    // Other error - show in current step
-                    throw new Error(result.message || result.error || 'Failed to create IdP');
+                    // Other error - show in current step with full details
+                    const errorMessage = result.message || result.error || 'Failed to create IdP';
+                    console.error('[DEBUG] Full error:', errorMessage);
+                    throw new Error(`${errorMessage} (Status: ${response.status})`);
                 }
                 return;
             }
+
+            console.log('[DEBUG] Submission successful!');
 
             // PHASE 2 FIX: Store submission results and show them to user
             setSubmissionResult({
