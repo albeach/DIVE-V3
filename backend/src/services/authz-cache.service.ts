@@ -328,7 +328,12 @@ class AuthzCacheService {
             size: keys.length,
             maxSize,
             keys: keys.length,
-            ttlStats: { ...this.ttlStats },
+            ttlStats: {
+                secret: this.ttlStats.secret,
+                confidential: this.ttlStats.confidential,
+                topSecret: this.ttlStats.topSecret,
+                unclassified: this.ttlStats.unclassified,
+            },
         };
     }
 

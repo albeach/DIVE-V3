@@ -20,7 +20,8 @@
         "postgres": "^3.4.4",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "react-dropzone": "^14.3.8"
+        "react-dropzone": "^14.3.8",
+        "recharts": "^3.2.1"
     },
     "devDependencies": {
         "@types/node": "^20.10.0",
