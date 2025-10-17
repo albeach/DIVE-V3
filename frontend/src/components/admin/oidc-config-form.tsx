@@ -17,7 +17,36 @@ interface IOIDCConfigFormProps {
 }
 
 export default function OIDCConfigForm({ config, onChange, errors = {}, readonly = false }: IOIDCConfigFormProps) {
+    const [localErrors, setLocalErrors] = React.useState<Record<string, string>>({});
+
+    const validateURL = (url: string): string | null => {
+        if (!url) return null;
+        
+        try {
+            const urlObj = new URL(url);
+            if (urlObj.protocol !== 'https:') {
+                return '⚠️ Must use HTTPS (security requirement)';
+            }
+            return null;
+        } catch (e) {
+            return '❌ Invalid URL (must be https://...)';
+        }
+    };
+
     const handleChange = (field: keyof IOIDCConfig, value: string) => {
+        // Validate URLs in real-time
+        if (field === 'issuer' || field === 'authorizationUrl' || field === 'tokenUrl' || field === 'jwksUrl') {
+            const error = validateURL(value);
+            if (error) {
+                setLocalErrors(prev => ({ ...prev, [field]: error }));
+            } else {
+                setLocalErrors(prev => {
+                    const { [field]: removed, ...rest } = prev;
+                    return rest;
+                });
+            }
+        }
+
         onChange({
             ...config,
             [field]: value
@@ -73,21 +102,26 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                     value={config.issuer}
                     onChange={(e) => handleChange('issuer', e.target.value)}
                     disabled={readonly}
-                    placeholder="https://idp.example.com/oidc"
+                    placeholder="https://login.microsoftonline.com/tenant-id"
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                         readonly 
                             ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
-                            : errors.issuer
+                            : (errors.issuer || localErrors.issuer)
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                            : config.issuer && !localErrors.issuer
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.issuer && !readonly && (
-                    <p className="mt-1 text-sm text-red-600">{errors.issuer}</p>
+                {(errors.issuer || localErrors.issuer) && !readonly && (
+                    <p className="mt-1 text-sm text-red-600">{errors.issuer || localErrors.issuer}</p>
                 )}
-                {!readonly && (
+                {!readonly && !errors.issuer && !localErrors.issuer && config.issuer && (
+                    <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
+                )}
+                {!readonly && !config.issuer && (
                     <p className="mt-1 text-xs text-gray-500">
-                        The OIDC issuer URL (e.g., https://accounts.google.com)
+                        Must be HTTPS URL (e.g., https://login.microsoftonline.com/common/v2.0)
                     </p>
                 )}
             </div>
