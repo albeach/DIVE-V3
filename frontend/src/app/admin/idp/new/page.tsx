@@ -46,6 +46,9 @@ export default function NewIdPWizard() {
     const [testResult, setTestResult] = useState<any>(null);
     const [submissionResult, setSubmissionResult] = useState<any>(null);
 
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+    const [isValidating, setIsValidating] = useState(false);
+
     const [formData, setFormData] = useState<IIdPFormData>({
         protocol: 'oidc',
         alias: '',
@@ -369,7 +372,22 @@ export default function NewIdPWizard() {
             const result: IAdminAPIResponse = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.message || result.error || 'Failed to create IdP');
+                // DETAILED ERROR HANDLING
+                if (result.data?.validationResults) {
+                    // Phase 1 validation failed - show detailed results
+                    setSubmissionResult({
+                        status: 'validation-failed',
+                        validationResults: result.data.validationResults,
+                        preliminaryScore: result.data.preliminaryScore,
+                        criticalFailures: result.data.criticalFailures,
+                        error: result.message || result.error
+                    });
+                    setCurrentStep(7); // Show results page with errors
+                } else {
+                    // Other error - show in current step
+                    throw new Error(result.message || result.error || 'Failed to create IdP');
+                }
+                return;
             }
 
             // PHASE 2 FIX: Store submission results and show them to user
@@ -826,18 +844,49 @@ export default function NewIdPWizard() {
                         {currentStep === 7 && submissionResult && (
                             <div className="space-y-8">
                                 <div>
-                                    <h3 className="text-2xl font-bold text-gray-900">✅ Submission Complete!</h3>
+                                    <h3 className="text-2xl font-bold text-gray-900">
+                                        {submissionResult.status === 'validation-failed' ? '⚠️ Validation Results' : '✅ Submission Complete!'}
+                                    </h3>
                                     <p className="mt-2 text-sm text-gray-600">
-                                        Your Identity Provider has been validated and assessed. Review the results below.
+                                        {submissionResult.status === 'validation-failed' 
+                                            ? 'Your configuration has validation issues. Review the details below and fix before resubmitting.'
+                                            : 'Your Identity Provider has been validated and assessed. Review the results below.'
+                                        }
                                     </p>
                                 </div>
 
-                                {/* Status Banner */}
-                                <div className={`rounded-xl p-6 ${
-                                    submissionResult.status === 'approved' ? 'bg-green-50 border-2 border-green-200' :
-                                    submissionResult.status === 'rejected' ? 'bg-red-50 border-2 border-red-200' :
-                                    'bg-blue-50 border-2 border-blue-200'
-                                }`}>
+                                {/* Validation Failed Banner */}
+                                {submissionResult.status === 'validation-failed' && (
+                                    <div className="rounded-xl p-6 bg-red-50 border-2 border-red-200">
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-4xl">❌</div>
+                                            <div className="flex-1">
+                                                <h4 className="text-lg font-bold text-red-900">Validation Failed</h4>
+                                                <p className="text-sm text-red-700 mt-1">
+                                                    {submissionResult.error || 'Configuration contains critical security issues'}
+                                                </p>
+                                                {submissionResult.criticalFailures && submissionResult.criticalFailures.length > 0 && (
+                                                    <ul className="mt-3 space-y-1">
+                                                        {submissionResult.criticalFailures.map((failure: string, idx: number) => (
+                                                            <li key={idx} className="text-sm text-red-800 flex items-start gap-2">
+                                                                <span>•</span>
+                                                                <span>{failure}</span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Status Banner (Success/Pending/Rejected) */}
+                                {submissionResult.status !== 'validation-failed' && (
+                                    <div className={`rounded-xl p-6 ${
+                                        submissionResult.status === 'approved' ? 'bg-green-50 border-2 border-green-200' :
+                                        submissionResult.status === 'rejected' ? 'bg-red-50 border-2 border-red-200' :
+                                        'bg-blue-50 border-2 border-blue-200'
+                                    }`}>
                                     <div className="flex items-center gap-4">
                                         <div className="text-4xl">
                                             {submissionResult.status === 'approved' ? '🎉' :
