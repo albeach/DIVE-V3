@@ -14,13 +14,81 @@
 import { healthService, HealthStatus } from '../services/health.service';
 import axios from 'axios';
 import { authzCacheService } from '../services/authz-cache.service';
-import { opaCircuitBreaker, keycloakCircuitBreaker } from '../utils/circuit-breaker';
+import * as circuitBreakerModule from '../utils/circuit-breaker';
 
 // Mock dependencies
 jest.mock('axios');
 jest.mock('mongodb');
 jest.mock('../services/authz-cache.service');
-jest.mock('../utils/circuit-breaker');
+jest.mock('../utils/circuit-breaker', () => ({
+    getAllCircuitBreakerStats: jest.fn(() => ({
+        opa: {
+            state: 'CLOSED',
+            failures: 0,
+            successes: 0,
+            totalRequests: 0,
+            lastFailureTime: null,
+            lastStateChange: new Date(),
+            rejectCount: 0,
+        },
+        keycloak: {
+            state: 'CLOSED',
+            failures: 0,
+            successes: 0,
+            totalRequests: 0,
+            lastFailureTime: null,
+            lastStateChange: new Date(),
+            rejectCount: 0,
+        },
+        mongodb: {
+            state: 'CLOSED',
+            failures: 0,
+            successes: 0,
+            totalRequests: 0,
+            lastFailureTime: null,
+            lastStateChange: new Date(),
+            rejectCount: 0,
+        },
+        kas: {
+            state: 'CLOSED',
+            failures: 0,
+            successes: 0,
+            totalRequests: 0,
+            lastFailureTime: null,
+            lastStateChange: new Date(),
+            rejectCount: 0,
+        },
+    })),
+    CircuitState: {
+        CLOSED: 'CLOSED',
+        OPEN: 'OPEN',
+        HALF_OPEN: 'HALF_OPEN',
+    },
+    opaCircuitBreaker: {
+        reset: jest.fn(),
+        getStats: jest.fn(() => ({
+            state: 'CLOSED',
+            failures: 0,
+            successes: 0,
+            totalRequests: 0,
+            lastFailureTime: null,
+            lastStateChange: new Date(),
+            rejectCount: 0,
+        })),
+    },
+    keycloakCircuitBreaker: {
+        reset: jest.fn(),
+        getStats: jest.fn(() => ({
+            state: 'CLOSED',
+            failures: 0,
+            successes: 0,
+            totalRequests: 0,
+            lastFailureTime: null,
+            lastStateChange: new Date(),
+            rejectCount: 0,
+        })),
+    },
+}));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
@@ -28,13 +96,45 @@ describe('HealthService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         
-        // Reset circuit breakers
-        if (opaCircuitBreaker.reset) {
-            opaCircuitBreaker.reset();
-        }
-        if (keycloakCircuitBreaker.reset) {
-            keycloakCircuitBreaker.reset();
-        }
+        // Reset mock for getAllCircuitBreakerStats
+        (circuitBreakerModule.getAllCircuitBreakerStats as jest.Mock).mockReturnValue({
+            opa: {
+                state: 'CLOSED',
+                failures: 0,
+                successes: 0,
+                totalRequests: 0,
+                lastFailureTime: null,
+                lastStateChange: new Date(),
+                rejectCount: 0,
+            },
+            keycloak: {
+                state: 'CLOSED',
+                failures: 0,
+                successes: 0,
+                totalRequests: 0,
+                lastFailureTime: null,
+                lastStateChange: new Date(),
+                rejectCount: 0,
+            },
+            mongodb: {
+                state: 'CLOSED',
+                failures: 0,
+                successes: 0,
+                totalRequests: 0,
+                lastFailureTime: null,
+                lastStateChange: new Date(),
+                rejectCount: 0,
+            },
+            kas: {
+                state: 'CLOSED',
+                failures: 0,
+                successes: 0,
+                totalRequests: 0,
+                lastFailureTime: null,
+                lastStateChange: new Date(),
+                rejectCount: 0,
+            },
+        });
     });
 
     describe('Basic Health Check', () => {
