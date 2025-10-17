@@ -91,17 +91,27 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
     }, [config.issuer, readonly, accessToken]);
 
     const handleChange = (field: keyof IOIDCConfig, value: string) => {
-        // Validate URLs in real-time
-        if (field === 'issuer' || field === 'authorizationUrl' || field === 'tokenUrl' || field === 'jwksUrl') {
+        // Validate ALL URLs in real-time
+        const urlFields = ['issuer', 'authorizationUrl', 'tokenUrl', 'userInfoUrl', 'jwksUrl'];
+        if (urlFields.includes(field) && value) {
             const error = validateURL(value);
             if (error) {
                 setLocalErrors(prev => ({ ...prev, [field]: error }));
+                setValidationStatus(prev => ({ ...prev, [field]: 'invalid' }));
             } else {
                 setLocalErrors(prev => {
                     const { [field]: removed, ...rest } = prev;
                     return rest;
                 });
+                setValidationStatus(prev => ({ ...prev, [field]: 'valid' }));
             }
+        } else if (urlFields.includes(field) && !value) {
+            // Clear validation when field is empty
+            setLocalErrors(prev => {
+                const { [field]: removed, ...rest } = prev;
+                return rest;
+            });
+            setValidationStatus(prev => ({ ...prev, [field]: null }));
         }
 
         onChange({
@@ -352,13 +362,18 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                         readonly 
                             ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
-                            : errors.authorizationUrl
+                            : (errors.authorizationUrl || localErrors.authorizationUrl)
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                            : validationStatus.authorizationUrl === 'valid'
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.authorizationUrl && !readonly && (
-                    <p className="mt-1 text-sm text-red-600">{errors.authorizationUrl}</p>
+                {(errors.authorizationUrl || localErrors.authorizationUrl) && !readonly && (
+                    <p className="mt-1 text-sm text-red-600">{errors.authorizationUrl || localErrors.authorizationUrl}</p>
+                )}
+                {!readonly && validationStatus.authorizationUrl === 'valid' && !localErrors.authorizationUrl && (
+                    <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
                 )}
             </div>
 
@@ -377,13 +392,18 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                         readonly 
                             ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
-                            : errors.tokenUrl
+                            : (errors.tokenUrl || localErrors.tokenUrl)
                             ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                            : validationStatus.tokenUrl === 'valid'
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {errors.tokenUrl && !readonly && (
-                    <p className="mt-1 text-sm text-red-600">{errors.tokenUrl}</p>
+                {(errors.tokenUrl || localErrors.tokenUrl) && !readonly && (
+                    <p className="mt-1 text-sm text-red-600">{errors.tokenUrl || localErrors.tokenUrl}</p>
+                )}
+                {!readonly && validationStatus.tokenUrl === 'valid' && !localErrors.tokenUrl && (
+                    <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
                 )}
             </div>
 
@@ -402,10 +422,22 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                         readonly 
                             ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : localErrors.userInfoUrl
+                            ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                            : validationStatus.userInfoUrl === 'valid'
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {!readonly && <p className="mt-1 text-xs text-gray-500">Optional: UserInfo endpoint URL</p>}
+                {localErrors.userInfoUrl && !readonly && (
+                    <p className="mt-1 text-sm text-red-600">{localErrors.userInfoUrl}</p>
+                )}
+                {!readonly && validationStatus.userInfoUrl === 'valid' && (
+                    <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
+                )}
+                {!readonly && !config.userInfoUrl && (
+                    <p className="mt-1 text-xs text-gray-500">Optional: UserInfo endpoint URL</p>
+                )}
             </div>
 
             {/* JWKS URL (Optional) */}
@@ -423,10 +455,22 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                     className={`mt-1 block w-full rounded-md shadow-sm sm:text-sm ${
                         readonly 
                             ? 'bg-gray-100 cursor-not-allowed text-gray-600 border-gray-300'
+                            : localErrors.jwksUrl
+                            ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
+                            : validationStatus.jwksUrl === 'valid'
+                            ? 'border-green-300 focus:border-green-500 focus:ring-green-500'
                             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                 />
-                {!readonly && <p className="mt-1 text-xs text-gray-500">Optional: JSON Web Key Set URL</p>}
+                {localErrors.jwksUrl && !readonly && (
+                    <p className="mt-1 text-sm text-red-600">{localErrors.jwksUrl}</p>
+                )}
+                {!readonly && validationStatus.jwksUrl === 'valid' && (
+                    <p className="mt-1 text-sm text-green-600">✓ Valid HTTPS URL</p>
+                )}
+                {!readonly && !config.jwksUrl && (
+                    <p className="mt-1 text-xs text-gray-500">Optional: JSON Web Key Set URL</p>
+                )}
             </div>
 
             {/* Default Scopes */}
