@@ -28,6 +28,12 @@ import {
     listAuth0ApplicationsHandler
 } from '../controllers/admin.controller';
 import {
+    validateOIDCDiscoveryHandler,
+    validateSAMLMetadataHandler,
+    parseOIDCMetadataHandler,
+    parseSAMLMetadataFileHandler
+} from '../controllers/idp-validation.controller';
+import {
     getLogsHandler,
     getViolationsHandler,
     getStatsHandler,
@@ -81,6 +87,30 @@ router.delete('/idps/:alias', deleteIdPHandler);
  * Test Identity Provider connectivity
  */
 router.post('/idps/:alias/test', testIdPHandler);
+
+/**
+ * POST /api/admin/idps/validate/oidc-discovery
+ * Validate OIDC discovery endpoint (real-time validation for wizard)
+ */
+router.post('/idps/validate/oidc-discovery', validateOIDCDiscoveryHandler);
+
+/**
+ * POST /api/admin/idps/validate/saml-metadata
+ * Validate SAML metadata XML (real-time validation for wizard)
+ */
+router.post('/idps/validate/saml-metadata', validateSAMLMetadataHandler);
+
+/**
+ * POST /api/admin/idps/parse/oidc-metadata
+ * Upload OIDC discovery JSON and auto-populate form
+ */
+router.post('/idps/parse/oidc-metadata', parseOIDCMetadataHandler);
+
+/**
+ * POST /api/admin/idps/parse/saml-metadata
+ * Upload SAML metadata XML and auto-populate form
+ */
+router.post('/idps/parse/saml-metadata', parseSAMLMetadataFileHandler);
 
 // ============================================
 // Audit Log Management Routes

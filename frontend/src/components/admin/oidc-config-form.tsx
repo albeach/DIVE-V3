@@ -14,9 +14,10 @@ interface IOIDCConfigFormProps {
     onChange: (config: IOIDCConfig) => void;
     errors?: Record<string, string>;
     readonly?: boolean;  // NEW: For Auth0 auto-populated fields
+    accessToken?: string;  // NEW: For backend validation
 }
 
-export default function OIDCConfigForm({ config, onChange, errors = {}, readonly = false }: IOIDCConfigFormProps) {
+export default function OIDCConfigForm({ config, onChange, errors = {}, readonly = false, accessToken }: IOIDCConfigFormProps) {
     const [localErrors, setLocalErrors] = React.useState<Record<string, string>>({});
     const [validationStatus, setValidationStatus] = React.useState<Record<string, 'validating' | 'valid' | 'invalid' | null>>({});
 
@@ -34,8 +35,8 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
         }
     };
 
-    // REAL validation - test OIDC discovery endpoint
-    const validateOIDCDiscovery = async (issuer: string) => {
+    // REAL validation - test OIDC discovery endpoint via BACKEND (avoids CORS)
+    const validateOIDCDiscovery = async (issuer: string, accessToken: string) => {
         if (!issuer) return;
         
         const urlError = validateURL(issuer);
@@ -44,56 +45,50 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
         setValidationStatus(prev => ({ ...prev, issuer: 'validating' }));
 
         try {
-            const wellKnownUrl = issuer.endsWith('/') 
-                ? `${issuer}.well-known/openid-configuration`
-                : `${issuer}/.well-known/openid-configuration`;
-
-            const response = await fetch(wellKnownUrl, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' }
+            // Call BACKEND validation endpoint (no CORS issues)
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/idps/validate/oidc-discovery`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({ issuer })
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.issuer && data.authorization_endpoint && data.token_endpoint) {
-                    setValidationStatus(prev => ({ ...prev, issuer: 'valid' }));
-                    setLocalErrors(prev => {
-                        const { issuer: removed, ...rest } = prev;
-                        return rest;
-                    });
-                } else {
-                    setValidationStatus(prev => ({ ...prev, issuer: 'invalid' }));
-                    setLocalErrors(prev => ({ 
-                        ...prev, 
-                        issuer: '❌ Invalid OIDC discovery document (missing required endpoints)' 
-                    }));
-                }
+            const result = await response.json();
+
+            if (response.ok && result.valid) {
+                setValidationStatus(prev => ({ ...prev, issuer: 'valid' }));
+                setLocalErrors(prev => {
+                    const { issuer: removed, ...rest } = prev;
+                    return rest;
+                });
             } else {
                 setValidationStatus(prev => ({ ...prev, issuer: 'invalid' }));
                 setLocalErrors(prev => ({ 
                     ...prev, 
-                    issuer: `❌ OIDC discovery endpoint not found (HTTP ${response.status})` 
+                    issuer: result.error || '❌ OIDC discovery endpoint validation failed' 
                 }));
             }
         } catch (error) {
             setValidationStatus(prev => ({ ...prev, issuer: 'invalid' }));
             setLocalErrors(prev => ({ 
                 ...prev, 
-                issuer: `❌ Cannot reach OIDC discovery endpoint (${error instanceof Error ? error.message : 'Network error'})` 
+                issuer: `❌ Validation request failed (${error instanceof Error ? error.message : 'Network error'})` 
             }));
         }
     };
 
     // Debounced validation
     React.useEffect(() => {
-        if (!readonly && config.issuer) {
+        if (!readonly && config.issuer && accessToken) {
             const timer = setTimeout(() => {
-                validateOIDCDiscovery(config.issuer);
+                validateOIDCDiscovery(config.issuer, accessToken);
             }, 1000); // Wait 1 second after user stops typing
 
             return () => clearTimeout(timer);
         }
-    }, [config.issuer, readonly]);
+    }, [config.issuer, readonly, accessToken]);
 
     const handleChange = (field: keyof IOIDCConfig, value: string) => {
         // Validate URLs in real-time
