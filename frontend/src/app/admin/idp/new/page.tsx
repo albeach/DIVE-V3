@@ -31,7 +31,7 @@ const WIZARD_STEPS = [
     { number: 1, title: 'Protocol', description: 'Select IdP protocol' },
     { number: 2, title: 'Basic Info', description: 'Name and description' },
     { number: 3, title: 'Configuration', description: 'Protocol settings' },
-    { number: 4, title: 'Operational', description: 'SLA & compliance data' },
+    { number: 4, title: 'Documentation', description: 'Upload compliance docs (optional)' },
     { number: 5, title: 'Attributes', description: 'Map DIVE attributes' },
     { number: 6, title: 'Review', description: 'Review configuration' },
     { number: 7, title: 'Submit', description: 'Submit for approval' },
@@ -83,16 +83,13 @@ export default function NewIdPWizard() {
         useAuth0: false,
         auth0Protocol: 'oidc',
         auth0AppType: 'spa',
-        // Phase 2: Operational data (with reasonable defaults)
-        operationalData: {
-            uptimeSLA: '99.9%',
-            incidentResponse: '24/7 support',
-            securityPatching: '<14 days',
-            supportContacts: ['support@example.com']
-        },
-        // Phase 2: Compliance documents (optional)
+        // Phase 2: Operational data - BACKEND will determine from discovery document
+        // User cannot game these - auto-detected from endpoint testing
+        operationalData: undefined,
+        
+        // Phase 2: Compliance documents - optional uploads
         complianceDocuments: {
-            mfaPolicy: 'MFA policy documented',
+            mfaPolicy: '',
             acp240Certificate: '',
             stanag4774Certification: '',
             auditPlan: ''
@@ -700,116 +697,50 @@ export default function NewIdPWizard() {
                             />
                         )}
 
-                        {/* Step 4: Operational & Compliance Data (NEW!) */}
+                        {/* Step 4: Supporting Documentation (Optional) */}
                         {currentStep === 4 && (
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Operational & Compliance Information</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
-                                        This information is used for Phase 2 risk scoring and compliance validation.
+                                    <h3 className="text-lg font-medium text-gray-900">Supporting Documentation (Optional)</h3>
+                                    <p className="mt-1 text-sm text-gray-600">
+                                        Upload or reference supporting documentation. These are <strong>optional</strong> and improve your approval chances.
                                     </p>
                                 </div>
 
-                                {/* Operational Data */}
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                                    <h4 className="font-semibold text-gray-900">📊 Operational Maturity (20 points)</h4>
-                                    
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Uptime SLA <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={formData.operationalData?.uptimeSLA || '99.9%'}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                operationalData: {
-                                                    ...formData.operationalData!,
-                                                    uptimeSLA: e.target.value
-                                                }
-                                            })}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                        >
-                                            <option value="99.99%">99.99% (Excellent - 5 points)</option>
-                                            <option value="99.9%">99.9% (Good - 4 points)</option>
-                                            <option value="99.5%">99.5% (Acceptable - 3 points)</option>
-                                            <option value="99%">99% (Basic - 2 points)</option>
-                                            <option value="95%">95% (Minimal - 1 point)</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Incident Response <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={formData.operationalData?.incidentResponse || '24/7 support'}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                operationalData: {
-                                                    ...formData.operationalData!,
-                                                    incidentResponse: e.target.value
-                                                }
-                                            })}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                        >
-                                            <option value="24/7 SOC">24/7 SOC (Excellent - 5 points)</option>
-                                            <option value="24/7 support">24/7 Support (Good - 4 points)</option>
-                                            <option value="Business hours">Business Hours (Acceptable - 3 points)</option>
-                                            <option value="Email only">Email Only (Minimal - 1 point)</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Security Patching <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={formData.operationalData?.securityPatching || '<14 days'}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                operationalData: {
-                                                    ...formData.operationalData!,
-                                                    securityPatching: e.target.value
-                                                }
-                                            })}
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                        >
-                                            <option value="<7 days">&lt;7 days (Excellent - 5 points)</option>
-                                            <option value="<14 days">&lt;14 days (Good - 4 points)</option>
-                                            <option value="<30 days">&lt;30 days (Acceptable - 3 points)</option>
-                                            <option value=">30 days">&gt;30 days (Minimal - 1 point)</option>
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700">
-                                            Support Contacts
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formData.operationalData?.supportContacts?.join(', ') || ''}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                operationalData: {
-                                                    ...formData.operationalData!,
-                                                    supportContacts: e.target.value.split(',').map(s => s.trim())
-                                                }
-                                            })}
-                                            placeholder="security@example.com, support@example.com"
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                        />
-                                        <p className="mt-1 text-xs text-gray-500">Comma-separated email addresses</p>
-                                    </div>
+                                {/* Info Card - Auto-Detection */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <h4 className="font-semibold text-blue-900 flex items-center gap-2 mb-2">
+                                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Automatic Security Assessment
+                                    </h4>
+                                    <p className="text-sm text-blue-800">
+                                        We will automatically assess your IdP's security configuration by testing:
+                                    </p>
+                                    <ul className="mt-2 text-sm text-blue-900 space-y-1 ml-4">
+                                        <li>✓ TLS version and cipher strength (connects to your endpoint)</li>
+                                        <li>✓ Cryptographic algorithms (analyzes your JWKS/certificates)</li>
+                                        <li>✓ MFA support (checks discovery document)</li>
+                                        <li>✓ Endpoint reachability (tests connectivity)</li>
+                                    </ul>
+                                    <p className="mt-3 text-xs text-blue-700">
+                                        <strong>These cannot be gamed</strong> - we verify by connecting to your actual endpoints!
+                                    </p>
                                 </div>
 
-                                {/* Compliance Documents */}
+                                {/* Compliance Documentation - Upload References */}
                                 <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-                                    <h4 className="font-semibold text-gray-900">📋 Compliance Documentation (10 points)</h4>
-                                    <p className="text-sm text-gray-600">Upload or reference compliance documentation. Leave blank if not available.</p>
+                                    <div>
+                                        <h4 className="font-semibold text-gray-900">📋 Compliance Documentation</h4>
+                                        <p className="text-sm text-gray-600 mt-1">
+                                            Provide references to compliance documents. Admins will verify these during review.
+                                        </p>
+                                    </div>
                                     
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">
-                                            MFA Policy
+                                            MFA Policy Document
                                         </label>
                                         <input
                                             type="text"
@@ -821,14 +752,15 @@ export default function NewIdPWizard() {
                                                     mfaPolicy: e.target.value
                                                 }
                                             })}
-                                            placeholder="MFA policy document reference or description"
+                                            placeholder="e.g., MFA-Policy-2024.pdf or URL to policy"
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
+                                        <p className="mt-1 text-xs text-gray-500">Optional: Reference to your MFA enforcement policy</p>
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">
-                                            ACP-240 Certificate
+                                            ACP-240 Certification
                                         </label>
                                         <input
                                             type="text"
@@ -840,9 +772,10 @@ export default function NewIdPWizard() {
                                                     acp240Certificate: e.target.value
                                                 }
                                             })}
-                                            placeholder="ACP-240 certification reference (e.g., cert-2024-001.pdf)"
+                                            placeholder="e.g., ACP-240-Cert-2024.pdf"
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
+                                        <p className="mt-1 text-xs text-gray-500">Optional: NATO ACP-240 certification (improves score)</p>
                                     </div>
 
                                     <div>
@@ -859,14 +792,15 @@ export default function NewIdPWizard() {
                                                     stanag4774Certification: e.target.value
                                                 }
                                             })}
-                                            placeholder="STANAG 4774 certification reference"
+                                            placeholder="e.g., STANAG-4774-Cert.pdf"
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
+                                        <p className="mt-1 text-xs text-gray-500">Optional: NATO security labeling certification</p>
                                     </div>
 
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">
-                                            Audit Plan
+                                            Audit/Logging Documentation
                                         </label>
                                         <input
                                             type="text"
@@ -878,9 +812,16 @@ export default function NewIdPWizard() {
                                                     auditPlan: e.target.value
                                                 }
                                             })}
-                                            placeholder="Audit plan document reference"
+                                            placeholder="e.g., Audit-Plan-2024.pdf or logging policy"
                                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
+                                        <p className="mt-1 text-xs text-gray-500">Optional: Audit plan or logging policy reference</p>
+                                    </div>
+
+                                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-4">
+                                        <p className="text-xs text-yellow-800">
+                                            <strong>Note:</strong> Admins will verify these documents during review. Providing valid documentation improves your approval speed and risk score. Leaving fields blank is acceptable - the system will score based on technical validation only.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
