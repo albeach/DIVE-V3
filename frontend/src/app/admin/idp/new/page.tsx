@@ -21,6 +21,10 @@ import WizardSteps from '@/components/admin/wizard-steps';
 import OIDCConfigForm from '@/components/admin/oidc-config-form';
 import SAMLConfigForm from '@/components/admin/saml-config-form';
 import AttributeMapper from '@/components/admin/attribute-mapper';
+import RiskScoreBadge from '@/components/admin/risk-score-badge';
+import RiskBreakdown from '@/components/admin/risk-breakdown';
+import ComplianceStatusCard from '@/components/admin/compliance-status-card';
+import SLACountdown from '@/components/admin/sla-countdown';
 import { IIdPFormData, IdPProtocol, IAdminAPIResponse } from '@/types/admin.types';
 
 const WIZARD_STEPS = [
@@ -29,7 +33,8 @@ const WIZARD_STEPS = [
     { number: 3, title: 'Configuration', description: 'Protocol settings' },
     { number: 4, title: 'Attributes', description: 'Map DIVE attributes' },
     { number: 5, title: 'Review', description: 'Review and test' },
-    { number: 6, title: 'Submit', description: 'Submit for approval' }
+    { number: 6, title: 'Submit', description: 'Submit for approval' },
+    { number: 7, title: 'Results', description: 'Validation & risk assessment' }
 ];
 
 export default function NewIdPWizard() {
@@ -39,6 +44,7 @@ export default function NewIdPWizard() {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [testResult, setTestResult] = useState<any>(null);
+    const [submissionResult, setSubmissionResult] = useState<any>(null);
 
     const [formData, setFormData] = useState<IIdPFormData>({
         protocol: 'oidc',
@@ -72,7 +78,28 @@ export default function NewIdPWizard() {
         // Auth0 Integration (Week 3.4.6)
         useAuth0: false,
         auth0Protocol: 'oidc',
-        auth0AppType: 'spa'
+        auth0AppType: 'spa',
+        // Phase 2: Operational data (with reasonable defaults)
+        operationalData: {
+            uptimeSLA: '99.9%',
+            incidentResponse: '24/7 support',
+            securityPatching: '<14 days',
+            supportContacts: ['support@example.com']
+        },
+        // Phase 2: Compliance documents (optional)
+        complianceDocuments: {
+            mfaPolicy: 'MFA policy documented',
+            acp240Certificate: '',
+            stanag4774Certification: '',
+            auditPlan: ''
+        },
+        // Metadata
+        metadata: {
+            country: 'USA',
+            organization: '',
+            contactEmail: '',
+            contactPhone: ''
+        }
     });
 
     // Auto-populate Auth0 OIDC config when useAuth0 is checked
@@ -327,22 +354,33 @@ export default function NewIdPWizard() {
                     // Include Auth0 metadata
                     useAuth0: formData.useAuth0,
                     auth0ClientId: formData.useAuth0 ? auth0ClientId : undefined,
-                    auth0ClientSecret: formData.useAuth0 ? auth0ClientSecret : undefined
+                    auth0ClientSecret: formData.useAuth0 ? auth0ClientSecret : undefined,
+                    // Phase 2: Operational data and compliance
+                    operationalData: formData.operationalData,
+                    complianceDocuments: formData.complianceDocuments,
+                    metadata: {
+                        ...(formData.metadata || {}),
+                        contactEmail: formData.metadata?.contactEmail || session?.user?.email || 'admin@example.com',
+                        organization: formData.metadata?.organization || formData.displayName
+                    }
                 })
             });
 
             const result: IAdminAPIResponse = await response.json();
 
             if (!response.ok) {
-                throw new Error(result.error || 'Failed to create IdP');
+                throw new Error(result.message || result.error || 'Failed to create IdP');
             }
 
-            // Success - redirect to IdP list with Auth0 info if applicable
-            const successUrl = formData.useAuth0 
-                ? `/admin/idp?success=created&auth0=true&clientId=${auth0ClientId}`
-                : '/admin/idp?success=created';
+            // PHASE 2 FIX: Store submission results and show them to user
+            setSubmissionResult({
+                ...result.data,
+                auth0ClientId: formData.useAuth0 ? auth0ClientId : undefined,
+                auth0Domain: formData.useAuth0 ? auth0Domain : undefined
+            });
             
-            router.push(successUrl);
+            // Move to results step instead of redirecting immediately
+            setCurrentStep(7);
         } catch (error) {
             setErrors({
                 submit: error instanceof Error ? error.message : 'Submission failed'
@@ -783,30 +821,166 @@ export default function NewIdPWizard() {
                                 )}
                             </div>
                         )}
+
+                        {/* Step 7: Results - Phase 2 Validation & Risk Assessment */}
+                        {currentStep === 7 && submissionResult && (
+                            <div className="space-y-8">
+                                <div>
+                                    <h3 className="text-2xl font-bold text-gray-900">✅ Submission Complete!</h3>
+                                    <p className="mt-2 text-sm text-gray-600">
+                                        Your Identity Provider has been validated and assessed. Review the results below.
+                                    </p>
+                                </div>
+
+                                {/* Status Banner */}
+                                <div className={`rounded-xl p-6 ${
+                                    submissionResult.status === 'approved' ? 'bg-green-50 border-2 border-green-200' :
+                                    submissionResult.status === 'rejected' ? 'bg-red-50 border-2 border-red-200' :
+                                    'bg-blue-50 border-2 border-blue-200'
+                                }`}>
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-4xl">
+                                            {submissionResult.status === 'approved' ? '🎉' :
+                                             submissionResult.status === 'rejected' ? '❌' :
+                                             '⏳'}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="text-lg font-bold">
+                                                {submissionResult.status === 'approved' ? 'Auto-Approved!' :
+                                                 submissionResult.status === 'rejected' ? 'Automatically Rejected' :
+                                                 'Pending Review'}
+                                            </h4>
+                                            <p className="text-sm text-gray-700 mt-1">
+                                                {submissionResult.approvalDecision?.reason || 'Awaiting administrator review'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Phase 2: Risk Score Badge */}
+                                {submissionResult.comprehensiveRiskScore && (
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                        <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                            🏆 Risk Assessment
+                                        </h4>
+                                        <RiskScoreBadge 
+                                            score={submissionResult.comprehensiveRiskScore.total}
+                                            maxScore={100}
+                                            tier={submissionResult.comprehensiveRiskScore.tier}
+                                            riskLevel={submissionResult.comprehensiveRiskScore.riskLevel}
+                                            size="lg"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Phase 2: Risk Breakdown */}
+                                {submissionResult.comprehensiveRiskScore && (
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                        <h4 className="text-lg font-semibold mb-4">📊 Risk Score Breakdown</h4>
+                                        <RiskBreakdown breakdown={submissionResult.comprehensiveRiskScore.breakdown} />
+                                    </div>
+                                )}
+
+                                {/* Phase 2: Compliance Status */}
+                                {submissionResult.complianceCheck && (
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                        <h4 className="text-lg font-semibold mb-4">📋 Compliance Status</h4>
+                                        <ComplianceStatusCard complianceCheck={submissionResult.complianceCheck} />
+                                    </div>
+                                )}
+
+                                {/* Phase 2: SLA Countdown (if fast-track or standard review) */}
+                                {submissionResult.approvalDecision?.slaDeadline && submissionResult.status === 'pending' && (
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                        <h4 className="text-lg font-semibold mb-4">⏱️ Review Deadline</h4>
+                                        <SLACountdown 
+                                            slaDeadline={submissionResult.approvalDecision.slaDeadline}
+                                            slaStatus={submissionResult.slaStatus || 'within'}
+                                            action={submissionResult.approvalDecision.action}
+                                        />
+                                        <p className="mt-2 text-xs text-gray-600">
+                                            {submissionResult.approvalDecision.action === 'fast-track' ? 
+                                                'Fast-track review (2-hour SLA)' : 
+                                                'Standard review (24-hour SLA)'}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Next Steps */}
+                                {submissionResult.approvalDecision?.nextSteps && (
+                                    <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
+                                        <h4 className="text-lg font-semibold text-blue-900 mb-3">📝 Next Steps</h4>
+                                        <ul className="space-y-2">
+                                            {submissionResult.approvalDecision.nextSteps.map((step: string, idx: number) => (
+                                                <li key={idx} className="flex items-start gap-2 text-sm text-blue-800">
+                                                    <span className="font-bold">{idx + 1}.</span>
+                                                    <span>{step}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+
+                                {/* Auth0 Integration Info */}
+                                {submissionResult.auth0ClientId && (
+                                    <div className="bg-purple-50 rounded-xl border border-purple-200 p-6">
+                                        <h4 className="text-lg font-semibold text-purple-900 mb-3">🔐 Auth0 Integration</h4>
+                                        <p className="text-sm text-purple-800 mb-3">
+                                            Auth0 application created successfully!
+                                        </p>
+                                        <div className="bg-white rounded-lg p-4 font-mono text-xs space-y-2">
+                                            <div><span className="text-gray-600">Client ID:</span> <span className="text-purple-700 font-semibold">{submissionResult.auth0ClientId}</span></div>
+                                            {submissionResult.auth0Domain && (
+                                                <div><span className="text-gray-600">Domain:</span> <span className="text-purple-700">{submissionResult.auth0Domain}</span></div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Action Buttons */}
+                                <div className="flex gap-4">
+                                    {submissionResult.status === 'pending' && (
+                                        <button
+                                            onClick={() => router.push('/admin/approvals')}
+                                            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                                        >
+                                            View in Approval Queue
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => router.push('/admin/idp')}
+                                        className={`${submissionResult.status === 'pending' ? 'flex-1' : 'w-full'} px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors`}
+                                    >
+                                        Return to IdP Management
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Navigation Buttons */}
-                    <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
-                        {currentStep < 6 ? (
-                            <button
-                                type="button"
-                                onClick={handleNext}
-                                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
-                            >
-                                Next →
-                            </button>
-                        ) : currentStep === 6 ? (
-                            <button
-                                type="button"
-                                onClick={handleSubmit}
-                                disabled={isSubmitting}
-                                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
-                            >
-                                {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
-                            </button>
-                        ) : null}
+                    {/* Navigation Buttons - Hide on Step 7 (Results) */}
+                    {currentStep < 7 && (
+                        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
+                            {currentStep < 6 ? (
+                                <button
+                                    type="button"
+                                    onClick={handleNext}
+                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                                >
+                                    Next →
+                                </button>
+                            ) : currentStep === 6 ? (
+                                <button
+                                    type="button"
+                                    onClick={handleSubmit}
+                                    disabled={isSubmitting}
+                                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                                >
+                                    {isSubmitting ? 'Submitting...' : 'Submit for Approval'}
+                                </button>
+                            ) : null}
 
-                        {currentStep > 1 && (
+                            {currentStep > 1 && (
                             <button
                                 type="button"
                                 onClick={handleBack}
@@ -816,14 +990,15 @@ export default function NewIdPWizard() {
                             </button>
                         )}
 
-                        <button
-                            type="button"
-                            onClick={() => router.push('/admin/idp')}
-                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:w-auto sm:text-sm"
-                        >
-                            Cancel
-                        </button>
-                    </div>
+                            <button
+                                type="button"
+                                onClick={() => router.push('/admin/idp')}
+                                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:w-auto sm:text-sm"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    )}
                 </div>
         </PageLayout>
     );
