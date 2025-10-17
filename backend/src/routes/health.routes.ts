@@ -1,58 +1,75 @@
 import { Router, Request, Response } from 'express';
-import { logger } from '../utils/logger';
+import { healthService } from '../services/health.service';
 
 const router = Router();
 
+/**
+ * GET /health
+ * Basic health check for load balancers
+ */
 router.get('/', async (_req: Request, res: Response) => {
-    const health = {
-        status: 'healthy',
-        service: 'dive-v3-backend',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: process.env.NODE_ENV
-    };
-
-    res.json(health);
+    try {
+        const health = await healthService.basicHealthCheck();
+        const statusCode = health.status === 'unhealthy' ? 503 : 200;
+        res.status(statusCode).json(health);
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            uptime: 0,
+            error: 'Health check failed',
+        });
+    }
 });
 
+/**
+ * GET /health/detailed
+ * Comprehensive health status (admin only in production)
+ */
+router.get('/detailed', async (_req: Request, res: Response) => {
+    try {
+        const health = await healthService.detailedHealthCheck();
+        const statusCode = health.status === 'unhealthy' ? 503 : 200;
+        res.status(statusCode).json(health);
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            timestamp: new Date().toISOString(),
+            error: 'Detailed health check failed',
+        });
+    }
+});
+
+/**
+ * GET /health/ready
+ * Kubernetes readiness probe
+ */
 router.get('/ready', async (_req: Request, res: Response) => {
-    // Check dependencies
-    const checks = {
-        opa: false,
-        mongodb: false
-    };
-
     try {
-        // Check OPA
-        const opaUrl = process.env.OPA_URL;
-        if (opaUrl) {
-            const axios = require('axios');
-            const opaHealth = await axios.get(`${opaUrl}/health`, { timeout: 2000 });
-            checks.opa = opaHealth.status === 200;
-        }
+        const readiness = await healthService.readinessCheck();
+        const statusCode = readiness.ready ? 200 : 503;
+        res.status(statusCode).json(readiness);
     } catch (error) {
-        logger.warn('OPA health check failed', { error });
+        res.status(503).json({
+            ready: false,
+            checks: {
+                mongodb: false,
+                opa: false,
+                keycloak: false,
+            },
+            timestamp: new Date().toISOString(),
+            error: 'Readiness check failed',
+        });
     }
+});
 
-    try {
-        // Check MongoDB
-        const { MongoClient } = require('mongodb');
-        const client = new MongoClient(process.env.MONGODB_URL!);
-        await client.connect();
-        await client.db().admin().ping();
-        await client.close();
-        checks.mongodb = true;
-    } catch (error) {
-        logger.warn('MongoDB health check failed', { error });
-    }
-
-    const ready = checks.opa && checks.mongodb;
-
-    res.status(ready ? 200 : 503).json({
-        status: ready ? 'ready' : 'not ready',
-        checks,
-        timestamp: new Date().toISOString()
-    });
+/**
+ * GET /health/live
+ * Kubernetes liveness probe
+ */
+router.get('/live', (_req: Request, res: Response) => {
+    const liveness = healthService.livenessCheck();
+    res.status(200).json(liveness);
 });
 
 export default router;

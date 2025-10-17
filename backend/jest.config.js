@@ -34,8 +34,59 @@ module.exports = {
     forceExit: true,
     detectOpenHandles: false,
     globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
-    // Coverage thresholds removed - will check in CI with continue-on-error
-    // This prevents local test failures due to incomplete coverage during development
-    coverageThreshold: {}
+    // Phase 4 - Comprehensive Coverage Thresholds
+    // Global thresholds: >95% for all metrics
+    // Critical services require 100% coverage
+    coverageThreshold: {
+        global: {
+            branches: 95,
+            functions: 95,
+            lines: 95,
+            statements: 95
+        },
+        // Critical services require 100% coverage
+        './src/services/risk-scoring.service.ts': {
+            branches: 100,
+            functions: 100,
+            lines: 100,
+            statements: 100
+        },
+        './src/services/authz-cache.service.ts': {
+            branches: 100,
+            functions: 100,
+            lines: 100,
+            statements: 100
+        },
+        './src/middleware/authz.middleware.ts': {
+            branches: 95,
+            functions: 95,
+            lines: 95,
+            statements: 95
+        },
+        './src/services/idp-validation.service.ts': {
+            branches: 95,
+            functions: 95,
+            lines: 95,
+            statements: 95
+        },
+        './src/services/compliance-validation.service.ts': {
+            branches: 95,
+            functions: 95,
+            lines: 95,
+            statements: 95
+        },
+        './src/services/analytics.service.ts': {
+            branches: 95,
+            functions: 95,
+            lines: 95,
+            statements: 95
+        },
+        './src/services/health.service.ts': {
+            branches: 95,
+            functions: 95,
+            lines: 95,
+            statements: 95
+        }
+    }
 };
 
