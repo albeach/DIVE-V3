@@ -110,6 +110,39 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
         });
     };
 
+    // Upload OIDC discovery JSON file
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !accessToken) return;
+
+        try {
+            const text = await file.text();
+            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/idps/parse/oidc-metadata`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({ discoveryJson: text })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.formData) {
+                // Auto-populate form with parsed data
+                onChange({
+                    ...config,
+                    ...result.formData
+                });
+                setValidationStatus(prev => ({ ...prev, issuer: 'valid' }));
+            } else {
+                setLocalErrors(prev => ({ ...prev, file: result.error || 'Failed to parse metadata' }));
+            }
+        } catch (error) {
+            setLocalErrors(prev => ({ ...prev, file: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` }));
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div>
@@ -117,10 +150,37 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
                 <p className="mt-1 text-sm text-gray-500">
                     {readonly 
                         ? '✨ Auth0 will automatically configure these settings' 
-                        : 'Configure OpenID Connect settings for this identity provider.'
+                        : 'Configure OpenID Connect settings manually or upload discovery document.'
                     }
                 </p>
             </div>
+
+            {/* Upload Metadata File */}
+            {!readonly && accessToken && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <label className="block text-sm font-semibold text-blue-900 mb-2">
+                        📄 Quick Setup: Upload OIDC Discovery Document
+                    </label>
+                    <p className="text-xs text-blue-700 mb-3">
+                        Upload your IdP's <code className="bg-blue-100 px-1 py-0.5 rounded">.well-known/openid-configuration</code> JSON file to auto-populate all fields.
+                    </p>
+                    <input
+                        type="file"
+                        accept=".json,application/json"
+                        onChange={handleFileUpload}
+                        className="block w-full text-sm text-blue-900
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-blue-600 file:text-white
+                            hover:file:bg-blue-700
+                            file:cursor-pointer cursor-pointer"
+                    />
+                    {localErrors.file && (
+                        <p className="mt-2 text-sm text-red-600">{localErrors.file}</p>
+                    )}
+                </div>
+            )}
 
             {readonly && (
                 <div className="rounded-md bg-blue-50 border border-blue-200 p-4">
