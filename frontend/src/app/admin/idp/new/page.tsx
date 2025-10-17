@@ -31,10 +31,11 @@ const WIZARD_STEPS = [
     { number: 1, title: 'Protocol', description: 'Select IdP protocol' },
     { number: 2, title: 'Basic Info', description: 'Name and description' },
     { number: 3, title: 'Configuration', description: 'Protocol settings' },
-    { number: 4, title: 'Attributes', description: 'Map DIVE attributes' },
-    { number: 5, title: 'Review', description: 'Review and test' },
-    { number: 6, title: 'Submit', description: 'Submit for approval' },
-    { number: 7, title: 'Results', description: 'Validation & risk assessment' }
+    { number: 4, title: 'Operational', description: 'SLA & compliance data' },
+    { number: 5, title: 'Attributes', description: 'Map DIVE attributes' },
+    { number: 6, title: 'Review', description: 'Review configuration' },
+    { number: 7, title: 'Submit', description: 'Submit for approval' },
+    { number: 8, title: 'Results', description: 'Validation & risk assessment' }
 ];
 
 export default function NewIdPWizard() {
@@ -423,7 +424,7 @@ export default function NewIdPWizard() {
             });
             
             // Move to results step instead of redirecting immediately
-            setCurrentStep(7);
+            setCurrentStep(8);
         } catch (error) {
             setErrors({
                 submit: error instanceof Error ? error.message : 'Submission failed'
@@ -699,8 +700,194 @@ export default function NewIdPWizard() {
                             />
                         )}
 
-                        {/* Step 4: Attribute Mapping */}
+                        {/* Step 4: Operational & Compliance Data (NEW!) */}
                         {currentStep === 4 && (
+                            <div className="space-y-6">
+                                <div>
+                                    <h3 className="text-lg font-medium text-gray-900">Operational & Compliance Information</h3>
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        This information is used for Phase 2 risk scoring and compliance validation.
+                                    </p>
+                                </div>
+
+                                {/* Operational Data */}
+                                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                                    <h4 className="font-semibold text-gray-900">📊 Operational Maturity (20 points)</h4>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Uptime SLA <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={formData.operationalData?.uptimeSLA || '99.9%'}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                operationalData: {
+                                                    ...formData.operationalData!,
+                                                    uptimeSLA: e.target.value
+                                                }
+                                            })}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        >
+                                            <option value="99.99%">99.99% (Excellent - 5 points)</option>
+                                            <option value="99.9%">99.9% (Good - 4 points)</option>
+                                            <option value="99.5%">99.5% (Acceptable - 3 points)</option>
+                                            <option value="99%">99% (Basic - 2 points)</option>
+                                            <option value="95%">95% (Minimal - 1 point)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Incident Response <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={formData.operationalData?.incidentResponse || '24/7 support'}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                operationalData: {
+                                                    ...formData.operationalData!,
+                                                    incidentResponse: e.target.value
+                                                }
+                                            })}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        >
+                                            <option value="24/7 SOC">24/7 SOC (Excellent - 5 points)</option>
+                                            <option value="24/7 support">24/7 Support (Good - 4 points)</option>
+                                            <option value="Business hours">Business Hours (Acceptable - 3 points)</option>
+                                            <option value="Email only">Email Only (Minimal - 1 point)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Security Patching <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={formData.operationalData?.securityPatching || '<14 days'}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                operationalData: {
+                                                    ...formData.operationalData!,
+                                                    securityPatching: e.target.value
+                                                }
+                                            })}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        >
+                                            <option value="<7 days">&lt;7 days (Excellent - 5 points)</option>
+                                            <option value="<14 days">&lt;14 days (Good - 4 points)</option>
+                                            <option value="<30 days">&lt;30 days (Acceptable - 3 points)</option>
+                                            <option value=">30 days">&gt;30 days (Minimal - 1 point)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Support Contacts
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.operationalData?.supportContacts?.join(', ') || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                operationalData: {
+                                                    ...formData.operationalData!,
+                                                    supportContacts: e.target.value.split(',').map(s => s.trim())
+                                                }
+                                            })}
+                                            placeholder="security@example.com, support@example.com"
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        />
+                                        <p className="mt-1 text-xs text-gray-500">Comma-separated email addresses</p>
+                                    </div>
+                                </div>
+
+                                {/* Compliance Documents */}
+                                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                                    <h4 className="font-semibold text-gray-900">📋 Compliance Documentation (10 points)</h4>
+                                    <p className="text-sm text-gray-600">Upload or reference compliance documentation. Leave blank if not available.</p>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            MFA Policy
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.complianceDocuments?.mfaPolicy || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                complianceDocuments: {
+                                                    ...formData.complianceDocuments!,
+                                                    mfaPolicy: e.target.value
+                                                }
+                                            })}
+                                            placeholder="MFA policy document reference or description"
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            ACP-240 Certificate
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.complianceDocuments?.acp240Certificate || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                complianceDocuments: {
+                                                    ...formData.complianceDocuments!,
+                                                    acp240Certificate: e.target.value
+                                                }
+                                            })}
+                                            placeholder="ACP-240 certification reference (e.g., cert-2024-001.pdf)"
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            STANAG 4774 Certification
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.complianceDocuments?.stanag4774Certification || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                complianceDocuments: {
+                                                    ...formData.complianceDocuments!,
+                                                    stanag4774Certification: e.target.value
+                                                }
+                                            })}
+                                            placeholder="STANAG 4774 certification reference"
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Audit Plan
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.complianceDocuments?.auditPlan || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                complianceDocuments: {
+                                                    ...formData.complianceDocuments!,
+                                                    auditPlan: e.target.value
+                                                }
+                                            })}
+                                            placeholder="Audit plan document reference"
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Step 5: Attribute Mapping (moved from Step 4) */}
+                        {currentStep === 5 && (
                             <AttributeMapper
                                 mappings={formData.attributeMappings}
                                 onChange={(mappings) => setFormData({ ...formData, attributeMappings: mappings })}
@@ -709,8 +896,8 @@ export default function NewIdPWizard() {
                             />
                         )}
 
-                        {/* Step 5: Review & Test */}
-                        {currentStep === 5 && (
+                        {/* Step 6: Review & Test (moved from Step 5) */}
+                        {currentStep === 6 && (
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="text-lg font-medium text-gray-900">Review Configuration</h3>
@@ -793,8 +980,8 @@ export default function NewIdPWizard() {
                             </div>
                         )}
 
-                        {/* Step 6: Submit for Approval */}
-                        {currentStep === 6 && (
+                        {/* Step 7: Submit for Approval (moved from Step 6) */}
+                        {currentStep === 7 && (
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="text-lg font-medium text-gray-900">Submit for Approval</h3>
@@ -866,8 +1053,8 @@ export default function NewIdPWizard() {
                             </div>
                         )}
 
-                        {/* Step 7: Results - Phase 2 Validation & Risk Assessment */}
-                        {currentStep === 7 && submissionResult && (
+                        {/* Step 8: Results - Phase 2 Validation & Risk Assessment (moved from Step 7) */}
+                        {currentStep === 8 && submissionResult && (
                             <div className="space-y-8">
                                 <div>
                                     <h3 className="text-2xl font-bold text-gray-900">
@@ -1034,10 +1221,10 @@ export default function NewIdPWizard() {
                         )}
                     </div>
 
-                    {/* Navigation Buttons - Hide on Step 7 (Results) */}
-                    {currentStep < 7 && (
+                    {/* Navigation Buttons - Hide on Step 8 (Results) */}
+                    {currentStep < 8 && (
                         <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
-                            {currentStep < 6 ? (
+                            {currentStep < 7 ? (
                                 <button
                                     type="button"
                                     onClick={handleNext}
@@ -1045,7 +1232,7 @@ export default function NewIdPWizard() {
                                 >
                                     Next →
                                 </button>
-                            ) : currentStep === 6 ? (
+                            ) : currentStep === 7 ? (
                                 <button
                                     type="button"
                                     onClick={handleSubmit}
