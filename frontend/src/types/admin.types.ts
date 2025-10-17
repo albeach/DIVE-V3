@@ -62,6 +62,26 @@ export interface IIdPFormData {
     auth0AppType?: 'spa' | 'regular_web' | 'native';
     auth0ClientId?: string;
     auth0ClientSecret?: string;
+
+    // Phase 2: Operational data and compliance
+    operationalData?: {
+        uptimeSLA?: string;
+        incidentResponse?: string;
+        securityPatching?: string;
+        supportContacts?: string[];
+    };
+    complianceDocuments?: {
+        mfaPolicy?: string;
+        acp240Certificate?: string;
+        stanag4774Certification?: string;
+        auditPlan?: string;
+    };
+    metadata?: {
+        country?: string;
+        organization?: string;
+        contactEmail?: string;
+        contactPhone?: string;
+    };
 }
 
 export interface IIdPListItem {
