@@ -16,7 +16,36 @@ interface ISAMLConfigFormProps {
 }
 
 export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLConfigFormProps) {
+    const [localErrors, setLocalErrors] = React.useState<Record<string, string>>({});
+
+    const validateURL = (url: string): string | null => {
+        if (!url) return null;
+        
+        try {
+            const urlObj = new URL(url);
+            if (urlObj.protocol !== 'https:') {
+                return '⚠️ Must use HTTPS (security requirement)';
+            }
+            return null;
+        } catch (e) {
+            return '❌ Invalid URL (must be https://...)';
+        }
+    };
+
     const handleChange = (field: keyof ISAMLConfig, value: string) => {
+        // Validate URLs in real-time
+        if (field === 'singleSignOnServiceUrl' || field === 'singleLogoutServiceUrl') {
+            const error = validateURL(value);
+            if (error) {
+                setLocalErrors(prev => ({ ...prev, [field]: error }));
+            } else {
+                setLocalErrors(prev => {
+                    const { [field]: removed, ...rest } = prev;
+                    return rest;
+                });
+            }
+        }
+
         onChange({
             ...config,
             [field]: value
