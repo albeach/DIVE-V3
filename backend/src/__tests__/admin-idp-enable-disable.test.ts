@@ -149,22 +149,22 @@ describe('Admin IdP Enable/Disable Feature', () => {
                     {
                         alias: 'canada-idp',
                         displayName: 'Canada',
-                        protocol: 'oidc' as 'oidc',
-                        status: 'active' as 'active',
+                        protocol: 'oidc' as const,
+                        status: 'active' as const,
                         enabled: true
                     },
                     {
                         alias: 'france-idp',
                         displayName: 'France',
-                        protocol: 'saml' as 'saml',
-                        status: 'active' as 'active',
+                        protocol: 'saml' as const,
+                        status: 'active' as const,
                         enabled: true
                     },
                     {
                         alias: 'disabled-idp',
                         displayName: 'Disabled',
-                        protocol: 'oidc' as 'oidc',
-                        status: 'disabled' as 'disabled',
+                        protocol: 'oidc' as const,
+                        status: 'disabled' as const,
                         enabled: false  // This one is disabled
                     }
                 ],
@@ -195,8 +195,8 @@ describe('Admin IdP Enable/Disable Feature', () => {
                     {
                         alias: 'new-idp',
                         displayName: 'New IdP',
-                        protocol: 'oidc' as 'oidc',
-                        status: 'disabled' as 'disabled',
+                        protocol: 'oidc' as const,
+                        status: 'disabled' as const,
                         enabled: false
                     }
                 ],
@@ -265,15 +265,15 @@ describe('Admin IdP Enable/Disable Feature', () => {
                     {
                         alias: 'idp-1',
                         displayName: 'IdP 1',
-                        protocol: 'oidc' as 'oidc',
-                        status: 'disabled' as 'disabled',
+                        protocol: 'oidc' as const,
+                        status: 'disabled' as const,
                         enabled: false
                     },
                     {
                         alias: 'idp-2',
                         displayName: 'IdP 2',
-                        protocol: 'saml' as 'saml',
-                        status: 'disabled' as 'disabled',
+                        protocol: 'saml' as const,
+                        status: 'disabled' as const,
                         enabled: false
                     }
                 ],
@@ -297,22 +297,22 @@ describe('Admin IdP Enable/Disable Feature', () => {
                     {
                         alias: 'idp-1',
                         displayName: 'IdP 1',
-                        protocol: 'oidc' as 'oidc',
-                        status: 'active' as 'active',
+                        protocol: 'oidc' as const,
+                        status: 'active' as const,
                         enabled: true
                     },
                     {
                         alias: 'idp-2',
                         displayName: 'IdP 2',
-                        protocol: 'saml' as 'saml',
-                        status: 'active' as 'active',
+                        protocol: 'saml' as const,
+                        status: 'active' as const,
                         enabled: true
                     },
                     {
                         alias: 'idp-3',
                         displayName: 'IdP 3',
-                        protocol: 'oidc' as 'oidc',
-                        status: 'active' as 'active',
+                        protocol: 'oidc' as const,
+                        status: 'active' as const,
                         enabled: true
                     }
                 ],

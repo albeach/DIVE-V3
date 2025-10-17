@@ -189,7 +189,7 @@ export function createTamperedZTDFResource(): IZTDFResource {
     // Set an obviously wrong policy hash (same approach as ztdf.utils.test.ts)
     // This will cause validation to fail with "Policy hash mismatch"
     resource.ztdf.policy.policyHash = 'TAMPERED_HASH_VALUE_THAT_WILL_NOT_MATCH_XXXXXXXXXXXXXX';
-    
+
     return resource;
 }
 
