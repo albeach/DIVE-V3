@@ -195,25 +195,25 @@ describe('Resource Service', () => {
 
         it('should validate ZTDF integrity on fetch (fail-closed)', async () => {
             // Best practice: Unique ID with timestamp AND random to prevent any collision
-            const uniqueId = `doc-tampered-fetch-${Date.now()}-${Math.floor(Math.random()*1000000)}`;
+            const uniqueId = `doc-tampered-fetch-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
             const tamperedResource = createTamperedZTDFResource();
             tamperedResource.resourceId = uniqueId;
-            
+
             // Insert tampered resource directly (bypasses createZTDFResource validation)
             await mongoHelper.insertResource(tamperedResource);
-            
+
             // Fetch should detect tampering and throw
             await expect(getResourceById(uniqueId)).rejects.toThrow(/ZTDF integrity validation failed/);
         });
 
         it('should throw error for tampered policy section', async () => {
             // Best practice: Unique ID prevents any collision
-            const uniqueId = `doc-tampered-policy-${Date.now()}-${Math.floor(Math.random()*1000000)}`;
+            const uniqueId = `doc-tampered-policy-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
             const tamperedResource = createTamperedZTDFResource();
             tamperedResource.resourceId = uniqueId;
-            
+
             await mongoHelper.insertResource(tamperedResource);
-            
+
             // Should throw due to policy hash mismatch
             await expect(getResourceById(uniqueId)).rejects.toThrow();
         });
@@ -292,12 +292,12 @@ describe('Resource Service', () => {
 
         it('should throw error for tampered resources (fail-closed)', async () => {
             // Best practice: Unique ID prevents collision
-            const uniqueId = `doc-tampered-legacy-${Date.now()}-${Math.floor(Math.random()*1000000)}`;
+            const uniqueId = `doc-tampered-legacy-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
             const tamperedResource = createTamperedZTDFResource();
             tamperedResource.resourceId = uniqueId;
-            
+
             await mongoHelper.insertResource(tamperedResource);
-            
+
             // getResourceByIdLegacy calls getResourceById which validates integrity
             await expect(getResourceByIdLegacy(uniqueId)).rejects.toThrow();
         });
@@ -332,7 +332,7 @@ describe('Resource Service', () => {
         it('should validate ZTDF integrity before storing (fail-closed)', async () => {
             // Best practice: Unique ID
             const tamperedResource = createTamperedZTDFResource();
-            tamperedResource.resourceId = `doc-tampered-create-${Date.now()}-${Math.floor(Math.random()*1000000)}`;
+            tamperedResource.resourceId = `doc-tampered-create-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
             // createZTDFResource should validate BEFORE storing and reject
             await expect(createZTDFResource(tamperedResource)).rejects.toThrow(/ZTDF integrity validation failed/);
@@ -341,7 +341,7 @@ describe('Resource Service', () => {
         it('should reject resource with missing policy hash', async () => {
             // Best practice: Unique ID
             const resourceWithoutHash = createZTDFResourceWithoutHashes();
-            resourceWithoutHash.resourceId = `doc-nohash-${Date.now()}-${Math.floor(Math.random()*1000000)}`;
+            resourceWithoutHash.resourceId = `doc-nohash-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
             // Missing hashes cause warnings but not errors (valid=false only if errors.length > 0)
             // Validation returns warnings for missing hashes but doesn't throw
@@ -530,12 +530,12 @@ describe('Resource Service', () => {
 
         it('should validate integrity before returning ZTDF', async () => {
             // Best practice: Unique ID prevents collision
-            const uniqueId = `doc-tampered-ztdf-${Date.now()}-${Math.floor(Math.random()*1000000)}`;
+            const uniqueId = `doc-tampered-ztdf-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
             const tamperedResource = createTamperedZTDFResource();
             tamperedResource.resourceId = uniqueId;
-            
+
             await mongoHelper.insertResource(tamperedResource);
-            
+
             // getZTDFObject should validate integrity before returning
             await expect(getZTDFObject(uniqueId)).rejects.toThrow();
         });
