@@ -929,10 +929,11 @@ export default function NewIdPWizard() {
                                             </p>
                                         </div>
                                     </div>
-                                </div>
+                                    </div>
+                                )}
 
                                 {/* Phase 2: Risk Score Badge */}
-                                {submissionResult.comprehensiveRiskScore && (
+                                {submissionResult.comprehensiveRiskScore && submissionResult.status !== 'validation-failed' && (
                                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                                         <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                                             🏆 Risk Assessment
