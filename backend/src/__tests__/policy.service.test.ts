@@ -93,9 +93,10 @@ test_deny_without_clearance {
     // Create spy variables at top level for proper mocking
     let existsSyncSpy: jest.SpyInstance;
     let readFileSyncSpy: jest.SpyInstance;
-    // @ts-expect-error - Spies are assigned in beforeEach
+    // Spies are used indirectly via jest.spyOn in beforeEach
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let statSyncSpy: jest.SpyInstance;
-    // @ts-expect-error - Spies are assigned in beforeEach
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let readdirSyncSpy: jest.SpyInstance;
 
     beforeEach(() => {

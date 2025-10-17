@@ -27,6 +27,9 @@ export interface IKASKeyRequest {
     /** KAO ID to unwrap */
     kaoId: string;
 
+    /** Wrapped DEK (plaintext in pilot mode) - CRITICAL for decryption */
+    wrappedKey?: string;
+
     /** JWT bearer token (for identity/attributes) */
     bearerToken: string;
 

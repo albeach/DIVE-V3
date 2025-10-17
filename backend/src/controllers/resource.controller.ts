@@ -130,8 +130,11 @@ export const getResourceHandler = async (
                 response.kasObligation = {
                     required: true,
                     kasUrl: resource.ztdf.payload.keyAccessObjects[0]?.kasUrl,
+                    wrappedKey: resource.ztdf.payload.keyAccessObjects[0]?.wrappedKey, // PILOT: Expose for KAS to use
                     message: 'Decryption key must be requested from KAS'
                 };
+                // CRITICAL: Set content to sentinel value so frontend knows to show KAS UI
+                response.content = '[Encrypted - KAS key request required]';
             } else {
                 // Return decrypted content (if available from legacy)
                 if (resource.legacy?.content) {
@@ -486,6 +489,15 @@ export const requestKeyHandler = async (
         const kasUrl = kao.kasUrl || 'http://localhost:8080';
         logger.info('Calling KAS', { requestId, kasUrl, kaoId });
 
+        // CRITICAL: Get the wrappedKey (actual DEK used during encryption)
+        const wrappedKey = kao.wrappedKey;
+        logger.info('Passing wrappedKey to KAS', {
+            requestId,
+            resourceId,
+            hasWrappedKey: !!wrappedKey,
+            wrappedKeyLength: wrappedKey?.length
+        });
+
         let kasResponse;
         try {
             kasResponse = await axios.post(
@@ -493,6 +505,7 @@ export const requestKeyHandler = async (
                 {
                     resourceId,
                     kaoId,
+                    wrappedKey, // CRITICAL: Pass the actual DEK so KAS doesn't regenerate
                     bearerToken,
                     requestTimestamp: new Date().toISOString(),
                     requestId
@@ -549,6 +562,62 @@ export const requestKeyHandler = async (
             }
 
             try {
+                // ============================================
+                // CRITICAL: Validate ZTDF Integrity Before Decryption
+                // ACP-240 Requirement: STANAG 4778 Cryptographic Binding
+                // ============================================
+                const { validateZTDFIntegrity } = await import('../utils/ztdf.utils');
+                const integrityResult = validateZTDFIntegrity(resource.ztdf);
+
+                if (!integrityResult.valid) {
+                    // FAIL-CLOSED: Deny access on integrity violation
+                    logger.error('ZTDF integrity violation - DENY', {
+                        requestId,
+                        resourceId,
+                        subject: (req as any).user?.uniqueID,
+                        errors: integrityResult.errors,
+                        issues: integrityResult.issues,
+                        policyHashValid: integrityResult.policyHashValid,
+                        payloadHashValid: integrityResult.payloadHashValid,
+                        allChunksValid: integrityResult.allChunksValid
+                    });
+
+                    // 🚨 SECURITY ALERT: Possible tampering detected
+                    logger.error('SECURITY ALERT: Possible ZTDF tampering detected', {
+                        alertLevel: 'CRITICAL',
+                        eventType: 'INTEGRITY_VIOLATION',
+                        requestId,
+                        resourceId,
+                        subject: (req as any).user?.uniqueID,
+                        timestamp: new Date().toISOString(),
+                        details: integrityResult
+                    });
+
+                    res.status(403).json({
+                        success: false,
+                        error: 'Forbidden',
+                        message: 'Resource integrity check failed',
+                        reason: 'Cryptographic binding violation - possible tampering detected',
+                        details: {
+                            policyHashValid: integrityResult.policyHashValid,
+                            payloadHashValid: integrityResult.payloadHashValid,
+                            allChunksValid: integrityResult.allChunksValid,
+                            issues: integrityResult.issues
+                        },
+                        executionTimeMs: Date.now() - startTime
+                    });
+                    return;
+                }
+
+                logger.info('ZTDF integrity validated successfully', {
+                    requestId,
+                    resourceId,
+                    policyHashValid: integrityResult.policyHashValid,
+                    payloadHashValid: integrityResult.payloadHashValid,
+                    allChunksValid: integrityResult.allChunksValid
+                });
+
+                // Integrity validated - safe to decrypt
                 const decryptedContent = decryptContent({
                     encryptedData: encryptedChunk.encryptedData,
                     iv: resource.ztdf.payload.iv,
