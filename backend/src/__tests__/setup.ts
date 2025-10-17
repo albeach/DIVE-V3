@@ -13,7 +13,11 @@ process.env.KEYCLOAK_CLIENT_SECRET = 'test-secret';
 process.env.KEYCLOAK_ADMIN_USERNAME = 'admin';
 process.env.KEYCLOAK_ADMIN_PASSWORD = 'admin';
 process.env.OPA_URL = 'http://localhost:8181';
+
+// CRITICAL: Force resource service to use test database (not production dive-v3)
 process.env.MONGODB_URI = 'mongodb://localhost:27017/dive-v3-test';
+process.env.MONGODB_URL = 'mongodb://localhost:27017';
+process.env.MONGODB_DATABASE = 'dive-v3-test';
 
 // Suppress console logs during tests (optional)
 if (process.env.SILENT_TESTS === 'true') {

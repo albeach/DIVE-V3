@@ -18,6 +18,15 @@ const decisionCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 // JWKS cache (1 hour TTL) - cache fetched public keys
 const jwksCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
+/**
+ * Clear all caches (for testing)
+ * @internal
+ */
+export const clearAuthzCaches = (): void => {
+    decisionCache.flushAll();
+    jwksCache.flushAll();
+};
+
 // OPA endpoint
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 const OPA_DECISION_ENDPOINT = `${OPA_URL}/v1/data/dive/authorization`;

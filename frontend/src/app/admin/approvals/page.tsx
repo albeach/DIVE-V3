@@ -10,6 +10,11 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import RiskScoreBadge from '@/components/admin/risk-score-badge';
+import RiskBreakdown from '@/components/admin/risk-breakdown';
+import ComplianceStatusCard from '@/components/admin/compliance-status-card';
+import SLACountdown from '@/components/admin/sla-countdown';
+import RiskFactorAnalysis from '@/components/admin/risk-factor-analysis';
 
 interface IIdPSubmission {
     submissionId: string;
@@ -26,6 +31,31 @@ interface IIdPSubmission {
     useAuth0?: boolean;
     auth0ClientId?: string;
     auth0ClientSecret?: string;
+    // Phase 2: Comprehensive Risk Scoring & Compliance
+    comprehensiveRiskScore?: {
+        total: number;
+        riskLevel: 'minimal' | 'low' | 'medium' | 'high';
+        tier: 'gold' | 'silver' | 'bronze' | 'fail';
+        breakdown: {
+            technicalSecurity: number;
+            authenticationStrength: number;
+            operationalMaturity: number;
+            complianceGovernance: number;
+        };
+        factors: any[];
+        recommendations: string[];
+    };
+    complianceCheck?: any;
+    approvalDecision?: {
+        action: string;
+        reason: string;
+        slaDeadline?: string;
+        nextSteps?: string[];
+    };
+    slaDeadline?: string;
+    slaStatus?: 'within' | 'approaching' | 'exceeded';
+    autoApproved?: boolean;
+    fastTrack?: boolean;
 }
 
 export default function ApprovalsPage() {
@@ -238,19 +268,43 @@ export default function ApprovalsPage() {
                         {pending.map((submission) => (
                             <div key={submission.submissionId} className="bg-white shadow sm:rounded-lg">
                                 <div className="px-4 py-5 sm:p-6">
-                                    {/* Header */}
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div>
-                                            <h3 className="text-lg font-medium text-gray-900">
+                                    {/* Header with Risk Score Badge */}
+                                    <div className="flex items-start justify-between mb-6 gap-4">
+                                        <div className="flex-1">
+                                            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
                                                 {submission.displayName}
                                             </h3>
                                             <p className="mt-1 text-sm text-gray-500">
                                                 Alias: <code className="text-blue-600">{submission.alias}</code>
                                             </p>
+                                            <div className="mt-2 flex items-center gap-2">
+                                                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                    {submission.protocol.toUpperCase()}
+                                                </span>
+                                                {submission.fastTrack && (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                        ⚡ Fast-Track
+                                                    </span>
+                                                )}
+                                                {submission.autoApproved && (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        ✅ Auto-Approved
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                            {submission.protocol.toUpperCase()}
-                                        </span>
+                                        
+                                        {/* Phase 2: Risk Score Badge */}
+                                        {submission.comprehensiveRiskScore && (
+                                            <div className="flex-shrink-0">
+                                                <RiskScoreBadge
+                                                    score={submission.comprehensiveRiskScore.total}
+                                                    tier={submission.comprehensiveRiskScore.tier}
+                                                    riskLevel={submission.comprehensiveRiskScore.riskLevel}
+                                                    size="md"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Details */}
@@ -299,18 +353,51 @@ export default function ApprovalsPage() {
                                         )}
                                     </div>
 
+                                    {/* Phase 2: Risk Score Breakdown */}
+                                    {submission.comprehensiveRiskScore && (
+                                        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <RiskBreakdown breakdown={submission.comprehensiveRiskScore.breakdown} />
+                                            {submission.complianceCheck && (
+                                                <ComplianceStatusCard complianceCheck={submission.complianceCheck} />
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Phase 2: SLA Countdown */}
+                                    {submission.slaDeadline && submission.slaStatus && submission.approvalDecision && (
+                                        <div className="mb-6">
+                                            <SLACountdown
+                                                slaDeadline={submission.slaDeadline}
+                                                slaStatus={submission.slaStatus}
+                                                action={submission.approvalDecision.action as any}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Phase 2: Risk Factor Analysis (Expandable) */}
+                                    {submission.comprehensiveRiskScore?.factors && (
+                                        <details className="mb-6">
+                                            <summary className="cursor-pointer text-sm font-semibold text-blue-600 hover:text-blue-500">
+                                                📊 View Detailed Risk Factor Analysis ({submission.comprehensiveRiskScore.factors.length} factors)
+                                            </summary>
+                                            <div className="mt-4">
+                                                <RiskFactorAnalysis factors={submission.comprehensiveRiskScore.factors} />
+                                            </div>
+                                        </details>
+                                    )}
+
                                     {/* View Details Button */}
                                     <button
                                         onClick={() => setSelectedIdP(selectedIdP?.alias === submission.alias ? null : submission)}
-                                        className="text-sm text-blue-600 hover:text-blue-500 mb-4"
+                                        className="text-sm text-gray-600 hover:text-gray-500 mb-4"
                                     >
                                         {selectedIdP?.alias === submission.alias ? 'Hide' : 'Show'} Configuration Details
                                     </button>
 
                                     {/* Configuration Details (Expandable) */}
                                     {selectedIdP?.alias === submission.alias && (
-                                        <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                                            <pre className="text-xs text-gray-700 overflow-x-auto">
+                                        <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                            <pre className="text-xs text-gray-700 dark:text-gray-300 overflow-x-auto">
                                                 {JSON.stringify(
                                                     {
                                                         config: submission.config,
