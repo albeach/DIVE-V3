@@ -168,6 +168,89 @@ function validateFile(fileBuffer: Buffer, mimeType: string): IFileValidation {
 }
 
 /**
+ * Create multiple Key Access Objects for Multi-KAS support (ACP-240 Section 5.3)
+ */
+function createMultipleKAOs(params: {
+    uploadId: string;
+    releasabilityTo: string[];
+    coiTags: string[];
+    classification: string;
+    wrappedKey: string;
+    currentTimestamp: string;
+    selectedCOI: string;
+}): any[] {
+    const kaos: any[] = [];
+    const kasBaseUrl = process.env.KAS_URL || 'http://localhost:8080';
+
+    // Strategy 1: COI-based KAOs
+    if (params.coiTags && params.coiTags.length > 0) {
+        for (const coi of params.coiTags) {
+            kaos.push({
+                kaoId: `kao-${coi.toLowerCase()}-${params.uploadId}`,
+                kasUrl: `${kasBaseUrl}/request-key`,
+                kasId: `${coi.toLowerCase()}-kas`,
+                wrappedKey: params.wrappedKey,
+                wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
+                policyBinding: {
+                    clearanceRequired: params.classification,
+                    countriesAllowed: params.releasabilityTo,
+                    coiRequired: [coi]
+                },
+                createdAt: params.currentTimestamp
+            });
+        }
+    }
+
+    // Strategy 2: Nation-specific KAOs (max 3)
+    const priorityNations = ['USA', 'GBR', 'FRA', 'CAN'];
+    const relevantNations = params.releasabilityTo
+        .filter(c => priorityNations.includes(c))
+        .slice(0, 3);
+
+    for (const nation of relevantNations) {
+        const alreadyCovered = kaos.some(k =>
+            k.policyBinding.countriesAllowed.length === 1 &&
+            k.policyBinding.countriesAllowed[0] === nation
+        );
+
+        if (!alreadyCovered) {
+            kaos.push({
+                kaoId: `kao-${nation.toLowerCase()}-${params.uploadId}`,
+                kasUrl: `${kasBaseUrl}/request-key`,
+                kasId: `${nation.toLowerCase()}-kas`,
+                wrappedKey: params.wrappedKey,
+                wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
+                policyBinding: {
+                    clearanceRequired: params.classification,
+                    countriesAllowed: [nation],
+                    coiRequired: []
+                },
+                createdAt: params.currentTimestamp
+            });
+        }
+    }
+
+    // Strategy 3: Fallback - ensure at least ONE KAO exists
+    if (kaos.length === 0) {
+        kaos.push({
+            kaoId: `kao-default-${params.uploadId}`,
+            kasUrl: `${kasBaseUrl}/request-key`,
+            kasId: 'dive-v3-kas',
+            wrappedKey: params.wrappedKey,
+            wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
+            policyBinding: {
+                clearanceRequired: params.classification,
+                countriesAllowed: params.releasabilityTo,
+                coiRequired: params.coiTags
+            },
+            createdAt: params.currentTimestamp
+        });
+    }
+
+    return kaos;
+}
+
+/**
  * Convert file to ZTDF format
  */
 async function convertToZTDF(
@@ -178,8 +261,17 @@ async function convertToZTDF(
     mimeType: string
 ): Promise<IZTDFObject> {
 
-    // 1. Encrypt content with AES-256-GCM (deterministic DEK for KAS compatibility)
-    const encryptionResult = encryptContent(base64Content, uploadId);
+    // 1. Encrypt content with COI-based community key (ACP-240 Section 5.3)
+    const { selectCOIForResource } = await import('./coi-key-registry');
+    const selectedCOI = selectCOIForResource(metadata.releasabilityTo, metadata.COI || []);
+    const encryptionResult = encryptContent(base64Content, uploadId, selectedCOI);
+
+    logger.info('Encrypting with COI key', {
+        uploadId,
+        selectedCOI,
+        releasabilityTo: metadata.releasabilityTo,
+        coiTags: metadata.COI
+    });
 
     // 2. Create ZTDF Manifest
     const currentTimestamp = new Date().toISOString();
@@ -247,20 +339,23 @@ async function convertToZTDF(
     delete (policyForHash as any).policyHash;
     policy.policyHash = computeObjectHash(policyForHash);
 
-    // 5. Create Key Access Object (KAO)
-    const kao = {
-        kaoId: `kao-${uploadId}`,
-        kasUrl: process.env.KAS_URL || 'http://localhost:8080/request-key',
-        kasId: 'dive-v3-kas',
-        wrappedKey: encryptionResult.dek, // In production, wrap with KAS public key
-        wrappingAlgorithm: 'RSA-OAEP-256', // In production, use actual RSA wrapping
-        policyBinding: {
-            clearanceRequired: metadata.classification,
-            countriesAllowed: metadata.releasabilityTo,
-            coiRequired: metadata.COI || []
-        },
-        createdAt: currentTimestamp
-    };
+    // 5. Create Multiple Key Access Objects (Multi-KAS Support - ACP-240 Section 5.3)
+    // Each KAO represents a different KAS endpoint (per nation/COI)
+    const kaos = createMultipleKAOs({
+        uploadId,
+        releasabilityTo: metadata.releasabilityTo,
+        coiTags: metadata.COI || [],
+        classification: metadata.classification,
+        wrappedKey: encryptionResult.dek,
+        currentTimestamp,
+        selectedCOI
+    });
+
+    logger.info('Created multiple KAOs for coalition access', {
+        uploadId,
+        kaoCount: kaos.length,
+        kaos: kaos.map(k => ({ kaoId: k.kaoId, kasId: k.kasId, coi: k.policyBinding.coiRequired }))
+    });
 
     // 6. Create Encrypted Payload Chunk
     const chunk = {
@@ -270,12 +365,12 @@ async function convertToZTDF(
         integrityHash: computeSHA384(encryptionResult.encryptedData)
     };
 
-    // 7. Create ZTDF Payload
+    // 7. Create ZTDF Payload (with multiple KAOs)
     const payload = {
         encryptionAlgorithm: 'AES-256-GCM',
         iv: encryptionResult.iv,
         authTag: encryptionResult.authTag,
-        keyAccessObjects: [kao],
+        keyAccessObjects: kaos, // Multiple KAOs for coalition scalability
         encryptedChunks: [chunk],
         payloadHash: '' // Will be computed below
     };

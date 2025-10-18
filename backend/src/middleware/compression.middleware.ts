@@ -91,7 +91,7 @@ export const compressionMiddleware = compression({
  * Logs compression ratio for monitoring
  * (Should be placed AFTER compression middleware)
  */
-export const compressionStats = (req: Request, res: Response, next: express.NextFunction): void => {
+export const compressionStats = (req: Request, res: Response, next: NextFunction): void => {
     const requestId = req.headers['x-request-id'] as string;
 
     // Wrap res.end to calculate compression stats
@@ -100,14 +100,14 @@ export const compressionStats = (req: Request, res: Response, next: express.Next
 
     // Intercept res.write to track original size
     const originalWrite = res.write;
-    res.write = function(chunk: any, ...args: any[]): boolean {
+    res.write = function (chunk: any, ...args: any[]): boolean {
         if (chunk) {
             originalSize += Buffer.byteLength(chunk);
         }
         return originalWrite.apply(res, [chunk, ...args] as any);
     };
 
-    res.end = function(chunk: any, ...args: any[]): any {
+    res.end = function (chunk: any, ...args: any[]): any {
         if (chunk) {
             originalSize += Buffer.byteLength(chunk);
         }
@@ -118,7 +118,7 @@ export const compressionStats = (req: Request, res: Response, next: express.Next
         // Log compression stats
         if (contentEncoding === 'gzip' && compressedSize && originalSize > 0) {
             const ratio = ((1 - (parseInt(compressedSize as string, 10) / originalSize)) * 100).toFixed(2);
-            
+
             logger.debug('Response compressed', {
                 requestId,
                 path: req.path,
