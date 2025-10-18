@@ -86,7 +86,7 @@ describe('Resource Service', () => {
 
             // All resources should have valid integrity
             for (const resource of resources) {
-                const validation = validateZTDFIntegrity(resource.ztdf);
+                const validation = await validateZTDFIntegrity(resource.ztdf);
                 expect(validation.valid).toBe(true);
             }
         });
@@ -254,7 +254,7 @@ describe('Resource Service', () => {
             const resource = await getResourceById('doc-fvey-001');
 
             // Manually verify integrity
-            const validation = validateZTDFIntegrity(resource!.ztdf);
+            const validation = await validateZTDFIntegrity(resource!.ztdf);
             expect(validation.valid).toBe(true);
             expect(validation.errors).toHaveLength(0);
         });
@@ -596,7 +596,7 @@ describe('Resource Service', () => {
             expect(fetched).toBeDefined();
 
             // Verify integrity
-            const validation = validateZTDFIntegrity(fetched!.ztdf);
+            const validation = await validateZTDFIntegrity(fetched!.ztdf);
             expect(validation.valid).toBe(true);
 
             // List
@@ -639,7 +639,7 @@ describe('Resource Service', () => {
 
             // Verify each has valid integrity
             for (const resource of allResources) {
-                const validation = validateZTDFIntegrity(resource.ztdf);
+                const validation = await validateZTDFIntegrity(resource.ztdf);
                 expect(validation.valid).toBe(true);
             }
         });
@@ -685,8 +685,8 @@ describe('Resource Service', () => {
             expect(fetch1).toEqual(fetch2);
 
             // Validate integrity each time
-            const validation1 = validateZTDFIntegrity(fetch1!.ztdf);
-            const validation2 = validateZTDFIntegrity(fetch2!.ztdf);
+            const validation1 = await validateZTDFIntegrity(fetch1!.ztdf);
+            const validation2 = await validateZTDFIntegrity(fetch2!.ztdf);
 
             expect(validation1.valid).toBe(true);
             expect(validation2.valid).toBe(true);
@@ -743,7 +743,7 @@ describe('Resource Service', () => {
             expect(fetched).toBeDefined();
 
             // Content should be encrypted, but structure should be valid
-            const validation = validateZTDFIntegrity(fetched!.ztdf);
+            const validation = await validateZTDFIntegrity(fetched!.ztdf);
             expect(validation.valid).toBe(true);
         });
 

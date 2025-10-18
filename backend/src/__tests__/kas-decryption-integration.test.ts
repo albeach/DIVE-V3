@@ -104,7 +104,7 @@ describe('KAS Decryption Integration Tests', () => {
             for (const resource of resources) {
                 // Import validation function
                 const { validateZTDFIntegrity } = await import('../utils/ztdf.utils');
-                const result = validateZTDFIntegrity(resource.ztdf);
+                const result = await validateZTDFIntegrity(resource.ztdf);
 
                 console.log(`${resource.resourceId}: valid=${result.valid}`);
 

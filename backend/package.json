@@ -19,7 +19,8 @@
         "seed-database": "tsx src/scripts/seed-resources.ts",
         "seed-ztdf": "tsx src/scripts/seed-ztdf-resources.ts",
         "migrate-logs": "tsx src/scripts/migrate-logs-to-mongodb.ts",
-        "optimize-database": "tsx src/scripts/optimize-database.ts"
+        "optimize-database": "tsx src/scripts/optimize-database.ts",
+        "generate-certs": "tsx src/scripts/generate-certificates.ts"
     },
     "keywords": [
         "dive",
@@ -34,6 +35,7 @@
     "dependencies": {
         "@keycloak/keycloak-admin-client": "^26.4.0",
         "@types/multer": "^2.0.0",
+        "@types/uuid": "^10.0.0",
         "axios": "^1.6.2",
         "compression": "^1.8.1",
         "cors": "^2.8.5",
@@ -50,6 +52,7 @@
         "multer": "^2.0.2",
         "node-cache": "^5.1.2",
         "node-forge": "^1.3.1",
+        "uuid": "^11.1.0",
         "winston": "^3.11.0",
         "xml2js": "^0.6.2"
     },

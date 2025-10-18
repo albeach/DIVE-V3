@@ -131,7 +131,7 @@ export async function getAllResources(): Promise<IZTDFResource[]> {
         // Validate ZTDF integrity for all resources
         for (const resource of resources) {
             if (isZTDFResource(resource)) {
-                const validation = validateZTDFIntegrity(resource.ztdf);
+                const validation = await validateZTDFIntegrity(resource.ztdf);
                 if (!validation.valid) {
                     logger.error('ZTDF integrity validation failed', {
                         resourceId: resource.resourceId,
@@ -185,7 +185,7 @@ export async function getResourceById(resourceId: string): Promise<IZTDFResource
 
         // Validate ZTDF integrity (fail-closed)
         if (isZTDFResource(resource)) {
-            const validation = validateZTDFIntegrity(resource.ztdf);
+            const validation = await validateZTDFIntegrity(resource.ztdf);
 
             if (!validation.valid) {
                 logger.error('ZTDF integrity validation failed', {
@@ -238,7 +238,7 @@ export async function createZTDFResource(resource: IZTDFResource): Promise<IZTDF
         const now = new Date();
 
         // Validate ZTDF integrity before storing
-        const validation = validateZTDFIntegrity(resource.ztdf);
+        const validation = await validateZTDFIntegrity(resource.ztdf);
         if (!validation.valid) {
             throw new Error(`ZTDF integrity validation failed: ${validation.errors.join(', ')}`);
         }
