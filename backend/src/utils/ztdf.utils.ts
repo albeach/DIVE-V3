@@ -11,6 +11,7 @@
  */
 
 import crypto from 'crypto';
+import { logger } from './logger';
 import {
     IZTDFObject,
     IZTDFManifest,
@@ -354,20 +355,52 @@ export interface IEncryptionResult {
 
 /**
  * Encrypt plaintext with AES-256-GCM
+ * 
+ * ACP-240 Section 5.3: COI-Based Community Keys
+ * 
+ * Key Selection Priority:
+ * 1. COI-based key (preferred): Shared key per Community of Interest
+ * 2. Deterministic DEK (legacy): For backwards compatibility
+ * 3. Random DEK (fallback): For resources without COI
+ * 
  * Returns: Encrypted data + IV + auth tag + DEK
  */
-export function encryptContent(plaintext: string, resourceId?: string): IEncryptionResult {
-    // Generate DETERMINISTIC DEK if resourceId provided (for KAS pilot)
-    // This matches the seed script pattern so KAS can regenerate the same DEK
+export function encryptContent(
+    plaintext: string,
+    resourceId?: string,
+    coi?: string
+): IEncryptionResult {
     let dek: Buffer;
-    if (resourceId) {
-        // Deterministic DEK for KAS compatibility
+
+    // Priority 1: Use COI-based community key (ACP-240 compliant)
+    if (coi) {
+        const { getCOIKey } = require('../services/coi-key-registry');
+        dek = getCOIKey(coi);
+
+        logger.debug('Using COI community key', {
+            resourceId,
+            coi,
+            keyLength: dek.length * 8
+        });
+    }
+    // Priority 2: Deterministic DEK for backwards compatibility
+    else if (resourceId) {
         const salt = 'dive-v3-pilot-dek-salt';
         const dekHash = crypto.createHash('sha256').update(resourceId + salt).digest();
-        dek = dekHash; // 32 bytes (256 bits) for AES-256-GCM
-    } else {
-        // Random DEK for non-KAS resources
+        dek = dekHash;
+
+        logger.debug('Using deterministic DEK (legacy)', {
+            resourceId,
+            keyLength: dek.length * 8
+        });
+    }
+    // Priority 3: Random DEK fallback
+    else {
         dek = crypto.randomBytes(32);
+
+        logger.warn('Using random DEK (no COI specified)', {
+            keyLength: dek.length * 8
+        });
     }
 
     // Generate random IV (96 bits for GCM)
