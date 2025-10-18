@@ -53,7 +53,7 @@ async function migrateResource(
         // ============================================
         // 2. Validate ZTDF integrity
         // ============================================
-        const validationResult = validateZTDFIntegrity(ztdfObject);
+        const validationResult = await validateZTDFIntegrity(ztdfObject);
 
         if (!validationResult.valid) {
             logger.error(`ZTDF validation failed for ${resource.resourceId}`, {

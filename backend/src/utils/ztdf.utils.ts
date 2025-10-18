@@ -73,7 +73,7 @@ export interface IZTDFValidationResult {
  * 
  * Returns: Validation result (deny access if !valid)
  */
-export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult {
+export async function validateZTDFIntegrity(ztdf: IZTDFObject): Promise<IZTDFValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     const issues: string[] = [];
@@ -156,11 +156,27 @@ export function validateZTDFIntegrity(ztdf: IZTDFObject): IZTDFValidationResult 
 
     // ============================================
     // 4. Validate Policy Signature (if present)
+    // ACP-240 Section 5.4: X.509 or HMAC signatures
     // ============================================
     if (ztdf.policy.policySignature) {
-        // TODO: Implement X.509 signature verification
-        // For now, just log that signature exists
-        warnings.push('Policy signature present but verification not yet implemented');
+        const { verifyPolicySignature } = await import('./policy-signature');
+        const sigResult = await verifyPolicySignature(ztdf.policy);
+
+        if (!sigResult.valid && sigResult.signatureType !== 'none') {
+            errors.push(`Policy signature verification failed: ${sigResult.error || 'Invalid signature'}`);
+            issues.push('Policy signature invalid - possible tampering');
+            logger.error('Policy signature verification FAILED', {
+                signatureType: sigResult.signatureType,
+                error: sigResult.error
+            });
+        } else if (sigResult.valid && sigResult.signatureType !== 'none') {
+            logger.info('Policy signature verified successfully', {
+                signatureType: sigResult.signatureType,
+                certificate: sigResult.certificateInfo
+            });
+        } else {
+            warnings.push('Policy signature present but verification not configured (acceptable for pilot)');
+        }
     }
 
     // ============================================

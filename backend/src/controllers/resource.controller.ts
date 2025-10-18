@@ -201,7 +201,7 @@ export const getZTDFDetailsHandler = async (
         }
 
         // Validate ZTDF integrity
-        const integrityResult = validateZTDFIntegrity(resource.ztdf);
+        const integrityResult = await validateZTDFIntegrity(resource.ztdf);
 
         logger.info('ZTDF integrity validation completed', {
             requestId,
@@ -567,7 +567,7 @@ export const requestKeyHandler = async (
                 // ACP-240 Requirement: STANAG 4778 Cryptographic Binding
                 // ============================================
                 const { validateZTDFIntegrity } = await import('../utils/ztdf.utils');
-                const integrityResult = validateZTDFIntegrity(resource.ztdf);
+                const integrityResult = await validateZTDFIntegrity(resource.ztdf);
 
                 if (!integrityResult.valid) {
                     // FAIL-CLOSED: Deny access on integrity violation

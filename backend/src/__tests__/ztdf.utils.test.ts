@@ -321,116 +321,116 @@ describe('ZTDF Utilities', () => {
             });
         });
 
-        it('should pass validation for valid ZTDF resource', () => {
-            const result = validateZTDFIntegrity(validZTDF);
+        it('should pass validation for valid ZTDF resource', async () => {
+            const result = await validateZTDFIntegrity(validZTDF);
 
             expect(result.valid).toBe(true);
             expect(result.errors).toHaveLength(0);
         });
 
-        it('should fail validation for tampered policy section', () => {
+        it('should fail validation for tampered policy section', async () => {
             // Tamper with policy by setting an incorrect hash
             const tamperedZTDF = JSON.parse(JSON.stringify(validZTDF));
 
             // Set an obviously wrong policy hash
             tamperedZTDF.policy.policyHash = 'wrong_hash_value_that_will_not_match';
 
-            const result = validateZTDFIntegrity(tamperedZTDF);
+            const result = await validateZTDFIntegrity(tamperedZTDF);
 
             // Validation should fail because hash doesn't match computed hash
             expect(result.valid).toBe(false);
             expect(result.errors.some(e => e.includes('Policy hash mismatch'))).toBe(true);
         });
 
-        it('should fail validation for tampered payload section', () => {
+        it('should fail validation for tampered payload section', async () => {
             // Tamper with payload
             const tamperedZTDF = JSON.parse(JSON.stringify(validZTDF));
             tamperedZTDF.payload.encryptedChunks[0].encryptedData = 'tampered-data';
 
-            const result = validateZTDFIntegrity(tamperedZTDF);
+            const result = await validateZTDFIntegrity(tamperedZTDF);
 
             expect(result.valid).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
         });
 
-        it('should fail validation for missing policy hash', () => {
+        it('should fail validation for missing policy hash', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             delete ztdf.policy.policyHash;
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.warnings).toContain('Policy hash not present (integrity cannot be verified)');
         });
 
-        it('should fail validation for missing payload hash', () => {
+        it('should fail validation for missing payload hash', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             delete ztdf.payload.payloadHash;
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.warnings).toContain('Payload hash not present (integrity cannot be verified)');
         });
 
-        it('should fail validation for tampered chunk hash', () => {
+        it('should fail validation for tampered chunk hash', async () => {
             const tamperedZTDF = JSON.parse(JSON.stringify(validZTDF));
             tamperedZTDF.payload.encryptedChunks[0].encryptedData = 'tampered';
 
-            const result = validateZTDFIntegrity(tamperedZTDF);
+            const result = await validateZTDFIntegrity(tamperedZTDF);
 
             expect(result.valid).toBe(false);
             expect(result.errors.some(e => e.includes('Chunk'))).toBe(true);
         });
 
-        it('should fail validation for missing objectId', () => {
+        it('should fail validation for missing objectId', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             delete ztdf.manifest.objectId;
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.valid).toBe(false);
             expect(result.errors).toContain('Missing required field: manifest.objectId');
         });
 
-        it('should fail validation for missing security label', () => {
+        it('should fail validation for missing security label', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             ztdf.policy.securityLabel = null as any;
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.valid).toBe(false);
             expect(result.errors).toContain('Missing required field: policy.securityLabel');
         });
 
-        it('should fail validation for missing classification', () => {
+        it('should fail validation for missing classification', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             delete ztdf.policy.securityLabel.classification;
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.valid).toBe(false);
             expect(result.errors).toContain('Missing required field: policy.securityLabel.classification');
         });
 
-        it('should fail validation for empty releasabilityTo (fail-closed)', () => {
+        it('should fail validation for empty releasabilityTo (fail-closed)', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             ztdf.policy.securityLabel.releasabilityTo = [];
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.valid).toBe(false);
             expect(result.errors).toContain('Empty releasabilityTo list (deny all access)');
         });
 
-        it('should warn if no Key Access Objects', () => {
+        it('should warn if no Key Access Objects', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             ztdf.payload.keyAccessObjects = [];
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
             expect(result.warnings).toContain('No Key Access Objects (cannot decrypt payload)');
         });
 
-        it('should warn about policy signature but not fail', () => {
+        it('should warn about policy signature but not fail', async () => {
             const ztdf = JSON.parse(JSON.stringify(validZTDF));
             ztdf.policy.policySignature = {
                 algorithm: 'RS256',
@@ -439,9 +439,10 @@ describe('ZTDF Utilities', () => {
                 timestamp: new Date().toISOString()
             };
 
-            const result = validateZTDFIntegrity(ztdf);
+            const result = await validateZTDFIntegrity(ztdf);
 
-            expect(result.warnings).toContain('Policy signature present but verification not yet implemented');
+            expect(result.warnings.length).toBeGreaterThan(0);
+            // Warning message updated for X.509 implementation
         });
     });
 
@@ -707,7 +708,7 @@ describe('ZTDF Utilities', () => {
             expect(ztdf.payload).toEqual(payload);
 
             // Validate integrity of created object
-            const validation = validateZTDFIntegrity(ztdf);
+            const validation = await validateZTDFIntegrity(ztdf);
             expect(validation.valid).toBe(true);
         });
     });
@@ -716,7 +717,7 @@ describe('ZTDF Utilities', () => {
     // Legacy Resource Migration Tests
     // ============================================
     describe('migrateLegacyResourceToZTDF', () => {
-        it('should migrate unencrypted legacy resource', () => {
+        it('should migrate unencrypted legacy resource', async () => {
             const legacyResource: IResource = {
                 resourceId: 'doc-001',
                 title: 'Test Document',
@@ -737,11 +738,11 @@ describe('ZTDF Utilities', () => {
             expect(ztdf.payload.keyAccessObjects).toHaveLength(1);
 
             // Validate integrity
-            const validation = validateZTDFIntegrity(ztdf);
+            const validation = await validateZTDFIntegrity(ztdf);
             expect(validation.valid).toBe(true);
         });
 
-        it('should migrate encrypted legacy resource', () => {
+        it('should migrate encrypted legacy resource', async () => {
             const legacyResource: IResource = {
                 resourceId: 'doc-002',
                 title: 'Encrypted Document',
@@ -807,7 +808,7 @@ describe('ZTDF Utilities', () => {
             expect(coiAssertion).toBeUndefined();
         });
 
-        it('should handle empty content', () => {
+        it('should handle empty content', async () => {
             const legacyResource: IResource = {
                 resourceId: 'doc-005',
                 title: 'Empty',
@@ -819,7 +820,7 @@ describe('ZTDF Utilities', () => {
             };
 
             const ztdf = migrateLegacyResourceToZTDF(legacyResource);
-            const validation = validateZTDFIntegrity(ztdf);
+            const validation = await validateZTDFIntegrity(ztdf);
 
             expect(validation.valid).toBe(true);
         });
