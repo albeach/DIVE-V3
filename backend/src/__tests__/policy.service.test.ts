@@ -93,11 +93,7 @@ test_deny_without_clearance {
     // Create spy variables at top level for proper mocking
     let existsSyncSpy: jest.SpyInstance;
     let readFileSyncSpy: jest.SpyInstance;
-    // Spies are used indirectly via jest.spyOn in beforeEach
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let statSyncSpy: jest.SpyInstance;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let readdirSyncSpy: jest.SpyInstance;
+    // Note: statSyncSpy and readdirSyncSpy removed as they were unused
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -116,13 +112,14 @@ test_deny_without_clearance {
             return '';
         }) as any);
 
-        statSyncSpy = jest.spyOn(mockedFs, 'statSync').mockReturnValue({
+        // Mock statSync and readdirSync directly without storing in variables (unused)
+        jest.spyOn(mockedFs, 'statSync').mockReturnValue({
             mtime: new Date('2025-10-14T12:00:00Z'),
             isFile: () => true,
             isDirectory: () => false
         } as any);
 
-        readdirSyncSpy = jest.spyOn(mockedFs, 'readdirSync').mockReturnValue(['policy_test.rego'] as any);
+        jest.spyOn(mockedFs, 'readdirSync').mockReturnValue(['policy_test.rego'] as any);
     });
 
     afterEach(() => {
