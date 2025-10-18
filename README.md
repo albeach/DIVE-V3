@@ -1189,13 +1189,13 @@ curl -X POST http://localhost:8181/v1/data/dive/authorization \
 ### NATO ACP-240 Compliance Status 📊
 
 **Last Assessment**: October 18, 2025  
-**Compliance Level**: **GOLD** ⭐⭐⭐ (95% fully compliant) 🎉
+**Compliance Level**: **PLATINUM** 🏅 (98% fully compliant) 🎉
 
 #### Summary
 - **Total Requirements**: 58 across 10 ACP-240 sections
-- **Fully Compliant**: 55 requirements (95%)
-- **Partially Compliant**: 3 requirements (5%)
-- **HIGH/CRITICAL Gaps**: ✅ **ZERO** - All HIGH priority gaps remediated (Oct 18)
+- **Fully Compliant**: 57 requirements (98%)
+- **Partially Compliant**: 1 requirement (2%)
+- **CRITICAL/HIGH/MEDIUM Gaps**: ✅ **ZERO** - All priority gaps remediated (Oct 18)
 
 #### Key Achievements ✅
 - ✅ **Multi-KAS Support** - Multiple KAOs per resource for coalition scalability (Oct 18)
