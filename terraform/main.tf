@@ -57,10 +57,10 @@ resource "keycloak_realm" "dive_v3" {
   # ACP-240 aligned password policy
   password_policy = "upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and length(12)"
   
-  # Token lifetimes
+  # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
   access_token_lifespan = "15m"   # 15 minutes
-  sso_session_idle_timeout = "8h" # 8 hours
-  sso_session_max_lifespan = "12h" # 12 hours
+  sso_session_idle_timeout = "15m" # 15 minutes (AAL2 requirement - was 8h)
+  sso_session_max_lifespan = "8h" # 8 hours (reduced from 12h for AAL2 alignment)
 }
 
 # ============================================
@@ -241,6 +241,65 @@ resource "keycloak_generic_protocol_mapper" "roles_mapper" {
 }
 
 # ============================================
+# AAL2/FAL2 Mappers (NIST SP 800-63B/C)
+# ============================================
+# Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 457-468
+
+# ACR mapper - map from user attribute to token claim
+resource "keycloak_generic_protocol_mapper" "acr_mapper" {
+  realm_id   = keycloak_realm.dive_v3.id
+  client_id  = keycloak_openid_client.dive_v3_app.id
+  name       = "acr-attribute-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "acr"
+    "claim.name"           = "acr"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# AMR mapper - map from user attribute to token claim
+resource "keycloak_generic_protocol_mapper" "amr_mapper" {
+  realm_id   = keycloak_realm.dive_v3.id
+  client_id  = keycloak_openid_client.dive_v3_app.id
+  name       = "amr-attribute-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "amr"
+    "claim.name"           = "amr"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# Auth time - use session note (Keycloak automatically tracks this)
+resource "keycloak_generic_protocol_mapper" "auth_time_mapper" {
+  realm_id   = keycloak_realm.dive_v3.id
+  client_id  = keycloak_openid_client.dive_v3_app.id
+  name       = "auth-time-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"    = "AUTH_TIME"
+    "claim.name"           = "auth_time"
+    "jsonType.label"       = "long"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# ============================================
 # Realm Roles
 # ============================================
 
@@ -282,6 +341,9 @@ resource "keycloak_user" "test_user_us_secret" {
     clearance              = "SECRET"
     countryOfAffiliation   = "USA"
     acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\"]"
+    # AAL2/FAL2 attributes (simulated for testing)
+    acr                    = "urn:mace:incommon:iap:silver"
+    amr                    = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {
@@ -306,6 +368,9 @@ resource "keycloak_user" "test_user_us_confid" {
     clearance              = "CONFIDENTIAL"
     countryOfAffiliation   = "USA"
     acpCOI                 = "[\"FVEY\"]"
+    # AAL2/FAL2 attributes
+    acr                    = "urn:mace:incommon:iap:silver"
+    amr                    = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {
@@ -330,6 +395,9 @@ resource "keycloak_user" "test_user_us_unclass" {
     clearance              = "UNCLASSIFIED"
     countryOfAffiliation   = "USA"
     acpCOI                 = "[]"
+    # AAL2/FAL2 attributes (AAL1 for contractor - password only)
+    acr                    = "urn:mace:incommon:iap:bronze"
+    amr                    = "[\"pwd\"]"
   }
 
   initial_password {
@@ -390,6 +458,9 @@ resource "keycloak_user" "france_user" {
     clearance              = "SECRET"  # Standard DIVE clearance level
     countryOfAffiliation   = "FRA"
     acpCOI                 = "[\"NATO-COSMIC\"]"
+    # AAL2/FAL2 attributes
+    acr                    = "urn:mace:incommon:iap:silver"
+    amr                    = "[\"pwd\",\"otp\"]"
   }
   
   initial_password {
@@ -682,6 +753,9 @@ resource "keycloak_user" "canada_user" {
     clearance              = "CONFIDENTIAL"
     countryOfAffiliation   = "CAN"
     acpCOI                 = "[\"CAN-US\"]"
+    # AAL2/FAL2 attributes
+    acr                    = "urn:mace:incommon:iap:silver"
+    amr                    = "[\"pwd\",\"otp\"]"
   }
   
   initial_password {
@@ -888,6 +962,9 @@ resource "keycloak_user" "industry_user" {
     # No clearance - will default to UNCLASSIFIED via enrichment
     # No countryOfAffiliation - will be inferred from email domain via enrichment
     # No acpCOI - will default to empty array
+    # AAL2/FAL2 attributes (AAL1 for contractor - password only)
+    acr = "urn:mace:incommon:iap:bronze"
+    amr = "[\"pwd\"]"
   }
   
   initial_password {

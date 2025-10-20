@@ -33,6 +33,7 @@ const OPA_DECISION_ENDPOINT = `${OPA_URL}/v1/data/dive/authorization`;
 
 /**
  * Interface for JWT payload (Keycloak token)
+ * Enhanced with NIST SP 800-63B/C claims for AAL2/FAL2 enforcement
  */
 interface IKeycloakToken {
     sub: string;
@@ -44,6 +45,11 @@ interface IKeycloakToken {
     acpCOI?: string[];
     exp?: number;
     iat?: number;
+    // AAL2/FAL2 claims (NIST SP 800-63B/C)
+    aud?: string | string[];  // Audience (FAL2 - prevents token theft)
+    acr?: string;              // Authentication Context Class Reference (AAL level)
+    amr?: string[];            // Authentication Methods Reference (MFA factors)
+    auth_time?: number;        // Time of authentication (Unix timestamp)
 }
 
 /**
@@ -74,6 +80,10 @@ interface IOPAInput {
             sourceIP: string;
             deviceCompliant: boolean;
             requestId: string;
+            // AAL2/FAL2 context (NIST SP 800-63B/C)
+            acr?: string;        // Authentication Context Class Reference (AAL level)
+            amr?: string[];      // Authentication Methods Reference (MFA factors)
+            auth_time?: number;  // Time of authentication (Unix timestamp)
         };
     };
 }
@@ -202,6 +212,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
                 {
                     algorithms: ['RS256'],
                     issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
+                    audience: 'dive-v3-client', // FAL2 requirement: strict audience validation
                 },
                 (err, decoded) => {
                     if (err) {
@@ -218,6 +229,65 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         });
         throw error;
     }
+};
+
+/**
+ * Validate AAL2 (Authentication Assurance Level 2) requirements
+ * Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 46-94
+ * 
+ * AAL2 Requirements:
+ * - Multi-factor authentication (MFA) required
+ * - At least 2 authentication factors (something you know + something you have)
+ * - ACR (Authentication Context Class Reference) indicates AAL2+
+ * - AMR (Authentication Methods Reference) shows 2+ factors
+ * 
+ * @param token - Decoded Keycloak token
+ * @param classification - Resource classification level
+ * @throws Error if AAL2 requirements not met for classified resources
+ */
+const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
+    // AAL2 requirement only applies to classified resources
+    if (classification === 'UNCLASSIFIED') {
+        return;
+    }
+
+    // Check ACR (Authentication Context Class Reference)
+    const acr = token.acr || '';
+
+    // AAL2 indicators: InCommon IAP Silver, explicit aal2, multi-factor
+    const isAAL2 =
+        acr.includes('silver') ||    // InCommon IAP Silver = AAL2
+        acr.includes('aal2') ||       // Explicit AAL2
+        acr.includes('multi-factor') || // Generic MFA indicator
+        acr.includes('gold');         // InCommon IAP Gold = AAL3 (also satisfies AAL2)
+
+    if (!isAAL2) {
+        logger.warn('AAL2 validation failed', {
+            classification,
+            acr,
+            reason: 'Classified resources require AAL2 (MFA)'
+        });
+        throw new Error(`Classified resources require AAL2 (MFA). Current ACR: ${acr || 'missing'}`);
+    }
+
+    // Check AMR (Authentication Methods Reference) - verify 2+ factors
+    const amr = token.amr || [];
+    if (amr.length < 2) {
+        logger.warn('MFA validation failed', {
+            classification,
+            amr,
+            factorCount: amr.length,
+            reason: 'AAL2 requires at least 2 authentication factors'
+        });
+        throw new Error(`MFA required: at least 2 factors needed for ${classification}, got ${amr.length}: [${amr.join(', ')}]`);
+    }
+
+    logger.debug('AAL2 validation passed', {
+        classification,
+        acr,
+        amr,
+        factorCount: amr.length
+    });
 };
 
 /**
@@ -575,6 +645,36 @@ export const authzMiddleware = async (
         }
 
         // ============================================
+        // AAL2/FAL2 Validation (NIST SP 800-63B/C)
+        // ============================================
+        // Validate AAL2 (Authentication Assurance Level 2) for classified resources
+        // This check must happen BEFORE OPA authorization to ensure authentication strength
+        // Reference: docs/IDENTITY-ASSURANCE-LEVELS.md
+        try {
+            const classification = resource && 'ztdf' in resource
+                ? resource.ztdf.policy.securityLabel.classification
+                : (resource as any)?.classification || 'UNCLASSIFIED';
+
+            validateAAL2(decodedToken, classification);
+        } catch (error) {
+            logger.warn('AAL2 validation failed', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                resourceId,
+            });
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'Authentication strength insufficient',
+                details: {
+                    reason: error instanceof Error ? error.message : 'AAL2 validation failed',
+                    requirement: 'Classified resources require AAL2 (Multi-Factor Authentication)',
+                    reference: 'NIST SP 800-63B, IDENTITY-ASSURANCE-LEVELS.md'
+                },
+            });
+            return;
+        }
+
+        // ============================================
         // Step 4: Check decision cache
         // ============================================
 
@@ -678,6 +778,10 @@ export const authzMiddleware = async (
                     sourceIP: (req.ip || req.socket.remoteAddress || 'unknown'),
                     deviceCompliant: true, // Week 3: Add device compliance check
                     requestId,
+                    // AAL2/FAL2 context (NIST SP 800-63B/C) - for OPA policy evaluation
+                    acr: decodedToken.acr,        // Authentication Context Class Reference
+                    amr: decodedToken.amr,        // Authentication Methods Reference
+                    auth_time: decodedToken.auth_time, // Time of authentication
                 },
             },
         };

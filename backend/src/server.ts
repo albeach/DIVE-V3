@@ -10,6 +10,7 @@ import policyRoutes from './routes/policy.routes';
 import uploadRoutes from './routes/upload.routes';
 import adminRoutes from './routes/admin.routes';
 import publicRoutes from './routes/public.routes';
+import complianceRoutes from './routes/compliance.routes';
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -72,6 +73,7 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/policies', policyRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/compliance', complianceRoutes);
 
 // Root endpoint
 app.get('/', (_req, res) => {

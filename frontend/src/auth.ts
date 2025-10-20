@@ -356,8 +356,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     session: {
         strategy: "database",
-        maxAge: 8 * 60 * 60, // 8 hours
-        updateAge: 24 * 60 * 60, // Update session every 24 hours
+        maxAge: 15 * 60, // 15 minutes (AAL2 compliant - aligns with Keycloak session timeout)
+        updateAge: 15 * 60, // Update session every 15 minutes (matches maxAge for AAL2)
     },
     cookies: {
         sessionToken: {
