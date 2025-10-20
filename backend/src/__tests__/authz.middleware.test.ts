@@ -117,17 +117,32 @@ describe('Authorization Middleware (PEP)', () => {
             signature: 'mock-signature'
         } as any);
 
-        // Mock jwt.verify - default to successful verification
-        jest.spyOn(jwt, 'verify').mockImplementation(((_token: any, _key: any, _options: any, callback: any) => {
-            callback(null, {
-                sub: 'testuser-us',
-                uniqueID: 'testuser-us',
-                clearance: 'SECRET',
-                countryOfAffiliation: 'USA',
-                acpCOI: ['FVEY'],
-                exp: Math.floor(Date.now() / 1000) + 3600,
-                iat: Math.floor(Date.now() / 1000)
-            });
+        // Mock jwt.verify - decode actual token and validate audience
+        jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
+            try {
+                // Manually decode JWT by parsing base64 payload (jwt.decode is also mocked)
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    callback(new Error('invalid token'), null);
+                    return;
+                }
+
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+
+                // Validate audience if specified (FAL2 requirement)
+                if (options?.audience) {
+                    const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+                    if (!tokenAud || !tokenAud.includes(options.audience)) {
+                        callback(new Error('jwt audience invalid'), null);
+                        return;
+                    }
+                }
+
+                // Return the decoded payload (has aud, acr, amr, auth_time)
+                callback(null, payload);
+            } catch (error) {
+                callback(new Error('invalid token'), null);
+            }
         }) as any);
 
         // Mock OPA responses - default to allow
@@ -311,17 +326,32 @@ describe('Authorization Middleware (PEP)', () => {
             // Reset next mock
             next = jest.fn();
 
-            // Reset JWT mocks for authz tests
-            jest.spyOn(jwt, 'verify').mockImplementation(((_token: any, _key: any, _options: any, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'SECRET',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['FVEY'],
-                    exp: Math.floor(Date.now() / 1000) + 3600,
-                    iat: Math.floor(Date.now() / 1000)
-                });
+            // Reset JWT mocks for authz tests - decode actual token and validate audience
+            jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
+                try {
+                    // Manually decode JWT by parsing base64 payload
+                    const parts = token.split('.');
+                    if (parts.length !== 3) {
+                        callback(new Error('invalid token'), null);
+                        return;
+                    }
+
+                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+
+                    // Validate audience if specified (FAL2 requirement)
+                    if (options?.audience) {
+                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+                        if (!tokenAud || !tokenAud.includes(options.audience)) {
+                            callback(new Error('jwt audience invalid'), null);
+                            return;
+                        }
+                    }
+
+                    // Return the decoded payload
+                    callback(null, payload);
+                } catch (error) {
+                    callback(new Error('invalid token'), null);
+                }
             }) as any);
 
             // Clear call history on service mocks (will be set per test)
@@ -729,14 +759,31 @@ describe('Authorization Middleware (PEP)', () => {
             req.headers!['x-request-id'] = 'test-req-123';
             req.params!.id = 'doc-fvey-001';
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'SECRET',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['FVEY']
-                });
+            // Decode actual token and validate audience
+            jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
+                try {
+                    // Manually decode JWT by parsing base64 payload
+                    const parts = token.split('.');
+                    if (parts.length !== 3) {
+                        callback(new Error('invalid token'), null);
+                        return;
+                    }
+
+                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+
+                    // Validate audience if specified
+                    if (options?.audience) {
+                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+                        if (!tokenAud || !tokenAud.includes(options.audience)) {
+                            callback(new Error('jwt audience invalid'), null);
+                            return;
+                        }
+                    }
+
+                    callback(null, payload);
+                } catch (error) {
+                    callback(new Error('invalid token'), null);
+                }
             });
         });
 
@@ -843,20 +890,34 @@ describe('Authorization Middleware (PEP)', () => {
         beforeEach(() => {
             req.params = { id: 'doc-concurrent-1' };
             req.headers!['x-request-id'] = 'test-req-123';
-            const token = createUSUserJWT();
+            const token = createUSUserJWT({ clearance: 'CONFIDENTIAL' });
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
-                callback(null, {
-                    sub: 'testuser-us',
-                    uniqueID: 'testuser-us',
-                    clearance: 'CONFIDENTIAL',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['FVEY'],
-                    iss: 'http://localhost:8081/realms/dive-v3-pilot',
-                    aud: 'dive-v3-client',
-                    exp: Math.floor(Date.now() / 1000) + 3600
-                });
+            // Decode actual token and validate audience
+            jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
+                try {
+                    // Manually decode JWT by parsing base64 payload
+                    const parts = token.split('.');
+                    if (parts.length !== 3) {
+                        callback(new Error('invalid token'), null);
+                        return;
+                    }
+
+                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+
+                    // Validate audience if specified
+                    if (options?.audience) {
+                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+                        if (!tokenAud || !tokenAud.includes(options.audience)) {
+                            callback(new Error('jwt audience invalid'), null);
+                            return;
+                        }
+                    }
+
+                    callback(null, payload);
+                } catch (error) {
+                    callback(new Error('invalid token'), null);
+                }
             });
         });
 
