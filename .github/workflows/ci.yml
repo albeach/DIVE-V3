@@ -60,16 +60,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
-      opa:
-        image: openpolicyagent/opa:0.68.0
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -85,11 +75,14 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
-      - name: Wait for Services
+      - name: Start OPA Server
         run: |
-          echo "Waiting for MongoDB and OPA..."
-          sleep 10
-          curl --retry 5 --retry-delay 2 http://localhost:8181/health
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          sleep 5
+          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+          echo "OPA server started successfully"
       
       - name: Run Unit Tests
         run: cd backend && npm run test -- --maxWorkers=2
@@ -128,16 +121,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
-      opa:
-        image: openpolicyagent/opa:0.68.0
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -153,11 +136,14 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
-      - name: Wait for Services
+      - name: Start OPA Server
         run: |
-          echo "Waiting for MongoDB and OPA..."
-          sleep 10
-          curl --retry 5 --retry-delay 2 http://localhost:8181/health
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          sleep 5
+          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+          echo "OPA server started successfully"
       
       - name: Load OPA Policies
         run: |
@@ -302,16 +288,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
-      opa:
-        image: openpolicyagent/opa:0.68.0
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -327,10 +303,14 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
-      - name: Wait for Services
+      - name: Start OPA Server
         run: |
-          sleep 10
-          curl --retry 5 --retry-delay 2 http://localhost:8181/health
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          sleep 5
+          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+          echo "OPA server started successfully"
       
       - name: Run Performance Tests
         run: cd backend && npm run test -- --testPathPattern="performance" --maxWorkers=2 || echo "Performance tests completed"
@@ -423,16 +403,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
-      opa:
-        image: openpolicyagent/opa:0.68.0
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -448,10 +418,14 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
-      - name: Wait for Services
+      - name: Start OPA Server
         run: |
-          sleep 10
-          curl --retry 5 --retry-delay 2 http://localhost:8181/health
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          sleep 5
+          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+          echo "OPA server started successfully"
       
       - name: Run Tests with Coverage
         run: cd backend && npm run test -- --coverage --maxWorkers=2
