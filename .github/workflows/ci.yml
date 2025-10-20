@@ -85,7 +85,7 @@ jobs:
           echo "OPA server started successfully"
       
       - name: Run Unit Tests
-        run: cd backend && npm run test -- --maxWorkers=2
+        run: cd backend && npm run test
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
@@ -153,7 +153,7 @@ jobs:
             --data-binary @policies/admin_authorization_policy.rego
       
       - name: Run Integration Tests
-        run: cd backend && npm run test -- --testPathPattern="integration" --maxWorkers=2
+        run: cd backend && npm run test:integration
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
@@ -313,7 +313,7 @@ jobs:
           echo "OPA server started successfully"
       
       - name: Run Performance Tests
-        run: cd backend && npm run test -- --testPathPattern="performance" --maxWorkers=2 || echo "Performance tests completed"
+        run: cd backend && npm run test -- --testPathPattern="performance" || echo "Performance tests completed"
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
@@ -428,7 +428,7 @@ jobs:
           echo "OPA server started successfully"
       
       - name: Run Tests with Coverage
-        run: cd backend && npm run test -- --coverage --maxWorkers=2
+        run: cd backend && npm run test -- --coverage
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
