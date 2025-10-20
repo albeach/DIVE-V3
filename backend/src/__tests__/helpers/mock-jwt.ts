@@ -19,6 +19,11 @@ export interface IJWTPayload {
     iss?: string;
     exp?: number;
     iat?: number;
+    // AAL2/FAL2 claims
+    aud?: string | string[];
+    acr?: string;
+    amr?: string[];
+    auth_time?: number;
 }
 
 /**
@@ -49,15 +54,20 @@ export function createMockJWT(claims: Partial<IJWTPayload> = {}, secret: string 
         countryOfAffiliation: 'USA',
         acpCOI: ['FVEY'],
         iss: DEFAULT_ISSUER,
+        aud: 'dive-v3-client',  // AAL2/FAL2: Default audience
         exp: now + 3600, // Expires in 1 hour
-        iat: now
+        iat: now,
+        // AAL2/FAL2 defaults
+        acr: 'urn:mace:incommon:iap:silver',  // Default to AAL2
+        amr: ['pwd', 'otp'],  // Default to MFA
+        auth_time: now
     };
 
     return jwt.sign({ ...defaultClaims, ...claims }, secret, { algorithm: 'HS256' });
 }
 
 /**
- * Create a JWT for a U.S. user with SECRET clearance
+ * Create a JWT for a U.S. user with SECRET clearance (or override)
  */
 export function createUSUserJWT(overrides: Partial<IJWTPayload> = {}): string {
     return createMockJWT({
@@ -67,6 +77,9 @@ export function createUSUserJWT(overrides: Partial<IJWTPayload> = {}): string {
         clearance: 'SECRET',
         countryOfAffiliation: 'USA',
         acpCOI: ['FVEY'],
+        aud: 'dive-v3-client',  // Ensure audience is always included
+        acr: 'urn:mace:incommon:iap:silver',
+        amr: ['pwd', 'otp'],
         ...overrides
     });
 }

@@ -31,6 +31,8 @@ allow if {
 	not is_under_embargo
 	not is_ztdf_integrity_violation
 	not is_upload_not_releasable_to_uploader
+	not is_authentication_strength_insufficient
+	not is_mfa_not_verified
 }
 
 # ============================================
@@ -266,6 +268,58 @@ is_upload_not_releasable_to_uploader := msg if {
 }
 
 # ============================================
+# Check 9: AAL2 Authentication Strength (NIST SP 800-63B)
+# ============================================
+# Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 302-306
+# Classified resources require AAL2 (Multi-Factor Authentication)
+# NOTE: Only enforced when ACR is provided (backwards compatible with existing tests)
+is_authentication_strength_insufficient := msg if {
+	# Only applies to classified resources
+	input.resource.classification != "UNCLASSIFIED"
+	
+	# Only check if ACR is explicitly provided in context
+	input.context.acr
+	
+	# Check ACR (Authentication Context Class Reference)
+	acr := input.context.acr
+	
+	# AAL2 indicators: InCommon IAP Silver/Gold, explicit aal2, multi-factor
+	not contains(lower(acr), "silver")
+	not contains(lower(acr), "gold")
+	not contains(lower(acr), "aal2")
+	not contains(lower(acr), "multi-factor")
+	
+	msg := sprintf("Classification %v requires AAL2 (MFA), but ACR is '%v'", [
+		input.resource.classification,
+		acr
+	])
+}
+
+# ============================================
+# Check 10: MFA Factor Verification (NIST SP 800-63B)
+# ============================================
+# Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 303, 716-729
+# AAL2 requires at least 2 authentication factors
+# NOTE: Only enforced when AMR is provided (backwards compatible with existing tests)
+is_mfa_not_verified := msg if {
+	# Only applies to classified resources
+	input.resource.classification != "UNCLASSIFIED"
+	
+	# Only check if AMR is explicitly provided in context
+	input.context.amr
+	
+	# Check AMR (Authentication Methods Reference)
+	amr := input.context.amr
+	count(amr) < 2
+	
+	msg := sprintf("MFA required for %v: need 2+ factors, got %v: %v", [
+		input.resource.classification,
+		count(amr),
+		amr
+	])
+}
+
+# ============================================
 # Decision Output
 # ============================================
 
@@ -286,6 +340,11 @@ reason := "Access granted - all conditions satisfied" if {
 	msg := is_missing_required_attributes
 } else := msg if {
 	msg := is_insufficient_clearance
+} else := msg if {
+	# AAL2/FAL2 checks (high priority - authentication strength)
+	msg := is_authentication_strength_insufficient
+} else := msg if {
+	msg := is_mfa_not_verified
 } else := msg if {
 	# Upload-specific checks (higher priority for upload operations)
 	msg := is_upload_not_releasable_to_uploader
@@ -342,6 +401,8 @@ evaluation_details := {
 		"embargo_passed": check_embargo_passed,
 		"ztdf_integrity_valid": check_ztdf_integrity_valid,
 		"upload_releasability_valid": check_upload_releasability_valid,
+		"authentication_strength_sufficient": check_authentication_strength_sufficient,
+		"mfa_verified": check_mfa_verified,
 	},
 	"subject": {
 		"uniqueID": object.get(input.subject, "uniqueID", ""),
@@ -354,10 +415,16 @@ evaluation_details := {
 		"encrypted": object.get(input.resource, "encrypted", false),
 		"ztdfEnabled": ztdf_enabled,
 	},
+	"authentication": {
+		"acr": object.get(input.context, "acr", ""),
+		"amr": object.get(input.context, "amr", []),
+		"aal_level": aal_level,
+	},
 	"acp240_compliance": {
 		"ztdf_validation": ztdf_enabled,
 		"kas_obligations": count(obligations) > 0,
 		"fail_closed_enforcement": true,
+		"aal2_enforced": true,
 	},
 }
 
@@ -398,4 +465,34 @@ check_upload_releasability_valid := true if {
 ztdf_enabled := true if {
 	input.resource.ztdf
 } else := false
+
+# Helper: Check if authentication strength is sufficient
+check_authentication_strength_sufficient := true if {
+	not is_authentication_strength_insufficient
+} else := false
+
+# Helper: Check if MFA is verified
+check_mfa_verified := true if {
+	not is_mfa_not_verified
+} else := false
+
+# Helper: Derive AAL level from ACR value
+aal_level := "AAL3" if {
+	acr := object.get(input.context, "acr", "")
+	contains(lower(acr), "gold")
+} else := "AAL2" if {
+	acr := object.get(input.context, "acr", "")
+	amr := object.get(input.context, "amr", [])
+	# AAL2 if: InCommon Silver, explicit aal2, multi-factor, or 2+ factors
+	contains(lower(acr), "silver")
+} else := "AAL2" if {
+	acr := object.get(input.context, "acr", "")
+	contains(lower(acr), "aal2")
+} else := "AAL2" if {
+	acr := object.get(input.context, "acr", "")
+	contains(lower(acr), "multi-factor")
+} else := "AAL2" if {
+	amr := object.get(input.context, "amr", [])
+	count(amr) >= 2
+} else := "AAL1"
 

@@ -130,6 +130,11 @@ export interface IACP240AuditEvent {
         clearance?: string;
         countryOfAffiliation?: string;
         acpCOI?: string[];
+        // AAL2/FAL2 attributes (NIST SP 800-63B/C)
+        acr?: string;        // Authentication Context Class Reference
+        amr?: string[];      // Authentication Methods Reference
+        auth_time?: number;  // Time of authentication
+        aal_level?: string;  // Derived AAL level (AAL1/AAL2/AAL3)
     };
 
     /** Resource attributes (for policy correlation) */

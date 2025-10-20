@@ -57,6 +57,7 @@ export default function Navigation({ user }: INavigationProps) {
         { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
         { name: 'Documents', href: '/resources', icon: '📄' },
         { name: 'Policies', href: '/policies', icon: '📜' },
+        { name: 'Compliance', href: '/compliance', icon: '🏆' },
         { name: 'Upload', href: '/upload', icon: '📤' },
     ];
 

@@ -148,7 +148,48 @@ For questions about prompts or gap analysis:
 
 ---
 
-**Last Updated**: October 17, 2025  
+---
+
+### 3. Identity Assurance Levels Gap Analysis (NEW 🆕)
+
+**Files**:
+- `IDENTITY-ASSURANCE-GAP-ANALYSIS-PROMPT.md` - Main comprehensive prompt
+- `IDENTITY-ASSURANCE-QUICK-START.md` - 5-minute quick start guide
+- `AAL-FAL-INVESTIGATION-GUIDE.md` - File-by-file investigation checklist
+
+**Purpose**: Verify and enforce NIST SP 800-63B/C (AAL2/FAL2) identity assurance requirements
+
+**Context**: DIVE V3 has documented AAL2/FAL2 requirements in `docs/IDENTITY-ASSURANCE-LEVELS.md` (652 lines), but enforcement in code is unclear. This prompt conducts systematic investigation to verify implementation.
+
+**Scope**:
+- JWT middleware: Validate `acr`, `amr`, `auth_time` claims
+- OPA policies: Check authentication strength for SECRET/TOP_SECRET
+- Keycloak config: Enforce MFA, 15-min session timeouts
+- IdP scoring: Require AAL2 for approval
+- Tests: Add 20+ AAL/FAL enforcement tests
+
+**Deliverables**:
+1. `IDENTITY-ASSURANCE-GAP-ANALYSIS.md` - Gap report with evidence
+2. Code fixes (CRITICAL + HIGH priority gaps)
+3. 20+ new tests (AAL/FAL enforcement)
+4. Updated docs (plan, changelog, README)
+5. CI/CD verification
+
+**Timeline**: 4-6 hours
+
+**Priority**: HIGH (ACP-240 Section 2.1 compliance)
+
+**How to Use**:
+1. Start new AI chat session
+2. Copy/paste starter text from `IDENTITY-ASSURANCE-QUICK-START.md`
+3. Let AI read all 3 guide documents
+4. AI investigates codebase systematically
+5. Review gap analysis report when complete
+6. Verify all tests passing and CI/CD green
+
+---
+
+**Last Updated**: October 19, 2025  
 **Maintainer**: DIVE V3 Development Team  
 **Repository**: https://github.com/albeach/DIVE-V3
 
