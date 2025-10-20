@@ -653,7 +653,7 @@ describe('ZTDF Utilities', () => {
     });
 
     describe('createZTDFObject', () => {
-        it('should create complete ZTDF object', () => {
+        it('should create complete ZTDF object', async () => {
             const encrypted = encryptContent('test content');
             const manifest = createZTDFManifest({
                 objectId: 'test-001',
