@@ -131,6 +131,24 @@ resource "keycloak_role" "broker_super_admin" {
 }
 
 # Protocol mappers for broker client (to include all DIVE attributes)
+
+# CRITICAL: Audience Mapper - ensures JWT tokens have correct 'aud' claim for backend verification
+resource "keycloak_generic_protocol_mapper" "broker_audience" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "audience-mapper"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-audience-mapper"
+
+  config = {
+    "included.client.audience"    = "dive-v3-client-broker"
+    "id.token.claim"              = "true"
+    "access.token.claim"          = "true"
+    "introspection.token.claim"   = "true"
+    "userinfo.token.claim"        = "true"
+  }
+}
+
 resource "keycloak_generic_protocol_mapper" "broker_uniqueid" {
   realm_id   = keycloak_realm.dive_v3_broker.id
   client_id  = keycloak_openid_client.dive_v3_app_broker.id

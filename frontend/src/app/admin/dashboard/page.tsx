@@ -1,7 +1,12 @@
 /**
- * Super Admin Dashboard
+ * Super Admin Dashboard - Complete Revamp
  * 
- * Overview of system metrics, recent activity, and quick actions
+ * Comprehensive analytics platform with:
+ * - Real-time system metrics
+ * - Interactive data visualizations
+ * - Drill-down capabilities
+ * - Multi-dimensional insights
+ * - Modern 2025 UI patterns
  */
 
 'use client';
@@ -11,75 +16,43 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
 
-interface IStats {
-    totalEvents: number;
-    eventsByType: Record<string, number>;
-    deniedAccess: number;
-    successfulAccess: number;
-    topDeniedResources: Array<{ resourceId: string; count: number }>;
-    topUsers: Array<{ subject: string; count: number }>;
-}
+// Import all analytics components
+import SystemOverviewSection from '@/components/admin/dashboard/system-overview-section';
+import AuthorizationAnalytics from '@/components/admin/dashboard/authorization-analytics';
+import SecurityPosture from '@/components/admin/dashboard/security-posture';
+import ThreatIntelligence from '@/components/admin/dashboard/threat-intelligence';
+import PerformanceMetrics from '@/components/admin/dashboard/performance-metrics';
+import ComplianceOverview from '@/components/admin/dashboard/compliance-overview';
+import RealTimeActivity from '@/components/admin/dashboard/realtime-activity';
+import ResourceAnalytics from '@/components/admin/dashboard/resource-analytics';
+
+type TabView = 'overview' | 'authz' | 'security' | 'threats' | 'performance' | 'compliance' | 'realtime' | 'resources';
 
 export default function AdminDashboard() {
     const router = useRouter();
     const { data: session, status } = useSession();
-    const [stats, setStats] = useState<IStats | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState<TabView>('overview');
+    const [dateRange, setDateRange] = useState<'24h' | '7d' | '30d' | '90d'>('7d');
+    const [autoRefresh, setAutoRefresh] = useState(true);
+    const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
+    // Auto-refresh every 30 seconds
     useEffect(() => {
-        if (status === 'authenticated' && session?.accessToken) {
-            fetchStats();
-        }
-    }, [status, session?.accessToken]);
+        if (!autoRefresh) return;
 
-    const fetchStats = async () => {
-        setLoading(true);
+        const interval = setInterval(() => {
+            setLastRefresh(new Date());
+        }, 30000);
 
-        try {
-            const token = (session as any)?.accessToken;
-            if (!token) {
-                console.warn('No access token available');
-                setLoading(false);
-                return;
-            }
+        return () => clearInterval(interval);
+    }, [autoRefresh]);
 
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/logs/stats?days=7`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
-            );
-
-            // Check if response is JSON before parsing
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                console.error('Expected JSON response but got:', contentType);
-                setLoading(false);
-                return;
-            }
-
-            const result = await response.json();
-
-            if (response.ok && result.success) {
-                setStats(result.data);
-            } else {
-                console.error('API error:', result.error || 'Unknown error');
-            }
-        } catch (error) {
-            console.error('Failed to fetch stats:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (status === 'loading' || loading) {
+    if (status === 'loading') {
         return (
-            <div className="flex min-h-screen items-center justify-center">
+            <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading dashboard...</p>
+                    <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
+                    <p className="mt-4 text-lg text-gray-600">Loading Dashboard...</p>
                 </div>
             </div>
         );
@@ -90,6 +63,17 @@ export default function AdminDashboard() {
         return null;
     }
 
+    const tabs = [
+        { id: 'overview', label: '📊 Overview', icon: '📊', description: 'System-wide metrics' },
+        { id: 'authz', label: '🔐 Authorization', icon: '🔐', description: 'Access decisions & patterns' },
+        { id: 'security', label: '🛡️ Security', icon: '🛡️', description: 'Security posture' },
+        { id: 'threats', label: '⚠️ Threats', icon: '⚠️', description: 'Threat intelligence' },
+        { id: 'performance', label: '⚡ Performance', icon: '⚡', description: 'System performance' },
+        { id: 'compliance', label: '✅ Compliance', icon: '✅', description: 'Standards & SLA' },
+        { id: 'realtime', label: '📡 Live Feed', icon: '📡', description: 'Real-time activity' },
+        { id: 'resources', label: '📁 Resources', icon: '📁', description: 'Resource analytics' }
+    ];
+
     return (
         <PageLayout 
             user={session?.user || {}}
@@ -98,255 +82,169 @@ export default function AdminDashboard() {
                 { label: 'Dashboard', href: null }
             ]}
         >
-            {/* Header */}
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">👑 Super Administrator Console</h1>
-                <p className="mt-2 text-sm text-gray-600">
-                    System overview, audit logs, and administrative tools.
-                </p>
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+                {/* Enhanced Header */}
+                <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                🔐 DIVE V3 Command Center
+                            </h1>
+                            <p className="mt-2 text-slate-600 text-lg">
+                                Advanced Analytics & Security Intelligence Platform
+                            </p>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                            {/* Auto-Refresh Toggle */}
+                            <button
+                                onClick={() => setAutoRefresh(!autoRefresh)}
+                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
+                                    autoRefresh
+                                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                            >
+                                <span className={autoRefresh ? 'animate-pulse' : ''}>●</span>
+                                <span>{autoRefresh ? 'Live' : 'Paused'}</span>
+                            </button>
+
+                            {/* Date Range Selector */}
+                            <select
+                                value={dateRange}
+                                onChange={(e) => setDateRange(e.target.value as any)}
+                                className="px-4 py-2 border border-slate-300 rounded-lg bg-white font-medium text-slate-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                            >
+                                <option value="24h">Last 24 Hours</option>
+                                <option value="7d">Last 7 Days</option>
+                                <option value="30d">Last 30 Days</option>
+                                <option value="90d">Last 90 Days</option>
+                            </select>
+
+                            {/* Manual Refresh */}
+                            <button
+                                onClick={() => setLastRefresh(new Date())}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
+                            >
+                                🔄 Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Last Refresh Time */}
+                    <div className="mt-4 text-sm text-slate-500">
+                        Last updated: {lastRefresh.toLocaleTimeString()} 
+                        {autoRefresh && <span className="ml-2 text-green-600">(Auto-refresh: 30s)</span>}
+                    </div>
+                </div>
+
+                {/* Navigation Tabs */}
+                <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-2">
+                    <nav className="flex space-x-1" aria-label="Tabs">
+                        {tabs.map((tab) => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id as TabView)}
+                                className={`
+                                    flex-1 group relative px-4 py-3 text-sm font-medium rounded-lg
+                                    transition-all duration-200 ease-in-out
+                                    ${activeTab === tab.id
+                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg scale-105'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                    }
+                                `}
+                            >
+                                <div className="flex flex-col items-center">
+                                    <span className="text-xl mb-1">{tab.icon}</span>
+                                    <span className="font-semibold">{tab.label.replace(/[^\w\s]/g, '')}</span>
+                                    <span className="text-xs opacity-75 mt-1">{tab.description}</span>
+                                </div>
+                                {activeTab === tab.id && (
+                                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1/2 h-1 bg-white rounded-t-full" />
+                                )}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+
+                {/* Content Area */}
+                <div className="pb-8">
+                    {activeTab === 'overview' && (
+                        <SystemOverviewSection 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'authz' && (
+                        <AuthorizationAnalytics 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'security' && (
+                        <SecurityPosture 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'threats' && (
+                        <ThreatIntelligence 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'performance' && (
+                        <PerformanceMetrics 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'compliance' && (
+                        <ComplianceOverview 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'realtime' && (
+                        <RealTimeActivity 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                    {activeTab === 'resources' && (
+                        <ResourceAnalytics 
+                            dateRange={dateRange} 
+                            refreshTrigger={lastRefresh}
+                        />
+                    )}
+                </div>
+
+                {/* Quick Action Floating Button */}
+                <div className="fixed bottom-8 right-8 flex flex-col space-y-3">
+                    <button
+                        onClick={() => router.push('/admin/logs')}
+                        className="group flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
+                    >
+                        <span className="text-xl">📋</span>
+                        <span className="font-semibold">Audit Logs</span>
+                    </button>
+                    
+                    <button
+                        onClick={() => router.push('/admin/idp')}
+                        className="group flex items-center space-x-3 bg-gradient-to-r from-green-600 to-teal-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
+                    >
+                        <span className="text-xl">🔧</span>
+                        <span className="font-semibold">Manage IdPs</span>
+                    </button>
+
+                    <button
+                        onClick={() => router.push('/admin/analytics')}
+                        className="group flex items-center space-x-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
+                    >
+                        <span className="text-xl">🏛️</span>
+                        <span className="font-semibold">IdP Governance</span>
+                    </button>
+                </div>
             </div>
-
-                {/* Quick Stats */}
-                <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <svg className="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">
-                                            Successful Access
-                                        </dt>
-                                        <dd className="text-3xl font-semibold text-gray-900">
-                                            {stats?.successfulAccess || 0}
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <svg className="h-6 w-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">
-                                            Denied Access
-                                        </dt>
-                                        <dd className="text-3xl font-semibold text-gray-900">
-                                            {stats?.deniedAccess || 0}
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <svg className="h-6 w-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                    </svg>
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">
-                                            Total Events
-                                        </dt>
-                                        <dd className="text-3xl font-semibold text-gray-900">
-                                            {stats?.totalEvents || 0}
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white overflow-hidden shadow rounded-lg">
-                        <div className="p-5">
-                            <div className="flex items-center">
-                                <div className="flex-shrink-0">
-                                    <svg className="h-6 w-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                    </svg>
-                                </div>
-                                <div className="ml-5 w-0 flex-1">
-                                    <dl>
-                                        <dt className="text-sm font-medium text-gray-500 truncate">
-                                            Violations (7d)
-                                        </dt>
-                                        <dd className="text-3xl font-semibold text-gray-900">
-                                            {stats?.deniedAccess || 0}
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="mb-8">
-                    <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        <button
-                            onClick={() => router.push('/admin/logs')}
-                            className="relative flex items-center space-x-3 rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-gray-400"
-                        >
-                            <div className="flex-shrink-0">
-                                <svg className="h-10 w-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                            </div>
-                            <div className="min-w-0 flex-1 text-left">
-                                <span className="block text-sm font-medium text-gray-900">View Audit Logs</span>
-                                <span className="block text-sm text-gray-500">Browse all ACP-240 events</span>
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={() => router.push('/admin/logs?outcome=DENY')}
-                            className="relative flex items-center space-x-3 rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-gray-400"
-                        >
-                            <div className="flex-shrink-0">
-                                <svg className="h-10 w-10 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                            </div>
-                            <div className="min-w-0 flex-1 text-left">
-                                <span className="block text-sm font-medium text-gray-900">Security Violations</span>
-                                <span className="block text-sm text-gray-500">View denied access attempts</span>
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={() => router.push('/admin/idp')}
-                            className="relative flex items-center space-x-3 rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-gray-400"
-                        >
-                            <div className="flex-shrink-0">
-                                <svg className="h-10 w-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                                </svg>
-                            </div>
-                            <div className="min-w-0 flex-1 text-left">
-                                <span className="block text-sm font-medium text-gray-900">Manage IdPs</span>
-                                <span className="block text-sm text-gray-500">Add or configure identity providers</span>
-                            </div>
-                        </button>
-
-                        <button
-                            onClick={() => router.push('/admin/analytics')}
-                            className="relative flex items-center space-x-3 rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm hover:border-gray-400"
-                        >
-                            <div className="flex-shrink-0">
-                                <svg className="h-10 w-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                                </svg>
-                            </div>
-                            <div className="min-w-0 flex-1 text-left">
-                                <span className="block text-sm font-medium text-gray-900">Analytics Dashboard</span>
-                                <span className="block text-sm text-gray-500">View performance and security metrics</span>
-                            </div>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Top Denied Resources */}
-                {stats && stats.topDeniedResources.length > 0 && (
-                    <div className="mb-8">
-                        <h2 className="text-lg font-medium text-gray-900 mb-4">Top Denied Resources</h2>
-                        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Resource ID
-                                        </th>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Denied Attempts
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {stats.topDeniedResources.slice(0, 5).map((resource, idx) => (
-                                        <tr key={idx}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                {resource.resourceId}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                                    {resource.count}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
-                {/* Events by Type */}
-                {stats && Object.keys(stats.eventsByType).length > 0 && (
-                    <div className="mb-8">
-                        <h2 className="text-lg font-medium text-gray-900 mb-4">Events by Type (Last 7 Days)</h2>
-                        <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Event Type
-                                        </th>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Count
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {Object.entries(stats.eventsByType).map(([type, count], idx) => (
-                                        <tr key={idx}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                    type === 'ACCESS_DENIED' ? 'bg-red-100 text-red-800' :
-                                                    type === 'DECRYPT' ? 'bg-green-100 text-green-800' :
-                                                    type === 'ENCRYPT' ? 'bg-blue-100 text-blue-800' :
-                                                    'bg-gray-100 text-gray-800'
-                                                }`}>
-                                                    {type}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {count}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
-
-                {/* No Data State */}
-                {!stats && !loading && (
-                    <div className="bg-white shadow sm:rounded-lg">
-                        <div className="px-4 py-12 text-center">
-                            <p className="text-gray-500">No statistics available yet. System activity will appear here.</p>
-                        </div>
-                </div>
-            )}
         </PageLayout>
     );
 }
-
