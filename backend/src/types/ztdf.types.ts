@@ -25,6 +25,13 @@ export type ClassificationLevel =
     | 'TOP_SECRET';
 
 /**
+ * COI Operator defines how multiple COIs are evaluated
+ * - ALL: Requester must have ALL listed COIs (intersection) - more restrictive
+ * - ANY: Requester may have ANY listed COI (union) - broader
+ */
+export type COIOperator = 'ALL' | 'ANY';
+
+/**
  * STANAG 4774 Security Label
  * Mandatory labeling for all objects per ACP-240 section 4.1
  */
@@ -37,6 +44,9 @@ export interface ISTANAG4774Label {
 
     /** Communities of Interest (NATO-COSMIC, FVEY, etc.) */
     COI?: string[];
+
+    /** COI evaluation operator (default: ALL) */
+    coiOperator?: COIOperator;
 
     /** Handling caveats (NOFORN, RELIDO, PROPIN, etc.) */
     caveats?: string[];
@@ -290,6 +300,7 @@ export interface IZTDFResource {
         classification: ClassificationLevel;
         releasabilityTo: string[];
         COI: string[];
+        coiOperator?: COIOperator;
         creationDate?: string;
         encrypted: boolean;
         content?: string;

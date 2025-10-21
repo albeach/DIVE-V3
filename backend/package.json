@@ -15,12 +15,16 @@
         "test:coverage": "NODE_ENV=test jest --coverage --testTimeout=15000 --maxWorkers=50%",
         "test:ci": "jest --coverage --testTimeout=15000 --runInBand --ci",
         "lint": "eslint src/**/*.ts",
+        "lint:coi": "tsx src/scripts/coi-logic-lint.ts",
+        "purge:invalid": "tsx src/scripts/purge-invalid-coi.ts",
         "typecheck": "tsc --noEmit",
         "seed-database": "tsx src/scripts/seed-resources.ts",
         "seed-ztdf": "tsx src/scripts/seed-ztdf-resources.ts",
+        "seed:fixed": "tsx src/scripts/seed-1000-ztdf-documents-fixed.ts",
         "migrate-logs": "tsx src/scripts/migrate-logs-to-mongodb.ts",
         "optimize-database": "tsx src/scripts/optimize-database.ts",
-        "generate-certs": "tsx src/scripts/generate-certificates.ts"
+        "generate-certs": "tsx src/scripts/generate-certificates.ts",
+        "migrate-uuids": "tsx src/scripts/migrate-uniqueids-to-uuid.ts"
     },
     "keywords": [
         "dive",
@@ -44,6 +48,7 @@
         "express-rate-limit": "^7.1.5",
         "express-validator": "^7.2.1",
         "helmet": "^7.1.0",
+        "ioredis": "^5.3.2",
         "joi": "^17.11.0",
         "jsonwebtoken": "^9.0.2",
         "jwk-to-pem": "^2.0.7",

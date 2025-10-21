@@ -27,6 +27,7 @@ import {
     computeObjectHash
 } from '../utils/ztdf.utils';
 import { createZTDFResource } from './resource.service';
+import { validateCOICoherenceOrThrow } from './coi-validation.service';
 
 /**
  * Upload file and convert to ZTDF
@@ -51,16 +52,33 @@ export async function uploadFile(
     });
 
     try {
-        // 1. Validate file
+        // 1. Validate COI coherence (CRITICAL: Fail-closed)
+        validateCOICoherenceOrThrow({
+            classification: metadata.classification,
+            releasabilityTo: metadata.releasabilityTo,
+            COI: metadata.COI || [],
+            coiOperator: metadata.coiOperator || 'ALL',
+            caveats: metadata.caveats
+        });
+
+        logger.info('COI validation passed', {
+            uploadId,
+            COI: metadata.COI,
+            coiOperator: metadata.coiOperator || 'ALL',
+            releasabilityTo: metadata.releasabilityTo,
+            caveats: metadata.caveats
+        });
+
+        // 2. Validate file
         const validation = validateFile(fileBuffer, mimeType);
         if (!validation.valid) {
             throw new Error(`File validation failed: ${validation.errors.join(', ')}`);
         }
 
-        // 2. Convert file to base64 for encryption
+        // 3. Convert file to base64 for encryption
         const base64Content = fileBuffer.toString('base64');
 
-        // 3. Create ZTDF object
+        // 4. Create ZTDF object
         const ztdfObject = await convertToZTDF(
             base64Content,
             uploadId,
@@ -69,7 +87,7 @@ export async function uploadFile(
             mimeType
         );
 
-        // 4. Create ZTDF resource and store in MongoDB
+        // 5. Create ZTDF resource and store in MongoDB
         const ztdfResource: IZTDFResource = {
             resourceId: uploadId,
             title: metadata.title,
@@ -78,6 +96,7 @@ export async function uploadFile(
                 classification: metadata.classification,
                 releasabilityTo: metadata.releasabilityTo,
                 COI: metadata.COI || [],
+                coiOperator: metadata.coiOperator || 'ALL',
                 encrypted: true,
                 encryptedContent: ztdfObject.payload.encryptedChunks[0]?.encryptedData
             }
@@ -88,10 +107,11 @@ export async function uploadFile(
         logger.info('File upload successful', {
             uploadId,
             resourceId: ztdfResource.resourceId,
-            displayMarking: ztdfObject.policy.securityLabel.displayMarking
+            displayMarking: ztdfObject.policy.securityLabel.displayMarking,
+            coiOperator: metadata.coiOperator || 'ALL'
         });
 
-        // 5. Return result
+        // 6. Return result
         return {
             success: true,
             resourceId: uploadId,
@@ -291,6 +311,7 @@ async function convertToZTDF(
         classification: metadata.classification as ClassificationLevel,
         releasabilityTo: metadata.releasabilityTo,
         COI: metadata.COI || [],
+        coiOperator: metadata.coiOperator || 'ALL',
         caveats: metadata.caveats || [],
         originatingCountry: uploader.countryOfAffiliation,
         creationDate: currentTimestamp
@@ -324,6 +345,10 @@ async function convertToZTDF(
         policyAssertions.push({
             type: 'coi-required',
             value: metadata.COI
+        });
+        policyAssertions.push({
+            type: 'coi-operator',
+            value: metadata.coiOperator || 'ALL'
         });
     }
 
