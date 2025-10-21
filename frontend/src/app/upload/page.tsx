@@ -43,8 +43,11 @@ export default function UploadPage() {
     if (COI.length > 0) {
       parts.push(COI.join('//'));
     }
+    if (caveats.length > 0) {
+      parts.push(caveats.join('//'));
+    }
     return parts.join('//');
-  }, [classification, releasabilityTo, COI]);
+  }, [classification, releasabilityTo, COI, caveats]);
 
   const handleUpload = async () => {
     if (!file) {
@@ -366,6 +369,23 @@ export default function UploadPage() {
                   <div>
                     <dt className="text-xs font-medium text-gray-500 mb-1">Communities of Interest</dt>
                     <dd className="text-sm font-mono text-gray-900">{COI.join(', ')}</dd>
+                  </div>
+                )}
+
+                {/* Caveats */}
+                {caveats.length > 0 && (
+                  <div>
+                    <dt className="text-xs font-medium text-gray-500 mb-1">Handling Caveats</dt>
+                    <dd className="flex flex-wrap gap-1">
+                      {caveats.map(caveat => (
+                        <span 
+                          key={caveat}
+                          className="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-xs font-bold font-mono"
+                        >
+                          {caveat}
+                        </span>
+                      ))}
+                    </dd>
                   </div>
                 )}
 

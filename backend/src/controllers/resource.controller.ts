@@ -42,7 +42,17 @@ export const listResourcesHandler = async (
                     encrypted: true, // ZTDF is always encrypted
                     creationDate: r.ztdf.policy.securityLabel.creationDate,
                     displayMarking: r.ztdf.policy.securityLabel.displayMarking, // ACP-240 STANAG 4774
-                    ztdfVersion: r.ztdf.manifest.version
+                    ztdfVersion: r.ztdf.manifest.version,
+                    // Multi-KAS support: Include KAO count and basic KAO info
+                    kaoCount: r.ztdf.payload.keyAccessObjects.length,
+                    kaos: r.ztdf.payload.keyAccessObjects.map(kao => ({
+                        kaoId: kao.kaoId,
+                        kasId: kao.kasId,
+                        policyBinding: {
+                            coiRequired: kao.policyBinding.coiRequired || [],
+                            countriesAllowed: kao.policyBinding.countriesAllowed || []
+                        }
+                    }))
                 };
             } else {
                 // Legacy resource (should not happen after migration)

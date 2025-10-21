@@ -179,8 +179,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 return true;
             }
 
+            // FIX #6: Enhanced token validity check
+            // Check if user has valid tokens (not just user existence)
+            const hasValidTokens = !!(auth as any)?.accessToken && !!(auth as any)?.idToken;
+
             // If logged in
             if (isLoggedIn) {
+                // FIX #6: User exists but no tokens - likely expired session
+                // Force re-login to establish fresh session
+                if (!hasValidTokens && !isOnHome && !isOnLogin) {
+                    console.warn('[DIVE] User exists but no tokens - forcing re-login');
+                    return Response.redirect(new URL("/", nextUrl));
+                }
+
                 // Redirect from Login to Dashboard (but allow Home for logout landing)
                 if (isOnLogin) {
                     return Response.redirect(new URL("/dashboard", nextUrl));
@@ -243,12 +254,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         const timeUntilExpiry = (account.expires_at || 0) - currentTime;
                         const isExpired = timeUntilExpiry <= 0;
 
-                        // PROACTIVE REFRESH: Refresh when token has 20% of lifetime left
-                        // For 15-minute tokens (900s), this means refresh at 3 minutes remaining
+                        // PROACTIVE REFRESH: Refresh when token has 33% of lifetime left
+                        // For 15-minute tokens (900s), this means refresh at 5 minutes remaining
+                        // For 30-minute tokens (1800s), this means refresh at 10 minutes remaining
                         // This prevents API failures from expired tokens
                         const shouldRefresh = hasRefreshToken && (
                             isExpired || // Token is expired
-                            timeUntilExpiry < 180 // Less than 3 minutes remaining (proactive)
+                            timeUntilExpiry < 300 // Less than 5 minutes remaining (proactive)
                         );
 
                         if (shouldRefresh && account.expires_at) {
@@ -263,22 +275,50 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 account = await refreshAccessToken(account);
                                 console.log('[DIVE] Token refreshed successfully, new expiry:',
                                     new Date((account.expires_at || 0) * 1000).toISOString());
+
+                                // FIX #2: Update database session expiry to match token refresh
+                                // This prevents session from expiring even though tokens are fresh
+                                try {
+                                    const newSessionExpiry = new Date(Date.now() + 60 * 60 * 1000); // +60 minutes from now
+                                    await db.update(sessions)
+                                        .set({ expires: newSessionExpiry })
+                                        .where(eq(sessions.userId, user.id));
+
+                                    console.log('[DIVE] Database session extended to:', newSessionExpiry.toISOString());
+                                } catch (dbError) {
+                                    console.error('[DIVE] Failed to extend database session:', dbError);
+                                    // Don't fail the entire session refresh if DB update fails
+                                }
                             } catch (error) {
                                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
                                 console.error('[DIVE] Token refresh failed:', errorMsg);
 
-                                // If refresh token expired, user needs to re-authenticate
+                                // FIX #3: If refresh token expired, delete database session and force re-auth
                                 if (errorMsg.includes('RefreshTokenExpired') || errorMsg.includes('invalid_grant')) {
-                                    console.log('[DIVE] Refresh token invalid - session expired, user needs to re-login');
+                                    console.log('[DIVE] Refresh token invalid - deleting session, user needs to re-login');
 
-                                    // Return session without tokens
-                                    // The authorized callback and pages will handle redirect to login
-                                    // when they detect missing accessToken
-                                    session.accessToken = undefined;
-                                    session.idToken = undefined;
-                                    session.refreshToken = undefined;
+                                    try {
+                                        // Delete database session to force complete logout
+                                        await db.delete(sessions).where(eq(sessions.userId, user.id));
+                                        console.log('[DIVE] Database session deleted due to invalid refresh token');
 
-                                    return session;
+                                        // Clear account tokens to prevent session recreation
+                                        await db.update(accounts)
+                                            .set({
+                                                access_token: null,
+                                                id_token: null,
+                                                refresh_token: null,
+                                                expires_at: null,
+                                                session_state: null,
+                                            })
+                                            .where(eq(accounts.userId, user.id));
+                                        console.log('[DIVE] Account tokens cleared');
+                                    } catch (cleanupError) {
+                                        console.error('[DIVE] Session cleanup error:', cleanupError);
+                                    }
+
+                                    // Return null to completely invalidate the session
+                                    return null as any;
                                 }
 
                                 // For other errors, continue with existing tokens if not expired
@@ -294,10 +334,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             }
                         } else if (!hasRefreshToken && isExpired) {
                             console.warn('[DIVE] Token expired but no refresh_token available');
-                            session.accessToken = undefined;
-                            session.idToken = undefined;
-                            session.refreshToken = undefined;
-                            return session;
+
+                            // FIX #3: Delete database session when no refresh possible
+                            try {
+                                await db.delete(sessions).where(eq(sessions.userId, user.id));
+                                console.log('[DIVE] Database session deleted - no refresh token available');
+                            } catch (cleanupError) {
+                                console.error('[DIVE] Session cleanup error:', cleanupError);
+                            }
+
+                            // Return null to force re-authentication
+                            return null as any;
                         } else {
                             console.log('[DIVE] Token valid, no refresh needed', {
                                 timeUntilExpiry,

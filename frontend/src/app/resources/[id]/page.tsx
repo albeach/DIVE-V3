@@ -8,6 +8,7 @@ import PageLayout from '@/components/layout/page-layout';
 import AccessDenied from '@/components/authz/access-denied';
 import KASRequestModal from '@/components/ztdf/KASRequestModal';
 import ContentViewer from '@/components/resources/content-viewer';
+import KAOSelector from '@/components/ztdf/KAOSelector';
 
 interface IResource {
   resourceId: string;
@@ -76,6 +77,8 @@ export default function ResourceDetailPage() {
   const [kasError, setKasError] = useState<string | null>(null);
   const [kaoId, setKaoId] = useState<string>('');
   const [suggestedResources, setSuggestedResources] = useState<IResource[]>([]);
+  const [kaos, setKaos] = useState<any[]>([]);
+  const [selectedKaoId, setSelectedKaoId] = useState<string>('');
 
   // Check sessionStorage for decrypted content on mount
   useEffect(() => {
@@ -445,90 +448,107 @@ export default function ResourceDetailPage() {
                       />
                     </div>
                   ) : resource.encrypted && !decryptedContent ? (
-                    /* Show KAS request button for encrypted resources - Modern 2025 Design */
-                    <div className="relative overflow-hidden">
-                      {/* Animated gradient background */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-purple-100 via-blue-100 to-indigo-100 opacity-60"></div>
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(120,119,198,0.3),rgba(255,255,255,0))]"></div>
-                      
-                      <div className="relative text-center py-12 px-6">
-                        {/* Lock icon with glow effect */}
-                        <div className="mb-6 inline-block relative">
-                          <div className="absolute inset-0 bg-purple-400 blur-2xl opacity-40 animate-pulse"></div>
-                          <div className="relative w-24 h-24 bg-gradient-to-br from-purple-500 via-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl transform hover:scale-105 transition-transform">
-                            <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                            </svg>
-                          </div>
-                        </div>
-                        
-                        <h3 className="text-2xl font-bold text-gray-900 mb-3">
-                          Content Encrypted with KAS
-                        </h3>
-                        <p className="text-gray-700 font-medium mb-2 max-w-lg mx-auto">
-                          This resource requires Key Access Service (KAS) mediation
-                        </p>
-                        <p className="text-gray-600 text-sm mb-8 max-w-xl mx-auto leading-relaxed">
-                          Zero Trust Data Format (ZTDF) ensures that access policies are re-evaluated in real-time before releasing the decryption key. 
-                          Click below to request access from the KAS.
-                        </p>
-                        
-                        {kasError && (
-                          <div className="mb-6 p-5 bg-red-50 border-2 border-red-300 rounded-xl max-w-md mx-auto shadow-lg animate-in fade-in slide-in-from-top-2">
-                            <div className="flex items-center gap-3">
-                              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                              </div>
-                              <div className="text-left">
-                                <p className="text-red-900 font-bold mb-1">Access Denied</p>
-                                <p className="text-red-700 text-sm">{kasError}</p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        <button
-                          onClick={async () => {
-                            setKasError(null);
-                            // Fetch ZTDF details to get KAO ID
-                            try {
-                              const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-                              const accessToken = (session as any)?.accessToken;
-                              const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
-                                headers: {
-                                  'Authorization': `Bearer ${accessToken}`,
-                                  'Content-Type': 'application/json'
+                    /* Show KAS request interface for encrypted resources */
+                    <div className="space-y-6">
+                      {/* Fetch KAOs if not already loaded */}
+                      {kaos.length === 0 && (
+                        <div className="text-center py-6">
+                          <button
+                            onClick={async () => {
+                              try {
+                                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+                                const accessToken = (session as any)?.accessToken;
+                                const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${accessToken}`,
+                                    'Content-Type': 'application/json'
+                                  }
+                                });
+                                if (ztdfResponse.ok) {
+                                  const ztdfData = await ztdfResponse.json();
+                                  const fetchedKaos = ztdfData.ztdfDetails?.payload?.keyAccessObjects || [];
+                                  setKaos(fetchedKaos);
+                                  if (fetchedKaos.length > 0) {
+                                    setSelectedKaoId(fetchedKaos[0].kaoId);
+                                  }
+                                } else {
+                                  setKasError('Failed to fetch ZTDF details');
                                 }
-                              });
-                              if (ztdfResponse.ok) {
-                                const ztdfData = await ztdfResponse.json();
-                                const kaoIdValue = ztdfData.ztdfDetails?.payload?.keyAccessObjects?.[0]?.kaoId || '';
-                                setKaoId(kaoIdValue);
-                                setShowKASModal(true);
-                              } else {
+                              } catch (err) {
                                 setKasError('Failed to fetch ZTDF details');
                               }
-                            } catch (err) {
-                              setKasError('Failed to fetch ZTDF details');
-                            }
-                          }}
-                          className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 transition-all font-bold text-lg shadow-2xl hover:shadow-purple-500/50 hover:scale-105 transform"
-                        >
-                          <svg className="w-6 h-6 group-hover:rotate-12 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                          <span>Request Decryption Key</span>
-                          <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                          </svg>
-                        </button>
-                        
-                        <p className="mt-6 text-xs text-gray-500 max-w-md mx-auto">
-                          Protected by ACP-240 policy enforcement • Real-time authorization checks
-                        </p>
-                      </div>
+                            }}
+                            className="group inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 transition-all font-bold text-lg shadow-2xl hover:shadow-purple-500/50 hover:scale-105 transform"
+                          >
+                            <svg className="w-6 h-6 group-hover:rotate-12 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                            </svg>
+                            <span>View Decryption Options</span>
+                          </button>
+                          <p className="mt-4 text-sm text-gray-600">
+                            🔐 This content is encrypted with KAS protection
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* KAO Selector */}
+                      {kaos.length > 0 && (
+                        <>
+                          <KAOSelector
+                            kaos={kaos}
+                            selectedKaoId={selectedKaoId}
+                            onSelect={setSelectedKaoId}
+                            userCountry={session?.user?.countryOfAffiliation || 'USA'}
+                            userCOI={(session?.user as any)?.acpCOI || []}
+                            userClearance={session?.user?.clearance || 'UNCLASSIFIED'}
+                          />
+                          
+                          {/* KAS Error Display */}
+                          {kasError && (
+                            <div className="p-5 bg-red-50 border-2 border-red-300 rounded-xl shadow-lg">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                                  <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                </div>
+                                <div className="text-left">
+                                  <p className="text-red-900 font-bold mb-1">Access Denied</p>
+                                  <p className="text-red-700 text-sm">{kasError}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Request Key Button */}
+                          <div className="text-center">
+                            <button
+                              onClick={() => {
+                                setKasError(null);
+                                setKaoId(selectedKaoId);
+                                setShowKASModal(true);
+                              }}
+                              disabled={!selectedKaoId}
+                              className={`group inline-flex items-center gap-3 px-8 py-4 rounded-xl transition-all font-bold text-lg shadow-2xl transform ${
+                                selectedKaoId
+                                  ? 'bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 text-white hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 hover:shadow-purple-500/50 hover:scale-105'
+                                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              }`}
+                            >
+                              <svg className="w-6 h-6 group-hover:rotate-12 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                              </svg>
+                              <span>Request Decryption Key</span>
+                              <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                              </svg>
+                            </button>
+                            <p className="mt-4 text-xs text-gray-500">
+                              Protected by ACP-240 policy enforcement • Real-time authorization checks
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ) : resource.content ? (
                     /* Show regular content */

@@ -12,17 +12,16 @@
  */
 
 import { MongoClient } from 'mongodb';
-import crypto from 'crypto';
-import { generateDisplayMarking, COIOperator } from '../types/ztdf.types';
+import { generateDisplayMarking, COIOperator, ClassificationLevel } from '../types/ztdf.types';
 import { encryptContent, computeSHA384, computeObjectHash } from '../utils/ztdf.utils';
-import { validateCOICoherence, COI_COUNTRY_MEMBERSHIP } from '../services/coi-validation.service';
+import { validateCOICoherence } from '../services/coi-validation.service';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const KAS_URL = process.env.KAS_URL || 'http://kas:8080';
 
 // Classification levels
-const CLASSIFICATIONS = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+const CLASSIFICATIONS: ClassificationLevel[] = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 
 // ============================================
 // DETERMINISTIC COI TEMPLATES
@@ -178,6 +177,56 @@ const COI_TEMPLATES: ICOITemplate[] = [
         releasabilityTo: ['USA'],
         caveats: [],
         description: 'US-only (no foreign release)'
+    },
+
+    // ============================================
+    // MULTI-COI TEMPLATES (Creates Multi-KAS)
+    // Note: Must avoid subset/superset conflicts with ANY operator
+    // ============================================
+
+    // 16. NATO + QUAD (Multi-COI - disjoint sets)
+    {
+        coi: ['NATO', 'QUAD'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU', 'ITA', 'ESP', 'POL', 'CAN', 'AUS', 'IND', 'JPN'],
+        caveats: [],
+        description: 'NATO + QUAD (Multi-COI with 2 KAOs)'
+    },
+
+    // 17. EUCOM + PACOM (Multi-COI - regional commands)
+    {
+        coi: ['EUCOM', 'PACOM'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'DEU', 'GBR', 'FRA', 'ITA', 'ESP', 'POL', 'JPN', 'KOR', 'AUS', 'NZL', 'PHL'],
+        caveats: [],
+        description: 'EUCOM + PACOM (Multi-COI)'
+    },
+
+    // 18. NORTHCOM + EUCOM (Multi-COI - regional)
+    {
+        coi: ['NORTHCOM', 'EUCOM'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'CAN', 'MEX', 'DEU', 'GBR', 'FRA', 'ITA', 'ESP', 'POL'],
+        caveats: [],
+        description: 'NORTHCOM + EUCOM (Multi-COI)'
+    },
+
+    // 19. CAN-US + GBR-US (Multi-COI - bilateral combinations)
+    {
+        coi: ['CAN-US', 'GBR-US'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'CAN', 'GBR'],
+        caveats: [],
+        description: 'CAN-US + GBR-US (Multi-bilateral COI)'
+    },
+
+    // 20. FRA-US + GBR-US (Multi-COI - European bilaterals)
+    {
+        coi: ['FRA-US', 'GBR-US'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'FRA', 'GBR'],
+        caveats: [],
+        description: 'FRA-US + GBR-US (Multi-bilateral COI)'
     }
 ];
 
@@ -289,6 +338,7 @@ function createValidZTDFDocument(index: number) {
             COI,
             coiOperator,
             caveats,
+            originatingCountry: 'USA',
             creationDate: currentTimestamp
         })
     };
@@ -313,22 +363,49 @@ function createValidZTDFDocument(index: number) {
         }
     ];
 
-    // 4. Create KAOs
-    const kaoCount = COI.length > 1 ? 2 : 1;
+    // 4. Create KAOs (Multi-KAS for 50% of documents)
+    let kaoCount: number;
+    if (COI.length > 1) {
+        // Multi-COI documents always get multiple KAOs (1 per COI)
+        kaoCount = COI.length;
+    } else {
+        // Single-COI documents: 50% get 1 KAO, 30% get 2 KAOs, 20% get 3 KAOs
+        const rand = Math.random();
+        if (rand < 0.5) {
+            kaoCount = 1; // 50% Single KAS
+        } else if (rand < 0.8) {
+            kaoCount = 2; // 30% Dual KAS
+        } else {
+            kaoCount = 3; // 20% Triple KAS
+        }
+    }
+
     const keyAccessObjects = [];
+    // For pilot: all KAOs point to the single running KAS instance
+    // In production, these would be separate KAS endpoints
+    const kasInstances = [
+        { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'Primary KAS' },
+        { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'FVEY KAS (pilot: same endpoint)' },
+        { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'NATO KAS (pilot: same endpoint)' }
+    ];
 
     for (let i = 0; i < kaoCount; i++) {
-        const kaoId = i === 0 ? `kao-${resourceId}` : `kao-${COI[1] || 'secondary'}-${resourceId}`;
+        const kasInstance = kasInstances[i % kasInstances.length];
+        // Generate unique kaoId by including index to prevent duplicates
+        const kaoId = COI.length > 1 && i < COI.length
+            ? `kao-${COI[i]}-${resourceId}`
+            : `kao-${kasInstance.kasId}-${i}-${resourceId}`;
+
         keyAccessObjects.push({
             kaoId,
-            kasUrl: `${KAS_URL}/request-key`,
-            kasId: 'dive-v3-kas-pilot',
+            kasUrl: kasInstance.kasUrl,
+            kasId: kasInstance.kasId,
             wrappedKey,
             wrappingAlgorithm: 'RSA-OAEP-256',
             policyBinding: {
                 clearanceRequired: classification,
                 countriesAllowed: releasabilityTo,
-                coiRequired: COI
+                coiRequired: COI.length > 1 && i < COI.length ? [COI[i]] : COI
             }
         });
     }
@@ -476,6 +553,30 @@ async function main() {
 
         const totalCount = await collection.countDocuments({ resourceId: { $regex: /^doc-generated-/ } });
         console.log(`\n   Total: ${totalCount} valid ZTDF documents`);
+
+        // Multi-KAS statistics
+        const kasStats = await collection.aggregate([
+            { $match: { resourceId: { $regex: /^doc-generated-/ } } },
+            {
+                $project: {
+                    kaoCount: { $size: '$ztdf.payload.keyAccessObjects' }
+                }
+            },
+            {
+                $group: {
+                    _id: '$kaoCount',
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]).toArray();
+
+        console.log('\n🔑 Multi-KAS Distribution:\n');
+        kasStats.forEach(stat => {
+            const kasType = stat._id === 1 ? 'Single KAS' : `${stat._id} KAS (Multi-KAS)`;
+            const percentage = ((stat.count / totalCount) * 100).toFixed(1);
+            console.log(`   ${kasType}: ${stat.count} documents (${percentage}%)`);
+        });
 
         console.log('\n✅ ALL DOCUMENTS PASS STRICT COI COHERENCE VALIDATION\n');
         console.log('COI Coherence Features:');

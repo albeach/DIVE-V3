@@ -14,7 +14,7 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 
 interface AccessDeniedProps {
@@ -76,6 +76,162 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
     const checks = denial.details?.checks || {};
     const failedChecks = Object.entries(checks).filter(([_, passed]) => !passed);
     const passedChecks = Object.entries(checks).filter(([_, passed]) => passed);
+
+    // Parse and humanize the denial reason
+    const humanizedReason = useMemo(() => {
+        if (!denial.reason) return null;
+
+        const reason = denial.reason;
+
+        // Pattern: COI operator=ALL: user countries {...} do not cover required countries {...} (missing: {...}, user COI: [...], resource COI: [...])
+        const coiCountryMatch = reason.match(/COI operator=(ALL|ANY): user countries {([^}]*)} do not cover required countries {([^}]*)} \(missing: {([^}]*)}, user COI: \[([^\]]*)\], resource COI: \[([^\]]*)\]\)/);
+        
+        if (coiCountryMatch) {
+            const [_, operator, userCountries, requiredCountries, missingCountries, userCOI, resourceCOI] = coiCountryMatch;
+            const userCOIList = userCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
+            const resourceCOIList = resourceCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
+            const missingList = missingCountries.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
+            
+            return {
+                title: '🌍 Community of Interest (COI) Country Requirement Not Met',
+                explanation: (
+                    <div className="space-y-3">
+                        <p className="font-semibold">
+                            This document requires Community of Interest: <span className="px-2 py-1 bg-purple-200 text-purple-900 rounded font-bold">{resourceCOIList.join(', ')}</span>
+                        </p>
+                        <div className="bg-white/50 rounded-lg p-4 space-y-2">
+                            <p className="text-sm">
+                                <span className="font-bold text-red-800">Why was I denied?</span>
+                            </p>
+                            <p className="text-sm">
+                                The <strong>{resourceCOIList[0]}</strong> COI requires members to be affiliated with specific countries: <strong>{requiredCountries}</strong>
+                            </p>
+                            <p className="text-sm">
+                                Your country affiliation (<strong>{userCountries}</strong>) does not include: <strong className="text-red-700">{missingList.join(', ')}</strong>
+                            </p>
+                        </div>
+                        <div className="bg-blue-100 rounded-lg p-4 space-y-2">
+                            <p className="text-sm font-semibold text-blue-900">
+                                💡 What does this mean?
+                            </p>
+                            <ul className="text-sm text-blue-800 space-y-1 ml-4 list-disc">
+                                <li>You belong to: <strong>{userCOIList.length > 0 ? userCOIList.join(', ') : 'No COIs'}</strong></li>
+                                <li>This document requires: <strong>{resourceCOIList.join(', ')}</strong></li>
+                                <li>Even though you have clearance and possibly other COI access, your country affiliation must match the required countries for this specific COI</li>
+                                <li>This is a policy-driven restriction based on ACP-240 coalition sharing rules</li>
+                            </ul>
+                        </div>
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <p className="text-sm text-yellow-800">
+                                <strong>📞 Need access?</strong> Contact your administrator to request country affiliation updates or COI membership changes.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `Your country affiliation doesn't match the required countries for ${resourceCOIList[0]} COI`
+            };
+        }
+
+        // Pattern: User COI [...] does not intersect with resource COI [...]
+        const coiIntersectionMatch = reason.match(/User COI \[([^\]]*)\] does not intersect with resource COI \[([^\]]*)\]/);
+        if (coiIntersectionMatch) {
+            const [_, userCOI, resourceCOI] = coiIntersectionMatch;
+            const userCOIList = userCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
+            const resourceCOIList = resourceCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
+            
+            return {
+                title: '👥 Community of Interest (COI) Mismatch',
+                explanation: (
+                    <div className="space-y-3">
+                        <p className="font-semibold">
+                            You don't belong to the required Community of Interest for this document.
+                        </p>
+                        <div className="bg-white/50 rounded-lg p-4 space-y-2">
+                            <p className="text-sm">
+                                <strong>Your COI memberships:</strong> <span className="font-mono">{userCOIList.length > 0 ? userCOIList.join(', ') : 'None'}</span>
+                            </p>
+                            <p className="text-sm">
+                                <strong>Required COI:</strong> <span className="font-mono text-red-700">{resourceCOIList.join(' or ')}</span>
+                            </p>
+                        </div>
+                        <div className="bg-blue-100 rounded-lg p-4">
+                            <p className="text-sm text-blue-900">
+                                💡 <strong>What is a COI?</strong> Communities of Interest are group-based access controls for coalition sharing. You must be a member of at least one of the required COIs to access this document.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `You need to be a member of: ${resourceCOIList.join(' or ')}`
+            };
+        }
+
+        // Pattern: Clearance X < Required Y
+        const clearanceMatch = reason.match(/Clearance (\w+) < Required (\w+)/i);
+        if (clearanceMatch) {
+            const [_, userClearance, requiredClearance] = clearanceMatch;
+            return {
+                title: '🔒 Insufficient Security Clearance',
+                explanation: (
+                    <div className="space-y-3">
+                        <p className="font-semibold">
+                            Your security clearance level is not high enough for this document.
+                        </p>
+                        <div className="bg-white/50 rounded-lg p-4 space-y-2">
+                            <p className="text-sm">
+                                <strong>Your clearance:</strong> <span className="font-mono">{userClearance}</span>
+                            </p>
+                            <p className="text-sm">
+                                <strong>Required clearance:</strong> <span className="font-mono text-red-700">{requiredClearance}</span>
+                            </p>
+                        </div>
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <p className="text-sm text-yellow-800">
+                                Contact your security officer to request a clearance upgrade if your role requires access to {requiredClearance} materials.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `Requires ${requiredClearance} clearance, you have ${userClearance}`
+            };
+        }
+
+        // Pattern: Country X not in releasabilityTo [...]
+        const releasabilityMatch = reason.match(/Country (\w+) not in releasabilityTo \[([^\]]*)\]/i);
+        if (releasabilityMatch) {
+            const [_, userCountry, allowedCountries] = releasabilityMatch;
+            return {
+                title: '🌎 Country Release Restriction',
+                explanation: (
+                    <div className="space-y-3">
+                        <p className="font-semibold">
+                            This document is not authorized for release to your country.
+                        </p>
+                        <div className="bg-white/50 rounded-lg p-4 space-y-2">
+                            <p className="text-sm">
+                                <strong>Your country:</strong> <span className="font-mono">{userCountry}</span>
+                            </p>
+                            <p className="text-sm">
+                                <strong>Releasable to:</strong> <span className="font-mono">{allowedCountries}</span>
+                            </p>
+                        </div>
+                        <div className="bg-blue-100 rounded-lg p-4">
+                            <p className="text-sm text-blue-900">
+                                This is a coalition-sharing policy restriction. The document originator has specified which countries can access this information.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `Document not releasable to ${userCountry}`
+            };
+        }
+
+        // Default: return original reason
+        return {
+            title: 'Authorization Failure',
+            explanation: <p className="text-sm">{reason}</p>,
+            shortMessage: reason
+        };
+    }, [denial.reason]);
 
     const formatCheckName = (checkName: string): string => {
         return checkName
@@ -233,18 +389,32 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                     </div>
 
                     {/* Denial Reason - Prominent Alert */}
-                    {denial.reason && (
+                    {humanizedReason && (
                         <div className="bg-gradient-to-r from-red-600 to-red-700 text-white rounded-xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300">
                             <div className="flex items-start gap-3">
                                 <svg className="w-6 h-6 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                                <div>
-                                    <h3 className="text-lg font-bold mb-2">Authorization Failure</h3>
-                                    <p className="text-red-50 text-sm leading-relaxed">{denial.reason}</p>
+                                <div className="flex-1">
+                                    <h3 className="text-lg font-bold mb-3">{humanizedReason.title}</h3>
+                                    <div className="text-red-50">
+                                        {humanizedReason.explanation}
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    )}
+
+                    {/* Technical Details (Collapsed by default) */}
+                    {denial.reason && (
+                        <details className="bg-gray-100 rounded-xl p-4 cursor-pointer hover:bg-gray-200 transition-colors">
+                            <summary className="text-sm font-semibold text-gray-700 select-none">
+                                🔍 Technical Details (for administrators)
+                            </summary>
+                            <div className="mt-3 p-3 bg-white rounded-lg border border-gray-300">
+                                <p className="text-xs font-mono text-gray-700 break-words">{denial.reason}</p>
+                            </div>
+                        </details>
                     )}
                 </div>
             </div>

@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { db } from '@/lib/db';
-import { accounts } from '@/lib/db/schema';
+import { accounts, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 export async function POST(request: NextRequest) {
@@ -111,10 +111,18 @@ export async function POST(request: NextRequest) {
                 })
                 .where(eq(accounts.userId, session.user.id));
 
+            // FIX #2: Update database session expiry to match token refresh
+            // Extend session by 60 minutes from now
+            const newSessionExpiry = new Date(Date.now() + 60 * 60 * 1000);
+            await db.update(sessions)
+                .set({ expires: newSessionExpiry })
+                .where(eq(sessions.userId, session.user.id));
+
             console.log('[SessionRefresh] Session refreshed successfully', {
                 userId: session.user.id,
                 newExpiry: new Date((Math.floor(Date.now() / 1000) + tokens.expires_in) * 1000).toISOString(),
                 expiresIn: tokens.expires_in,
+                sessionExpiry: newSessionExpiry.toISOString(),
             });
 
             return NextResponse.json({

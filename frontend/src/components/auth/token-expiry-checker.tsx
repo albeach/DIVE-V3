@@ -48,6 +48,15 @@ export function TokenExpiryChecker() {
             const data = await response.json();
             
             if (!response.ok || !data.success) {
+                // If session is already expired (401), don't throw error - just show expired modal
+                if (response.status === 401) {
+                    console.warn('[TokenExpiry] Session already expired, cannot refresh');
+                    setModalReason('expired');
+                    setTimeRemaining(0);
+                    setModalOpen(true);
+                    syncManagerRef.current.notifySessionExpired();
+                    return;
+                }
                 throw new Error(data.message || 'Refresh failed');
             }
             

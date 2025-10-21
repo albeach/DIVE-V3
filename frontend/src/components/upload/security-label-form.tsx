@@ -64,7 +64,7 @@ const ALL_COI_OPTIONS = [
     value: 'NATO-COSMIC', 
     label: 'NATO COSMIC', 
     description: 'NATO Top Secret material',
-    requiredCountries: []
+    requiredCountries: ['USA', 'GBR', 'FRA', 'DEU', 'CAN', 'ITA', 'ESP', 'POL'] // Core NATO members in our list
   },
   { 
     value: 'CAN-US', 
@@ -82,13 +82,31 @@ const ALL_COI_OPTIONS = [
     value: 'EU-RESTRICTED', 
     label: 'EU Restricted', 
     description: 'European Union members only',
-    requiredCountries: []
+    requiredCountries: ['FRA', 'DEU', 'ESP', 'ITA', 'POL'] // EU members in our list
   },
   { 
     value: 'QUAD', 
     label: 'QUAD', 
     description: 'USA, AUS, India, Japan strategic dialogue',
     requiredCountries: ['USA', 'AUS']
+  },
+  { 
+    value: 'GBR-US', 
+    label: 'UK-US', 
+    description: 'Bilateral United Kingdom-US partnership',
+    requiredCountries: ['GBR', 'USA']
+  },
+  { 
+    value: 'FRA-US', 
+    label: 'France-US', 
+    description: 'Bilateral France-US partnership',
+    requiredCountries: ['FRA', 'USA']
+  },
+  { 
+    value: 'AUKUS', 
+    label: 'AUKUS', 
+    description: 'Australia, UK, USA defense partnership',
+    requiredCountries: ['AUS', 'GBR', 'USA']
   }
 ];
 
@@ -231,16 +249,82 @@ export default function SecurityLabelForm({
 
   const toggleCountry = (countryCode: string) => {
     if (releasabilityTo.includes(countryCode)) {
-      onReleasabilityChange(releasabilityTo.filter(c => c !== countryCode));
+      // Removing a country - check if it breaks any COI requirements
+      const newReleasabilityTo = releasabilityTo.filter(c => c !== countryCode);
+      onReleasabilityChange(newReleasabilityTo);
+      
+      // Auto-deselect COIs that require this country
+      const newCOIs = COI.filter(coiValue => {
+        const coiOption = ALL_COI_OPTIONS.find(o => o.value === coiValue);
+        if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
+          // If this COI requires the removed country, deselect it
+          return !coiOption.requiredCountries.includes(countryCode);
+        }
+        return true;
+      });
+      
+      if (newCOIs.length !== COI.length) {
+        onCOIChange(newCOIs);
+      }
     } else {
+      // Adding a country
       onReleasabilityChange([...releasabilityTo, countryCode]);
     }
   };
 
   const toggleCOI = (coiValue: string) => {
     if (COI.includes(coiValue)) {
+      // Deselecting COI - remove countries that are only required by this COI
+      const coiOption = ALL_COI_OPTIONS.find(o => o.value === coiValue);
+      if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
+        // Get all countries required by remaining COIs
+        const remainingCOIs = COI.filter(c => c !== coiValue);
+        const countriesStillNeeded = new Set<string>();
+        
+        remainingCOIs.forEach(remainingCoi => {
+          const remainingOption = ALL_COI_OPTIONS.find(o => o.value === remainingCoi);
+          remainingOption?.requiredCountries?.forEach(country => {
+            countriesStillNeeded.add(country);
+          });
+        });
+        
+        // Remove countries that are no longer needed by any COI
+        const newCountries = releasabilityTo.filter(country => {
+          // Keep the country if:
+          // 1. It's not in the deselected COI's required countries, OR
+          // 2. It's still needed by another selected COI
+          if (!coiOption.requiredCountries.includes(country)) {
+            return true; // Not related to this COI, keep it
+          }
+          return countriesStillNeeded.has(country); // Keep if still needed by another COI
+        });
+        
+        if (newCountries.length !== releasabilityTo.length) {
+          onReleasabilityChange(newCountries);
+        }
+      }
+      
       onCOIChange(COI.filter(c => c !== coiValue));
     } else {
+      // Selecting COI - auto-add required countries
+      const coiOption = ALL_COI_OPTIONS.find(o => o.value === coiValue);
+      if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
+        // Add all required countries that aren't already selected
+        const newCountries = [...releasabilityTo];
+        let countriesAdded = false;
+        
+        coiOption.requiredCountries.forEach(country => {
+          if (!newCountries.includes(country)) {
+            newCountries.push(country);
+            countriesAdded = true;
+          }
+        });
+        
+        if (countriesAdded) {
+          onReleasabilityChange(newCountries);
+        }
+      }
+      
       onCOIChange([...COI, coiValue]);
     }
   };
@@ -402,6 +486,15 @@ export default function SecurityLabelForm({
               ⚠️ You have no COI memberships
             </span>
           )}
+        </div>
+
+        {/* Smart COI-Country Sync Info */}
+        <div className="mb-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-xs text-blue-800">
+            <strong>🔄 Auto-Sync:</strong> Selecting a COI automatically adds required countries. 
+            Deselecting a COI removes its countries (unless needed by another COI). 
+            Removing a required country deselects the COI.
+          </p>
         </div>
 
         {availableCOIs.length > 0 && (

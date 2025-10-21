@@ -21,7 +21,9 @@ import {
   Globe,
   Lock,
   ArrowRight,
-  TrendingUp
+  TrendingUp,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface KASEndpoint {
@@ -72,6 +74,7 @@ export default function MultiKasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedKAS, setSelectedKAS] = useState<string | null>(null);
+  const [isAccordionOpen, setIsAccordionOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -175,70 +178,100 @@ export default function MultiKasPage() {
         </div>
       )}
 
-      {/* How Multi-KAS Works Explainer */}
-      <div className="mb-8 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
-        <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-3">
-          <Shield className="w-6 h-6 text-blue-600" />
-          How Multi-KAS Works in DIVE V3
-        </h2>
-        <div className="space-y-4">
-          <div className="bg-white rounded-lg p-4 border border-blue-200">
-            <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-              <span className="text-2xl">📤</span>
-              1. Upload Phase (Resource Creation)
-            </h3>
-            <p className="text-sm text-gray-700">
-              When you upload an encrypted resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">upload.service.ts</code> automatically 
-              creates <strong>1-4 Key Access Objects (KAOs)</strong> based on the resource's <code className="text-blue-600">releasabilityTo</code> and 
-              <code className="text-purple-600">COI</code> tags. Each KAO wraps the data encryption key (DEK) with a different KAS's public key.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg p-4 border border-blue-200">
-            <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-              <span className="text-2xl">🔍</span>
-              2. Access Phase (Key Request)
-            </h3>
-            <p className="text-sm text-gray-700">
-              When you try to view a resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">resource.service.ts</code> selects the 
-              <strong>optimal KAS</strong> based on your attributes (country, COI membership). It sends a rewrap request to that KAS, which 
-              re-evaluates the OPA policy before releasing the key.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg p-4 border border-blue-200">
-            <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-              <span className="text-2xl">⚙️</span>
-              Current Implementation Status
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="font-semibold text-green-700 mb-1">✅ Implemented:</p>
-                <ul className="list-disc list-inside text-gray-700 space-y-1">
-                  <li>Single KAS (localhost:8080)</li>
-                  <li>Multi-KAO creation logic</li>
-                  <li>COI-based key selection</li>
-                  <li>KAS request/response flow</li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-semibold text-blue-700 mb-1">🎯 Shown Below (Demo):</p>
-                <ul className="list-disc list-inside text-gray-700 space-y-1">
-                  <li>6 distributed KAS endpoints</li>
-                  <li>Nation-specific KAS instances</li>
-                  <li>COI community KAS services</li>
-                  <li>Production architecture vision</li>
-                </ul>
-              </div>
+      {/* How Multi-KAS Works Accordion */}
+      <div className="mb-8">
+        <button
+          onClick={() => setIsAccordionOpen(!isAccordionOpen)}
+          className="w-full bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200 hover:border-blue-400 transition-all hover:shadow-lg group"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Shield className="w-6 h-6 text-blue-600" />
+              <h2 className="text-xl font-bold text-gray-900">
+                How Multi-KAS Works in DIVE V3
+              </h2>
+              <span className="px-3 py-1 bg-blue-200 text-blue-800 text-xs font-bold rounded-full">
+                Technical Details
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-blue-600 font-semibold group-hover:text-blue-700">
+                {isAccordionOpen ? 'Hide Details' : 'Show Details'}
+              </span>
+              {isAccordionOpen ? (
+                <ChevronUp className="w-6 h-6 text-blue-600 group-hover:text-blue-700 transition-transform" />
+              ) : (
+                <ChevronDown className="w-6 h-6 text-blue-600 group-hover:text-blue-700 transition-transform group-hover:translate-y-0.5" />
+              )}
             </div>
           </div>
+        </button>
 
-          <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg p-4 border-2 border-yellow-300">
-            <p className="text-sm text-gray-800">
-              <strong className="text-yellow-800">💡 Production Deployment:</strong> In production, each nation/COI would host 
-              their own KAS endpoint. The endpoints shown below represent the <strong>target architecture</strong> for coalition 
-              deployment, demonstrating how DIVE V3 enables instant coalition growth without re-encrypting historical data.
-            </p>
+        {/* Accordion Content with Smooth Animation */}
+        <div
+          className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            isAccordionOpen ? 'max-h-[2000px] opacity-100 mt-4' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200 space-y-4">
+            <div className="bg-white rounded-lg p-4 border border-blue-200 hover:shadow-md transition-shadow">
+              <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <span className="text-2xl">📤</span>
+                1. Upload Phase (Resource Creation)
+              </h3>
+              <p className="text-sm text-gray-700">
+                When you upload an encrypted resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">upload.service.ts</code> automatically 
+                creates <strong>1-4 Key Access Objects (KAOs)</strong> based on the resource's <code className="text-blue-600">releasabilityTo</code> and 
+                <code className="text-purple-600">COI</code> tags. Each KAO wraps the data encryption key (DEK) with a different KAS's public key.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-lg p-4 border border-blue-200 hover:shadow-md transition-shadow">
+              <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <span className="text-2xl">🔍</span>
+                2. Access Phase (Key Request)
+              </h3>
+              <p className="text-sm text-gray-700">
+                When you try to view a resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">resource.service.ts</code> selects the 
+                <strong>optimal KAS</strong> based on your attributes (country, COI membership). It sends a rewrap request to that KAS, which 
+                re-evaluates the OPA policy before releasing the key.
+              </p>
+            </div>
+
+            <div className="bg-white rounded-lg p-4 border border-blue-200 hover:shadow-md transition-shadow">
+              <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+                <span className="text-2xl">⚙️</span>
+                Current Implementation Status
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="font-semibold text-green-700 mb-1">✅ Implemented:</p>
+                  <ul className="list-disc list-inside text-gray-700 space-y-1">
+                    <li>Single KAS (localhost:8080)</li>
+                    <li>Multi-KAO creation logic</li>
+                    <li>COI-based key selection</li>
+                    <li>KAS request/response flow</li>
+                  </ul>
+                </div>
+                <div>
+                  <p className="font-semibold text-blue-700 mb-1">🎯 Shown Below (Demo):</p>
+                  <ul className="list-disc list-inside text-gray-700 space-y-1">
+                    <li>6 distributed KAS endpoints</li>
+                    <li>Nation-specific KAS instances</li>
+                    <li>COI community KAS services</li>
+                    <li>Production architecture vision</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg p-4 border-2 border-yellow-300">
+              <p className="text-sm text-gray-800">
+                <strong className="text-yellow-800">💡 Production Deployment:</strong> In production, each nation/COI would host 
+                their own KAS endpoint. The endpoints shown below represent the <strong>target architecture</strong> for coalition 
+                deployment, demonstrating how DIVE V3 enables instant coalition growth without re-encrypting historical data.
+              </p>
+            </div>
           </div>
         </div>
       </div>

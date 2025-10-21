@@ -158,7 +158,8 @@ function extractPolicyDescription(content: string, policyId: string): string {
 }
 
 /**
- * Count policy tests
+ * Count policy tests for a specific policy
+ * Matches test files by naming convention or package reference
  */
 async function countPolicyTests(policyId: string): Promise<number> {
     try {
@@ -170,14 +171,24 @@ async function countPolicyTests(policyId: string): Promise<number> {
 
         const testFiles = fs.readdirSync(TEST_DIR).filter(f => f.endsWith('.rego'));
 
+        // Match test files to policy by:
+        // 1. Exact match: {policyId}_test.rego or {policyId}_tests.rego
+        // 2. Keyword match: test file name contains policy keywords
+        // 3. Package match: test file imports/references the policy package
+
         for (const testFile of testFiles) {
             const testPath = path.join(TEST_DIR, testFile);
             const content = fs.readFileSync(testPath, 'utf-8');
 
-            // Count test_ rules
-            const testMatches = content.match(/^test_\w+/gm);
-            if (testMatches) {
-                totalTests += testMatches.length;
+            // Check if this test file is relevant to the policy
+            const isRelevant = isTestFileRelevantToPolicy(testFile, content, policyId);
+
+            if (isRelevant) {
+                // Count test_ rules in this file
+                const testMatches = content.match(/^test_\w+/gm);
+                if (testMatches) {
+                    totalTests += testMatches.length;
+                }
             }
         }
 
@@ -187,6 +198,65 @@ async function countPolicyTests(policyId: string): Promise<number> {
         logger.warn('Failed to count policy tests', { error, policyId });
         return 0;
     }
+}
+
+/**
+ * Determine if a test file is relevant to a specific policy
+ */
+function isTestFileRelevantToPolicy(testFileName: string, testContent: string, policyId: string): boolean {
+    // Normalize policy ID for matching
+    const normalizedPolicyId = policyId.toLowerCase().replace(/[_-]/g, '');
+    const testFileNormalized = testFileName.toLowerCase().replace(/[_-]/g, '');
+
+    // 1. Exact file name match: fuel_inventory_abac_policy.rego → fuel_inventory_tests.rego
+    if (testFileNormalized.includes(normalizedPolicyId.replace('policy', ''))) {
+        return true;
+    }
+
+    // 2. Check for common policy keywords
+    const policyKeywords = policyId.toLowerCase().split('_').filter(word =>
+        word.length > 3 && word !== 'policy' && word !== 'authorization'
+    );
+
+    for (const keyword of policyKeywords) {
+        if (testFileNormalized.includes(keyword)) {
+            return true;
+        }
+    }
+
+    // 3. Check if test file imports or references the policy package
+    const packageMatch = testContent.match(/^package\s+([\w.]+)/m);
+    if (packageMatch) {
+        const testPackage = packageMatch[1];
+        // Check if test package matches policy package structure
+        if (testPackage.includes(normalizedPolicyId)) {
+            return true;
+        }
+    }
+
+    // 4. Check for import statements referencing the policy
+    const importPattern = new RegExp(`import.*${policyId}`, 'i');
+    if (importPattern.test(testContent)) {
+        return true;
+    }
+
+    // 5. Special case mappings for known policies
+    const specialMappings: Record<string, string[]> = {
+        'fuel_inventory_abac_policy': ['comprehensive', 'negative', 'acp240'],
+        'admin_authorization_policy': ['admin_authorization', 'policy_management'],
+        'upload_authorization_policy': ['upload_authorization']
+    };
+
+    if (specialMappings[policyId]) {
+        const relevantKeywords = specialMappings[policyId];
+        for (const keyword of relevantKeywords) {
+            if (testFileNormalized.includes(keyword.toLowerCase())) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 /**

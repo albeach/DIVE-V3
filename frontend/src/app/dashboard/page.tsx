@@ -3,9 +3,10 @@ import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/page-layout";
 import { DashboardCard } from "@/components/dashboard/dashboard-card";
 import { ProfileBadge } from "@/components/dashboard/profile-badge";
-import { CompactProfile } from "@/components/dashboard/compact-profile";
-import { FederationPartners } from "@/components/dashboard/federation-partners";
-import { InformationPanel } from "@/components/dashboard/information-panel";
+import { PseudonymNotice } from "@/components/dashboard/pseudonym-notice";
+import { IdpInfo } from "@/components/dashboard/idp-info";
+import { FederationPartnersRevamped } from "@/components/dashboard/federation-partners-revamped";
+import { InformationPanelModern } from "@/components/dashboard/information-panel-modern";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -43,46 +44,78 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Side-by-side: Security Profile & Federation Partners */}
+      {/* Side-by-side: Pseudonym Notice & IdP Info */}
       <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Security Profile & IdP Info */}
-        <CompactProfile user={session.user || {}} />
+        {/* Left: Pseudonym Explanation */}
+        <PseudonymNotice user={session.user || {}} />
 
-        {/* Right: Federation Partners */}
-        <FederationPartners />
+        {/* Right: IdP Info */}
+        <IdpInfo user={session.user || {}} />
       </div>
 
-      {/* Information & Support Panel */}
-      <div className="mb-8">
-        <InformationPanel />
+      {/* Side-by-side: Federation Network & Information & Support */}
+      <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left: Federation Network */}
+        <FederationPartnersRevamped user={session.user || {}} />
+
+        {/* Right: Information & Support */}
+        <InformationPanelModern />
       </div>
 
-      {/* Main Action Cards */}
+      {/* Divider with gradient */}
       <div className="mb-8">
-        <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wide mb-4">Quick Actions</h3>
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t-2 border-gray-200"></div>
+          </div>
+          <div className="relative flex justify-center">
+            <div className="px-6 py-2 bg-gradient-to-r from-[#4396ac] via-[#6cb38b] to-[#90d56a] rounded-full shadow-lg animate-bounce-subtle">
+              <span className="text-white font-bold text-sm uppercase tracking-wider">Your Actions</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions - Modernized */}
+      <div className="mb-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <DashboardCard
             href="/resources"
             title="Browse Documents"
             description="Access classified documents based on your security attributes and authorization policies"
-            icon="📄"
-            delay={150}
+            icon={
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            }
+            gradient="from-blue-500 to-indigo-600"
+            delay={0}
           />
 
           <DashboardCard
             href="/upload"
             title="Upload Document"
             description="Upload files with automatic ZTDF encryption and ACP-240 compliant security labeling"
-            icon="📤"
-            delay={200}
+            icon={
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            }
+            gradient="from-emerald-500 to-teal-600"
+            delay={50}
           />
 
           <DashboardCard
             href="/policies"
             title="Authorization Policies"
             description="View OPA Rego policies and test authorization decisions with real-time feedback"
-            icon="📜"
-            delay={250}
+            icon={
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            }
+            gradient="from-purple-500 to-pink-600"
+            delay={100}
           />
         </div>
       </div>

@@ -13,7 +13,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 
 interface HeartbeatResponse {
     authenticated: boolean;
@@ -32,7 +32,8 @@ interface SessionHealthStatus {
     needsRefresh: boolean;
 }
 
-const HEARTBEAT_INTERVAL = 30000; // 30 seconds
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds (normal)
+const HEARTBEAT_INTERVAL_CRITICAL = 10000; // 10 seconds (when < 5 minutes remaining)
 const CLOCK_SKEW_TOLERANCE = 5000; // 5 seconds tolerance
 
 export function useSessionHeartbeat() {
@@ -101,6 +102,14 @@ export function useSessionHeartbeat() {
                 needsRefresh: health.needsRefresh,
             });
 
+            // FIX #7: Heartbeat-triggered logout failsafe
+            // If server reports session is invalid or expired, force logout
+            if (!health.isValid && data.authenticated === false) {
+                console.error('[Heartbeat] Server reports session invalid - forcing logout');
+                await signOut({ callbackUrl: '/', redirect: true });
+                return null;
+            }
+
             setSessionHealth(health);
             lastHeartbeatRef.current = Date.now();
 
@@ -158,12 +167,26 @@ export function useSessionHeartbeat() {
 
         // Only run interval when page is visible
         if (isPageVisible) {
-            console.log('[Heartbeat] Starting interval (page visible)');
+            // FIX #4: Dynamic heartbeat interval based on session health
+            // Use faster interval when session is approaching expiry
+            const timeUntilExpiry = sessionHealth?.expiresAt
+                ? (sessionHealth.expiresAt - Date.now()) / 1000
+                : Infinity;
+
+            const intervalDuration = timeUntilExpiry < 300 // Less than 5 minutes
+                ? HEARTBEAT_INTERVAL_CRITICAL  // 10 seconds
+                : HEARTBEAT_INTERVAL;           // 30 seconds
+
+            console.log('[Heartbeat] Starting interval (page visible)', {
+                timeUntilExpiry: Math.floor(timeUntilExpiry),
+                intervalDuration,
+                intervalType: intervalDuration === HEARTBEAT_INTERVAL_CRITICAL ? 'CRITICAL' : 'NORMAL'
+            });
 
             heartbeatIntervalRef.current = setInterval(() => {
                 console.log('[Heartbeat] Interval tick');
                 performHeartbeat();
-            }, HEARTBEAT_INTERVAL);
+            }, intervalDuration);
         } else {
             console.log('[Heartbeat] Pausing interval (page hidden)');
 
@@ -179,7 +202,7 @@ export function useSessionHeartbeat() {
                 heartbeatIntervalRef.current = null;
             }
         };
-    }, [status, isPageVisible, performHeartbeat]);
+    }, [status, isPageVisible, sessionHealth?.expiresAt, performHeartbeat]);
 
     // Manual refresh function
     const triggerHeartbeat = useCallback(() => {
