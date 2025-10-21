@@ -300,6 +300,74 @@ resource "keycloak_generic_protocol_mapper" "auth_time_mapper" {
 }
 
 # ============================================
+# ACR/AMR Enrichment (Gap #6 Remediation - Oct 20, 2025)
+# ============================================
+# Reference: docs/ATTRIBUTE-SCHEMA-SPECIFICATION.md
+# NIST SP 800-63B/C: Authentication Context and Methods Reference
+# 
+# PILOT APPROACH: Use existing user attributes (already set in test users)
+# The existing acr_mapper and amr_mapper (lines 249-282) already pass through
+# user attributes to JWT claims. Test users have acr and amr attributes populated.
+# 
+# PRODUCTION APPROACH: Keycloak Custom Authenticator SPI (Java-based)
+# - Detect actual MFA type during authentication flow
+# - Set ACR based on authentication method (password, OTP, PIV/CAC)
+# - Set AMR array with actual factors used
+# - Store in user session for protocol mappers to include in tokens
+# 
+# DESIGN DOCUMENTED IN: docs/KEYCLOAK-MULTI-REALM-GUIDE.md
+# Estimated effort for production SPI: 8-10 hours (Java development + testing)
+# 
+# For pilot, the existing mappers (acr_mapper and amr_mapper) are sufficient
+# because test users have these attributes pre-populated. Real IdPs would
+# need to provide these claims, or the SPI would generate them.
+# 
+# NOTE: Script-based protocol mappers not available in Keycloak 23.0 without
+# additional configuration. For robustness, using attribute-based mappers.
+
+# ============================================
+# Organization Attributes (Gap #4 Remediation - Oct 20, 2025)
+# ============================================
+# Reference: docs/ATTRIBUTE-SCHEMA-SPECIFICATION.md
+# ACP-240 Section 2.1: Organization/Unit & Role attributes
+
+# dutyOrg mapper - user's duty organization
+resource "keycloak_generic_protocol_mapper" "dutyorg_mapper" {
+  realm_id   = keycloak_realm.dive_v3.id
+  client_id  = keycloak_openid_client.dive_v3_app.id
+  name       = "dutyOrg"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "dutyOrg"
+    "claim.name"           = "dutyOrg"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+# orgUnit mapper - user's organizational unit
+resource "keycloak_generic_protocol_mapper" "orgunit_mapper" {
+  realm_id   = keycloak_realm.dive_v3.id
+  client_id  = keycloak_openid_client.dive_v3_app.id
+  name       = "orgUnit"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "orgUnit"
+    "claim.name"           = "orgUnit"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+# ============================================
 # Realm Roles
 # ============================================
 
@@ -341,6 +409,9 @@ resource "keycloak_user" "test_user_us_secret" {
     clearance              = "SECRET"
     countryOfAffiliation   = "USA"
     acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\"]"
+    # Gap #4: Organization attributes
+    dutyOrg                = "US_ARMY"
+    orgUnit                = "CYBER_DEFENSE"
     # AAL2/FAL2 attributes (simulated for testing)
     acr                    = "urn:mace:incommon:iap:silver"
     amr                    = "[\"pwd\",\"otp\"]"
@@ -368,6 +439,9 @@ resource "keycloak_user" "test_user_us_confid" {
     clearance              = "CONFIDENTIAL"
     countryOfAffiliation   = "USA"
     acpCOI                 = "[\"FVEY\"]"
+    # Gap #4: Organization attributes
+    dutyOrg                = "US_NAVY"
+    orgUnit                = "INTELLIGENCE"
     # AAL2/FAL2 attributes
     acr                    = "urn:mace:incommon:iap:silver"
     amr                    = "[\"pwd\",\"otp\"]"
@@ -395,6 +469,9 @@ resource "keycloak_user" "test_user_us_unclass" {
     clearance              = "UNCLASSIFIED"
     countryOfAffiliation   = "USA"
     acpCOI                 = "[]"
+    # Gap #4: Organization attributes
+    dutyOrg                = "CONTRACTOR"
+    orgUnit                = "LOGISTICS"
     # AAL2/FAL2 attributes (AAL1 for contractor - password only)
     acr                    = "urn:mace:incommon:iap:bronze"
     amr                    = "[\"pwd\"]"
@@ -458,6 +535,9 @@ resource "keycloak_user" "france_user" {
     clearance              = "SECRET"  # Standard DIVE clearance level
     countryOfAffiliation   = "FRA"
     acpCOI                 = "[\"NATO-COSMIC\"]"
+    # Gap #4: Organization attributes
+    dutyOrg                = "FR_DEFENSE_MINISTRY"
+    orgUnit                = "RENSEIGNEMENT"  # Intelligence
     # AAL2/FAL2 attributes
     acr                    = "urn:mace:incommon:iap:silver"
     amr                    = "[\"pwd\",\"otp\"]"
@@ -722,6 +802,33 @@ resource "keycloak_custom_identity_provider_mapper" "france_coi_mapper" {
   }
 }
 
+# Gap #4 Remediation: Organization attributes for France IdP
+resource "keycloak_custom_identity_provider_mapper" "france_dutyorg_mapper" {
+  realm                    = keycloak_realm.dive_v3.id
+  identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
+  name                     = "france-dutyOrg-mapper"
+  identity_provider_mapper = "saml-user-attribute-idp-mapper"
+  
+  extra_config = {
+    "syncMode"       = "INHERIT"
+    "attribute.name" = "dutyOrg"
+    "user.attribute" = "dutyOrg"
+  }
+}
+
+resource "keycloak_custom_identity_provider_mapper" "france_orgunit_mapper" {
+  realm                    = keycloak_realm.dive_v3.id
+  identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
+  name                     = "france-orgUnit-mapper"
+  identity_provider_mapper = "saml-user-attribute-idp-mapper"
+  
+  extra_config = {
+    "syncMode"       = "INHERIT"
+    "attribute.name" = "orgUnit"
+    "user.attribute" = "orgUnit"
+  }
+}
+
 # --------------------------------------------
 # Canada OIDC IdP (Mock Realm)
 # --------------------------------------------
@@ -753,6 +860,9 @@ resource "keycloak_user" "canada_user" {
     clearance              = "CONFIDENTIAL"
     countryOfAffiliation   = "CAN"
     acpCOI                 = "[\"CAN-US\"]"
+    # Gap #4: Organization attributes
+    dutyOrg                = "CAN_FORCES"
+    orgUnit                = "CYBER_OPS"
     # AAL2/FAL2 attributes
     acr                    = "urn:mace:incommon:iap:silver"
     amr                    = "[\"pwd\",\"otp\"]"
@@ -928,6 +1038,33 @@ resource "keycloak_custom_identity_provider_mapper" "canada_coi_mapper" {
   }
 }
 
+# Gap #4 Remediation: Organization attributes for Canada IdP
+resource "keycloak_custom_identity_provider_mapper" "canada_dutyorg_mapper" {
+  realm                    = keycloak_realm.dive_v3.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
+  name                     = "canada-dutyOrg-mapper"
+  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
+  
+  extra_config = {
+    "syncMode"      = "INHERIT"
+    "claim"         = "dutyOrg"
+    "user.attribute" = "dutyOrg"
+  }
+}
+
+resource "keycloak_custom_identity_provider_mapper" "canada_orgunit_mapper" {
+  realm                    = keycloak_realm.dive_v3.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
+  name                     = "canada-orgUnit-mapper"
+  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
+  
+  extra_config = {
+    "syncMode"      = "INHERIT"
+    "claim"         = "orgUnit"
+    "user.attribute" = "orgUnit"
+  }
+}
+
 # --------------------------------------------
 # Industry OIDC IdP (Mock Realm)
 # --------------------------------------------
@@ -962,6 +1099,9 @@ resource "keycloak_user" "industry_user" {
     # No clearance - will default to UNCLASSIFIED via enrichment
     # No countryOfAffiliation - will be inferred from email domain via enrichment
     # No acpCOI - will default to empty array
+    # Gap #4: Organization attributes (enriched from email domain)
+    dutyOrg = "LOCKHEED_MARTIN"
+    orgUnit = "RESEARCH_DEV"
     # AAL2/FAL2 attributes (AAL1 for contractor - password only)
     acr = "urn:mace:incommon:iap:bronze"
     amr = "[\"pwd\"]"
@@ -1078,6 +1218,34 @@ resource "keycloak_custom_identity_provider_mapper" "industry_email_mapper" {
     "syncMode"      = "INHERIT"
     "claim"         = "email"
     "user.attribute" = "email"
+  }
+}
+
+# Gap #4 Remediation: Organization attributes for Industry IdP
+# Note: Industry users may not provide these, will be enriched from email domain
+resource "keycloak_custom_identity_provider_mapper" "industry_dutyorg_mapper" {
+  realm                    = keycloak_realm.dive_v3.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.industry_idp.alias
+  name                     = "industry-dutyOrg-mapper"
+  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
+  
+  extra_config = {
+    "syncMode"      = "INHERIT"
+    "claim"         = "dutyOrg"
+    "user.attribute" = "dutyOrg"
+  }
+}
+
+resource "keycloak_custom_identity_provider_mapper" "industry_orgunit_mapper" {
+  realm                    = keycloak_realm.dive_v3.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.industry_idp.alias
+  name                     = "industry-orgUnit-mapper"
+  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
+  
+  extra_config = {
+    "syncMode"      = "INHERIT"
+    "claim"         = "orgUnit"
+    "user.attribute" = "orgUnit"
   }
 }
 

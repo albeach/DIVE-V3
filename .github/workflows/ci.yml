@@ -90,9 +90,15 @@ jobs:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
+          KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
           JWT_AUDIENCE: dive-v3-api-test
+          # Multi-realm configuration (Oct 21, 2025)
+          KEYCLOAK_URL: http://localhost:8081
+          KEYCLOAK_REALM: dive-v3-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_CLIENT_SECRET: test-secret
       
       - name: Upload Test Results
         if: always()
@@ -161,10 +167,12 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
           JWT_AUDIENCE: dive-v3-api-test
-          KEYCLOAK_URL: http://localhost:8080
-          KEYCLOAK_REALM: dive-v3-pilot
-          KEYCLOAK_CLIENT_ID: dive-v3-client
+          # Multi-realm configuration (Oct 21, 2025)
+          KEYCLOAK_URL: http://localhost:8081
+          KEYCLOAK_REALM: dive-v3-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-secret
+          KAS_URL: http://localhost:8080
 
   opa-policy-tests:
     name: OPA - Policy Tests
@@ -227,6 +235,16 @@ jobs:
           NEXT_PUBLIC_BACKEND_URL: http://localhost:4000
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-nextauth-secret-for-ci
+          AUTH_SECRET: test-nextauth-secret-for-ci
+          # Multi-realm configuration (Oct 21, 2025)
+          KEYCLOAK_URL: http://localhost:8081
+          KEYCLOAK_REALM: dive-v3-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
+          NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8081
+          NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+          # Database for NextAuth (not actually used in build, but required for type checking)
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
       
       - name: Verify Build Output
         run: |
@@ -318,7 +336,13 @@ jobs:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
+          KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
+          # Multi-realm configuration (Oct 21, 2025)
+          KEYCLOAK_URL: http://localhost:8081
+          KEYCLOAK_REALM: dive-v3-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_CLIENT_SECRET: test-secret
 
   code-quality:
     name: Code Quality - ESLint
@@ -433,9 +457,15 @@ jobs:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
+          KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
           JWT_AUDIENCE: dive-v3-api-test
+          # Multi-realm configuration (Oct 21, 2025)
+          KEYCLOAK_URL: http://localhost:8081
+          KEYCLOAK_REALM: dive-v3-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_CLIENT_SECRET: test-secret
       
       - name: Generate Coverage Summary
         run: |

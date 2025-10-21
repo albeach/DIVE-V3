@@ -129,10 +129,23 @@ describe('Authorization Middleware (PEP)', () => {
 
                 const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
 
+                // Validate issuer if specified (FAL2 requirement)
+                // Session expiration fix (Oct 21): Handle array issuers for multi-realm support
+                if (options?.issuer) {
+                    const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
+                    if (!validIssuers.includes(payload.iss)) {
+                        callback(new Error('jwt issuer invalid'), null);
+                        return;
+                    }
+                }
+
                 // Validate audience if specified (FAL2 requirement)
+                // Session expiration fix (Oct 21): Handle array audiences for multi-realm support
                 if (options?.audience) {
                     const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                    if (!tokenAud || !tokenAud.includes(options.audience)) {
+                    const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
+                    const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
+                    if (!hasValidAudience) {
                         callback(new Error('jwt audience invalid'), null);
                         return;
                     }
@@ -326,7 +339,8 @@ describe('Authorization Middleware (PEP)', () => {
             // Reset next mock
             next = jest.fn();
 
-            // Reset JWT mocks for authz tests - decode actual token and validate audience
+            // Reset JWT mocks for authz tests - decode actual token and validate audience/issuer
+            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
             jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
                 try {
                     // Manually decode JWT by parsing base64 payload
@@ -338,10 +352,23 @@ describe('Authorization Middleware (PEP)', () => {
 
                     const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
 
+                    // Validate issuer if specified (FAL2 requirement)
+                    // Multi-realm support: Handle array of valid issuers
+                    if (options?.issuer) {
+                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
+                        if (!validIssuers.includes(payload.iss)) {
+                            callback(new Error('jwt issuer invalid'), null);
+                            return;
+                        }
+                    }
+
                     // Validate audience if specified (FAL2 requirement)
+                    // Multi-realm support: Handle array of valid audiences
                     if (options?.audience) {
                         const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        if (!tokenAud || !tokenAud.includes(options.audience)) {
+                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
+                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
+                        if (!hasValidAudience) {
                             callback(new Error('jwt audience invalid'), null);
                             return;
                         }
@@ -759,7 +786,8 @@ describe('Authorization Middleware (PEP)', () => {
             req.headers!['x-request-id'] = 'test-req-123';
             req.params!.id = 'doc-fvey-001';
 
-            // Decode actual token and validate audience
+            // Decode actual token and validate audience/issuer
+            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
             jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
                 try {
                     // Manually decode JWT by parsing base64 payload
@@ -771,10 +799,23 @@ describe('Authorization Middleware (PEP)', () => {
 
                     const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
 
-                    // Validate audience if specified
+                    // Validate issuer if specified (FAL2 requirement)
+                    // Multi-realm support: Handle array of valid issuers
+                    if (options?.issuer) {
+                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
+                        if (!validIssuers.includes(payload.iss)) {
+                            callback(new Error('jwt issuer invalid'), null);
+                            return;
+                        }
+                    }
+
+                    // Validate audience if specified (FAL2 requirement)
+                    // Multi-realm support: Handle array of valid audiences
                     if (options?.audience) {
                         const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        if (!tokenAud || !tokenAud.includes(options.audience)) {
+                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
+                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
+                        if (!hasValidAudience) {
                             callback(new Error('jwt audience invalid'), null);
                             return;
                         }
@@ -893,7 +934,8 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT({ clearance: 'CONFIDENTIAL' });
             req.headers!.authorization = `Bearer ${token}`;
 
-            // Decode actual token and validate audience
+            // Decode actual token and validate audience/issuer
+            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
             jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
                 try {
                     // Manually decode JWT by parsing base64 payload
@@ -905,10 +947,23 @@ describe('Authorization Middleware (PEP)', () => {
 
                     const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
 
-                    // Validate audience if specified
+                    // Validate issuer if specified (FAL2 requirement)
+                    // Multi-realm support: Handle array of valid issuers
+                    if (options?.issuer) {
+                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
+                        if (!validIssuers.includes(payload.iss)) {
+                            callback(new Error('jwt issuer invalid'), null);
+                            return;
+                        }
+                    }
+
+                    // Validate audience if specified (FAL2 requirement)
+                    // Multi-realm support: Handle array of valid audiences
                     if (options?.audience) {
                         const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        if (!tokenAud || !tokenAud.includes(options.audience)) {
+                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
+                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
+                        if (!hasValidAudience) {
                             callback(new Error('jwt audience invalid'), null);
                             return;
                         }

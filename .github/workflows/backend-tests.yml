@@ -64,9 +64,11 @@ jobs:
           MONGODB_DATABASE: dive-v3-test
           MONGODB_URI: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
+          KAS_URL: http://localhost:8080
+          # Multi-realm configuration (Oct 21, 2025)
           KEYCLOAK_URL: http://localhost:8081
-          KEYCLOAK_REALM: dive-v3-pilot
-          KEYCLOAK_CLIENT_ID: dive-v3-client
+          KEYCLOAK_REALM: dive-v3-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-secret
         continue-on-error: true
 
