@@ -9,7 +9,7 @@
 
 import { MongoClient } from 'mongodb';
 import { validateCOICoherence } from '../services/coi-validation.service';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger';  // Commented out - not used in this script
 import * as fs from 'fs';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
@@ -73,7 +73,7 @@ async function main() {
             }
 
             // Validate COI coherence
-            const validation = validateCOICoherence(securityLabel);
+            const validation = await validateCOICoherence(securityLabel);
 
             if (!validation.valid) {
                 invalidIds.push(resourceId);

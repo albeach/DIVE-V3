@@ -258,7 +258,7 @@ function randomDate(startDate: Date, endDate: Date): Date {
 /**
  * Create properly formatted ZTDF document with VALIDATED COI coherence
  */
-function createValidZTDFDocument(index: number) {
+async function createValidZTDFDocument(index: number) {
     const resourceId = `doc-generated-${Date.now()}-${index.toString().padStart(4, '0')}`;
 
     // Step 1: Pick classification
@@ -271,7 +271,7 @@ function createValidZTDFDocument(index: number) {
     const { coi: COI, coiOperator, releasabilityTo, caveats } = template;
 
     // Step 4: VALIDATE (should always pass, but safety check)
-    const validation = validateCOICoherence({
+    const validation = await validateCOICoherence({
         classification,
         releasabilityTo,
         COI,
@@ -476,7 +476,7 @@ async function main() {
     // Validate all templates first
     console.log('✅ Validating COI templates...\n');
     for (const template of COI_TEMPLATES) {
-        const validation = validateCOICoherence({
+        const validation = await validateCOICoherence({
             classification: 'SECRET',
             releasabilityTo: template.releasabilityTo,
             COI: template.coi,

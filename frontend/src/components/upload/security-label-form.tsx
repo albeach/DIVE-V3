@@ -52,63 +52,13 @@ const COUNTRIES = [
   { code: 'POL', name: 'Poland', flag: '🇵🇱', region: 'NATO' }
 ];
 
-// All possible COIs (user's COIs will be filtered from this)
-const ALL_COI_OPTIONS = [
-  { 
-    value: 'FVEY', 
-    label: 'Five Eyes', 
-    description: 'USA, GBR, CAN, AUS, NZL intelligence alliance',
-    requiredCountries: ['USA', 'GBR', 'CAN', 'AUS', 'NZL']
-  },
-  { 
-    value: 'NATO-COSMIC', 
-    label: 'NATO COSMIC', 
-    description: 'NATO Top Secret material',
-    requiredCountries: ['USA', 'GBR', 'FRA', 'DEU', 'CAN', 'ITA', 'ESP', 'POL'] // Core NATO members in our list
-  },
-  { 
-    value: 'CAN-US', 
-    label: 'Canada-US', 
-    description: 'Bilateral Canada-US partnership',
-    requiredCountries: ['CAN', 'USA']
-  },
-  { 
-    value: 'US-ONLY', 
-    label: 'US Only', 
-    description: 'US Personnel Only - no foreign release',
-    requiredCountries: ['USA']
-  },
-  { 
-    value: 'EU-RESTRICTED', 
-    label: 'EU Restricted', 
-    description: 'European Union members only',
-    requiredCountries: ['FRA', 'DEU', 'ESP', 'ITA', 'POL'] // EU members in our list
-  },
-  { 
-    value: 'QUAD', 
-    label: 'QUAD', 
-    description: 'USA, AUS, India, Japan strategic dialogue',
-    requiredCountries: ['USA', 'AUS']
-  },
-  { 
-    value: 'GBR-US', 
-    label: 'UK-US', 
-    description: 'Bilateral United Kingdom-US partnership',
-    requiredCountries: ['GBR', 'USA']
-  },
-  { 
-    value: 'FRA-US', 
-    label: 'France-US', 
-    description: 'Bilateral France-US partnership',
-    requiredCountries: ['FRA', 'USA']
-  },
-  { 
-    value: 'AUKUS', 
-    label: 'AUKUS', 
-    description: 'Australia, UK, USA defense partnership',
-    requiredCountries: ['AUS', 'GBR', 'USA']
-  }
-];
+// COI Options - now fetched dynamically from API
+interface COIOption {
+  value: string;
+  label: string;
+  description: string;
+  requiredCountries: string[];
+}
 
 const CAVEAT_OPTIONS = [
   { 
@@ -172,20 +122,56 @@ export default function SecurityLabelForm({
   onCaveatsChange
 }: SecurityLabelFormProps) {
   
+  // Fetch COI options from API
+  const [allCOIOptions, setAllCOIOptions] = useState<COIOption[]>([]);
+  const [coiLoading, setCoiLoading] = useState(true);
+  
+  useEffect(() => {
+    const fetchCOIs = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        const response = await fetch(`${backendUrl}/api/coi-keys?status=active`);
+        const data = await response.json();
+        
+        const coiOptions: COIOption[] = data.cois.map((coi: any) => ({
+          value: coi.coiId,
+          label: coi.name,
+          description: coi.description,
+          requiredCountries: coi.memberCountries
+        }));
+        
+        setAllCOIOptions(coiOptions);
+      } catch (error) {
+        console.error('Failed to fetch COI options:', error);
+        // Fallback to empty array - user can still use the form
+        setAllCOIOptions([]);
+      } finally {
+        setCoiLoading(false);
+      }
+    };
+    
+    fetchCOIs();
+  }, []);
+  
   // Filter COI options to only show user's COIs
   const availableCOIs = useMemo(() => {
+    if (coiLoading) return [];
     if (!userCOI || userCOI.length === 0) {
-      return ALL_COI_OPTIONS; // Show all if user has no COIs
+      return allCOIOptions; // Show all if user has no COIs
     }
-    return ALL_COI_OPTIONS.filter(option => userCOI.includes(option.value));
-  }, [userCOI]);
+    return allCOIOptions.filter(option => userCOI.includes(option.value));
+  }, [userCOI, allCOIOptions, coiLoading]);
 
   // Quick select presets
   const selectFVEY = () => {
-    const fveyCountries = COUNTRIES.filter(c => c.region === 'FVEY').map(c => c.code);
-    onReleasabilityChange(fveyCountries);
-    if (availableCOIs.some(c => c.value === 'FVEY')) {
+    const fveyCOI = availableCOIs.find(c => c.value === 'FVEY');
+    if (fveyCOI) {
+      onReleasabilityChange(fveyCOI.requiredCountries);
       onCOIChange(['FVEY']);
+    } else {
+      // Fallback if FVEY not available
+      const fveyCountries = COUNTRIES.filter(c => c.region === 'FVEY').map(c => c.code);
+      onReleasabilityChange(fveyCountries);
     }
   };
 
@@ -229,7 +215,7 @@ export default function SecurityLabelForm({
     
     // COI selected but countries don't match
     COI.forEach(coi => {
-      const coiOption = ALL_COI_OPTIONS.find(o => o.value === coi);
+      const coiOption = allCOIOptions.find(o => o.value === coi);
       if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
         const missingCountries = coiOption.requiredCountries.filter(
           c => !releasabilityTo.includes(c)
@@ -255,7 +241,7 @@ export default function SecurityLabelForm({
       
       // Auto-deselect COIs that require this country
       const newCOIs = COI.filter(coiValue => {
-        const coiOption = ALL_COI_OPTIONS.find(o => o.value === coiValue);
+        const coiOption = allCOIOptions.find(o => o.value === coiValue);
         if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
           // If this COI requires the removed country, deselect it
           return !coiOption.requiredCountries.includes(countryCode);
@@ -275,14 +261,14 @@ export default function SecurityLabelForm({
   const toggleCOI = (coiValue: string) => {
     if (COI.includes(coiValue)) {
       // Deselecting COI - remove countries that are only required by this COI
-      const coiOption = ALL_COI_OPTIONS.find(o => o.value === coiValue);
+      const coiOption = allCOIOptions.find(o => o.value === coiValue);
       if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
         // Get all countries required by remaining COIs
         const remainingCOIs = COI.filter(c => c !== coiValue);
         const countriesStillNeeded = new Set<string>();
         
         remainingCOIs.forEach(remainingCoi => {
-          const remainingOption = ALL_COI_OPTIONS.find(o => o.value === remainingCoi);
+          const remainingOption = allCOIOptions.find(o => o.value === remainingCoi);
           remainingOption?.requiredCountries?.forEach(country => {
             countriesStillNeeded.add(country);
           });
@@ -307,7 +293,7 @@ export default function SecurityLabelForm({
       onCOIChange(COI.filter(c => c !== coiValue));
     } else {
       // Selecting COI - auto-add required countries
-      const coiOption = ALL_COI_OPTIONS.find(o => o.value === coiValue);
+      const coiOption = allCOIOptions.find(o => o.value === coiValue);
       if (coiOption?.requiredCountries && coiOption.requiredCountries.length > 0) {
         // Add all required countries that aren't already selected
         const newCountries = [...releasabilityTo];

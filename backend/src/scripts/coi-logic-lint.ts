@@ -9,7 +9,7 @@
 
 import { MongoClient } from 'mongodb';
 import { validateCOICoherence } from '../services/coi-validation.service';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger';  // Commented out - not used in this script
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
@@ -87,7 +87,7 @@ async function main() {
             }
 
             // Validate COI coherence
-            const validation = validateCOICoherence(securityLabel);
+            const validation = await validateCOICoherence(securityLabel);
 
             if (!validation.valid) {
                 invalidCount++;
@@ -102,7 +102,7 @@ async function main() {
                 console.log(`❌ INVALID: ${resourceId}`);
                 console.log(`   Title: ${title}`);
                 console.log(`   Violations:`);
-                validation.errors.forEach(err => console.log(`      - ${err}`));
+                validation.errors.forEach((err: string) => console.log(`      - ${err}`));
                 console.log('');
             } else {
                 validCount++;

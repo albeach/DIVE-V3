@@ -3,6 +3,9 @@
  * 
  * Enforces NATO ACP-240 / STANAG 4774/5636 COI and Releasability Coherence
  * 
+ * **UPDATED:** Now uses MongoDB COI Keys collection as single source of truth
+ * for COI membership data instead of hardcoded COI_MEMBERSHIP map.
+ * 
  * Implements fail-closed validation of:
  * 1. COI mutual exclusivity (US-ONLY ⊥ foreign-sharing COIs)
  * 2. COI superset/subset conflicts (when operator=ANY)
@@ -14,6 +17,9 @@
  */
 
 import { logger } from '../utils/logger';
+
+// Import COI Keys service for dynamic membership lookup
+import { getCOIMembershipMap } from './coi-key.service';
 
 // ============================================
 // COI Operator Types
@@ -43,8 +49,13 @@ export interface IEnhancedSecurityLabel {
 // ============================================
 
 /**
- * Static COI → Country Membership Map
- * Authoritative source for validation
+ * Static COI → Country Membership Map (DEPRECATED - for backwards compatibility only)
+ * 
+ * **IMPORTANT:** This is maintained for backwards compatibility and testing.
+ * Production code should use getCOIMembershipMapFromDB() which queries
+ * the MongoDB COI Keys collection as the single source of truth.
+ * 
+ * @deprecated Use getCOIMembershipMapFromDB() instead
  */
 export const COI_MEMBERSHIP: Record<string, Set<string>> = {
     'US-ONLY': new Set(['USA']),
@@ -71,6 +82,30 @@ export const COI_MEMBERSHIP: Record<string, Set<string>> = {
     'CENTCOM': new Set(['USA', 'SAU', 'ARE', 'QAT', 'KWT', 'BHR', 'JOR', 'EGY']),
     'SOCOM': new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']) // FVEY special ops
 };
+
+/**
+ * Get COI Membership Map from MongoDB (single source of truth)
+ * 
+ * This replaces the static COI_MEMBERSHIP map with live data from the database.
+ * 
+ * @returns Promise<Record<string, Set<string>>> Map of COI ID -> Set of country codes
+ */
+async function getCOIMembershipMapFromDB(): Promise<Record<string, Set<string>>> {
+    try {
+        const membershipMap = await getCOIMembershipMap();
+
+        // Special handling for NATO-COSMIC (requires NATO membership)
+        if (membershipMap['NATO-COSMIC']) {
+            // NATO-COSMIC inherits NATO membership
+            membershipMap['NATO-COSMIC'] = membershipMap['NATO'] || new Set();
+        }
+
+        return membershipMap;
+    } catch (error) {
+        logger.warn('Failed to load COI membership from database, falling back to static map', { error });
+        return COI_MEMBERSHIP; // Fallback for resilience
+    }
+}
 
 // ============================================
 // COI Relationship Definitions
@@ -152,17 +187,20 @@ function checkSubsetSupersetConflicts(cois: string[], operator: COIOperator): st
 /**
  * INVARIANT 3: Releasability must be subset of COI membership union
  */
-function checkReleasabilityAlignment(releasabilityTo: string[], cois: string[]): string[] {
+async function checkReleasabilityAlignment(releasabilityTo: string[], cois: string[]): Promise<string[]> {
     const errors: string[] = [];
+
+    // Get live COI membership data from database
+    const membershipMap = await getCOIMembershipMapFromDB();
 
     // Compute union of all COI member countries
     const union = new Set<string>();
     for (const coi of cois) {
-        let members = COI_MEMBERSHIP[coi];
+        let members = membershipMap[coi];
 
         // Special case: NATO-COSMIC expands to full NATO membership
         if (coi === 'NATO-COSMIC') {
-            members = COI_MEMBERSHIP['NATO'];
+            members = membershipMap['NATO'];
         }
 
         if (members) {
@@ -237,7 +275,7 @@ function checkEmptyCOI(cois: string[], caveats: string[] | undefined): string[] 
  * @param label Security label with COI operator
  * @returns Validation result with errors/warnings
  */
-export function validateCOICoherence(label: IEnhancedSecurityLabel): IValidationResult {
+export async function validateCOICoherence(label: IEnhancedSecurityLabel): Promise<IValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -249,10 +287,10 @@ export function validateCOICoherence(label: IEnhancedSecurityLabel): IValidation
         caveats: label.caveats
     });
 
-    // Run all invariant checks
+    // Run all invariant checks (note: checkReleasabilityAlignment is now async)
     errors.push(...checkMutualExclusivity(label.COI));
     errors.push(...checkSubsetSupersetConflicts(label.COI, label.coiOperator));
-    errors.push(...checkReleasabilityAlignment(label.releasabilityTo, label.COI));
+    errors.push(...await checkReleasabilityAlignment(label.releasabilityTo, label.COI));
     errors.push(...checkCaveatEnforcement(label.caveats, label.COI, label.releasabilityTo));
     errors.push(...checkEmptyReleasability(label.releasabilityTo));
     warnings.push(...checkEmptyCOI(label.COI, label.caveats));
@@ -277,8 +315,8 @@ export function validateCOICoherence(label: IEnhancedSecurityLabel): IValidation
 /**
  * Validate and throw if invalid (for middleware/service use)
  */
-export function validateCOICoherenceOrThrow(label: IEnhancedSecurityLabel): void {
-    const result = validateCOICoherence(label);
+export async function validateCOICoherenceOrThrow(label: IEnhancedSecurityLabel): Promise<void> {
+    const result = await validateCOICoherence(label);
     if (!result.valid) {
         throw new Error(`COI validation failed: ${result.errors.join('; ')}`);
     }
@@ -288,8 +326,10 @@ export function validateCOICoherenceOrThrow(label: IEnhancedSecurityLabel): void
  * Get allowed COIs given mutual exclusivity constraints
  * Used by UI to filter COI picker options
  */
-export function getAllowedCOIs(selectedCOIs: string[]): string[] {
-    const allCOIs = Object.keys(COI_MEMBERSHIP);
+export async function getAllowedCOIs(selectedCOIs: string[]): Promise<string[]> {
+    // Get all COIs from database
+    const membershipMap = await getCOIMembershipMapFromDB();
+    const allCOIs = Object.keys(membershipMap);
 
     if (selectedCOIs.length === 0) {
         return allCOIs;
@@ -316,15 +356,18 @@ export function getAllowedCOIs(selectedCOIs: string[]): string[] {
  * Get allowed countries given COI selection
  * Used by UI to populate releasability picker
  */
-export function getAllowedCountriesForCOIs(cois: string[]): string[] {
+export async function getAllowedCountriesForCOIs(cois: string[]): Promise<string[]> {
     if (cois.length === 0) {
         return []; // No COI = no default countries
     }
 
+    // Get live COI membership data
+    const membershipMap = await getCOIMembershipMapFromDB();
+
     // Union of all COI member countries
     const union = new Set<string>();
     for (const coi of cois) {
-        const members = COI_MEMBERSHIP[coi];
+        const members = membershipMap[coi];
         if (members) {
             members.forEach(m => union.add(m));
         }
