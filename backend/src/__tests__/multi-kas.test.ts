@@ -41,7 +41,7 @@ describe('Multi-KAS Support', () => {
             const metadata = {
                 classification: 'CONFIDENTIAL' as ClassificationLevel,
                 releasabilityTo: ['USA', 'GBR', 'FRA'],
-                COI: [],
+                COI: ['NATO'],  // Add NATO COI to satisfy validation
                 caveats: [],
                 title: 'Coalition Planning Document'
             };
@@ -96,7 +96,7 @@ describe('Multi-KAS Support', () => {
             const metadata = {
                 classification: 'SECRET' as ClassificationLevel,
                 releasabilityTo: ['USA'],
-                COI: [],
+                COI: ['US-ONLY'],  // Add US-ONLY COI to satisfy validation
                 caveats: ['NOFORN'],
                 title: 'US Only Document'
             };
@@ -153,7 +153,7 @@ describe('Multi-KAS Support', () => {
             const metadata = {
                 classification: 'CONFIDENTIAL' as ClassificationLevel,
                 releasabilityTo: ['USA', 'CAN'],
-                COI: [], // No explicit COI
+                COI: ['CAN-US'], // Add explicit COI to satisfy validation
                 caveats: [],
                 title: 'CAN-US Bilateral Agreement'
             };
@@ -182,7 +182,7 @@ describe('Multi-KAS Support', () => {
             const metadata = {
                 classification: 'UNCLASSIFIED' as ClassificationLevel,
                 releasabilityTo: ['USA'],
-                COI: [],
+                COI: ['US-ONLY'],  // Add COI to satisfy validation
                 caveats: [],
                 title: 'Legacy Document'
             };

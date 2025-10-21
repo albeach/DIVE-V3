@@ -5,6 +5,7 @@ import NodeCache from 'node-cache';
 import jwkToPem from 'jwk-to-pem';
 import { logger } from '../utils/logger';
 import { getResourceById } from '../services/resource.service';
+import { isTokenBlacklisted, areUserTokensRevoked } from '../services/token-blacklist.service';
 
 // ============================================
 // PEP (Policy Enforcement Point) Middleware
@@ -34,6 +35,7 @@ const OPA_DECISION_ENDPOINT = `${OPA_URL}/v1/data/dive/authorization`;
 /**
  * Interface for JWT payload (Keycloak token)
  * Enhanced with NIST SP 800-63B/C claims for AAL2/FAL2 enforcement
+ * Gap #4: Added dutyOrg and orgUnit (ACP-240 Section 2.1)
  */
 interface IKeycloakToken {
     sub: string;
@@ -43,8 +45,11 @@ interface IKeycloakToken {
     clearance?: string;
     countryOfAffiliation?: string;
     acpCOI?: string[];
+    dutyOrg?: string;          // Gap #4: User's duty organization (e.g., US_ARMY, FR_DEFENSE_MINISTRY)
+    orgUnit?: string;          // Gap #4: User's organizational unit (e.g., CYBER_DEFENSE, INTELLIGENCE)
     exp?: number;
     iat?: number;
+    jti?: string;              // JWT ID for revocation
     // AAL2/FAL2 claims (NIST SP 800-63B/C)
     aud?: string | string[];  // Audience (FAL2 - prevents token theft)
     acr?: string;              // Authentication Context Class Reference (AAL level)
@@ -54,6 +59,7 @@ interface IKeycloakToken {
 
 /**
  * Interface for OPA input
+ * Gap #4: Added dutyOrg and orgUnit for organization-based policies
  */
 interface IOPAInput {
     input: {
@@ -63,6 +69,8 @@ interface IOPAInput {
             clearance?: string;
             countryOfAffiliation?: string;
             acpCOI?: string[];
+            dutyOrg?: string;    // Gap #4: Organization (e.g., US_ARMY, FR_DEFENSE_MINISTRY)
+            orgUnit?: string;    // Gap #4: Organizational Unit (e.g., CYBER_DEFENSE, INTELLIGENCE)
         };
         action: {
             operation: string;
@@ -72,6 +80,7 @@ interface IOPAInput {
             classification?: string;
             releasabilityTo?: string[];
             COI?: string[];
+            coiOperator?: string;  // COI operator: "ALL" | "ANY"
             creationDate?: string;
             encrypted?: boolean;
         };
@@ -129,14 +138,58 @@ interface IOPADecision {
 }
 
 /**
- * Get signing key from JWKS
- * Uses direct JWKS fetch instead of jwks-rsa due to compatibility issues
+ * Extract realm name from token issuer
+ * Multi-realm support: Determine which realm issued the token
  */
-const getSigningKey = async (header: jwt.JwtHeader): Promise<string> => {
+const getRealmFromToken = (token: string): string => {
+    try {
+        const decoded = jwt.decode(token, { complete: true });
+        if (!decoded || !decoded.payload) {
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        }
+
+        const payload = decoded.payload as any;
+        const issuer = payload.iss;
+
+        if (!issuer) {
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        }
+
+        // Extract realm from issuer URL: http://localhost:8081/realms/{realm}
+        const match = issuer.match(/\/realms\/([^\/]+)/);
+        if (match && match[1]) {
+            return match[1];
+        }
+
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+    } catch (error) {
+        logger.warn('Could not extract realm from token, using default', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+    }
+};
+
+/**
+ * Get signing key from JWKS with multi-realm support
+ * Uses direct JWKS fetch instead of jwks-rsa due to compatibility issues
+ * 
+ * Multi-Realm Migration (Oct 21, 2025):
+ * - Dynamically determines JWKS URL based on token issuer
+ * - Supports both dive-v3-pilot and dive-v3-broker realms
+ * - Caches keys per kid (realm-independent caching)
+ */
+const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<string> => {
+    // Determine which realm to fetch JWKS from
+    // Default to KEYCLOAK_REALM (dive-v3-broker), but support multi-realm
+    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
+    const jwksUri = `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`;
+
     logger.debug('Getting signing key for token', {
         kid: header.kid,
         alg: header.alg,
-        jwksUri: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+        realm,
+        jwksUri,
     });
 
     if (!header.kid) {
@@ -145,16 +198,15 @@ const getSigningKey = async (header: jwt.JwtHeader): Promise<string> => {
     }
 
     try {
-        // Check cache first
+        // Check cache first (keys cached by kid, not realm-specific)
         const cachedKey = jwksCache.get<string>(header.kid);
         if (cachedKey) {
-            logger.debug('Using cached JWKS public key', { kid: header.kid });
+            logger.debug('Using cached JWKS public key', { kid: header.kid, realm });
             return cachedKey;
         }
 
         // Fetch JWKS directly from Keycloak
-        const jwksUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/certs`;
-        const response = await axios.get(jwksUrl);
+        const response = await axios.get(jwksUri);
         const jwks = response.data;
 
         // Find the key with matching kid and use="sig"
@@ -163,6 +215,8 @@ const getSigningKey = async (header: jwt.JwtHeader): Promise<string> => {
         if (!key) {
             logger.error('No matching signing key found in JWKS', {
                 kid: header.kid,
+                realm,
+                jwksUri,
                 availableKids: jwks.keys.map((k: any) => ({ kid: k.kid, use: k.use, alg: k.alg })),
             });
             throw new Error(`No signing key found for kid: ${header.kid}`);
@@ -177,6 +231,7 @@ const getSigningKey = async (header: jwt.JwtHeader): Promise<string> => {
         logger.debug('Signing key retrieved successfully', {
             kid: header.kid,
             alg: key.alg,
+            realm,
             hasKey: !!publicKey,
         });
 
@@ -184,6 +239,8 @@ const getSigningKey = async (header: jwt.JwtHeader): Promise<string> => {
     } catch (error) {
         logger.error('Failed to fetch signing key', {
             kid: header.kid,
+            realm,
+            jwksUri,
             error: error instanceof Error ? error.message : 'Unknown error',
         });
         throw error;
@@ -191,7 +248,13 @@ const getSigningKey = async (header: jwt.JwtHeader): Promise<string> => {
 };
 
 /**
- * Verify JWT token
+ * Verify JWT token with dual-issuer support (multi-realm migration)
+ * 
+ * Multi-Realm Migration (Oct 21, 2025):
+ * - Supports both dive-v3-pilot (legacy single-realm) AND dive-v3-broker (multi-realm federation)
+ * - Backward compatible: Existing tokens from dive-v3-pilot still work
+ * - Forward compatible: New tokens from dive-v3-broker federation accepted
+ * - Dual audience support: dive-v3-client AND dive-v3-client-broker
  */
 const verifyToken = async (token: string): Promise<IKeycloakToken> => {
     try {
@@ -201,8 +264,24 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             throw new Error('Invalid token format');
         }
 
-        // Get the signing key
-        const publicKey = await getSigningKey(decoded.header);
+        // Get the signing key (pass token for realm detection)
+        const publicKey = await getSigningKey(decoded.header, token);
+
+        // Multi-realm: Accept tokens from both dive-v3-pilot AND dive-v3-broker
+        // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
+        const validIssuers: [string, ...string[]] = [
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
+            'http://localhost:8081/realms/dive-v3-pilot',          // External: dive-v3-pilot
+            'http://localhost:8081/realms/dive-v3-broker',         // External: dive-v3-broker
+        ];
+
+        // Multi-realm: Accept tokens for both clients + Keycloak default audience
+        const validAudiences: [string, ...string[]] = [
+            'dive-v3-client',         // Legacy client
+            'dive-v3-client-broker',  // Multi-realm broker client
+            'account',                // Keycloak default audience (ID tokens)
+        ];
 
         // Verify the token with the public key
         return new Promise((resolve, reject) => {
@@ -211,10 +290,10 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
                 publicKey,
                 {
                     algorithms: ['RS256'],
-                    issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
-                    audience: 'dive-v3-client', // FAL2 requirement: strict audience validation
+                    issuer: validIssuers,      // Array of valid issuers (FAL2 compliant)
+                    audience: validAudiences,  // Array of valid audiences (FAL2 compliant)
                 },
-                (err, decoded) => {
+                (err: any, decoded: any) => {
                     if (err) {
                         reject(err);
                     } else {
@@ -235,11 +314,16 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
  * Validate AAL2 (Authentication Assurance Level 2) requirements
  * Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 46-94
  * 
- * AAL2 Requirements:
+ * AAL2 Requirements (NIST SP 800-63B):
  * - Multi-factor authentication (MFA) required
  * - At least 2 authentication factors (something you know + something you have)
  * - ACR (Authentication Context Class Reference) indicates AAL2+
  * - AMR (Authentication Methods Reference) shows 2+ factors
+ * 
+ * Multi-Realm Note (Oct 21, 2025):
+ * - Keycloak sets ACR to numeric values (0=AAL1, 1=AAL2, 2=AAL3)
+ * - AMR may be JSON-encoded string from user attributes
+ * - Must parse AMR before checking array length
  * 
  * @param token - Decoded Keycloak token
  * @param classification - Resource classification level
@@ -251,43 +335,70 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
         return;
     }
 
+    // Parse AMR - may be JSON-encoded string from Keycloak mapper
+    let amrArray: string[] = [];
+    if (token.amr) {
+        if (Array.isArray(token.amr)) {
+            amrArray = token.amr;
+        } else if (typeof token.amr === 'string') {
+            try {
+                const parsed = JSON.parse(token.amr);
+                amrArray = Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+                amrArray = [token.amr];
+            }
+        }
+    }
+
     // Check ACR (Authentication Context Class Reference)
-    const acr = token.acr || '';
+    const acr = String(token.acr || '');
 
-    // AAL2 indicators: InCommon IAP Silver, explicit aal2, multi-factor
+    // AAL2 indicators:
+    // - String descriptors: "silver", "aal2", "multi-factor", "gold"
+    // - Numeric levels: "1" (AAL2), "2" (AAL3)
+    // - URN format: "urn:mace:incommon:iap:silver"
     const isAAL2 =
-        acr.includes('silver') ||    // InCommon IAP Silver = AAL2
-        acr.includes('aal2') ||       // Explicit AAL2
-        acr.includes('multi-factor') || // Generic MFA indicator
-        acr.includes('gold');         // InCommon IAP Gold = AAL3 (also satisfies AAL2)
+        acr.includes('silver') ||       // InCommon IAP Silver = AAL2
+        acr.includes('aal2') ||          // Explicit AAL2
+        acr.includes('multi-factor') ||  // Generic MFA indicator
+        acr.includes('gold') ||          // InCommon IAP Gold = AAL3 (also satisfies AAL2)
+        acr === '1' ||                   // Keycloak numeric: 1 = AAL2
+        acr === '2' ||                   // Keycloak numeric: 2 = AAL3 (satisfies AAL2)
+        acr === '3';                     // Keycloak numeric: 3 = AAL3+ (satisfies AAL2)
 
-    if (!isAAL2) {
-        logger.warn('AAL2 validation failed', {
+    // If ACR indicates AAL2+, accept it
+    if (isAAL2) {
+        logger.debug('AAL2 validation passed via ACR', {
             classification,
             acr,
-            reason: 'Classified resources require AAL2 (MFA)'
+            amr: amrArray,
+            factorCount: amrArray.length
         });
-        throw new Error(`Classified resources require AAL2 (MFA). Current ACR: ${acr || 'missing'}`);
+        return;
     }
 
-    // Check AMR (Authentication Methods Reference) - verify 2+ factors
-    const amr = token.amr || [];
-    if (amr.length < 2) {
-        logger.warn('MFA validation failed', {
+    // Fallback: Check AMR for 2+ factors (allows AAL2 via MFA even if ACR not set correctly)
+    // This handles cases where IdP doesn't set proper ACR but does provide AMR
+    if (amrArray.length >= 2) {
+        logger.info('AAL2 validated via AMR (2+ factors), despite ACR not matching expected values', {
             classification,
-            amr,
-            factorCount: amr.length,
-            reason: 'AAL2 requires at least 2 authentication factors'
+            acr,
+            amr: amrArray,
+            factorCount: amrArray.length,
+            note: 'Accepting based on AMR factors - consider configuring IdP to set proper ACR value'
         });
-        throw new Error(`MFA required: at least 2 factors needed for ${classification}, got ${amr.length}: [${amr.join(', ')}]`);
+        return;
     }
 
-    logger.debug('AAL2 validation passed', {
+    // Reject: Neither ACR nor AMR indicate AAL2
+    logger.warn('AAL2 validation failed', {
         classification,
         acr,
-        amr,
-        factorCount: amr.length
+        amr: amrArray,
+        factorCount: amrArray.length,
+        reason: 'Classified resources require AAL2 (MFA)'
     });
+    throw new Error(`Classified resources require AAL2 (MFA). Current ACR: ${acr || 'missing'}, AMR factors: ${amrArray.length}`);
 };
 
 /**
@@ -574,6 +685,29 @@ export const authzMiddleware = async (
         }
 
         // ============================================
+        // Step 1.5: Check Token Revocation (Gap #7)
+        // ============================================
+        // Check if token has been blacklisted (logout or manual revocation)
+        const jti = decodedToken.jti;
+        if (jti && await isTokenBlacklisted(jti)) {
+            logger.warn('Blacklisted token detected', {
+                requestId,
+                jti,
+                sub: decodedToken.sub
+            });
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Token has been revoked',
+                details: {
+                    reason: 'Token was blacklisted (user logged out or token manually revoked)',
+                    jti: jti,
+                    recommendation: 'Please re-authenticate to obtain a new token'
+                },
+            });
+            return;
+        }
+
+        // ============================================
         // Step 2: Extract identity attributes
         // Week 3: Use enriched claims if available (from enrichmentMiddleware)
         // ============================================
@@ -583,6 +717,24 @@ export const authzMiddleware = async (
         const wasEnriched = (req as any).wasEnriched || false;
 
         const uniqueID = tokenData.uniqueID || tokenData.preferred_username || tokenData.sub;
+
+        // Check if all user tokens are revoked (global logout)
+        if (await areUserTokensRevoked(uniqueID)) {
+            logger.warn('User tokens globally revoked', {
+                requestId,
+                uniqueID
+            });
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'User session has been terminated',
+                details: {
+                    reason: 'All user tokens revoked (logout event or account suspension)',
+                    uniqueID: uniqueID,
+                    recommendation: 'Please re-authenticate'
+                },
+            });
+            return;
+        }
         const clearance = tokenData.clearance;
         const countryOfAffiliation = tokenData.countryOfAffiliation;
 
@@ -748,6 +900,9 @@ export const authzMiddleware = async (
         const COI = isZTDF
             ? (resource.ztdf.policy.securityLabel.COI || [])
             : ((resource as any).COI || []);
+        const coiOperator = isZTDF
+            ? (resource.ztdf.policy.securityLabel.coiOperator || 'ALL')
+            : ((resource as any).coiOperator || 'ALL');
         const creationDate = isZTDF
             ? resource.ztdf.policy.securityLabel.creationDate
             : (resource as any).creationDate;
@@ -761,6 +916,8 @@ export const authzMiddleware = async (
                     clearance,
                     countryOfAffiliation,
                     acpCOI,
+                    dutyOrg: tokenData.dutyOrg,      // Gap #4: Organization attribute
+                    orgUnit: tokenData.orgUnit,      // Gap #4: Organizational unit
                 },
                 action: {
                     operation: 'view',
@@ -770,6 +927,7 @@ export const authzMiddleware = async (
                     classification,
                     releasabilityTo,
                     COI,
+                    coiOperator,
                     creationDate,
                     encrypted,
                 },

@@ -5,7 +5,7 @@
  * Type definitions for file upload with automatic ZTDF conversion
  */
 
-import { ClassificationLevel } from './ztdf.types';
+import { ClassificationLevel, COIOperator } from './ztdf.types';
 
 /**
  * Upload metadata (from client)
@@ -14,6 +14,7 @@ export interface IUploadMetadata {
     classification: ClassificationLevel;
     releasabilityTo: string[]; // ISO 3166-1 alpha-3 codes
     COI?: string[];             // Communities of Interest
+    coiOperator?: COIOperator;  // ALL or ANY (default: ALL)
     caveats?: string[];         // NOFORN, RELIDO, PROPIN, etc.
     title: string;              // Required, max 200 characters
     description?: string;       // Optional description

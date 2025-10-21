@@ -28,11 +28,142 @@ allow if {
 	not is_insufficient_clearance
 	not is_not_releasable_to_country
 	not is_coi_violation
+	count(is_coi_coherence_violation) == 0  # Set rule: check if empty
 	not is_under_embargo
 	not is_ztdf_integrity_violation
 	not is_upload_not_releasable_to_uploader
 	not is_authentication_strength_insufficient
 	not is_mfa_not_verified
+}
+
+# ============================================
+# COI Coherence Checks (NEW)
+# ============================================
+
+# Check 5b: COI Coherence (Mutual Exclusivity, Releasability Alignment)
+# Import checks from coi_coherence_policy.rego
+
+# COI Membership Registry (same as coi_coherence_policy.rego)
+coi_members := {
+	"US-ONLY": {"USA"},
+	"CAN-US": {"CAN", "USA"},
+	"GBR-US": {"GBR", "USA"},
+	"FRA-US": {"FRA", "USA"},
+	"FVEY": {"USA", "GBR", "CAN", "AUS", "NZL"},
+	"NATO": {
+		"ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
+		"DEU", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
+		"MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE", "TUR", "USA",
+	},
+	"NATO-COSMIC": {"NATO"},
+	"EU-RESTRICTED": {
+		"AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA",
+		"DEU", "GRC", "HUN", "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD",
+		"POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE",
+	},
+	"AUKUS": {"AUS", "GBR", "USA"},
+	"QUAD": {"USA", "AUS", "IND", "JPN"},
+	"NORTHCOM": {"USA", "CAN", "MEX"},
+	"EUCOM": {"USA", "DEU", "GBR", "FRA", "ITA", "ESP", "POL"},
+	"PACOM": {"USA", "JPN", "KOR", "AUS", "NZL", "PHL"},
+	"CENTCOM": {"USA", "SAU", "ARE", "QAT", "KWT", "BHR", "JOR", "EGY"},
+	"SOCOM": {"USA", "GBR", "CAN", "AUS", "NZL"},
+}
+
+# Mutual exclusivity check (SET RULE - can produce multiple violations)
+is_coi_coherence_violation contains msg if {
+	"US-ONLY" in input.resource.COI
+	some x in input.resource.COI
+	x != "US-ONLY"
+	msg := sprintf("COI US-ONLY cannot be combined with foreign-sharing COIs: %s", [x])
+}
+
+is_coi_coherence_violation contains msg if {
+	"EU-RESTRICTED" in input.resource.COI
+	some x in input.resource.COI
+	x == "NATO-COSMIC"
+	msg := "COI EU-RESTRICTED cannot be combined with NATO-COSMIC"
+}
+
+is_coi_coherence_violation contains msg if {
+	"EU-RESTRICTED" in input.resource.COI
+	some x in input.resource.COI
+	x == "US-ONLY"
+	msg := "COI EU-RESTRICTED cannot be combined with US-ONLY"
+}
+
+# Releasability ⊆ COI membership check
+is_coi_coherence_violation contains msg if {
+	count(input.resource.COI) > 0
+	
+	# Compute union of all COI member countries
+	union := {c | some coi in input.resource.COI; some c in coi_members[coi]}
+
+	# Check if releasabilityTo ⊆ union
+	some r in input.resource.releasabilityTo
+	not r in union
+
+	msg := sprintf("Releasability country %s not in COI union %v", [r, union])
+}
+
+# NOFORN caveat enforcement
+is_coi_coherence_violation contains msg if {
+	input.resource.caveats
+	"NOFORN" in input.resource.caveats
+	count(input.resource.COI) != 1
+	msg := "NOFORN caveat requires COI=[US-ONLY] (single COI)"
+}
+
+is_coi_coherence_violation contains msg if {
+	input.resource.caveats
+	"NOFORN" in input.resource.caveats
+	count(input.resource.COI) == 1
+	input.resource.COI[0] != "US-ONLY"
+	msg := "NOFORN caveat requires COI=[US-ONLY]"
+}
+
+is_coi_coherence_violation contains msg if {
+	input.resource.caveats
+	"NOFORN" in input.resource.caveats
+	count(input.resource.releasabilityTo) != 1
+	msg := "NOFORN caveat requires releasabilityTo=[USA] (single country)"
+}
+
+is_coi_coherence_violation contains msg if {
+	input.resource.caveats
+	"NOFORN" in input.resource.caveats
+	count(input.resource.releasabilityTo) == 1
+	input.resource.releasabilityTo[0] != "USA"
+	msg := "NOFORN caveat requires releasabilityTo=[USA]"
+}
+
+# Subset/superset check (when operator=ANY)
+is_coi_coherence_violation contains msg if {
+	input.resource.coiOperator == "ANY"
+	"CAN-US" in input.resource.COI
+	"FVEY" in input.resource.COI
+	msg := "Subset+superset COIs [CAN-US, FVEY] invalid with ANY semantics (widens access)"
+}
+
+is_coi_coherence_violation contains msg if {
+	input.resource.coiOperator == "ANY"
+	"GBR-US" in input.resource.COI
+	"FVEY" in input.resource.COI
+	msg := "Subset+superset COIs [GBR-US, FVEY] invalid with ANY semantics (widens access)"
+}
+
+is_coi_coherence_violation contains msg if {
+	input.resource.coiOperator == "ANY"
+	"AUKUS" in input.resource.COI
+	"FVEY" in input.resource.COI
+	msg := "Subset+superset COIs [AUKUS, FVEY] invalid with ANY semantics (widens access)"
+}
+
+is_coi_coherence_violation contains msg if {
+	input.resource.coiOperator == "ANY"
+	"NATO-COSMIC" in input.resource.COI
+	"NATO" in input.resource.COI
+	msg := "Subset+superset COIs [NATO-COSMIC, NATO] invalid with ANY semantics (widens access)"
 }
 
 # ============================================
@@ -174,19 +305,67 @@ is_not_releasable_to_country := msg if {
 	])
 }
 
-# Check 5: Community of Interest (COI)
+# Check 5: Community of Interest (COI) with Country Membership Matching
+# DESIGN DECISION: Use country membership matching instead of strict tag matching
+# - User with FVEY can access CAN-US (because FVEY countries include CAN+USA)
+# - User with NATO-COSMIC can access any NATO member documents
+# - Maintains compartmentalization: US-ONLY still requires US-ONLY membership
 is_coi_violation := msg if {
-	# If resource has COI, user must have at least one matching COI
+	# If resource has COI, check based on coiOperator
 	count(input.resource.COI) > 0
 
 	# Get user COI (default to empty array if missing)
 	user_coi := object.get(input.subject, "acpCOI", [])
 
-	# Check for intersection
-	intersection := {coi | some coi in user_coi; coi in input.resource.COI}
+	# Get COI operator (default to ALL)
+	operator := object.get(input.resource, "coiOperator", "ALL")
+
+	# Check based on operator: ALL mode (country membership)
+	operator == "ALL"
+	
+	# Compute required countries from resource COIs
+	required_countries := {c | 
+		some coi in input.resource.COI
+		some c in coi_members[coi]
+	}
+	
+	# Compute user's countries from their COIs
+	user_countries := {c | 
+		some coi in user_coi
+		some c in coi_members[coi]
+	}
+	
+	# Check if user countries is a superset of required countries
+	missing_countries := required_countries - user_countries
+	count(missing_countries) > 0
+
+	msg := sprintf("COI operator=ALL: user countries %v do not cover required countries %v (missing: %v, user COI: %v, resource COI: %v)", [
+		user_countries,
+		required_countries,
+		missing_countries,
+		user_coi,
+		input.resource.COI,
+	])
+} else := msg if {
+	# If resource has COI, check based on coiOperator (ANY mode - at least one COI match)
+	count(input.resource.COI) > 0
+
+	# Get user COI (default to empty array if missing)
+	user_coi := object.get(input.subject, "acpCOI", [])
+
+	# Get COI operator (default to ALL)
+	operator := object.get(input.resource, "coiOperator", "ALL")
+
+	# Check based on operator: ANY mode
+	operator == "ANY"
+	
+	# ANY: User must have at least one matching COI (exact tag match for ANY)
+	required := {coi | some coi in input.resource.COI}
+	has := {coi | some coi in user_coi}
+	intersection := required & has
 	count(intersection) == 0
 
-	msg := sprintf("No COI intersection: user COI %v does not intersect resource COI %v", [
+	msg := sprintf("COI operator=ANY: user has no matching COI (user COI %v does not intersect resource COI %v)", [
 		user_coi,
 		input.resource.COI,
 	])
@@ -273,6 +452,11 @@ is_upload_not_releasable_to_uploader := msg if {
 # Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 302-306
 # Classified resources require AAL2 (Multi-Factor Authentication)
 # NOTE: Only enforced when ACR is provided (backwards compatible with existing tests)
+#
+# Multi-Realm Enhancement (Oct 21, 2025):
+# - Accepts both string descriptors ("silver", "aal2") AND numeric values ("1", "2", "3")
+# - Keycloak numeric ACR: 0=AAL1, 1=AAL2, 2=AAL3, 3=AAL3+
+# - Fallback to AMR if ACR not conclusive (IdP step-up compatibility)
 is_authentication_strength_insufficient := msg if {
 	# Only applies to classified resources
 	input.resource.classification != "UNCLASSIFIED"
@@ -282,16 +466,30 @@ is_authentication_strength_insufficient := msg if {
 	
 	# Check ACR (Authentication Context Class Reference)
 	acr := input.context.acr
+	acr_lower := lower(acr)
+	acr_str := sprintf("%v", [acr])  # Convert to string (handles numeric ACR)
 	
-	# AAL2 indicators: InCommon IAP Silver/Gold, explicit aal2, multi-factor
-	not contains(lower(acr), "silver")
-	not contains(lower(acr), "gold")
-	not contains(lower(acr), "aal2")
-	not contains(lower(acr), "multi-factor")
+	# AAL2 indicators:
+	# - String descriptors: "silver", "gold", "aal2", "multi-factor"
+	# - Numeric levels: "1" (AAL2), "2" (AAL3), "3" (AAL3+)
+	# - URN format: "urn:mace:incommon:iap:silver"
+	not contains(acr_lower, "silver")
+	not contains(acr_lower, "gold")
+	not contains(acr_lower, "aal2")
+	not contains(acr_lower, "multi-factor")
+	acr_str != "1"  # Keycloak numeric: 1 = AAL2
+	acr_str != "2"  # Keycloak numeric: 2 = AAL3 (satisfies AAL2)
+	acr_str != "3"  # Keycloak numeric: 3 = AAL3+ (satisfies AAL2)
 	
-	msg := sprintf("Classification %v requires AAL2 (MFA), but ACR is '%v'", [
+	# Fallback: Check AMR for 2+ factors (IdP may not set proper ACR during step-up)
+	# This allows AAL2 validation even if ACR is "0" but user completed MFA
+	amr_factors := parse_amr(input.context.amr)
+	count(amr_factors) < 2
+	
+	msg := sprintf("Classification %v requires AAL2 (MFA), but ACR is '%v' and only %v factor(s) provided", [
 		input.resource.classification,
-		acr
+		acr,
+		count(amr_factors)
 	])
 }
 
@@ -476,23 +674,62 @@ check_mfa_verified := true if {
 	not is_mfa_not_verified
 } else := false
 
+# Helper: Parse AMR (Authentication Methods Reference)
+# AMR may be:
+# - Array: ["pwd", "otp"]
+# - JSON string: "[\"pwd\",\"otp\"]" (from Keycloak mapper)
+# - Single string: "pwd"
+parse_amr(amr_input) := parsed if {
+	is_array(amr_input)
+	parsed := amr_input
+} else := parsed if {
+	is_string(amr_input)
+	# Try to parse as JSON
+	parsed := json.unmarshal(amr_input)
+	is_array(parsed)
+} else := [amr_input] if {
+	# Single value, wrap in array
+	is_string(amr_input)
+} else := []
+
 # Helper: Derive AAL level from ACR value
+# Multi-Realm Enhancement (Oct 21, 2025):
+# - Accepts string descriptors ("silver", "aal2") AND numeric values ("1", "2", "3")
+# - Keycloak numeric ACR: 0=AAL1, 1=AAL2, 2=AAL3, 3=AAL3+
 aal_level := "AAL3" if {
 	acr := object.get(input.context, "acr", "")
-	contains(lower(acr), "gold")
+	acr_lower := lower(sprintf("%v", [acr]))
+	# AAL3 indicators: "gold" or numeric "2"/"3"
+	contains(acr_lower, "gold")
+} else := "AAL3" if {
+	acr := object.get(input.context, "acr", "")
+	acr_str := sprintf("%v", [acr])
+	acr_str == "2"  # Keycloak numeric AAL3
+} else := "AAL3" if {
+	acr := object.get(input.context, "acr", "")
+	acr_str := sprintf("%v", [acr])
+	acr_str == "3"  # Keycloak numeric AAL3+
 } else := "AAL2" if {
 	acr := object.get(input.context, "acr", "")
+	acr_lower := lower(sprintf("%v", [acr]))
+	# AAL2 indicators: "silver", "aal2", "multi-factor", or numeric "1"
+	contains(acr_lower, "silver")
+} else := "AAL2" if {
+	acr := object.get(input.context, "acr", "")
+	acr_lower := lower(sprintf("%v", [acr]))
+	contains(acr_lower, "aal2")
+} else := "AAL2" if {
+	acr := object.get(input.context, "acr", "")
+	acr_lower := lower(sprintf("%v", [acr]))
+	contains(acr_lower, "multi-factor")
+} else := "AAL2" if {
+	acr := object.get(input.context, "acr", "")
+	acr_str := sprintf("%v", [acr])
+	acr_str == "1"  # Keycloak numeric: 1 = AAL2
+} else := "AAL2" if {
+	# Fallback: 2+ AMR factors = AAL2 (even if ACR not set)
 	amr := object.get(input.context, "amr", [])
-	# AAL2 if: InCommon Silver, explicit aal2, multi-factor, or 2+ factors
-	contains(lower(acr), "silver")
-} else := "AAL2" if {
-	acr := object.get(input.context, "acr", "")
-	contains(lower(acr), "aal2")
-} else := "AAL2" if {
-	acr := object.get(input.context, "acr", "")
-	contains(lower(acr), "multi-factor")
-} else := "AAL2" if {
-	amr := object.get(input.context, "amr", [])
-	count(amr) >= 2
+	amr_factors := parse_amr(amr)
+	count(amr_factors) >= 2
 } else := "AAL1"
 
