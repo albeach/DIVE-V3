@@ -183,13 +183,18 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     // Determine which realm to fetch JWKS from
     // Default to KEYCLOAK_REALM (dive-v3-broker), but support multi-realm
     const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
-    const jwksUri = `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`;
+
+    // FIX: Try both internal (Docker) and external (localhost) URLs for JWKS
+    const jwksUris = [
+        `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal: http://keycloak:8080
+        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External: http://localhost:8081
+    ];
 
     logger.debug('Getting signing key for token', {
         kid: header.kid,
         alg: header.alg,
         realm,
-        jwksUri,
+        jwksUris,
     });
 
     if (!header.kid) {
@@ -197,54 +202,70 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
         throw new Error('Token header missing kid');
     }
 
-    try {
-        // Check cache first (keys cached by kid, not realm-specific)
-        const cachedKey = jwksCache.get<string>(header.kid);
-        if (cachedKey) {
-            logger.debug('Using cached JWKS public key', { kid: header.kid, realm });
-            return cachedKey;
-        }
+    // Check cache first (keys cached by kid, not realm-specific)
+    const cachedKey = jwksCache.get<string>(header.kid);
+    if (cachedKey) {
+        logger.debug('Using cached JWKS public key', { kid: header.kid, realm });
+        return cachedKey;
+    }
 
-        // Fetch JWKS directly from Keycloak
-        const response = await axios.get(jwksUri);
-        const jwks = response.data;
+    // Try to fetch JWKS from each URL until one succeeds
+    let lastError: Error | null = null;
+    for (const jwksUri of jwksUris) {
+        try {
+            logger.debug('Attempting to fetch JWKS', { jwksUri, kid: header.kid });
 
-        // Find the key with matching kid and use="sig"
-        const key = jwks.keys.find((k: any) => k.kid === header.kid && k.use === 'sig');
+            // Fetch JWKS directly from Keycloak
+            const response = await axios.get(jwksUri);
+            const jwks = response.data;
 
-        if (!key) {
-            logger.error('No matching signing key found in JWKS', {
+            // Find the key with matching kid and use="sig"
+            const key = jwks.keys.find((k: any) => k.kid === header.kid && k.use === 'sig');
+
+            if (!key) {
+                logger.warn('No matching signing key found in JWKS at this URL', {
+                    kid: header.kid,
+                    realm,
+                    jwksUri,
+                    availableKids: jwks.keys.map((k: any) => ({ kid: k.kid, use: k.use, alg: k.alg })),
+                });
+                continue; // Try next URL
+            }
+
+            // Convert JWK to PEM format
+            const publicKey = jwkToPem(key);
+
+            // Cache the public key
+            jwksCache.set(header.kid, publicKey);
+
+            logger.info('Signing key retrieved successfully', {
+                kid: header.kid,
+                alg: key.alg,
+                realm,
+                jwksUri,
+                hasKey: !!publicKey,
+            });
+
+            return publicKey;
+        } catch (error) {
+            logger.warn('Failed to fetch signing key from this URL, trying next', {
                 kid: header.kid,
                 realm,
                 jwksUri,
-                availableKids: jwks.keys.map((k: any) => ({ kid: k.kid, use: k.use, alg: k.alg })),
+                error: error instanceof Error ? error.message : 'Unknown error',
             });
-            throw new Error(`No signing key found for kid: ${header.kid}`);
+            lastError = error instanceof Error ? error : new Error('Unknown error');
         }
-
-        // Convert JWK to PEM format
-        const publicKey = jwkToPem(key);
-
-        // Cache the public key
-        jwksCache.set(header.kid, publicKey);
-
-        logger.debug('Signing key retrieved successfully', {
-            kid: header.kid,
-            alg: key.alg,
-            realm,
-            hasKey: !!publicKey,
-        });
-
-        return publicKey;
-    } catch (error) {
-        logger.error('Failed to fetch signing key', {
-            kid: header.kid,
-            realm,
-            jwksUri,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        });
-        throw error;
     }
+
+    // If we get here, all URLs failed
+    logger.error('Failed to fetch signing key from all URLs', {
+        kid: header.kid,
+        realm,
+        jwksUris,
+        lastError: lastError?.message,
+    });
+    throw new Error(`Failed to fetch signing key for kid: ${header.kid}. Last error: ${lastError?.message}`);
 };
 
 /**

@@ -23,9 +23,7 @@ import {
     testIdPHandler,
     getPendingApprovalsHandler,
     approveIdPHandler,
-    rejectIdPHandler,
-    createAuth0ApplicationHandler,
-    listAuth0ApplicationsHandler
+    rejectIdPHandler
 } from '../controllers/admin.controller';
 import {
     validateOIDCDiscoveryHandler,
@@ -163,22 +161,6 @@ router.post('/approvals/:alias/approve', approveIdPHandler);
 router.post('/approvals/:alias/reject', rejectIdPHandler);
 
 // ============================================
-// Auth0 MCP Integration Routes (Week 3.4.6)
-// ============================================
-
-/**
- * POST /api/admin/auth0/create-application
- * Create Auth0 application via MCP Server
- */
-router.post('/auth0/create-application', createAuth0ApplicationHandler);
-
-/**
- * GET /api/admin/auth0/applications
- * List Auth0 applications
- */
-router.get('/auth0/applications', listAuth0ApplicationsHandler);
-
-// ============================================
 // Analytics Routes (Phase 3)
 // ============================================
 
@@ -208,7 +190,7 @@ router.get('/analytics/compliance-trends', async (req: Request, res: Response) =
     try {
         const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
         const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
-        
+
         const trends = await analyticsService.getComplianceTrends({ startDate, endDate });
         res.json(trends);
     } catch (error) {
@@ -243,7 +225,7 @@ router.get('/analytics/authz-metrics', async (req: Request, res: Response) => {
     try {
         const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
         const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
-        
+
         const metrics = await analyticsService.getAuthzMetrics({ startDate, endDate });
         res.json(metrics);
     } catch (error) {

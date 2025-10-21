@@ -64,7 +64,7 @@ export default function Navigation({ user }: INavigationProps) {
 
     const adminItems = [
         { name: 'Dashboard', href: '/admin/dashboard', icon: '📊', badge: null },
-        { name: 'Analytics', href: '/admin/analytics', icon: '📈', badge: 'New' },
+        { name: 'IdP Governance', href: '/admin/analytics', icon: '🏛️', badge: null },
         { name: 'IdP Management', href: '/admin/idp', icon: '🔐', badge: null },
         { name: 'Approvals', href: '/admin/approvals', icon: '✅', badge: '3' },
         { name: 'Audit Logs', href: '/admin/logs', icon: '📋', badge: null },
@@ -85,8 +85,8 @@ export default function Navigation({ user }: INavigationProps) {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-20">
                         {/* Left: Logo + Nav */}
-                        <div className="flex items-center gap-8">
-                            {/* Logo with micro-interaction */}
+                        <div className="flex items-center gap-6">
+                            {/* Compact Logo with micro-interaction */}
                             <Link 
                                 href="/dashboard" 
                                 className="group flex items-center gap-3 transform transition-all duration-300 hover:scale-105"
@@ -101,7 +101,7 @@ export default function Navigation({ user }: INavigationProps) {
                                     </div>
                                 </div>
                                 
-                                <div>
+                                <div className="hidden xl:block">
                                     <div className="text-xl font-black bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent">
                                         DIVE V3
                                     </div>
@@ -111,7 +111,7 @@ export default function Navigation({ user }: INavigationProps) {
                                 </div>
                             </Link>
 
-                            {/* Desktop Navigation */}
+                            {/* Desktop Navigation - Icon + Text */}
                             <div className="hidden lg:flex lg:gap-1">
                                 {navItems.map((item) => {
                                     const active = isActive(item.href);
@@ -119,7 +119,7 @@ export default function Navigation({ user }: INavigationProps) {
                                         <Link
                                             key={item.href}
                                             href={item.href}
-                                            className="group relative px-4 py-2 rounded-lg transition-all duration-300"
+                                            className="group relative px-3 py-2 rounded-lg transition-all duration-300"
                                         >
                                             {/* Hover background */}
                                             <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
@@ -151,63 +151,96 @@ export default function Navigation({ user }: INavigationProps) {
                                         </Link>
                                     );
                                 })}
+                            </div>
+                        </div>
 
-                                {/* Admin Dropdown */}
-                                {isSuperAdmin && (
-                                    <div ref={dropdownRef} className="relative">
-                                        <button
-                                            onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                                            className="group relative px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2"
-                                        >
-                                            {/* Glow effect */}
-                                            <div className={`absolute inset-0 rounded-lg bg-gradient-to-r from-[#4497ac] to-[#90d56a] transition-opacity duration-300 ${
-                                                adminDropdownOpen || pathname.startsWith('/admin')
-                                                    ? 'opacity-10'
-                                                    : 'opacity-0 group-hover:opacity-5'
-                                            }`} />
-                                            
-                                            <div className="relative flex items-center gap-2">
-                                                <span className={`text-lg transition-transform duration-300 ${
-                                                    adminDropdownOpen ? 'scale-110 rotate-12' : 'group-hover:scale-110'
-                                                }`}>
-                                                    ⚙️
-                                                </span>
-                                                <span className={`font-semibold text-sm ${
-                                                    pathname.startsWith('/admin')
-                                                        ? 'bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent'
-                                                        : 'text-gray-700 group-hover:text-gray-900'
-                                                }`}>
-                                                    Admin
-                                                </span>
-                                                <svg className={`w-4 h-4 transition-transform duration-300 ${
-                                                    adminDropdownOpen ? 'rotate-180' : ''
-                                                } ${pathname.startsWith('/admin') ? 'text-[#4497ac]' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
+                        {/* Right: Unified Actions Menu - 2025 Pattern */}
+                        <div className="flex items-center gap-2">
+                            {/* Unified User + Admin Dropdown */}
+                            <div ref={dropdownRef} className="hidden lg:block relative">
+                                <button
+                                    onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                                    className="group flex items-center gap-2.5 pl-3 pr-3.5 py-2 rounded-xl bg-gradient-to-r from-white/80 to-gray-50/80 border border-gray-100/50 shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300"
+                                >
+                                    {/* Compact Avatar */}
+                                    <div className="relative">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full opacity-0 group-hover:opacity-100 blur-md transition-all duration-500" />
+                                        <div className="relative w-9 h-9 rounded-full bg-gradient-to-br from-[#4497ac] to-[#90d56a] flex items-center justify-center shadow-md transform group-hover:scale-110 transition-all duration-300">
+                                            <span className="text-sm font-black text-white drop-shadow-md">
+                                                {(getPseudonymFromUser(user as any) || 'U').charAt(0).toUpperCase()}
+                                            </span>
+                                        </div>
+                                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#90d56a] border-2 border-white rounded-full shadow-lg">
+                                            <div className="absolute inset-0 bg-[#90d56a] rounded-full animate-ping opacity-75" />
+                                        </div>
+                                    </div>
+                                    
+                                    {/* User Info - More compact */}
+                                    <div className="hidden xl:flex flex-col min-w-0 max-w-[140px]">
+                                        <span className="text-xs font-bold text-gray-900 leading-tight truncate">
+                                            {getPseudonymFromUser(user as any)}
+                                        </span>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 text-[#4497ac]">
+                                                {user.clearance || 'UNCLASS'}
+                                            </span>
+                                            <span className="text-[10px] font-medium text-gray-600">
+                                                {user.countryOfAffiliation || 'USA'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Dropdown Arrow */}
+                                    <svg className={`w-4 h-4 text-gray-500 transition-transform duration-300 ${
+                                        adminDropdownOpen ? 'rotate-180' : ''
+                                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
 
-                                            {pathname.startsWith('/admin') && (
-                                                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full shadow-lg shadow-[#4497ac]/50" />
-                                            )}
-                                        </button>
-
-                                        {/* Dropdown Menu - Premium Design */}
-                                        {adminDropdownOpen && (
-                                            <div className="absolute top-full mt-2 right-0 w-72 origin-top-right animate-fade-in">
-                                                {/* Glow */}
-                                                <div className="absolute -inset-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-2xl opacity-20 blur-xl" />
+                                {/* Unified Dropdown Menu */}
+                                {adminDropdownOpen && (
+                                    <div className="absolute top-full mt-2 right-0 w-72 origin-top-right animate-fade-in z-50">
+                                        <div className="absolute -inset-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-2xl opacity-20 blur-xl" />
+                                        
+                                        <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+                                            {/* User Info Header */}
+                                            <div className="px-4 py-4 bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 border-b border-gray-100">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-[#4497ac] to-[#90d56a] flex items-center justify-center shadow-lg">
+                                                        <span className="text-xl font-black text-white drop-shadow-md">
+                                                            {(getPseudonymFromUser(user as any) || 'U').charAt(0).toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-bold text-gray-900 truncate">
+                                                            {getPseudonymFromUser(user as any)}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 text-[#4497ac] border border-[#4497ac]/30">
+                                                                {user.clearance || 'UNCLASSIFIED'}
+                                                            </span>
+                                                            <span className="text-xs font-medium text-gray-600">
+                                                                {user.countryOfAffiliation || 'USA'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                                 
-                                                {/* Menu */}
-                                                <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-                                                    {/* Header */}
-                                                    <div className="px-4 py-3 bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 border-b border-gray-100">
-                                                        <p className="text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent">
+                                                {/* Logout Button */}
+                                                <SecureLogoutButton />
+                                            </div>
+                                            
+                                            {/* Admin Section - Only if super admin */}
+                                            {isSuperAdmin && (
+                                                <>
+                                                    <div className="px-4 py-2 bg-gray-50/50">
+                                                        <p className="text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent">
                                                             Admin Portal
                                                         </p>
                                                     </div>
                                                     
-                                                    {/* Items */}
-                                                    <div className="py-2">
+                                                    <div className="py-1">
                                                         {adminItems.map((item, idx) => {
                                                             const active = isActive(item.href);
                                                             return (
@@ -215,20 +248,17 @@ export default function Navigation({ user }: INavigationProps) {
                                                                     key={item.href}
                                                                     href={item.href}
                                                                     onClick={() => setAdminDropdownOpen(false)}
-                                                                    className="group relative block px-4 py-3 transition-all duration-200"
-                                                                    style={{ animationDelay: `${idx * 30}ms` }}
+                                                                    className="group relative block px-4 py-2.5 transition-all duration-200"
                                                                 >
-                                                                    {/* Hover/active background */}
                                                                     <div className={`absolute inset-0 transition-all duration-200 ${
                                                                         active
                                                                             ? 'bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10'
                                                                             : 'bg-transparent group-hover:bg-gray-50'
                                                                     }`} />
                                                                     
-                                                                    {/* Content */}
                                                                     <div className="relative flex items-center justify-between">
-                                                                        <div className="flex items-center gap-3">
-                                                                            <span className={`text-xl transition-transform duration-200 ${
+                                                                        <div className="flex items-center gap-2.5">
+                                                                            <span className={`text-lg transition-transform duration-200 ${
                                                                                 active ? 'scale-110' : 'group-hover:scale-110'
                                                                             }`}>
                                                                                 {item.icon}
@@ -242,7 +272,6 @@ export default function Navigation({ user }: INavigationProps) {
                                                                             </span>
                                                                         </div>
                                                                         
-                                                                        {/* Badge */}
                                                                         {item.badge && (
                                                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                                                                 item.badge === 'New'
@@ -254,70 +283,21 @@ export default function Navigation({ user }: INavigationProps) {
                                                                         )}
                                                                     </div>
                                                                     
-                                                                    {/* Active indicator */}
                                                                     {active && (
-                                                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-[#4497ac] to-[#90d56a] rounded-r-full shadow-lg shadow-[#4497ac]/50" />
+                                                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-[#4497ac] to-[#90d56a] rounded-r-full shadow-lg shadow-[#4497ac]/50" />
                                                                     )}
                                                                 </Link>
                                                             );
                                                         })}
                                                     </div>
-                                                </div>
-                                            </div>
-                                        )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
-                        </div>
 
-                        {/* Right: User Info + Actions */}
-                        <div className="flex items-center gap-3">
-                            {/* User Avatar & Info - Enhanced with better responsiveness */}
-                            <div className="hidden sm:flex items-center gap-3 px-3 py-2 rounded-xl bg-gradient-to-r from-white/80 to-gray-50/80 border border-gray-100 shadow-sm hover:shadow-lg hover:scale-[1.02] transition-all duration-300 group">
-                                {/* Enhanced Avatar with initials */}
-                                <div className="relative">
-                                    {/* Animated glow ring */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full opacity-0 group-hover:opacity-100 blur-md transition-all duration-500" />
-                                    
-                                    {/* Avatar with better depth */}
-                                    <div className="relative w-11 h-11 rounded-full bg-gradient-to-br from-[#4497ac] via-[#5ca3b5] to-[#90d56a] flex items-center justify-center shadow-lg transform group-hover:scale-110 group-hover:rotate-6 transition-all duration-300">
-                                        <div className="absolute inset-[2px] rounded-full bg-gradient-to-br from-[#4497ac] to-[#90d56a] flex items-center justify-center">
-                                            <span className="text-lg font-black text-white drop-shadow-md">
-                                                {(getPseudonymFromUser(user as any) || 'U').charAt(0).toUpperCase()}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Enhanced online indicator with pulse */}
-                                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-[#90d56a] border-2 border-white rounded-full shadow-lg">
-                                        <div className="absolute inset-0 bg-[#90d56a] rounded-full animate-ping opacity-75" />
-                                    </div>
-                                </div>
-                                
-                                <div className="hidden md:flex flex-col min-w-0">
-                                    <span className="text-sm font-bold text-gray-900 leading-tight truncate">
-                                        {/* ACP-240 Section 6.2: Display pseudonym instead of email (PII minimization) */}
-                                        {getPseudonymFromUser(user as any)}
-                                    </span>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        {/* Enhanced clearance badge */}
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 text-[#4497ac] border border-[#4497ac]/20 shadow-sm">
-                                            {user.clearance || 'UNCLASSIFIED'}
-                                        </span>
-                                        {/* Country with better styling */}
-                                        <span className="text-xs font-medium text-gray-600">
-                                            {user.countryOfAffiliation || 'USA'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Clean Sign Out Button */}
-                            <div className="hidden sm:block">
-                                <SecureLogoutButton />
-                            </div>
-
-                            {/* Enhanced Mobile Menu Button */}
+                            {/* Mobile Menu Button */}
                             <button
                                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                                 className="lg:hidden relative p-2.5 rounded-xl hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 active:scale-95 transition-all duration-200 group"

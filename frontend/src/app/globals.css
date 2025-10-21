@@ -347,6 +347,23 @@ body {
     animation: gradientX 3s ease infinite;
 }
 
+/* Floating animation without opacity change - for logos */
+@keyframes floatLogo {
+
+    0%,
+    100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.animate-float-logo {
+    animation: floatLogo 3s ease-in-out infinite;
+}
+
 /* Floating particles animation with variations */
 @keyframes floatParticles {
 
@@ -399,4 +416,31 @@ body {
 .btn-hover-glow:hover::before {
     width: 300px;
     height: 300px;
+}
+
+/* Card hover lift with subtle shadow */
+.card-lift {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(0, 154, 179, 0.15), 0 10px 20px rgba(121, 216, 90, 0.1);
+}
+
+/* Glow pulse for interactive elements */
+@keyframes glowPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 5px rgba(0, 154, 179, 0.3), 0 0 10px rgba(121, 216, 90, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 20px rgba(0, 154, 179, 0.6), 0 0 30px rgba(121, 216, 90, 0.4);
+    }
+}
+
+.animate-glow-pulse {
+    animation: glowPulse 2s ease-in-out infinite;
 }

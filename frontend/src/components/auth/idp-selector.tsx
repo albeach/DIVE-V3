@@ -83,20 +83,24 @@ export function IdpSelector() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <p className="ml-4 text-gray-600">Loading identity providers...</p>
+      <div className="flex justify-center items-center py-16">
+        <div className="relative">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-gray-200 border-t-[#009ab3]"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-transparent border-b-[#79d85a] animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1s' }}></div>
+        </div>
+        <p className="ml-4 text-gray-600 font-medium">Loading identity providers...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-center py-8">
-        <p className="text-red-600 mb-4">{error}</p>
+      <div className="text-center py-12 px-6 bg-red-50 rounded-xl border-2 border-red-200">
+        <div className="text-4xl mb-4">⚠️</div>
+        <p className="text-red-600 font-semibold mb-4">{error}</p>
         <button
           onClick={fetchEnabledIdPs}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="px-6 py-3 bg-gradient-to-r from-[#009ab3] to-[#79d85a] text-white font-bold rounded-lg hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
         >
           Retry
         </button>
@@ -106,8 +110,9 @@ export function IdpSelector() {
 
   if (idps.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-600 mb-4">No identity providers are currently available.</p>
+      <div className="text-center py-12 px-6 bg-gray-50 rounded-xl border-2 border-gray-200">
+        <div className="text-4xl mb-4">🔒</div>
+        <p className="text-gray-700 font-semibold mb-2">No identity providers are currently available.</p>
         <p className="text-sm text-gray-500">Please contact your administrator.</p>
       </div>
     );
@@ -121,21 +126,21 @@ export function IdpSelector() {
           <button
             key={idp.alias}
             onClick={() => handleIdpClick(idp.alias)}
-            className="group p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:shadow-lg transition-all duration-200 text-left"
+            className="group p-6 border-2 border-gray-200 rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left bg-gradient-to-br from-white to-gray-50"
           >
             <div className="flex items-center space-x-4">
-              <div className="text-4xl">{getFlagForIdP(idp.alias)}</div>
+              <div className="text-5xl group-hover:scale-110 transition-transform duration-300">{getFlagForIdP(idp.alias)}</div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600">
+                <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
                   {idp.displayName}
                 </h3>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-500 mt-1 font-medium">
                   {idp.protocol.toUpperCase()} • {idp.alias}
                 </p>
               </div>
               <div className="flex-shrink-0">
-                <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#009ab3] to-[#79d85a] text-white text-xs font-bold rounded-full shadow-md">
+                  <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
                   Active
                 </span>
               </div>
@@ -145,76 +150,19 @@ export function IdpSelector() {
       </div>
 
       {/* Direct Keycloak Login - Super Admin Access */}
-      <div className="mt-6 pt-6 border-t-2 border-yellow-200">
-        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-300 rounded-lg p-4 mb-4">
-          <div className="text-center">
-            <div className="inline-block px-3 py-1 bg-yellow-500 text-white text-xs font-bold rounded-full mb-2">
-              👑 SUPER ADMINISTRATOR ACCESS
-            </div>
-            <p className="text-sm text-gray-700 font-semibold mb-3">
-              Direct Keycloak Login
-            </p>
-            
-            {/* Broker Realm Admin (Preferred) */}
-            <div className="bg-white border-2 border-green-300 rounded-md p-3 text-left mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">
-                  ✅ RECOMMENDED (Broker Realm)
-                </span>
-                <span className="text-xs text-gray-500">dive-v3-broker</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-gray-600 font-medium">Username:</div>
-                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">admin-dive</div>
-                <div className="text-gray-600 font-medium">Password:</div>
-                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">DiveAdmin2025!</div>
-              </div>
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <p className="text-xs text-gray-600">
-                  <span className="font-semibold">Access:</span> TOP_SECRET clearance, Full IdP Management, All COIs
-                </p>
-              </div>
-            </div>
-
-            {/* Legacy Admin (dive-v3-pilot) */}
-            <div className="bg-white border border-yellow-200 rounded-md p-3 text-left">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-yellow-700 bg-yellow-100 px-2 py-1 rounded">
-                  🔄 LEGACY (Pilot Realm)
-                </span>
-                <span className="text-xs text-gray-500">dive-v3-pilot</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-gray-600 font-medium">Username:</div>
-                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">testuser-us</div>
-                <div className="text-gray-600 font-medium">Password:</div>
-                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">Password123!</div>
-              </div>
-              <div className="mt-2 pt-2 border-t border-gray-200">
-                <p className="text-xs text-gray-600">
-                  <span className="font-semibold">Access:</span> SECRET clearance, NATO-COSMIC & FVEY COI
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-gray-500 mt-3">
-              Other test users: testuser-us-confid (CONFIDENTIAL), testuser-us-unclass (UNCLASSIFIED)
-            </p>
-          </div>
-        </div>
-        
+      <div className="mt-8 pt-8 border-t-2 border-gray-200">
         <button
           onClick={() => handleIdpClick(undefined)}
-          className="group w-full p-4 border-2 border-yellow-400 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg hover:border-yellow-500 hover:shadow-lg transition-all duration-200 text-center"
+          className="group w-full p-6 border-2 border-[#009ab3] bg-gradient-to-br from-[#009ab3]/5 to-[#79d85a]/5 rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-center"
         >
-          <div className="flex items-center justify-center space-x-3">
-            <div className="text-3xl">🔑</div>
+          <div className="flex items-center justify-center space-x-4">
+            <div className="text-4xl group-hover:scale-110 transition-transform duration-300">👑</div>
             <div>
-              <h3 className="text-base font-semibold text-gray-900 group-hover:text-yellow-700">
+              <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
                 Login as Super Administrator
               </h3>
-              <p className="text-xs text-gray-600 mt-1">
-                Click to proceed to Keycloak login page (use credentials above)
+              <p className="text-sm text-gray-600 mt-1">
+                Click to proceed...
               </p>
             </div>
           </div>
