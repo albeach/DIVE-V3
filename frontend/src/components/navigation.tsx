@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { SessionStatusIndicator } from '@/components/auth/session-status-indicator';
+import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
 
 interface INavigationProps {
     user: {
@@ -280,7 +281,7 @@ export default function Navigation({ user }: INavigationProps) {
                                 <div className="relative">
                                     <div className="absolute inset-0 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full opacity-0 group-hover:opacity-100 blur-sm transition-opacity duration-300" />
                                     <div className="relative w-10 h-10 rounded-full bg-gradient-to-br from-[#4497ac] to-[#90d56a] flex items-center justify-center text-white font-bold shadow-md transform group-hover:scale-110 transition-transform duration-300">
-                                        {user.email?.charAt(0).toUpperCase() || 'U'}
+                                        🌊
                                     </div>
                                     {/* Online indicator */}
                                     <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#90d56a] border-2 border-white rounded-full shadow-sm animate-pulse" />
@@ -288,7 +289,8 @@ export default function Navigation({ user }: INavigationProps) {
                                 
                                 <div className="flex flex-col">
                                     <span className="text-sm font-bold text-gray-900 leading-tight">
-                                        {user.email?.split('@')[0] || 'User'}
+                                        {/* ACP-240 Section 6.2: Display pseudonym instead of email (PII minimization) */}
+                                        {getPseudonymFromUser(user as any)}
                                     </span>
                                     <div className="flex items-center gap-2 mt-0.5">
                                         {/* Clearance badge */}

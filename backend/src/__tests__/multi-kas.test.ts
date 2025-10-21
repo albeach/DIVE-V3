@@ -211,14 +211,14 @@ describe('Multi-KAS Support', () => {
             // In production, a new FVEY member (e.g., hypothetically adding a 6th nation)
             // would immediately get access to all FVEY-encrypted historical data
             // without requiring re-encryption
-            
+
             const { getCOIKey } = require('../services/coi-key-registry');
             const fveyKey = getCOIKey('FVEY');
-            
+
             // Both existing and new members use the same FVEY key
             expect(fveyKey).toBeDefined();
             expect(fveyKey.length).toBe(32);
-            
+
             // Demonstrates that the key is stable and shared
             const fveyKey2 = getCOIKey('FVEY');
             expect(fveyKey.toString('base64')).toBe(fveyKey2.toString('base64'));
@@ -287,16 +287,16 @@ describe('ACP-240 Compliance - Multi-KAS Benefits', () => {
     test('demonstrates coalition growth without re-encryption', () => {
         // Conceptual test showing ACP-240 Section 5.3 compliance
         const { selectCOIForResource, getCOIKey } = require('../services/coi-key-registry');
-        
+
         // Scenario: FVEY resource created in 2024
         const coi2024 = selectCOIForResource(['USA', 'GBR', 'CAN', 'AUS', 'NZL'], ['FVEY']);
         const key2024 = getCOIKey(coi2024);
-        
+
         // Scenario: New member joins FVEY in 2025 (hypothetical)
         // They can immediately access 2024 data using the same FVEY key
         const coi2025 = selectCOIForResource(['USA', 'GBR', 'CAN', 'AUS', 'NZL'], ['FVEY']);
         const key2025 = getCOIKey(coi2025);
-        
+
         // Keys are identical - no re-encryption needed
         expect(key2024.toString('base64')).toBe(key2025.toString('base64'));
     });
@@ -305,13 +305,13 @@ describe('ACP-240 Compliance - Multi-KAS Benefits', () => {
         // Conceptual test showing how each nation can have its own KAS
         // Example: USA-KAS, GBR-KAS, CAN-KAS all can decrypt the same resource
         // using their respective KAOs, maintaining national sovereignty
-        
+
         const kasEndpoints = {
             'USA': 'https://usa.kas.mil:8080',
             'GBR': 'https://gbr.kas.mod.uk:8080',
             'CAN': 'https://can.kas.dnd.ca:8080'
         };
-        
+
         // Each nation maintains control of their KAS infrastructure
         expect(Object.keys(kasEndpoints).length).toBe(3);
     });

@@ -21,6 +21,12 @@ const robotoMono = Roboto_Mono({
 export const metadata: Metadata = {
   title: "DIVE V3 - Coalition ICAM Pilot",
   description: "USA/NATO Coalition Identity and Access Management Demonstration",
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: '32x32' },
+    ],
+  },
 };
 
 export default function RootLayout({

@@ -20,8 +20,19 @@ import {
 } from '../types/policy.types';
 
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
-const POLICY_DIR = path.join(__dirname, '../../../policies');
+// POLICY_DIR: In Docker dev mode with tsx, __dirname is /app/src/services
+// So ../../../policies resolves to /policies (wrong!)
+// Fix: Use absolute path /app/policies or resolve from process.cwd()
+const POLICY_DIR = process.env.POLICY_DIR || path.join(process.cwd(), 'policies');
 const TEST_DIR = path.join(POLICY_DIR, 'tests');
+
+// Debug logging for path resolution
+logger.debug('Policy paths', {
+    cwd: process.cwd(),
+    __dirname,
+    POLICY_DIR,
+    exists: require('fs').existsSync(POLICY_DIR)
+});
 
 /**
  * Get all available policies

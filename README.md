@@ -18,6 +18,52 @@ DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential,
 
 ## 🏗️ Architecture
 
+### Multi-Realm Federation Architecture (NEW - October 2025)
+
+DIVE V3 implements **multi-realm Keycloak architecture** for true nation sovereignty:
+
+```
+User → Broker Realm (dive-v3-broker) → Select IdP → National Realm → 
+Authenticate → Attribute Mapping → Broker Token → Application → 
+Backend (dual-issuer validation) → OPA Authorization
+```
+
+**5 Realms Deployed**:
+- **dive-v3-usa** - U.S. military/government (NIST AAL2, 15m timeout, MFA required)
+- **dive-v3-fra** - France military/government (ANSSI RGS Level 2+, 30m timeout, bilingual)
+- **dive-v3-can** - Canada military/government (GCCF Level 2+, 20m timeout, bilingual)
+- **dive-v3-industry** - Defense contractors (AAL1, 60m timeout, password-only)
+- **dive-v3-broker** - Federation hub (10m token lifetime, cross-realm orchestration)
+
+**4 IdP Brokers**:
+- usa-realm-broker → Federates from dive-v3-usa
+- fra-realm-broker → Federates from dive-v3-fra
+- can-realm-broker → Federates from dive-v3-can
+- industry-realm-broker → Federates from dive-v3-industry
+
+**Cross-Realm Authentication Flow**:
+1. User visits application → Redirected to dive-v3-broker
+2. Broker shows 4 IdP choices (USA, France, Canada, Industry)
+3. User selects IdP → Redirected to national realm (e.g., dive-v3-usa)
+4. User authenticates in national realm → Token issued
+5. National realm redirects to broker → Attributes mapped (8 DIVE attributes)
+6. Broker issues federated token → Application receives token
+7. Backend validates token (dual-issuer: pilot + broker)
+8. OPA evaluates policy → Authorization decision
+
+**Benefits**:
+- ✅ **Nation sovereignty**: Each partner controls own realm with independent policies
+- ✅ **User isolation**: Separate databases per realm (data sovereignty)
+- ✅ **Scalability**: Add new nations in ~2 hours (Terraform module)
+- ✅ **Backward compatible**: Legacy dive-v3-pilot realm still works
+- ✅ **PII minimization**: Ocean pseudonyms replace real names (ACP-240 Section 6.2)
+
+**Documentation**: See `docs/KEYCLOAK-MULTI-REALM-GUIDE.md` (32,000 words) for complete architecture details.
+
+---
+
+### Original Architecture Diagram
+
 ```
 IdPs (US/FRA/CAN) → Keycloak Broker → Next.js + NextAuth
                                               ↓
@@ -29,13 +75,13 @@ IdPs (US/FRA/CAN) → Keycloak Broker → Next.js + NextAuth
 ```
 
 **Components:**
-- **Keycloak:** IdP broker with claim normalization
-- **Next.js 15:** Frontend UI with NextAuth.js v5
-- **Express.js:** Backend API with PEP (Policy Enforcement Point)
-- **OPA:** Policy Decision Point with Rego policies
-- **MongoDB:** Resource metadata store
-- **PostgreSQL:** Keycloak session store
-- **KAS:** Key Access Service (Week 4 stretch goal)
+- **Keycloak:** Multi-realm IdP broker with claim normalization (5 realms + 4 brokers)
+- **Next.js 15:** Frontend UI with NextAuth.js v5 + ocean pseudonyms
+- **Express.js:** Backend API with PEP (dual-issuer JWT validation)
+- **OPA:** Policy Decision Point with Rego policies (organization-based access)
+- **MongoDB:** Resource metadata store (ZTDF encrypted documents)
+- **PostgreSQL:** Keycloak session store + NextAuth database sessions
+- **KAS:** Key Access Service with policy re-evaluation (Week 4 stretch goal)
 
 ## 🚀 Quick Start
 

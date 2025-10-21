@@ -69,7 +69,7 @@ export function SecureLogoutButton() {
       }
       
       const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
-      const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-pilot";
+      const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";  // Multi-realm: Use broker realm
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
       
       console.log('[DIVE] Keycloak logout config:', {

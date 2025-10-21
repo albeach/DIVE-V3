@@ -1,0 +1,27 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# Don't copy source code - it will be mounted as volume
+# This allows hot reload during development
+
+# Create logs directory and set permissions
+RUN mkdir -p logs && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 expressjs && \
+    chown -R expressjs:nodejs /app
+
+USER expressjs
+
+EXPOSE 4000
+
+ENV PORT=4000
+ENV NODE_ENV=development
+
+# Development mode with hot reload (tsx watch)
+CMD ["npm", "run", "dev"]
+

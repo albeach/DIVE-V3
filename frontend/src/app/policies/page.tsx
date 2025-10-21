@@ -23,7 +23,9 @@ interface IPolicyStats {
 }
 
 async function getPolicies(): Promise<{ policies: IPolicyMetadata[], stats: IPolicyStats }> {
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+  // Server component: Use Docker network name for internal communication
+  // In Docker: backend:4000, Outside Docker: localhost:4000
+  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
   
   try {
     const response = await fetch(`${backendUrl}/api/policies`, {

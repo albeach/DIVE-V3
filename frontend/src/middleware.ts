@@ -18,9 +18,9 @@ export function middleware(req: NextRequest) {
     const csp = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-        "style-src 'self' 'unsafe-inline'",
+        `style-src 'self' 'unsafe-inline' ${keycloakBaseUrl}`,
         "img-src 'self' data: https:",
-        "font-src 'self'",
+        `font-src 'self' ${keycloakBaseUrl}`,
         `connect-src 'self' ${keycloakBaseUrl} ${apiUrl}`,
         `frame-src 'self' ${keycloakBaseUrl}`,
     ].join("; ");
@@ -31,6 +31,10 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-    matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+    // Apply to all routes except static files and most API routes
+    // BUT include /api/auth routes that need CSP for iframe embedding
+    matcher: [
+        "/((?!_next/static|_next/image|favicon.ico).*)",
+    ],
 };
 

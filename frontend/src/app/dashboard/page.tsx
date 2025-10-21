@@ -104,7 +104,19 @@ export default async function DashboardPage() {
             </summary>
             <div className="mt-3 rounded-lg bg-gray-900 p-4 overflow-auto max-h-96 border border-gray-700">
               <pre className="text-xs text-green-400 font-mono leading-relaxed">
-                {JSON.stringify(session, null, 2)}
+                {JSON.stringify({
+                  ...session,
+                  user: {
+                    ...session.user,
+                    // ACP-240 Section 6.2: Redact PII in development logs
+                    name: session.user?.name ? '*** REDACTED (PII) ***' : undefined,
+                    email: session.user?.email ? '*** REDACTED (PII) ***' : undefined,
+                    uniqueID: session.user?.uniqueID,
+                    clearance: session.user?.clearance,
+                    countryOfAffiliation: session.user?.countryOfAffiliation,
+                    acpCOI: session.user?.acpCOI,
+                  },
+                }, null, 2)}
               </pre>
             </div>
           </details>
