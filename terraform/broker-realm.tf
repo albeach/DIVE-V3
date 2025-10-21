@@ -101,10 +101,11 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
+    "offline_access",
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
-  # Note: offline_access is already available as an optional scope
-  # It's requested via authorization params in NextAuth config
+  # Note: offline_access added to default scopes for admin-dive user login
+  # This allows NextAuth to request refresh tokens for long-lived sessions
 }
 
 # ============================================
@@ -282,5 +283,58 @@ resource "keycloak_generic_protocol_mapper" "broker_roles" {
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
   }
+}
+
+# ============================================
+# Super Admin User (Direct Broker Login)
+# ============================================
+# Gap Remediation: Add super_admin user directly in broker realm
+# This allows direct login to broker realm without going through federation
+
+resource "keycloak_user" "broker_super_admin" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  username = "admin-dive"
+  enabled  = true
+
+  email      = "admin@dive-v3.pilot"
+  first_name = "DIVE"
+  last_name  = "Administrator"
+  
+  # Super admin attributes - full access
+  attributes = {
+    uniqueID               = "admin@dive-v3.pilot"
+    clearance              = "TOP_SECRET"
+    countryOfAffiliation   = "USA"
+    acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\",\"CAN-US\"]"
+    dutyOrg                = "DIVE_ADMIN"
+    orgUnit                = "SYSTEM_ADMINISTRATION"
+    acr                    = "urn:mace:incommon:iap:silver"
+    amr                    = "[\"pwd\",\"otp\"]"
+  }
+
+  initial_password {
+    value     = "DiveAdmin2025!"
+    temporary = false
+  }
+}
+
+# Get the offline_access role (default realm role)
+data "keycloak_role" "offline_access" {
+  realm_id = keycloak_realm.dive_v3_broker.id
+  name     = "offline_access"
+}
+
+# Assign super_admin and offline_access roles to broker admin user
+resource "keycloak_user_roles" "broker_super_admin_roles" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  user_id  = keycloak_user.broker_super_admin[0].id
+
+  role_ids = [
+    keycloak_role.broker_user.id,
+    keycloak_role.broker_super_admin.id,
+    data.keycloak_role.offline_access.id
+  ]
 }
 

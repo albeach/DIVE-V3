@@ -161,6 +161,30 @@ npm run dev
 
 ### U.S. IdP (Simulated - Keycloak Users)
 
+#### 🔒 Super Administrator Accounts
+
+**Broker Realm Admin (RECOMMENDED)**
+- **Realm:** `dive-v3-broker`
+- **Username:** `admin-dive`
+- **Password:** `DiveAdmin2025!`
+- **Clearance:** TOP_SECRET
+- **Country:** USA
+- **COI:** NATO-COSMIC, FVEY, CAN-US
+- **Capabilities:** Full system access including IdP management, audit logs, user management
+- **Use for:** Super admin console at `/admin/dashboard`
+
+**Legacy Admin (Pilot Realm)**
+- **Realm:** `dive-v3-pilot`
+- **Username:** `testuser-us`
+- **Password:** `Password123!`
+- **Clearance:** SECRET
+- **Country:** USA
+- **COI:** NATO-COSMIC, FVEY
+- **Capabilities:** IdP management, limited admin access
+- **Note:** Legacy account, still functional but prefer `admin-dive` above
+
+#### Standard Test Users
+
 | Username | Password | Clearance | Country | COI |
 |----------|----------|-----------|---------|-----|
 | `testuser-us` | `Password123!` | SECRET | USA | NATO-COSMIC, FVEY |

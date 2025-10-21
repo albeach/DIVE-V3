@@ -34,6 +34,28 @@ export default async function Home() {
         </div>
 
         <div className="border-t border-gray-200 pt-8">
+          {/* Super Admin Quick Access Banner */}
+          <div className="mb-6 bg-gradient-to-r from-yellow-50 via-orange-50 to-yellow-50 border-2 border-yellow-400 rounded-lg p-4 shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="text-2xl">👑</div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Super Administrator Access</h3>
+                  <p className="text-xs text-gray-600 mt-1">
+                    <span className="font-semibold text-green-700">Broker:</span> <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-300">admin-dive</span> / <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-300">DiveAdmin2025!</span>
+                    <span className="mx-2 text-gray-400">•</span>
+                    <span className="font-semibold text-yellow-700">Legacy:</span> <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-300">testuser-us</span> / <span className="font-mono bg-white px-1.5 py-0.5 rounded border border-gray-300">Password123!</span>
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">
+                <div className="bg-white px-3 py-1.5 rounded-full border border-yellow-400">
+                  🔓 Direct Login
+                </div>
+              </div>
+            </div>
+          </div>
+          
           <h2 className="text-2xl font-semibold text-gray-800 mb-6 text-center">
             Select Your Identity Provider
           </h2>

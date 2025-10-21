@@ -144,25 +144,77 @@ export function IdpSelector() {
         ))}
       </div>
 
-      {/* Direct Keycloak Login (for test users in dive-v3-pilot realm) */}
-      <div className="mt-6 pt-6 border-t border-gray-200">
-        <div className="text-center mb-4">
-          <p className="text-sm text-gray-600 mb-3">
-            <strong>For Testing:</strong> Direct login with dive-v3-pilot realm test users
-          </p>
+      {/* Direct Keycloak Login - Super Admin Access */}
+      <div className="mt-6 pt-6 border-t-2 border-yellow-200">
+        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-300 rounded-lg p-4 mb-4">
+          <div className="text-center">
+            <div className="inline-block px-3 py-1 bg-yellow-500 text-white text-xs font-bold rounded-full mb-2">
+              👑 SUPER ADMINISTRATOR ACCESS
+            </div>
+            <p className="text-sm text-gray-700 font-semibold mb-3">
+              Direct Keycloak Login
+            </p>
+            
+            {/* Broker Realm Admin (Preferred) */}
+            <div className="bg-white border-2 border-green-300 rounded-md p-3 text-left mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">
+                  ✅ RECOMMENDED (Broker Realm)
+                </span>
+                <span className="text-xs text-gray-500">dive-v3-broker</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-gray-600 font-medium">Username:</div>
+                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">admin-dive</div>
+                <div className="text-gray-600 font-medium">Password:</div>
+                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">DiveAdmin2025!</div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-600">
+                  <span className="font-semibold">Access:</span> TOP_SECRET clearance, Full IdP Management, All COIs
+                </p>
+              </div>
+            </div>
+
+            {/* Legacy Admin (dive-v3-pilot) */}
+            <div className="bg-white border border-yellow-200 rounded-md p-3 text-left">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-yellow-700 bg-yellow-100 px-2 py-1 rounded">
+                  🔄 LEGACY (Pilot Realm)
+                </span>
+                <span className="text-xs text-gray-500">dive-v3-pilot</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-gray-600 font-medium">Username:</div>
+                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">testuser-us</div>
+                <div className="text-gray-600 font-medium">Password:</div>
+                <div className="text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">Password123!</div>
+              </div>
+              <div className="mt-2 pt-2 border-t border-gray-200">
+                <p className="text-xs text-gray-600">
+                  <span className="font-semibold">Access:</span> SECRET clearance, NATO-COSMIC & FVEY COI
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-500 mt-3">
+              Other test users: testuser-us-confid (CONFIDENTIAL), testuser-us-unclass (UNCLASSIFIED)
+            </p>
+          </div>
         </div>
+        
         <button
           onClick={() => handleIdpClick(undefined)}
-          className="group w-full p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 text-center"
+          className="group w-full p-4 border-2 border-yellow-400 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg hover:border-yellow-500 hover:shadow-lg transition-all duration-200 text-center"
         >
           <div className="flex items-center justify-center space-x-3">
             <div className="text-3xl">🔑</div>
             <div>
-              <h3 className="text-base font-semibold text-gray-700 group-hover:text-blue-600">
-                Direct Keycloak Login
+              <h3 className="text-base font-semibold text-gray-900 group-hover:text-yellow-700">
+                Login as Super Administrator
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
-                dive-v3-pilot realm (testuser-us, testuser-fra, etc.)
+              <p className="text-xs text-gray-600 mt-1">
+                Click to proceed to Keycloak login page (use credentials above)
               </p>
             </div>
           </div>
