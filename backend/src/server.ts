@@ -11,6 +11,7 @@ import uploadRoutes from './routes/upload.routes';
 import adminRoutes from './routes/admin.routes';
 import publicRoutes from './routes/public.routes';
 import complianceRoutes from './routes/compliance.routes';
+import coiKeysRoutes from './routes/coi-keys.routes';
 import authRoutes from './controllers/auth.controller';  // Gap #7: Token revocation
 
 // Load environment variables from parent directory
@@ -75,6 +76,7 @@ app.use('/api/policies', policyRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/compliance', complianceRoutes);
+app.use('/api/coi-keys', coiKeysRoutes);
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
 
 // Root endpoint

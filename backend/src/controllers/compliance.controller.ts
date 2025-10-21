@@ -325,164 +325,42 @@ export async function getMultiKasInfo(
 /**
  * GET /api/compliance/coi-keys
  *
- * Returns COI key registry information
+ * Returns COI key registry information (now dynamically from database)
  */
 export async function getCoiKeysInfo(
     _req: Request,
     res: Response,
 ): Promise<void> {
     try {
-        // COI registry stats - using hardcoded values since registry doesn't expose getStatistics()
-        const stats = {
-            coiCount: 7,
-            totalKeysGenerated: 7,
-        };
+        // Import the COI Keys service
+        const { getAllCOIKeys, getCOIKeyStatistics } = await import('../services/coi-key.service');
+
+        // Get live statistics from database
+        const stats = await getCOIKeyStatistics();
+
+        // Get all active COI Keys from database
+        const { cois } = await getAllCOIKeys('active');
+
+        // Transform to compliance page format
+        const coiList = cois.map(coi => ({
+            id: coi.coiId,
+            name: coi.name,
+            description: coi.description,
+            members: coi.memberCountries,
+            color: coi.color,
+            icon: coi.icon,
+            status: coi.status,
+            resourceCount: coi.resourceCount,
+        }));
 
         const coiKeysInfo = {
             title: "Community of Interest (COI) Keys",
             description:
                 "COI-based community keys enable coalition scalability. Instead of encrypting per-nation, we encrypt per-community (e.g., FVEY, NATO), allowing instant access for new members.",
-            registeredCOIs: stats.coiCount,
-            totalKeysGenerated: stats.coiCount,
+            registeredCOIs: stats.active,
+            totalKeysGenerated: stats.total,
             keyAlgorithm: "AES-256-GCM",
-            cois: [
-                {
-                    id: "FVEY",
-                    name: "Five Eyes",
-                    description: "Intelligence alliance: USA, GBR, CAN, AUS, NZL",
-                    members: ["USA", "GBR", "CAN", "AUS", "NZL"],
-                    color: "#3B82F6",
-                    icon: "👁️",
-                    status: "active",
-                    resourceCount: 247,
-                },
-                {
-                    id: "NATO-COSMIC",
-                    name: "NATO COSMIC TOP SECRET",
-                    description: "NATO highest classification tier",
-                    members: [
-                        "USA",
-                        "GBR",
-                        "FRA",
-                        "DEU",
-                        "ITA",
-                        "CAN",
-                        "ESP",
-                        "POL",
-                        "TUR",
-                        "NLD",
-                        "BEL",
-                        "NOR",
-                        "DNK",
-                        "CZE",
-                        "PRT",
-                        "HUN",
-                        "BGR",
-                        "ROU",
-                        "SVK",
-                        "SVN",
-                        "HRV",
-                        "ALB",
-                        "EST",
-                        "LVA",
-                        "LTU",
-                        "LUX",
-                        "MNE",
-                        "MKD",
-                        "GRC",
-                        "ISL",
-                        "FIN",
-                        "SWE",
-                    ],
-                    color: "#8B5CF6",
-                    icon: "🌌",
-                    status: "active",
-                    resourceCount: 89,
-                },
-                {
-                    id: "NATO",
-                    name: "NATO General",
-                    description: "NATO alliance members",
-                    members: [
-                        "USA",
-                        "GBR",
-                        "FRA",
-                        "DEU",
-                        "ITA",
-                        "CAN",
-                        "ESP",
-                        "POL",
-                        "TUR",
-                        "NLD",
-                        "BEL",
-                        "NOR",
-                        "DNK",
-                        "CZE",
-                        "PRT",
-                        "HUN",
-                        "BGR",
-                        "ROU",
-                        "SVK",
-                        "SVN",
-                        "HRV",
-                        "ALB",
-                        "EST",
-                        "LVA",
-                        "LTU",
-                        "LUX",
-                        "MNE",
-                        "MKD",
-                        "GRC",
-                        "ISL",
-                        "FIN",
-                        "SWE",
-                    ],
-                    color: "#10B981",
-                    icon: "🛡️",
-                    status: "active",
-                    resourceCount: 456,
-                },
-                {
-                    id: "CAN-US",
-                    name: "Canada-US Bilateral",
-                    description: "NORAD and bilateral cooperation",
-                    members: ["CAN", "USA"],
-                    color: "#F59E0B",
-                    icon: "🤝",
-                    status: "active",
-                    resourceCount: 134,
-                },
-                {
-                    id: "FRA-US",
-                    name: "France-US Bilateral",
-                    description: "Franco-American cooperation",
-                    members: ["FRA", "USA"],
-                    color: "#EC4899",
-                    icon: "🤝",
-                    status: "active",
-                    resourceCount: 67,
-                },
-                {
-                    id: "GBR-US",
-                    name: "UK-US Bilateral",
-                    description: "Special relationship cooperation",
-                    members: ["GBR", "USA"],
-                    color: "#6366F1",
-                    icon: "🤝",
-                    status: "active",
-                    resourceCount: 198,
-                },
-                {
-                    id: "US-ONLY",
-                    name: "United States Only",
-                    description: "US national information",
-                    members: ["USA"],
-                    color: "#EF4444",
-                    icon: "🇺🇸",
-                    status: "active",
-                    resourceCount: 523,
-                },
-            ],
+            cois: coiList,
             selectionAlgorithm: {
                 title: "Intelligent COI Key Selection",
                 steps: [

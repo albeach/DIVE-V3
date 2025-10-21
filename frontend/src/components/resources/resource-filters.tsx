@@ -56,14 +56,13 @@ const COUNTRIES = [
     { code: 'NZL', name: 'New Zealand', flag: '🇳🇿' }
 ];
 
-const COIS = [
-    { value: 'FVEY', label: 'Five Eyes', icon: '👁️', color: 'purple' },
-    { value: 'NATO-COSMIC', label: 'NATO COSMIC', icon: '⭐', color: 'blue' },
-    { value: 'US-ONLY', label: 'US Only', icon: '🇺🇸', color: 'red' },
-    { value: 'CAN-US', label: 'Canada-US', icon: '🤝', color: 'indigo' },
-    { value: 'EU-RESTRICTED', label: 'EU Restricted', icon: '🇪🇺', color: 'blue' },
-    { value: 'QUAD', label: 'QUAD', icon: '◆', color: 'green' }
-];
+// COI list will be dynamically fetched from API
+interface COI {
+    value: string;
+    label: string;
+    icon: string;
+    color: string;
+}
 
 const CLEARANCE_HIERARCHY: Record<string, string[]> = {
     'UNCLASSIFIED': ['UNCLASSIFIED'],
@@ -74,7 +73,7 @@ const CLEARANCE_HIERARCHY: Record<string, string[]> = {
 
 const CLASSIFICATION_VALUES = CLASSIFICATIONS.map(c => c.value);
 const COUNTRY_CODES = COUNTRIES.map(c => c.code);
-const COI_VALUES = COIS.map(c => c.value);
+// COI_VALUES will be computed dynamically from fetched COIs
 
 export default function ResourceFilters({ 
     userAttributes, 
@@ -84,6 +83,54 @@ export default function ResourceFilters({
 }: ResourceFiltersProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
+    
+    // Fetch COI options from API
+    const [cois, setCois] = useState<COI[]>([]);
+    const [coiLoading, setCoiLoading] = useState(true);
+    
+    useEffect(() => {
+        const fetchCOIs = async () => {
+            try {
+                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+                const response = await fetch(`${backendUrl}/api/coi-keys?status=active`);
+                const data = await response.json();
+                
+                // Transform API response to filter format
+                const coiFilters: COI[] = data.cois.map((coi: any) => {
+                    // Map colors to Tailwind-friendly values
+                    const colorMap: Record<string, string> = {
+                        '#8B5CF6': 'purple',
+                        '#3B82F6': 'blue',
+                        '#1E40AF': 'indigo',
+                        '#DC2626': 'red',
+                        '#6366F1': 'indigo',
+                        '#10B981': 'green',
+                        '#F59E0B': 'amber',
+                        '#EF4444': 'red'
+                    };
+                    
+                    return {
+                        value: coi.coiId,
+                        label: coi.name,
+                        icon: coi.icon,
+                        color: colorMap[coi.color] || 'gray'
+                    };
+                });
+                
+                setCois(coiFilters);
+            } catch (error) {
+                console.error('Failed to fetch COI options:', error);
+                // Fallback to empty array
+                setCois([]);
+            } finally {
+                setCoiLoading(false);
+            }
+        };
+        
+        fetchCOIs();
+    }, []);
+    
+    const COI_VALUES = useMemo(() => cois.map(c => c.value), [cois]);
     
     const [filters, setFilters] = useState<ResourceFiltersState>(() => ({
         search: searchParams.get('search') || '',
@@ -434,22 +481,29 @@ export default function ResourceFilters({
                                 </svg>
                             </Disclosure.Button>
                             <Disclosure.Panel className="px-4 pb-3 space-y-1.5">
-                                {COIS.map(coiItem => {
-                                    const isSelected = filters.cois.includes(coiItem.value);
-                                    const colorClasses = {
-                                        purple: 'bg-purple-50 text-purple-900 border-purple-400',
-                                        blue: 'bg-blue-50 text-blue-900 border-blue-400',
-                                        red: 'bg-red-50 text-red-900 border-red-400',
-                                        indigo: 'bg-indigo-50 text-indigo-900 border-indigo-400',
-                                        green: 'bg-green-50 text-green-900 border-green-400'
-                                    };
-                                    
-                                    return (
-                                        <button
-                                            key={coiItem.value}
-                                            type="button"
-                                            onClick={() => toggleArrayFilter('cois', coiItem.value)}
-                                            className={`relative w-full px-3 py-2 rounded-lg border-2 text-left transition-all transform hover:scale-102 ${
+                                {coiLoading ? (
+                                    <div className="text-center text-sm text-gray-500 py-2">Loading COIs...</div>
+                                ) : cois.length === 0 ? (
+                                    <div className="text-center text-sm text-gray-500 py-2">No COIs available</div>
+                                ) : (
+                                    cois.map(coiItem => {
+                                        const isSelected = filters.cois.includes(coiItem.value);
+                                        const colorClasses = {
+                                            purple: 'bg-purple-50 text-purple-900 border-purple-400',
+                                            blue: 'bg-blue-50 text-blue-900 border-blue-400',
+                                            red: 'bg-red-50 text-red-900 border-red-400',
+                                            indigo: 'bg-indigo-50 text-indigo-900 border-indigo-400',
+                                            green: 'bg-green-50 text-green-900 border-green-400',
+                                            amber: 'bg-amber-50 text-amber-900 border-amber-400',
+                                            gray: 'bg-gray-50 text-gray-900 border-gray-400'
+                                        };
+                                        
+                                        return (
+                                            <button
+                                                key={coiItem.value}
+                                                type="button"
+                                                onClick={() => toggleArrayFilter('cois', coiItem.value)}
+                                                className={`relative w-full px-3 py-2 rounded-lg border-2 text-left transition-all transform hover:scale-102 ${
                                                 isSelected
                                                     ? colorClasses[coiItem.color as keyof typeof colorClasses]
                                                     : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
@@ -470,7 +524,8 @@ export default function ResourceFilters({
                                             </div>
                                         </button>
                                     );
-                                })}
+                                })
+                                )}
                             </Disclosure.Panel>
                         </>
                     )}
