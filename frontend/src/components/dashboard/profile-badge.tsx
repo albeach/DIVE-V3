@@ -1,7 +1,11 @@
 'use client';
 
+import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
+
 interface User {
+  uniqueID?: string | null;
   name?: string | null;
+  email?: string | null;
   clearance?: string | null;
   countryOfAffiliation?: string | null;
   acpCOI?: string[] | null;
@@ -63,10 +67,11 @@ export function ProfileBadge({ user }: ProfileBadgeProps) {
 
         {/* Profile Info - Expanded */}
         <div className="flex-1 min-w-0">
-          {/* Name, Status, Clearance, Country - All inline */}
+          {/* Name (Pseudonym), Status, Clearance, Country - All inline */}
+          {/* ACP-240 Section 6.2: Display ocean pseudonym instead of real name (PII minimization) */}
           <div className="flex items-center flex-wrap gap-2 mb-3">
             <h3 className="text-xl font-bold text-gray-900">
-              {user.name || 'User'}
+              {getPseudonymFromUser(user as any)}
             </h3>
             <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-green-100 border border-green-300">
               <div className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse" />

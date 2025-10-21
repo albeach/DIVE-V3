@@ -19,6 +19,7 @@ import crypto from 'crypto';
 import NodeCache from 'node-cache';
 
 import { kasLogger, logKASAuditEvent } from './utils/kas-logger';
+import { verifyToken, IKeycloakToken } from './utils/jwt-validator';
 import {
     IKASKeyRequest,
     IKASKeyResponse,
@@ -99,17 +100,28 @@ app.post('/request-key', async (req: Request, res: Response) => {
         // ============================================
         // 2. Verify JWT Token (extract identity attributes)
         // ============================================
-        let decodedToken: any;
+        // SECURITY FIX (Oct 20, 2025): Gap #3 - KAS JWT Verification
+        // Replaced jwt.decode() with verifyToken() for signature verification
+        // This prevents forged token attacks on the Key Access Service
+        let decodedToken: IKeycloakToken;
         try {
-            // For pilot: Decode without verification (production: verify with JWKS)
-            decodedToken = jwt.decode(keyRequest.bearerToken);
-            if (!decodedToken) {
-                throw new Error('Invalid token');
-            }
+            // SECURE: Verify JWT signature with JWKS (RS256)
+            decodedToken = await verifyToken(keyRequest.bearerToken);
+
+            kasLogger.info('JWT signature verified successfully', {
+                requestId,
+                sub: decodedToken.sub,
+                iss: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
+                aud: decodedToken.aud,
+                exp: decodedToken.exp,
+                iat: decodedToken.iat
+            });
+
         } catch (error) {
             kasLogger.error('JWT verification failed', {
                 requestId,
-                error: error instanceof Error ? error.message : 'Unknown error'
+                error: error instanceof Error ? error.message : 'Unknown error',
+                errorType: error instanceof Error ? error.name : 'UnknownError'
             });
 
             const auditEvent: IKASAuditEvent = {
@@ -120,7 +132,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 resourceId: keyRequest.resourceId,
                 kaoId: keyRequest.kaoId,
                 outcome: 'DENY',
-                reason: 'Invalid JWT token',
+                reason: `JWT verification failed: ${error instanceof Error ? error.message : 'Invalid or expired token'}`,
                 latencyMs: Date.now() - startTime
             };
             logKASAuditEvent(auditEvent);
@@ -129,6 +141,11 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 success: false,
                 error: 'Unauthorized',
                 denialReason: 'Invalid or expired JWT token',
+                details: {
+                    reason: error instanceof Error ? error.message : 'Token verification failed',
+                    requirement: 'Valid RS256 signed JWT from Keycloak',
+                    reference: 'ACP-240 Section 5.2 (Key Access Service)'
+                },
                 responseTimestamp: new Date().toISOString()
             } as IKASKeyResponse);
             return;
@@ -137,6 +154,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
         const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
         const clearance = decodedToken.clearance;
         const countryOfAffiliation = decodedToken.countryOfAffiliation;
+        const dutyOrg = decodedToken.dutyOrg;        // Gap #4: Organization attribute
+        const orgUnit = decodedToken.orgUnit;        // Gap #4: Organizational unit
 
         // Parse acpCOI - handle string or array (same fix as upload controller)
         let acpCOI: string[] = [];
@@ -159,7 +178,9 @@ app.post('/request-key', async (req: Request, res: Response) => {
             country: countryOfAffiliation,
             acpCOI,  // DEBUG: Log parsed COI
             acpCOI_type: typeof acpCOI,
-            acpCOI_isArray: Array.isArray(acpCOI)
+            acpCOI_isArray: Array.isArray(acpCOI),
+            dutyOrg,  // Gap #4: Log organization
+            orgUnit   // Gap #4: Log organizational unit
         });
 
         // ============================================
@@ -221,7 +242,9 @@ app.post('/request-key', async (req: Request, res: Response) => {
                     uniqueID,
                     clearance,
                     countryOfAffiliation,
-                    acpCOI: userCOI  // ✅ Guaranteed array
+                    acpCOI: userCOI,  // ✅ Guaranteed array
+                    dutyOrg,          // Gap #4: Organization attribute
+                    orgUnit           // Gap #4: Organizational unit
                 },
                 action: {
                     operation: 'decrypt' // KAS-specific action
@@ -238,18 +261,41 @@ app.post('/request-key', async (req: Request, res: Response) => {
                     currentTime: new Date().toISOString(),
                     sourceIP: req.ip || 'unknown',
                     deviceCompliant: true,
-                    requestId
+                    requestId,
+                    // AAL2/FAL2 context (NIST SP 800-63B/C) - CRITICAL for KAS policy re-evaluation
+                    acr: decodedToken.acr,        // Authentication Context Class Reference
+                    amr: decodedToken.amr,        // Authentication Methods Reference (may be JSON string)
+                    auth_time: decodedToken.auth_time  // Time of authentication
                 }
             }
         };
 
-        // DEBUG: Log OPA input to verify array types
-        kasLogger.debug('OPA input for KAS', {
+        // DEBUG: Log OPA input to verify all attributes including AAL2 context
+        kasLogger.info('KAS Policy Re-Evaluation Input', {
             requestId,
-            subject_acpCOI: userCOI,
-            subject_acpCOI_isArray: Array.isArray(userCOI),
-            resource_COI: resourceCOI,
-            resource_COI_isArray: Array.isArray(resourceCOI)
+            subject: {
+                uniqueID,
+                clearance,
+                countryOfAffiliation,
+                acpCOI: userCOI,
+                acpCOI_isArray: Array.isArray(userCOI),
+                dutyOrg,
+                orgUnit
+            },
+            resource: {
+                resourceId: resource.resourceId,
+                classification: resource.classification,
+                releasabilityTo: resource.releasabilityTo,
+                COI: resourceCOI,
+                COI_isArray: Array.isArray(resourceCOI)
+            },
+            context: {
+                acr: decodedToken.acr,
+                amr: decodedToken.amr,
+                auth_time: decodedToken.auth_time,
+                amr_type: typeof decodedToken.amr,
+                acr_type: typeof decodedToken.acr
+            }
         });
 
         let opaDecision: any;
@@ -321,9 +367,9 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 kaoId: keyRequest.kaoId,
                 outcome: 'DENY',
                 reason: opaDecision.reason,
-                subjectAttributes: { clearance, countryOfAffiliation, acpCOI: userCOI },
+                subjectAttributes: { clearance: clearance as any, countryOfAffiliation, acpCOI: userCOI },
                 resourceAttributes: {
-                    classification: resource.classification,
+                    classification: resource.classification as any,
                     releasabilityTo: resource.releasabilityTo,
                     COI: resourceCOI
                 },
@@ -425,9 +471,9 @@ app.post('/request-key', async (req: Request, res: Response) => {
             kaoId: keyRequest.kaoId,
             outcome: 'ALLOW',
             reason: 'Policy authorization successful',
-            subjectAttributes: { clearance, countryOfAffiliation, acpCOI: userCOI },
+            subjectAttributes: { clearance: clearance as any, countryOfAffiliation, acpCOI: userCOI },
             resourceAttributes: {
-                classification: resource.classification,
+                classification: resource.classification as any,
                 releasabilityTo: resource.releasabilityTo,
                 COI: resourceCOI
             },

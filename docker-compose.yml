@@ -7,6 +7,7 @@ networks:
 volumes:
   postgres_data:
   mongo_data:
+  redis_data:
 
 services:
   postgres:
@@ -37,16 +38,21 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: password
+      # BEST PRACTICE: Set frontend URL so issuer matches browser perspective
       KC_HOSTNAME: localhost
       KC_HOSTNAME_PORT: 8081
       KC_HOSTNAME_STRICT: false
       KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT_BACKCHANNEL: false
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
+      # Gap #6: Enable JavaScript providers for script-based protocol mappers
+      KC_FEATURES: scripts
+    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,6 +86,22 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: dive-v3-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dive-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   opa:
     image: openpolicyagent/opa:0.68.0
     container_name: dive-v3-opa
@@ -106,19 +128,23 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-backend
     environment:
       NODE_ENV: development
       PORT: 4000
+      # Multi-realm migration (Oct 21, 2025): Updated to broker realm
       KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: dive-v3-pilot
-      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/dive-v3-pilot/protocol/openid-connect/certs
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/dive-v3-broker/protocol/openid-connect/certs
       MONGODB_URL: mongodb://admin:password@mongo:27017
       MONGODB_DATABASE: dive-v3
       OPA_URL: http://opa:8181
       KAS_URL: http://kas:8080
       LOG_LEVEL: info
+      # Redis for token blacklist (Gap #7)
+      REDIS_URL: redis://redis:6379
     ports:
       - "4000:4000"
     depends_on:
@@ -128,27 +154,46 @@ services:
     networks:
       - dive-network
     volumes:
+      # Development: Mount source code for hot reload
       - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      # CRITICAL: Mount policies directory so backend can read OPA Rego files
+      - ./policies:/app/policies:ro
+      # Logs directory
       - ./backend/logs:/app/logs
-    command: npm run dev
 
   nextjs:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-frontend
     environment:
       NODE_ENV: development
+      # BEST PRACTICE: Pure Docker networking (no extra_hosts)
+      # Browser (NEXT_PUBLIC_*): Uses localhost (exposed ports)
+      # Server-side: Uses Docker service names (internal network)
       NEXT_PUBLIC_API_URL: http://localhost:4000
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:4000
       NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      # Server-side backend URL (Docker internal network)
+      BACKEND_URL: http://backend:4000
+      # Multi-realm migration (Oct 21, 2025): Updated to broker realm
+      # Server-side NextAuth: Use Docker network name for Keycloak
       KEYCLOAK_BASE_URL: http://localhost:8081
       KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: dive-v3-pilot
-      KEYCLOAK_CLIENT_ID: dive-v3-client
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
+      # Public Keycloak URLs (for browser-side logout)
+      NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8081
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      # NextAuth configuration
       AUTH_URL: http://localhost:3000
-      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
       NEXTAUTH_URL: http://localhost:3000
+      # Database for NextAuth sessions
+      DATABASE_URL: postgresql://postgres:password@postgres:5432/dive_v3_app
     ports:
       - "3000:3000"
     depends_on:
@@ -157,9 +202,11 @@ services:
     networks:
       - dive-network
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-    command: npm run dev
+      # Development: Mount entire source for hot reload
+      - ./frontend:/app
+      # Exclude node_modules and .next from host (use container's versions)
+      - /app/node_modules
+      - /app/.next
 
   kas:
     build:
@@ -174,6 +221,13 @@ services:
       MONGODB_URL: mongodb://admin:password@mongo:27017
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
+      # Multi-realm migration (Oct 21, 2025): KAS needs Keycloak config for JWT validation
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      # Backend should be internal Docker network when fully containerized
+      # Change to http://backend:4000 when running backend in Docker
+      # Currently: http://host.docker.internal:4000 (backend runs outside Docker)
     ports:
       - "8080:8080"
     depends_on:

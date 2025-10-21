@@ -39,6 +39,8 @@ const nextConfig: NextConfig = {
             bodySizeLimit: "2mb",
         },
     },
+    // Docker deployment: Development mode for hot reload and runtime env vars
+    // output: 'standalone',  // Use for production builds only
 };
 
 export default nextConfig;

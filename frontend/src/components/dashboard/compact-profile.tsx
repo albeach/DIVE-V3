@@ -1,8 +1,10 @@
 'use client';
 
+import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
+
 interface User {
   uniqueID?: string | null;
-  name?: string | null;
+  name?: string | null;  // Real name from IdP (DO NOT DISPLAY - PII minimization)
   email?: string | null;
   clearance?: string | null;
   countryOfAffiliation?: string | null;
@@ -51,6 +53,19 @@ export function CompactProfile({ user }: CompactProfileProps) {
           </h3>
           
           <dl className="space-y-4">
+            <div>
+              <dt className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wide flex items-center">
+                Display Name
+                <span className="ml-2 text-xs text-gray-400 normal-case" title="ACP-240 Section 6.2: PII minimization - pseudonym derived from UUID">
+                  (Pseudonym)
+                </span>
+              </dt>
+              <dd className="text-base font-bold text-gray-900">
+                <span className="inline-flex items-center px-4 py-2 rounded-lg bg-cyan-50 border border-cyan-200 text-cyan-900">
+                  {getPseudonymFromUser(user as any)}
+                </span>
+              </dd>
+            </div>
             <div>
               <dt className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wide">Clearance Level</dt>
               <dd className="text-base font-bold text-gray-900">

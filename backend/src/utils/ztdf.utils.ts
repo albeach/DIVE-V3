@@ -110,9 +110,10 @@ export async function validateZTDFIntegrity(ztdf: IZTDFObject): Promise<IZTDFVal
     // 2. Validate Payload Hash
     // ============================================
     if (ztdf.payload.payloadHash) {
-        // Compute hash of all chunks
-        const chunksData = ztdf.payload.encryptedChunks
-            .map(chunk => chunk.encryptedData)
+        // Compute hash of all chunks (handle both chunked and non-chunked)
+        const encryptedChunks = ztdf.payload.encryptedChunks || [];
+        const chunksData = encryptedChunks
+            .map((chunk: any) => chunk.encryptedData)
             .join('');
         const computedHash = computeSHA384(chunksData);
 
@@ -134,7 +135,9 @@ export async function validateZTDFIntegrity(ztdf: IZTDFObject): Promise<IZTDFVal
     // ============================================
     // 3. Validate Individual Chunk Hashes
     // ============================================
-    ztdf.payload.encryptedChunks.forEach((chunk, index) => {
+    // Handle both chunked and non-chunked payloads
+    const encryptedChunks = ztdf.payload.encryptedChunks || [];
+    encryptedChunks.forEach((chunk: any, index: number) => {
         if (chunk.integrityHash) {
             const computedHash = computeSHA384(chunk.encryptedData);
             if (computedHash !== chunk.integrityHash) {
