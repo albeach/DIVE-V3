@@ -45,67 +45,105 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
 
 /**
  * Refresh access token using refresh token
+ * Session Expiration Fix (Oct 21, 2025):
+ * - Enhanced logging for full lifecycle tracking
+ * - Better error handling for Keycloak session expiration
+ * - Offline token support for long-lived refresh capability
  */
 async function refreshAccessToken(account: any) {
-    try {
-        console.log('[DIVE] Attempting token refresh for user:', account.userId);
+    const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`;
+    const currentTime = Math.floor(Date.now() / 1000);
+    const timeUntilExpiry = (account.expires_at || 0) - currentTime;
 
-        const response = await fetch(
-            `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    client_id: process.env.KEYCLOAK_CLIENT_ID!,
-                    client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
-                    grant_type: 'refresh_token',
-                    refresh_token: account.refresh_token!,
-                }),
-            }
-        );
+    try {
+        console.log('[DIVE] Token Refresh Request', {
+            userId: account.userId,
+            keycloakUrl: process.env.KEYCLOAK_URL,
+            realm: process.env.KEYCLOAK_REALM,
+            refreshUrl,
+            currentTime: new Date(currentTime * 1000).toISOString(),
+            expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
+            timeUntilExpiry,
+            hasRefreshToken: !!account.refresh_token,
+            refreshTokenLength: account.refresh_token?.length || 0,
+        });
+
+        const response = await fetch(refreshUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                client_id: process.env.KEYCLOAK_CLIENT_ID!,
+                client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
+                grant_type: 'refresh_token',
+                refresh_token: account.refresh_token!,
+            }),
+        });
 
         const tokens = await response.json();
 
         if (!response.ok) {
-            console.error('[DIVE] Token refresh failed:', {
+            console.error('[DIVE] Token Refresh Failed', {
                 status: response.status,
+                statusText: response.statusText,
                 error: tokens.error,
                 error_description: tokens.error_description,
+                userId: account.userId,
+                timeUntilExpiry,
             });
 
-            // If refresh token is invalid/expired, we can't refresh
-            // User will need to re-authenticate
-            if (tokens.error === 'invalid_grant') {
-                console.log('[DIVE] Refresh token expired or invalid - user needs to re-login');
+            // Keycloak session expired - user needs to re-authenticate
+            if (tokens.error === 'invalid_grant' || tokens.error_description?.includes('Session not active')) {
+                console.warn('[DIVE] Keycloak Session Expired', {
+                    reason: 'SSO session idle timeout exceeded or session explicitly ended',
+                    error: tokens.error,
+                    error_description: tokens.error_description,
+                    recommendation: 'User must re-authenticate to establish new session',
+                });
                 throw new Error('RefreshTokenExpired');
             }
 
             throw new Error(`Token refresh failed: ${tokens.error || 'Unknown error'}`);
         }
 
-        console.log('[DIVE] Token refreshed successfully, new expiry:', tokens.expires_in, 'seconds');
+        console.log('[DIVE] Token Refreshed Successfully', {
+            userId: account.userId,
+            newExpiresIn: tokens.expires_in,
+            newExpiresAt: new Date((currentTime + tokens.expires_in) * 1000).toISOString(),
+            refreshTokenRotated: !!tokens.refresh_token && tokens.refresh_token !== account.refresh_token,
+            scope: tokens.scope,
+        });
 
         // Update account in database with new tokens
+        const updatedAccount = {
+            access_token: tokens.access_token,
+            id_token: tokens.id_token,
+            expires_at: currentTime + tokens.expires_in,
+            refresh_token: tokens.refresh_token || account.refresh_token, // Handle rotation
+        };
+
         await db.update(accounts)
-            .set({
-                access_token: tokens.access_token,
-                id_token: tokens.id_token,
-                expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
-                refresh_token: tokens.refresh_token || account.refresh_token,
-            })
+            .set(updatedAccount)
             .where(eq(accounts.userId, account.userId));
+
+        console.log('[DIVE] Database Updated', {
+            userId: account.userId,
+            newExpiresAt: new Date(updatedAccount.expires_at * 1000).toISOString(),
+        });
 
         return {
             ...account,
-            access_token: tokens.access_token,
-            id_token: tokens.id_token,
-            expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
-            refresh_token: tokens.refresh_token || account.refresh_token,
+            ...updatedAccount,
         };
     } catch (error) {
-        console.error('[DIVE] Error refreshing token:', error);
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[DIVE] Token Refresh Error', {
+            userId: account.userId,
+            error: errorMsg,
+            errorType: error instanceof Error ? error.constructor.name : typeof error,
+            timeUntilExpiry,
+        });
         throw error;
     }
 }
@@ -120,9 +158,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
             authorization: {
                 params: {
-                    scope: "openid profile email",
+                    // Session expiration fix: Request offline_access for long-lived refresh tokens
+                    scope: "openid profile email offline_access",
                 }
-            }
+            },
+            // Multi-realm: Allow linking accounts from different realms
+            allowDangerousEmailAccountLinking: true,
         }),
     ],
     debug: process.env.NODE_ENV === "development",
@@ -443,11 +484,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
         },
         async signIn({ user, account, profile }) {
+            // Multi-realm: Handle federated accounts from broker realm
+            // Allow sign-in for all Keycloak accounts (broker creates new users)
+            console.log('[DIVE] Sign-in event', {
+                email: user?.email,
+                provider: account?.provider,
+                accountId: account?.providerAccountId,
+            });
+
             // On fresh sign-in, manually update account tokens in database
             // DrizzleAdapter creates account on first login but doesn't always update on re-login
             if (account && user?.id) {
                 try {
-                    console.log('[DIVE] Sign-in event - updating account tokens', {
+                    console.log('[DIVE] Updating account tokens', {
                         userId: user.id,
                         provider: account.provider,
                         hasAccessToken: !!account.access_token,
@@ -467,12 +516,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         })
                         .where(eq(accounts.userId, user.id));
 
-                    console.log('[DIVE] Account tokens updated in database');
+                    console.log('[DIVE] Account tokens updated successfully');
                 } catch (error) {
                     console.error('[DIVE] Failed to update account tokens:', error);
                     // Don't fail the login, just log the error
                 }
             }
+
+            // Multi-realm: All Keycloak accounts allowed (broker creates new users)
+            // No return needed - void function
         },
     },
 });

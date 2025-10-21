@@ -486,8 +486,19 @@ export const requestKeyHandler = async (
         }
 
         // Call KAS to request key
-        const kasUrl = kao.kasUrl || 'http://localhost:8080';
-        logger.info('Calling KAS', { requestId, kasUrl, kaoId });
+        // Priority: KAO's kasUrl > Environment KAS_URL > Default 'http://kas:8080'
+        // Session expiration fix (Oct 21): Properly handle custom KAS URLs from KAOs
+        const kasUrl = kao.kasUrl
+            ? (kao.kasUrl.includes('/request-key') ? kao.kasUrl : `${kao.kasUrl}/request-key`)
+            : `${process.env.KAS_URL || 'http://kas:8080'}/request-key`;
+
+        logger.info('Calling KAS', {
+            requestId,
+            kasUrl,
+            kaoKasUrl: kao.kasUrl,
+            envKasUrl: process.env.KAS_URL,
+            constructedUrl: kasUrl
+        });
 
         // CRITICAL: Get the wrappedKey (actual DEK used during encryption)
         const wrappedKey = kao.wrappedKey;
@@ -501,7 +512,7 @@ export const requestKeyHandler = async (
         let kasResponse;
         try {
             kasResponse = await axios.post(
-                `${kasUrl}/request-key`,
+                kasUrl,  // Use full URL (already includes /request-key)
                 {
                     resourceId,
                     kaoId,

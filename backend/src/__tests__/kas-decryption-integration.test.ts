@@ -34,12 +34,12 @@ describe('KAS Decryption Integration Tests', () => {
 
             // 1. Fetch resource from MongoDB
             const resource = await db.collection('resources').findOne({ resourceId });
-            
+
             if (!resource) {
                 console.log('Seeded resource not found - skipping test (CI environment)');
                 return;
             }
-            
+
             expect(resource).toBeTruthy();
             expect(resource.ztdf).toBeTruthy();
 
