@@ -217,6 +217,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     let account = accountResults[0];
 
                     if (account) {
+                        // CRITICAL FIX: If no tokens in account, user has logged out
+                        // This prevents session recreation after logout
+                        if (!account.access_token || !account.id_token) {
+                            console.log('[DIVE] No tokens in account - user logged out, invalidating session');
+                            // Return null to invalidate the session
+                            return null as any; // Type assertion needed for NextAuth v5
+                        }
                         console.log('[DIVE] Account found for user:', {
                             userId: user.id,
                             provider: account.provider,
@@ -466,8 +473,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // From https://authjs.dev/getting-started/database
             // DrizzleAdapter doesn't auto-delete sessions on signOut()
             const sessionData = 'session' in message ? message.session : null;
+            let userId: string | null = null;
 
-            if (sessionData) {
+            if (sessionData?.userId) {
+                userId = sessionData.userId;
+            } else if ('user' in message && message.user) {
+                const user = message.user as any;
+                userId = user.id || null;
+            }
+
+            if (sessionData && sessionData.sessionToken) {
                 try {
                     await db
                         .delete(sessions)
@@ -475,6 +490,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     console.log('[DIVE] Database session deleted:', sessionData.sessionToken.substring(0, 8) + '...');
                 } catch (error) {
                     console.error('[DIVE] Error deleting session from database:', error);
+                }
+            }
+
+            // CRITICAL: Clear account tokens to prevent session recreation
+            // Without this, the session callback will find the account and recreate the session!
+            if (userId) {
+                try {
+                    await db.update(accounts)
+                        .set({
+                            access_token: null,
+                            id_token: null,
+                            refresh_token: null,
+                            expires_at: null,
+                            session_state: null,
+                        })
+                        .where(eq(accounts.userId, userId));
+                    console.log('[DIVE] Account tokens cleared for user:', userId);
+                } catch (error) {
+                    console.error('[DIVE] Error clearing account tokens:', error);
                 }
             }
 

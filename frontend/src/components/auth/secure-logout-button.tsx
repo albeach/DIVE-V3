@@ -12,42 +12,80 @@ export function SecureLogoutButton() {
     try {
       setIsLoggingOut(true);
       
-      console.log('[DIVE] User-initiated logout - starting...');
+      console.log('[DIVE] User-initiated logout - starting COMPREHENSIVE cleanup...');
+      console.log('[DIVE] This will: 1) Delete DB sessions, 2) Clear tokens, 3) Delete cookies, 4) Clear storage, 5) Terminate Keycloak SSO');
       
-      // Notify other tabs before logout
+      // STEP 1: Complete server-side logout FIRST
+      // This deletes database sessions AND clears account tokens
+      // CRITICAL: Must happen before NextAuth signOut to prevent session recreation
+      console.log('[DIVE] Step 1: Complete server-side logout (DB + tokens)...');
+      try {
+        const response = await fetch('/api/auth/logout', { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('[DIVE] Server-side logout SUCCESS:', result);
+        } else {
+          console.error('[DIVE] Server-side logout FAILED:', response.status);
+        }
+      } catch (serverError) {
+        console.error('[DIVE] Server-side logout API error:', serverError);
+        // Continue with local cleanup even if server fails
+      }
+      
+      // Step 2: Call NextAuth signOut (client-side cookie deletion)
+      console.log('[DIVE] Step 2: NextAuth signOut (delete cookies)...');
+      await signOut({ redirect: false });
+      console.log('[DIVE] NextAuth signOut complete');
+      
+      // Step 3: Clear browser storage
+      console.log('[DIVE] Step 3: Clearing browser storage...');
+      localStorage.clear();
+      sessionStorage.clear();
+      console.log('[DIVE] Browser storage cleared');
+      
+      // Step 4: Notify other tabs
+      console.log('[DIVE] Step 4: Notifying other tabs via BroadcastChannel...');
       const syncManager = getSessionSyncManager();
       syncManager.notifyUserLogout();
+      console.log('[DIVE] Other tabs notified');
       
-      // Step 1: Get Keycloak logout URL (includes id_token_hint)
+      // Step 5: Terminate Keycloak SSO session
+      console.log('[DIVE] Step 5: Getting Keycloak logout URL...');
       const keycloakLogoutUrl = await getKeycloakLogoutUrl();
       
       if (keycloakLogoutUrl) {
-        console.log('[DIVE] Redirecting to Keycloak logout endpoint');
-        console.log('[DIVE] Keycloak will call frontchannel logout callback');
-        console.log('[DIVE] Callback will send postMessage to parent');
-        console.log('[DIVE] Parent LogoutListener will complete cleanup');
+        console.log('[DIVE] Redirecting to Keycloak for SSO termination');
+        console.log('[DIVE] Full logout URL:', keycloakLogoutUrl.substring(0, 100) + '...');
         
-        // Redirect to Keycloak logout
-        // Keycloak will:
-        // 1. Terminate Keycloak SSO session
-        // 2. Load /api/auth/logout-callback in iframe (frontchannel logout)
-        // 3. Iframe deletes cookies and sends postMessage
-        // 4. LogoutListener receives message and redirects to home
+        // Redirect to Keycloak - this terminates the SSO session
+        // All local cleanup is done, so user is fully logged out even if Keycloak fails
         window.location.href = keycloakLogoutUrl;
         
       } else {
-        console.warn('[DIVE] No Keycloak logout URL, doing local logout only');
+        console.warn('[DIVE] No Keycloak logout URL - doing local logout only');
+        console.log('[DIVE] Complete logout done, redirecting to home');
         
-        // Fallback: Local logout without Keycloak
-        localStorage.clear();
-        sessionStorage.clear();
-        await signOut({ redirect: false });
+        // All cleanup complete, redirect home
         window.location.href = "/";
       }
       
     } catch (error) {
       console.error("[DIVE] Logout error:", error);
-      // Force redirect to home even if error
+      
+      // Emergency cleanup even on error
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (storageError) {
+        console.error("[DIVE] Emergency storage clear error:", storageError);
+      }
+      
+      // Force redirect home
+      console.log('[DIVE] Forcing redirect after error');
       window.location.href = "/";
     }
   };
@@ -105,9 +143,31 @@ export function SecureLogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={isLoggingOut}
-      className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      className="relative group w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-800 hover:to-gray-900 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2 overflow-hidden"
+      aria-label="Sign out"
     >
-      {isLoggingOut ? "Signing out..." : "Sign Out"}
+      {/* Animated background shine effect */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+      
+      {/* Content */}
+      <span className="relative flex items-center gap-2">
+        {isLoggingOut ? (
+          <>
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span>Signing out...</span>
+          </>
+        ) : (
+          <>
+            <svg className="w-4 h-4 transition-transform group-hover:translate-x-[-2px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Sign Out</span>
+          </>
+        )}
+      </span>
     </button>
   );
 }
