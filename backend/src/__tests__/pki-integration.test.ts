@@ -246,10 +246,10 @@ describe('PKI Integration Tests - End-to-End', () => {
         test('should support certificate rotation gracefully', async () => {
             // Load current hierarchy
             await certificateManager.loadThreeTierHierarchy();
-            
+
             // Sign with current certificate
             const signedPolicy1 = await signPolicyWithDefaultCert(samplePolicy);
-            
+
             // Verify with current certificate
             const result1 = await verifyPolicyWithDefaultCert(signedPolicy1);
             expect(result1.valid).toBe(true);
@@ -262,7 +262,7 @@ describe('PKI Integration Tests - End-to-End', () => {
 
             // Load hierarchy again
             const hierarchy2 = await certificateManager.loadThreeTierHierarchy();
-            
+
             // Certificates should still be valid
             expect(hierarchy2.root).toBeDefined();
             expect(hierarchy2.intermediate).toBeDefined();
@@ -440,7 +440,7 @@ describe('PKI Integration Tests - End-to-End', () => {
 
         test('signature generation should complete in < 10ms', async () => {
             await certificateManager.loadThreeTierHierarchy();
-            
+
             // Load signing key
             const paths = certificateManager.resolveCertificatePaths();
             const privateKeyPEM = fs.readFileSync(paths.signingKeyPath, 'utf8');
