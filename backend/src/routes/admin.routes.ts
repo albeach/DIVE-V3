@@ -37,6 +37,17 @@ import {
     getStatsHandler,
     exportLogsHandler
 } from '../controllers/admin-log.controller';
+import {
+    listCertificates,
+    getCertificateHealth,
+    rotateCertificate,
+    completeRotation,
+    rollbackRotation,
+    getRevocationList,
+    revokeCertificate,
+    checkRevocationStatus,
+    updateCRL
+} from '../controllers/admin-certificates.controller';
 import { metricsService } from '../services/metrics.service';
 
 const router = Router();
@@ -159,6 +170,64 @@ router.post('/approvals/:alias/approve', approveIdPHandler);
  * Reject pending IdP
  */
 router.post('/approvals/:alias/reject', rejectIdPHandler);
+
+// ============================================
+// Certificate Management Routes
+// ============================================
+
+/**
+ * GET /api/admin/certificates
+ * List all certificates with status
+ */
+router.get('/certificates', listCertificates);
+
+/**
+ * GET /api/admin/certificates/health
+ * Get certificate health dashboard
+ */
+router.get('/certificates/health', getCertificateHealth);
+
+/**
+ * POST /api/admin/certificates/rotate
+ * Trigger certificate rotation
+ */
+router.post('/certificates/rotate', rotateCertificate);
+
+/**
+ * POST /api/admin/certificates/rotation/complete
+ * Complete certificate rotation
+ */
+router.post('/certificates/rotation/complete', completeRotation);
+
+/**
+ * POST /api/admin/certificates/rotation/rollback
+ * Rollback certificate rotation
+ */
+router.post('/certificates/rotation/rollback', rollbackRotation);
+
+/**
+ * GET /api/admin/certificates/revocation-list
+ * View Certificate Revocation List
+ */
+router.get('/certificates/revocation-list', getRevocationList);
+
+/**
+ * POST /api/admin/certificates/revoke
+ * Revoke a certificate
+ */
+router.post('/certificates/revoke', revokeCertificate);
+
+/**
+ * GET /api/admin/certificates/revocation-status/:serialNumber
+ * Check certificate revocation status
+ */
+router.get('/certificates/revocation-status/:serialNumber', checkRevocationStatus);
+
+/**
+ * POST /api/admin/certificates/revocation-list/update
+ * Update CRL
+ */
+router.post('/certificates/revocation-list/update', updateCRL);
 
 // ============================================
 // Analytics Routes (Phase 3)
