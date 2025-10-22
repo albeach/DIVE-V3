@@ -119,15 +119,8 @@ export const getResourceHandler = async (
                 // ACP-240: STANAG 4774 Display Marking (prominent)
                 displayMarking: resource.ztdf.policy.securityLabel.displayMarking,
 
-                // ZTDF metadata
-                ztdf: {
-                    version: resource.ztdf.manifest.version,
-                    objectType: resource.ztdf.manifest.objectType,
-                    contentType: resource.ztdf.manifest.contentType,
-                    policyVersion: resource.ztdf.policy.policyVersion,
-                    encryptionAlgorithm: resource.ztdf.payload.encryptionAlgorithm,
-                    kaoCount: resource.ztdf.payload.keyAccessObjects.length
-                },
+                // ZTDF object (full for classification equivalency tests)
+                ztdf: resource.ztdf,
 
                 metadata: {
                     createdAt: resource.createdAt,

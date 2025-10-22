@@ -41,6 +41,8 @@ export const uploadFileHandler = async (
         // 2. Extract and validate metadata
         const metadata: IUploadMetadata = {
             classification: req.body.classification,
+            originalClassification: req.body.originalClassification,  // ACP-240 Section 4.3
+            originalCountry: req.body.originalCountry,                // ACP-240 Section 4.3
             releasabilityTo: req.body.releasabilityTo, // Already parsed by validateUploadMetadata middleware
             COI: req.body.COI || [],
             caveats: req.body.caveats || [],

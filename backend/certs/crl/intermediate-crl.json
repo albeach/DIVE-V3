@@ -1,7 +1,7 @@
 {
   "version": 1,
   "issuer": "DIVE-V3 Intermediate CA",
-  "thisUpdate": "2025-10-21T23:46:33.309Z",
-  "nextUpdate": "2025-11-20T23:46:33.309Z",
+  "thisUpdate": "2025-10-22T23:24:33.976Z",
+  "nextUpdate": "2025-11-21T23:24:33.976Z",
   "revokedCertificates": []
 }

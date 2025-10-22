@@ -1,0 +1,85 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'policies/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'policies/**'
+
+jobs:
+  test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+      
+      - name: Run TypeScript compilation
+        run: |
+          cd backend
+          npx tsc --noEmit
+      
+      - name: Run linter
+        run: |
+          cd backend
+          npm run lint || true
+        continue-on-error: true
+      
+      - name: Run unit tests
+        env:
+          NODE_ENV: test
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB_NAME: dive_v3_test
+          JWT_SECRET: test-secret-for-ci
+          OPA_URL: http://localhost:8181
+        run: |
+          cd backend
+          npm test -- --coverage --passWithNoTests
+      
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage/
+          retention-days: 30
+      
+      - name: Display test results
+        if: always()
+        run: |
+          echo "Backend tests completed"
+          if [ -f backend/coverage/coverage-summary.json ]; then
+            cat backend/coverage/coverage-summary.json
+          fi
+
