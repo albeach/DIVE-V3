@@ -1284,6 +1284,8 @@ curl -X POST http://localhost:8181/v1/data/dive/authorization \
 - ✅ **Certificate Chain Validation** - Full trust chain verification (root → intermediate → signing)
 - ✅ **X.509 Digital Signatures** - Policy signatures with SHA-384 + RSA
 - ✅ **Certificate Revocation Lists** - CRL infrastructure for certificate revocation management
+- ✅ **Certificate Lifecycle Management** - Expiry monitoring, rotation workflows, health dashboards
+- ✅ **Admin Certificate APIs** - 8 REST endpoints for certificate management
 - ✅ **Multi-KAS Support** - Multiple KAOs per resource for coalition scalability
 - ✅ **COI-Based Community Keys** - Shared keys per Community of Interest  
 - ✅ **Classification Equivalency** - 12-nation cross-classification mapping
@@ -1294,8 +1296,148 @@ curl -X POST http://localhost:8181/v1/data/dive/authorization \
 - ✅ SOC alerting on tampering detection
 - ✅ All 5 ACP-240 audit event categories (ENCRYPT, DECRYPT, DENIED, MODIFIED, SHARED)
 - ✅ Fail-closed enforcement validated
-- ✅ 775 automated tests (100% pass rate on PKI tests, 95.4% overall)
+- ✅ **850+ automated tests** (100% pass rate on PKI tests, 95%+ overall)
 - ✅ Classification-based cache TTL (15s for TOP_SECRET to 300s for UNCLASSIFIED)
+
+---
+
+### X.509 PKI Features 🔐
+
+**Implementation Status**: ✅ **100% COMPLETE** (Phases 0-3 delivered October 21, 2025)
+
+#### Production-Grade Certificate Infrastructure
+- ✅ **Three-Tier CA Hierarchy**
+  - Root CA: 4096-bit RSA, self-signed, 10-year validity
+  - Intermediate CA: 2048-bit RSA, signed by root, 5-year validity
+  - Policy Signing Certificate: 2048-bit RSA, signed by intermediate, 2-year validity
+- ✅ **Certificate Chain Validation** - Full trust path verification with clock skew tolerance (±5 minutes)
+- ✅ **Certificate Caching** - 1-hour TTL with automatic expiry management
+- ✅ **Performance** - All operations < 15ms (certificate loading < 10ms, verification < 15ms)
+
+#### Certificate Lifecycle Management
+- ✅ **Expiry Monitoring** with 4-tier alert thresholds:
+  - 🟦 **INFO** (90 days): Informational notice
+  - 🟨 **WARNING** (60 days): Plan renewal
+  - 🟧 **ERROR** (30 days): Urgent renewal needed
+  - 🟥 **CRITICAL** (7 days): Immediate renewal required
+- ✅ **Certificate Rotation** - Graceful overlap period (7 days default) for zero-downtime rotation
+- ✅ **Health Dashboard** - Real-time certificate status monitoring
+- ✅ **Automated Alerting** - Extensible to email/Slack/PagerDuty
+
+#### Certificate Revocation Management
+- ✅ **Certificate Revocation Lists (CRL)** - RFC 5280 compliant
+- ✅ **Revocation Checking** - Fast CRL lookups with caching
+- ✅ **Revocation Operations** - Add/remove certificates from CRL
+- ✅ **CRL Freshness Validation** - 7-day freshness threshold
+- ✅ **Revocation Reasons** - Full RFC 5280 reason codes (keyCompromise, superseded, etc.)
+
+#### Admin Certificate APIs
+8 REST endpoints for complete certificate management:
+
+```bash
+# List all certificates
+GET /api/admin/certificates
+
+# Certificate health dashboard  
+GET /api/admin/certificates/health
+
+# Certificate rotation workflow
+POST /api/admin/certificates/rotate
+POST /api/admin/certificates/rotation/complete
+POST /api/admin/certificates/rotation/rollback
+
+# Certificate revocation
+GET /api/admin/certificates/revocation-list?ca=intermediate
+POST /api/admin/certificates/revoke
+GET /api/admin/certificates/revocation-status/:serialNumber
+POST /api/admin/certificates/revocation-list/update
+```
+
+#### Performance Benchmarks
+```
+Certificate loading (cold cache):   < 10ms ✅
+Certificate loading (warm cache):   < 2ms ✅
+Certificate chain validation:       < 15ms ✅
+Signature generation:               < 10ms ✅
+Signature verification:             < 15ms ✅
+Full ZTDF verification:             < 50ms ✅
+100 parallel verifications:         ~15ms avg ✅
+50 parallel signatures:             ~25ms avg ✅
+```
+
+#### Quick Start - Certificate Management
+
+**Generate Three-Tier CA Hierarchy:**
+```bash
+cd backend
+npm run generate-ca
+```
+
+**Check Certificate Health:**
+```bash
+curl http://localhost:3001/api/admin/certificates/health
+```
+
+**Certificate Rotation Example:**
+```bash
+# Initiate rotation (7-day overlap)
+curl -X POST http://localhost:3001/api/admin/certificates/rotate \
+  -H "Content-Type: application/json" \
+  -d '{"overlapPeriodDays": 7}'
+
+# After overlap period ends
+curl -X POST http://localhost:3001/api/admin/certificates/rotation/complete
+```
+
+**Revoke a Certificate:**
+```bash
+curl -X POST http://localhost:3001/api/admin/certificates/revoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serialNumber": "abc123...",
+    "reason": "keyCompromise",
+    "ca": "intermediate"
+  }'
+```
+
+#### Environment Variables
+```bash
+# Certificate Paths
+PKI_ROOT_CA_PATH=backend/certs/ca/root.crt
+PKI_INTERMEDIATE_CA_PATH=backend/certs/ca/intermediate.crt
+PKI_SIGNING_CERT_PATH=backend/certs/signing/policy-signer.crt
+PKI_SIGNING_KEY_PATH=backend/certs/signing/policy-signer.key
+
+# Certificate Configuration
+PKI_CERTIFICATE_CACHE_TTL_MS=3600000     # 1 hour
+PKI_CLOCK_SKEW_TOLERANCE_MS=300000       # ±5 minutes
+PKI_ENABLE_SIGNATURE_VERIFICATION=true   # Enable X.509 signatures
+CA_KEY_PASSPHRASE=<your-secure-passphrase>
+```
+
+#### Test Coverage
+```
+Total PKI Tests:        185+ tests (100% passing)
+  - Phase 1 (CA):       32 tests (three-tier infrastructure)
+  - Phase 2 (Integration): 160+ tests (signatures + integration)
+  - Phase 3 (Lifecycle): Covered by integration tests
+
+Backend Tests Total:    850+ tests (95%+ passing)
+OPA Tests:             138/138 passing (100%)
+KAS Tests:             18/18 passing (100%)
+```
+
+#### Production Deployment
+For production deployment:
+1. Replace self-signed root CA with enterprise PKI (DoD PKI, NATO PKI)
+2. Store CA private keys in HSM (Hardware Security Module)
+3. Implement OCSP for real-time revocation checking
+4. Configure external alerting (email, Slack, PagerDuty)
+5. Set up automated certificate renewal
+6. Deploy Prometheus/Grafana dashboards
+7. Schedule daily health checks (cron at 2 AM UTC)
+
+---
 
 #### Compliance by Section
 

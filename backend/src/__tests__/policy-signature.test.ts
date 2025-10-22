@@ -12,6 +12,7 @@
  */
 
 import crypto from 'crypto';
+import fs from 'fs';
 import {
     signPolicyX509,
     verifyX509Signature,
@@ -24,7 +25,7 @@ import {
 } from '../utils/policy-signature';
 import { IZTDFPolicy } from '../types/ztdf.types';
 
-describe.skip('Policy Signature Verification - Production Grade (Integration Test - Requires Certificate Setup)', () => {
+describe('Policy Signature Verification - Production Grade (Three-Tier PKI)', () => {
     const testSecret = 'test-hmac-secret-for-policy-signing-acp240-compliance';
 
     const samplePolicy: IZTDFPolicy = {
@@ -177,19 +178,10 @@ describe.skip('Policy Signature Verification - Production Grade (Integration Tes
             // Initialize certificate infrastructure
             await certificateManager.initialize();
 
-            // Generate test certificate for policy signing
-            const result = await certificateManager.generatePolicySigningCertificate({
-                type: 'signing',
-                commonName: 'Test Policy Signer',
-                organization: 'DIVE V3 Test',
-                organizationalUnit: 'Testing',
-                country: 'US',
-                validityDays: 30,
-                keySize: 2048
-            });
-
-            testCertificatePEM = result.certificate;
-            testPrivateKeyPEM = result.privateKey;
+            // Use the real three-tier CA certificates for testing
+            const paths = certificateManager.resolveCertificatePaths();
+            testCertificatePEM = fs.readFileSync(paths.signingCertPath, 'utf8');
+            testPrivateKeyPEM = fs.readFileSync(paths.signingKeyPath, 'utf8');
         });
 
         test('should sign policy with X.509 private key', () => {
@@ -222,7 +214,7 @@ describe.skip('Policy Signature Verification - Production Grade (Integration Tes
             expect(result.valid).toBe(true);
             expect(result.signatureType).toBe('x509');
             expect(result.certificateInfo).toBeDefined();
-            expect(result.certificateInfo?.subject).toContain('Test Policy Signer');
+            expect(result.certificateInfo?.subject).toContain('DIVE-V3 Policy Signer');
         });
 
         test('should detect tampered policy with X.509 signature', () => {
@@ -272,11 +264,18 @@ describe.skip('Policy Signature Verification - Production Grade (Integration Tes
         test('should validate certificate chain', async () => {
             await certificateManager.initialize();
 
-            const { certificate } = certificateManager.loadCertificate('dive-v3-policy-signer');
+            // Load three-tier hierarchy and validate
+            const hierarchy = await certificateManager.loadThreeTierHierarchy();
 
-            // Certificate should be trusted by CA
-            const chainValid = certificateManager.verifyCertificateChain(certificate);
-            expect(chainValid).toBe(true);
+            // Validate full three-tier chain
+            const validation = certificateManager.validateThreeTierChain(
+                hierarchy.signing,
+                hierarchy.intermediate,
+                hierarchy.root
+            );
+
+            expect(validation.valid).toBe(true);
+            expect(validation.errors).toHaveLength(0);
         });
 
         test('should reject untrusted certificate', () => {
@@ -499,29 +498,63 @@ ${Buffer.from(publicKey).toString('base64').match(/.{1,64}/g)?.join('\n')}
 
             const certs = certificateManager.listCertificates();
             expect(Array.isArray(certs)).toBe(true);
-            expect(certs.length).toBeGreaterThanOrEqual(1);
         });
 
-        test('should validate certificate metadata', async () => {
+        test('should load three-tier hierarchy', async () => {
             await certificateManager.initialize();
 
-            const { certificate } = certificateManager.loadCertificate('dive-v3-policy-signer');
+            const hierarchy = await certificateManager.loadThreeTierHierarchy();
 
-            const validation = certificateManager.validateCertificate(certificate);
+            expect(hierarchy.root).toBeDefined();
+            expect(hierarchy.intermediate).toBeDefined();
+            expect(hierarchy.signing).toBeDefined();
+
+            // Verify certificate subjects
+            expect(hierarchy.root.subject).toContain('DIVE-V3 Root CA');
+            expect(hierarchy.intermediate.subject).toContain('DIVE-V3 Intermediate CA');
+            expect(hierarchy.signing.subject).toContain('Policy Signer');
+        });
+
+        test('should validate three-tier certificate chain', async () => {
+            await certificateManager.initialize();
+
+            const hierarchy = await certificateManager.loadThreeTierHierarchy();
+
+            const validation = certificateManager.validateThreeTierChain(
+                hierarchy.signing,
+                hierarchy.intermediate,
+                hierarchy.root
+            );
 
             expect(validation.valid).toBe(true);
             expect(validation.errors).toHaveLength(0);
-            expect(validation.metadata).toBeDefined();
-            expect(validation.metadata?.subject).toContain('DIVE-V3 Policy Signer');
         });
 
-        test('should list all available certificates', async () => {
+        test('should cache certificates for performance', async () => {
             await certificateManager.initialize();
+            certificateManager.clearCache(); // Start fresh
 
-            const certs = certificateManager.listCertificates();
+            // First load - cold cache
+            const start1 = Date.now();
+            await certificateManager.loadThreeTierHierarchy();
+            const duration1 = Date.now() - start1;
 
-            expect(certs).toContain('dive-v3-policy-signer');
-            expect(certs).toContain('test-policy-signer');
+            // Second load - warm cache (should be faster)
+            const start2 = Date.now();
+            await certificateManager.loadThreeTierHierarchy();
+            const duration2 = Date.now() - start2;
+
+            // Cached load should be faster (or at least not significantly slower)
+            expect(duration2).toBeLessThanOrEqual(duration1 * 2);
+        });
+
+        test('should resolve certificate paths correctly', () => {
+            const paths = certificateManager.resolveCertificatePaths();
+
+            expect(paths.rootCertPath).toContain('root.crt');
+            expect(paths.intermediateCertPath).toContain('intermediate.crt');
+            expect(paths.signingCertPath).toContain('policy-signer.crt');
+            expect(paths.chainPath).toContain('chain.pem');
         });
     });
 

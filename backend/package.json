@@ -25,6 +25,7 @@
         "optimize-database": "tsx src/scripts/optimize-database.ts",
         "generate-certs": "tsx src/scripts/generate-certificates.ts",
         "generate-ca": "tsx src/scripts/generate-three-tier-ca.ts",
+        "generate-real-x509-ca": "tsx src/scripts/generate-real-x509-ca.ts",
         "migrate-uuids": "tsx src/scripts/migrate-uniqueids-to-uuid.ts"
     },
     "keywords": [

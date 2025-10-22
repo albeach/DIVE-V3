@@ -40,17 +40,36 @@ export interface ISignatureVerificationResult {
  * Create canonical JSON representation of policy
  * CRITICAL: Must be deterministic for signature verification
  * 
- * Uses same approach as ztdf.utils.ts computeObjectHash()
- * - Top-level key sorting only (matches existing implementation)
+ * Uses RECURSIVE key sorting to ensure tampering is detected
+ * even in nested objects like securityLabel.
+ * 
  * - Remove policySignature field before signing
+ * - Recursively sort all object keys
  */
 function canonicalizePolicyForSigning(policy: IZTDFPolicy): string {
     // Create copy without signature
     const policyForSigning = { ...policy };
     delete (policyForSigning as any).policySignature;
 
-    // Sort top-level keys (matches ztdf.utils.ts computeObjectHash pattern)
-    const canonical = JSON.stringify(policyForSigning, Object.keys(policyForSigning).sort());
+    // Recursive function to sort keys in nested objects
+    function sortKeysRecursive(obj: any): any {
+        if (Array.isArray(obj)) {
+            return obj.map(sortKeysRecursive);
+        } else if (obj !== null && typeof obj === 'object') {
+            const sorted: any = {};
+            Object.keys(obj).sort().forEach(key => {
+                sorted[key] = sortKeysRecursive(obj[key]);
+            });
+            return sorted;
+        }
+        return obj;
+    }
+
+    // Sort all keys recursively
+    const canonicalObject = sortKeysRecursive(policyForSigning);
+    
+    // JSON.stringify with sorted keys
+    const canonical = JSON.stringify(canonicalObject);
     
     return canonical;
 }
@@ -207,6 +226,7 @@ export function verifyX509Signature(
         return {
             valid: isValid,
             signatureType: 'x509',
+            error: isValid ? undefined : 'Signature verification failed - policy may have been tampered with',
             certificateInfo: {
                 subject: cert.subject,
                 issuer: cert.issuer,
@@ -442,19 +462,14 @@ export async function signPolicyWithDefaultCert(
     policy: IZTDFPolicy
 ): Promise<IZTDFPolicy> {
     try {
-        // Skip in test environment (certificates not available)
-        if (process.env.NODE_ENV === 'test') {
-            logger.warn('Skipping certificate signing in test environment');
-            return policy;
-        }
-
         await certificateManager.initialize();
 
-        // Load default signing certificate
-        const { privateKey } = certificateManager.loadCertificate('dive-v3-policy-signer');
+        // Resolve certificate paths
+        const paths = certificateManager.resolveCertificatePaths();
+        const privateKeyPEM = fs.readFileSync(paths.signingKeyPath, 'utf8');
 
         // Sign policy
-        const signature = signPolicyX509(policy, privateKey, 'SHA384');
+        const signature = signPolicyX509(policy, privateKeyPEM, 'SHA384');
 
         // Add signature to policy
         return {
@@ -485,23 +500,14 @@ export async function verifyPolicyWithDefaultCert(
     policy: IZTDFPolicy
 ): Promise<ISignatureVerificationResult> {
     try {
-        // Skip in test environment (certificates not available)
-        if (process.env.NODE_ENV === 'test') {
-            logger.warn('Skipping certificate verification in test environment');
-            return {
-                valid: true,
-                signatureType: 'none',
-                warnings: ['Certificate verification skipped in test environment']
-            };
-        }
-
         await certificateManager.initialize();
 
-        // Load default signing certificate
-        const { certificate } = certificateManager.loadCertificate('dive-v3-policy-signer');
+        // Resolve certificate paths
+        const paths = certificateManager.resolveCertificatePaths();
+        const certificatePEM = fs.readFileSync(paths.signingCertPath, 'utf8');
 
         // Verify signature
-        return verifyX509Signature(policy, certificate, true);
+        return verifyX509Signature(policy, certificatePEM, true);
 
     } catch (error) {
         logger.error('Failed to verify policy with default certificate', {
