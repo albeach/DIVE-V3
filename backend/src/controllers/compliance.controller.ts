@@ -608,69 +608,71 @@ export async function getCertificateStatus(
     res: Response,
 ): Promise<void> {
     try {
-        // Get certificate metadata from the certificate manager
-        // Since getRootCertificate/getSigningCertificate don't exist, we'll build mock data based on actual cert structure
-        const now = new Date();
-        const oneYearFromNow = new Date(now);
-        oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
-
-        const rootCert = {
-            subject: "CN=DIVE V3 Root CA, O=DIVE V3 Pilot, C=US",
-            issuer: "CN=DIVE V3 Root CA, O=DIVE V3 Pilot, C=US",
-            serialNumber: "01",
-            validFrom: now.toISOString(),
-            validTo: oneYearFromNow.toISOString(),
-            keySize: 4096,
-            signatureAlgorithm: "sha256WithRSAEncryption",
+        // Load real three-tier certificate hierarchy
+        const { certificateManager } = await import('../utils/certificate-manager');
+        const { certificateLifecycleService } = await import('../services/certificate-lifecycle.service');
+        
+        const hierarchy = await certificateManager.loadThreeTierHierarchy();
+        
+        // Get health status for each certificate
+        const rootHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.root, 'root');
+        const intermediateHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.intermediate, 'intermediate');
+        const signingHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.signing, 'signing');
+        
+        // Calculate days until expiry
+        const calcDaysUntilExpiry = (validTo: string) => {
+            return Math.ceil((new Date(validTo).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
         };
-
-        const signingCert = {
-            subject: "CN=DIVE V3 Signing Certificate, O=DIVE V3 Pilot, C=US",
-            issuer: "CN=DIVE V3 Root CA, O=DIVE V3 Pilot, C=US",
-            serialNumber: "02",
-            validFrom: now.toISOString(),
-            validTo: oneYearFromNow.toISOString(),
-            keySize: 2048,
-            signatureAlgorithm: "sha256WithRSAEncryption",
-        };
+        
+        // Determine overall PKI health
+        const allHealthy = rootHealth.status === 'valid' && 
+                          intermediateHealth.status === 'valid' && 
+                          signingHealth.status === 'valid';
+        const componentsHealthy = [rootHealth, intermediateHealth, signingHealth]
+            .filter(h => h.status === 'valid').length;
 
         const certificateStatus = {
-            title: "X.509 PKI Infrastructure",
+            title: "X.509 PKI Infrastructure (Three-Tier)",
             description:
-                "DIVE V3 uses enterprise X.509 PKI for policy signatures, trust chains, and cryptographic binding (ACP-240 Section 5).",
+                "DIVE V3 uses enterprise X.509 three-tier PKI (Root CA → Intermediate CA → Signing Certificate) for policy signatures, trust chains, and cryptographic binding (ACP-240 Section 5.4).",
             pkiHealth: {
-                status: "healthy",
+                status: allHealthy ? "healthy" : "warning",
                 lastCheck: new Date().toISOString(),
-                componentsHealthy: 2,
-                componentsTotal: 2,
+                componentsHealthy,
+                componentsTotal: 3,
             },
             rootCertificate: {
-                subject: rootCert.subject,
-                issuer: rootCert.issuer,
-                serialNumber: rootCert.serialNumber,
-                validFrom: rootCert.validFrom,
-                validTo: rootCert.validTo,
-                keySize: rootCert.keySize,
-                signatureAlgorithm: rootCert.signatureAlgorithm,
-                status: "valid",
-                daysUntilExpiry: Math.ceil(
-                    (new Date(rootCert.validTo).getTime() - Date.now()) /
-                    (1000 * 60 * 60 * 24),
-                ),
+                subject: hierarchy.root.subject,
+                issuer: hierarchy.root.issuer,
+                serialNumber: hierarchy.root.serialNumber,
+                validFrom: hierarchy.root.validFrom,
+                validTo: hierarchy.root.validTo,
+                keySize: 4096, // RSA-4096 for root
+                signatureAlgorithm: "sha256WithRSAEncryption",
+                status: rootHealth.status,
+                daysUntilExpiry: calcDaysUntilExpiry(hierarchy.root.validTo),
+            },
+            intermediateCertificate: {
+                subject: hierarchy.intermediate.subject,
+                issuer: hierarchy.intermediate.issuer,
+                serialNumber: hierarchy.intermediate.serialNumber,
+                validFrom: hierarchy.intermediate.validFrom,
+                validTo: hierarchy.intermediate.validTo,
+                keySize: 4096, // RSA-4096 for intermediate
+                signatureAlgorithm: "sha256WithRSAEncryption",
+                status: intermediateHealth.status,
+                daysUntilExpiry: calcDaysUntilExpiry(hierarchy.intermediate.validTo),
             },
             signingCertificate: {
-                subject: signingCert.subject,
-                issuer: signingCert.issuer,
-                serialNumber: signingCert.serialNumber,
-                validFrom: signingCert.validFrom,
-                validTo: signingCert.validTo,
-                keySize: signingCert.keySize,
-                signatureAlgorithm: signingCert.signatureAlgorithm,
-                status: "valid",
-                daysUntilExpiry: Math.ceil(
-                    (new Date(signingCert.validTo).getTime() - Date.now()) /
-                    (1000 * 60 * 60 * 24),
-                ),
+                subject: hierarchy.signing.subject,
+                issuer: hierarchy.signing.issuer,
+                serialNumber: hierarchy.signing.serialNumber,
+                validFrom: hierarchy.signing.validFrom,
+                validTo: hierarchy.signing.validTo,
+                keySize: 4096, // RSA-4096 for signing
+                signatureAlgorithm: "sha256WithRSAEncryption",
+                status: signingHealth.status,
+                daysUntilExpiry: calcDaysUntilExpiry(hierarchy.signing.validTo),
             },
             useCases: [
                 {
@@ -681,9 +683,9 @@ export async function getCertificateStatus(
                     status: "active",
                 },
                 {
-                    title: "Certificate Chain Validation",
+                    title: "Three-Tier Certificate Chain",
                     description:
-                        "Verify signing certificate is issued by trusted root CA",
+                        "Root CA → Intermediate CA → Signing Certificate for robust trust management",
                     icon: "🔗",
                     status: "active",
                 },
@@ -695,9 +697,9 @@ export async function getCertificateStatus(
                     status: "active",
                 },
                 {
-                    title: "SOC Tampering Alerts",
+                    title: "Tamper Detection & SOC Alerts",
                     description:
-                        "Alert security operations center if signature verification fails",
+                        "Fail-secure signature verification with automatic security alerts",
                     icon: "🚨",
                     status: "active",
                 },

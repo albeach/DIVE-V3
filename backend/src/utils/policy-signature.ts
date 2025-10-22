@@ -67,10 +67,10 @@ function canonicalizePolicyForSigning(policy: IZTDFPolicy): string {
 
     // Sort all keys recursively
     const canonicalObject = sortKeysRecursive(policyForSigning);
-    
+
     // JSON.stringify with sorted keys
     const canonical = JSON.stringify(canonicalObject);
-    
+
     return canonical;
 }
 
