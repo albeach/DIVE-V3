@@ -160,6 +160,8 @@ services:
       - ./backend/tsconfig.json:/app/tsconfig.json:ro
       # CRITICAL: Mount policies directory so backend can read OPA Rego files
       - ./policies:/app/policies:ro
+      # CRITICAL: Mount certs directory for X.509 PKI certificates
+      - ./backend/certs:/app/certs:ro
       # Logs directory
       - ./backend/logs:/app/logs
 
