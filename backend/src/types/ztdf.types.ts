@@ -34,10 +34,33 @@ export type COIOperator = 'ALL' | 'ANY';
 /**
  * STANAG 4774 Security Label
  * Mandatory labeling for all objects per ACP-240 section 4.1
+ * 
+ * ACP-240 Section 4.3 Compliance:
+ * "Carry original + standardized tags for recipients to enforce equivalents"
  */
 export interface ISTANAG4774Label {
-    /** Classification level (confidentiality) */
+    /** Classification level (DIVE V3 canonical: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET) */
     classification: ClassificationLevel;
+
+    /**
+     * Original national classification (ACP-240 Section 4.3)
+     * Example: "GEHEIM" (Germany), "SECRET DÉFENSE" (France)
+     * Preserves classification provenance from originating nation
+     */
+    originalClassification?: string;
+
+    /**
+     * Country that issued the original classification (ACP-240 Section 4.3)
+     * ISO 3166-1 alpha-3 code (e.g., "DEU", "FRA", "USA")
+     */
+    originalCountry?: string;
+
+    /**
+     * NATO standard equivalent classification (ACP-240 Section 4.3)
+     * Example: "SECRET", "NATO_SECRET", "COSMIC_TOP_SECRET"
+     * Enables NATO-wide interoperability
+     */
+    natoEquivalent?: string;
 
     /** Release countries (ISO 3166-1 alpha-3) */
     releasabilityTo: string[];
@@ -57,7 +80,10 @@ export interface ISTANAG4774Label {
     /** Creation timestamp (ISO 8601) */
     creationDate: string;
 
-    /** Classification equivalence mapping (for coalition) */
+    /**
+     * Classification equivalence mapping (for coalition)
+     * @deprecated Use originalClassification, originalCountry, natoEquivalent instead (ACP-240 Section 4.3)
+     */
     equivalentClassifications?: Array<{
         country: string;
         classification: string;

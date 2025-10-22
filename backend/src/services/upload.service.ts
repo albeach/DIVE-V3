@@ -17,14 +17,13 @@ import {
 import {
     IZTDFObject,
     IZTDFResource,
-    ClassificationLevel,
-    generateDisplayMarking,
-    ISTANAG4774Label
+    ClassificationLevel
 } from '../types/ztdf.types';
 import {
     encryptContent,
     computeSHA384,
-    computeObjectHash
+    computeObjectHash,
+    createSecurityLabel  // NEW: Use createSecurityLabel helper (ACP-240 Section 4.3)
 } from '../utils/ztdf.utils';
 import { createZTDFResource } from './resource.service';
 import { validateCOICoherenceOrThrow } from './coi-validation.service';
@@ -306,24 +305,30 @@ async function convertToZTDF(
         payloadSize: Buffer.from(encryptionResult.encryptedData, 'base64').length
     };
 
-    // 3. Create STANAG 4774 Security Label
-    const securityLabel: ISTANAG4774Label = {
+    // 3. Create STANAG 4774 Security Label (ACP-240 Section 4.3 Enhanced)
+    // Now includes originalClassification, originalCountry, natoEquivalent
+    const securityLabel = createSecurityLabel({
         classification: metadata.classification as ClassificationLevel,
+        originalClassification: metadata.originalClassification,  // NEW: ACP-240 Section 4.3
+        originalCountry: metadata.originalCountry,                // NEW: ACP-240 Section 4.3
         releasabilityTo: metadata.releasabilityTo,
         COI: metadata.COI || [],
-        coiOperator: metadata.coiOperator || 'ALL',
         caveats: metadata.caveats || [],
         originatingCountry: uploader.countryOfAffiliation,
         creationDate: currentTimestamp
-    };
+    });
 
-    // Add display marking
-    const displayMarking = generateDisplayMarking(securityLabel);
+    logger.debug('Security label created with classification equivalency', {
+        uploadId,
+        classification: securityLabel.classification,
+        originalClassification: securityLabel.originalClassification,
+        originalCountry: securityLabel.originalCountry,
+        natoEquivalent: securityLabel.natoEquivalent,
+        originatingCountry: securityLabel.originatingCountry
+    });
 
-    const securityLabelWithMarking = {
-        ...securityLabel,
-        displayMarking
-    };
+    // Display marking is already included in securityLabel from createSecurityLabel()
+    const securityLabelWithMarking = securityLabel;
 
     // 4. Create ZTDF Policy
     const policyAssertions = [

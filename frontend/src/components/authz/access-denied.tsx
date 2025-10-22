@@ -77,11 +77,108 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
     const failedChecks = Object.entries(checks).filter(([_, passed]) => !passed);
     const passedChecks = Object.entries(checks).filter(([_, passed]) => passed);
 
+    // Helper to get country name from code
+    const getCountryName = (code: string): string => {
+        const countryNames: Record<string, string> = {
+            'USA': 'United States', 'GBR': 'United Kingdom', 'FRA': 'France', 'CAN': 'Canada',
+            'DEU': 'Germany', 'AUS': 'Australia', 'NZL': 'New Zealand', 'ESP': 'Spain',
+            'ITA': 'Italy', 'POL': 'Poland', 'NLD': 'Netherlands', 'BEL': 'Belgium',
+            'DNK': 'Denmark', 'NOR': 'Norway'
+        };
+        return countryNames[code] || code;
+    };
+
+    // Helper to get country flag from code
+    const getCountryFlag = (code: string): string => {
+        const flags: Record<string, string> = {
+            'USA': '🇺🇸', 'GBR': '🇬🇧', 'FRA': '🇫🇷', 'CAN': '🇨🇦',
+            'DEU': '🇩🇪', 'AUS': '🇦🇺', 'NZL': '🇳🇿', 'ESP': '🇪🇸',
+            'ITA': '🇮🇹', 'POL': '🇵🇱', 'NLD': '🇳🇱', 'BEL': '🇧🇪',
+            'DNK': '🇩🇰', 'NOR': '🇳🇴'
+        };
+        return flags[code] || '🌍';
+    };
+
     // Parse and humanize the denial reason
     const humanizedReason = useMemo(() => {
         if (!denial.reason) return null;
 
         const reason = denial.reason;
+
+        // Pattern: Classification Equivalency Denial
+        // "Insufficient clearance: DEU (GEHEIM clearance) insufficient for FRA (TRÈS SECRET DÉFENSE) document [NATO: SECRET < TOP_SECRET]"
+        const equivalencyMatch = reason.match(/Insufficient clearance: (\w+) \(([^)]+) clearance\) insufficient for (\w+) \(([^)]+)\) document \[NATO: (\w+) < (\w+)\]/);
+        
+        if (equivalencyMatch) {
+            const [_, userCountry, userClearance, docCountry, docClassification, userNATO, docNATO] = equivalencyMatch;
+            
+            return {
+                title: '🔒 Insufficient Security Clearance (Classification Equivalency)',
+                explanation: (
+                    <div className="space-y-4">
+                        <p className="font-semibold text-white">
+                            Your national security clearance level is not high enough for this document.
+                        </p>
+                        
+                        {/* Visual Comparison Card */}
+                        <div className="bg-white/95 backdrop-blur rounded-xl p-6 space-y-4 shadow-lg">
+                            <div className="flex items-center justify-between gap-4">
+                                {/* User Clearance */}
+                                <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg p-4 text-center">
+                                    <div className="text-xs font-bold text-blue-700 uppercase mb-2">Your Clearance</div>
+                                    <div className="text-2xl mb-1">{getCountryFlag(userCountry)}</div>
+                                    <div className="font-bold text-blue-900 text-lg mb-1">{userClearance}</div>
+                                    <div className="text-xs text-blue-700 font-semibold">({getCountryName(userCountry)})</div>
+                                    <div className="mt-2 pt-2 border-t border-blue-300">
+                                        <div className="text-xs text-blue-600 font-semibold">NATO Equivalent</div>
+                                        <div className="text-sm font-bold text-blue-800">{userNATO}</div>
+                                    </div>
+                                </div>
+
+                                {/* Comparison Arrow */}
+                                <div className="flex flex-col items-center">
+                                    <div className="text-3xl text-red-600 font-bold">&lt;</div>
+                                    <div className="text-xs text-red-700 font-bold mt-1">Insufficient</div>
+                                </div>
+
+                                {/* Document Classification */}
+                                <div className="flex-1 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-400 rounded-lg p-4 text-center">
+                                    <div className="text-xs font-bold text-red-700 uppercase mb-2">Document Requires</div>
+                                    <div className="text-2xl mb-1">{getCountryFlag(docCountry)}</div>
+                                    <div className="font-bold text-red-900 text-lg mb-1">{docClassification}</div>
+                                    <div className="text-xs text-red-700 font-semibold">({getCountryName(docCountry)})</div>
+                                    <div className="mt-2 pt-2 border-t border-red-400">
+                                        <div className="text-xs text-red-600 font-semibold">NATO Equivalent</div>
+                                        <div className="text-sm font-bold text-red-800">{docNATO}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                                <p className="text-sm text-blue-900">
+                                    <strong>💡 What does this mean?</strong>
+                                </p>
+                                <p className="text-sm text-blue-800 mt-2">
+                                    This document originated in <strong>{getCountryName(docCountry)}</strong> with classification <strong>{docClassification}</strong>, 
+                                    which is equivalent to NATO <strong>{docNATO}</strong> level.
+                                </p>
+                                <p className="text-sm text-blue-800 mt-2">
+                                    Your <strong>{getCountryName(userCountry)}</strong> clearance of <strong>{userClearance}</strong> (NATO <strong>{userNATO}</strong>) 
+                                    is not high enough to access this material.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
+                            <p className="text-sm text-yellow-900">
+                                <strong>📞 Need higher clearance?</strong> Contact your security officer to request a clearance upgrade if your role requires access to {docNATO} materials.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `${userClearance} (${userCountry}) insufficient for ${docClassification} (${docCountry}) - NATO: ${userNATO} < ${docNATO}`
+            };
+        }
 
         // Pattern: COI operator=ALL: user countries {...} do not cover required countries {...} (missing: {...}, user COI: [...], resource COI: [...])
         const coiCountryMatch = reason.match(/COI operator=(ALL|ANY): user countries {([^}]*)} do not cover required countries {([^}]*)} \(missing: {([^}]*)}, user COI: \[([^\]]*)\], resource COI: \[([^\]]*)\]\)/);

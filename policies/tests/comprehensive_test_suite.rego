@@ -137,17 +137,17 @@ test_releasability_usa_to_fra if {
 
 # T-CR-03: FRA user accessing FRA-releasable resource - ALLOW
 test_releasability_fra_to_fra if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"countryOfAffiliation": "FRA"}), "resource": object.union(valid_input.resource, {"releasabilityTo": ["FRA"]})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"countryOfAffiliation": "FRA"}), "resource": object.union(valid_input.resource, {"releasabilityTo": ["FRA"], "COI": []})})
 }
 
 # T-CR-04: CAN user accessing CAN-releasable resource - ALLOW
 test_releasability_can_to_can if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"countryOfAffiliation": "CAN"}), "resource": object.union(valid_input.resource, {"releasabilityTo": ["CAN"]})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"countryOfAffiliation": "CAN"}), "resource": object.union(valid_input.resource, {"releasabilityTo": ["CAN"], "COI": []})})
 }
 
 # T-CR-05: USA user accessing multi-country resource [USA, GBR, FRA] - ALLOW
 test_releasability_usa_to_multi if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"countryOfAffiliation": "USA"}), "resource": object.union(valid_input.resource, {"releasabilityTo": ["USA", "GBR", "FRA"]})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"countryOfAffiliation": "USA", "acpCOI": ["NATO"]}), "resource": object.union(valid_input.resource, {"releasabilityTo": ["USA", "GBR", "FRA"], "COI": ["NATO"]})})
 }
 
 # T-CR-06: GBR user accessing multi-country resource [USA, GBR] - ALLOW
@@ -186,37 +186,37 @@ test_coi_fvey_match if {
 
 # T-COI-02: User with NATO-COSMIC accessing NATO-COSMIC resource - ALLOW
 test_coi_nato_match if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["NATO-COSMIC"]}), "resource": object.union(valid_input.resource, {"COI": ["NATO-COSMIC"]})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["NATO-COSMIC"], "countryOfAffiliation": "USA"}), "resource": object.union(valid_input.resource, {"COI": ["NATO-COSMIC"], "releasabilityTo": ["USA"]})})
 }
 
 # T-COI-03: User with FVEY accessing US-ONLY resource - DENY
 test_coi_fvey_to_usonly if {
-	not allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY"]}), "resource": object.union(valid_input.resource, {"COI": ["US-ONLY"]})})
+	not allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY"], "countryOfAffiliation": "USA"}), "resource": object.union(valid_input.resource, {"COI": ["US-ONLY"], "releasabilityTo": ["USA"]})})
 }
 
 # T-COI-04: User with multiple COI [FVEY, NATO-COSMIC] accessing FVEY - ALLOW
 test_coi_multi_user_single_resource if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY", "NATO-COSMIC"]}), "resource": object.union(valid_input.resource, {"COI": ["FVEY"]})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY", "NATO-COSMIC"]}), "resource": object.union(valid_input.resource, {"COI": ["FVEY"], "releasabilityTo": ["USA", "GBR"]})})
 }
 
-# T-COI-05: User with single COI [FVEY] accessing multi-COI resource [FVEY, NATO-COSMIC] - ALLOW
+# T-COI-05: User with single COI [FVEY] accessing multi-COI resource [FVEY, NATO-COSMIC] - DENY (needs ALL COIs)
 test_coi_single_user_multi_resource if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY"]}), "resource": object.union(valid_input.resource, {"COI": ["FVEY", "NATO-COSMIC"]})})
+	not allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY"]}), "resource": object.union(valid_input.resource, {"COI": ["FVEY", "NATO-COSMIC"], "releasabilityTo": ["USA"]})})
 }
 
 # T-COI-06: User with no COI accessing resource with COI - DENY
 test_coi_no_coi_user if {
-	not allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": []}), "resource": object.union(valid_input.resource, {"COI": ["FVEY"]})})
+	not allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": []}), "resource": object.union(valid_input.resource, {"COI": ["FVEY"], "releasabilityTo": ["USA", "GBR"]})})
 }
 
 # T-COI-07: User with COI accessing resource with no COI - ALLOW (no restriction)
 test_coi_no_coi_resource if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY"]}), "resource": object.union(valid_input.resource, {"COI": []})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["FVEY"]}), "resource": object.union(valid_input.resource, {"COI": [], "releasabilityTo": ["USA", "GBR"]})})
 }
 
 # T-COI-08: User with CAN-US accessing resource with CAN-US - ALLOW
 test_coi_can_us_match if {
-	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["CAN-US"]}), "resource": object.union(valid_input.resource, {"COI": ["CAN-US"]})})
+	allow with input as object.union(valid_input, {"subject": object.union(valid_input.subject, {"acpCOI": ["CAN-US"], "countryOfAffiliation": "CAN"}), "resource": object.union(valid_input.resource, {"COI": ["CAN-US"], "releasabilityTo": ["CAN", "USA"]})})
 }
 
 # T-COI-09: User missing acpCOI attribute accessing resource with COI - DENY

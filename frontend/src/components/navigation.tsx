@@ -24,6 +24,37 @@ import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { SessionStatusIndicator } from '@/components/auth/session-status-indicator';
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
 
+// National classification mappings (ACP-240 Section 4.3)
+const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
+  'USA': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+  'GBR': { 'UNCLASSIFIED': 'OFFICIAL', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+  'FRA': { 'UNCLASSIFIED': 'NON CLASSIFIÉ', 'CONFIDENTIAL': 'CONFIDENTIEL DÉFENSE', 'SECRET': 'SECRET DÉFENSE', 'TOP_SECRET': 'TRÈS SECRET DÉFENSE' },
+  'CAN': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+  'DEU': { 'UNCLASSIFIED': 'OFFEN', 'CONFIDENTIAL': 'VS-VERTRAULICH', 'SECRET': 'GEHEIM', 'TOP_SECRET': 'STRENG GEHEIM' },
+  'AUS': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+  'NZL': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+  'ESP': { 'UNCLASSIFIED': 'NO CLASIFICADO', 'CONFIDENTIAL': 'CONFIDENCIAL', 'SECRET': 'SECRETO', 'TOP_SECRET': 'ALTO SECRETO' },
+  'ITA': { 'UNCLASSIFIED': 'NON CLASSIFICATO', 'CONFIDENTIAL': 'CONFIDENZIALE', 'SECRET': 'SEGRETO', 'TOP_SECRET': 'SEGRETISSIMO' },
+  'POL': { 'UNCLASSIFIED': 'NIEJAWNE', 'CONFIDENTIAL': 'POUFNE', 'SECRET': 'TAJNE', 'TOP_SECRET': 'ŚCIŚLE TAJNE' }
+};
+
+// Helper to get national classification label
+function getNationalClearance(natoLevel: string | null | undefined, country: string | null | undefined): string {
+  if (!natoLevel) return 'UNCLASS';
+  if (!country) return natoLevel;
+  return NATIONAL_CLASSIFICATIONS[country]?.[natoLevel] || natoLevel;
+}
+
+// Helper to get COUNTRY name from code
+function getCountryName(code: string | null | undefined): string {
+  const countryNames: Record<string, string> = {
+    'USA': 'United States', 'GBR': 'United Kingdom', 'FRA': 'France', 'CAN': 'Canada',
+    'DEU': 'Germany', 'AUS': 'Australia', 'NZL': 'New Zealand', 'ESP': 'Spain',
+    'ITA': 'Italy', 'POL': 'Poland', 'NLD': 'Netherlands'
+  };
+  return countryNames[code || ''] || code || 'Unknown';
+}
+
 interface INavigationProps {
     user: {
         uniqueID?: string | null;
@@ -176,18 +207,25 @@ export default function Navigation({ user }: INavigationProps) {
                                         </div>
                                     </div>
                                     
-                                    {/* User Info - More compact */}
-                                    <div className="hidden xl:flex flex-col min-w-0 max-w-[140px]">
+                                    {/* User Info - More compact with National Clearance */}
+                                    <div className="hidden xl:flex flex-col min-w-0 max-w-[200px]">
                                         <span className="text-xs font-bold text-gray-900 leading-tight truncate">
                                             {getPseudonymFromUser(user as any)}
                                         </span>
-                                        <div className="flex items-center gap-1.5 mt-0.5">
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 text-[#4497ac]">
-                                                {user.clearance || 'UNCLASS'}
-                                            </span>
-                                            <span className="text-[10px] font-medium text-gray-600">
-                                                {user.countryOfAffiliation || 'USA'}
-                                            </span>
+                                        <div className="flex flex-col gap-0.5 mt-0.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 text-[#4497ac]" title={`Your Clearance: ${getNationalClearance(user.clearance, user.countryOfAffiliation)} (${getCountryName(user.countryOfAffiliation)}) / ${user.clearance || 'UNCLASSIFIED'} (NATO)`}>
+                                                    {getNationalClearance(user.clearance, user.countryOfAffiliation)}
+                                                </span>
+                                                <span className="text-[10px] font-medium text-gray-600">
+                                                    {user.countryOfAffiliation || 'USA'}
+                                                </span>
+                                            </div>
+                                            {getNationalClearance(user.clearance, user.countryOfAffiliation) !== (user.clearance || 'UNCLASS') && (
+                                                <span className="text-[8px] text-gray-500">
+                                                    NATO: {user.clearance || 'UNCLASSIFIED'}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                     
@@ -205,7 +243,7 @@ export default function Navigation({ user }: INavigationProps) {
                                         <div className="absolute -inset-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-2xl opacity-20 blur-xl" />
                                         
                                         <div className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-                                            {/* User Info Header */}
+                                            {/* User Info Header with National Clearance Format */}
                                             <div className="px-4 py-4 bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 border-b border-gray-100">
                                                 <div className="flex items-center gap-3 mb-3">
                                                     <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-[#4497ac] to-[#90d56a] flex items-center justify-center shadow-lg">
@@ -217,13 +255,20 @@ export default function Navigation({ user }: INavigationProps) {
                                                         <p className="text-sm font-bold text-gray-900 truncate">
                                                             {getPseudonymFromUser(user as any)}
                                                         </p>
-                                                        <div className="flex items-center gap-2 mt-1">
-                                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 text-[#4497ac] border border-[#4497ac]/30">
-                                                                {user.clearance || 'UNCLASSIFIED'}
-                                                            </span>
-                                                            <span className="text-xs font-medium text-gray-600">
-                                                                {user.countryOfAffiliation || 'USA'}
-                                                            </span>
+                                                        <div className="flex flex-col gap-1 mt-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 text-[#4497ac] border border-[#4497ac]/30" title={`Your Clearance: ${getNationalClearance(user.clearance, user.countryOfAffiliation)} (${getCountryName(user.countryOfAffiliation)})`}>
+                                                                    {getNationalClearance(user.clearance, user.countryOfAffiliation)}
+                                                                </span>
+                                                                <span className="text-xs font-medium text-gray-600">
+                                                                    {user.countryOfAffiliation || 'USA'}
+                                                                </span>
+                                                            </div>
+                                                            {getNationalClearance(user.clearance, user.countryOfAffiliation) !== (user.clearance || 'UNCLASSIFIED') && (
+                                                                <p className="text-[10px] text-gray-600">
+                                                                    <span className="font-semibold">NATO Equivalent:</span> {user.clearance || 'UNCLASSIFIED'}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -326,7 +371,7 @@ export default function Navigation({ user }: INavigationProps) {
                     {/* Menu panel */}
                     <div className="absolute top-[85px] left-0 right-0 bg-white/98 backdrop-blur-xl border-b border-gray-200 shadow-2xl animate-slide-down max-h-[calc(100vh-85px)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="px-4 py-6 space-y-1 max-w-lg mx-auto">
-                            {/* Mobile User Info Card */}
+                            {/* Mobile User Info Card with National Clearance */}
                             <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-[#4497ac]/5 to-[#90d56a]/5 border border-[#4497ac]/10">
                                 <div className="flex items-center gap-3 mb-3">
                                     <div className="relative">
@@ -345,13 +390,20 @@ export default function Navigation({ user }: INavigationProps) {
                                         <p className="text-base font-bold text-gray-900 truncate">
                                             {getPseudonymFromUser(user as any)}
                                         </p>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 text-[#4497ac] border border-[#4497ac]/30">
-                                                {user.clearance || 'UNCLASSIFIED'}
-                                            </span>
-                                            <span className="text-xs font-medium text-gray-600">
-                                                {user.countryOfAffiliation || 'USA'}
-                                            </span>
+                                        <div className="flex flex-col gap-1 mt-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 text-[#4497ac] border border-[#4497ac]/30" title={`${getNationalClearance(user.clearance, user.countryOfAffiliation)} (${getCountryName(user.countryOfAffiliation)})`}>
+                                                    {getNationalClearance(user.clearance, user.countryOfAffiliation)}
+                                                </span>
+                                                <span className="text-xs font-medium text-gray-600">
+                                                    {user.countryOfAffiliation || 'USA'}
+                                                </span>
+                                            </div>
+                                            {getNationalClearance(user.clearance, user.countryOfAffiliation) !== (user.clearance || 'UNCLASSIFIED') && (
+                                                <p className="text-[10px] text-gray-600">
+                                                    NATO: {user.clearance || 'UNCLASSIFIED'}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

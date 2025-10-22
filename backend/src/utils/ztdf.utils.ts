@@ -258,9 +258,15 @@ export function createZTDFManifest(params: {
 
 /**
  * Create STANAG 4774 security label
+ * 
+ * ACP-240 Section 4.3 Enhancement:
+ * Now accepts originalClassification and originalCountry to preserve
+ * classification provenance and enable recipient-specific enforcement
  */
 export function createSecurityLabel(params: {
     classification: ClassificationLevel;
+    originalClassification?: string;  // NEW: e.g., "GEHEIM", "SECRET DÉFENSE"
+    originalCountry?: string;          // NEW: ISO 3166-1 alpha-3 (e.g., "DEU", "FRA")
     releasabilityTo: string[];
     COI?: string[];
     caveats?: string[];
@@ -269,12 +275,40 @@ export function createSecurityLabel(params: {
 }): ISTANAG4774Label {
     const label: ISTANAG4774Label = {
         classification: params.classification,
+        originalClassification: params.originalClassification,  // NEW: ACP-240 Section 4.3
+        originalCountry: params.originalCountry,                // NEW: ACP-240 Section 4.3
         releasabilityTo: params.releasabilityTo,
         COI: params.COI,
         caveats: params.caveats,
         originatingCountry: params.originatingCountry,
         creationDate: params.creationDate || new Date().toISOString()
     };
+
+    // NEW: Map to NATO equivalent if original classification provided (ACP-240 Section 4.3)
+    if (params.originalClassification && params.originalCountry) {
+        try {
+            const { mapToNATOLevel } = require('./classification-equivalency');
+            const natoLevel = mapToNATOLevel(
+                params.originalClassification,
+                params.originalCountry as any
+            );
+
+            if (natoLevel) {
+                label.natoEquivalent = natoLevel;
+                logger.debug('Mapped original classification to NATO equivalent', {
+                    originalClassification: params.originalClassification,
+                    originalCountry: params.originalCountry,
+                    natoEquivalent: natoLevel
+                });
+            }
+        } catch (error) {
+            logger.warn('Failed to map to NATO equivalent', {
+                originalClassification: params.originalClassification,
+                originalCountry: params.originalCountry,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
 
     // Generate display marking
     label.displayMarking = generateDisplayMarking(label);
