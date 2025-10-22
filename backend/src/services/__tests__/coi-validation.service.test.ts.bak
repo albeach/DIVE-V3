@@ -48,8 +48,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('EU-RESTRICTED cannot be combined with NATO-COSMIC', async () => {
-            const result = await validateCOICoherence({
+        test('EU-RESTRICTED cannot be combined with NATO-COSMIC', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['FRA', 'DEU'],
                 COI: ['EU-RESTRICTED', 'NATO-COSMIC'],
@@ -62,8 +62,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('EU-RESTRICTED cannot be combined with US-ONLY', async () => {
-            const result = await validateCOICoherence({
+        test('EU-RESTRICTED cannot be combined with US-ONLY', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['FRA'],
                 COI: ['EU-RESTRICTED', 'US-ONLY'],
@@ -82,8 +82,8 @@ describe.skip('COI Validation Service', () => {
     // ============================================
 
     describe('Subset/Superset with ANY operator', () => {
-        test('CAN-US + FVEY invalid with ANY operator', async () => {
-            const result = await validateCOICoherence({
+        test('CAN-US + FVEY invalid with ANY operator', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'CAN'],
                 COI: ['CAN-US', 'FVEY'],
@@ -96,8 +96,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('GBR-US + FVEY invalid with ANY operator', async () => {
-            const result = await validateCOICoherence({
+        test('GBR-US + FVEY invalid with ANY operator', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'GBR'],
                 COI: ['GBR-US', 'FVEY'],
@@ -110,8 +110,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('AUKUS + FVEY invalid with ANY operator', async () => {
-            const result = await validateCOICoherence({
+        test('AUKUS + FVEY invalid with ANY operator', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['AUS', 'GBR', 'USA'],
                 COI: ['AUKUS', 'FVEY'],
@@ -124,8 +124,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('NATO-COSMIC + NATO invalid with ANY operator', async () => {
-            const result = await validateCOICoherence({
+        test('NATO-COSMIC + NATO invalid with ANY operator', () => {
+            const result = validateCOICoherence({
                 classification: 'TOP_SECRET',
                 releasabilityTo: ['USA', 'GBR', 'FRA'],
                 COI: ['NATO-COSMIC', 'NATO'],
@@ -138,8 +138,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('CAN-US + FVEY valid with ALL operator (no widening)', async () => {
-            const result = await validateCOICoherence({
+        test('CAN-US + FVEY valid with ALL operator (no widening)', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'CAN'],
                 COI: ['CAN-US', 'FVEY'],
@@ -159,8 +159,8 @@ describe.skip('COI Validation Service', () => {
     // ============================================
 
     describe('Releasability Alignment', () => {
-        test('COI=CAN-US requires REL TO ⊆ {CAN, USA}', async () => {
-            const result = await validateCOICoherence({
+        test('COI=CAN-US requires REL TO ⊆ {CAN, USA}', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'CAN', 'GBR'], // GBR not in CAN-US
                 COI: ['CAN-US'],
@@ -173,8 +173,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('COI=FVEY requires REL TO ⊆ {USA, GBR, CAN, AUS, NZL}', async () => {
-            const result = await validateCOICoherence({
+        test('COI=FVEY requires REL TO ⊆ {USA, GBR, CAN, AUS, NZL}', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'GBR', 'FRA'], // FRA not in FVEY
                 COI: ['FVEY'],
@@ -187,8 +187,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('COI=US-ONLY requires REL TO = {USA}', async () => {
-            const result = await validateCOICoherence({
+        test('COI=US-ONLY requires REL TO = {USA}', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'CAN'], // CAN not allowed
                 COI: ['US-ONLY'],
@@ -201,8 +201,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('Valid: COI=FVEY with REL TO ⊆ FVEY members', async () => {
-            const result = await validateCOICoherence({
+        test('Valid: COI=FVEY with REL TO ⊆ FVEY members', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'GBR', 'CAN'],
                 COI: ['FVEY'],
@@ -219,8 +219,8 @@ describe.skip('COI Validation Service', () => {
     // ============================================
 
     describe('NOFORN Caveat Enforcement', () => {
-        test('NOFORN requires COI=[US-ONLY]', async () => {
-            const result = await validateCOICoherence({
+        test('NOFORN requires COI=[US-ONLY]', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA'],
                 COI: ['CAN-US'],
@@ -234,8 +234,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('NOFORN requires REL TO=[USA]', async () => {
-            const result = await validateCOICoherence({
+        test('NOFORN requires REL TO=[USA]', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'CAN'],
                 COI: ['US-ONLY'],
@@ -249,8 +249,8 @@ describe.skip('COI Validation Service', () => {
             );
         });
 
-        test('Valid: NOFORN with US-ONLY and REL USA', async () => {
-            const result = await validateCOICoherence({
+        test('Valid: NOFORN with US-ONLY and REL USA', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA'],
                 COI: ['US-ONLY'],
@@ -268,8 +268,8 @@ describe.skip('COI Validation Service', () => {
     // ============================================
 
     describe('Empty Releasability', () => {
-        test('Empty releasabilityTo is invalid', async () => {
-            const result = await validateCOICoherence({
+        test('Empty releasabilityTo is invalid', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: [],
                 COI: ['FVEY'],
@@ -288,35 +288,35 @@ describe.skip('COI Validation Service', () => {
     // ============================================
 
     describe('getAllowedCOIs', () => {
-        test('Returns all COIs when none selected', async () => {
-            const allowed = await getAllowedCOIs([]);
+        test('Returns all COIs when none selected', () => {
+            const allowed = getAllowedCOIs([]);
             expect(allowed.length).toBeGreaterThan(10);
             expect(allowed).toContain('FVEY');
             expect(allowed).toContain('NATO');
         });
 
-        test('Excludes foreign-sharing COIs when US-ONLY selected', async () => {
-            const allowed = await getAllowedCOIs(['US-ONLY']);
+        test('Excludes foreign-sharing COIs when US-ONLY selected', () => {
+            const allowed = getAllowedCOIs(['US-ONLY']);
             expect(allowed).not.toContain('CAN-US');
             expect(allowed).not.toContain('FVEY');
             expect(allowed).not.toContain('NATO');
         });
 
-        test('Excludes US-ONLY when CAN-US selected', async () => {
-            const allowed = await getAllowedCOIs(['CAN-US']);
+        test('Excludes US-ONLY when CAN-US selected', () => {
+            const allowed = getAllowedCOIs(['CAN-US']);
             expect(allowed).not.toContain('US-ONLY');
         });
 
-        test('Excludes NATO-COSMIC when EU-RESTRICTED selected', async () => {
-            const allowed = await getAllowedCOIs(['EU-RESTRICTED']);
+        test('Excludes NATO-COSMIC when EU-RESTRICTED selected', () => {
+            const allowed = getAllowedCOIs(['EU-RESTRICTED']);
             expect(allowed).not.toContain('NATO-COSMIC');
             expect(allowed).not.toContain('US-ONLY');
         });
     });
 
     describe('getAllowedCountriesForCOIs', () => {
-        test('Returns FVEY members for FVEY COI', async () => {
-            const countries = await getAllowedCountriesForCOIs(['FVEY']);
+        test('Returns FVEY members for FVEY COI', () => {
+            const countries = getAllowedCountriesForCOIs(['FVEY']);
             expect(countries).toContain('USA');
             expect(countries).toContain('GBR');
             expect(countries).toContain('CAN');
@@ -325,46 +325,46 @@ describe.skip('COI Validation Service', () => {
             expect(countries).not.toContain('FRA');
         });
 
-        test('Returns USA for US-ONLY COI', async () => {
-            const countries = await getAllowedCountriesForCOIs(['US-ONLY']);
+        test('Returns USA for US-ONLY COI', () => {
+            const countries = getAllowedCountriesForCOIs(['US-ONLY']);
             expect(countries).toEqual(['USA']);
         });
 
-        test('Returns union for multiple COIs', async () => {
-            const countries = await getAllowedCountriesForCOIs(['CAN-US', 'GBR-US']);
+        test('Returns union for multiple COIs', () => {
+            const countries = getAllowedCountriesForCOIs(['CAN-US', 'GBR-US']);
             expect(countries).toContain('USA');
             expect(countries).toContain('CAN');
             expect(countries).toContain('GBR');
             expect(countries.length).toBe(3);
         });
 
-        test('Returns empty for no COIs', async () => {
-            const countries = await getAllowedCountriesForCOIs([]);
+        test('Returns empty for no COIs', () => {
+            const countries = getAllowedCountriesForCOIs([]);
             expect(countries).toEqual([]);
         });
     });
 
     describe('suggestCOIOperator', () => {
-        test('Suggests ALL for no COIs', async () => {
+        test('Suggests ALL for no COIs', () => {
             const { operator, reason } = suggestCOIOperator([]);
             expect(operator).toBe('ALL');
             expect(reason).toContain('no COIs selected');
         });
 
-        test('Suggests ALL for single COI', async () => {
+        test('Suggests ALL for single COI', () => {
             const { operator, reason } = suggestCOIOperator(['FVEY']);
             expect(operator).toBe('ALL');
             expect(reason).toContain('Single COI');
         });
 
-        test('Suggests ALL for subset+superset pairs', async () => {
+        test('Suggests ALL for subset+superset pairs', () => {
             const { operator, reason } = suggestCOIOperator(['CAN-US', 'FVEY']);
             expect(operator).toBe('ALL');
             expect(reason).toContain('subset+superset');
             expect(reason).toContain('prevent widening');
         });
 
-        test('Suggests ALL (safer) for multiple independent COIs', async () => {
+        test('Suggests ALL (safer) for multiple independent COIs', () => {
             const { operator, reason } = suggestCOIOperator(['NATO', 'QUAD']);
             expect(operator).toBe('ALL');
             expect(reason).toContain('Recommended');
@@ -376,8 +376,8 @@ describe.skip('COI Validation Service', () => {
     // ============================================
 
     describe('Complex Valid Scenarios', () => {
-        test('Valid: NATO with subset of NATO countries', async () => {
-            const result = await validateCOICoherence({
+        test('Valid: NATO with subset of NATO countries', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU'],
                 COI: ['NATO'],
@@ -387,8 +387,8 @@ describe.skip('COI Validation Service', () => {
             expect(result.valid).toBe(true);
         });
 
-        test('Valid: AUKUS with all AUKUS members', async () => {
-            const result = await validateCOICoherence({
+        test('Valid: AUKUS with all AUKUS members', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['AUS', 'GBR', 'USA'],
                 COI: ['AUKUS'],
@@ -398,8 +398,8 @@ describe.skip('COI Validation Service', () => {
             expect(result.valid).toBe(true);
         });
 
-        test('Valid: Multiple COIs with ALL operator (intersection)', async () => {
-            const result = await validateCOICoherence({
+        test('Valid: Multiple COIs with ALL operator (intersection)', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'GBR', 'CAN'],
                 COI: ['FVEY', 'NATO'],
@@ -411,8 +411,8 @@ describe.skip('COI Validation Service', () => {
     });
 
     describe('Complex Invalid Scenarios', () => {
-        test('Invalid: Multiple violations at once', async () => {
-            const result = await validateCOICoherence({
+        test('Invalid: Multiple violations at once', () => {
+            const result = validateCOICoherence({
                 classification: 'SECRET',
                 releasabilityTo: ['USA', 'FRA', 'KOR'], // KOR not in US-ONLY
                 COI: ['US-ONLY', 'FVEY'], // Mutual exclusivity violation
@@ -424,8 +424,8 @@ describe.skip('COI Validation Service', () => {
             expect(result.errors.length).toBeGreaterThan(2);
         });
 
-        test('Invalid: Nonsensical combo from audit example', async () => {
-            const result = await validateCOICoherence({
+        test('Invalid: Nonsensical combo from audit example', () => {
+            const result = validateCOICoherence({
                 classification: 'CONFIDENTIAL',
                 releasabilityTo: ['NOR', 'SVN', 'EST', 'KOR'],
                 COI: ['CAN-US', 'US-ONLY', 'EU-RESTRICTED'],

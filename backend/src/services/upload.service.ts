@@ -110,12 +110,13 @@ export async function uploadFile(
             coiOperator: metadata.coiOperator || 'ALL'
         });
 
-        // 6. Return result
+        // 6. Return result (include full ZTDF for classification equivalency tests)
         return {
             success: true,
             resourceId: uploadId,
             ztdfObjectId: ztdfObject.manifest.objectId,
             displayMarking: ztdfObject.policy.securityLabel.displayMarking || '',
+            ztdf: ztdfObject,  // Include full ZTDF object for test validation
             metadata: {
                 fileSize: fileBuffer.length,
                 mimeType,
