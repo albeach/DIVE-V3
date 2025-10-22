@@ -33,6 +33,10 @@ interface ISecurityLabel {
   originatingCountry: string;
   creationDate: string;
   displayMarking: string;
+  // ACP-240 Section 4.3: Classification Equivalency
+  originalClassification?: string;
+  originalCountry?: string;
+  natoEquivalent?: string;
 }
 
 interface IPolicyAssertion {
@@ -355,6 +359,56 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
                   {caveat}
                 </span>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Classification Equivalency (ACP-240 Section 4.3) */}
+        {(policy.securityLabel.originalClassification || policy.securityLabel.originalCountry || policy.securityLabel.natoEquivalent) && (
+          <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+            <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+              <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+              </svg>
+              Classification Equivalency (ACP-240 Section 4.3)
+            </h4>
+            <p className="text-xs text-blue-800 mb-3">
+              NATO standard for coalition interoperability - original classification preserved with NATO equivalent
+            </p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {policy.securityLabel.originalClassification && (
+                <div className="bg-white rounded-md p-3 border border-blue-300">
+                  <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Original Classification</label>
+                  <p className="text-sm font-bold text-gray-900">{policy.securityLabel.originalClassification}</p>
+                  {policy.securityLabel.originalCountry && (
+                    <p className="text-xs text-gray-600 mt-1">from {policy.securityLabel.originalCountry}</p>
+                  )}
+                </div>
+              )}
+              
+              {policy.securityLabel.natoEquivalent && (
+                <div className="bg-white rounded-md p-3 border border-blue-300">
+                  <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">NATO Equivalent</label>
+                  <p className="text-sm font-bold text-gray-900">{policy.securityLabel.natoEquivalent}</p>
+                  <p className="text-xs text-gray-600 mt-1">standardized level</p>
+                </div>
+              )}
+              
+              <div className="bg-white rounded-md p-3 border border-blue-300">
+                <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Current (DIVE V3)</label>
+                <p className="text-sm font-bold text-gray-900">{policy.securityLabel.classification}</p>
+                <p className="text-xs text-gray-600 mt-1">normalized level</p>
+              </div>
+            </div>
+            
+            <div className="mt-3 flex items-center gap-2 text-xs text-blue-700">
+              <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <span>
+                Classification equivalency enables interoperability across {policy.securityLabel.originalCountry || 'coalition'} and NATO classification systems.
+              </span>
             </div>
           </div>
         )}

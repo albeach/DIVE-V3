@@ -221,6 +221,108 @@ export default function ClassificationsPage() {
         </div>
       </div>
 
+      {/* Interactive Classification Equivalency Matrix (12x4) */}
+      <div className="mb-8 bg-white rounded-xl border-2 border-gray-200 shadow-lg overflow-hidden">
+        <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-600">
+          <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
+            <Globe className="w-7 h-7" />
+            Interactive Equivalency Matrix (ACP-240 Section 4.3)
+          </h2>
+          <p className="text-blue-100 text-sm">
+            12 nations × 4 classification levels - Hover over cells to see national classification names
+          </p>
+        </div>
+
+        <div className="p-6 overflow-x-auto">
+          <table className="w-full border-collapse min-w-[800px]">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-gray-100 p-3 text-left font-bold text-gray-700 border border-gray-300">
+                  Nation
+                </th>
+                {classificationsData.levels.map((level) => (
+                  <th 
+                    key={level.canonicalLevel}
+                    className="p-3 text-center font-bold text-white border border-gray-300"
+                    style={{ backgroundColor: level.color }}
+                  >
+                    <div className="text-sm">{level.displayName}</div>
+                    <div className="text-xs font-mono opacity-80">{level.canonicalLevel}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allCountries.map((country) => {
+                const isUserCountry = country === (session?.user as any)?.countryOfAffiliation;
+                return (
+                  <tr 
+                    key={country}
+                    className={`transition-all ${
+                      isUserCountry
+                        ? 'bg-green-50 ring-2 ring-green-400 ring-inset'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <td className={`sticky left-0 z-10 p-3 font-bold border border-gray-300 ${
+                      isUserCountry ? 'bg-green-100 text-green-900' : 'bg-gray-50 text-gray-900'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <Flag className="w-4 h-4" />
+                        {country}
+                        {isUserCountry && (
+                          <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs rounded-full font-bold">
+                            YOU
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {classificationsData.levels.map((level) => {
+                      const mapping = level.mappings.find(m => m.country === country);
+                      return (
+                        <td 
+                          key={`${country}-${level.canonicalLevel}`}
+                          className="p-3 text-center border border-gray-300 hover:bg-blue-50 hover:shadow-inner transition-all cursor-help"
+                          title={mapping ? `${mapping.localLevel} (${mapping.localAbbrev})` : 'No mapping'}
+                        >
+                          {mapping ? (
+                            <div>
+                              <div className="text-sm font-bold text-gray-900">
+                                {mapping.localLevel.replace(/_/g, ' ')}
+                              </div>
+                              <div className="text-xs font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded mt-1 inline-block">
+                                {mapping.localAbbrev}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-6 pb-6">
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-900 font-medium mb-2">
+              📊 How to use this matrix:
+            </p>
+            <ul className="text-xs text-blue-800 space-y-1 ml-4 list-disc">
+              <li><strong>Rows:</strong> Represent nations (12 total)</li>
+              <li><strong>Columns:</strong> Represent NATO classification levels (4 total)</li>
+              <li><strong>Cells:</strong> Show the national classification equivalent for each nation-level combination</li>
+              <li><strong>Hover:</strong> See tooltip with full classification name and abbreviation</li>
+              <li><strong>Your country</strong> is highlighted in green for easy reference</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* Classification Levels */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">

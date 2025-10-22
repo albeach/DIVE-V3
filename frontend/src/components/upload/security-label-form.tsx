@@ -38,6 +38,71 @@ const CLASSIFICATION_HIERARCHY: Record<string, number> = {
   'TOP_SECRET': 3
 };
 
+// National classification equivalents (ACP-240 Section 4.3)
+// Maps NATO levels to national classifications for each country
+const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
+  'USA': {
+    'UNCLASSIFIED': 'UNCLASSIFIED',
+    'CONFIDENTIAL': 'CONFIDENTIAL',
+    'SECRET': 'SECRET',
+    'TOP_SECRET': 'TOP SECRET'
+  },
+  'GBR': {
+    'UNCLASSIFIED': 'OFFICIAL',
+    'CONFIDENTIAL': 'CONFIDENTIAL',
+    'SECRET': 'SECRET',
+    'TOP_SECRET': 'TOP SECRET'
+  },
+  'FRA': {
+    'UNCLASSIFIED': 'NON CLASSIFIÉ',
+    'CONFIDENTIAL': 'CONFIDENTIEL DÉFENSE',
+    'SECRET': 'SECRET DÉFENSE',
+    'TOP_SECRET': 'TRÈS SECRET DÉFENSE'
+  },
+  'CAN': {
+    'UNCLASSIFIED': 'UNCLASSIFIED',
+    'CONFIDENTIAL': 'CONFIDENTIAL',
+    'SECRET': 'SECRET',
+    'TOP_SECRET': 'TOP SECRET'
+  },
+  'DEU': {
+    'UNCLASSIFIED': 'OFFEN',
+    'CONFIDENTIAL': 'VS-VERTRAULICH',
+    'SECRET': 'GEHEIM',
+    'TOP_SECRET': 'STRENG GEHEIM'
+  },
+  'AUS': {
+    'UNCLASSIFIED': 'UNCLASSIFIED',
+    'CONFIDENTIAL': 'CONFIDENTIAL',
+    'SECRET': 'SECRET',
+    'TOP_SECRET': 'TOP SECRET'
+  },
+  'NZL': {
+    'UNCLASSIFIED': 'UNCLASSIFIED',
+    'CONFIDENTIAL': 'CONFIDENTIAL',
+    'SECRET': 'SECRET',
+    'TOP_SECRET': 'TOP SECRET'
+  },
+  'ESP': {
+    'UNCLASSIFIED': 'NO CLASIFICADO',
+    'CONFIDENTIAL': 'CONFIDENCIAL',
+    'SECRET': 'SECRETO',
+    'TOP_SECRET': 'ALTO SECRETO'
+  },
+  'ITA': {
+    'UNCLASSIFIED': 'NON CLASSIFICATO',
+    'CONFIDENTIAL': 'CONFIDENZIALE',
+    'SECRET': 'SEGRETO',
+    'TOP_SECRET': 'SEGRETISSIMO'
+  },
+  'POL': {
+    'UNCLASSIFIED': 'NIEJAWNE',
+    'CONFIDENTIAL': 'POUFNE',
+    'SECRET': 'TAJNE',
+    'TOP_SECRET': 'ŚCIŚLE TAJNE'
+  }
+};
+
 // Country data with flags and full names
 const COUNTRIES = [
   { code: 'USA', name: 'United States', flag: '🇺🇸', region: 'FVEY' },
@@ -107,6 +172,20 @@ const classificationAccents: Record<string, string> = {
   'SECRET': 'from-orange-500 to-orange-600',
   'TOP_SECRET': 'from-red-500 to-red-600',
 };
+
+/**
+ * Get national classification label for a NATO level
+ * @param natoLevel - NATO classification level
+ * @param country - ISO 3166 alpha-3 country code
+ * @returns National classification label (e.g., "GEHEIM" for DEU SECRET)
+ */
+function getNationalClassificationLabel(natoLevel: string, country: string): string {
+  const countryMap = NATIONAL_CLASSIFICATIONS[country];
+  if (!countryMap) {
+    return natoLevel; // Fallback to NATO level if country not found
+  }
+  return countryMap[natoLevel] || natoLevel;
+}
 
 export default function SecurityLabelForm({
   userClearance,
@@ -330,10 +409,16 @@ export default function SecurityLabelForm({
         <label className="block text-sm font-semibold text-gray-900 mb-3">
           Classification Level <span className="text-red-500">*</span>
         </label>
+        <p className="text-xs text-gray-600 mb-3">
+          ℹ️ Showing your national classification labels ({userCountry}) with NATO equivalents
+        </p>
         <div className="grid grid-cols-2 gap-3">
           {CLASSIFICATION_LEVELS.map((level) => {
             const allowed = isClassificationAllowed(level);
             const selected = classification === level;
+            const nationalLabel = getNationalClassificationLabel(level, userCountry);
+            const isDifferent = nationalLabel !== level;
+            
             return (
               <button
                 key={level}
@@ -355,9 +440,16 @@ export default function SecurityLabelForm({
                     </svg>
                   </div>
                 )}
-                <div className="flex items-center justify-center">
-                  {level}
-                  {!allowed && ' 🔒'}
+                <div className="flex flex-col items-center justify-center gap-1">
+                  <div className="font-bold">
+                    {nationalLabel}
+                    {!allowed && ' 🔒'}
+                  </div>
+                  {isDifferent && (
+                    <div className="text-xs opacity-70 font-normal">
+                      ({level})
+                    </div>
+                  )}
                 </div>
               </button>
             );

@@ -253,8 +253,195 @@ valid_country_codes := {
 	"AUS", "NZL", "JPN", "KOR", "FIN", "SWE", "AUT", "CHE", "IRL"
 }
 
-# Check 3: Clearance Level
+# ============================================
+# ACP-240 Section 4.3: Classification Equivalency Functions
+# ============================================
+# Map national classifications to NATO standard levels
+# Reference: backend/src/utils/classification-equivalency.ts
+
+# Classification equivalency mapping table
+# Maps national classifications → NATO standard levels
+classification_equivalency := {
+	"USA": {
+		"UNCLASSIFIED": "UNCLASSIFIED",
+		"FOUO": "NATO_UNCLASSIFIED",
+		"CONFIDENTIAL": "CONFIDENTIAL",
+		"SECRET": "SECRET",
+		"TOP SECRET": "COSMIC_TOP_SECRET",
+		"TOP_SECRET": "COSMIC_TOP_SECRET"
+	},
+	"GBR": {
+		"UNCLASSIFIED": "UNCLASSIFIED",
+		"OFFICIAL": "NATO_UNCLASSIFIED",
+		"CONFIDENTIAL": "CONFIDENTIAL",
+		"SECRET": "SECRET",
+		"TOP SECRET": "COSMIC_TOP_SECRET",
+		"TOP_SECRET": "COSMIC_TOP_SECRET"
+	},
+	"FRA": {
+		"NON CLASSIFIÉ": "UNCLASSIFIED",
+		"DIFFUSION RESTREINTE": "NATO_UNCLASSIFIED",
+		"CONFIDENTIEL DÉFENSE": "CONFIDENTIAL",
+		"SECRET DÉFENSE": "SECRET",
+		"TRÈS SECRET DÉFENSE": "COSMIC_TOP_SECRET"
+	},
+	"CAN": {
+		"UNCLASSIFIED": "UNCLASSIFIED",
+		"PROTECTED A": "NATO_UNCLASSIFIED",
+		"CONFIDENTIAL": "CONFIDENTIAL",
+		"SECRET": "SECRET",
+		"TOP SECRET": "COSMIC_TOP_SECRET",
+		"TOP_SECRET": "COSMIC_TOP_SECRET"
+	},
+	"DEU": {
+		"OFFEN": "UNCLASSIFIED",
+		"VS-NUR FÜR DEN DIENSTGEBRAUCH": "NATO_UNCLASSIFIED",
+		"VS-VERTRAULICH": "CONFIDENTIAL",
+		"GEHEIM": "SECRET",
+		"STRENG GEHEIM": "COSMIC_TOP_SECRET"
+	},
+	"AUS": {
+		"UNCLASSIFIED": "UNCLASSIFIED",
+		"OFFICIAL": "NATO_UNCLASSIFIED",
+		"CONFIDENTIAL": "CONFIDENTIAL",
+		"SECRET": "SECRET",
+		"TOP SECRET": "COSMIC_TOP_SECRET",
+		"TOP_SECRET": "COSMIC_TOP_SECRET"
+	},
+	"NZL": {
+		"UNCLASSIFIED": "UNCLASSIFIED",
+		"CONFIDENTIAL": "CONFIDENTIAL",
+		"SECRET": "SECRET",
+		"TOP SECRET": "COSMIC_TOP_SECRET",
+		"TOP_SECRET": "COSMIC_TOP_SECRET"
+	},
+	"ITA": {
+		"NON CLASSIFICATO": "UNCLASSIFIED",
+		"USO UFFICIALE": "NATO_UNCLASSIFIED",
+		"CONFIDENZIALE": "CONFIDENTIAL",
+		"SEGRETO": "SECRET",
+		"SEGRETISSIMO": "COSMIC_TOP_SECRET"
+	},
+	"ESP": {
+		"NO CLASIFICADO": "UNCLASSIFIED",
+		"USO OFICIAL": "NATO_UNCLASSIFIED",
+		"CONFIDENCIAL": "CONFIDENTIAL",
+		"SECRETO": "SECRET",
+		"ALTO SECRETO": "COSMIC_TOP_SECRET"
+	},
+	"POL": {
+		"NIEJAWNE": "UNCLASSIFIED",
+		"UŻYTEK SŁUŻBOWY": "NATO_UNCLASSIFIED",
+		"POUFNE": "CONFIDENTIAL",
+		"TAJNE": "SECRET",
+		"ŚCIŚLE TAJNE": "COSMIC_TOP_SECRET"
+	},
+	"NLD": {
+		"NIET GERUBRICEERD": "UNCLASSIFIED",
+		"DEPARTEMENTAAL VERTROUWELIJK": "NATO_UNCLASSIFIED",
+		"CONFIDENTIEEL": "CONFIDENTIAL",
+		"GEHEIM": "SECRET",
+		"ZEER GEHEIM": "COSMIC_TOP_SECRET"
+	},
+	"NATO": {
+		"NATO UNCLASSIFIED": "NATO_UNCLASSIFIED",
+		"NATO CONFIDENTIAL": "CONFIDENTIAL",
+		"NATO SECRET": "SECRET",
+		"COSMIC TOP SECRET": "COSMIC_TOP_SECRET"
+	}
+}
+
+# NATO level to DIVE V3 standard mapping
+nato_to_dive_standard := {
+	"UNCLASSIFIED": "UNCLASSIFIED",
+	"NATO_UNCLASSIFIED": "UNCLASSIFIED",
+	"RESTRICTED": "UNCLASSIFIED",
+	"CONFIDENTIAL": "CONFIDENTIAL",
+	"SECRET": "SECRET",
+	"NATO_SECRET": "SECRET",
+	"COSMIC_TOP_SECRET": "TOP_SECRET"
+}
+
+# DIVE V3 clearance level mapping (for numeric comparison)
+dive_clearance_levels := {
+	"UNCLASSIFIED": 0,
+	"CONFIDENTIAL": 1,
+	"SECRET": 2,
+	"TOP_SECRET": 3
+}
+
+# Helper: Get NATO equivalency level for a national classification
+# Returns NATO standard level or null if not found
+get_equivalency_level(classification, country) := nato_level if {
+	# Try country-specific mapping first
+	classification_equivalency[country]
+	upper_class := upper(classification)
+	nato_level := classification_equivalency[country][upper_class]
+} else := nato_level if {
+	# Try direct NATO level mapping
+	upper_class := upper(classification)
+	nato_level := nato_to_dive_standard[upper_class]
+} else := nato_level if {
+	# Try simplified standard levels (DIVE V3 format)
+	upper_class := upper(classification)
+	dive_clearance_levels[upper_class]
+	nato_level := upper_class
+} else := null
+
+# Helper: Check if user clearance is equivalent to or higher than resource classification
+# Supports both national classifications and NATO standard levels
+classification_equivalent(user_clearance, user_country, resource_classification, resource_country) if {
+	# Get NATO equivalency levels
+	user_nato := get_equivalency_level(user_clearance, user_country)
+	resource_nato := get_equivalency_level(resource_classification, resource_country)
+	
+	# Both must resolve to NATO levels
+	user_nato
+	resource_nato
+	
+	# Convert NATO levels to DIVE V3 standard for comparison
+	user_dive := nato_to_dive_standard[user_nato]
+	resource_dive := nato_to_dive_standard[resource_nato]
+	
+	# Get numeric levels for comparison
+	user_level := dive_clearance_levels[user_dive]
+	resource_level := dive_clearance_levels[resource_dive]
+	
+	# User clearance must be >= resource classification
+	user_level >= resource_level
+}
+
+# Check 3: Clearance Level (with Classification Equivalency support)
+# NEW: ACP-240 Section 4.3 - Supports national classifications
 is_insufficient_clearance := msg if {
+	# Priority 1: Check using original classifications (if available)
+	input.subject.clearanceOriginal
+	input.subject.clearanceCountry
+	input.resource.originalClassification
+	input.resource.originalCountry
+	
+	# Use equivalency comparison
+	not classification_equivalent(
+		input.subject.clearanceOriginal,
+		input.subject.clearanceCountry,
+		input.resource.originalClassification,
+		input.resource.originalCountry
+	)
+	
+	# Build denial message with original classifications
+	msg := sprintf("Insufficient clearance: %s (%s clearance) insufficient for %s (%s) document [NATO: %s < %s]", [
+		input.subject.clearanceCountry,
+		input.subject.clearanceOriginal,
+		input.resource.originalCountry,
+		input.resource.originalClassification,
+		input.subject.clearance,
+		input.resource.classification
+	])
+} else := msg if {
+	# Priority 2: Fallback to DIVE V3 standard clearance comparison
+	# (backward compatibility for resources without originalClassification)
+	not input.subject.clearanceOriginal  # No original clearance available
+	
 	# Get numeric clearance levels
 	user_clearance_level := clearance_levels[input.subject.clearance]
 	resource_classification_level := clearance_levels[input.resource.classification]
@@ -268,19 +455,22 @@ is_insufficient_clearance := msg if {
 	])
 }
 
+# Validation: Deny if clearance not in valid enum (when not using equivalency)
 is_insufficient_clearance := msg if {
-	# Deny if clearance not in valid enum
+	not input.subject.clearanceOriginal  # Standard clearance mode
 	not clearance_levels[input.subject.clearance]
 	msg := sprintf("Invalid clearance level: %s", [input.subject.clearance])
 }
 
+# Validation: Deny if classification not in valid enum (when not using equivalency)
 is_insufficient_clearance := msg if {
-	# Deny if classification not in valid enum
+	not input.resource.originalClassification  # Standard classification mode
 	not clearance_levels[input.resource.classification]
 	msg := sprintf("Invalid classification level: %s", [input.resource.classification])
 }
 
 # Clearance level mapping (higher number = higher clearance)
+# Used for backward compatibility (DIVE V3 standard levels)
 clearance_levels := {
 	"UNCLASSIFIED": 0,
 	"CONFIDENTIAL": 1,
@@ -589,6 +779,7 @@ kas_obligations contains obligation if {
 }
 
 # Evaluation details for debugging (ACP-240 enhanced)
+# NEW: Added classification equivalency fields per ACP-240 Section 4.3
 evaluation_details := {
 	"checks": {
 		"authenticated": check_authenticated,
@@ -605,11 +796,16 @@ evaluation_details := {
 	"subject": {
 		"uniqueID": object.get(input.subject, "uniqueID", ""),
 		"clearance": object.get(input.subject, "clearance", ""),
+		"clearanceOriginal": object.get(input.subject, "clearanceOriginal", ""),  # NEW: ACP-240 Section 4.3
+		"clearanceCountry": object.get(input.subject, "clearanceCountry", ""),    # NEW: ACP-240 Section 4.3
 		"country": object.get(input.subject, "countryOfAffiliation", ""),
 	},
 	"resource": {
 		"resourceId": object.get(input.resource, "resourceId", ""),
 		"classification": object.get(input.resource, "classification", ""),
+		"originalClassification": object.get(input.resource, "originalClassification", ""),  # NEW: ACP-240 Section 4.3
+		"originalCountry": object.get(input.resource, "originalCountry", ""),              # NEW: ACP-240 Section 4.3
+		"natoEquivalent": object.get(input.resource, "natoEquivalent", ""),                # NEW: ACP-240 Section 4.3
 		"encrypted": object.get(input.resource, "encrypted", false),
 		"ztdfEnabled": ztdf_enabled,
 	},
@@ -623,7 +819,40 @@ evaluation_details := {
 		"kas_obligations": count(obligations) > 0,
 		"fail_closed_enforcement": true,
 		"aal2_enforced": true,
+		"classification_equivalency_enabled": true,  # NEW: ACP-240 Section 4.3
+		"equivalency_applied": equivalency_applied,  # NEW: P2-T5
+		"equivalency_details": equivalency_details,   # NEW: P2-T5
 	},
+}
+
+# Helper: Check if classification equivalency was used in this decision
+equivalency_applied := true if {
+	# Equivalency is applied when both original classifications are present
+	input.subject.clearanceOriginal
+	input.subject.clearanceCountry
+	input.resource.originalClassification
+	input.resource.originalCountry
+} else := false
+
+# Helper: Equivalency details for audit/debugging
+equivalency_details := details if {
+	equivalency_applied
+	details := {
+		"user_clearance_original": input.subject.clearanceOriginal,
+		"user_clearance_country": input.subject.clearanceCountry,
+		"user_clearance_nato": input.subject.clearance,
+		"resource_classification_original": input.resource.originalClassification,
+		"resource_classification_country": input.resource.originalCountry,
+		"resource_classification_nato": input.resource.classification,
+		"display_marking": sprintf("%s (%s) / %s (NATO)", [
+			input.resource.originalClassification,
+			input.resource.originalCountry,
+			input.resource.classification
+		]),
+	}
+} else := {} if {
+	# No equivalency applied
+	not equivalency_applied
 }
 
 # Helper rules for evaluation details (always return boolean)

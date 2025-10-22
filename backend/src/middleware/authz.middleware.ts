@@ -59,6 +59,7 @@ interface IKeycloakToken {
 
 /**
  * Interface for OPA input
+ * ACP-240 Section 4.3 Enhancement: Added original classification fields
  * Gap #4: Added dutyOrg and orgUnit for organization-based policies
  */
 interface IOPAInput {
@@ -66,21 +67,26 @@ interface IOPAInput {
         subject: {
             authenticated: boolean;
             uniqueID: string;
-            clearance?: string;
+            clearance?: string;                    // DIVE canonical (SECRET, TOP_SECRET, etc.)
+            clearanceOriginal?: string;            // NEW: Original national clearance (e.g., "GEHEIM", "SECRET DÉFENSE")
+            clearanceCountry?: string;             // NEW: Country that issued clearance (ISO 3166-1 alpha-3)
             countryOfAffiliation?: string;
             acpCOI?: string[];
-            dutyOrg?: string;    // Gap #4: Organization (e.g., US_ARMY, FR_DEFENSE_MINISTRY)
-            orgUnit?: string;    // Gap #4: Organizational Unit (e.g., CYBER_DEFENSE, INTELLIGENCE)
+            dutyOrg?: string;                      // Gap #4: Organization (e.g., US_ARMY, FR_DEFENSE_MINISTRY)
+            orgUnit?: string;                      // Gap #4: Organizational Unit (e.g., CYBER_DEFENSE, INTELLIGENCE)
         };
         action: {
             operation: string;
         };
         resource: {
             resourceId: string;
-            classification?: string;
+            classification?: string;               // DIVE canonical (SECRET, TOP_SECRET, etc.)
+            originalClassification?: string;       // NEW: Original national classification (ACP-240 Section 4.3)
+            originalCountry?: string;              // NEW: Country that created classification (ACP-240 Section 4.3)
+            natoEquivalent?: string;               // NEW: NATO standard equivalent (ACP-240 Section 4.3)
             releasabilityTo?: string[];
             COI?: string[];
-            coiOperator?: string;  // COI operator: "ALL" | "ANY"
+            coiOperator?: string;                  // COI operator: "ALL" | "ANY"
             creationDate?: string;
             encrypted?: boolean;
         };
@@ -90,9 +96,9 @@ interface IOPAInput {
             deviceCompliant: boolean;
             requestId: string;
             // AAL2/FAL2 context (NIST SP 800-63B/C)
-            acr?: string;        // Authentication Context Class Reference (AAL level)
-            amr?: string[];      // Authentication Methods Reference (MFA factors)
-            auth_time?: number;  // Time of authentication (Unix timestamp)
+            acr?: string;                          // Authentication Context Class Reference (AAL level)
+            amr?: string[];                        // Authentication Methods Reference (MFA factors)
+            auth_time?: number;                    // Time of authentication (Unix timestamp)
         };
     };
 }
@@ -285,6 +291,38 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             throw new Error('Invalid token format');
         }
 
+        // TEST ENVIRONMENT: Allow HS256 tokens without kid for integration tests
+        if (process.env.NODE_ENV === 'test' && decoded.header.alg === 'HS256') {
+            logger.debug('Using test mode JWT verification (HS256)', {
+                alg: decoded.header.alg,
+                iss: (decoded.payload as any).iss,
+            });
+
+            const jwtSecret = process.env.JWT_SECRET || 'test-secret';
+
+            // Verify HS256 token with shared secret (test only)
+            return new Promise((resolve, reject) => {
+                jwt.verify(
+                    token,
+                    jwtSecret,
+                    {
+                        algorithms: ['HS256'],
+                        // In test mode, accept test issuer
+                        issuer: ['https://keycloak.dive-v3.local', `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`, `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`],
+                        audience: ['dive-v3-client', 'dive-v3-client-broker', 'account'],
+                    },
+                    (err: any, decodedToken: any) => {
+                        if (err) {
+                            reject(err);
+                        } else {
+                            resolve(decodedToken as IKeycloakToken);
+                        }
+                    }
+                );
+            });
+        }
+
+        // PRODUCTION: Require RS256 with kid from JWKS
         // Get the signing key (pass token for realm detection)
         const publicKey = await getSigningKey(decoded.header, token);
 
@@ -915,6 +953,18 @@ export const authzMiddleware = async (
         const classification = isZTDF
             ? resource.ztdf.policy.securityLabel.classification
             : (resource as any).classification;
+
+        // NEW: Extract original classification fields (ACP-240 Section 4.3)
+        const originalClassification = isZTDF
+            ? resource.ztdf.policy.securityLabel.originalClassification
+            : undefined;
+        const originalCountry = isZTDF
+            ? resource.ztdf.policy.securityLabel.originalCountry
+            : undefined;
+        const natoEquivalent = isZTDF
+            ? resource.ztdf.policy.securityLabel.natoEquivalent
+            : undefined;
+
         const releasabilityTo = isZTDF
             ? resource.ztdf.policy.securityLabel.releasabilityTo
             : (resource as any).releasabilityTo;
@@ -935,6 +985,8 @@ export const authzMiddleware = async (
                     authenticated: true,
                     uniqueID,
                     clearance,
+                    clearanceOriginal: tokenData.clearanceOriginal || clearance, // NEW: ACP-240 Section 4.3
+                    clearanceCountry: tokenData.clearanceCountry || countryOfAffiliation, // NEW: ACP-240 Section 4.3
                     countryOfAffiliation,
                     acpCOI,
                     dutyOrg: tokenData.dutyOrg,      // Gap #4: Organization attribute
@@ -946,6 +998,9 @@ export const authzMiddleware = async (
                 resource: {
                     resourceId: resource.resourceId,
                     classification,
+                    originalClassification,          // NEW: ACP-240 Section 4.3
+                    originalCountry,                 // NEW: ACP-240 Section 4.3
+                    natoEquivalent,                  // NEW: ACP-240 Section 4.3
                     releasabilityTo,
                     COI,
                     coiOperator,
@@ -965,10 +1020,13 @@ export const authzMiddleware = async (
             },
         };
 
-        logger.debug('Constructed OPA input', {
+        logger.debug('Constructed OPA input with classification equivalency', {
             requestId,
             subject: opaInput.input.subject.uniqueID,
             resource: opaInput.input.resource.resourceId,
+            originalClassification: opaInput.input.resource.originalClassification,
+            originalCountry: opaInput.input.resource.originalCountry,
+            natoEquivalent: opaInput.input.resource.natoEquivalent,
         });
 
         // ============================================
