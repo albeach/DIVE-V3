@@ -221,6 +221,14 @@ export default function AdminDashboard() {
                 {/* Quick Action Floating Button */}
                 <div className="fixed bottom-8 right-8 flex flex-col space-y-3">
                     <button
+                        onClick={() => router.push('/admin/certificates')}
+                        className="group flex items-center space-x-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
+                    >
+                        <span className="text-xl">🔐</span>
+                        <span className="font-semibold">Certificates</span>
+                    </button>
+                    
+                    <button
                         onClick={() => router.push('/admin/logs')}
                         className="group flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
                     >
@@ -238,7 +246,7 @@ export default function AdminDashboard() {
 
                     <button
                         onClick={() => router.push('/admin/analytics')}
-                        className="group flex items-center space-x-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
+                        className="group flex items-center space-x-3 bg-gradient-to-r from-orange-600 to-pink-600 text-white px-6 py-4 rounded-full shadow-2xl hover:shadow-3xl transform hover:scale-105 transition-all duration-200"
                     >
                         <span className="text-xl">🏛️</span>
                         <span className="font-semibold">IdP Governance</span>
