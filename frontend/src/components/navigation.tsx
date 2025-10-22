@@ -64,8 +64,9 @@ export default function Navigation({ user }: INavigationProps) {
 
     const adminItems = [
         { name: 'Dashboard', href: '/admin/dashboard', icon: '📊', badge: null },
+        { name: 'Certificates', href: '/admin/certificates', icon: '🔐', badge: null },
         { name: 'IdP Governance', href: '/admin/analytics', icon: '🏛️', badge: null },
-        { name: 'IdP Management', href: '/admin/idp', icon: '🔐', badge: null },
+        { name: 'IdP Management', href: '/admin/idp', icon: '🔑', badge: null },
         { name: 'Approvals', href: '/admin/approvals', icon: '✅', badge: '3' },
         { name: 'Audit Logs', href: '/admin/logs', icon: '📋', badge: null },
     ];
