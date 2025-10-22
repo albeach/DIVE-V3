@@ -50,18 +50,52 @@ interface Certificate {
 }
 
 interface CertificateHealth {
+  success: boolean;
+  dashboard: {
+    overallStatus: 'healthy' | 'warning' | 'critical';
+    lastChecked: string;
+    certificates: {
+      root: {
+        status: string;
+        daysRemaining: number;
+        validUntil: string;
+        alerts: Array<{ severity: string; message: string }>;
+      };
+      intermediate: {
+        status: string;
+        daysRemaining: number;
+        validUntil: string;
+        alerts: Array<{ severity: string; message: string }>;
+      };
+      signing: {
+        status: string;
+        daysRemaining: number;
+        validUntil: string;
+        alerts: Array<{ severity: string; message: string }>;
+      };
+    };
+    summary: {
+      total: number;
+      valid: number;
+      expiringSoon: number;
+      expired: number;
+      daysUntilNextExpiry: number;
+    };
+    alerts: Array<{ severity: string; message: string; certificateType: string }>;
+    recommendations: string[];
+  };
+  rotationStatus?: {
+    inProgress: boolean;
+    currentCertificate?: string;
+    newCertificate?: string;
+    startedAt?: string;
+  };
   certificates: Certificate[];
   overallHealth: {
     status: 'healthy' | 'warning' | 'critical';
     healthyCount: number;
     totalCount: number;
     warnings: string[];
-  };
-  rotationStatus: {
-    inProgress: boolean;
-    currentCertificate?: string;
-    newCertificate?: string;
-    startedAt?: string;
   };
 }
 
@@ -118,29 +152,78 @@ export default function AdminCertificatesPage() {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
     
     try {
-      // Fetch certificate health
+      // Get auth token from session
+      const token = (session as any)?.accessToken;
+      
+      if (!token) {
+        setError('No access token available. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch certificate health (dashboard data)
       const healthRes = await fetch(`${backendUrl}/api/admin/certificates/health`, {
         headers: {
-          'Authorization': `Bearer ${(session as any)?.accessToken || ''}`,
+          'Authorization': `Bearer ${token}`,
         },
         cache: 'no-store',
       });
 
-      if (!healthRes.ok) throw new Error('Failed to fetch certificate health');
+      if (!healthRes.ok) {
+        const errorData = await healthRes.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || 'Failed to fetch certificate health');
+      }
+      
       const healthData = await healthRes.json();
-      setHealth(healthData);
+      
+      // Fetch certificate list to get detailed info
+      const certsRes = await fetch(`${backendUrl}/api/admin/certificates`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        cache: 'no-store',
+      });
+
+      if (!certsRes.ok) {
+        const errorData = await certsRes.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || 'Failed to fetch certificates');
+      }
+      
+      const certsData = await certsRes.json();
+      
+      // Combine the data
+      const combinedHealth: CertificateHealth = {
+        ...healthData,
+        certificates: certsData.certificates || [],
+        overallHealth: {
+          status: healthData.dashboard.overallStatus,
+          healthyCount: healthData.dashboard.summary.valid,
+          totalCount: healthData.dashboard.summary.total,
+          warnings: healthData.dashboard.recommendations || []
+        },
+        rotationStatus: {
+          inProgress: false,
+          ...healthData.rotationStatus
+        }
+      };
+      
+      setHealth(combinedHealth);
 
       // Fetch CRL
       const crlRes = await fetch(`${backendUrl}/api/admin/certificates/revocation-list`, {
         headers: {
-          'Authorization': `Bearer ${(session as any)?.accessToken || ''}`,
+          'Authorization': `Bearer ${token}`,
         },
         cache: 'no-store',
       });
 
-      if (!crlRes.ok) throw new Error('Failed to fetch CRL');
+      if (!crlRes.ok) {
+        const errorData = await crlRes.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || 'Failed to fetch CRL');
+      }
+      
       const crlData = await crlRes.json();
-      setCrl(crlData.revokedCertificates || []);
+      setCrl(crlData.revokedCertificates || crlData.revocationList?.revokedCertificates || []);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load certificate data');
@@ -156,15 +239,25 @@ export default function AdminCertificatesPage() {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
     try {
+      const token = (session as any)?.accessToken;
+      
+      if (!token) {
+        setRotationMessage('❌ No access token available');
+        return;
+      }
+
       const response = await fetch(`${backendUrl}/api/admin/certificates/rotate`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${(session as any)?.accessToken || ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
 
-      if (!response.ok) throw new Error('Certificate rotation failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || 'Certificate rotation failed');
+      }
       
       const data = await response.json();
       setRotationMessage(`✅ Rotation started successfully! New certificate: ${data.newCertificate?.subject}`);
@@ -187,10 +280,17 @@ export default function AdminCertificatesPage() {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
     try {
+      const token = (session as any)?.accessToken;
+      
+      if (!token) {
+        alert('❌ No access token available');
+        return;
+      }
+
       const response = await fetch(`${backendUrl}/api/admin/certificates/revoke`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${(session as any)?.accessToken || ''}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -199,7 +299,10 @@ export default function AdminCertificatesPage() {
         }),
       });
 
-      if (!response.ok) throw new Error('Revocation failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || 'Revocation failed');
+      }
       
       alert('✅ Certificate revoked successfully');
       setRevokeModalOpen(false);
