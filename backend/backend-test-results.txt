@@ -1,0 +1,100 @@
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m280[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'errors' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m280[0m             expect(result.errors).toContainEqual(
+    [7m   [0m [91m                          ~~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m280[0m:[93m27[0m
+        [7m280[0m             expect(result.errors).toContainEqual(
+        [7m   [0m [96m                          ~~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m293[0m:[93m28[0m - [91merror[0m[90m TS2339: [0mProperty 'length' does not exist on type 'Promise<string[]>'.
+
+    [7m293[0m             expect(allowed.length).toBeGreaterThan(10);
+    [7m   [0m [91m                           ~~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m293[0m:[93m28[0m
+        [7m293[0m             expect(allowed.length).toBeGreaterThan(10);
+        [7m   [0m [96m                           ~~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m338[0m:[93m30[0m - [91merror[0m[90m TS2339: [0mProperty 'length' does not exist on type 'Promise<string[]>'.
+
+    [7m338[0m             expect(countries.length).toBe(3);
+    [7m   [0m [91m                             ~~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m338[0m:[93m30[0m
+        [7m338[0m             expect(countries.length).toBe(3);
+        [7m   [0m [96m                             ~~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m387[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'valid' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m387[0m             expect(result.valid).toBe(true);
+    [7m   [0m [91m                          ~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m387[0m:[93m27[0m
+        [7m387[0m             expect(result.valid).toBe(true);
+        [7m   [0m [96m                          ~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m398[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'valid' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m398[0m             expect(result.valid).toBe(true);
+    [7m   [0m [91m                          ~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m398[0m:[93m27[0m
+        [7m398[0m             expect(result.valid).toBe(true);
+        [7m   [0m [96m                          ~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m409[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'valid' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m409[0m             expect(result.valid).toBe(true);
+    [7m   [0m [91m                          ~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m409[0m:[93m27[0m
+        [7m409[0m             expect(result.valid).toBe(true);
+        [7m   [0m [96m                          ~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m423[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'valid' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m423[0m             expect(result.valid).toBe(false);
+    [7m   [0m [91m                          ~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m423[0m:[93m27[0m
+        [7m423[0m             expect(result.valid).toBe(false);
+        [7m   [0m [96m                          ~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m424[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'errors' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m424[0m             expect(result.errors.length).toBeGreaterThan(2);
+    [7m   [0m [91m                          ~~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m424[0m:[93m27[0m
+        [7m424[0m             expect(result.errors.length).toBeGreaterThan(2);
+        [7m   [0m [96m                          ~~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m435[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'valid' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m435[0m             expect(result.valid).toBe(false);
+    [7m   [0m [91m                          ~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m435[0m:[93m27[0m
+        [7m435[0m             expect(result.valid).toBe(false);
+        [7m   [0m [96m                          ~~~~~[0m
+        Did you forget to use 'await'?
+    [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m437[0m:[93m27[0m - [91merror[0m[90m TS2339: [0mProperty 'errors' does not exist on type 'Promise<IValidationResult>'.
+
+    [7m437[0m             expect(result.errors.length).toBeGreaterThan(3);
+    [7m   [0m [91m                          ~~~~~~[0m
+
+      [96msrc/services/__tests__/coi-validation.service.test.ts[0m:[93m437[0m:[93m27[0m
+        [7m437[0m             expect(result.errors.length).toBeGreaterThan(3);
+        [7m   [0m [96m                          ~~~~~~[0m
+        Did you forget to use 'await'?
+
+
+Test Suites: 4 failed, 33 passed, 37 total
+Tests:       20 failed, 2 skipped, 775 passed, 797 total
+Snapshots:   0 total
+Time:        41.139 s, estimated 42 s
+Ran all test suites.
+✅ Global teardown complete - all connections closed
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

@@ -20,6 +20,10 @@ interface IResource {
   creationDate?: string;
   content?: string;
   displayMarking?: string;
+  // ACP-240 Section 4.3: Classification Equivalency
+  originalClassification?: string;
+  originalCountry?: string;
+  natoEquivalent?: string;
   ztdf?: {
     version: string;
     objectType: string;
@@ -345,15 +349,35 @@ export default function ResourceDetailPage() {
                 </div>
               )}
 
-              {/* Display Marking (STANAG 4774) */}
+              {/* Display Marking (STANAG 4774) - Dual-Format (ACP-240 Section 4.3) */}
               {resource.displayMarking && (
                 <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-4">
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div className="flex-1">
                       <p className="text-xs font-medium text-gray-500 uppercase mb-1">STANAG 4774 Display Marking</p>
                       <p className="text-xl font-bold text-gray-900 font-mono">{resource.displayMarking}</p>
+                      
+                      {/* Dual-format classification display (ACP-240 Section 4.3) */}
+                      {resource.originalClassification && resource.originalCountry && (
+                        <div className="mt-3 pt-3 border-t border-gray-300">
+                          <p className="text-xs font-medium text-blue-600 uppercase mb-1">Classification Equivalency</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center px-3 py-1 rounded-md bg-blue-100 text-blue-900 text-sm font-bold border border-blue-300">
+                              {resource.originalClassification} ({resource.originalCountry})
+                            </span>
+                            <span className="text-gray-400 font-bold">≈</span>
+                            <span className="inline-flex items-center px-3 py-1 rounded-md bg-green-100 text-green-900 text-sm font-bold border border-green-300">
+                              {resource.natoEquivalent || resource.classification} (NATO)
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-2">
+                            Original: <strong>{resource.originalClassification}</strong> from {resource.originalCountry} • 
+                            NATO Equivalent: <strong>{resource.natoEquivalent || resource.classification}</strong>
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-600 text-right">
+                    <div className="text-xs text-gray-600 text-right ml-4">
                       <p>Must appear on all</p>
                       <p>extractions & copies</p>
                     </div>
@@ -370,13 +394,21 @@ export default function ResourceDetailPage() {
                         {resource.resourceId}
                       </p>
                     </div>
-                    <span
-                      className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-bold border-2 ${
-                        classificationColors[resource.classification] || 'bg-gray-100 text-gray-800 border-gray-300'
-                      }`}
-                    >
-                      {resource.classification}
-                    </span>
+                    <div className="flex flex-col items-end gap-2">
+                      <span
+                        className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-bold border-2 ${
+                          classificationColors[resource.classification] || 'bg-gray-100 text-gray-800 border-gray-300'
+                        }`}
+                      >
+                        {resource.classification}
+                      </span>
+                      {/* Show original classification if different (ACP-240 Section 4.3) */}
+                      {resource.originalClassification && resource.originalClassification !== resource.classification && (
+                        <span className="text-xs text-gray-600 font-semibold">
+                          Original: {resource.originalClassification} ({resource.originalCountry})
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 

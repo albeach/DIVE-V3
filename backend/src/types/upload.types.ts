@@ -9,15 +9,20 @@ import { ClassificationLevel, COIOperator } from './ztdf.types';
 
 /**
  * Upload metadata (from client)
+ * 
+ * ACP-240 Section 4.3 Enhancement:
+ * Now includes originalClassification and originalCountry for classification provenance
  */
 export interface IUploadMetadata {
-    classification: ClassificationLevel;
-    releasabilityTo: string[]; // ISO 3166-1 alpha-3 codes
-    COI?: string[];             // Communities of Interest
-    coiOperator?: COIOperator;  // ALL or ANY (default: ALL)
-    caveats?: string[];         // NOFORN, RELIDO, PROPIN, etc.
-    title: string;              // Required, max 200 characters
-    description?: string;       // Optional description
+    classification: ClassificationLevel;  // DIVE canonical (UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET)
+    originalClassification?: string;       // NEW: e.g., "GEHEIM", "SECRET DÉFENSE" (ACP-240 Section 4.3)
+    originalCountry?: string;              // NEW: ISO 3166-1 alpha-3 (e.g., "DEU", "FRA") (ACP-240 Section 4.3)
+    releasabilityTo: string[];             // ISO 3166-1 alpha-3 codes
+    COI?: string[];                        // Communities of Interest
+    coiOperator?: COIOperator;             // ALL or ANY (default: ALL)
+    caveats?: string[];                    // NOFORN, RELIDO, PROPIN, etc.
+    title: string;                         // Required, max 200 characters
+    description?: string;                  // Optional description
 }
 
 /**

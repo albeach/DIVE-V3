@@ -572,14 +572,14 @@ export default function AdminCertificatesPage() {
               </p>
             </div>
 
-            {health.rotationStatus.inProgress && (
+            {health.rotationStatus?.inProgress && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 mb-6">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-1" />
                   <div>
                     <p className="font-bold text-yellow-900 mb-2">Rotation In Progress</p>
                     <p className="text-sm text-yellow-800 mb-2">
-                      Started: {new Date(health.rotationStatus.startedAt!).toLocaleString()}
+                      Started: {health.rotationStatus.startedAt ? new Date(health.rotationStatus.startedAt).toLocaleString() : 'Unknown'}
                     </p>
                     <p className="text-xs text-yellow-700 mb-1">
                       Current: {health.rotationStatus.currentCertificate}
@@ -614,11 +614,11 @@ export default function AdminCertificatesPage() {
 
               <button
                 onClick={() => setRotationModalOpen(true)}
-                disabled={health.rotationStatus.inProgress}
+                disabled={health.rotationStatus?.inProgress}
                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-blue-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RefreshCw className="w-5 h-5" />
-                {health.rotationStatus.inProgress ? 'Rotation In Progress' : 'Start Certificate Rotation'}
+                {health.rotationStatus?.inProgress ? 'Rotation In Progress' : 'Start Certificate Rotation'}
               </button>
             </div>
           </div>

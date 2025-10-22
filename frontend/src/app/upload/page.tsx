@@ -34,9 +34,36 @@ export default function UploadPage() {
   const userCountry = session?.user?.countryOfAffiliation || 'USA';
   const userCOI = (session?.user as any)?.acpCOI || [];
 
+  // National classification mappings (ACP-240 Section 4.3)
+  const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
+    'USA': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+    'GBR': { 'UNCLASSIFIED': 'OFFICIAL', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+    'FRA': { 'UNCLASSIFIED': 'NON CLASSIFIÉ', 'CONFIDENTIAL': 'CONFIDENTIEL DÉFENSE', 'SECRET': 'SECRET DÉFENSE', 'TOP_SECRET': 'TRÈS SECRET DÉFENSE' },
+    'CAN': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+    'DEU': { 'UNCLASSIFIED': 'OFFEN', 'CONFIDENTIAL': 'VS-VERTRAULICH', 'SECRET': 'GEHEIM', 'TOP_SECRET': 'STRENG GEHEIM' },
+    'AUS': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+    'NZL': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
+    'ESP': { 'UNCLASSIFIED': 'NO CLASIFICADO', 'CONFIDENTIAL': 'CONFIDENCIAL', 'SECRET': 'SECRETO', 'TOP_SECRET': 'ALTO SECRETO' },
+    'ITA': { 'UNCLASSIFIED': 'NON CLASSIFICATO', 'CONFIDENTIAL': 'CONFIDENZIALE', 'SECRET': 'SEGRETO', 'TOP_SECRET': 'SEGRETISSIMO' },
+    'POL': { 'UNCLASSIFIED': 'NIEJAWNE', 'CONFIDENTIAL': 'POUFNE', 'SECRET': 'TAJNE', 'TOP_SECRET': 'ŚCIŚLE TAJNE' }
+  };
+
+  // Helper function to get national classification label
+  const getNationalClassification = (natoLevel: string, country: string): string => {
+    return NATIONAL_CLASSIFICATIONS[country]?.[natoLevel] || natoLevel;
+  };
+
   // Generate display marking preview
   const displayMarking = useMemo(() => {
-    const parts = [classification];
+    const nationalLabel = getNationalClassification(classification, userCountry);
+    const isDifferent = nationalLabel !== classification;
+    
+    // Dual-format marking (ACP-240 Section 4.3)
+    const classificationPart = isDifferent 
+      ? `${nationalLabel} / ${classification} (${userCountry})`
+      : classification;
+    
+    const parts = [classificationPart];
     if (releasabilityTo.length > 0 && releasabilityTo.length <= 3) {
       parts.push(`REL TO ${releasabilityTo.join(', ')}`);
     }
@@ -47,7 +74,7 @@ export default function UploadPage() {
       parts.push(caveats.join('//'));
     }
     return parts.join('//');
-  }, [classification, releasabilityTo, COI, caveats]);
+  }, [classification, releasabilityTo, COI, caveats, userCountry]);
 
   const handleUpload = async () => {
     if (!file) {
@@ -92,6 +119,11 @@ export default function UploadPage() {
       if (description.trim()) {
         formData.append('description', description.trim());
       }
+      
+      // ACP-240 Section 4.3: Original classification equivalency
+      const originalClassification = getNationalClassification(classification, userCountry);
+      formData.append('originalClassification', originalClassification);
+      formData.append('originalCountry', userCountry);
 
       // Upload to backend
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
