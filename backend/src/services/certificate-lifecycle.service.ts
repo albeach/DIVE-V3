@@ -20,7 +20,7 @@ import { X509Certificate } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger';
-import { certificateManager, IThreeTierHierarchy } from '../utils/certificate-manager';
+import { certificateManager } from '../utils/certificate-manager';
 
 /**
  * Certificate status
