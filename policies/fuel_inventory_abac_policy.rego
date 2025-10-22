@@ -52,10 +52,15 @@ coi_members := {
 	"FVEY": {"USA", "GBR", "CAN", "AUS", "NZL"},
 	"NATO": {
 		"ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
-		"DEU", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
+		"DEU", "GBR", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
 		"MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE", "TUR", "USA",
 	},
-	"NATO-COSMIC": {"NATO"},
+	"NATO-COSMIC": {
+		# COSMIC TOP SECRET is NATO's highest classification - all NATO members
+		"ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
+		"DEU", "GBR", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE", "NLD",
+		"MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE", "TUR", "USA",
+	},
 	"EU-RESTRICTED": {
 		"AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA",
 		"DEU", "GRC", "HUN", "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD",
@@ -343,6 +348,36 @@ classification_equivalency := {
 		"GEHEIM": "SECRET",
 		"ZEER GEHEIM": "COSMIC_TOP_SECRET"
 	},
+	"TUR": {
+		"TASNIF DIŞI": "UNCLASSIFIED",
+		"HİZMETE ÖZEL": "NATO_UNCLASSIFIED",
+		"ÖZEL": "CONFIDENTIAL",
+		"GİZLİ": "SECRET",
+		"ÇOK GİZLİ": "SECRET",
+		"ÇOKGIZLI": "SECRET",
+		"COSMIC TOP SECRET": "COSMIC_TOP_SECRET"
+	},
+	"GRC": {
+		"ΑΝΕΠΙΦΥΛΑΚΤΟ": "UNCLASSIFIED",
+		"ΠΕΡΙΟΡΙΣΜΕΝΗΣ ΧΡΗΣΕΩΣ": "NATO_UNCLASSIFIED",
+		"ΕΜΠΙΣΤΕΥΤΙΚΟ": "CONFIDENTIAL",
+		"ΑΠΟΡΡΗΤΟ": "SECRET",
+		"ΑΠΌΡΡΗΤΟ": "SECRET",
+		"ΑΠΟΛΥΤΩΣ ΑΠΟΡΡΗΤΟ": "COSMIC_TOP_SECRET"
+	},
+	"NOR": {
+		"UGRADERT": "UNCLASSIFIED",
+		"BEGRENSET": "NATO_UNCLASSIFIED",
+		"KONFIDENSIELT": "CONFIDENTIAL",
+		"HEMMELIG": "SECRET",
+		"STRENGT HEMMELIG": "COSMIC_TOP_SECRET"
+	},
+	"DNK": {
+		"TIL TJENESTEBRUG": "UNCLASSIFIED",
+		"FORTROLIGT": "CONFIDENTIAL",
+		"HEMMELIGT": "SECRET",
+		"STRENGT HEMMELIGT": "COSMIC_TOP_SECRET"
+	},
 	"NATO": {
 		"NATO UNCLASSIFIED": "NATO_UNCLASSIFIED",
 		"NATO CONFIDENTIAL": "CONFIDENTIAL",
@@ -501,6 +536,15 @@ is_not_releasable_to_country := msg if {
 # - User with NATO-COSMIC can access any NATO member documents
 # - Maintains compartmentalization: US-ONLY still requires US-ONLY membership
 is_coi_violation := msg if {
+	# Special case: US-ONLY requires exact match (no foreign COIs allowed)
+	"US-ONLY" in input.resource.COI
+	user_coi := object.get(input.subject, "acpCOI", [])
+	
+	# User must have ONLY US-ONLY COI, not other COIs that include USA
+	not user_coi == ["US-ONLY"]
+	
+	msg := sprintf("Resource requires US-ONLY COI. User has COI: %v (foreign-sharing COIs not permitted)", [user_coi])
+} else := msg if {
 	# If resource has COI, check based on coiOperator
 	count(input.resource.COI) > 0
 

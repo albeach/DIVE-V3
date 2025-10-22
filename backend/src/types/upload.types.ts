@@ -43,6 +43,7 @@ export interface IUploadResult {
     resourceId: string;
     ztdfObjectId: string;
     displayMarking: string;
+    ztdf?: any;  // Include full ZTDF object for classification equivalency tests
     metadata: {
         fileSize: number;
         mimeType: string;
