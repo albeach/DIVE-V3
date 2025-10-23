@@ -17,7 +17,8 @@ import {
   CheckCircle2, 
   Flag,
   Search,
-  Filter
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 
 interface ClassificationMapping {
@@ -323,15 +324,16 @@ export default function ClassificationsPage() {
         </div>
       </div>
 
-      {/* Classification Levels */}
+      {/* Classification Levels - Accordion Style */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">
           <Shield className="w-7 h-7 text-green-600" />
           Classification Levels
         </h2>
-        <div className="space-y-6">
+        <div className="space-y-4">
           {classificationsData.levels.map((level) => {
             const filteredMappings = getFilteredMappings(level.mappings);
+            const isOpen = selectedLevel === level.canonicalLevel;
             
             if (filteredMappings.length === 0 && (searchQuery || filterCountry !== 'ALL')) {
               return null; // Hide level if no mappings match filter
@@ -340,67 +342,81 @@ export default function ClassificationsPage() {
             return (
               <div 
                 key={level.canonicalLevel}
-                className={`bg-white rounded-xl border-2 shadow-md hover:shadow-xl transition-all ${
-                  selectedLevel === level.canonicalLevel
+                className={`bg-white rounded-xl border-2 shadow-md overflow-hidden transition-all ${
+                  isOpen
                     ? 'ring-4 ring-green-100 border-green-500'
-                    : 'border-gray-200'
+                    : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
-                {/* Level Header */}
-                <div 
-                  className="p-6 cursor-pointer"
-                  onClick={() => setSelectedLevel(selectedLevel === level.canonicalLevel ? null : level.canonicalLevel)}
-                  style={{ backgroundColor: `${level.color}15` }}
+                {/* Accordion Header - Always Visible */}
+                <button
+                  className="w-full p-6 cursor-pointer text-left transition-colors hover:bg-gray-50"
+                  onClick={() => setSelectedLevel(isOpen ? null : level.canonicalLevel)}
+                  style={{ backgroundColor: isOpen ? `${level.color}15` : 'transparent' }}
+                  aria-expanded={isOpen}
+                  aria-controls={`classification-${level.canonicalLevel}`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-1">
                       <div 
-                        className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg"
+                        className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg"
                         style={{ backgroundColor: level.color }}
                       >
                         {level.numericValue}
                       </div>
-                      <div>
-                        <h3 className="text-2xl font-bold text-gray-900">{level.displayName}</h3>
-                        <p className="text-sm font-mono text-gray-600 uppercase">{level.canonicalLevel}</p>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-gray-900">{level.displayName}</h3>
+                        <p className="text-xs font-mono text-gray-600 uppercase mt-1">{level.canonicalLevel}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-3xl font-bold" style={{ color: level.color }}>
-                        {filteredMappings.length}
-                      </p>
-                      <p className="text-sm text-gray-600">Nation Mappings</p>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-2xl font-bold" style={{ color: level.color }}>
+                          {filteredMappings.length}
+                        </p>
+                        <p className="text-xs text-gray-600">Mappings</p>
+                      </div>
+                      <ChevronDown 
+                        className={`w-6 h-6 text-gray-400 transition-transform duration-200 ${
+                          isOpen ? 'transform rotate-180' : ''
+                        }`}
+                      />
                     </div>
                   </div>
-                </div>
+                </button>
 
-                {/* Mappings Table */}
-                <div className="p-6 pt-0">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {filteredMappings.map((mapping) => (
-                      <div 
-                        key={`${level.canonicalLevel}-${mapping.country}`}
-                        className="bg-gray-50 rounded-lg p-4 border-2 border-gray-200 hover:border-green-400 hover:shadow-md transition-all"
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <Flag className="w-4 h-4 text-gray-500" />
-                          <span className="font-bold text-gray-900 text-sm">{mapping.country}</span>
+                {/* Accordion Content - Collapsible */}
+                {isOpen && (
+                  <div 
+                    id={`classification-${level.canonicalLevel}`}
+                    className="border-t-2 border-gray-200 p-6 animate-in slide-in-from-top-2 duration-200"
+                  >
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {filteredMappings.map((mapping) => (
+                        <div 
+                          key={`${level.canonicalLevel}-${mapping.country}`}
+                          className="bg-gray-50 rounded-lg p-4 border-2 border-gray-200 hover:border-green-400 hover:shadow-md transition-all"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Flag className="w-4 h-4 text-gray-500" />
+                            <span className="font-bold text-gray-900 text-sm">{mapping.country}</span>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-gray-600">Local Level:</p>
+                            <p className="text-sm font-semibold text-gray-900">{mapping.localLevel.replace(/_/g, ' ')}</p>
+                            <p className="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
+                              {mapping.localAbbrev}
+                            </p>
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-xs text-gray-600">Local Level:</p>
-                          <p className="text-sm font-semibold text-gray-900">{mapping.localLevel.replace(/_/g, ' ')}</p>
-                          <p className="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded border border-gray-300">
-                            {mapping.localAbbrev}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+
+                    {filteredMappings.length === 0 && (searchQuery || filterCountry !== 'ALL') && (
+                      <p className="text-center text-gray-500 py-4">No mappings match your search criteria</p>
+                    )}
                   </div>
-
-                  {filteredMappings.length === 0 && (searchQuery || filterCountry !== 'ALL') && (
-                    <p className="text-center text-gray-500 py-4">No mappings match your search criteria</p>
-                  )}
-                </div>
+                )}
               </div>
             );
           })}
