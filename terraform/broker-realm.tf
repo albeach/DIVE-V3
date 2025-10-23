@@ -8,17 +8,17 @@
 resource "keycloak_realm" "dive_v3_broker" {
   realm   = "dive-v3-broker"
   enabled = true
-  
+
   display_name      = "DIVE V3 - Federation Hub"
   display_name_html = "<b>DIVE V3</b> - Coalition Identity Broker"
-  
+
   # Federation hub settings (no direct users)
   registration_allowed           = false
   registration_email_as_username = false
   remember_me                    = false
   reset_password_allowed         = false
   edit_username_allowed          = false
-  
+
   # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
   # Increased timeouts to prevent session expiration during active use
   access_token_lifespan        = "15m"   # Access token (aligns with NextAuth session)
@@ -26,7 +26,16 @@ resource "keycloak_realm" "dive_v3_broker" {
   sso_session_max_lifespan     = "8h"    # Max session (8 hours - AAL2 compliant)
   offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
   offline_session_max_lifespan = "1440h" # Offline max (60 days)
-  
+
+  # OTP Policy (AAL2 MFA Enforcement)
+  otp_policy {
+    algorithm = "HmacSHA256"
+    digits    = 6
+    period    = 30
+    type      = "totp"
+    look_ahead_window = 1
+  }
+
   # Brute-force detection (still needed for broker attempts)
   security_defenses {
     brute_force_detection {
@@ -42,7 +51,7 @@ resource "keycloak_realm" "dive_v3_broker" {
       strict_transport_security = "max-age=31536000; includeSubDomains; preload"
     }
   }
-  
+
   ssl_required = "external"
 }
 
@@ -52,29 +61,29 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   client_id = "dive-v3-client-broker"
   name      = "DIVE V3 Application (Broker)"
   enabled   = true
-  
+
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
   direct_access_grants_enabled = false
   service_accounts_enabled     = false
-  
+
   # Use same client secret as original dive-v3-client for consistency
   client_secret = "8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L"
-  
+
   root_url = var.app_url
   base_url = var.app_url
-  
+
   valid_redirect_uris = [
     "${var.app_url}/*",
     "${var.app_url}/api/auth/callback/keycloak"
   ]
-  
+
   web_origins = [
     var.app_url,
     "+"
   ]
-  
+
   # Logout configuration
   frontchannel_logout_enabled     = true
   frontchannel_logout_url         = "${var.app_url}/api/auth/logout-callback"
@@ -101,7 +110,6 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
-    "offline_access",
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
   # Note: offline_access added to default scopes for admin-dive user login
@@ -141,19 +149,19 @@ resource "keycloak_generic_protocol_mapper" "broker_audience" {
   protocol_mapper = "oidc-audience-mapper"
 
   config = {
-    "included.client.audience"    = "dive-v3-client-broker"
-    "id.token.claim"              = "true"
-    "access.token.claim"          = "true"
-    "introspection.token.claim"   = "true"
-    "userinfo.token.claim"        = "true"
+    "included.client.audience"  = "dive-v3-client-broker"
+    "id.token.claim"            = "true"
+    "access.token.claim"        = "true"
+    "introspection.token.claim" = "true"
+    "userinfo.token.claim"      = "true"
   }
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_uniqueid" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "uniqueID"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "uniqueID"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -167,10 +175,10 @@ resource "keycloak_generic_protocol_mapper" "broker_uniqueid" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_clearance" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "clearance"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "clearance"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -184,10 +192,10 @@ resource "keycloak_generic_protocol_mapper" "broker_clearance" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_country" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "countryOfAffiliation"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "countryOfAffiliation"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -201,10 +209,10 @@ resource "keycloak_generic_protocol_mapper" "broker_country" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_coi" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "acpCOI"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "acpCOI"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -218,10 +226,10 @@ resource "keycloak_generic_protocol_mapper" "broker_coi" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_dutyorg" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "dutyOrg"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "dutyOrg"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -235,10 +243,10 @@ resource "keycloak_generic_protocol_mapper" "broker_dutyorg" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_orgunit" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "orgUnit"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "orgUnit"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -252,10 +260,10 @@ resource "keycloak_generic_protocol_mapper" "broker_orgunit" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_acr" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "acr"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "acr"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -269,10 +277,10 @@ resource "keycloak_generic_protocol_mapper" "broker_acr" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_amr" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "amr"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "amr"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -287,10 +295,10 @@ resource "keycloak_generic_protocol_mapper" "broker_amr" {
 
 # Roles mapper for broker realm (includes realm roles in token)
 resource "keycloak_generic_protocol_mapper" "broker_roles" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "realm-roles"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "realm-roles"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-realm-role-mapper"
 
   config = {
@@ -318,17 +326,17 @@ resource "keycloak_user" "broker_super_admin" {
   email      = "admin@dive-v3.pilot"
   first_name = "DIVE"
   last_name  = "Administrator"
-  
+
   # Super admin attributes - full access
   attributes = {
-    uniqueID               = "admin@dive-v3.pilot"
-    clearance              = "TOP_SECRET"
-    countryOfAffiliation   = "USA"
-    acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\",\"CAN-US\"]"
-    dutyOrg                = "DIVE_ADMIN"
-    orgUnit                = "SYSTEM_ADMINISTRATION"
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    uniqueID             = "admin@dive-v3.pilot"
+    clearance            = "TOP_SECRET"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[\"NATO-COSMIC\",\"FVEY\",\"CAN-US\"]"
+    dutyOrg              = "DIVE_ADMIN"
+    orgUnit              = "SYSTEM_ADMINISTRATION"
+    acr                  = "urn:mace:incommon:iap:silver"
+    amr                  = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {

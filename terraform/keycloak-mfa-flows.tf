@@ -248,12 +248,95 @@ resource "keycloak_authentication_bindings" "can_classified_bindings" {
 }
 
 # ============================================
+# Replicate for Broker Realm
+# ============================================
+# The broker realm is the main entry point for federation
+# It also needs conditional MFA to enforce AAL2 for classified users
+
+resource "keycloak_authentication_flow" "broker_classified_browser" {
+  realm_id    = keycloak_realm.dive_v3_broker.id
+  alias       = "Classified Access Browser Flow - Broker"
+  description = "AAL2 enforcement: MFA required for CONFIDENTIAL, SECRET, TOP_SECRET clearances"
+}
+
+resource "keycloak_authentication_execution" "broker_classified_cookie" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_flow.broker_classified_browser.alias
+  authenticator     = "auth-cookie"
+  requirement       = "ALTERNATIVE"
+}
+
+resource "keycloak_authentication_subflow" "broker_classified_conditional" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_flow.broker_classified_browser.alias
+  alias             = "Classified User Conditional - Broker"
+  requirement       = "ALTERNATIVE"
+  provider_id       = "basic-flow"
+}
+
+resource "keycloak_authentication_execution" "broker_classified_username_password" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_subflow.broker_classified_conditional.alias
+  authenticator     = "auth-username-password-form"
+  requirement       = "REQUIRED"
+}
+
+resource "keycloak_authentication_subflow" "broker_classified_otp_conditional" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_subflow.broker_classified_conditional.alias
+  alias             = "Conditional OTP for Classified - Broker"
+  requirement       = "CONDITIONAL"
+  # provider_id omitted for conditional flows
+}
+
+# Condition: User attribute "clearance" != "UNCLASSIFIED"
+resource "keycloak_authentication_execution" "broker_classified_condition_user_attribute" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_subflow.broker_classified_otp_conditional.alias
+  authenticator     = "conditional-user-attribute"
+  requirement       = "REQUIRED"
+}
+
+# Configuration for conditional-user-attribute
+resource "keycloak_authentication_execution_config" "broker_classified_condition_config" {
+  realm_id     = keycloak_realm.dive_v3_broker.id
+  execution_id = keycloak_authentication_execution.broker_classified_condition_user_attribute.id
+  alias        = "Classified Clearance Check - Broker"
+  config = {
+    attribute_name  = "clearance"
+    attribute_value = "^(?!UNCLASSIFIED$).*"
+    negate          = "false"
+  }
+}
+
+# Action: Require OTP if condition passes
+resource "keycloak_authentication_execution" "broker_classified_otp_form" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_subflow.broker_classified_otp_conditional.alias
+  authenticator     = "auth-otp-form"
+  requirement       = "REQUIRED"
+  
+  # Ensure condition is created before OTP form to maintain proper execution order
+  depends_on = [
+    keycloak_authentication_execution.broker_classified_condition_user_attribute,
+    keycloak_authentication_execution_config.broker_classified_condition_config
+  ]
+}
+
+# Bind the flow to Broker realm browser authentication
+resource "keycloak_authentication_bindings" "broker_classified_bindings" {
+  realm_id     = keycloak_realm.dive_v3_broker.id
+  browser_flow = keycloak_authentication_flow.broker_classified_browser.alias
+}
+
+# ============================================
 # NOTES: OTP Policy Configuration
 # ============================================
 # OTP policies are configured as blocks within each realm resource:
 # - terraform/usa-realm.tf (lines 66-73)
 # - terraform/fra-realm.tf (lines 65-72)  
 # - terraform/can-realm.tf (lines 39-46)
+# - terraform/broker-realm.tf (OTP policy needs to be added)
 #
 # Configuration:
 # - Algorithm: HmacSHA256
