@@ -99,15 +99,19 @@ app.use(errorHandler);
 // Server Startup
 // ============================================
 
-app.listen(PORT, () => {
-  logger.info('DIVE V3 Backend API started', {
-    port: PORT,
-    env: process.env.NODE_ENV,
-    keycloak: process.env.KEYCLOAK_URL,
-    opa: process.env.OPA_URL,
-    mongodb: process.env.MONGODB_URL
+// Only start server if not in test environment (to avoid port conflicts)
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    logger.info('DIVE V3 Backend API started', {
+      port: PORT,
+      env: process.env.NODE_ENV,
+      keycloak: process.env.KEYCLOAK_URL,
+      opa: process.env.OPA_URL,
+      mongodb: process.env.MONGODB_URL
+    });
   });
-});
+}
 
 export default app;
+
 
