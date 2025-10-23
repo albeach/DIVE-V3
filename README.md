@@ -1792,25 +1792,61 @@ For production deployment:
 
 ### Identity Assurance Levels (NIST SP 800-63B/C) ✅ **FULLY ENFORCED**
 
-**Status**: 100% AAL2/FAL2 compliance achieved (October 19-20, 2025)  
+**Status**: 100% AAL2/FAL2 compliance achieved (October 23, 2025) - **REAL MFA ENFORCEMENT**  
+**Critical Fix**: Gap #6 remediated - Keycloak conditionally enforces MFA based on clearance  
+**Execution Order Fix**: Terraform dependency issue resolved - conditional logic now works correctly  
 **Test Coverage**: 809/809 tests passing (100%)
 
+#### 🚨 CRITICAL UPDATE (October 23, 2025): Real AAL2 Enforcement Deployed
+
+**Before**: AAL2 validation relied on hardcoded ACR/AMR claims in user attributes (bypass risk)  
+**After**: Keycloak conditionally enforces OTP/MFA based on user clearance level (real enforcement)  
+**Execution Fix**: Added `depends_on` to ensure condition check executes before OTP form
+
 #### Authentication Assurance Level 2 (AAL2)
-- ✅ **Multi-Factor Authentication** required for all IdPs
-- ✅ **ACR Claim Validation**: JWT `acr` claim validated (InCommon Silver/Gold = AAL2)
-- ✅ **AMR Claim Validation**: JWT `amr` claim verified (2+ authentication factors)
+- ✅ **Multi-Factor Authentication** enforced at Keycloak login for clearance ≥ CONFIDENTIAL
+- ✅ **Conditional Authentication Flows**: Custom Keycloak flows require OTP for classified users (FIXED)
+- ✅ **Execution Order Fix**: Condition check (index 0) → OTP Form (index 1) for all realms
+- ✅ **Dynamic ACR Claims**: Keycloak sets `acr="1"` (AAL2) when OTP used, `acr="0"` (AAL1) for password-only
+- ✅ **Dynamic AMR Claims**: Keycloak sets `amr=["pwd","otp"]` based on actual authentication methods
+- ✅ **ACR Claim Validation**: Backend/OPA validate JWT `acr` claim (accepts numeric or URN format)
+- ✅ **AMR Claim Validation**: Backend/OPA verify `amr` claim (2+ authentication factors required)
 - ✅ **Session Idle Timeout**: 15 minutes (AAL2 compliant, reduced from 8 hours - 32x reduction)
 - ✅ **Access Token Lifespan**: 15 minutes (replay attack prevention)
-- ✅ **Phishing-Resistant Methods**: Smart cards, TOTP, hardware tokens supported
+- ✅ **Phishing-Resistant Methods**: TOTP (Google Authenticator, Authy), smart cards, hardware tokens
 
-**Enforcement**: Lines 250-287 in `backend/src/middleware/authz.middleware.ts`
-```typescript
-// AAL2 validation for classified resources
-if (classification !== 'UNCLASSIFIED') {
-  const isAAL2 = acr.includes('silver') || acr.includes('gold') || acr.includes('aal2');
-  if (!isAAL2) throw new Error('Classified resources require AAL2 (MFA)');
-  if (amr.length < 2) throw new Error('MFA required: at least 2 factors needed');
-}
+**Enforcement Points** (Defense in Depth):
+1. **Keycloak Authentication Flows** (PRIMARY): Conditional OTP required for classified clearances
+   - USA: CONFIDENTIAL, SECRET, TOP_SECRET require OTP
+   - France: CONFIDENTIEL-DÉFENSE, SECRET-DÉFENSE, TRÈS SECRET-DÉFENSE require OTP
+   - Canada: PROTECTED B, SECRET, TOP SECRET require OTP
+   - Industry: UNCLASSIFIED only (no MFA required)
+2. **Backend Middleware** (SECONDARY): Lines 391-461 in `backend/src/middleware/authz.middleware.ts`
+   - Validates ACR claim (numeric "1", "2", "3" or string "silver", "gold", "aal2")
+   - Validates AMR claim (requires 2+ factors for classified resources)
+3. **OPA Policy** (TERTIARY): Lines 694-728 in `policies/fuel_inventory_abac_policy.rego`
+   - `is_authentication_strength_insufficient`: Checks ACR for AAL2 indicators
+   - `is_mfa_not_verified`: Checks AMR for 2+ authentication factors
+
+**Implementation Files**:
+- `terraform/keycloak-mfa-flows.tf`: Conditional authentication flows (USA, France, Canada)
+- `terraform/keycloak-dynamic-acr-amr.tf`: Dynamic ACR/AMR protocol mappers
+- `docs/AAL2-MFA-ENFORCEMENT-FIX.md`: Complete implementation details and testing guide
+- `scripts/deploy-aal2-mfa-enforcement.sh`: Deployment script
+
+**Testing**:
+```bash
+# Test 1: UNCLASSIFIED user (no MFA)
+Login: bob.contractor (clearance=UNCLASSIFIED)
+Expected: Password only → JWT acr="0", amr=["pwd"]
+
+# Test 2: SECRET user (MFA REQUIRED)
+Login: john.doe (clearance=SECRET)
+Expected: Password + OTP setup → JWT acr="1", amr=["pwd","otp"]
+
+# Test 3: TOP_SECRET user (MFA REQUIRED)
+Login: super.admin (clearance=TOP_SECRET)
+Expected: Password + OTP (mandatory) → JWT acr="1", amr=["pwd","otp"]
 ```
 
 #### Federation Assurance Level 2 (FAL2)
