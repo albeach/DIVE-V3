@@ -25,10 +25,10 @@ resource "keycloak_realm" "dive_v3" {
   realm   = var.realm_name
   enabled = true
 
-  display_name               = "DIVE V3 Coalition Pilot"
-  display_name_html          = "<b>DIVE V3</b> - USA/NATO ICAM Pilot"
-  
-  registration_allowed           = false  # Federated IdPs only
+  display_name      = "DIVE V3 Coalition Pilot"
+  display_name_html = "<b>DIVE V3</b> - USA/NATO ICAM Pilot"
+
+  registration_allowed           = false # Federated IdPs only
   registration_email_as_username = false
   remember_me                    = true
   reset_password_allowed         = true
@@ -56,11 +56,11 @@ resource "keycloak_realm" "dive_v3" {
 
   # ACP-240 aligned password policy
   password_policy = "upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and length(12)"
-  
+
   # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
-  access_token_lifespan = "15m"   # 15 minutes
+  access_token_lifespan    = "15m" # 15 minutes
   sso_session_idle_timeout = "15m" # 15 minutes (AAL2 requirement - was 8h)
-  sso_session_max_lifespan = "8h" # 8 hours (reduced from 12h for AAL2 alignment)
+  sso_session_max_lifespan = "8h"  # 8 hours (reduced from 12h for AAL2 alignment)
 }
 
 # ============================================
@@ -75,7 +75,7 @@ resource "keycloak_openid_client" "dive_v3_app" {
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
-  direct_access_grants_enabled = false  # Federated only
+  direct_access_grants_enabled = false # Federated only
   service_accounts_enabled     = false
 
   root_url = var.app_url
@@ -96,11 +96,11 @@ resource "keycloak_openid_client" "dive_v3_app" {
   # Logout configuration - Proper frontchannel logout for Single Logout (SLO)
   frontchannel_logout_enabled = true
   frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
-  
+
   # CRITICAL: Keycloak expects "+" separated list, not array
   # Must be exact match for post_logout_redirect_uri parameter
   valid_post_logout_redirect_uris = ["${var.app_url}"]
-  
+
   extra_config = {
     "frontchannel.logout.session.required" = "false"
   }
@@ -151,10 +151,10 @@ resource "keycloak_openid_client_optional_scopes" "dive_v3_optional_scopes" {
 
 # uniqueID mapper
 resource "keycloak_generic_protocol_mapper" "unique_id_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "uniqueID"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "uniqueID"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -169,10 +169,10 @@ resource "keycloak_generic_protocol_mapper" "unique_id_mapper" {
 
 # clearance mapper
 resource "keycloak_generic_protocol_mapper" "clearance_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "clearance"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "clearance"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -187,10 +187,10 @@ resource "keycloak_generic_protocol_mapper" "clearance_mapper" {
 
 # countryOfAffiliation mapper
 resource "keycloak_generic_protocol_mapper" "country_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "countryOfAffiliation"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "countryOfAffiliation"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -205,10 +205,10 @@ resource "keycloak_generic_protocol_mapper" "country_mapper" {
 
 # acpCOI mapper (multi-valued attribute)
 resource "keycloak_generic_protocol_mapper" "coi_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "acpCOI"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "acpCOI"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -224,10 +224,10 @@ resource "keycloak_generic_protocol_mapper" "coi_mapper" {
 
 # Roles mapper (for super_admin role)
 resource "keycloak_generic_protocol_mapper" "roles_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "realm-roles"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "realm-roles"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-realm-role-mapper"
 
   config = {
@@ -247,10 +247,10 @@ resource "keycloak_generic_protocol_mapper" "roles_mapper" {
 
 # ACR mapper - map from user attribute to token claim
 resource "keycloak_generic_protocol_mapper" "acr_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "acr-attribute-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "acr-attribute-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -265,10 +265,10 @@ resource "keycloak_generic_protocol_mapper" "acr_mapper" {
 
 # AMR mapper - map from user attribute to token claim
 resource "keycloak_generic_protocol_mapper" "amr_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "amr-attribute-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "amr-attribute-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -283,10 +283,10 @@ resource "keycloak_generic_protocol_mapper" "amr_mapper" {
 
 # Auth time - use session note (Keycloak automatically tracks this)
 resource "keycloak_generic_protocol_mapper" "auth_time_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "auth-time-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "auth-time-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usersessionmodel-note-mapper"
 
   config = {
@@ -333,10 +333,10 @@ resource "keycloak_generic_protocol_mapper" "auth_time_mapper" {
 
 # dutyOrg mapper - user's duty organization
 resource "keycloak_generic_protocol_mapper" "dutyorg_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "dutyOrg"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "dutyOrg"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -351,10 +351,10 @@ resource "keycloak_generic_protocol_mapper" "dutyorg_mapper" {
 
 # orgUnit mapper - user's organizational unit
 resource "keycloak_generic_protocol_mapper" "orgunit_mapper" {
-  realm_id   = keycloak_realm.dive_v3.id
-  client_id  = keycloak_openid_client.dive_v3_app.id
-  name       = "orgUnit"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3.id
+  client_id       = keycloak_openid_client.dive_v3_app.id
+  name            = "orgUnit"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -403,18 +403,18 @@ resource "keycloak_user" "test_user_us_secret" {
   email      = "john.doe@army.mil"
   first_name = "John"
   last_name  = "Doe"
-  
+
   attributes = {
-    uniqueID               = "john.doe@mil"
-    clearance              = "SECRET"
-    countryOfAffiliation   = "USA"
-    acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\"]"
+    uniqueID             = "john.doe@mil"
+    clearance            = "SECRET"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[\"NATO-COSMIC\",\"FVEY\"]"
     # Gap #4: Organization attributes
-    dutyOrg                = "US_ARMY"
-    orgUnit                = "CYBER_DEFENSE"
+    dutyOrg = "US_ARMY"
+    orgUnit = "CYBER_DEFENSE"
     # AAL2/FAL2 attributes (simulated for testing)
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    acr = "urn:mace:incommon:iap:silver"
+    amr = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {
@@ -433,18 +433,18 @@ resource "keycloak_user" "test_user_us_confid" {
   email      = "jane.smith@navy.mil"
   first_name = "Jane"
   last_name  = "Smith"
-  
+
   attributes = {
-    uniqueID               = "jane.smith@mil"
-    clearance              = "CONFIDENTIAL"
-    countryOfAffiliation   = "USA"
-    acpCOI                 = "[\"FVEY\"]"
+    uniqueID             = "jane.smith@mil"
+    clearance            = "CONFIDENTIAL"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[\"FVEY\"]"
     # Gap #4: Organization attributes
-    dutyOrg                = "US_NAVY"
-    orgUnit                = "INTELLIGENCE"
+    dutyOrg = "US_NAVY"
+    orgUnit = "INTELLIGENCE"
     # AAL2/FAL2 attributes
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    acr = "urn:mace:incommon:iap:silver"
+    amr = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {
@@ -463,18 +463,18 @@ resource "keycloak_user" "test_user_us_unclass" {
   email      = "bob.jones@contractor.mil"
   first_name = "Bob"
   last_name  = "Jones"
-  
+
   attributes = {
-    uniqueID               = "bob.jones@mil"
-    clearance              = "UNCLASSIFIED"
-    countryOfAffiliation   = "USA"
-    acpCOI                 = "[]"
+    uniqueID             = "bob.jones@mil"
+    clearance            = "UNCLASSIFIED"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[]"
     # Gap #4: Organization attributes
-    dutyOrg                = "CONTRACTOR"
-    orgUnit                = "LOGISTICS"
+    dutyOrg = "CONTRACTOR"
+    orgUnit = "LOGISTICS"
     # AAL2/FAL2 attributes (AAL1 for contractor - password only)
-    acr                    = "urn:mace:incommon:iap:bronze"
-    amr                    = "[\"pwd\"]"
+    acr = "urn:mace:incommon:iap:bronze"
+    amr = "[\"pwd\"]"
   }
 
   initial_password {
@@ -491,7 +491,7 @@ resource "keycloak_user_roles" "test_user_us_secret_roles" {
 
   role_ids = [
     keycloak_role.user_role.id,
-    keycloak_role.super_admin_role.id  # Assign super_admin for testing
+    keycloak_role.super_admin_role.id # Assign super_admin for testing
   ]
 }
 
@@ -510,12 +510,12 @@ resource "keycloak_user_roles" "test_user_us_secret_roles" {
 resource "keycloak_realm" "france_mock" {
   realm   = "france-mock-idp"
   enabled = true
-  
+
   display_name = "France Mock IdP (SAML)"
-  
+
   # Enable SAML for this realm
   registration_allowed = false
-  login_theme = "keycloak"
+  login_theme          = "keycloak"
 }
 
 # France test user in mock realm
@@ -524,25 +524,25 @@ resource "keycloak_user" "france_user" {
   realm_id = keycloak_realm.france_mock.id
   username = "testuser-fra"
   enabled  = true
-  
+
   email      = "pierre.dubois@defense.gouv.fr"
   first_name = "Pierre"
   last_name  = "Dubois"
-  
+
   # French attributes using standard OIDC claim names (simplified for pilot)
   attributes = {
-    uniqueID               = "pierre.dubois@defense.gouv.fr"
-    clearance              = "SECRET"  # Standard DIVE clearance level
-    countryOfAffiliation   = "FRA"
-    acpCOI                 = "[\"NATO-COSMIC\"]"
+    uniqueID             = "pierre.dubois@defense.gouv.fr"
+    clearance            = "SECRET" # Standard DIVE clearance level
+    countryOfAffiliation = "FRA"
+    acpCOI               = "[\"NATO-COSMIC\"]"
     # Gap #4: Organization attributes
-    dutyOrg                = "FR_DEFENSE_MINISTRY"
-    orgUnit                = "RENSEIGNEMENT"  # Intelligence
+    dutyOrg = "FR_DEFENSE_MINISTRY"
+    orgUnit = "RENSEIGNEMENT" # Intelligence
     # AAL2/FAL2 attributes
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    acr = "urn:mace:incommon:iap:silver"
+    amr = "[\"pwd\",\"otp\"]"
   }
-  
+
   initial_password {
     value     = "Password123!"
     temporary = false
@@ -555,24 +555,24 @@ resource "keycloak_saml_client" "france_saml_client" {
   client_id = "dive-v3-saml-client"
   name      = "DIVE V3 SAML Client"
   enabled   = true
-  
+
   # Critical: Disable ALL signature requirements for mock IdP
-  sign_documents              = false
-  sign_assertions             = false
-  client_signature_required   = false
-  
-  include_authn_statement   = true
-  force_post_binding        = false  # Allow redirect binding
-  front_channel_logout      = true
-  
+  sign_documents            = false
+  sign_assertions           = false
+  client_signature_required = false
+
+  include_authn_statement = true
+  force_post_binding      = false # Allow redirect binding
+  front_channel_logout    = true
+
   # Redirect URIs - must match broker callback
   valid_redirect_uris = [
     "http://localhost:8081/realms/dive-v3-pilot/broker/france-idp/endpoint",
     "http://keycloak:8080/realms/dive-v3-pilot/broker/france-idp/endpoint"
   ]
-  
+
   base_url = "http://localhost:3000"
-  
+
   # Master SAML Processing URL (critical for broker)
   master_saml_processing_url = "http://localhost:8081/realms/dive-v3-pilot/broker/france-idp/endpoint"
 }
@@ -582,7 +582,7 @@ resource "keycloak_saml_user_property_protocol_mapper" "france_email_property" {
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "email-property-mapper"
-  
+
   user_property              = "email"
   friendly_name              = "email"
   saml_attribute_name        = "email"
@@ -593,7 +593,7 @@ resource "keycloak_saml_user_property_protocol_mapper" "france_firstname_propert
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "firstName-property-mapper"
-  
+
   user_property              = "firstName"
   friendly_name              = "firstName"
   saml_attribute_name        = "firstName"
@@ -604,7 +604,7 @@ resource "keycloak_saml_user_property_protocol_mapper" "france_lastname_property
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "lastName-property-mapper"
-  
+
   user_property              = "lastName"
   friendly_name              = "lastName"
   saml_attribute_name        = "lastName"
@@ -616,8 +616,8 @@ resource "keycloak_saml_user_attribute_protocol_mapper" "france_unique_id" {
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "uniqueID-mapper"
-  
-  user_attribute              = "uniqueID"
+
+  user_attribute             = "uniqueID"
   friendly_name              = "uniqueID"
   saml_attribute_name        = "uniqueID"
   saml_attribute_name_format = "Basic"
@@ -627,8 +627,8 @@ resource "keycloak_saml_user_attribute_protocol_mapper" "france_clearance" {
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "clearance-mapper"
-  
-  user_attribute              = "clearance"
+
+  user_attribute             = "clearance"
   friendly_name              = "clearance"
   saml_attribute_name        = "clearance"
   saml_attribute_name_format = "Basic"
@@ -638,8 +638,8 @@ resource "keycloak_saml_user_attribute_protocol_mapper" "france_country" {
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "country-mapper"
-  
-  user_attribute              = "countryOfAffiliation"
+
+  user_attribute             = "countryOfAffiliation"
   friendly_name              = "country"
   saml_attribute_name        = "countryOfAffiliation"
   saml_attribute_name_format = "Basic"
@@ -649,8 +649,8 @@ resource "keycloak_saml_user_attribute_protocol_mapper" "france_coi" {
   realm_id  = keycloak_realm.france_mock.id
   client_id = keycloak_saml_client.france_saml_client.id
   name      = "coi-mapper"
-  
-  user_attribute              = "acpCOI"
+
+  user_attribute             = "acpCOI"
   friendly_name              = "coi"
   saml_attribute_name        = "acpCOI"
   saml_attribute_name_format = "Basic"
@@ -662,36 +662,36 @@ resource "keycloak_saml_identity_provider" "france_idp" {
   alias        = "france-idp"
   display_name = "France (SAML)"
   enabled      = true
-  
+
   # SAML configuration
-  entity_id                    = "dive-v3-saml-client"
-  single_sign_on_service_url   = "http://localhost:8081/realms/france-mock-idp/protocol/saml"
-  
+  entity_id                  = "dive-v3-saml-client"
+  single_sign_on_service_url = "http://localhost:8081/realms/france-mock-idp/protocol/saml"
+
   # Binding configuration
-  backchannel_supported        = false
-  post_binding_response        = false  # Use redirect binding
-  post_binding_authn_request   = false  # Use redirect binding
-  force_authn                  = false
-  
+  backchannel_supported      = false
+  post_binding_response      = false # Use redirect binding
+  post_binding_authn_request = false # Use redirect binding
+  force_authn                = false
+
   # Critical: Disable ALL signature validation for mock
-  validate_signature           = false
-  want_assertions_signed       = false
-  want_assertions_encrypted    = false
-  
+  validate_signature        = false
+  want_assertions_signed    = false
+  want_assertions_encrypted = false
+
   # Trust and sync settings for proper federation
-  store_token              = true
-  trust_email              = true
-  sync_mode               = "FORCE"  # Always sync attributes from IdP
-  
+  store_token = true
+  trust_email = true
+  sync_mode   = "FORCE" # Always sync attributes from IdP
+
   # First broker login - use default flow
   first_broker_login_flow_alias = "first broker login"
-  
+
   # Account linking strategy
-  link_only = false  # Create new user if doesn't exist
-  
+  link_only = false # Create new user if doesn't exist
+
   # Additional federation settings
   authenticate_by_default = false
-  gui_order             = "1"
+  gui_order               = "1"
 }
 
 # SAML username mapper - critical for auto-user creation
@@ -700,7 +700,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_username_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-username-mapper"
   identity_provider_mapper = "saml-username-idp-mapper"
-  
+
   extra_config = {
     "syncMode" = "INHERIT"
     "template" = "$${ATTRIBUTE.uniqueID}"
@@ -713,9 +713,9 @@ resource "keycloak_custom_identity_provider_mapper" "france_unique_id_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-uniqueID-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"       = "FORCE"  # Always sync from IdP
+    "syncMode"       = "FORCE" # Always sync from IdP
     "attribute.name" = "uniqueID"
     "user.attribute" = "uniqueID"
   }
@@ -727,7 +727,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_email_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-email-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "attribute.name" = "email"
@@ -741,7 +741,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_firstname_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-firstname-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "attribute.name" = "firstName"
@@ -755,7 +755,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_lastname_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-lastname-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "attribute.name" = "lastName"
@@ -768,7 +768,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_clearance_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-clearance-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "INHERIT"
     "attribute.name" = "clearance"
@@ -781,7 +781,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_country_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-country-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "INHERIT"
     "attribute.name" = "countryOfAffiliation"
@@ -794,7 +794,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_coi_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-coi-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "INHERIT"
     "attribute.name" = "acpCOI"
@@ -808,7 +808,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_dutyorg_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-dutyOrg-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "INHERIT"
     "attribute.name" = "dutyOrg"
@@ -821,7 +821,7 @@ resource "keycloak_custom_identity_provider_mapper" "france_orgunit_mapper" {
   identity_provider_alias  = keycloak_saml_identity_provider.france_idp.alias
   name                     = "france-orgUnit-mapper"
   identity_provider_mapper = "saml-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "INHERIT"
     "attribute.name" = "orgUnit"
@@ -837,11 +837,11 @@ resource "keycloak_custom_identity_provider_mapper" "france_orgunit_mapper" {
 resource "keycloak_realm" "canada_mock" {
   realm   = "canada-mock-idp"
   enabled = true
-  
+
   display_name = "Canada Mock IdP (OIDC)"
-  
+
   registration_allowed = false
-  login_theme = "keycloak"
+  login_theme          = "keycloak"
 }
 
 # Canada test user in mock realm
@@ -850,24 +850,24 @@ resource "keycloak_user" "canada_user" {
   realm_id = keycloak_realm.canada_mock.id
   username = "testuser-can"
   enabled  = true
-  
+
   email      = "john.macdonald@forces.gc.ca"
   first_name = "John"
   last_name  = "MacDonald"
-  
+
   attributes = {
-    uniqueID               = "john.macdonald@forces.gc.ca"
-    clearance              = "CONFIDENTIAL"
-    countryOfAffiliation   = "CAN"
-    acpCOI                 = "[\"CAN-US\"]"
+    uniqueID             = "john.macdonald@forces.gc.ca"
+    clearance            = "CONFIDENTIAL"
+    countryOfAffiliation = "CAN"
+    acpCOI               = "[\"CAN-US\"]"
     # Gap #4: Organization attributes
-    dutyOrg                = "CAN_FORCES"
-    orgUnit                = "CYBER_OPS"
+    dutyOrg = "CAN_FORCES"
+    orgUnit = "CYBER_OPS"
     # AAL2/FAL2 attributes
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    acr = "urn:mace:incommon:iap:silver"
+    amr = "[\"pwd\",\"otp\"]"
   }
-  
+
   initial_password {
     value     = "Password123!"
     temporary = false
@@ -880,27 +880,27 @@ resource "keycloak_openid_client" "canada_oidc_client" {
   client_id = "dive-v3-canada-client"
   name      = "DIVE V3 Canada OIDC Client"
   enabled   = true
-  
+
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   direct_access_grants_enabled = false
-  
+
   valid_redirect_uris = [
     "http://localhost:8081/realms/dive-v3-pilot/broker/canada-idp/endpoint"
   ]
-  
+
   root_url = "http://localhost:3000"
   base_url = "http://localhost:3000"
 }
 
 # Protocol mappers for Canada OIDC client - CRITICAL: Send user attributes in tokens
 resource "keycloak_generic_protocol_mapper" "canada_client_uniqueid" {
-  realm_id   = keycloak_realm.canada_mock.id
-  client_id  = keycloak_openid_client.canada_oidc_client.id
-  name       = "uniqueID-client-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.canada_mock.id
+  client_id       = keycloak_openid_client.canada_oidc_client.id
+  name            = "uniqueID-client-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
-  
+
   config = {
     "user.attribute"       = "uniqueID"
     "claim.name"           = "uniqueID"
@@ -912,12 +912,12 @@ resource "keycloak_generic_protocol_mapper" "canada_client_uniqueid" {
 }
 
 resource "keycloak_generic_protocol_mapper" "canada_client_clearance" {
-  realm_id   = keycloak_realm.canada_mock.id
-  client_id  = keycloak_openid_client.canada_oidc_client.id
-  name       = "clearance-client-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.canada_mock.id
+  client_id       = keycloak_openid_client.canada_oidc_client.id
+  name            = "clearance-client-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
-  
+
   config = {
     "user.attribute"       = "clearance"
     "claim.name"           = "clearance"
@@ -929,12 +929,12 @@ resource "keycloak_generic_protocol_mapper" "canada_client_clearance" {
 }
 
 resource "keycloak_generic_protocol_mapper" "canada_client_country" {
-  realm_id   = keycloak_realm.canada_mock.id
-  client_id  = keycloak_openid_client.canada_oidc_client.id
-  name       = "country-client-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.canada_mock.id
+  client_id       = keycloak_openid_client.canada_oidc_client.id
+  name            = "country-client-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
-  
+
   config = {
     "user.attribute"       = "countryOfAffiliation"
     "claim.name"           = "countryOfAffiliation"
@@ -946,12 +946,12 @@ resource "keycloak_generic_protocol_mapper" "canada_client_country" {
 }
 
 resource "keycloak_generic_protocol_mapper" "canada_client_coi" {
-  realm_id   = keycloak_realm.canada_mock.id
-  client_id  = keycloak_openid_client.canada_oidc_client.id
-  name       = "coi-client-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.canada_mock.id
+  client_id       = keycloak_openid_client.canada_oidc_client.id
+  name            = "coi-client-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
-  
+
   config = {
     "user.attribute"       = "acpCOI"
     "claim.name"           = "acpCOI"
@@ -968,19 +968,19 @@ resource "keycloak_oidc_identity_provider" "canada_idp" {
   alias        = "canada-idp"
   display_name = "Canada (OIDC)"
   enabled      = true
-  
+
   # Browser-facing URL (user redirected here)
   authorization_url = "http://localhost:8081/realms/canada-mock-idp/protocol/openid-connect/auth"
-  
+
   # Server-to-server URLs (Keycloak internal calls - must use Docker network hostname)
-  token_url        = "http://keycloak:8080/realms/canada-mock-idp/protocol/openid-connect/token"
-  jwks_url         = "http://keycloak:8080/realms/canada-mock-idp/protocol/openid-connect/certs"
-  
+  token_url = "http://keycloak:8080/realms/canada-mock-idp/protocol/openid-connect/token"
+  jwks_url  = "http://keycloak:8080/realms/canada-mock-idp/protocol/openid-connect/certs"
+
   client_id     = keycloak_openid_client.canada_oidc_client.client_id
   client_secret = keycloak_openid_client.canada_oidc_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  
+
   store_token = true
   trust_email = true
 }
@@ -991,10 +991,10 @@ resource "keycloak_custom_identity_provider_mapper" "canada_unique_id_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
   name                     = "canada-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "uniqueID"
+    "syncMode"       = "INHERIT"
+    "claim"          = "uniqueID"
     "user.attribute" = "uniqueID"
   }
 }
@@ -1004,10 +1004,10 @@ resource "keycloak_custom_identity_provider_mapper" "canada_clearance_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
   name                     = "canada-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "clearance"
+    "syncMode"       = "INHERIT"
+    "claim"          = "clearance"
     "user.attribute" = "clearance"
   }
 }
@@ -1017,10 +1017,10 @@ resource "keycloak_custom_identity_provider_mapper" "canada_country_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
   name                     = "canada-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "countryOfAffiliation"
+    "syncMode"       = "INHERIT"
+    "claim"          = "countryOfAffiliation"
     "user.attribute" = "countryOfAffiliation"
   }
 }
@@ -1030,10 +1030,10 @@ resource "keycloak_custom_identity_provider_mapper" "canada_coi_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
   name                     = "canada-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "acpCOI"
+    "syncMode"       = "INHERIT"
+    "claim"          = "acpCOI"
     "user.attribute" = "acpCOI"
   }
 }
@@ -1044,10 +1044,10 @@ resource "keycloak_custom_identity_provider_mapper" "canada_dutyorg_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
   name                     = "canada-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "dutyOrg"
+    "syncMode"       = "INHERIT"
+    "claim"          = "dutyOrg"
     "user.attribute" = "dutyOrg"
   }
 }
@@ -1057,10 +1057,10 @@ resource "keycloak_custom_identity_provider_mapper" "canada_orgunit_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.canada_idp.alias
   name                     = "canada-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "orgUnit"
+    "syncMode"       = "INHERIT"
+    "claim"          = "orgUnit"
     "user.attribute" = "orgUnit"
   }
 }
@@ -1075,11 +1075,11 @@ resource "keycloak_custom_identity_provider_mapper" "canada_orgunit_mapper" {
 resource "keycloak_realm" "industry_mock" {
   realm   = "industry-mock-idp"
   enabled = true
-  
+
   display_name = "Industry Mock IdP (OIDC)"
-  
+
   registration_allowed = false
-  login_theme = "keycloak"
+  login_theme          = "keycloak"
 }
 
 # Industry test user - contractor with minimal attributes
@@ -1088,11 +1088,11 @@ resource "keycloak_user" "industry_user" {
   realm_id = keycloak_realm.industry_mock.id
   username = "bob.contractor"
   enabled  = true
-  
+
   email      = "bob.contractor@lockheed.com"
   first_name = "Bob"
   last_name  = "Contractor"
-  
+
   # Industry users have minimal attributes - will be enriched
   attributes = {
     uniqueID = "bob.contractor@lockheed.com"
@@ -1106,7 +1106,7 @@ resource "keycloak_user" "industry_user" {
     acr = "urn:mace:incommon:iap:bronze"
     amr = "[\"pwd\"]"
   }
-  
+
   initial_password {
     value     = "Password123!"
     temporary = false
@@ -1119,27 +1119,27 @@ resource "keycloak_openid_client" "industry_oidc_client" {
   client_id = "dive-v3-industry-client"
   name      = "DIVE V3 Industry OIDC Client"
   enabled   = true
-  
+
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   direct_access_grants_enabled = false
-  
+
   valid_redirect_uris = [
     "http://localhost:8081/realms/dive-v3-pilot/broker/industry-idp/endpoint"
   ]
-  
+
   root_url = "http://localhost:3000"
   base_url = "http://localhost:3000"
 }
 
 # Protocol mappers for Industry OIDC client - Send user attributes in tokens
 resource "keycloak_generic_protocol_mapper" "industry_client_uniqueid" {
-  realm_id   = keycloak_realm.industry_mock.id
-  client_id  = keycloak_openid_client.industry_oidc_client.id
-  name       = "uniqueID-client-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.industry_mock.id
+  client_id       = keycloak_openid_client.industry_oidc_client.id
+  name            = "uniqueID-client-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
-  
+
   config = {
     "user.attribute"       = "uniqueID"
     "claim.name"           = "uniqueID"
@@ -1151,12 +1151,12 @@ resource "keycloak_generic_protocol_mapper" "industry_client_uniqueid" {
 }
 
 resource "keycloak_generic_protocol_mapper" "industry_client_email" {
-  realm_id   = keycloak_realm.industry_mock.id
-  client_id  = keycloak_openid_client.industry_oidc_client.id
-  name       = "email-client-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.industry_mock.id
+  client_id       = keycloak_openid_client.industry_oidc_client.id
+  name            = "email-client-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-property-mapper"
-  
+
   config = {
     "user.attribute"       = "email"
     "claim.name"           = "email"
@@ -1176,19 +1176,19 @@ resource "keycloak_oidc_identity_provider" "industry_idp" {
   alias        = "industry-idp"
   display_name = "Industry Partner (OIDC)"
   enabled      = true
-  
+
   # Browser-facing URL (user redirected here)
   authorization_url = "http://localhost:8081/realms/industry-mock-idp/protocol/openid-connect/auth"
-  
+
   # Server-to-server URLs (Keycloak internal calls - must use Docker network hostname)
-  token_url        = "http://keycloak:8080/realms/industry-mock-idp/protocol/openid-connect/token"
-  jwks_url         = "http://keycloak:8080/realms/industry-mock-idp/protocol/openid-connect/certs"
-  
+  token_url = "http://keycloak:8080/realms/industry-mock-idp/protocol/openid-connect/token"
+  jwks_url  = "http://keycloak:8080/realms/industry-mock-idp/protocol/openid-connect/certs"
+
   client_id     = keycloak_openid_client.industry_oidc_client.client_id
   client_secret = keycloak_openid_client.industry_oidc_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  
+
   store_token = true
   trust_email = true
 }
@@ -1199,10 +1199,10 @@ resource "keycloak_custom_identity_provider_mapper" "industry_unique_id_mapper" 
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_idp.alias
   name                     = "industry-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "uniqueID"
+    "syncMode"       = "INHERIT"
+    "claim"          = "uniqueID"
     "user.attribute" = "uniqueID"
   }
 }
@@ -1213,10 +1213,10 @@ resource "keycloak_custom_identity_provider_mapper" "industry_email_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_idp.alias
   name                     = "industry-email-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "email"
+    "syncMode"       = "INHERIT"
+    "claim"          = "email"
     "user.attribute" = "email"
   }
 }
@@ -1228,10 +1228,10 @@ resource "keycloak_custom_identity_provider_mapper" "industry_dutyorg_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_idp.alias
   name                     = "industry-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "dutyOrg"
+    "syncMode"       = "INHERIT"
+    "claim"          = "dutyOrg"
     "user.attribute" = "dutyOrg"
   }
 }
@@ -1241,10 +1241,10 @@ resource "keycloak_custom_identity_provider_mapper" "industry_orgunit_mapper" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_idp.alias
   name                     = "industry-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"      = "INHERIT"
-    "claim"         = "orgUnit"
+    "syncMode"       = "INHERIT"
+    "claim"          = "orgUnit"
     "user.attribute" = "orgUnit"
   }
 }

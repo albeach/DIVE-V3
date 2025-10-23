@@ -8,36 +8,36 @@
 resource "keycloak_realm" "dive_v3_usa" {
   realm   = "dive-v3-usa"
   enabled = true
-  
+
   display_name      = "DIVE V3 - United States"
   display_name_html = "<b>DIVE V3</b> - U.S. Department of Defense"
-  
+
   # Registration and login settings
-  registration_allowed           = false  # Federated IdPs only
+  registration_allowed           = false # Federated IdPs only
   registration_email_as_username = false
   remember_me                    = true
   reset_password_allowed         = true
   edit_username_allowed          = false
   login_with_email_allowed       = true
-  
+
   # Theming
   login_theme = "keycloak"
-  
+
   # Internationalization
   internationalization {
     supported_locales = ["en"]
     default_locale    = "en"
   }
-  
+
   # Token lifetimes (AAL2 - NIST SP 800-63B)
-  access_token_lifespan        = "15m"   # 15 minutes (AAL2)
-  sso_session_idle_timeout     = "15m"   # AAL2 requirement
-  sso_session_max_lifespan     = "8h"    # AAL2 max: 12h
-  access_code_lifespan         = "1m"
-  
+  access_token_lifespan    = "15m" # 15 minutes (AAL2)
+  sso_session_idle_timeout = "15m" # AAL2 requirement
+  sso_session_max_lifespan = "8h"  # AAL2 max: 12h
+  access_code_lifespan     = "1m"
+
   # Password policy (NIST SP 800-63B + DoD)
   password_policy = "upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and length(12) and notUsername"
-  
+
   # Brute-force detection (U.S. settings)
   security_defenses {
     brute_force_detection {
@@ -49,19 +49,28 @@ resource "keycloak_realm" "dive_v3_usa" {
       max_failure_wait_seconds         = 900
       failure_reset_time_seconds       = 43200
     }
-    
+
     headers {
-      x_frame_options                    = "SAMEORIGIN"
-      content_security_policy            = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
-      x_content_type_options             = "nosniff"
-      x_robots_tag                       = "none"
-      x_xss_protection                   = "1; mode=block"
-      strict_transport_security          = "max-age=31536000; includeSubDomains"
+      x_frame_options           = "SAMEORIGIN"
+      content_security_policy   = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
+      x_content_type_options    = "nosniff"
+      x_robots_tag              = "none"
+      x_xss_protection          = "1; mode=block"
+      strict_transport_security = "max-age=31536000; includeSubDomains"
     }
   }
-  
+
   # SSL/TLS requirements
   ssl_required = "external"
+
+  # OTP Policy (AAL2 MFA - Gap #6 Remediation)
+  otp_policy {
+    algorithm          = "HmacSHA256"
+    digits             = 6
+    period             = 30
+    look_ahead_window  = 1
+    type               = "totp"
+  }
 }
 
 # U.S. Realm Roles
@@ -83,27 +92,27 @@ resource "keycloak_openid_client" "usa_realm_client" {
   client_id = "dive-v3-broker-client"
   name      = "DIVE V3 Broker Client"
   enabled   = true
-  
+
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   direct_access_grants_enabled = false
-  
+
   # Redirect to broker realm
   valid_redirect_uris = [
     "http://localhost:8081/realms/dive-v3-broker/broker/usa-realm-broker/endpoint",
     "http://keycloak:8080/realms/dive-v3-broker/broker/usa-realm-broker/endpoint"
   ]
-  
+
   root_url = var.app_url
   base_url = var.app_url
 }
 
 # Protocol mappers for U.S. realm client
 resource "keycloak_generic_protocol_mapper" "usa_uniqueid_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "uniqueID-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "uniqueID-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -117,10 +126,10 @@ resource "keycloak_generic_protocol_mapper" "usa_uniqueid_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_clearance_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "clearance-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "clearance-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -134,10 +143,10 @@ resource "keycloak_generic_protocol_mapper" "usa_clearance_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_country_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "country-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "country-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -151,10 +160,10 @@ resource "keycloak_generic_protocol_mapper" "usa_country_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_coi_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "coi-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "coi-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -168,10 +177,10 @@ resource "keycloak_generic_protocol_mapper" "usa_coi_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_dutyorg_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "dutyOrg-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "dutyOrg-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -185,10 +194,10 @@ resource "keycloak_generic_protocol_mapper" "usa_dutyorg_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_orgunit_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "orgUnit-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "orgUnit-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -202,10 +211,10 @@ resource "keycloak_generic_protocol_mapper" "usa_orgunit_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_acr_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "acr-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "acr-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -219,10 +228,10 @@ resource "keycloak_generic_protocol_mapper" "usa_acr_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "usa_amr_mapper" {
-  realm_id   = keycloak_realm.dive_v3_usa.id
-  client_id  = keycloak_openid_client.usa_realm_client.id
-  name       = "amr-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_usa.id
+  client_id       = keycloak_openid_client.usa_realm_client.id
+  name            = "amr-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -245,16 +254,16 @@ resource "keycloak_user" "usa_test_user_secret" {
   email      = "john.doe@army.mil"
   first_name = "John"
   last_name  = "Doe"
-  
+
   attributes = {
-    uniqueID               = "550e8400-e29b-41d4-a716-446655440001"  # UUID v4
-    clearance              = "SECRET"
-    countryOfAffiliation   = "USA"
-    acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\"]"
-    dutyOrg                = "US_ARMY"
-    orgUnit                = "CYBER_DEFENSE"
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    uniqueID             = "550e8400-e29b-41d4-a716-446655440001" # UUID v4
+    clearance            = "SECRET"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[\"NATO-COSMIC\",\"FVEY\"]"
+    dutyOrg              = "US_ARMY"
+    orgUnit              = "CYBER_DEFENSE"
+    acr                  = "urn:mace:incommon:iap:silver"
+    amr                  = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {

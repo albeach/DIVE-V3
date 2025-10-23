@@ -19,10 +19,13 @@ resource "keycloak_realm" "dive_v3_broker" {
   reset_password_allowed         = false
   edit_username_allowed          = false
 
-  # Token lifetimes (conservative for federation)
-  access_token_lifespan    = "10m" # Short for federated tokens
-  sso_session_idle_timeout = "15m" # Align with strictest realm (U.S.)
-  sso_session_max_lifespan = "4h"  # Conservative
+  # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
+  # Increased timeouts to prevent session expiration during active use
+  access_token_lifespan        = "15m"   # Access token (aligns with NextAuth session)
+  sso_session_idle_timeout     = "60m"   # SSO idle (1 hour - prevents premature expiration)
+  sso_session_max_lifespan     = "8h"    # Max session (8 hours - AAL2 compliant)
+  offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
+  offline_session_max_lifespan = "1440h" # Offline max (60 days)
 
   # Brute-force detection (still needed for broker attempts)
   security_defenses {
@@ -55,6 +58,9 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   implicit_flow_enabled        = false
   direct_access_grants_enabled = false
   service_accounts_enabled     = false
+
+  # Use same client secret as original dive-v3-client for consistency
+  client_secret = "8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L"
 
   root_url = var.app_url
   base_url = var.app_url
@@ -95,11 +101,54 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
+    "offline_access",
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
+  # Note: offline_access added to default scopes for admin-dive user login
+  # This allows NextAuth to request refresh tokens for long-lived sessions
+}
+
+# ============================================
+# Broker Realm Roles (for admin functionality)
+# ============================================
+
+resource "keycloak_role" "broker_user" {
+  realm_id    = keycloak_realm.dive_v3_broker.id
+  name        = "user"
+  description = "Standard user role in broker realm"
+}
+
+resource "keycloak_role" "broker_admin" {
+  realm_id    = keycloak_realm.dive_v3_broker.id
+  name        = "admin"
+  description = "Administrator role in broker realm"
+}
+
+resource "keycloak_role" "broker_super_admin" {
+  realm_id    = keycloak_realm.dive_v3_broker.id
+  name        = "super_admin"
+  description = "Super Administrator role with full system access including IdP management"
 }
 
 # Protocol mappers for broker client (to include all DIVE attributes)
+
+# CRITICAL: Audience Mapper - ensures JWT tokens have correct 'aud' claim for backend verification
+resource "keycloak_generic_protocol_mapper" "broker_audience" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "audience-mapper"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-audience-mapper"
+
+  config = {
+    "included.client.audience"  = "dive-v3-client-broker"
+    "id.token.claim"            = "true"
+    "access.token.claim"        = "true"
+    "introspection.token.claim" = "true"
+    "userinfo.token.claim"      = "true"
+  }
+}
+
 resource "keycloak_generic_protocol_mapper" "broker_uniqueid" {
   realm_id        = keycloak_realm.dive_v3_broker.id
   client_id       = keycloak_openid_client.dive_v3_app_broker.id
@@ -236,4 +285,74 @@ resource "keycloak_generic_protocol_mapper" "broker_amr" {
   }
 }
 
+# Roles mapper for broker realm (includes realm roles in token)
+resource "keycloak_generic_protocol_mapper" "broker_roles" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "realm-roles"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usermodel-realm-role-mapper"
+
+  config = {
+    "claim.name"           = "realm_access.roles"
+    "jsonType.label"       = "String"
+    "multivalued"          = "true"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+# ============================================
+# Super Admin User (Direct Broker Login)
+# ============================================
+# Gap Remediation: Add super_admin user directly in broker realm
+# This allows direct login to broker realm without going through federation
+
+resource "keycloak_user" "broker_super_admin" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  username = "admin-dive"
+  enabled  = true
+
+  email      = "admin@dive-v3.pilot"
+  first_name = "DIVE"
+  last_name  = "Administrator"
+
+  # Super admin attributes - full access
+  attributes = {
+    uniqueID             = "admin@dive-v3.pilot"
+    clearance            = "TOP_SECRET"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[\"NATO-COSMIC\",\"FVEY\",\"CAN-US\"]"
+    dutyOrg              = "DIVE_ADMIN"
+    orgUnit              = "SYSTEM_ADMINISTRATION"
+    acr                  = "urn:mace:incommon:iap:silver"
+    amr                  = "[\"pwd\",\"otp\"]"
+  }
+
+  initial_password {
+    value     = "DiveAdmin2025!"
+    temporary = false
+  }
+}
+
+# Get the offline_access role (default realm role)
+data "keycloak_role" "offline_access" {
+  realm_id = keycloak_realm.dive_v3_broker.id
+  name     = "offline_access"
+}
+
+# Assign super_admin and offline_access roles to broker admin user
+resource "keycloak_user_roles" "broker_super_admin_roles" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  user_id  = keycloak_user.broker_super_admin[0].id
+
+  role_ids = [
+    keycloak_role.broker_user.id,
+    keycloak_role.broker_super_admin.id,
+    data.keycloak_role.offline_access.id
+  ]
+}
 

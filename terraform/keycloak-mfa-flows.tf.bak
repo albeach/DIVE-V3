@@ -79,12 +79,6 @@ resource "keycloak_authentication_execution" "usa_classified_otp_form" {
   parent_flow_alias = keycloak_authentication_subflow.usa_classified_otp_conditional.alias
   authenticator     = "auth-otp-form"
   requirement       = "REQUIRED"
-  
-  # Ensure condition is created before OTP form to maintain proper execution order
-  depends_on = [
-    keycloak_authentication_execution.usa_classified_condition_user_attribute,
-    keycloak_authentication_execution_config.usa_classified_condition_config
-  ]
 }
 
 # Bind the flow to USA realm browser authentication
@@ -99,7 +93,7 @@ resource "keycloak_authentication_bindings" "usa_classified_bindings" {
 
 resource "keycloak_authentication_flow" "fra_classified_browser" {
   realm_id    = keycloak_realm.dive_v3_fra.id
-  alias       = "Classified Access Browser Flow - France"
+  alias       = "Classified Access Browser Flow (France)"
   description = "AAL2 enforcement: MFA required for CONFIDENTIEL-DÉFENSE and above"
 }
 
@@ -113,7 +107,7 @@ resource "keycloak_authentication_execution" "fra_classified_cookie" {
 resource "keycloak_authentication_subflow" "fra_classified_conditional" {
   realm_id          = keycloak_realm.dive_v3_fra.id
   parent_flow_alias = keycloak_authentication_flow.fra_classified_browser.alias
-  alias             = "Classified User Conditional - France"
+  alias             = "Classified User Conditional (France)"
   requirement       = "ALTERNATIVE"
   provider_id       = "basic-flow"
 }
@@ -143,7 +137,7 @@ resource "keycloak_authentication_execution" "fra_classified_condition_user_attr
 resource "keycloak_authentication_execution_config" "fra_classified_condition_config" {
   realm_id     = keycloak_realm.dive_v3_fra.id
   execution_id = keycloak_authentication_execution.fra_classified_condition_user_attribute.id
-  alias        = "Classified Clearance Check - France"
+  alias        = "Classified Clearance Check (France)"
   config = {
     attribute_name = "clearance"
     # Match French clearances: CONFIDENTIEL-DÉFENSE, SECRET-DÉFENSE, TRÈS SECRET-DÉFENSE
@@ -157,12 +151,6 @@ resource "keycloak_authentication_execution" "fra_classified_otp_form" {
   parent_flow_alias = keycloak_authentication_subflow.fra_classified_otp_conditional.alias
   authenticator     = "auth-otp-form"
   requirement       = "REQUIRED"
-  
-  # Ensure condition is created before OTP form to maintain proper execution order
-  depends_on = [
-    keycloak_authentication_execution.fra_classified_condition_user_attribute,
-    keycloak_authentication_execution_config.fra_classified_condition_config
-  ]
 }
 
 resource "keycloak_authentication_bindings" "fra_classified_bindings" {
@@ -176,7 +164,7 @@ resource "keycloak_authentication_bindings" "fra_classified_bindings" {
 
 resource "keycloak_authentication_flow" "can_classified_browser" {
   realm_id    = keycloak_realm.dive_v3_can.id
-  alias       = "Classified Access Browser Flow - Canada"
+  alias       = "Classified Access Browser Flow (Canada)"
   description = "AAL2 enforcement: MFA required for PROTECTED B and above"
 }
 
@@ -190,7 +178,7 @@ resource "keycloak_authentication_execution" "can_classified_cookie" {
 resource "keycloak_authentication_subflow" "can_classified_conditional" {
   realm_id          = keycloak_realm.dive_v3_can.id
   parent_flow_alias = keycloak_authentication_flow.can_classified_browser.alias
-  alias             = "Classified User Conditional - Canada"
+  alias             = "Classified User Conditional (Canada)"
   requirement       = "ALTERNATIVE"
   provider_id       = "basic-flow"
 }
@@ -205,7 +193,7 @@ resource "keycloak_authentication_execution" "can_classified_username_password" 
 resource "keycloak_authentication_subflow" "can_classified_otp_conditional" {
   realm_id          = keycloak_realm.dive_v3_can.id
   parent_flow_alias = keycloak_authentication_subflow.can_classified_conditional.alias
-  alias             = "Conditional OTP for Classified - Canada"
+  alias             = "Conditional OTP for Classified (Canada)"
   requirement       = "CONDITIONAL"
   # provider_id omitted for conditional flows
 }
@@ -220,7 +208,7 @@ resource "keycloak_authentication_execution" "can_classified_condition_user_attr
 resource "keycloak_authentication_execution_config" "can_classified_condition_config" {
   realm_id     = keycloak_realm.dive_v3_can.id
   execution_id = keycloak_authentication_execution.can_classified_condition_user_attribute.id
-  alias        = "Classified Clearance Check - Canada"
+  alias        = "Classified Clearance Check (Canada)"
   config = {
     attribute_name = "clearance"
     # Match Canadian clearances: PROTECTED B, SECRET, TOP SECRET
@@ -234,12 +222,6 @@ resource "keycloak_authentication_execution" "can_classified_otp_form" {
   parent_flow_alias = keycloak_authentication_subflow.can_classified_otp_conditional.alias
   authenticator     = "auth-otp-form"
   requirement       = "REQUIRED"
-  
-  # Ensure condition is created before OTP form to maintain proper execution order
-  depends_on = [
-    keycloak_authentication_execution.can_classified_condition_user_attribute,
-    keycloak_authentication_execution_config.can_classified_condition_config
-  ]
 }
 
 resource "keycloak_authentication_bindings" "can_classified_bindings" {
@@ -248,99 +230,12 @@ resource "keycloak_authentication_bindings" "can_classified_bindings" {
 }
 
 # ============================================
-# Replicate for Broker Realm
-# ============================================
-# The broker realm is the main entry point for federation
-# It also needs conditional MFA to enforce AAL2 for classified users
-
-resource "keycloak_authentication_flow" "broker_classified_browser" {
-  realm_id    = keycloak_realm.dive_v3_broker.id
-  alias       = "Classified Access Browser Flow - Broker"
-  description = "AAL2 enforcement: MFA required for CONFIDENTIAL, SECRET, TOP_SECRET clearances"
-}
-
-resource "keycloak_authentication_execution" "broker_classified_cookie" {
-  realm_id          = keycloak_realm.dive_v3_broker.id
-  parent_flow_alias = keycloak_authentication_flow.broker_classified_browser.alias
-  authenticator     = "auth-cookie"
-  requirement       = "ALTERNATIVE"
-}
-
-resource "keycloak_authentication_subflow" "broker_classified_conditional" {
-  realm_id          = keycloak_realm.dive_v3_broker.id
-  parent_flow_alias = keycloak_authentication_flow.broker_classified_browser.alias
-  alias             = "Classified User Conditional - Broker"
-  requirement       = "ALTERNATIVE"
-  provider_id       = "basic-flow"
-}
-
-resource "keycloak_authentication_execution" "broker_classified_username_password" {
-  realm_id          = keycloak_realm.dive_v3_broker.id
-  parent_flow_alias = keycloak_authentication_subflow.broker_classified_conditional.alias
-  authenticator     = "auth-username-password-form"
-  requirement       = "REQUIRED"
-}
-
-resource "keycloak_authentication_subflow" "broker_classified_otp_conditional" {
-  realm_id          = keycloak_realm.dive_v3_broker.id
-  parent_flow_alias = keycloak_authentication_subflow.broker_classified_conditional.alias
-  alias             = "Conditional OTP for Classified - Broker"
-  requirement       = "CONDITIONAL"
-  # provider_id omitted for conditional flows
-}
-
-# Condition: User attribute "clearance" != "UNCLASSIFIED"
-resource "keycloak_authentication_execution" "broker_classified_condition_user_attribute" {
-  realm_id          = keycloak_realm.dive_v3_broker.id
-  parent_flow_alias = keycloak_authentication_subflow.broker_classified_otp_conditional.alias
-  authenticator     = "conditional-user-attribute"
-  requirement       = "REQUIRED"
-}
-
-# Configuration for conditional-user-attribute
-resource "keycloak_authentication_execution_config" "broker_classified_condition_config" {
-  realm_id     = keycloak_realm.dive_v3_broker.id
-  execution_id = keycloak_authentication_execution.broker_classified_condition_user_attribute.id
-  alias        = "Classified Clearance Check - Broker"
-  config = {
-    attribute_name  = "clearance"
-    attribute_value = "^(?!UNCLASSIFIED$).*"
-    negate          = "false"
-  }
-}
-
-# Action: Require OTP if condition passes
-resource "keycloak_authentication_execution" "broker_classified_otp_form" {
-  realm_id          = keycloak_realm.dive_v3_broker.id
-  parent_flow_alias = keycloak_authentication_subflow.broker_classified_otp_conditional.alias
-  authenticator     = "auth-otp-form"
-  requirement       = "REQUIRED"
-  
-  # Ensure condition is created before OTP form to maintain proper execution order
-  depends_on = [
-    keycloak_authentication_execution.broker_classified_condition_user_attribute,
-    keycloak_authentication_execution_config.broker_classified_condition_config
-  ]
-}
-
-# NOTE: DO NOT bind this flow to the broker realm!
-# The broker realm is for FEDERATION (IdP selection), not direct login.
-# Users don't have clearance attributes until AFTER they've authenticated via an IdP.
-# The conditional MFA flow should ONLY be used in USA/France/Canada realms.
-#
-# resource "keycloak_authentication_bindings" "broker_classified_bindings" {
-#   realm_id     = keycloak_realm.dive_v3_broker.id
-#   browser_flow = keycloak_authentication_flow.broker_classified_browser.alias
-# }
-
-# ============================================
 # NOTES: OTP Policy Configuration
 # ============================================
 # OTP policies are configured as blocks within each realm resource:
 # - terraform/usa-realm.tf (lines 66-73)
 # - terraform/fra-realm.tf (lines 65-72)  
 # - terraform/can-realm.tf (lines 39-46)
-# - terraform/broker-realm.tf (OTP policy needs to be added)
 #
 # Configuration:
 # - Algorithm: HmacSHA256

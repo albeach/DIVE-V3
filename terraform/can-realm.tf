@@ -7,24 +7,24 @@
 resource "keycloak_realm" "dive_v3_can" {
   realm   = "dive-v3-can"
   enabled = true
-  
+
   display_name      = "DIVE V3 - Canada"
   display_name_html = "<b>DIVE V3</b> - Canadian Armed Forces"
-  
+
   registration_allowed = false
-  
+
   internationalization {
-    supported_locales = ["en", "fr"]  # Bilingual
+    supported_locales = ["en", "fr"] # Bilingual
     default_locale    = "en"
   }
-  
+
   # Token lifetimes (GCCF Level 2 - balanced)
-  access_token_lifespan        = "20m"
-  sso_session_idle_timeout     = "20m"
-  sso_session_max_lifespan     = "10h"
-  
+  access_token_lifespan    = "20m"
+  sso_session_idle_timeout = "20m"
+  sso_session_max_lifespan = "10h"
+
   password_policy = "upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and length(12)"
-  
+
   security_defenses {
     brute_force_detection {
       max_login_failures         = 5
@@ -33,8 +33,17 @@ resource "keycloak_realm" "dive_v3_can" {
       failure_reset_time_seconds = 43200
     }
   }
-  
+
   ssl_required = "external"
+
+  # OTP Policy (AAL2 MFA - Gap #6 Remediation)
+  otp_policy {
+    algorithm         = "HmacSHA256"
+    digits            = 6
+    period            = 30
+    look_ahead_window = 1
+    type              = "totp"
+  }
 }
 
 resource "keycloak_role" "can_user" {
@@ -48,26 +57,26 @@ resource "keycloak_openid_client" "can_realm_client" {
   client_id = "dive-v3-broker-client"
   name      = "DIVE V3 Broker Client"
   enabled   = true
-  
+
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   direct_access_grants_enabled = false
-  
+
   valid_redirect_uris = [
     "http://localhost:8081/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
     "http://keycloak:8080/realms/dive-v3-broker/broker/can-realm-broker/endpoint"
   ]
-  
+
   root_url = var.app_url
   base_url = var.app_url
 }
 
 # Protocol mappers for Canada realm client (all DIVE attributes)
 resource "keycloak_generic_protocol_mapper" "can_uniqueid_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "uniqueID-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "uniqueID-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -81,10 +90,10 @@ resource "keycloak_generic_protocol_mapper" "can_uniqueid_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_clearance_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "clearance-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "clearance-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -98,10 +107,10 @@ resource "keycloak_generic_protocol_mapper" "can_clearance_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_country_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "country-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "country-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -115,10 +124,10 @@ resource "keycloak_generic_protocol_mapper" "can_country_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_coi_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "coi-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "coi-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -132,10 +141,10 @@ resource "keycloak_generic_protocol_mapper" "can_coi_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_dutyorg_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "dutyOrg-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "dutyOrg-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -149,10 +158,10 @@ resource "keycloak_generic_protocol_mapper" "can_dutyorg_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_orgunit_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "orgUnit-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "orgUnit-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -166,10 +175,10 @@ resource "keycloak_generic_protocol_mapper" "can_orgunit_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_acr_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "acr-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "acr-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -183,10 +192,10 @@ resource "keycloak_generic_protocol_mapper" "can_acr_mapper" {
 }
 
 resource "keycloak_generic_protocol_mapper" "can_amr_mapper" {
-  realm_id   = keycloak_realm.dive_v3_can.id
-  client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "amr-mapper"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_can.id
+  client_id       = keycloak_openid_client.can_realm_client.id
+  name            = "amr-mapper"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -209,16 +218,16 @@ resource "keycloak_user" "can_test_user" {
   email      = "john.macdonald@forces.gc.ca"
   first_name = "John"
   last_name  = "MacDonald"
-  
+
   attributes = {
-    uniqueID               = "770fa622-g49d-63f6-c938-668877662222"  # UUID v4
-    clearance              = "CONFIDENTIAL"
-    countryOfAffiliation   = "CAN"
-    acpCOI                 = "[\"CAN-US\"]"
-    dutyOrg                = "CAN_FORCES"
-    orgUnit                = "CYBER_OPS"
-    acr                    = "urn:mace:incommon:iap:silver"
-    amr                    = "[\"pwd\",\"otp\"]"
+    uniqueID             = "770fa622-g49d-63f6-c938-668877662222" # UUID v4
+    clearance            = "CONFIDENTIAL"
+    countryOfAffiliation = "CAN"
+    acpCOI               = "[\"CAN-US\"]"
+    dutyOrg              = "CAN_FORCES"
+    orgUnit              = "CYBER_OPS"
+    acr                  = "urn:mace:incommon:iap:silver"
+    amr                  = "[\"pwd\",\"otp\"]"
   }
 
   initial_password {

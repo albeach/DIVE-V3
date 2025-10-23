@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test MFA</title></head>
+<body>
+<h1>Test Keycloak MFA</h1>
+<button onclick="login()">Login as john.doe (SECRET clearance)</button>
+<div id="result"></div>
+<script>
+function login() {
+  const authUrl = 'http://localhost:8081/realms/dive-v3-usa/protocol/openid-connect/auth?' +
+    'client_id=dive-v3-broker-client&' +
+    'redirect_uri=http://localhost:8000/callback&' +
+    'response_type=code&' +
+    'scope=openid';
+  window.open(authUrl, '_blank', 'width=800,height=600');
+}
+</script>
+</body>
+</html>

@@ -8,23 +8,23 @@ resource "keycloak_oidc_identity_provider" "industry_realm_broker" {
   alias        = "industry-realm-broker"
   display_name = "Industry Partners (Contractors)"
   enabled      = true
-  
+
   authorization_url = "http://localhost:8081/realms/dive-v3-industry/protocol/openid-connect/auth"
   token_url         = "http://keycloak:8080/realms/dive-v3-industry/protocol/openid-connect/token"
   jwks_url          = "http://keycloak:8080/realms/dive-v3-industry/protocol/openid-connect/certs"
   user_info_url     = "http://keycloak:8080/realms/dive-v3-industry/protocol/openid-connect/userinfo"
-  
+
   client_id     = keycloak_openid_client.industry_realm_client.client_id
   client_secret = keycloak_openid_client.industry_realm_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  store_token = true
-  trust_email = true
-  sync_mode   = "FORCE"
-  
+  store_token    = true
+  trust_email    = true
+  sync_mode      = "FORCE"
+
   first_broker_login_flow_alias = "first broker login"
-  link_only = false
-  gui_order = "4"
+  link_only                     = false
+  gui_order                     = "4"
 }
 
 # Attribute mappers for Industry broker
@@ -33,7 +33,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_uniqueid" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "uniqueID"
@@ -46,7 +46,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_clearance" 
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearance"
@@ -59,7 +59,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_country" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "countryOfAffiliation"
@@ -72,7 +72,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_coi" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acpCOI"
@@ -85,7 +85,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_dutyorg" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "dutyOrg"
@@ -98,7 +98,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_orgunit" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "orgUnit"
@@ -111,7 +111,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_acr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-acr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acr"
@@ -124,7 +124,7 @@ resource "keycloak_custom_identity_provider_mapper" "industry_broker_amr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
   name                     = "industry-amr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "amr"
