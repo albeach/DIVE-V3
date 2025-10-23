@@ -68,57 +68,104 @@ const TEST_USERS = {
 // ============================================================================
 
 /**
- * Mock authentication by setting session cookie
- * In real E2E, this would use Keycloak OAuth flow
+ * Mock authentication by intercepting NextAuth session API
+ * This works by intercepting the /api/auth/session call and returning a mock session
  */
 async function mockLogin(page: Page, user: typeof TEST_USERS.DEU_SECRET) {
-    // Navigate to login page
-    await page.goto(`${BASE_URL}/api/auth/signin`);
+    // Intercept NextAuth session endpoint
+    await page.route('**/api/auth/session', async (route) => {
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                user: {
+                    name: user.username,
+                    email: user.username,
+                    uniqueID: user.username,
+                    clearance: user.clearanceNATO,
+                    countryOfAffiliation: user.country,
+                    acpCOI: user.coi,
+                },
+                expires: new Date(Date.now() + 3600000).toISOString(), // 1 hour
+            }),
+        });
+    });
 
-    // For this test, we'll use API-based authentication
-    // Create a mock JWT token for testing
-    const mockJWT = await createMockJWT(user);
+    // Also intercept backend API calls to add Bearer token
+    await page.route('**/api/**', async (route) => {
+        // Skip if it's the NextAuth session endpoint
+        if (route.request().url().includes('/api/auth/session')) {
+            await route.continue();
+            return;
+        }
 
-    // Set the session cookie
-    await page.context().addCookies([
-        {
-            name: 'next-auth.session-token',
-            value: mockJWT,
-            domain: 'localhost',
-            path: '/',
-            httpOnly: true,
-            sameSite: 'Lax',
-            expires: Date.now() / 1000 + 3600, // 1 hour
-        },
-    ]);
+        // Create a valid test JWT for backend API calls
+        const testJWT = await createMockJWT(user);
+        
+        const headers = {
+            ...route.request().headers(),
+            'Authorization': `Bearer ${testJWT}`,
+        };
 
-    // Verify authentication by navigating to dashboard
+        await route.continue({ headers });
+    });
+
+    // Navigate to trigger session load
     await page.goto(`${BASE_URL}/dashboard`);
     await page.waitForLoadState('networkidle');
 }
 
 /**
- * Create a mock JWT for testing (HS256 test mode)
+ * Create a mock JWT for backend API testing (HS256 test mode)
  * Backend accepts HS256 in test mode for E2E testing
  */
 async function createMockJWT(user: typeof TEST_USERS.DEU_SECRET): Promise<string> {
-    // In real implementation, call backend test endpoint to generate JWT
-    // For now, return a mock token structure
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({
+    // Use Node.js crypto to sign JWT properly
+    const header = {
+        alg: 'HS256',
+        typ: 'JWT'
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
         sub: user.username,
         uniqueID: user.username,
-        clearance: user.clearance,
+        email: user.username,
+        clearance: user.clearanceNATO,
         countryOfAffiliation: user.country,
         acpCOI: user.coi,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
-    })).toString('base64url');
+        iss: 'http://localhost:8081/realms/dive-v3-pilot',
+        aud: 'dive-v3-client',
+        iat: now,
+        exp: now + 3600,
+        acr: 'urn:mace:incommon:iap:silver', // AAL2
+        amr: ['mfa', 'pwd'], // Multi-factor
+        auth_time: now
+    };
 
-    // Mock signature (in real test, backend generates this)
-    const signature = 'mock-signature-for-e2e-testing';
+    // Encode to base64url
+    const base64url = (str: string) => {
+        return Buffer.from(str)
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=/g, '');
+    };
 
-    return `${header}.${payload}.${signature}`;
+    const headerB64 = base64url(JSON.stringify(header));
+    const payloadB64 = base64url(JSON.stringify(payload));
+    
+    // Sign with test-secret (matches backend)
+    const crypto = await import('crypto');
+    const signature = crypto
+        .createHmac('sha256', 'test-secret')
+        .update(`${headerB64}.${payloadB64}`)
+        .digest('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
+    return `${headerB64}.${payloadB64}.${signature}`;
 }
 
 /**
