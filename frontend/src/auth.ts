@@ -8,12 +8,28 @@ import { eq } from "drizzle-orm";
 /**
  * Email domain to country mapping for enrichment
  * Week 3: Infer countryOfAffiliation from email domain
+ * Phase 3: Added DEU, GBR, ITA, ESP, POL, NLD NATO partners
  */
 const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
+    // United States
     'mil': 'USA', 'army.mil': 'USA', 'navy.mil': 'USA', 'af.mil': 'USA',
+    // France
     'gouv.fr': 'FRA', 'defense.gouv.fr': 'FRA',
+    // Canada
     'gc.ca': 'CAN', 'forces.gc.ca': 'CAN',
-    'mod.uk': 'GBR',
+    // United Kingdom / Great Britain
+    'mod.uk': 'GBR', 'gov.uk': 'GBR',
+    // Germany (Deutschland)
+    'bundeswehr.org': 'DEU', 'bund.de': 'DEU', 'bmvg.de': 'DEU',
+    // Italy
+    'difesa.it': 'ITA', 'esercito.difesa.it': 'ITA',
+    // Spain (España)
+    'mde.es': 'ESP', 'defensa.gob.es': 'ESP',
+    // Poland (Polska)
+    'mon.gov.pl': 'POL', 'wp.mil.pl': 'POL',
+    // Netherlands (Nederland)
+    'mindef.nl': 'NLD', 'defensie.nl': 'NLD',
+    // Industry partners (default to USA)
     'lockheed.com': 'USA', 'northropgrumman.com': 'USA', 'raytheon.com': 'USA',
     'boeing.com': 'USA', 'l3harris.com': 'USA',
 };
@@ -151,7 +167,7 @@ async function refreshAccessToken(account: any) {
 export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: DrizzleAdapter(db),
     trustHost: true, // Required for NextAuth v5 in development
-    debug: true,  // ENABLE VERBOSE DEBUG LOGGING
+    debug: process.env.NODE_ENV === "development",  // ENABLE VERBOSE DEBUG LOGGING
     logger: {
         error(code, ...message) {
             console.error('[NextAuth Error]', code, message);
@@ -180,7 +196,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             allowDangerousEmailAccountLinking: true,
         }),
     ],
-    debug: process.env.NODE_ENV === "development",
 
     callbacks: {
         authorized({ auth, request: { nextUrl } }) {

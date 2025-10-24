@@ -196,6 +196,36 @@ export default function CustomLoginPage() {
                 accent = '#FFFFFF';
                 displayName = 'Canada';
                 backgroundImage = '/login-backgrounds/canada-idp.jpg';
+            } else if (idpAlias.includes('deu') || idpAlias.includes('germany')) {
+                primary = '#000000';
+                accent = '#DD0000';
+                displayName = 'Germany (Bundeswehr)';
+                backgroundImage = '/login-backgrounds/germany-flag.jpg';
+            } else if (idpAlias.includes('gbr') || idpAlias.includes('uk')) {
+                primary = '#012169';
+                accent = '#C8102E';
+                displayName = 'United Kingdom (MOD)';
+                backgroundImage = '/login-backgrounds/uk-flag.jpg';
+            } else if (idpAlias.includes('ita') || idpAlias.includes('italy')) {
+                primary = '#009246';
+                accent = '#CE2B37';
+                displayName = 'Italy (Ministero della Difesa)';
+                backgroundImage = '/login-backgrounds/italy-flag.jpg';
+            } else if (idpAlias.includes('esp') || idpAlias.includes('spain')) {
+                primary = '#AA151B';
+                accent = '#F1BF00';
+                displayName = 'Spain (Ministerio de Defensa)';
+                backgroundImage = '/login-backgrounds/spain-flag.jpg';
+            } else if (idpAlias.includes('pol') || idpAlias.includes('poland')) {
+                primary = '#DC143C';
+                accent = '#FFFFFF';
+                displayName = 'Poland (Ministerstwo Obrony Narodowej)';
+                backgroundImage = '/login-backgrounds/poland-flag.jpg';
+            } else if (idpAlias.includes('nld') || idpAlias.includes('netherlands')) {
+                primary = '#21468B';
+                accent = '#AE1C28';
+                displayName = 'Netherlands (Ministerie van Defensie)';
+                backgroundImage = '/login-backgrounds/netherlands-flag.jpg';
             } else if (idpAlias === 'dive-v3-broker') {
                 primary = '#6B46C1';
                 accent = '#F59E0B';
