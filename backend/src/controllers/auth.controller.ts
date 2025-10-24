@@ -235,6 +235,37 @@ router.post('/check-revocation', authenticateJWT, async (req: Request, res: Resp
     }
 });
 
+// ============================================
+// Custom Login Routes (Phase 4.2)
+// ============================================
+
+import { customLoginHandler, customLoginMFAHandler } from './custom-login.controller';
+import { initiateOTPSetup, verifyAndEnableOTP } from './otp-setup.controller';
+
+/**
+ * POST /api/auth/custom-login
+ * Custom login page authentication
+ */
+router.post('/custom-login', customLoginHandler);
+
+/**
+ * POST /api/auth/custom-login/mfa
+ * MFA verification for custom login
+ */
+router.post('/custom-login/mfa', customLoginMFAHandler);
+
+/**
+ * POST /api/auth/otp/setup
+ * Initiate OTP setup - returns QR code and secret
+ */
+router.post('/otp/setup', initiateOTPSetup);
+
+/**
+ * POST /api/auth/otp/verify
+ * Verify and enable OTP for user
+ */
+router.post('/otp/verify', verifyAndEnableOTP);
+
 export default router;
 
 

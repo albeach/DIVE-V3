@@ -30,7 +30,7 @@
  *   npm run migrate:classification-equivalency -- --execute --create-rollback
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
 import { mapToNATOLevel, mapFromNATOLevel } from '../utils/classification-equivalency';
 import type { NationalClassificationSystem } from '../utils/classification-equivalency';

@@ -1,0 +1,174 @@
+{
+    "idp": {
+        "title": "Gestion des Fournisseurs d'Identité",
+        "subtitle": "Gérez et surveillez vos fournisseurs d'identité fédérés",
+        "addNew": "Ajouter un Nouveau FI",
+        "noIdPs": "Aucun Fournisseur d'Identité pour le moment",
+        "noIdPsDescription": "Commencez par ajouter votre premier Fournisseur d'Identité",
+        "noResults": "Aucun FI correspondant trouvé",
+        "noResultsDescription": "Essayez d'ajuster votre recherche ou vos filtres",
+        "searchPlaceholder": "Rechercher des FI...",
+        "status": {
+            "enabled": "Activé",
+            "disabled": "Désactivé",
+            "online": "En ligne",
+            "offline": "Hors ligne",
+            "degraded": "Dégradé"
+        },
+        "protocol": {
+            "oidc": "OIDC",
+            "saml": "SAML"
+        },
+        "actions": {
+            "test": "Tester la Connexion",
+            "view": "Voir les Détails",
+            "edit": "Modifier",
+            "delete": "Supprimer le FI",
+            "enable": "Activer",
+            "disable": "Désactiver",
+            "analytics": "Voir les Analyses",
+            "sessions": "Gérer les Sessions",
+            "mfa": "Configurer MFA",
+            "theme": "Personnaliser le Thème"
+        },
+        "confirm": {
+            "delete": "Êtes-vous sûr de vouloir supprimer ce Fournisseur d'Identité ? Cette action ne peut pas être annulée.",
+            "enable": "Êtes-vous sûr de vouloir activer {{count}} FI ?",
+            "disable": "Êtes-vous sûr de vouloir désactiver {{count}} FI ?",
+            "deleteMultiple": "Êtes-vous sûr de vouloir supprimer {{count}} FI ? Cette action ne peut pas être annulée."
+        },
+        "batch": {
+            "selected": "{{count}} sélectionné(s)",
+            "enableAll": "Tout Activer",
+            "disableAll": "Tout Désactiver",
+            "testAll": "Tout Tester",
+            "exportConfig": "Exporter la Config",
+            "deleteSelected": "Supprimer la Sélection"
+        }
+    },
+    "mfa": {
+        "title": "Authentification Multifacteur",
+        "subtitle": "Configurez les exigences MFA pour ce Fournisseur d'Identité",
+        "requireAll": "Exiger MFA pour tous les utilisateurs",
+        "requireAllDescription": "Tous les utilisateurs doivent configurer et utiliser l'authentification multifacteur",
+        "conditionalMFA": "MFA Conditionnelle (Basée sur l'Habilitation)",
+        "conditionalMFADescription": "Exiger MFA uniquement pour les utilisateurs avec des niveaux d'habilitation spécifiques",
+        "selectClearanceLevels": "Sélectionnez les Niveaux d'Habilitation",
+        "otpSettings": "Paramètres OTP",
+        "algorithm": "Algorithme",
+        "codeLength": "Longueur du Code",
+        "timePeriod": "Période de Temps (secondes)",
+        "preview": "Aperçu de la Règle MFA",
+        "testFlow": "Tester le Flux MFA",
+        "saveChanges": "Enregistrer les Modifications",
+        "unsavedChanges": "Modifications non enregistrées"
+    },
+    "sessions": {
+        "title": "Sessions Actives",
+        "subtitle": "Consultez et gérez les sessions utilisateur actives",
+        "noSessions": "Aucune session active",
+        "noSessionsDescription": "Il n'y a actuellement aucune session active pour ce FI",
+        "searchPlaceholder": "Rechercher par nom d'utilisateur ou IP...",
+        "columns": {
+            "username": "Nom d'utilisateur",
+            "ipAddress": "Adresse IP",
+            "loginTime": "Heure de Connexion",
+            "lastActivity": "Dernière Activité",
+            "client": "Client",
+            "actions": "Actions"
+        },
+        "stats": {
+            "totalActive": "Total Actif",
+            "peakConcurrent": "Pic Concurrent (24h)",
+            "avgDuration": "Durée Moyenne",
+            "errorRate": "Taux d'Erreur",
+            "avgResponse": "Réponse Moyenne"
+        },
+        "actions": {
+            "revoke": "Révoquer la Session",
+            "revokeAll": "Révoquer Toutes les Sessions",
+            "revokeSelected": "Révoquer la Sélection",
+            "viewDetails": "Voir les Détails"
+        },
+        "confirm": {
+            "revoke": "Êtes-vous sûr de vouloir révoquer cette session ?",
+            "revokeAll": "Êtes-vous sûr de vouloir révoquer toutes les sessions pour cet utilisateur ?",
+            "revokeMultiple": "Êtes-vous sûr de vouloir révoquer {{count}} session(s) ?"
+        }
+    },
+    "theme": {
+        "title": "Thème de Connexion Personnalisé",
+        "subtitle": "Personnalisez l'apparence de la page de connexion",
+        "enabled": "Utiliser la Page de Connexion Personnalisée",
+        "enabledDescription": "Les utilisateurs seront redirigés vers votre page de connexion personnalisée",
+        "tabs": {
+            "colors": "Couleurs",
+            "background": "Arrière-plan",
+            "logo": "Logo",
+            "layout": "Disposition"
+        },
+        "colors": {
+            "title": "Palette de Couleurs",
+            "countryPresets": "Préréglages de Drapeau de Pays",
+            "primary": "Couleur Primaire",
+            "secondary": "Couleur Secondaire",
+            "accent": "Couleur d'Accent",
+            "background": "Couleur d'Arrière-plan",
+            "text": "Couleur du Texte"
+        },
+        "background": {
+            "title": "Image d'Arrière-plan",
+            "upload": "Télécharger l'Arrière-plan",
+            "dragDrop": "Glissez-déposez une image ou parcourez",
+            "fileTypes": "JPG, PNG, WebP jusqu'à 5 Mo",
+            "blur": "Intensité du Flou",
+            "overlay": "Opacité de la Superposition"
+        },
+        "logo": {
+            "title": "Logo",
+            "upload": "Télécharger le Logo",
+            "remove": "Supprimer le Logo",
+            "position": "Position du Logo",
+            "recommended": "PNG ou SVG, 200x200px recommandé"
+        },
+        "layout": {
+            "formPosition": "Position du Formulaire",
+            "cardStyle": "Style de Carte",
+            "buttonStyle": "Style de Bouton",
+            "positions": {
+                "left": "Gauche",
+                "center": "Centre",
+                "right": "Droite"
+            },
+            "styles": {
+                "glassmorphism": "Glassmorphisme",
+                "solid": "Solide",
+                "bordered": "Bordé",
+                "floating": "Flottant",
+                "rounded": "Arrondi",
+                "square": "Carré",
+                "pill": "Pilule"
+            }
+        },
+        "preview": {
+            "title": "Aperçu du Thème",
+            "devices": {
+                "desktop": "Bureau",
+                "tablet": "Tablette",
+                "mobile": "Mobile"
+            }
+        },
+        "actions": {
+            "saveTheme": "Enregistrer le Thème",
+            "revertDefault": "Revenir par Défaut",
+            "previewTheme": "Aperçu du Thème"
+        }
+    },
+    "analytics": {
+        "title": "Tableau de Bord de Gouvernance FI",
+        "subtitle": "Surveillez la santé de l'écosystème des partenaires de fédération et la qualité de l'intégration",
+        "manageIdPs": "Gérer les FI",
+        "riskDistribution": "Distribution des Niveaux de Risque FI",
+        "clickToView": "Cliquez pour voir"
+    }
+}

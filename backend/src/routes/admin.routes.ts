@@ -23,7 +23,20 @@ import {
     testIdPHandler,
     getPendingApprovalsHandler,
     approveIdPHandler,
-    rejectIdPHandler
+    rejectIdPHandler,
+    getMFAConfigHandler,
+    updateMFAConfigHandler,
+    testMFAFlowHandler,
+    getSessionsHandler,
+    revokeSessionHandler,
+    revokeUserSessionsHandler,
+    getSessionStatsHandler,
+    getThemeHandler,
+    updateThemeHandler,
+    uploadThemeAssetHandler,
+    deleteThemeHandler,
+    previewThemeHandler,
+    uploadMiddleware
 } from '../controllers/admin.controller';
 import {
     validateOIDCDiscoveryHandler,
@@ -170,6 +183,90 @@ router.post('/approvals/:alias/approve', approveIdPHandler);
  * Reject pending IdP
  */
 router.post('/approvals/:alias/reject', rejectIdPHandler);
+
+// ============================================
+// MFA Configuration Routes (Phase 1.5)
+// ============================================
+
+/**
+ * GET /api/admin/idps/:alias/mfa-config
+ * Get MFA configuration for realm
+ */
+router.get('/idps/:alias/mfa-config', getMFAConfigHandler);
+
+/**
+ * PUT /api/admin/idps/:alias/mfa-config
+ * Update MFA configuration for realm
+ */
+router.put('/idps/:alias/mfa-config', updateMFAConfigHandler);
+
+/**
+ * POST /api/admin/idps/:alias/mfa-config/test
+ * Test MFA flow
+ */
+router.post('/idps/:alias/mfa-config/test', testMFAFlowHandler);
+
+// ============================================
+// Session Management Routes (Phase 1.6)
+// ============================================
+
+/**
+ * GET /api/admin/idps/:alias/sessions
+ * Get active sessions for realm
+ */
+router.get('/idps/:alias/sessions', getSessionsHandler);
+
+/**
+ * DELETE /api/admin/idps/:alias/sessions/:sessionId
+ * Revoke specific session
+ */
+router.delete('/idps/:alias/sessions/:sessionId', revokeSessionHandler);
+
+/**
+ * DELETE /api/admin/idps/:alias/users/:username/sessions
+ * Revoke all sessions for a user
+ */
+router.delete('/idps/:alias/users/:username/sessions', revokeUserSessionsHandler);
+
+/**
+ * GET /api/admin/idps/:alias/sessions/stats
+ * Get session statistics
+ */
+router.get('/idps/:alias/sessions/stats', getSessionStatsHandler);
+
+// ============================================
+// Theme Management Routes (Phase 1.7)
+// ============================================
+
+/**
+ * GET /api/admin/idps/:alias/theme
+ * Get theme for IdP
+ */
+router.get('/idps/:alias/theme', getThemeHandler);
+
+/**
+ * PUT /api/admin/idps/:alias/theme
+ * Update theme for IdP
+ */
+router.put('/idps/:alias/theme', updateThemeHandler);
+
+/**
+ * POST /api/admin/idps/:alias/theme/upload
+ * Upload theme asset (background or logo)
+ */
+router.post('/idps/:alias/theme/upload', uploadMiddleware, uploadThemeAssetHandler);
+
+/**
+ * DELETE /api/admin/idps/:alias/theme
+ * Delete theme (revert to default)
+ */
+router.delete('/idps/:alias/theme', deleteThemeHandler);
+
+/**
+ * GET /api/admin/idps/:alias/theme/preview
+ * Get theme preview HTML
+ */
+router.get('/idps/:alias/theme/preview', previewThemeHandler);
 
 // ============================================
 // Certificate Management Routes

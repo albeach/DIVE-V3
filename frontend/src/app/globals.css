@@ -444,3 +444,57 @@ body {
 .animate-glow-pulse {
     animation: glowPulse 2s ease-in-out infinite;
 }
+
+/* Spin slow animation for rings */
+@keyframes spinSlow {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin-slow {
+    animation: spinSlow 3s linear infinite;
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+    outline: 2px solid #4497ac;
+    outline-offset: 2px;
+}
+
+/* Enhanced button press effect */
+.active\\:scale-\\[0\\.98\\]:active {
+    transform: scale(0.98);
+}
+
+/* Shake animation for error states - 2025 modern pattern */
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-10px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(10px);
+    }
+}
+
+.animate-shake {
+    animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}

@@ -240,3 +240,118 @@ export interface IKeycloakError {
     errorMessage?: string;
 }
 
+// ============================================
+// MFA Configuration Types (Phase 1.5)
+// ============================================
+
+export interface IMFAConfig {
+    required: boolean;
+    otp: {
+        type: 'totp' | 'hotp';
+        algorithm: 'HmacSHA1' | 'HmacSHA256' | 'HmacSHA512';
+        digits: number;
+        period: number;
+        initialCounter?: number;
+    };
+    conditionalMFA?: {
+        enabled: boolean;
+        clearanceLevels?: string[]; // e.g., ["SECRET", "TOP_SECRET"]
+    };
+}
+
+export interface IMFATestResult {
+    success: boolean;
+    message: string;
+    flowAlias?: string;
+    flowId?: string;
+    requiredActions?: string[];
+}
+
+// ============================================
+// Session Management Types (Phase 1.6)
+// ============================================
+
+export interface ISession {
+    id: string;
+    username: string;
+    userId: string;
+    ipAddress: string;
+    start: number; // Unix timestamp
+    lastAccess: number; // Unix timestamp
+    clients: Record<string, string>; // clientId -> clientName
+}
+
+export interface ISessionFilters {
+    username?: string;
+    clientId?: string;
+    ipAddress?: string;
+}
+
+export interface ISessionStats {
+    totalActive: number;
+    peakConcurrent24h: number;
+    averageDuration: number; // in seconds
+    byClient: Record<string, number>;
+    byUser: Record<string, number>;
+}
+
+// ============================================
+// Theme Management Types (Phase 1.7)
+// ============================================
+
+export interface IIdPTheme {
+    idpAlias: string;
+    enabled: boolean;
+    colors: {
+        primary: string;
+        secondary: string;
+        accent: string;
+        background: string;
+        text: string;
+    };
+    background: {
+        type: 'image' | 'gradient';
+        imageUrl?: string;
+        blur: number; // 0-10
+        overlayOpacity: number; // 0-1
+        gradientDirection?: 'top-bottom' | 'left-right' | 'radial';
+    };
+    logo: {
+        url: string;
+        position: 'top-left' | 'top-center' | 'custom';
+        customX?: number;
+        customY?: number;
+    };
+    layout: {
+        formPosition: 'left' | 'center' | 'right';
+        formWidth: '400px' | '600px' | '800px';
+        cardStyle: 'glassmorphism' | 'solid' | 'bordered' | 'floating';
+        buttonStyle: 'rounded' | 'square' | 'pill';
+        inputStyle: 'outlined' | 'filled' | 'underlined';
+    };
+    typography: {
+        fontFamily: string;
+        fontSize: 'small' | 'medium' | 'large';
+    };
+    localization: {
+        defaultLanguage: string;
+        enableToggle: boolean;
+        supportedLanguages: string[]; // e.g., ["en", "fr"]
+    };
+    createdAt: Date;
+    updatedAt: Date;
+    createdBy: string; // admin uniqueID
+}
+
+export interface IThemeAssetUpload {
+    file: Buffer;
+    filename: string;
+    mimetype: string;
+    size: number;
+}
+
+export interface IThemePreviewOptions {
+    device: 'desktop' | 'tablet' | 'mobile';
+    language?: string;
+}
+

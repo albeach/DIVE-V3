@@ -323,10 +323,83 @@ resource "keycloak_authentication_execution" "broker_classified_otp_form" {
   ]
 }
 
-# Bind the flow to Broker realm browser authentication
+# Bind both Browser and Direct Grant flows
 resource "keycloak_authentication_bindings" "broker_classified_bindings" {
-  realm_id     = keycloak_realm.dive_v3_broker.id
-  browser_flow = keycloak_authentication_flow.broker_classified_browser.alias
+  realm_id         = keycloak_realm.dive_v3_broker.id
+  browser_flow     = keycloak_authentication_flow.broker_classified_browser.alias
+  direct_grant_flow = keycloak_authentication_flow.broker_direct_grant_with_mfa.alias
+}
+
+# ============================================
+# Direct Grant Flow with MFA (Broker Realm)
+# ============================================
+# This flow enables our custom login form to properly trigger MFA
+# when using Direct Access Grants (Resource Owner Password Credentials flow)
+#
+# IMPORTANT: Direct Grant flows work differently than browser flows.
+# The backend (custom-login.controller.ts) pre-checks user attributes via
+# Keycloak Admin API to determine if MFA is required, then:
+# - If MFA required + OTP configured: sends `totp` parameter in request
+# - If MFA required + OTP NOT configured: prompts user to set up OTP first
+# - If MFA not required: no `totp` parameter sent
+#
+# When `totp` parameter is present, Keycloak validates it even though
+# the OTP execution is CONDITIONAL (only validates when totp param exists)
+
+resource "keycloak_authentication_flow" "broker_direct_grant_with_mfa" {
+  realm_id    = keycloak_realm.dive_v3_broker.id
+  alias       = "Direct Grant with MFA - Broker"
+  description = "Direct Access Grants flow with conditional OTP support"
+}
+
+# Step 1: Validate Username
+resource "keycloak_authentication_execution" "broker_direct_grant_username" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_flow.broker_direct_grant_with_mfa.alias
+  authenticator     = "direct-grant-validate-username"
+  requirement       = "REQUIRED"
+}
+
+# Step 2: Validate Password
+resource "keycloak_authentication_execution" "broker_direct_grant_password" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_flow.broker_direct_grant_with_mfa.alias
+  authenticator     = "direct-grant-validate-password"
+  requirement       = "REQUIRED"
+  
+  depends_on = [keycloak_authentication_execution.broker_direct_grant_username]
+}
+
+# Step 3: Conditional OTP Subflow
+# This subflow will only execute if the condition passes
+resource "keycloak_authentication_subflow" "broker_direct_grant_conditional_otp" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_flow.broker_direct_grant_with_mfa.alias
+  alias             = "Conditional OTP - Direct Grant"
+  requirement       = "CONDITIONAL"
+  provider_id       = "basic-flow"
+  
+  depends_on = [keycloak_authentication_execution.broker_direct_grant_password]
+}
+
+# Condition: Check if user has TOTP configured
+# This uses "conditional-user-configured" which checks if user has OTP set up
+# Unlike "conditional-user-attribute", this works reliably in Direct Grant flows
+resource "keycloak_authentication_execution" "broker_direct_grant_condition_configured" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_subflow.broker_direct_grant_conditional_otp.alias
+  authenticator     = "conditional-user-configured"
+  requirement       = "REQUIRED"
+}
+
+# Action: Validate OTP if user has it configured
+resource "keycloak_authentication_execution" "broker_direct_grant_otp" {
+  realm_id          = keycloak_realm.dive_v3_broker.id
+  parent_flow_alias = keycloak_authentication_subflow.broker_direct_grant_conditional_otp.alias
+  authenticator     = "direct-grant-validate-otp"
+  requirement       = "REQUIRED"
+  
+  depends_on = [keycloak_authentication_execution.broker_direct_grant_condition_configured]
 }
 
 # ============================================

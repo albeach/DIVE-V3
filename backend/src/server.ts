@@ -13,6 +13,7 @@ import publicRoutes from './routes/public.routes';
 import complianceRoutes from './routes/compliance.routes';
 import coiKeysRoutes from './routes/coi-keys.routes';
 import authRoutes from './controllers/auth.controller';  // Gap #7: Token revocation
+import { initializeThemesCollection } from './services/idp-theme.service';
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -101,7 +102,7 @@ app.use(errorHandler);
 
 // Only start server if not in test environment (to avoid port conflicts)
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     logger.info('DIVE V3 Backend API started', {
       port: PORT,
       env: process.env.NODE_ENV,
@@ -109,6 +110,16 @@ if (process.env.NODE_ENV !== 'test') {
       opa: process.env.OPA_URL,
       mongodb: process.env.MONGODB_URL
     });
+
+    // Initialize IdP themes collection (Phase 1.9)
+    try {
+      await initializeThemesCollection();
+      logger.info('IdP themes collection initialized');
+    } catch (error) {
+      logger.error('Failed to initialize themes collection', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
 }
 
