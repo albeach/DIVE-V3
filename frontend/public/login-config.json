@@ -58,7 +58,24 @@
             "background": "#F9FAFB"
         },
         "backgroundImage": "/login-backgrounds/dive-v3-broker.jpg",
-        "logo": "/logos/dive-v3-logo.svg"
+        "logo": "/logos/dive-v3-logo.svg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": ["CONFIDENTIAL", "SECRET", "TOP_SECRET"],
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication is required for CONFIDENTIAL and above clearances.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA setup complete! You can now log in securely."
+                },
+                "fr": {
+                    "setupPrompt": "L'authentification multi-facteurs est requise pour les habilitations CONFIDENTIEL et supérieures.",
+                    "verifyPrompt": "Entrez votre code d'authentification à 6 chiffres",
+                    "setupComplete": "Configuration MFA terminée ! Vous pouvez maintenant vous connecter en toute sécurité."
+                }
+            }
+        }
     },
     "usa-idp": {
         "displayName": {
@@ -110,7 +127,24 @@
             "accent": "#3C3B6E",
             "background": "#F3F4F6"
         },
-        "backgroundImage": "/login-backgrounds/usa-flag.jpg"
+        "backgroundImage": "/login-backgrounds/usa-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": ["CONFIDENTIAL", "SECRET", "TOP_SECRET"],
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIAL and above.",
+                    "verifyPrompt": "Enter your 6-digit code from your authenticator app",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "fr": {
+                    "setupPrompt": "Authentification multi-facteurs requise pour CONFIDENTIAL et supérieur.",
+                    "verifyPrompt": "Entrez votre code à 6 chiffres depuis votre application d'authentification",
+                    "setupComplete": "MFA configuré avec succès !"
+                }
+            }
+        }
     },
     "france-idp": {
         "displayName": {
@@ -162,7 +196,29 @@
             "accent": "#EF4135",
             "background": "#F9FAFB"
         },
-        "backgroundImage": "/login-backgrounds/france-flag.jpg"
+        "backgroundImage": "/login-backgrounds/france-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": ["CONFIDENTIAL", "SECRET", "TOP_SECRET"],
+            "clearanceMappings": {
+                "CONFIDENTIEL DÉFENSE": "CONFIDENTIAL",
+                "SECRET DÉFENSE": "SECRET",
+                "TRÈS SECRET DÉFENSE": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIEL DÉFENSE and above.",
+                    "verifyPrompt": "Enter your authentication code",
+                    "setupComplete": "MFA setup complete!"
+                },
+                "fr": {
+                    "setupPrompt": "L'authentification multi-facteurs est obligatoire pour CONFIDENTIEL DÉFENSE et supérieur.",
+                    "verifyPrompt": "Entrez votre code d'authentification",
+                    "setupComplete": "Configuration MFA terminée !"
+                }
+            }
+        }
     },
     "canada-idp": {
         "displayName": {
@@ -214,6 +270,101 @@
             "accent": "#FFFFFF",
             "background": "#F3F4F6"
         },
-        "backgroundImage": "/login-backgrounds/canada-flag.jpg"
+        "backgroundImage": "/login-backgrounds/canada-flag.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": ["CONFIDENTIAL", "SECRET", "TOP_SECRET"],
+            "clearanceMappings": {
+                "PROTECTED B": "CONFIDENTIAL",
+                "PROTECTED C": "SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for PROTECTED B and above.",
+                    "verifyPrompt": "Enter your 6-digit authentication code",
+                    "setupComplete": "MFA configured successfully!"
+                },
+                "fr": {
+                    "setupPrompt": "Authentification multi-facteurs requise pour PROTÉGÉ B et supérieur.",
+                    "verifyPrompt": "Entrez votre code d'authentification à 6 chiffres",
+                    "setupComplete": "MFA configuré avec succès !"
+                }
+            }
+        }
+    },
+    "industry-idp": {
+        "displayName": {
+            "en": "Industry Partner Access",
+            "fr": "Accès Partenaire Industrie"
+        },
+        "description": {
+            "en": {
+                "title": "Industry Partner Portal",
+                "subtitle": "Secure Collaboration Access",
+                "content": "Access coalition resources as an authorized industry partner. All activities are monitored and logged. By proceeding, you acknowledge compliance with applicable security policies.",
+                "features": [
+                    {
+                        "icon": "🏢",
+                        "text": "Partner Verified"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Secure Collaboration"
+                    },
+                    {
+                        "icon": "📊",
+                        "text": "Controlled Access"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Portail Partenaire Industrie",
+                "subtitle": "Accès Collaboration Sécurisée",
+                "content": "Accédez aux ressources de la coalition en tant que partenaire industriel autorisé. Toutes les activités sont surveillées et enregistrées. En continuant, vous reconnaissez la conformité aux politiques de sécurité applicables.",
+                "features": [
+                    {
+                        "icon": "🏢",
+                        "text": "Partenaire Vérifié"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Collaboration Sécurisée"
+                    },
+                    {
+                        "icon": "📊",
+                        "text": "Accès Contrôlé"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#059669",
+            "accent": "#10B981",
+            "background": "#F0FDF4"
+        },
+        "backgroundImage": "/login-backgrounds/industry-network.jpg",
+        "mfa": {
+            "enabled": true,
+            "requiredForClearance": ["CONFIDENTIAL", "SECRET", "TOP_SECRET"],
+            "clearanceMappings": {
+                "PROPRIETARY": "CONFIDENTIAL",
+                "TRADE SECRET": "SECRET",
+                "HIGHLY CONFIDENTIAL": "TOP_SECRET"
+            },
+            "otpSetupRequired": true,
+            "messages": {
+                "en": {
+                    "setupPrompt": "Multi-Factor Authentication required for CONFIDENTIAL and above.",
+                    "verifyPrompt": "Enter your authentication code",
+                    "setupComplete": "MFA setup complete!"
+                },
+                "fr": {
+                    "setupPrompt": "Authentification multi-facteurs requise pour CONFIDENTIEL et supérieur.",
+                    "verifyPrompt": "Entrez votre code d'authentification",
+                    "setupComplete": "Configuration MFA terminée !"
+                }
+            }
+        }
     }
 }
