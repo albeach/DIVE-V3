@@ -56,8 +56,6 @@ export const initiateOTPSetup = async (
         }
 
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
-        const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-client-broker';
-        const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET || '';
 
         // Step 1: Get admin access token to manage user
         const adminTokenResponse = await axios.post(
@@ -102,7 +100,6 @@ export const initiateOTPSetup = async (
             }
         );
 
-        const otpPolicy = realmResponse.data.otpPolicyType || 'totp';
         const otpAlgorithm = realmResponse.data.otpPolicyAlgorithm || 'HmacSHA256';
         const otpDigits = realmResponse.data.otpPolicyDigits || 6;
         const otpPeriod = realmResponse.data.otpPolicyPeriod || 30;
