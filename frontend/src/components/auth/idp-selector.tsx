@@ -24,6 +24,10 @@ const getFlagForIdP = (alias: string): string => {
   if (alias.includes('france') || alias.includes('fra')) return '🇫🇷';
   if (alias.includes('canada') || alias.includes('can')) return '🇨🇦';
   if (alias.includes('uk') || alias.includes('gbr')) return '🇬🇧';
+  if (alias.includes('italy') || alias.includes('ita')) return '🇮🇹';
+  if (alias.includes('spain') || alias.includes('esp')) return '🇪🇸';
+  if (alias.includes('poland') || alias.includes('pol')) return '🇵🇱';
+  if (alias.includes('netherlands') || alias.includes('nld')) return '🇳🇱';
   if (alias.includes('industry') || alias.includes('contractor')) return '🏢';
   // Check for US last (since "industry" doesn't contain "us")
   if (alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return '🇺🇸';
