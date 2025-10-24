@@ -27,6 +27,9 @@ describe('Multi-KAS Support', () => {
         db = mongoClient.db(DB_NAME);
 
         // Seed required COI keys for tests
+        const coiKeysCollection = db.collection('coi_keys');
+        await coiKeysCollection.deleteMany({}); // Clear existing test data
+
         const coiKeys = [
             {
                 coiId: 'US-ONLY',
@@ -122,10 +125,8 @@ describe('Multi-KAS Support', () => {
             }
         ];
 
-        // Delete and recreate COI keys to ensure clean state
-        const coiIds = coiKeys.map(c => c.coiId);
-        await db.collection('coi_keys').deleteMany({ coiId: { $in: coiIds } });
-        await db.collection('coi_keys').insertMany(coiKeys);
+        // Insert COI keys to MongoDB
+        await coiKeysCollection.insertMany(coiKeys);
     });
 
     afterAll(async () => {
