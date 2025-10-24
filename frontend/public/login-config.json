@@ -1,0 +1,219 @@
+{
+    "dive-v3-broker": {
+        "displayName": {
+            "en": "DIVE V3 Super Administrator",
+            "fr": "Super Administrateur DIVE V3"
+        },
+        "description": {
+            "en": {
+                "title": "Welcome to DIVE V3 Admin Portal",
+                "subtitle": "Secure Identity & Access Management",
+                "content": "This portal provides comprehensive tools for managing identity providers, user access, and system audits. Ensure all actions comply with coalition security protocols.",
+                "features": [
+                    {
+                        "icon": "⚙️",
+                        "text": "IdP Governance & Management"
+                    },
+                    {
+                        "icon": "✅",
+                        "text": "Approval Workflows"
+                    },
+                    {
+                        "icon": "📋",
+                        "text": "Comprehensive Audit Logs"
+                    },
+                    {
+                        "icon": "🌍",
+                        "text": "Multi-Nation Support"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Portail d'Administration DIVE V3",
+                "subtitle": "Gestion Sécurisée des Identités et Accès",
+                "content": "Ce portail offre des outils complets pour gérer les fournisseurs d'identité, l'accès des utilisateurs et les audits système. Assurez-vous que toutes les actions respectent les protocoles de sécurité de la coalition.",
+                "features": [
+                    {
+                        "icon": "⚙️",
+                        "text": "Gouvernance et Gestion IdP"
+                    },
+                    {
+                        "icon": "✅",
+                        "text": "Flux d'Approbation"
+                    },
+                    {
+                        "icon": "📋",
+                        "text": "Journaux d'Audit Complets"
+                    },
+                    {
+                        "icon": "🌍",
+                        "text": "Support Multi-Nations"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#6B46C1",
+            "accent": "#F59E0B",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/dive-v3-broker.jpg",
+        "logo": "/logos/dive-v3-logo.svg"
+    },
+    "usa-idp": {
+        "displayName": {
+            "en": "United States Identity Provider",
+            "fr": "Fournisseur d'Identité des États-Unis"
+        },
+        "description": {
+            "en": {
+                "title": "Secure Access for US Personnel",
+                "subtitle": "Department of Defense Login",
+                "content": "This system is for authorized U.S. Government use only. Unauthorized access is prohibited. All activities are monitored and recorded. By proceeding, you acknowledge and consent to these terms.",
+                "features": [
+                    {
+                        "icon": "🇺🇸",
+                        "text": "US DoD Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "CAC/PIV Card Support"
+                    },
+                    {
+                        "icon": "🌐",
+                        "text": "Global Access"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Accès Sécurisé pour le Personnel Américain",
+                "subtitle": "Connexion Département de la Défense",
+                "content": "Ce système est réservé à l'usage autorisé du gouvernement américain uniquement. L'accès non autorisé est interdit. Toutes les activités sont surveillées et enregistrées. En continuant, vous reconnaissez et acceptez ces conditions.",
+                "features": [
+                    {
+                        "icon": "🇺🇸",
+                        "text": "Conforme DoD Américain"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Support Carte CAC/PIV"
+                    },
+                    {
+                        "icon": "🌐",
+                        "text": "Accès Global"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#B22234",
+            "accent": "#3C3B6E",
+            "background": "#F3F4F6"
+        },
+        "backgroundImage": "/login-backgrounds/usa-flag.jpg"
+    },
+    "france-idp": {
+        "displayName": {
+            "en": "France Identity Provider",
+            "fr": "Fournisseur d'Identité Français"
+        },
+        "description": {
+            "en": {
+                "title": "French Defence Network Access",
+                "subtitle": "Secure Authentication Portal",
+                "content": "Access classified resources with your French defence credentials. All access is monitored in accordance with national security policies.",
+                "features": [
+                    {
+                        "icon": "🇫🇷",
+                        "text": "ANSSI Compliant"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Strong Authentication"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "National Classification"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Accès Réseau de Défense Français",
+                "subtitle": "Portail d'Authentification Sécurisé",
+                "content": "Accédez aux ressources classifiées avec vos identifiants de défense français. Tous les accès sont surveillés conformément aux politiques de sécurité nationales.",
+                "features": [
+                    {
+                        "icon": "🇫🇷",
+                        "text": "Conforme ANSSI"
+                    },
+                    {
+                        "icon": "🔐",
+                        "text": "Authentification Forte"
+                    },
+                    {
+                        "icon": "🛡️",
+                        "text": "Classification Nationale"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#0055A4",
+            "accent": "#EF4135",
+            "background": "#F9FAFB"
+        },
+        "backgroundImage": "/login-backgrounds/france-flag.jpg"
+    },
+    "canada-idp": {
+        "displayName": {
+            "en": "Canadian Identity Provider",
+            "fr": "Fournisseur d'Identité Canadien"
+        },
+        "description": {
+            "en": {
+                "title": "Canadian Defence Network",
+                "subtitle": "Secure Access Portal",
+                "content": "Access classified resources using your Canadian Armed Forces credentials. All activities are monitored in accordance with national security policies.",
+                "features": [
+                    {
+                        "icon": "🇨🇦",
+                        "text": "CAF Compliant"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Protected B Ready"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "Real-Time Access"
+                    }
+                ]
+            },
+            "fr": {
+                "title": "Réseau de Défense Canadien",
+                "subtitle": "Portail d'Accès Sécurisé",
+                "content": "Accédez aux ressources classifiées en utilisant vos identifiants des Forces armées canadiennes. Toutes les activités sont surveillées conformément aux politiques de sécurité nationales.",
+                "features": [
+                    {
+                        "icon": "🇨🇦",
+                        "text": "Conforme FAC"
+                    },
+                    {
+                        "icon": "🔒",
+                        "text": "Prêt Protégé B"
+                    },
+                    {
+                        "icon": "⚡",
+                        "text": "Accès en Temps Réel"
+                    }
+                ]
+            }
+        },
+        "theme": {
+            "primary": "#FF0000",
+            "accent": "#FFFFFF",
+            "background": "#F3F4F6"
+        },
+        "backgroundImage": "/login-backgrounds/canada-flag.jpg"
+    }
+}

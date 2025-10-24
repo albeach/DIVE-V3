@@ -26,7 +26,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-RUN mkdir -p logs
+RUN mkdir -p logs uploads/idp-themes
 RUN chown -R expressjs:nodejs /app
 
 USER expressjs

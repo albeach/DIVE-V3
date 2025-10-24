@@ -976,4 +976,759 @@ export const rejectIdPHandler = async (
     }
 };
 
+// ============================================
+// MFA Configuration Handlers (Phase 1.5)
+// ============================================
+
+/**
+ * GET /api/admin/idps/:alias/mfa-config
+ * Get MFA configuration for realm
+ */
+export const getMFAConfigHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+
+    try {
+        logger.info('Admin: Get MFA config request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias
+        });
+
+        // Get realm name from IdP alias (e.g., "usa-idp" -> "usa-realm")
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        const config = await keycloakAdminService.getMFAConfig(realmName);
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: config,
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to get MFA config', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to get MFA configuration',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * PUT /api/admin/idps/:alias/mfa-config
+ * Update MFA configuration for realm
+ */
+export const updateMFAConfigHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+    const mfaConfig = req.body;
+
+    try {
+        logger.info('Admin: Update MFA config request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias,
+            config: mfaConfig
+        });
+
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        await keycloakAdminService.updateMFAConfig(mfaConfig, realmName);
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'update_mfa_config',
+            target: alias,
+            outcome: 'success',
+            details: { config: mfaConfig }
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            message: 'MFA configuration updated successfully',
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to update MFA config', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'update_mfa_config',
+            target: alias,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to update MFA configuration',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * POST /api/admin/idps/:alias/mfa-config/test
+ * Test MFA flow
+ */
+export const testMFAFlowHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+
+    try {
+        logger.info('Admin: Test MFA flow request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias
+        });
+
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        const testResult = await keycloakAdminService.testMFAFlow(realmName);
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: testResult,
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to test MFA flow', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to test MFA flow',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+// ============================================
+// Session Management Handlers (Phase 1.6)
+// ============================================
+
+/**
+ * GET /api/admin/idps/:alias/sessions
+ * Get active sessions for realm
+ */
+export const getSessionsHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+    const { username, clientId, ipAddress } = req.query;
+
+    try {
+        logger.info('Admin: Get sessions request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias,
+            filters: { username, clientId, ipAddress }
+        });
+
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        const filters = {
+            username: username as string,
+            clientId: clientId as string,
+            ipAddress: ipAddress as string
+        };
+
+        const sessions = await keycloakAdminService.getActiveSessions(realmName, filters);
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: sessions,
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to get sessions', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to get sessions',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * DELETE /api/admin/idps/:alias/sessions/:sessionId
+ * Revoke specific session
+ */
+export const revokeSessionHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias, sessionId } = req.params;
+
+    try {
+        logger.info('Admin: Revoke session request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias,
+            sessionId
+        });
+
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        await keycloakAdminService.revokeSession(sessionId, realmName);
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'revoke_session',
+            target: `${alias}/${sessionId}`,
+            outcome: 'success'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            message: 'Session revoked successfully',
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to revoke session', {
+            requestId,
+            alias,
+            sessionId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'revoke_session',
+            target: `${alias}/${sessionId}`,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to revoke session',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * DELETE /api/admin/idps/:alias/users/:username/sessions
+ * Revoke all sessions for a user
+ */
+export const revokeUserSessionsHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias, username } = req.params;
+
+    try {
+        logger.info('Admin: Revoke user sessions request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias,
+            username
+        });
+
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        const count = await keycloakAdminService.revokeUserSessions(username, realmName);
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'revoke_user_sessions',
+            target: `${alias}/${username}`,
+            outcome: 'success',
+            details: { sessionsRevoked: count }
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            message: `Revoked ${count} session(s) for user ${username}`,
+            data: { count },
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to revoke user sessions', {
+            requestId,
+            alias,
+            username,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'revoke_user_sessions',
+            target: `${alias}/${username}`,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to revoke user sessions',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * GET /api/admin/idps/:alias/sessions/stats
+ * Get session statistics
+ */
+export const getSessionStatsHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+
+    try {
+        logger.info('Admin: Get session stats request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias
+        });
+
+        const realmName = alias.replace('-idp', '-realm').replace('-broker', '-realm');
+
+        const stats = await keycloakAdminService.getSessionStats(realmName);
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: stats,
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to get session stats', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to get session statistics',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+// ============================================
+// Theme Management Handlers (Phase 1.7)
+// ============================================
+
+import { idpThemeService } from '../services/idp-theme.service';
+import multer from 'multer';
+
+// Configure multer for file uploads
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5MB max
+    },
+    fileFilter: (_req, file, cb) => {
+        const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Invalid file type. Only JPG, PNG, and WebP allowed.'));
+        }
+    }
+});
+
+export const uploadMiddleware = upload.single('file');
+
+/**
+ * GET /api/admin/idps/:alias/theme
+ * Get theme for IdP
+ */
+export const getThemeHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+
+    try {
+        logger.info('Admin: Get theme request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias
+        });
+
+        let theme = await idpThemeService.getTheme(alias);
+
+        // If no theme exists, return default
+        if (!theme) {
+            theme = idpThemeService.getDefaultTheme(alias);
+        }
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: theme,
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to get theme', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to get theme',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * PUT /api/admin/idps/:alias/theme
+ * Update theme for IdP
+ */
+export const updateThemeHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+    const themeData = req.body;
+
+    try {
+        logger.info('Admin: Update theme request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias
+        });
+
+        const theme = await idpThemeService.saveTheme({
+            ...themeData,
+            idpAlias: alias,
+            createdBy: authReq.user?.uniqueID || 'unknown'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'update_theme',
+            target: alias,
+            outcome: 'success'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: theme,
+            message: 'Theme updated successfully',
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to update theme', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'update_theme',
+            target: alias,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to update theme',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * POST /api/admin/idps/:alias/theme/upload
+ * Upload theme asset (background or logo)
+ */
+export const uploadThemeAssetHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+    const { type } = req.body;
+    const file = (req as any).file;
+
+    try {
+        if (!file) {
+            throw new Error('No file uploaded');
+        }
+
+        if (!type || !['background', 'logo'].includes(type)) {
+            throw new Error('Invalid asset type. Must be "background" or "logo"');
+        }
+
+        logger.info('Admin: Upload theme asset request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias,
+            type,
+            filename: file.originalname,
+            size: file.size
+        });
+
+        const url = await idpThemeService.uploadThemeAsset(
+            alias,
+            file.buffer,
+            file.originalname,
+            type
+        );
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'upload_theme_asset',
+            target: alias,
+            outcome: 'success',
+            details: { type, url }
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            data: { url },
+            message: 'Asset uploaded successfully',
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to upload theme asset', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'upload_theme_asset',
+            target: alias,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to upload asset',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * DELETE /api/admin/idps/:alias/theme
+ * Delete theme (revert to default)
+ */
+export const deleteThemeHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const authReq = req as IAuthenticatedRequest;
+    const { alias } = req.params;
+
+    try {
+        logger.info('Admin: Delete theme request', {
+            requestId,
+            admin: authReq.user?.uniqueID,
+            alias
+        });
+
+        await idpThemeService.deleteTheme(alias);
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'delete_theme',
+            target: alias,
+            outcome: 'success'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: true,
+            message: 'Theme deleted successfully (reverted to default)',
+            requestId
+        };
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.error('Failed to delete theme', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        logAdminAction({
+            requestId,
+            admin: authReq.user?.uniqueID || 'unknown',
+            action: 'delete_theme',
+            target: alias,
+            outcome: 'failure',
+            reason: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        const response: IAdminAPIResponse = {
+            success: false,
+            error: 'Failed to delete theme',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            requestId
+        };
+
+        res.status(500).json(response);
+    }
+};
+
+/**
+ * GET /api/admin/idps/:alias/theme/preview
+ * Get theme preview HTML
+ */
+export const previewThemeHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const { alias } = req.params;
+    const { device } = req.query;
+
+    try {
+        logger.info('Admin: Preview theme request', {
+            requestId,
+            alias,
+            device
+        });
+
+        let theme = await idpThemeService.getTheme(alias);
+
+        // If no theme exists, use default
+        if (!theme) {
+            theme = idpThemeService.getDefaultTheme(alias);
+        }
+
+        const html = idpThemeService.generatePreviewHTML(
+            theme,
+            (device as 'desktop' | 'tablet' | 'mobile') || 'desktop'
+        );
+
+        res.setHeader('Content-Type', 'text/html');
+        res.status(200).send(html);
+    } catch (error) {
+        logger.error('Failed to preview theme', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(500).send(`
+            <html>
+                <body>
+                    <h1>Error</h1>
+                    <p>Failed to generate theme preview: ${error instanceof Error ? error.message : 'Unknown error'}</p>
+                </body>
+            </html>
+        `);
+    }
+};
+
 

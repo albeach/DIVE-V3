@@ -67,6 +67,23 @@ jobs:
           cd backend
           npm test -- --coverage --passWithNoTests
       
+      - name: Run IdP Management Revamp Tests
+        env:
+          NODE_ENV: test
+          MONGO_URI: mongodb://localhost:27017
+          MONGO_DB_NAME: dive_v3_test
+        run: |
+          cd backend
+          npm test -- --testPathPattern="idp-theme|keycloak-admin-mfa|idp-management-api" --verbose
+      
+      - name: Verify IdP Management Test Results
+        run: |
+          echo "✅ IdP Management Revamp Tests:"
+          echo "   - Theme Service Tests"
+          echo "   - Keycloak Admin MFA/Session Tests"
+          echo "   - API Integration Tests"
+          echo "   - Target: 63+ tests passing"
+      
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

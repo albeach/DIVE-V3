@@ -1,0 +1,41 @@
+{
+    "app": {
+        "name": "DIVE V3",
+        "tagline": "Pilote ICAM Adapté aux Coalitions"
+    },
+    "nav": {
+        "home": "Accueil",
+        "resources": "Ressources",
+        "admin": "Administration",
+        "dashboard": "Tableau de Bord",
+        "signOut": "Se Déconnecter"
+    },
+    "common": {
+        "loading": "Chargement...",
+        "error": "Erreur",
+        "success": "Succès",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "delete": "Supprimer",
+        "edit": "Modifier",
+        "view": "Voir",
+        "test": "Tester",
+        "refresh": "Actualiser",
+        "export": "Exporter",
+        "import": "Importer",
+        "search": "Rechercher",
+        "filter": "Filtrer",
+        "clearFilters": "Effacer les Filtres",
+        "noResults": "Aucun résultat trouvé",
+        "confirm": "Confirmer"
+    },
+    "time": {
+        "justNow": "À l'instant",
+        "minuteAgo": "Il y a 1 minute",
+        "minutesAgo": "Il y a {{count}} minutes",
+        "hourAgo": "Il y a 1 heure",
+        "hoursAgo": "Il y a {{count}} heures",
+        "dayAgo": "Il y a 1 jour",
+        "daysAgo": "Il y a {{count}} jours"
+    }
+}

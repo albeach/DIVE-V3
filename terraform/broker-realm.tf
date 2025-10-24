@@ -36,13 +36,13 @@ resource "keycloak_realm" "dive_v3_broker" {
     look_ahead_window = 1
   }
 
-  # Brute-force detection (still needed for broker attempts)
+  # Brute-force detection (balanced for MFA setup attempts)
   security_defenses {
     brute_force_detection {
-      max_login_failures         = 3
+      max_login_failures         = 8  # Increased for MFA setup attempts
       wait_increment_seconds     = 60
-      max_failure_wait_seconds   = 900
-      failure_reset_time_seconds = 43200
+      max_failure_wait_seconds   = 300  # Reduced from 900 to 5 minutes
+      failure_reset_time_seconds = 3600  # Reduced from 12 hours to 1 hour
     }
     headers {
       x_frame_options           = "DENY"
@@ -52,7 +52,7 @@ resource "keycloak_realm" "dive_v3_broker" {
     }
   }
 
-  ssl_required = "external"
+  ssl_required = "none"  # Development: Allow HTTP
 }
 
 # Application Client in Broker Realm
@@ -65,7 +65,7 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
-  direct_access_grants_enabled = false
+  direct_access_grants_enabled = true  # Required for custom login form
   service_accounts_enabled     = false
 
   # Use same client secret as original dive-v3-client for consistency
@@ -335,8 +335,8 @@ resource "keycloak_user" "broker_super_admin" {
     acpCOI               = "[\"NATO-COSMIC\",\"FVEY\",\"CAN-US\"]"
     dutyOrg              = "DIVE_ADMIN"
     orgUnit              = "SYSTEM_ADMINISTRATION"
-    acr                  = "urn:mace:incommon:iap:silver"
-    amr                  = "[\"pwd\",\"otp\"]"
+    # NOTE: acr and amr are now dynamically set by Keycloak based on actual authentication
+    # Not hardcoded in user attributes (AAL2 fix)
   }
 
   initial_password {
