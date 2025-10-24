@@ -22,7 +22,7 @@ import Navigation from '@/components/navigation';
 import Breadcrumbs, { BreadcrumbItem } from './breadcrumbs';
 
 interface PageLayoutProps {
-    user: {
+    user?: {
         uniqueID?: string | null;
         email?: string | null;
         clearance?: string | null;
@@ -36,7 +36,7 @@ interface PageLayoutProps {
 }
 
 export default function PageLayout({ 
-    user, 
+    user = {}, 
     breadcrumbs, 
     children, 
     maxWidth = '7xl',

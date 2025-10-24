@@ -200,6 +200,14 @@ export default function IdPGovernanceDashboard() {
                             </div>
 
                             <div className="flex items-center space-x-4">
+                                {/* Manage IdPs Button - Phase 3.3 Cross-Navigation */}
+                                <button
+                                    onClick={() => router.push('/admin/idp')}
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-lg"
+                                >
+                                    ⚙️ Manage IdPs
+                                </button>
+
                                 {/* Auto-refresh toggle */}
                                 <button
                                     onClick={() => setAutoRefresh(!autoRefresh)}
@@ -401,8 +409,11 @@ export default function IdPGovernanceDashboard() {
                                                     </div>
                                                 </div>
 
-                                                {/* Silver Tier */}
-                                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/50 dark:to-gray-700/50 p-6 border border-gray-200 dark:border-gray-700">
+                                                {/* Silver Tier - CLICKABLE for drill-down */}
+                                                <button
+                                                    onClick={() => router.push('/admin/idp?tier=silver')}
+                                                    className="relative overflow-hidden rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800/50 dark:to-gray-700/50 p-6 border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-shadow cursor-pointer text-left w-full"
+                                                >
                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-gray-400/20 to-transparent rounded-full -mr-16 -mt-16"></div>
                                                     <div className="relative">
                                                         <div className="flex items-center space-x-3 mb-4">
@@ -411,7 +422,7 @@ export default function IdPGovernanceDashboard() {
                                                             </div>
                                                             <div>
                                                                 <h4 className="text-lg font-bold text-gray-800 dark:text-gray-400">Silver Tier</h4>
-                                                                <p className="text-xs text-gray-600 dark:text-gray-500">70-84 points</p>
+                                                                <p className="text-xs text-gray-600 dark:text-gray-500">70-84 points • Click to view</p>
                                                             </div>
                                                         </div>
                                                         <p className="text-4xl font-bold text-gray-900 dark:text-gray-300 mb-2">
@@ -426,10 +437,13 @@ export default function IdPGovernanceDashboard() {
                                                             </span>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                </button>
 
-                                                {/* Bronze Tier */}
-                                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 p-6 border border-orange-200 dark:border-orange-800">
+                                                {/* Bronze Tier - CLICKABLE for drill-down */}
+                                                <button
+                                                    onClick={() => router.push('/admin/idp?tier=bronze')}
+                                                    className="relative overflow-hidden rounded-xl bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 p-6 border border-orange-200 dark:border-orange-800 hover:shadow-xl transition-shadow cursor-pointer text-left w-full"
+                                                >
                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-400/20 to-transparent rounded-full -mr-16 -mt-16"></div>
                                                     <div className="relative">
                                                         <div className="flex items-center space-x-3 mb-4">
@@ -438,7 +452,7 @@ export default function IdPGovernanceDashboard() {
                                                             </div>
                                                             <div>
                                                                 <h4 className="text-lg font-bold text-orange-800 dark:text-orange-400">Bronze Tier</h4>
-                                                                <p className="text-xs text-orange-600 dark:text-orange-500">50-69 points</p>
+                                                                <p className="text-xs text-orange-600 dark:text-orange-500">50-69 points • Click to view</p>
                                                             </div>
                                                         </div>
                                                         <p className="text-4xl font-bold text-orange-900 dark:text-orange-300 mb-2">
@@ -453,10 +467,13 @@ export default function IdPGovernanceDashboard() {
                                                             </span>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                </button>
 
-                                                {/* Fail Tier */}
-                                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 p-6 border border-red-200 dark:border-red-800">
+                                                {/* Fail Tier - CLICKABLE for drill-down */}
+                                                <button
+                                                    onClick={() => router.push('/admin/idp?tier=fail')}
+                                                    className="relative overflow-hidden rounded-xl bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 p-6 border border-red-200 dark:border-red-800 hover:shadow-xl transition-shadow cursor-pointer text-left w-full"
+                                                >
                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-red-400/20 to-transparent rounded-full -mr-16 -mt-16"></div>
                                                     <div className="relative">
                                                         <div className="flex items-center space-x-3 mb-4">
@@ -465,7 +482,7 @@ export default function IdPGovernanceDashboard() {
                                                             </div>
                                                             <div>
                                                                 <h4 className="text-lg font-bold text-red-800 dark:text-red-400">Failed</h4>
-                                                                <p className="text-xs text-red-600 dark:text-red-500">&lt;50 points</p>
+                                                                <p className="text-xs text-red-600 dark:text-red-500">&lt;50 points • Click to view</p>
                                                             </div>
                                                         </div>
                                                         <p className="text-4xl font-bold text-red-900 dark:text-red-300 mb-2">
@@ -480,7 +497,7 @@ export default function IdPGovernanceDashboard() {
                                                             </span>
                                                         </div>
                                                     </div>
-                                                </div>
+                                                </button>
                                             </div>
                                         </div>
                                     )}

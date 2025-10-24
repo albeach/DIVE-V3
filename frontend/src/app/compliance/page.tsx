@@ -143,76 +143,6 @@ export default function ComplianceDashboard() {
         { label: 'Compliance', href: null }
       ]}
     >
-      {/* Hero Section - PERFECT Compliance Achievement */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl">
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 80%, white 1px, transparent 1px)`,
-            backgroundSize: '50px 50px'
-          }} />
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-              <Shield className="w-12 h-12 text-white" />
-            </div>
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
-                {complianceData.badge} {complianceData.level} Compliance
-              </h1>
-              <p className="text-blue-100 text-lg">
-                NATO ACP-240 (A) Data-Centric Security
-              </p>
-            </div>
-          </div>
-
-          {/* Certification Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <Target className="w-8 h-8 text-white/80" />
-                <span className="text-3xl font-bold text-white">{complianceData.percentage}%</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Compliance Rate</p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <CheckCircle2 className="w-8 h-8 text-green-300" />
-                <span className="text-3xl font-bold text-white">{complianceData.compliantRequirements}/{complianceData.totalRequirements}</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Requirements Met</p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <Award className="w-8 h-8 text-yellow-300" />
-                <span className="text-3xl font-bold text-white">{complianceData.testMetrics.total}</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Tests Passing</p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
-              <div className="flex items-center justify-between mb-2">
-                <Server className="w-8 h-8 text-emerald-300" />
-                <span className="text-sm font-bold text-white uppercase">{complianceData.deploymentStatus.environment}</span>
-              </div>
-              <p className="text-white/80 text-sm font-medium">Deployment Status</p>
-            </div>
-          </div>
-
-          {/* Certification Badge */}
-          <div className="mt-8 inline-flex items-center gap-3 bg-white/20 backdrop-blur-md px-6 py-3 rounded-full border-2 border-white/30">
-            <Award className="w-5 h-5 text-yellow-300" />
-            <span className="text-white font-semibold">
-              Certificate ID: {complianceData.deploymentStatus.certificateId}
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Error State */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
@@ -220,11 +150,11 @@ export default function ComplianceDashboard() {
         </div>
       )}
 
-      {/* Key Achievements Section */}
+      {/* Core Conformance Section */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">
           <Zap className="w-7 h-7 text-yellow-500" />
-          Key Achievements
+          Core Conformance
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {complianceData.keyAchievements.map((achievement) => (

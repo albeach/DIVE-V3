@@ -151,18 +151,32 @@ async function refreshAccessToken(account: any) {
 export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: DrizzleAdapter(db),
     trustHost: true, // Required for NextAuth v5 in development
+    debug: true,  // ENABLE VERBOSE DEBUG LOGGING
+    logger: {
+        error(code, ...message) {
+            console.error('[NextAuth Error]', code, message);
+        },
+        warn(code, ...message) {
+            console.warn('[NextAuth Warn]', code, message);
+        },
+        debug(code, ...message) {
+            console.log('[NextAuth Debug]', code, message);
+        },
+    },
     providers: [
         Keycloak({
             clientId: process.env.KEYCLOAK_CLIENT_ID as string,
             clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
             issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
             authorization: {
+                url: `http://localhost:8081/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
-                    // Session expiration fix: Request offline_access for long-lived refresh tokens
                     scope: "openid profile email offline_access",
                 }
             },
-            // Multi-realm: Allow linking accounts from different realms
+            token: `http://keycloak:8080/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
+            userinfo: `http://keycloak:8080/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
+            checks: [],
             allowDangerousEmailAccountLinking: true,
         }),
     ],
@@ -172,10 +186,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
+            const isOnCustomLogin = nextUrl.pathname.startsWith("/login/"); // Custom login pages
             const isOnHome = nextUrl.pathname === "/";
 
             // Allow API routes and auth callbacks
             if (nextUrl.pathname.startsWith("/api/")) {
+                return true;
+            }
+
+            // Allow custom login pages (they handle their own auth flow)
+            if (isOnCustomLogin) {
                 return true;
             }
 
@@ -187,9 +207,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             if (isLoggedIn) {
                 // FIX #6: User exists but no tokens - likely expired session
                 // Force re-login to establish fresh session
-                if (!hasValidTokens && !isOnHome && !isOnLogin) {
+                if (!hasValidTokens && !isOnHome && !isOnLogin && !isOnCustomLogin) {
                     console.warn('[DIVE] User exists but no tokens - forcing re-login');
-                    return Response.redirect(new URL("/", nextUrl));
+                    // Redirect to /login (not /auth/signin)
+                    return Response.redirect(new URL("/login", nextUrl));
                 }
 
                 // Redirect from Login to Dashboard (but allow Home for logout landing)
@@ -201,12 +222,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
             // If not logged in
             if (!isLoggedIn) {
-                // Allow Home and Login only
-                if (isOnHome || isOnLogin) {
+                // Allow Home, Login, and Custom Login pages
+                if (isOnHome || isOnLogin || isOnCustomLogin) {
                     return true;
                 }
-                // Redirect to Home
-                return Response.redirect(new URL("/", nextUrl));
+                // Redirect to /login (not /auth/signin)
+                return Response.redirect(new URL("/login", nextUrl));
             }
 
             return true;
@@ -448,11 +469,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     pages: {
         signIn: "/login",
         error: "/",
+        signOut: "/", // Redirect to home after signout
+        verifyRequest: "/login", // Redirect for email verification
+        newUser: "/dashboard" // Redirect for new users
     },
     session: {
         strategy: "database",
-        maxAge: 15 * 60, // 15 minutes (AAL2 compliant - aligns with Keycloak session timeout)
-        updateAge: 15 * 60, // Update session every 15 minutes (matches maxAge for AAL2)
+        maxAge: 30 * 60, // 30 minutes (more reasonable for admin tasks)
+        updateAge: 5 * 60, // Update session every 5 minutes (keep session alive with activity)
     },
     cookies: {
         sessionToken: {

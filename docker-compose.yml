@@ -137,6 +137,7 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/dive-v3-broker/protocol/openid-connect/certs
       MONGODB_URL: mongodb://admin:password@mongo:27017
       MONGODB_DATABASE: dive-v3
@@ -164,6 +165,8 @@ services:
       - ./backend/certs:/app/certs:ro
       # Logs directory
       - ./backend/logs:/app/logs
+      # IdP Management Revamp: Theme uploads directory
+      - ./backend/uploads:/app/uploads
 
   nextjs:
     build:
@@ -181,10 +184,13 @@ services:
       # Server-side backend URL (Docker internal network)
       BACKEND_URL: http://backend:4000
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm
-      # Server-side NextAuth: Use Docker network name for Keycloak
-      KEYCLOAK_BASE_URL: http://localhost:8081
+      # Server-side NextAuth: Use keycloak:8080 (Docker network for container-to-container)
+      # NextAuth running inside the container needs to reach Keycloak via Docker network
+      KEYCLOAK_BASE_URL: http://keycloak:8080
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: dive-v3-broker
+      # IdP Revamp: Disable issuer validation (Keycloak returns localhost:8081 but we use keycloak:8080)
+      AUTH_TRUST_HOST: "true"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       # Public Keycloak URLs (for browser-side logout)

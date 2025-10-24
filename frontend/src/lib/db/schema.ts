@@ -18,6 +18,7 @@ export const users = pgTable("user", {
 export const accounts = pgTable(
     "account",
     {
+        id: text("id").notNull().primaryKey(),
         userId: text("userId")
             .notNull()
             .references(() => users.id, { onDelete: "cascade" }),
@@ -40,7 +41,8 @@ export const accounts = pgTable(
 );
 
 export const sessions = pgTable("session", {
-    sessionToken: text("sessionToken").notNull().primaryKey(),
+    id: text("id").notNull().primaryKey(),
+    sessionToken: text("sessionToken").notNull().unique(),
     userId: text("userId")
         .notNull()
         .references(() => users.id, { onDelete: "cascade" }),
