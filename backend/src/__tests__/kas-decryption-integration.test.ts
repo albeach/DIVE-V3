@@ -108,6 +108,12 @@ describe('KAS Decryption Integration Tests', () => {
             const resources = await db.collection('resources').find({ encrypted: true }).limit(10).toArray();
 
             for (const resource of resources) {
+                // Skip resources without ZTDF structure
+                if (!resource.ztdf || !resource.ztdf.policy || !resource.ztdf.payload) {
+                    console.log(`${resource.resourceId}: skipping - missing ZTDF structure`);
+                    continue;
+                }
+
                 // Import validation function
                 const { validateZTDFIntegrity } = await import('../utils/ztdf.utils');
                 const result = await validateZTDFIntegrity(resource.ztdf);

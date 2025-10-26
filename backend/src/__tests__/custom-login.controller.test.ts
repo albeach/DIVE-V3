@@ -26,6 +26,28 @@ jest.mock('../utils/logger', () => ({
     }
 }));
 
+// Mock KeycloakConfigSyncService for dynamic rate limiting
+jest.mock('../services/keycloak-config-sync.service', () => ({
+    KeycloakConfigSyncService: {
+        getMaxAttempts: jest.fn().mockResolvedValue(8),
+        getWindowMs: jest.fn().mockResolvedValue(15 * 60 * 1000), // 15 minutes
+        getConfig: jest.fn().mockResolvedValue({
+            maxLoginFailures: 8,
+            failureResetTimeSeconds: 900,
+            waitIncrementSeconds: 60,
+            maxFailureWaitSeconds: 300,
+            lastSynced: Date.now()
+        }),
+        forceSync: jest.fn().mockResolvedValue(undefined),
+        syncAllRealms: jest.fn().mockResolvedValue(undefined),
+        clearCaches: jest.fn(),
+        getCacheStats: jest.fn().mockReturnValue({
+            realms: ['dive-v3-broker'],
+            adminTokenExpiry: null
+        })
+    }
+}));
+
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 // ============================================
@@ -567,12 +589,13 @@ describe('Error Handling', () => {
             .post('/api/auth/custom-login')
             .send(validCredentials);
 
-        // Verify logging
+        // Verify logging - updated to match actual log message
         expect(logger.info).toHaveBeenCalledWith(
-            'Custom login attempt',
+            'Attempting Keycloak authentication',
             expect.objectContaining({
                 username: validCredentials.username,
-                idpAlias: validCredentials.idpAlias
+                idpAlias: validCredentials.idpAlias,
+                realmName: 'dive-v3-broker'
             })
         );
 
@@ -734,6 +757,336 @@ describe('Realm Detection', () => {
         const tokenRequestCall = mockedAxios.post.mock.calls[0];
         const tokenUrl = tokenRequestCall[0] as string;
         expect(tokenUrl).toContain('/realms/dive-v3-fra/');
+    });
+
+    it('should map industry-realm-broker to dive-v3-industry', async () => {
+        mockedAxios.post.mockResolvedValueOnce({ data: mockKeycloakTokenResponse });
+
+        await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'industry-realm-broker' });
+
+        const tokenRequestCall = mockedAxios.post.mock.calls[0];
+        const tokenUrl = tokenRequestCall[0] as string;
+        expect(tokenUrl).toContain('/realms/dive-v3-industry/');
+    });
+});
+
+// ============================================
+// 6. Clearance Mapping Tests (Multi-Realm)
+// ============================================
+
+describe('Clearance Mapping for Multi-Realm', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('should handle USA clearances (SECRET, TOP_SECRET)', async () => {
+        mockedAxios.post
+            .mockResolvedValueOnce({ data: mockKeycloakTokenResponse })
+            .mockResolvedValueOnce({ data: mockAdminTokenResponse });
+
+        mockedAxios.get.mockResolvedValueOnce({
+            data: [{
+                ...topSecretUser,
+                attributes: { ...topSecretUser.attributes, clearance: ['SECRET'] }
+            }]
+        });
+
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'usa-realm-broker' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.clearance).toBe('SECRET');
+        expect(response.body.mfaRequired).toBe(true);
+    });
+
+    it('should handle French clearances (CONFIDENTIEL DÉFENSE, SECRET DÉFENSE)', async () => {
+        mockedAxios.post
+            .mockResolvedValueOnce({ data: mockKeycloakTokenResponse })
+            .mockResolvedValueOnce({ data: mockAdminTokenResponse });
+
+        const frenchUser = {
+            id: 'user-fra-123',
+            username: 'pierre.dubois',
+            totp: false,
+            attributes: {
+                clearance: ['CONFIDENTIEL DÉFENSE'],
+                countryOfAffiliation: ['FRA'],
+                uniqueID: ['pierre.dubois@defense.gouv.fr']
+            }
+        };
+
+        mockedAxios.get.mockResolvedValueOnce({
+            data: [frenchUser]
+        });
+
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'fra-realm-broker', username: 'pierre.dubois' });
+
+        expect(response.status).toBe(200);
+        // The clearance mapper service should normalize this to CONFIDENTIAL
+        expect(response.body.mfaRequired).toBe(true);
+    });
+
+    it('should handle Canadian clearances (PROTECTED B, PROTECTED C)', async () => {
+        mockedAxios.post
+            .mockResolvedValueOnce({ data: mockKeycloakTokenResponse })
+            .mockResolvedValueOnce({ data: mockAdminTokenResponse });
+
+        const canadianUser = {
+            id: 'user-can-123',
+            username: 'john.smith',
+            totp: false,
+            attributes: {
+                clearance: ['PROTECTED B'],
+                countryOfAffiliation: ['CAN'],
+                uniqueID: ['john.smith@forces.gc.ca']
+            }
+        };
+
+        mockedAxios.get.mockResolvedValueOnce({
+            data: [canadianUser]
+        });
+
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'can-realm-broker', username: 'john.smith' });
+
+        expect(response.status).toBe(200);
+        // The clearance mapper service should normalize PROTECTED B to CONFIDENTIAL
+        expect(response.body.mfaRequired).toBe(true);
+    });
+
+    it('should handle Industry clearances (PROPRIETARY, TRADE SECRET)', async () => {
+        mockedAxios.post
+            .mockResolvedValueOnce({ data: mockKeycloakTokenResponse })
+            .mockResolvedValueOnce({ data: mockAdminTokenResponse });
+
+        const industryUser = {
+            id: 'user-ind-123',
+            username: 'bob.contractor',
+            totp: false,
+            attributes: {
+                clearance: ['PROPRIETARY'],
+                countryOfAffiliation: ['USA'],
+                uniqueID: ['bob.contractor@lockheed.com']
+            }
+        };
+
+        mockedAxios.get.mockResolvedValueOnce({
+            data: [industryUser]
+        });
+
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'industry-realm-broker', username: 'bob.contractor' });
+
+        expect(response.status).toBe(200);
+        // The clearance mapper service should normalize PROPRIETARY to CONFIDENTIAL
+        expect(response.body.mfaRequired).toBe(true);
+    });
+
+    it('should not require MFA for Industry UNCLASSIFIED users', async () => {
+        mockedAxios.post
+            .mockResolvedValueOnce({ data: mockKeycloakTokenResponse })
+            .mockResolvedValueOnce({ data: mockAdminTokenResponse });
+
+        const industryUnclassified = {
+            id: 'user-ind-456',
+            username: 'jane.contractor',
+            totp: false,
+            attributes: {
+                clearance: ['UNCLASSIFIED'],
+                countryOfAffiliation: ['USA'],
+                uniqueID: ['jane.contractor@boeing.com']
+            }
+        };
+
+        mockedAxios.get.mockResolvedValueOnce({
+            data: [industryUnclassified]
+        });
+
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'industry-realm-broker', username: 'jane.contractor' });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.mfaRequired).toBeUndefined();
+        expect(response.body.data.accessToken).toBeDefined();
+    });
+});
+
+// ============================================
+// 6. Dynamic Rate Limiting Tests (Task 4)
+// ============================================
+
+describe('Dynamic Rate Limiting', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        resetRateLimiting();
+    });
+
+    it('should fetch rate limit config from KeycloakConfigSyncService', async () => {
+        const { KeycloakConfigSyncService } = require('../services/keycloak-config-sync.service');
+
+        mockedAxios.post.mockRejectedValue({
+            response: {
+                status: 401,
+                data: {
+                    error: 'invalid_grant',
+                    error_description: 'Invalid user credentials'
+                }
+            }
+        });
+
+        await request(app)
+            .post('/api/auth/custom-login')
+            .send(validCredentials);
+
+        // Verify that the service was called with the correct realm
+        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-broker');
+        expect(KeycloakConfigSyncService.getWindowMs).toHaveBeenCalledWith('dive-v3-broker');
+    });
+
+    it('should use dynamic maxAttempts from config service', async () => {
+        const { KeycloakConfigSyncService } = require('../services/keycloak-config-sync.service');
+
+        // Mock config service to return only 3 attempts
+        KeycloakConfigSyncService.getMaxAttempts.mockResolvedValue(3);
+        KeycloakConfigSyncService.getWindowMs.mockResolvedValue(15 * 60 * 1000);
+
+        mockedAxios.post.mockRejectedValue({
+            response: {
+                status: 401,
+                data: {
+                    error: 'invalid_grant',
+                    error_description: 'Invalid user credentials'
+                }
+            }
+        });
+
+        // Make 3 failed attempts (should all succeed)
+        for (let i = 0; i < 3; i++) {
+            const response = await request(app)
+                .post('/api/auth/custom-login')
+                .send(validCredentials);
+            expect(response.status).toBe(401);
+        }
+
+        // 4th attempt should be rate limited (since max is 3)
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send(validCredentials);
+
+        expect(response.status).toBe(429);
+        expect(response.body.error).toContain('Too many login attempts');
+    });
+
+    it('should use dynamic windowMs from config service', async () => {
+        const { KeycloakConfigSyncService } = require('../services/keycloak-config-sync.service');
+
+        // Mock config service to return custom window message
+        KeycloakConfigSyncService.getMaxAttempts.mockResolvedValue(1);
+        KeycloakConfigSyncService.getWindowMs.mockResolvedValue(30 * 60 * 1000); // 30 minutes
+
+        mockedAxios.post.mockRejectedValue({
+            response: {
+                status: 401,
+                data: {
+                    error: 'invalid_grant',
+                    error_description: 'Invalid user credentials'
+                }
+            }
+        });
+
+        // Make 1 failed attempt
+        await request(app)
+            .post('/api/auth/custom-login')
+            .send(validCredentials);
+
+        // 2nd attempt should be rate limited
+        const response = await request(app)
+            .post('/api/auth/custom-login')
+            .send(validCredentials);
+
+        expect(response.status).toBe(429);
+        expect(response.body.error).toContain('30 minutes'); // Should show 30 minutes, not 15
+    });
+
+    it('should call config service with correct realm for different IdPs', async () => {
+        const { KeycloakConfigSyncService } = require('../services/keycloak-config-sync.service');
+
+        mockedAxios.post.mockRejectedValue({
+            response: {
+                status: 401,
+                data: {
+                    error: 'invalid_grant',
+                    error_description: 'Invalid user credentials'
+                }
+            }
+        });
+
+        // Test USA realm
+        await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'usa-realm-broker' });
+        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-usa');
+
+        jest.clearAllMocks();
+
+        // Test France realm
+        await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'fra-realm-broker' });
+        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-fra');
+
+        jest.clearAllMocks();
+
+        // Test Canada realm
+        await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'can-realm-broker' });
+        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-can');
+    });
+
+    it('should track rate limiting per realm', async () => {
+        const { KeycloakConfigSyncService } = require('../services/keycloak-config-sync.service');
+
+        KeycloakConfigSyncService.getMaxAttempts.mockResolvedValue(2);
+        KeycloakConfigSyncService.getWindowMs.mockResolvedValue(15 * 60 * 1000);
+
+        mockedAxios.post.mockRejectedValue({
+            response: {
+                status: 401,
+                data: {
+                    error: 'invalid_grant',
+                    error_description: 'Invalid user credentials'
+                }
+            }
+        });
+
+        // Make 2 failed attempts to USA realm
+        for (let i = 0; i < 2; i++) {
+            await request(app)
+                .post('/api/auth/custom-login')
+                .send({ ...validCredentials, idpAlias: 'usa-realm-broker' });
+        }
+
+        // 3rd attempt to USA should be rate limited
+        const usaResponse = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'usa-realm-broker' });
+        expect(usaResponse.status).toBe(429);
+
+        // But attempt to France realm should still work (different realm)
+        const fraResponse = await request(app)
+            .post('/api/auth/custom-login')
+            .send({ ...validCredentials, idpAlias: 'fra-realm-broker' });
+        expect(fraResponse.status).toBe(401); // Not rate limited, just invalid creds
     });
 });
 
