@@ -17,7 +17,9 @@ import rego.v1
 #
 # Default deny pattern (fail-secure)
 
-default allow := false
+allow := false
+
+decision_reason := "Authorization check not evaluated"
 
 # ============================================
 # Main Authorization Rule
@@ -156,8 +158,9 @@ clearance_levels := ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
 
 # Clearance check
 is_insufficient_clearance := msg if {
-	user_level := indexof(clearance_levels, input.subject.clearance)
-	resource_level := indexof(clearance_levels, input.resource.classification)
+	clearance_map := {"UNCLASSIFIED": 0, "CONFIDENTIAL": 1, "SECRET": 2, "TOP_SECRET": 3}
+	user_level := clearance_map[input.subject.clearance]
+	resource_level := clearance_map[input.resource.classification]
 	user_level < resource_level
 	msg := sprintf("Insufficient clearance: %s < %s", [input.subject.clearance, input.resource.classification])
 }
@@ -190,29 +193,21 @@ is_coi_violation := msg if {
 }
 
 # ============================================
-# Decision Structure
+# Decision Structure (Simplified for Rego v1)
 # ============================================
 
-decision := {
-	"allow": allow,
-	"reason": reason,
-	"evaluation_details": {
-		"policy": "federation_abac_policy (ADatP-5663 focused)",
-		"aal_check": not is_insufficient_aal,
-		"token_lifetime_check": not is_token_expired,
-		"issuer_trust_check": not is_issuer_not_trusted,
-		"mfa_verification_check": not is_mfa_not_verified,
-		"clearance_check": not is_insufficient_clearance,
-		"releasability_check": not is_not_releasable_to_country,
-		"coi_check": not is_coi_violation,
-	},
+decision := d if {
+	d := {
+		"allow": allow,
+		"reason": decision_reason,
+	}
 }
 
-reason := "All federation and ABAC conditions satisfied" if {
+decision_reason := "All federation and ABAC conditions satisfied" if {
 	allow
 }
 
-reason := violation_message if {
+decision_reason := violation_message if {
 	not allow
 	violation_message := concat("; ", [
 		is_not_authenticated,

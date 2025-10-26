@@ -15,7 +15,11 @@ import rego.v1
 # - Enhanced KAS obligations for encrypted resources
 # - Data-centric security policy enforcement
 
-default allow := false
+allow := false
+
+obligations := []
+
+evaluation_details := {}
 
 # ============================================
 # Main Authorization Rule
@@ -28,7 +32,7 @@ allow if {
 	not is_insufficient_clearance
 	not is_not_releasable_to_country
 	not is_coi_violation
-	count(is_coi_coherence_violation) == 0  # Set rule: check if empty
+	count(is_coi_coherence_violation) == 0 # Set rule: check if empty
 	not is_under_embargo
 	not is_ztdf_integrity_violation
 	not is_upload_not_releasable_to_uploader
@@ -100,7 +104,7 @@ is_coi_coherence_violation contains msg if {
 # Releasability ⊆ COI membership check
 is_coi_coherence_violation contains msg if {
 	count(input.resource.COI) > 0
-	
+
 	# Compute union of all COI member countries
 	union := {c | some coi in input.resource.COI; some c in coi_members[coi]}
 
@@ -242,6 +246,7 @@ is_missing_required_attributes := msg if {
 is_missing_required_attributes := msg if {
 	# Subject country must be valid or missing (don't double-report)
 	valid_country_codes[input.subject.countryOfAffiliation]
+
 	# Now check resource countries
 	input.resource.releasabilityTo
 	count(input.resource.releasabilityTo) > 0
@@ -302,7 +307,7 @@ valid_country_codes := {
 	# Y
 	"YEM",
 	# Z
-	"ZAF", "ZMB", "ZWE"
+	"ZAF", "ZMB", "ZWE",
 }
 
 # ============================================
@@ -320,7 +325,7 @@ classification_equivalency := {
 		"CONFIDENTIAL": "CONFIDENTIAL",
 		"SECRET": "SECRET",
 		"TOP SECRET": "COSMIC_TOP_SECRET",
-		"TOP_SECRET": "COSMIC_TOP_SECRET"
+		"TOP_SECRET": "COSMIC_TOP_SECRET",
 	},
 	"GBR": {
 		"UNCLASSIFIED": "UNCLASSIFIED",
@@ -328,14 +333,14 @@ classification_equivalency := {
 		"CONFIDENTIAL": "CONFIDENTIAL",
 		"SECRET": "SECRET",
 		"TOP SECRET": "COSMIC_TOP_SECRET",
-		"TOP_SECRET": "COSMIC_TOP_SECRET"
+		"TOP_SECRET": "COSMIC_TOP_SECRET",
 	},
 	"FRA": {
 		"NON CLASSIFIÉ": "UNCLASSIFIED",
 		"DIFFUSION RESTREINTE": "NATO_UNCLASSIFIED",
 		"CONFIDENTIEL DÉFENSE": "CONFIDENTIAL",
 		"SECRET DÉFENSE": "SECRET",
-		"TRÈS SECRET DÉFENSE": "COSMIC_TOP_SECRET"
+		"TRÈS SECRET DÉFENSE": "COSMIC_TOP_SECRET",
 	},
 	"CAN": {
 		"UNCLASSIFIED": "UNCLASSIFIED",
@@ -343,14 +348,14 @@ classification_equivalency := {
 		"CONFIDENTIAL": "CONFIDENTIAL",
 		"SECRET": "SECRET",
 		"TOP SECRET": "COSMIC_TOP_SECRET",
-		"TOP_SECRET": "COSMIC_TOP_SECRET"
+		"TOP_SECRET": "COSMIC_TOP_SECRET",
 	},
 	"DEU": {
 		"OFFEN": "UNCLASSIFIED",
 		"VS-NUR FÜR DEN DIENSTGEBRAUCH": "NATO_UNCLASSIFIED",
 		"VS-VERTRAULICH": "CONFIDENTIAL",
 		"GEHEIM": "SECRET",
-		"STRENG GEHEIM": "COSMIC_TOP_SECRET"
+		"STRENG GEHEIM": "COSMIC_TOP_SECRET",
 	},
 	"AUS": {
 		"UNCLASSIFIED": "UNCLASSIFIED",
@@ -358,42 +363,42 @@ classification_equivalency := {
 		"CONFIDENTIAL": "CONFIDENTIAL",
 		"SECRET": "SECRET",
 		"TOP SECRET": "COSMIC_TOP_SECRET",
-		"TOP_SECRET": "COSMIC_TOP_SECRET"
+		"TOP_SECRET": "COSMIC_TOP_SECRET",
 	},
 	"NZL": {
 		"UNCLASSIFIED": "UNCLASSIFIED",
 		"CONFIDENTIAL": "CONFIDENTIAL",
 		"SECRET": "SECRET",
 		"TOP SECRET": "COSMIC_TOP_SECRET",
-		"TOP_SECRET": "COSMIC_TOP_SECRET"
+		"TOP_SECRET": "COSMIC_TOP_SECRET",
 	},
 	"ITA": {
 		"NON CLASSIFICATO": "UNCLASSIFIED",
 		"USO UFFICIALE": "NATO_UNCLASSIFIED",
 		"CONFIDENZIALE": "CONFIDENTIAL",
 		"SEGRETO": "SECRET",
-		"SEGRETISSIMO": "COSMIC_TOP_SECRET"
+		"SEGRETISSIMO": "COSMIC_TOP_SECRET",
 	},
 	"ESP": {
 		"NO CLASIFICADO": "UNCLASSIFIED",
 		"USO OFICIAL": "NATO_UNCLASSIFIED",
 		"CONFIDENCIAL": "CONFIDENTIAL",
 		"SECRETO": "SECRET",
-		"ALTO SECRETO": "COSMIC_TOP_SECRET"
+		"ALTO SECRETO": "COSMIC_TOP_SECRET",
 	},
 	"POL": {
 		"NIEJAWNE": "UNCLASSIFIED",
 		"UŻYTEK SŁUŻBOWY": "NATO_UNCLASSIFIED",
 		"POUFNE": "CONFIDENTIAL",
 		"TAJNE": "SECRET",
-		"ŚCIŚLE TAJNE": "COSMIC_TOP_SECRET"
+		"ŚCIŚLE TAJNE": "COSMIC_TOP_SECRET",
 	},
 	"NLD": {
 		"NIET GERUBRICEERD": "UNCLASSIFIED",
 		"DEPARTEMENTAAL VERTROUWELIJK": "NATO_UNCLASSIFIED",
 		"CONFIDENTIEEL": "CONFIDENTIAL",
 		"GEHEIM": "SECRET",
-		"ZEER GEHEIM": "COSMIC_TOP_SECRET"
+		"ZEER GEHEIM": "COSMIC_TOP_SECRET",
 	},
 	"TUR": {
 		"TASNIF DIŞI": "UNCLASSIFIED",
@@ -402,7 +407,7 @@ classification_equivalency := {
 		"GİZLİ": "SECRET",
 		"ÇOK GİZLİ": "SECRET",
 		"ÇOKGIZLI": "SECRET",
-		"COSMIC TOP SECRET": "COSMIC_TOP_SECRET"
+		"COSMIC TOP SECRET": "COSMIC_TOP_SECRET",
 	},
 	"GRC": {
 		"ΑΝΕΠΙΦΥΛΑΚΤΟ": "UNCLASSIFIED",
@@ -410,27 +415,27 @@ classification_equivalency := {
 		"ΕΜΠΙΣΤΕΥΤΙΚΟ": "CONFIDENTIAL",
 		"ΑΠΟΡΡΗΤΟ": "SECRET",
 		"ΑΠΌΡΡΗΤΟ": "SECRET",
-		"ΑΠΟΛΥΤΩΣ ΑΠΟΡΡΗΤΟ": "COSMIC_TOP_SECRET"
+		"ΑΠΟΛΥΤΩΣ ΑΠΟΡΡΗΤΟ": "COSMIC_TOP_SECRET",
 	},
 	"NOR": {
 		"UGRADERT": "UNCLASSIFIED",
 		"BEGRENSET": "NATO_UNCLASSIFIED",
 		"KONFIDENSIELT": "CONFIDENTIAL",
 		"HEMMELIG": "SECRET",
-		"STRENGT HEMMELIG": "COSMIC_TOP_SECRET"
+		"STRENGT HEMMELIG": "COSMIC_TOP_SECRET",
 	},
 	"DNK": {
 		"TIL TJENESTEBRUG": "UNCLASSIFIED",
 		"FORTROLIGT": "CONFIDENTIAL",
 		"HEMMELIGT": "SECRET",
-		"STRENGT HEMMELIGT": "COSMIC_TOP_SECRET"
+		"STRENGT HEMMELIGT": "COSMIC_TOP_SECRET",
 	},
 	"NATO": {
 		"NATO UNCLASSIFIED": "NATO_UNCLASSIFIED",
 		"NATO CONFIDENTIAL": "CONFIDENTIAL",
 		"NATO SECRET": "SECRET",
-		"COSMIC TOP SECRET": "COSMIC_TOP_SECRET"
-	}
+		"COSMIC TOP SECRET": "COSMIC_TOP_SECRET",
+	},
 }
 
 # NATO level to DIVE V3 standard mapping
@@ -441,7 +446,7 @@ nato_to_dive_standard := {
 	"CONFIDENTIAL": "CONFIDENTIAL",
 	"SECRET": "SECRET",
 	"NATO_SECRET": "SECRET",
-	"COSMIC_TOP_SECRET": "TOP_SECRET"
+	"COSMIC_TOP_SECRET": "TOP_SECRET",
 }
 
 # DIVE V3 clearance level mapping (for numeric comparison)
@@ -449,7 +454,7 @@ dive_clearance_levels := {
 	"UNCLASSIFIED": 0,
 	"CONFIDENTIAL": 1,
 	"SECRET": 2,
-	"TOP_SECRET": 3
+	"TOP_SECRET": 3,
 }
 
 # Helper: Get NATO equivalency level for a national classification
@@ -476,19 +481,19 @@ classification_equivalent(user_clearance, user_country, resource_classification,
 	# Get NATO equivalency levels
 	user_nato := get_equivalency_level(user_clearance, user_country)
 	resource_nato := get_equivalency_level(resource_classification, resource_country)
-	
+
 	# Both must resolve to NATO levels
 	user_nato
 	resource_nato
-	
+
 	# Convert NATO levels to DIVE V3 standard for comparison
 	user_dive := nato_to_dive_standard[user_nato]
 	resource_dive := nato_to_dive_standard[resource_nato]
-	
+
 	# Get numeric levels for comparison
 	user_level := dive_clearance_levels[user_dive]
 	resource_level := dive_clearance_levels[resource_dive]
-	
+
 	# User clearance must be >= resource classification
 	user_level >= resource_level
 }
@@ -501,15 +506,15 @@ is_insufficient_clearance := msg if {
 	input.subject.clearanceCountry
 	input.resource.originalClassification
 	input.resource.originalCountry
-	
+
 	# Use equivalency comparison
 	not classification_equivalent(
 		input.subject.clearanceOriginal,
 		input.subject.clearanceCountry,
 		input.resource.originalClassification,
-		input.resource.originalCountry
+		input.resource.originalCountry,
 	)
-	
+
 	# Build denial message with original classifications
 	msg := sprintf("Insufficient clearance: %s (%s clearance) insufficient for %s (%s) document [NATO: %s < %s]", [
 		input.subject.clearanceCountry,
@@ -517,13 +522,13 @@ is_insufficient_clearance := msg if {
 		input.resource.originalCountry,
 		input.resource.originalClassification,
 		input.subject.clearance,
-		input.resource.classification
+		input.resource.classification,
 	])
 } else := msg if {
 	# Priority 2: Fallback to DIVE V3 standard clearance comparison
 	# (backward compatibility for resources without originalClassification)
-	not input.subject.clearanceOriginal  # No original clearance available
-	
+	not input.subject.clearanceOriginal # No original clearance available
+
 	# Get numeric clearance levels
 	user_clearance_level := clearance_levels[input.subject.clearance]
 	resource_classification_level := clearance_levels[input.resource.classification]
@@ -539,14 +544,14 @@ is_insufficient_clearance := msg if {
 
 # Validation: Deny if clearance not in valid enum (when not using equivalency)
 is_insufficient_clearance := msg if {
-	not input.subject.clearanceOriginal  # Standard clearance mode
+	not input.subject.clearanceOriginal # Standard clearance mode
 	not clearance_levels[input.subject.clearance]
 	msg := sprintf("Invalid clearance level: %s", [input.subject.clearance])
 }
 
 # Validation: Deny if classification not in valid enum (when not using equivalency)
 is_insufficient_clearance := msg if {
-	not input.resource.originalClassification  # Standard classification mode
+	not input.resource.originalClassification # Standard classification mode
 	not clearance_levels[input.resource.classification]
 	msg := sprintf("Invalid classification level: %s", [input.resource.classification])
 }
@@ -586,10 +591,10 @@ is_coi_violation := msg if {
 	# Special case: US-ONLY requires exact match (no foreign COIs allowed)
 	"US-ONLY" in input.resource.COI
 	user_coi := object.get(input.subject, "acpCOI", [])
-	
+
 	# User must have ONLY US-ONLY COI, not other COIs that include USA
 	not user_coi == ["US-ONLY"]
-	
+
 	msg := sprintf("Resource requires US-ONLY COI. User has COI: %v (foreign-sharing COIs not permitted)", [user_coi])
 } else := msg if {
 	# If resource has COI, check based on coiOperator
@@ -603,19 +608,19 @@ is_coi_violation := msg if {
 
 	# Check based on operator: ALL mode (country membership)
 	operator == "ALL"
-	
+
 	# Compute required countries from resource COIs
-	required_countries := {c | 
+	required_countries := {c |
 		some coi in input.resource.COI
 		some c in coi_members[coi]
 	}
-	
+
 	# Compute user's countries from their COIs
-	user_countries := {c | 
+	user_countries := {c |
 		some coi in user_coi
 		some c in coi_members[coi]
 	}
-	
+
 	# Check if user countries is a superset of required countries
 	missing_countries := required_countries - user_countries
 	count(missing_countries) > 0
@@ -639,7 +644,7 @@ is_coi_violation := msg if {
 
 	# Check based on operator: ANY mode
 	operator == "ANY"
-	
+
 	# ANY: User must have at least one matching COI (exact tag match for ANY)
 	required := {coi | some coi in input.resource.COI}
 	has := {coi | some coi in user_coi}
@@ -665,7 +670,7 @@ is_under_embargo := msg if {
 	clock_skew_ns := 300000000000
 
 	# Deny if current time is before creation time (minus tolerance)
-	current_time_ns < (creation_time_ns - clock_skew_ns)
+	current_time_ns < creation_time_ns - clock_skew_ns
 
 	msg := sprintf("Resource under embargo until %s (current time: %s)", [
 		input.resource.creationDate,
@@ -682,23 +687,23 @@ is_under_embargo := msg if {
 is_ztdf_integrity_violation := msg if {
 	# Check if resource has ZTDF metadata
 	input.resource.ztdf
-	
+
 	# Priority 1: Check for explicitly failed validation
 	input.resource.ztdf.integrityValidated == false
-	
+
 	msg := "ZTDF integrity validation failed (cryptographic binding compromised)"
 } else := msg if {
 	# Priority 2: Check for missing policy hash (STANAG 4778 requirement)
 	input.resource.ztdf
 	not input.resource.ztdf.policyHash
-	
+
 	msg := "ZTDF policy hash missing (STANAG 4778 binding required)"
 } else := msg if {
 	# Priority 3: Check for missing payload hash
 	input.resource.ztdf
 	input.resource.ztdf.policyHash # policy hash exists
 	not input.resource.ztdf.payloadHash
-	
+
 	msg := "ZTDF payload hash missing (integrity protection required)"
 } else := msg if {
 	# Priority 4: Check if integrity validation flag is missing (when hashes are present)
@@ -706,7 +711,7 @@ is_ztdf_integrity_violation := msg if {
 	input.resource.ztdf.policyHash
 	input.resource.ztdf.payloadHash
 	not input.resource.ztdf.integrityValidated
-	
+
 	msg := "ZTDF integrity not validated (STANAG 4778 binding required)"
 }
 
@@ -717,14 +722,12 @@ is_ztdf_integrity_violation := msg if {
 is_upload_not_releasable_to_uploader := msg if {
 	# Only check for upload operations
 	input.action.operation == "upload"
-	
+
 	# Ensure releasabilityTo includes uploader's country
 	count(input.resource.releasabilityTo) > 0
 	not input.subject.countryOfAffiliation in input.resource.releasabilityTo
-	
-	msg := sprintf("Upload releasabilityTo must include uploader country: %s", [
-		input.subject.countryOfAffiliation
-	])
+
+	msg := sprintf("Upload releasabilityTo must include uploader country: %s", [input.subject.countryOfAffiliation])
 }
 
 # ============================================
@@ -741,15 +744,15 @@ is_upload_not_releasable_to_uploader := msg if {
 is_authentication_strength_insufficient := msg if {
 	# Only applies to classified resources
 	input.resource.classification != "UNCLASSIFIED"
-	
+
 	# Only check if ACR is explicitly provided in context
 	input.context.acr
-	
+
 	# Check ACR (Authentication Context Class Reference)
 	acr := input.context.acr
 	acr_lower := lower(acr)
-	acr_str := sprintf("%v", [acr])  # Convert to string (handles numeric ACR)
-	
+	acr_str := sprintf("%v", [acr]) # Convert to string (handles numeric ACR)
+
 	# AAL2 indicators:
 	# - String descriptors: "silver", "gold", "aal2", "multi-factor"
 	# - Numeric levels: "1" (AAL2), "2" (AAL3), "3" (AAL3+)
@@ -758,19 +761,19 @@ is_authentication_strength_insufficient := msg if {
 	not contains(acr_lower, "gold")
 	not contains(acr_lower, "aal2")
 	not contains(acr_lower, "multi-factor")
-	acr_str != "1"  # Keycloak numeric: 1 = AAL2
-	acr_str != "2"  # Keycloak numeric: 2 = AAL3 (satisfies AAL2)
-	acr_str != "3"  # Keycloak numeric: 3 = AAL3+ (satisfies AAL2)
-	
+	acr_str != "1" # Keycloak numeric: 1 = AAL2
+	acr_str != "2" # Keycloak numeric: 2 = AAL3 (satisfies AAL2)
+	acr_str != "3" # Keycloak numeric: 3 = AAL3+ (satisfies AAL2)
+
 	# Fallback: Check AMR for 2+ factors (IdP may not set proper ACR during step-up)
 	# This allows AAL2 validation even if ACR is "0" but user completed MFA
 	amr_factors := parse_amr(input.context.amr)
 	count(amr_factors) < 2
-	
+
 	msg := sprintf("Classification %v requires AAL2 (MFA), but ACR is '%v' and only %v factor(s) provided", [
 		input.resource.classification,
 		acr,
-		count(amr_factors)
+		count(amr_factors),
 	])
 }
 
@@ -783,30 +786,31 @@ is_authentication_strength_insufficient := msg if {
 is_mfa_not_verified := msg if {
 	# Only applies to classified resources
 	input.resource.classification != "UNCLASSIFIED"
-	
+
 	# Only check if AMR is explicitly provided in context
 	input.context.amr
-	
+
 	# Check AMR (Authentication Methods Reference)
 	amr := input.context.amr
 	count(amr) < 2
-	
+
 	msg := sprintf("MFA required for %v: need 2+ factors, got %v: %v", [
 		input.resource.classification,
 		count(amr),
-		amr
+		amr,
 	])
 }
 
 # ============================================
-# Decision Output
+# Decision Output (Simplified for Rego v1)
 # ============================================
 
-decision := {
-	"allow": allow,
-	"reason": reason,
-	"obligations": obligations,
-	"evaluation_details": evaluation_details,
+decision := d if {
+	d := {
+		"allow": allow,
+		"reason": reason,
+		"obligations": obligations,
+	}
 }
 
 # Reason for decision
@@ -853,7 +857,7 @@ obligations := kas_obligations if {
 kas_obligations contains obligation if {
 	allow
 	input.resource.encrypted == true
-	
+
 	obligation := {
 		"type": "kas",
 		"action": "request_key",
@@ -887,16 +891,16 @@ evaluation_details := {
 	"subject": {
 		"uniqueID": object.get(input.subject, "uniqueID", ""),
 		"clearance": object.get(input.subject, "clearance", ""),
-		"clearanceOriginal": object.get(input.subject, "clearanceOriginal", ""),  # NEW: ACP-240 Section 4.3
-		"clearanceCountry": object.get(input.subject, "clearanceCountry", ""),    # NEW: ACP-240 Section 4.3
+		"clearanceOriginal": object.get(input.subject, "clearanceOriginal", ""), # NEW: ACP-240 Section 4.3
+		"clearanceCountry": object.get(input.subject, "clearanceCountry", ""), # NEW: ACP-240 Section 4.3
 		"country": object.get(input.subject, "countryOfAffiliation", ""),
 	},
 	"resource": {
 		"resourceId": object.get(input.resource, "resourceId", ""),
 		"classification": object.get(input.resource, "classification", ""),
-		"originalClassification": object.get(input.resource, "originalClassification", ""),  # NEW: ACP-240 Section 4.3
-		"originalCountry": object.get(input.resource, "originalCountry", ""),              # NEW: ACP-240 Section 4.3
-		"natoEquivalent": object.get(input.resource, "natoEquivalent", ""),                # NEW: ACP-240 Section 4.3
+		"originalClassification": object.get(input.resource, "originalClassification", ""), # NEW: ACP-240 Section 4.3
+		"originalCountry": object.get(input.resource, "originalCountry", ""), # NEW: ACP-240 Section 4.3
+		"natoEquivalent": object.get(input.resource, "natoEquivalent", ""), # NEW: ACP-240 Section 4.3
 		"encrypted": object.get(input.resource, "encrypted", false),
 		"ztdfEnabled": ztdf_enabled,
 	},
@@ -910,14 +914,14 @@ evaluation_details := {
 		"kas_obligations": count(obligations) > 0,
 		"fail_closed_enforcement": true,
 		"aal2_enforced": true,
-		"classification_equivalency_enabled": true,  # NEW: ACP-240 Section 4.3
-		"equivalency_applied": equivalency_applied,  # NEW: P2-T5
-		"equivalency_details": equivalency_details,   # NEW: P2-T5
+		"classification_equivalency_enabled": true, # NEW: ACP-240 Section 4.3
+		"equivalency_applied": equivalency_applied, # NEW: P2-T5
+		"equivalency_details": equivalency_details, # NEW: P2-T5
 	},
 }
 
 # Helper: Check if classification equivalency was used in this decision
-equivalency_applied := true if {
+equivalency_applied if {
 	# Equivalency is applied when both original classifications are present
 	input.subject.clearanceOriginal
 	input.subject.clearanceCountry
@@ -938,7 +942,7 @@ equivalency_details := details if {
 		"display_marking": sprintf("%s (%s) / %s (NATO)", [
 			input.resource.originalClassification,
 			input.resource.originalCountry,
-			input.resource.classification
+			input.resource.classification,
 		]),
 	}
 } else := {} if {
@@ -947,50 +951,50 @@ equivalency_details := details if {
 }
 
 # Helper rules for evaluation details (always return boolean)
-check_authenticated := true if {
+check_authenticated if {
 	not is_not_authenticated
 } else := false
 
-check_required_attributes := true if {
+check_required_attributes if {
 	not is_missing_required_attributes
 } else := false
 
-check_clearance_sufficient := true if {
+check_clearance_sufficient if {
 	not is_insufficient_clearance
 } else := false
 
-check_country_releasable := true if {
+check_country_releasable if {
 	not is_not_releasable_to_country
 } else := false
 
-check_coi_satisfied := true if {
+check_coi_satisfied if {
 	not is_coi_violation
 } else := false
 
-check_embargo_passed := true if {
+check_embargo_passed if {
 	not is_under_embargo
 } else := false
 
-check_ztdf_integrity_valid := true if {
+check_ztdf_integrity_valid if {
 	not is_ztdf_integrity_violation
 } else := false
 
-check_upload_releasability_valid := true if {
+check_upload_releasability_valid if {
 	not is_upload_not_releasable_to_uploader
 } else := false
 
 # Helper: Check if ZTDF is enabled for this resource
-ztdf_enabled := true if {
+ztdf_enabled if {
 	input.resource.ztdf
 } else := false
 
 # Helper: Check if authentication strength is sufficient
-check_authentication_strength_sufficient := true if {
+check_authentication_strength_sufficient if {
 	not is_authentication_strength_insufficient
 } else := false
 
 # Helper: Check if MFA is verified
-check_mfa_verified := true if {
+check_mfa_verified if {
 	not is_mfa_not_verified
 } else := false
 
@@ -1004,6 +1008,7 @@ parse_amr(amr_input) := parsed if {
 	parsed := amr_input
 } else := parsed if {
 	is_string(amr_input)
+
 	# Try to parse as JSON
 	parsed := json.unmarshal(amr_input)
 	is_array(parsed)
@@ -1019,19 +1024,21 @@ parse_amr(amr_input) := parsed if {
 aal_level := "AAL3" if {
 	acr := object.get(input.context, "acr", "")
 	acr_lower := lower(sprintf("%v", [acr]))
+
 	# AAL3 indicators: "gold" or numeric "2"/"3"
 	contains(acr_lower, "gold")
 } else := "AAL3" if {
 	acr := object.get(input.context, "acr", "")
 	acr_str := sprintf("%v", [acr])
-	acr_str == "2"  # Keycloak numeric AAL3
+	acr_str == "2" # Keycloak numeric AAL3
 } else := "AAL3" if {
 	acr := object.get(input.context, "acr", "")
 	acr_str := sprintf("%v", [acr])
-	acr_str == "3"  # Keycloak numeric AAL3+
+	acr_str == "3" # Keycloak numeric AAL3+
 } else := "AAL2" if {
 	acr := object.get(input.context, "acr", "")
 	acr_lower := lower(sprintf("%v", [acr]))
+
 	# AAL2 indicators: "silver", "aal2", "multi-factor", or numeric "1"
 	contains(acr_lower, "silver")
 } else := "AAL2" if {
@@ -1045,11 +1052,10 @@ aal_level := "AAL3" if {
 } else := "AAL2" if {
 	acr := object.get(input.context, "acr", "")
 	acr_str := sprintf("%v", [acr])
-	acr_str == "1"  # Keycloak numeric: 1 = AAL2
+	acr_str == "1" # Keycloak numeric: 1 = AAL2
 } else := "AAL2" if {
 	# Fallback: 2+ AMR factors = AAL2 (even if ACR not set)
 	amr := object.get(input.context, "amr", [])
 	amr_factors := parse_amr(amr)
 	count(amr_factors) >= 2
 } else := "AAL1"
-

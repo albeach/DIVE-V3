@@ -15,6 +15,7 @@ import complianceRoutes from './routes/compliance.routes';
 import coiKeysRoutes from './routes/coi-keys.routes';
 import authRoutes from './controllers/auth.controller';  // Gap #7: Token revocation
 import decisionReplayRoutes from './routes/decision-replay.routes';
+import policiesLabRoutes from './routes/policies-lab.routes';  // Policies Lab
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 
@@ -80,6 +81,7 @@ app.use('/health', healthRoutes);
 app.use('/api', publicRoutes);  // Public routes (no auth required)
 app.use('/api/resources', resourceRoutes);
 app.use('/api/policies', policyRoutes);
+app.use('/api/policies-lab', policiesLabRoutes);  // Policies Lab (distinct from /api/policies)
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/compliance', complianceRoutes);
