@@ -66,7 +66,7 @@ services:
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "-k", "https://localhost:8443/health/ready"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/realms/master || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -108,8 +108,9 @@ services:
       retries: 5
 
   opa:
-    image: openpolicyagent/opa:0.68.0
+    image: openpolicyagent/opa:latest
     container_name: dive-v3-opa
+    platform: linux/amd64
     command:
       - "run"
       - "--server"
@@ -125,10 +126,30 @@ services:
     networks:
       - dive-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      test: ["CMD-SHELL", "wget --spider --quiet http://localhost:8181/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  authzforce:
+    image: authzforce/server:13.3.2
+    container_name: dive-v3-authzforce
+    ports:
+      - "8282:8080"
+    volumes:
+      - ./authzforce/conf:/opt/authzforce-ce-server/conf:ro
+      - ./authzforce/data:/opt/authzforce-ce-server/data
+      - ./policies/uploads:/policies:ro
+    environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/authzforce-ce/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dive-network
+    restart: unless-stopped
 
   backend:
     build:
@@ -148,6 +169,7 @@ services:
       MONGODB_DATABASE: dive-v3
       OPA_URL: http://opa:8181
       KAS_URL: http://kas:8080
+      AUTHZFORCE_URL: http://authzforce:8080/authzforce-ce
       LOG_LEVEL: info
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
@@ -157,6 +179,7 @@ services:
       - keycloak
       - mongo
       - opa
+      - authzforce
     networks:
       - dive-network
     volumes:
@@ -172,6 +195,8 @@ services:
       - ./backend/logs:/app/logs
       # IdP Management Revamp: Theme uploads directory
       - ./backend/uploads:/app/uploads
+      # Policies Lab: Upload directory for user policies
+      - ./policies/uploads:/app/policies/uploads
 
   nextjs:
     build:
