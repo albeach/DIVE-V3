@@ -1,0 +1,276 @@
+# ============================================
+# United Kingdom Realm Configuration
+# ============================================
+# UK MOD Security Policy compliant realm
+# NATO Expansion: Phase 1 - Ministry of Defence
+# Reference: docs/NATO-EXPANSION-COMPLETE.md
+
+resource "keycloak_realm" "dive_v3_gbr" {
+  realm   = "dive-v3-gbr"
+  enabled = true
+  
+  display_name      = "DIVE V3 - United Kingdom"
+  display_name_html = "<b>DIVE V3</b> - Ministry of Defence"
+  
+  # Registration and login settings
+  registration_allowed           = false  # Federated IdPs only
+  registration_email_as_username = false
+  remember_me                    = true
+  reset_password_allowed         = true
+  edit_username_allowed          = false
+  login_with_email_allowed       = true
+  
+  # Theming
+  login_theme = "keycloak"
+  
+  # Internationalization (English only)
+  internationalization {
+    supported_locales = ["en"]
+    default_locale    = "en"
+  }
+  
+  # Token lifetimes (AAL2 - UK MOD Security Policy)
+  access_token_lifespan        = "15m"   # 15 minutes (AAL2)
+  sso_session_idle_timeout     = "15m"   # AAL2 requirement
+  sso_session_max_lifespan     = "8h"    # AAL2 max: 12h
+  access_code_lifespan         = "1m"
+  
+  # Password policy (UK MOD requirements)
+  password_policy = "upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and length(12) and notUsername"
+  
+  # Brute-force detection (UK MOD settings)
+  security_defenses {
+    brute_force_detection {
+      permanent_lockout                = false
+      max_login_failures               = 5
+      wait_increment_seconds           = 60
+      quick_login_check_milli_seconds  = 1000
+      minimum_quick_login_wait_seconds = 60
+      max_failure_wait_seconds         = 900
+      failure_reset_time_seconds       = 43200
+    }
+    
+    headers {
+      x_frame_options                    = "SAMEORIGIN"
+      content_security_policy            = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
+      x_content_type_options             = "nosniff"
+      x_robots_tag                       = "none"
+      x_xss_protection                   = "1; mode=block"
+      strict_transport_security          = "max-age=31536000; includeSubDomains"
+    }
+  }
+  
+  # SSL/TLS requirements
+  ssl_required = "external"
+}
+
+# UK Realm Roles
+resource "keycloak_role" "gbr_user" {
+  realm_id    = keycloak_realm.dive_v3_gbr.id
+  name        = "user"
+  description = "Standard UK user role"
+}
+
+resource "keycloak_role" "gbr_admin" {
+  realm_id    = keycloak_realm.dive_v3_gbr.id
+  name        = "admin"
+  description = "UK realm administrator"
+}
+
+# UK Realm OIDC Client (for broker federation)
+resource "keycloak_openid_client" "gbr_realm_client" {
+  realm_id  = keycloak_realm.dive_v3_gbr.id
+  client_id = "dive-v3-broker-client"
+  name      = "DIVE V3 Broker Client"
+  enabled   = true
+  
+  access_type                  = "CONFIDENTIAL"
+  standard_flow_enabled        = true
+  direct_access_grants_enabled = false
+  
+  # Redirect to broker realm
+  valid_redirect_uris = [
+    "http://localhost:8081/realms/dive-v3-broker/broker/gbr-realm-broker/endpoint",
+    "http://keycloak:8080/realms/dive-v3-broker/broker/gbr-realm-broker/endpoint"
+  ]
+  
+  root_url = var.app_url
+  base_url = var.app_url
+}
+
+# Protocol mappers for UK realm client
+resource "keycloak_generic_protocol_mapper" "gbr_uniqueid_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "uniqueID-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "uniqueID"
+    "claim.name"           = "uniqueID"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_clearance_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "clearance-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "clearance"
+    "claim.name"           = "clearance"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_country_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "country-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "countryOfAffiliation"
+    "claim.name"           = "countryOfAffiliation"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_coi_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "coi-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "acpCOI"
+    "claim.name"           = "acpCOI"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_dutyorg_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "dutyOrg-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "dutyOrg"
+    "claim.name"           = "dutyOrg"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_orgunit_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "orgUnit-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "orgUnit"
+    "claim.name"           = "orgUnit"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_acr_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "acr-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "acr"
+    "claim.name"           = "acr"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "gbr_amr_mapper" {
+  realm_id   = keycloak_realm.dive_v3_gbr.id
+  client_id  = keycloak_openid_client.gbr_realm_client.id
+  name       = "amr-mapper"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "amr"
+    "claim.name"           = "amr"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# UK Test Users
+resource "keycloak_user" "gbr_test_user_secret" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_gbr.id
+  username = "james.smith"
+  enabled  = true
+
+  email      = "james.smith@mod.uk"
+  first_name = "James"
+  last_name  = "Smith"
+  
+  attributes = {
+    uniqueID               = "550e8400-e29b-41d4-a716-446655440005"  # UUID v4
+    clearance              = "SECRET"
+    countryOfAffiliation   = "GBR"
+    acpCOI                 = "[\"NATO-COSMIC\",\"FVEY\"]"
+    dutyOrg                = "UK_MOD"
+    orgUnit                = "CYBER_DEFENSE"
+    acr                    = "urn:mace:incommon:iap:silver"
+    amr                    = "[\"pwd\",\"otp\"]"
+  }
+
+  initial_password {
+    value     = "Password123!"
+    temporary = false
+  }
+}
+
+resource "keycloak_user_roles" "gbr_test_user_roles" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_gbr.id
+  user_id  = keycloak_user.gbr_test_user_secret[0].id
+
+  role_ids = [
+    keycloak_role.gbr_user.id
+  ]
+}
+
+

@@ -1,0 +1,2 @@
+com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.class
+com/dive/keycloak/authenticator/DirectGrantOTPAuthenticatorFactory.class

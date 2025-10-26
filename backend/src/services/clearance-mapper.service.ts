@@ -28,6 +28,11 @@ export type NationalClearanceSystem =
     | 'FRA'  // France
     | 'CAN'  // Canada
     | 'GBR'  // United Kingdom
+    | 'DEU'  // Germany
+    | 'ITA'  // Italy
+    | 'ESP'  // Spain
+    | 'POL'  // Poland
+    | 'NLD'  // Netherlands
     | 'INDUSTRY';  // Industry partners
 
 /**
@@ -55,6 +60,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             FRA: ['NON CLASSIFIÉ', 'NON CLASSIFIE'],
             CAN: ['UNCLASSIFIED', 'U'],
             GBR: ['UNCLASSIFIED', 'OFFICIAL'],
+            DEU: ['OFFEN'],
+            ITA: ['NON CLASSIFICATO'],
+            ESP: ['NO CLASIFICADO'],
+            POL: ['NIEJAWNE'],
+            NLD: ['NIET-GERUBRICEERD'],
             INDUSTRY: ['UNCLASSIFIED', 'PUBLIC']
         },
         mfaRequired: false,
@@ -75,6 +85,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             ],
             CAN: ['CONFIDENTIAL', 'PROTECTED B', 'PROTECTED-B'],
             GBR: ['CONFIDENTIAL'],
+            DEU: ['VS-NUR FÜR DEN DIENSTGEBRAUCH', 'VS-NUR FUR DEN DIENSTGEBRAUCH', 'VS-VERTRAULICH'],
+            ITA: ['RISERVATO', 'RISERVATISSIMO'],
+            ESP: ['DIFUSIÓN LIMITADA', 'DIFUSION LIMITADA', 'CONFIDENCIAL'],
+            POL: ['ZASTRZEŻONE', 'ZASTRZEZIONE', 'POUFNE'],
+            NLD: ['DEPARTEMENTAAL VERTROUWELIJK', 'VERTROUWELIJK'],
             INDUSTRY: ['CONFIDENTIAL', 'PROPRIETARY']
         },
         mfaRequired: true,
@@ -95,6 +110,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             ],
             CAN: ['SECRET', 'PROTECTED C', 'PROTECTED-C'],
             GBR: ['SECRET'],
+            DEU: ['GEHEIM'],
+            ITA: ['SEGRETO'],
+            ESP: ['SECRETO'],
+            POL: ['TAJNE'],
+            NLD: ['GEHEIM'],
             INDUSTRY: ['SECRET', 'TRADE SECRET']
         },
         mfaRequired: true,
@@ -115,6 +135,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             ],
             CAN: ['TOP SECRET', 'TS', 'TOP_SECRET'],
             GBR: ['TOP SECRET', 'TS'],
+            DEU: ['STRENG GEHEIM'],
+            ITA: ['SEGRETISSIMO'],
+            ESP: ['ALTO SECRETO'],
+            POL: ['ŚCIŚLE TAJNE', 'SCISLE TAJNE'],
+            NLD: ['ZEER GEHEIM'],
             INDUSTRY: ['TOP SECRET', 'HIGHLY CONFIDENTIAL']
         },
         mfaRequired: true,
@@ -299,6 +324,21 @@ export function getCountryFromRealm(realmName: string): NationalClearanceSystem 
     if (normalized.includes('gbr') || normalized.includes('uk') || normalized.includes('britain')) {
         return 'GBR';
     }
+    if (normalized.includes('deu') || normalized.includes('germany') || normalized.includes('german')) {
+        return 'DEU';
+    }
+    if (normalized.includes('ita') || normalized.includes('italy') || normalized.includes('italian')) {
+        return 'ITA';
+    }
+    if (normalized.includes('esp') || normalized.includes('spain') || normalized.includes('spanish')) {
+        return 'ESP';
+    }
+    if (normalized.includes('pol') || normalized.includes('poland') || normalized.includes('polish')) {
+        return 'POL';
+    }
+    if (normalized.includes('nld') || normalized.includes('netherlands') || normalized.includes('dutch')) {
+        return 'NLD';
+    }
     if (normalized.includes('industry') || normalized.includes('partner')) {
         return 'INDUSTRY';
     }
@@ -338,7 +378,7 @@ export function validateClearanceMapping(): { valid: boolean; errors: string[] }
     }
 
     // Check that each mapping has equivalents for all countries
-    const requiredCountries: NationalClearanceSystem[] = ['USA', 'FRA', 'CAN', 'GBR', 'INDUSTRY'];
+    const requiredCountries: NationalClearanceSystem[] = ['USA', 'FRA', 'CAN', 'GBR', 'DEU', 'ITA', 'ESP', 'POL', 'NLD', 'INDUSTRY'];
 
     for (const mapping of CLEARANCE_EQUIVALENCY_TABLE) {
         for (const country of requiredCountries) {

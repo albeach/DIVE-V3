@@ -386,6 +386,12 @@ function IdPManagementPageContent() {
                                     Super Admin Console
                                 </a>
                                 <a
+                                    href="/integration/federation-vs-object"
+                                    className="block px-3 py-2 text-sm text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md transition-colors font-medium"
+                                >
+                                    📖 Integration Guide (NEW)
+                                </a>
+                                <a
                                     href="/admin/idp/new"
                                     className="block px-3 py-2 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-md transition-colors font-medium"
                                 >

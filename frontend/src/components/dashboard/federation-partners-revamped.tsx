@@ -17,14 +17,17 @@ interface FederationPartnersRevampedProps {
   user: User;
 }
 
-const protocolColors = {
-  oidc: 'from-blue-500 to-indigo-600',
-  saml: 'from-purple-500 to-pink-600',
-};
-
-const protocolBadgeColors = {
-  oidc: 'bg-blue-100 text-blue-700 border-blue-300',
-  saml: 'bg-purple-100 text-purple-700 border-purple-300',
+// Consolidated style classes
+const styles = {
+  protocolIcon: "w-10 h-10 rounded-xl flex items-center justify-center shadow-md transform group-hover/card:scale-110 transition-transform duration-300",
+  protocolColors: {
+    oidc: 'bg-gradient-to-br from-blue-500 to-indigo-600',
+    saml: 'bg-gradient-to-br from-purple-500 to-pink-600',
+  },
+  card: "group/card relative rounded-xl bg-white p-3 shadow-md border-2 border-gray-200 hover:border-emerald-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden",
+  statusDot: "w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse",
+  headerIcon: "relative w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 mr-4",
+  container: "group rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 p-8 shadow-lg border-2 border-emerald-200 hover:border-emerald-300 transition-all duration-500 animate-fade-in-up relative overflow-hidden",
 };
 
 export function FederationPartnersRevamped({ user }: FederationPartnersRevampedProps) {
@@ -90,7 +93,7 @@ export function FederationPartnersRevamped({ user }: FederationPartnersRevampedP
   }
 
   return (
-    <div className="group rounded-2xl bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 p-8 shadow-lg border-2 border-emerald-200 hover:border-emerald-300 transition-all duration-500 animate-fade-in-up relative overflow-hidden" style={{ animationDelay: '200ms' }}>
+    <div className={styles.container} style={{ animationDelay: '200ms' }}>
       {/* Animated gradient border */}
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 animate-gradient-x opacity-20" />
@@ -109,7 +112,7 @@ export function FederationPartnersRevamped({ user }: FederationPartnersRevampedP
           <div className="flex items-center">
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-2xl blur-lg animate-pulse opacity-50" />
-              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-600 flex items-center justify-center shadow-lg transform group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 mr-4">
+              <div className={styles.headerIcon}>
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                 </svg>
@@ -119,7 +122,7 @@ export function FederationPartnersRevamped({ user }: FederationPartnersRevampedP
               <h2 className="text-lg font-bold text-gray-900 mb-2 flex flex-wrap items-center gap-2">
                 <span>🌍 Federation Network</span>
                 <span className="flex items-center text-sm text-gray-600 font-normal">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-2"></span>
+                  <span className={`${styles.statusDot} mr-2`}></span>
                   {idps.length} Active {idps.length === 1 ? 'Partner' : 'Partners'}
                 </span>
               </h2>
@@ -141,23 +144,23 @@ export function FederationPartnersRevamped({ user }: FederationPartnersRevampedP
               {idps.map((idp, index) => (
                 <div
                   key={idp.alias}
-                  className="group/card relative rounded-xl bg-white p-3 shadow-md border-2 border-gray-200 hover:border-emerald-400 hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+                  className={styles.card}
                   style={{ animationDelay: `${400 + index * 75}ms` }}
                 >
                   {/* Gradient accent bar */}
-                  <div className={`absolute top-0 left-0 right-0 h-2 bg-gradient-to-r ${protocolColors[idp.protocol]}`} />
+                  <div className={`absolute top-0 left-0 right-0 h-2 ${styles.protocolColors[idp.protocol]}`} />
                   
                   {/* Active indicator */}
                   <div className="flex items-center justify-end mb-2">
                     <div className="flex items-center space-x-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      <div className={styles.statusDot} />
                       <span className="text-xs font-medium text-green-600">Active</span>
                     </div>
                   </div>
 
                   {/* Icon */}
                   <div className="flex justify-center mb-2">
-                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${protocolColors[idp.protocol]} flex items-center justify-center shadow-md transform group-hover/card:scale-110 transition-transform duration-300`}>
+                    <div className={`${styles.protocolIcon} ${styles.protocolColors[idp.protocol]}`}>
                       <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                       </svg>
