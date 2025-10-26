@@ -15,6 +15,13 @@ export default function AdminDebugPage() {
     const { data: session, status } = useSession();
     const router = useRouter();
 
+    // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+    React.useEffect(() => {
+        if (status !== 'loading' && status === 'unauthenticated') {
+            router.push('/login');
+        }
+    }, [status, router]);
+
     if (status === 'loading') {
         return (
             <div className="flex min-h-screen items-center justify-center">
@@ -24,7 +31,6 @@ export default function AdminDebugPage() {
     }
 
     if (status === 'unauthenticated') {
-        router.push('/login');
         return null;
     }
 

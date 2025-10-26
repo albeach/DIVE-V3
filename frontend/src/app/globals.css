@@ -498,3 +498,248 @@ body {
 .animate-shake {
     animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
+
+/* ============================================ */
+/* 🥚 EASTER EGG ANIMATIONS - 2025 Hacker Terminal */
+/* ============================================ */
+
+/* Matrix rain effect */
+@keyframes matrixRain {
+    0% {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    90% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(100vh);
+        opacity: 0;
+    }
+}
+
+.animate-matrix-rain {
+    animation: matrixRain linear infinite;
+}
+
+/* Terminal line typing effect */
+@keyframes terminalLine {
+    0% {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.animate-terminal-line {
+    animation: terminalLine 0.3s ease-out forwards;
+}
+
+/* Glitch effect 1 */
+@keyframes glitch1 {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+        opacity: 0.8;
+    }
+
+    33% {
+        transform: translate(-2px, 2px);
+        opacity: 0.9;
+    }
+
+    66% {
+        transform: translate(2px, -2px);
+        opacity: 0.7;
+    }
+}
+
+.animate-glitch-1 {
+    animation: glitch1 0.3s infinite;
+}
+
+/* Glitch effect 2 */
+@keyframes glitch2 {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+        opacity: 0.8;
+    }
+
+    33% {
+        transform: translate(2px, -2px);
+        opacity: 0.7;
+    }
+
+    66% {
+        transform: translate(-2px, 2px);
+        opacity: 0.9;
+    }
+}
+
+.animate-glitch-2 {
+    animation: glitch2 0.4s infinite;
+}
+
+/* Scan line effect */
+@keyframes scanLine {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(100%);
+    }
+}
+
+.animate-scan-line {
+    animation: scanLine 4s linear infinite;
+}
+
+/* Neon glow pulse for admin access */
+@keyframes neonPulse {
+
+    0%,
+    100% {
+        filter: drop-shadow(0 0 10px rgba(0, 255, 65, 0.6));
+    }
+
+    50% {
+        filter: drop-shadow(0 0 30px rgba(0, 255, 65, 1));
+    }
+}
+
+.animate-neon-pulse {
+    animation: neonPulse 2s ease-in-out infinite;
+}
+
+/* CRT screen flicker effect */
+@keyframes crtFlicker {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.95;
+    }
+
+    51% {
+        opacity: 1;
+    }
+
+    52% {
+        opacity: 0.98;
+    }
+
+    53% {
+        opacity: 1;
+    }
+}
+
+.animate-crt-flicker {
+    animation: crtFlicker 0.1s infinite;
+}
+
+/* Access granted text reveal */
+@keyframes accessGranted {
+    0% {
+        opacity: 0;
+        letter-spacing: 1em;
+        transform: scale(0.5);
+    }
+
+    50% {
+        letter-spacing: 0.5em;
+    }
+
+    100% {
+        opacity: 1;
+        letter-spacing: normal;
+        transform: scale(1);
+    }
+}
+
+.animate-access-granted {
+    animation: accessGranted 0.8s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+/* Cyber grid background pulse */
+@keyframes cyberGrid {
+
+    0%,
+    100% {
+        background-position: 0 0;
+        opacity: 0.3;
+    }
+
+    50% {
+        background-position: 50px 50px;
+        opacity: 0.5;
+    }
+}
+
+.animate-cyber-grid {
+    animation: cyberGrid 4s ease infinite;
+}
+
+/* Hologram flicker */
+@keyframes hologramFlicker {
+
+    0%,
+    100% {
+        opacity: 1;
+        filter: brightness(1);
+    }
+
+    45% {
+        opacity: 0.8;
+        filter: brightness(1.1);
+    }
+
+    50% {
+        opacity: 0.9;
+        filter: brightness(0.9);
+    }
+
+    55% {
+        opacity: 1;
+        filter: brightness(1.05);
+    }
+}
+
+.animate-hologram {
+    animation: hologramFlicker 3s ease-in-out infinite;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+
+    .animate-matrix-rain,
+    .animate-glitch-1,
+    .animate-glitch-2,
+    .animate-scan-line,
+    .animate-neon-pulse,
+    .animate-crt-flicker,
+    .animate-hologram,
+    .animate-cyber-grid {
+        animation: none !important;
+    }
+
+    .animate-access-granted {
+        animation: fadeIn 0.5s ease-out forwards;
+    }
+}

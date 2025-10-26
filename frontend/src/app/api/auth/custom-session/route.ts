@@ -15,7 +15,15 @@ export async function POST(request: NextRequest) {
     try {
         const { accessToken, refreshToken, idToken, expiresIn } = await request.json();
 
+        console.log('[Custom Session] Received tokens:', {
+            hasAccessToken: !!accessToken,
+            hasRefreshToken: !!refreshToken,
+            hasIdToken: !!idToken,
+            expiresIn
+        });
+
         if (!accessToken || !idToken) {
+            console.error('[Custom Session] Missing required tokens:', { accessToken: !!accessToken, idToken: !!idToken });
             return NextResponse.json(
                 { error: 'Missing required tokens' },
                 { status: 400 }

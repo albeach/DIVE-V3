@@ -154,12 +154,18 @@ export default function ResourcesPage() {
     }
   };
 
+  // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      router.push('/login');
+    }
+  }, [status, session, router]);
+
   // Fetch resources
   useEffect(() => {
     if (status === 'loading') return;
     
     if (!session) {
-      router.push('/login');
       return;
     }
 

@@ -250,12 +250,59 @@ is_missing_required_attributes := msg if {
 	msg := sprintf("Invalid country code in releasabilityTo: %s (must be ISO 3166-1 alpha-3)", [country])
 }
 
-# Valid ISO 3166-1 alpha-3 country codes (NATO + common partners)
+# Valid ISO 3166-1 alpha-3 country codes (ALL 249 officially assigned codes)
+# Updated to support coalition operations with any country
 valid_country_codes := {
-	"USA", "CAN", "GBR", "FRA", "DEU", "ITA", "ESP", "NLD", "BEL", "LUX",
-	"PRT", "DNK", "NOR", "ISL", "TUR", "GRC", "POL", "CZE", "HUN", "SVK",
-	"SVN", "EST", "LVA", "LTU", "BGR", "ROU", "HRV", "ALB", "MKD", "MNE",
-	"AUS", "NZL", "JPN", "KOR", "FIN", "SWE", "AUT", "CHE", "IRL"
+	# A
+	"ABW", "AFG", "AGO", "AIA", "ALA", "ALB", "AND", "ARE", "ARG", "ARM", "ASM", "ATA", "ATF", "ATG", "AUS", "AUT", "AZE",
+	# B
+	"BDI", "BEL", "BEN", "BES", "BFA", "BGD", "BGR", "BHR", "BHS", "BIH", "BLM", "BLR", "BLZ", "BMU", "BOL", "BRA", "BRB", "BRN", "BTN", "BVT", "BWA",
+	# C
+	"CAF", "CAN", "CCK", "CHE", "CHL", "CHN", "CIV", "CMR", "COD", "COG", "COK", "COL", "COM", "CPV", "CRI", "CUB", "CUW", "CXR", "CYM", "CYP", "CZE",
+	# D
+	"DEU", "DJI", "DMA", "DNK", "DOM", "DZA",
+	# E
+	"ECU", "EGY", "ERI", "ESH", "ESP", "EST", "ETH",
+	# F
+	"FIN", "FJI", "FLK", "FRA", "FRO", "FSM",
+	# G
+	"GAB", "GBR", "GEO", "GGY", "GHA", "GIB", "GIN", "GLP", "GMB", "GNB", "GNQ", "GRC", "GRD", "GRL", "GTM", "GUF", "GUM", "GUY",
+	# H
+	"HKG", "HMD", "HND", "HRV", "HTI", "HUN",
+	# I
+	"IDN", "IMN", "IND", "IOT", "IRL", "IRN", "IRQ", "ISL", "ISR", "ITA",
+	# J
+	"JAM", "JEY", "JOR", "JPN",
+	# K
+	"KAZ", "KEN", "KGZ", "KHM", "KIR", "KNA", "KOR", "KWT",
+	# L
+	"LAO", "LBN", "LBR", "LBY", "LCA", "LIE", "LKA", "LSO", "LTU", "LUX", "LVA",
+	# M
+	"MAC", "MAF", "MAR", "MCO", "MDA", "MDG", "MDV", "MEX", "MHL", "MKD", "MLI", "MLT", "MMR", "MNE", "MNG", "MNP", "MOZ", "MRT", "MSR", "MTQ", "MUS", "MWI", "MYS", "MYT",
+	# N
+	"NAM", "NCL", "NER", "NFK", "NGA", "NIC", "NIU", "NLD", "NOR", "NPL", "NRU", "NZL",
+	# O
+	"OMN",
+	# P
+	"PAK", "PAN", "PCN", "PER", "PHL", "PLW", "PNG", "POL", "PRI", "PRK", "PRT", "PRY", "PSE", "PYF",
+	# Q
+	"QAT",
+	# R
+	"REU", "ROU", "RUS", "RWA",
+	# S
+	"SAU", "SDN", "SEN", "SGP", "SGS", "SHN", "SJM", "SLB", "SLE", "SLV", "SMR", "SOM", "SPM", "SRB", "SSD", "STP", "SUR", "SVK", "SVN", "SWE", "SWZ", "SXM", "SYC", "SYR",
+	# T
+	"TCA", "TCD", "TGO", "THA", "TJK", "TKL", "TKM", "TLS", "TON", "TTO", "TUN", "TUR", "TUV", "TWN",
+	# U
+	"TZA", "UGA", "UKR", "UMI", "URY", "USA", "UZB",
+	# V
+	"VAT", "VCT", "VEN", "VGB", "VIR", "VNM", "VUT",
+	# W
+	"WLF", "WSM",
+	# Y
+	"YEM",
+	# Z
+	"ZAF", "ZMB", "ZWE"
 }
 
 # ============================================

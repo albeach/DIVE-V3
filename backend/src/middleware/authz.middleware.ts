@@ -326,13 +326,58 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Get the signing key (pass token for realm detection)
         const publicKey = await getSigningKey(decoded.header, token);
 
-        // Multi-realm: Accept tokens from both dive-v3-pilot AND dive-v3-broker
+        // Log the actual issuer for debugging
+        const actualIssuer = (decoded.payload as any)?.iss;
+        logger.debug('Token issuer detected', {
+            actualIssuer,
+            tokenKid: decoded.header.kid,
+        });
+
+        // Multi-realm: Accept tokens from all DIVE realms (broker + individual IdP realms)
         // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
+        // Keycloak 26 Fix: Also accept localhost:8080 (frontend container accessing Keycloak)
         const validIssuers: [string, ...string[]] = [
+            // Legacy pilot realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
             'http://localhost:8081/realms/dive-v3-pilot',          // External: dive-v3-pilot
+            'http://localhost:8080/realms/dive-v3-pilot',          // Frontend container: dive-v3-pilot
+
+            // Main broker realm
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
             'http://localhost:8081/realms/dive-v3-broker',         // External: dive-v3-broker
+            'http://localhost:8080/realms/dive-v3-broker',         // Frontend container: dive-v3-broker
+
+            // Individual IdP realms (for direct login to sub-realms)
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-usa`,      // Internal: dive-v3-usa
+            'http://localhost:8081/realms/dive-v3-usa',            // External: dive-v3-usa
+            'http://localhost:8080/realms/dive-v3-usa',            // Frontend container: dive-v3-usa
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-fra`,      // Internal: dive-v3-fra
+            'http://localhost:8081/realms/dive-v3-fra',            // External: dive-v3-fra
+            'http://localhost:8080/realms/dive-v3-fra',            // Frontend container: dive-v3-fra
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-can`,      // Internal: dive-v3-can
+            'http://localhost:8081/realms/dive-v3-can',            // External: dive-v3-can
+            'http://localhost:8080/realms/dive-v3-can',            // Frontend container: dive-v3-can
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-industry`, // Internal: dive-v3-industry
+            'http://localhost:8081/realms/dive-v3-industry',       // External: dive-v3-industry
+            'http://localhost:8080/realms/dive-v3-industry',       // Frontend container: dive-v3-industry
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-gbr`,      // Internal: dive-v3-gbr
+            'http://localhost:8081/realms/dive-v3-gbr',            // External: dive-v3-gbr
+            'http://localhost:8080/realms/dive-v3-gbr',            // Frontend container: dive-v3-gbr
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-deu`,      // Internal: dive-v3-deu
+            'http://localhost:8081/realms/dive-v3-deu',            // External: dive-v3-deu
+            'http://localhost:8080/realms/dive-v3-deu',            // Frontend container: dive-v3-deu
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-nld`,      // Internal: dive-v3-nld
+            'http://localhost:8081/realms/dive-v3-nld',            // External: dive-v3-nld
+            'http://localhost:8080/realms/dive-v3-nld',            // Frontend container: dive-v3-nld
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-pol`,      // Internal: dive-v3-pol
+            'http://localhost:8081/realms/dive-v3-pol',            // External: dive-v3-pol
+            'http://localhost:8080/realms/dive-v3-pol',            // Frontend container: dive-v3-pol
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-ita`,      // Internal: dive-v3-ita
+            'http://localhost:8081/realms/dive-v3-ita',            // External: dive-v3-ita
+            'http://localhost:8080/realms/dive-v3-ita',            // Frontend container: dive-v3-ita
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-esp`,      // Internal: dive-v3-esp
+            'http://localhost:8081/realms/dive-v3-esp',            // External: dive-v3-esp
+            'http://localhost:8080/realms/dive-v3-esp',            // Frontend container: dive-v3-esp
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
@@ -354,6 +399,14 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
                 },
                 (err: any, decoded: any) => {
                     if (err) {
+                        // Enhanced error logging: show actual issuer received
+                        logger.error('JWT verification failed in jwt.verify', {
+                            error: err.message,
+                            actualIssuer: actualIssuer,
+                            expectedIssuers: validIssuers.slice(0, 5), // Log first 5 to avoid huge logs
+                            actualAudience: (decoded?.payload as any)?.aud,
+                            expectedAudiences: validAudiences
+                        });
                         reject(err);
                     } else {
                         resolve(decoded as IKeycloakToken);
@@ -362,7 +415,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             );
         });
     } catch (error) {
-        logger.error('Token verification error', {
+        logger.error('Token verification error (outer catch)', {
             error: error instanceof Error ? error.message : 'Unknown error',
         });
         throw error;

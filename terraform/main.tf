@@ -1,11 +1,11 @@
 terraform {
   required_providers {
     keycloak = {
-      source  = "mrparkers/keycloak"
-      version = ">= 4.0.0"
+      source  = "keycloak/keycloak"
+      version = "~> 5.0"  # Official Keycloak provider - Use latest 5.x
     }
   }
-  required_version = ">= 1.0"
+  required_version = ">= 1.13.4"
 }
 
 provider "keycloak" {

@@ -135,6 +135,10 @@ export interface IACP240AuditEvent {
         amr?: string[];      // Authentication Methods Reference
         auth_time?: number;  // Time of authentication
         aal_level?: string;  // Derived AAL level (AAL1/AAL2/AAL3)
+        // ADatP-5663 specific fields
+        issuer?: string;     // IdP URL (§4.4)
+        token_id?: string;   // JWT ID (jti claim) for revocation tracking
+        token_lifetime?: number;  // Time since authentication (currentTime - auth_time)
     };
 
     /** Resource attributes (for policy correlation) */
@@ -143,6 +147,17 @@ export interface IACP240AuditEvent {
         releasabilityTo?: string[];
         COI?: string[];
         encrypted?: boolean;
+        // ACP-240 specific fields
+        ztdf_integrity?: 'valid' | 'invalid' | 'not_checked';  // STANAG 4778 signature status
+        original_classification?: string;  // National classification (e.g., "GEHEIM")
+        original_country?: string;         // ISO 3166-1 alpha-3 (e.g., "DEU")
+        kas_actions?: Array<{              // KAS unwrap/rewrap operations
+            action: 'unwrap' | 'rewrap';
+            kas_url: string;
+            status: 'success' | 'failure';
+            latency_ms: number;
+            timestamp: string;
+        }>;
     };
 
     /** Policy evaluation details (OPA) */
@@ -150,6 +165,11 @@ export interface IACP240AuditEvent {
         allow: boolean;
         reason: string;
         evaluation_details?: Record<string, unknown>;
+        obligations?: Array<{           // ACP-240 §5.2 KAS obligations
+            type: string;
+            resourceId?: string;
+            status?: 'pending' | 'fulfilled' | 'failed';
+        }>;
     };
 
     /** Additional context */

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { config } from 'dotenv';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/error.middleware';
+import { policySelectorMiddleware } from './middleware/policy-selector.middleware';
 import resourceRoutes from './routes/resource.routes';
 import healthRoutes from './routes/health.routes';
 import policyRoutes from './routes/policy.routes';
@@ -13,7 +14,9 @@ import publicRoutes from './routes/public.routes';
 import complianceRoutes from './routes/compliance.routes';
 import coiKeysRoutes from './routes/coi-keys.routes';
 import authRoutes from './controllers/auth.controller';  // Gap #7: Token revocation
+import decisionReplayRoutes from './routes/decision-replay.routes';
 import { initializeThemesCollection } from './services/idp-theme.service';
+import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -51,6 +54,9 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Policy selector (determines which OPA policy to use)
+app.use(policySelectorMiddleware);
+
 // Request logging
 app.use((req, _res, next) => {
   const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -79,6 +85,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/coi-keys', coiKeysRoutes);
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
+app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -120,6 +127,33 @@ if (process.env.NODE_ENV !== 'test') {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
+
+    // Task 4.3: Sync Keycloak brute force configuration for all realms
+    try {
+      logger.info('Starting Keycloak configuration sync for all realms');
+      await KeycloakConfigSyncService.syncAllRealms();
+      logger.info('Keycloak configuration sync completed successfully');
+    } catch (error) {
+      logger.error('Failed to sync Keycloak configuration', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      // Non-fatal: will fallback to defaults during rate limiting
+    }
+
+    // Set up periodic sync (every 5 minutes)
+    setInterval(async () => {
+      try {
+        logger.debug('Running periodic Keycloak configuration sync');
+        await KeycloakConfigSyncService.syncAllRealms();
+      } catch (error) {
+        logger.error('Periodic sync failed', {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    logger.info('Periodic Keycloak configuration sync scheduled (every 5 minutes)');
   });
 }
 

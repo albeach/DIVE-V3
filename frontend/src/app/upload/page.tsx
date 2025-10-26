@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -161,7 +161,14 @@ export default function UploadPage() {
 
   const canUpload = file && title.trim() && releasabilityTo.length > 0 && !uploading;
 
-  // Redirect to login if not authenticated
+  // Redirect to login if not authenticated (use useEffect to avoid render-phase updates)
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      router.push('/login');
+    }
+  }, [status, session, router]);
+
+  // Loading state
   if (status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -173,8 +180,8 @@ export default function UploadPage() {
     );
   }
 
+  // Return null while redirecting
   if (!session) {
-    router.push('/login');
     return null;
   }
 

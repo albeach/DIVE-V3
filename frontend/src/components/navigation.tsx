@@ -25,6 +25,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { SessionStatusIndicator } from '@/components/auth/session-status-indicator';
+import { StandardsLensToggle } from '@/components/standards/StandardsLensToggle';
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
 import { 
     LayoutDashboard, 
@@ -51,7 +52,9 @@ import {
     Key,
     CheckSquare,
     FileCheck,
-    ArrowRight
+    ArrowRight,
+    BookOpen,
+    GitMerge
 } from 'lucide-react';
 
 // National classification mappings (ACP-240 Section 4.3)
@@ -199,10 +202,10 @@ export default function Navigation({ user }: INavigationProps) {
             hasMegaMenu: false
         },
         { 
-            name: 'Tests', 
+            name: 'Compliance & Testing', 
             href: '/compliance', 
             icon: CheckCircle2,
-            description: 'Compliance testing',
+            description: 'ACP-240 compliance, standards integration, testing',
             hasMegaMenu: false
         },
         { 
@@ -256,6 +259,13 @@ export default function Navigation({ user }: INavigationProps) {
             icon: ScrollText, 
             badge: null,
             description: 'View audit trail'
+        },
+        { 
+            name: 'Integration Guide', 
+            href: '/integration/federation-vs-object', 
+            icon: BookOpen, 
+            badge: 'NEW',
+            description: '5663 × 240 Interactive Tutorial'
         },
     ];
 
@@ -454,6 +464,11 @@ export default function Navigation({ user }: INavigationProps) {
 
                         {/* Right: Unified Actions Menu - 2025 Pattern */}
                         <div className="flex items-center gap-3">
+                            {/* Standards Lens Toggle */}
+                            <div className="hidden lg:block">
+                                <StandardsLensToggle />
+                            </div>
+                            
                             {/* Unified User + Admin Dropdown - Enhanced */}
                             <div ref={dropdownRef} className="hidden lg:block relative">
                                 <button
@@ -515,7 +530,7 @@ export default function Navigation({ user }: INavigationProps) {
                                         {/* Glow effect */}
                                         <div className="absolute -inset-2 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-2xl opacity-20 blur-xl" />
                                         
-                                        <div className="relative bg-white/98 backdrop-blur-2xl rounded-2xl shadow-2xl border border-gray-100/80 overflow-hidden">
+                                        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/60 overflow-hidden" style={{ backdropFilter: 'blur(20px) saturate(180%)' }}>
                                             {/* User Info Header - Enhanced */}
                                             <div className="px-5 py-5 bg-gradient-to-r from-[#4497ac]/5 via-[#5ca3b5]/5 to-[#90d56a]/5 border-b border-gray-100">
                                                 <div className="flex items-center gap-3 mb-4">

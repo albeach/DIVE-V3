@@ -51,7 +51,7 @@ export class DecisionReplayService {
             // Extract security attributes from ZTDF structure
             const securityLabel = resource.ztdf?.policy?.securityLabel || {} as any;
             const legacyFields = resource.legacy || {} as any;
-            
+
             const opaInput = {
                 input: {
                     subject,
