@@ -235,7 +235,7 @@ services:
   # Keycloak (Identity Provider Broker)
   # ============================================
   keycloak:
-    image: quay.io/keycloak/keycloak:23.0
+    image: quay.io/keycloak/keycloak:26.0.7
     container_name: dive-v3-keycloak-prod
     restart: unless-stopped
     

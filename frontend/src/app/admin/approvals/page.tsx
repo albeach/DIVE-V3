@@ -74,6 +74,13 @@ export default function ApprovalsPage() {
         }
     }, [status, session?.accessToken]);
 
+    // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+    useEffect(() => {
+        if (status !== 'loading' && status === 'unauthenticated') {
+            router.push('/login');
+        }
+    }, [status, router]);
+
     const fetchPending = async () => {
         setLoading(true);
         setError(null);
@@ -204,7 +211,6 @@ export default function ApprovalsPage() {
     }
 
     if (status === 'unauthenticated') {
-        router.push('/login');
         return null;
     }
 

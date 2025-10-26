@@ -47,6 +47,13 @@ export default function AdminDashboard() {
         return () => clearInterval(interval);
     }, [autoRefresh]);
 
+    // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+    useEffect(() => {
+        if (status !== 'loading' && status === 'unauthenticated') {
+            router.push('/login');
+        }
+    }, [status, router]);
+
     if (status === 'loading') {
         return (
             <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
@@ -59,7 +66,6 @@ export default function AdminDashboard() {
     }
 
     if (status === 'unauthenticated') {
-        router.push('/login');
         return null;
     }
 

@@ -20,10 +20,15 @@ resource "keycloak_realm" "dive_v3_broker" {
   edit_username_allowed          = false
 
   # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
-  # Increased timeouts to prevent session expiration during active use
+  # Broker realm: Used by admin-dive super admin for management console
+  # Allow reasonable session for admin work (not enforcing 1s like national realms)
   access_token_lifespan        = "15m"   # Access token (aligns with NextAuth session)
-  sso_session_idle_timeout     = "60m"   # SSO idle (1 hour - prevents premature expiration)
-  sso_session_max_lifespan     = "8h"    # Max session (8 hours - AAL2 compliant)
+  
+  # Broker realm sessions: Allow normal sessions for super admin
+  # MFA is still enforced via authentication flow, but sessions can persist
+  sso_session_idle_timeout     = "30m"   # SSO idle: 30 minutes
+  sso_session_max_lifespan     = "8h"    # Max session: 8 hours
+  
   offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
   offline_session_max_lifespan = "1440h" # Offline max (60 days)
 
@@ -332,7 +337,7 @@ resource "keycloak_user" "broker_super_admin" {
     uniqueID             = "admin@dive-v3.pilot"
     clearance            = "TOP_SECRET"
     countryOfAffiliation = "USA"
-    acpCOI               = "[\"NATO-COSMIC\",\"FVEY\",\"CAN-US\"]"
+    acpCOI               = jsonencode(["NATO-COSMIC", "FVEY", "CAN-US"])
     dutyOrg              = "DIVE_ADMIN"
     orgUnit              = "SYSTEM_ADMINISTRATION"
     # NOTE: acr and amr are now dynamically set by Keycloak based on actual authentication
@@ -343,6 +348,9 @@ resource "keycloak_user" "broker_super_admin" {
     value     = "DiveAdmin2025!"
     temporary = false
   }
+  
+  # NOTE: Attributes are synced via null_resource in broker-realm-attribute-fix.tf
+  # This works around Terraform Provider 5.5.0 bug where attributes don't persist
 }
 
 # Get the offline_access role (default realm role)

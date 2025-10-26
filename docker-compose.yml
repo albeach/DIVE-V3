@@ -31,20 +31,22 @@ services:
       retries: 5
 
   keycloak:
-    image: quay.io/keycloak/keycloak:23.0
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
     container_name: dive-v3-keycloak
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: password
-      # BEST PRACTICE: Set frontend URL so issuer matches browser perspective
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: 8081
-      KC_HOSTNAME_STRICT: false
-      KC_HOSTNAME_STRICT_HTTPS: false
+      # Keycloak 26 Configuration with HTTPS (Single Source of Truth)
+      # Using self-signed certificate for development
+      # DO NOT set KC_HOSTNAME - let Keycloak use request hostname for dynamic issuer
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTP_ENABLED: true
-      KC_HOSTNAME_STRICT_BACKCHANNEL: false
+      KC_HTTPS_PORT: 8443
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
@@ -57,11 +59,14 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8081:8080"
+      - "8081:8080"   # HTTP (for internal Docker access)
+      - "8443:8443"   # HTTPS (for browser and external access)
     networks:
       - dive-network
+    volumes:
+      - ./keycloak/certs:/opt/keycloak/certs:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8443/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -218,11 +218,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Check if user has valid tokens (not just user existence)
             const hasValidTokens = !!(auth as any)?.accessToken && !!(auth as any)?.idToken;
 
+            // EXCEPTION: Super Admin accounts don't have Keycloak tokens (custom session)
+            const isSuperAdmin = auth?.user?.roles?.includes('super_admin');
+
+            // DEBUG: Log authorization check
+            if (isLoggedIn && !hasValidTokens && !isSuperAdmin && nextUrl.pathname !== "/" && nextUrl.pathname !== "/login") {
+                console.log('[DIVE authorized()] Redirect to login - no tokens', {
+                    path: nextUrl.pathname,
+                    hasUser: !!auth?.user,
+                    hasAccessToken: !!(auth as any)?.accessToken,
+                    hasIdToken: !!(auth as any)?.idToken,
+                    isSuperAdmin,
+                    authKeys: Object.keys(auth || {}),
+                });
+            }
+
             // If logged in
             if (isLoggedIn) {
                 // FIX #6: User exists but no tokens - likely expired session
                 // Force re-login to establish fresh session
-                if (!hasValidTokens && !isOnHome && !isOnLogin && !isOnCustomLogin) {
+                // EXCEPT for Super Admin users who don't use Keycloak tokens
+                if (!hasValidTokens && !isSuperAdmin && !isOnHome && !isOnLogin && !isOnCustomLogin) {
                     console.warn('[DIVE] User exists but no tokens - forcing re-login');
                     // Redirect to /login (not /auth/signin)
                     return Response.redirect(new URL("/login", nextUrl));

@@ -167,6 +167,13 @@ export default function IdPGovernanceDashboard() {
         return total > 0 ? ((count / total) * 100).toFixed(1) : '0';
     };
 
+    // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+    useEffect(() => {
+        if (status !== 'loading' && status === 'unauthenticated') {
+            router.push('/auth/signin');
+        }
+    }, [status, router]);
+
     if (status === 'loading') {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -179,7 +186,6 @@ export default function IdPGovernanceDashboard() {
     }
 
     if (status === 'unauthenticated') {
-        router.push('/auth/signin');
         return null;
     }
 

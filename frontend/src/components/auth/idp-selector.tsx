@@ -1,13 +1,15 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
 
 /**
  * IdP Selector Component - Dynamic with Enable/Disable Support
  * 
  * Fetches enabled IdPs from Keycloak and displays them dynamically.
  * When admin enables/disables IdPs, this list updates automatically.
+ * 
+ * 🥚 EASTER EGG: Super Admin access hidden behind secret triggers
  */
 
 interface IdPOption {
@@ -30,18 +32,35 @@ const getFlagForIdP = (alias: string): string => {
   if (alias.includes('netherlands') || alias.includes('nld')) return '🇳🇱';
   if (alias.includes('industry') || alias.includes('contractor')) return '🏢';
   // Check for US last (since "industry" doesn't contain "us")
-  if (alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return '🇺🇸';
+  if (alias.includes('usa') || alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return '🇺🇸';
   
   return '🌐'; // Default globe icon
 };
 
 export function IdpSelector() {
+  const router = useRouter();
   const [idps, setIdps] = useState<IdPOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // 🥚 Easter egg state
+  const [eggActive, setEggActive] = useState(false);
+  const [eggUnlocking, setEggUnlocking] = useState(false);
+  const [terminalLines, setTerminalLines] = useState<string[]>([]);
+  const [eggCount, setEggCount] = useState(0);
+  const konamiBuffer = useRef<number[]>([]);
+  const logoClickCount = useRef(0);
+  const logoClickTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     fetchEnabledIdPs();
+    
+    // Load easter egg counter from localStorage
+    const count = parseInt(localStorage.getItem('dive-egg-count') || '0', 10);
+    setEggCount(count);
+    
+    // Set up easter egg listeners
+    setupEasterEgg();
   }, []);
 
   const fetchEnabledIdPs = async () => {
@@ -94,9 +113,110 @@ export function IdpSelector() {
   };
 
   const handleIdpClick = async (idp: IdPOption) => {
-    // Phase 4.1: ALL IdPs use custom login pages
-    // Route to: /login/[idpAlias] with themed UI
-    window.location.href = `/login/${idp.alias}?redirect_uri=/dashboard`;
+    // MFA FIX: Custom SPI now handles OTP setup within Direct Grant
+    // Navigate to custom login page with idp hint
+    // See: CUSTOM-SPI-IMPLEMENTATION-GUIDE.md
+    router.push(`/login/${idp.alias}?redirect_uri=/dashboard`);
+  };
+
+  // 🥚 Easter egg setup
+  const setupEasterEgg = () => {
+    const konami = [38, 38, 40, 40, 37, 39, 37, 39, 66, 65]; // up up down down left right left right B A
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement)?.isContentEditable) return;
+
+      // Shortcut: Ctrl+Shift+A (Admin)
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        triggerEasterEgg();
+        return;
+      }
+
+      // Konami code tracking
+      konamiBuffer.current.push(e.keyCode);
+      if (konamiBuffer.current.length > konami.length) konamiBuffer.current.shift();
+      if (konamiBuffer.current.join(',') === konami.join(',')) {
+        triggerEasterEgg();
+        konamiBuffer.current = [];
+      }
+    };
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && eggActive) {
+        closeEasterEgg();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  };
+
+  const triggerEasterEgg = () => {
+    if (eggActive || eggUnlocking) return;
+    
+    setEggUnlocking(true);
+    
+    // Terminal boot sequence
+    const lines = [
+      '> INITIALIZING SECURE CHANNEL...',
+      '> AUTHENTICATING CREDENTIALS...',
+      '> BYPASSING STANDARD PROTOCOLS...',
+      '> ACCESSING ADMINISTRATIVE INTERFACE...',
+      '> CLEARANCE LEVEL: COSMIC TOP SECRET',
+      '> WELCOME, OPERATOR',
+      '> ADMIN ACCESS GRANTED ✓'
+    ];
+    
+    let currentLine = 0;
+    const typingInterval = setInterval(() => {
+      if (currentLine < lines.length) {
+        setTerminalLines(prev => [...prev, lines[currentLine]]);
+        currentLine++;
+      } else {
+        clearInterval(typingInterval);
+        setTimeout(() => {
+          setEggUnlocking(false);
+          setEggActive(true);
+          
+          // Increment counter
+          const newCount = eggCount + 1;
+          setEggCount(newCount);
+          localStorage.setItem('dive-egg-count', newCount.toString());
+        }, 500);
+      }
+    }, 200);
+  };
+
+  const closeEasterEgg = () => {
+    setEggActive(false);
+    setEggUnlocking(false);
+    setTerminalLines([]);
+  };
+
+  // Triple-click logo handler (attach to logo in parent page.tsx)
+  const handleLogoClick = () => {
+    logoClickCount.current++;
+    
+    if (logoClickTimer.current) {
+      clearTimeout(logoClickTimer.current);
+    }
+    
+    if (logoClickCount.current === 3) {
+      triggerEasterEgg();
+      logoClickCount.current = 0;
+    } else {
+      logoClickTimer.current = setTimeout(() => {
+        logoClickCount.current = 0;
+      }, 600);
+    }
   };
 
   if (loading) {
@@ -167,25 +287,174 @@ export function IdpSelector() {
         ))}
       </div>
 
-      {/* Direct Keycloak Login - Super Admin Access */}
-      <div className="mt-8 pt-8 border-t-2 border-gray-200">
-        <button
-          onClick={() => handleIdpClick({ alias: 'dive-v3-broker', displayName: 'Super Admin', protocol: 'oidc', enabled: true })}
-          className="group w-full p-6 border-2 border-[#009ab3] bg-gradient-to-br from-[#009ab3]/5 to-[#79d85a]/5 rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-center"
+      {/* 🥚 Easter Egg: Terminal Unlock Animation */}
+      {eggUnlocking && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 backdrop-blur-sm animate-fade-in"
+          aria-live="polite"
+          aria-label="Secret admin access unlocking"
         >
-          <div className="flex items-center justify-center space-x-4">
-            <div className="text-4xl group-hover:scale-110 transition-transform duration-300">👑</div>
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
-                Login as Super Administrator
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Click to proceed...
-              </p>
+          <div className="w-full max-w-3xl mx-4">
+            {/* Terminal Window */}
+            <div className="bg-black border-2 border-[#00ff41] rounded-lg shadow-[0_0_50px_rgba(0,255,65,0.5)] overflow-hidden">
+              {/* Terminal Header */}
+              <div className="bg-gradient-to-r from-gray-900 to-black border-b border-[#00ff41] px-4 py-2 flex items-center gap-2">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                  <div className="w-3 h-3 rounded-full bg-[#00ff41]"></div>
+                </div>
+                <span className="text-[#00ff41] text-sm font-mono ml-2">root@dive-v3-admin</span>
+              </div>
+              
+              {/* Terminal Content */}
+              <div className="p-6 font-mono text-sm">
+                {terminalLines.map((line, idx) => (
+                  <div 
+                    key={idx}
+                    className="text-[#00ff41] mb-2 animate-terminal-line"
+                    style={{ 
+                      textShadow: '0 0 10px rgba(0,255,65,0.8)',
+                      animationDelay: `${idx * 0.1}s`
+                    }}
+                  >
+                    {line}
+                  </div>
+                ))}
+                <div className="text-[#00ff41] inline-block animate-pulse">▊</div>
+              </div>
             </div>
           </div>
-        </button>
-      </div>
+        </div>
+      )}
+
+      {/* 🥚 Easter Egg: Super Admin Access Revealed */}
+      {eggActive && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade-in"
+          onClick={(e) => e.target === e.currentTarget && closeEasterEgg()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="egg-title"
+        >
+          {/* Matrix Rain Background Effect */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
+            {[...Array(20)].map((_, i) => (
+              <div
+                key={i}
+                className="absolute top-0 font-mono text-[#00ff41] text-xs animate-matrix-rain whitespace-pre"
+                style={{
+                  left: `${i * 5}%`,
+                  animationDelay: `${Math.random() * 2}s`,
+                  animationDuration: `${5 + Math.random() * 5}s`
+                }}
+              >
+                {Array(30).fill(0).map(() => String.fromCharCode(33 + Math.floor(Math.random() * 94))).join('\n')}
+              </div>
+            ))}
+          </div>
+
+          {/* Admin Access Card */}
+          <div className="relative max-w-2xl w-full mx-4">
+            {/* Glitch effect background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-purple-500/20 rounded-2xl blur-xl animate-glitch-1"></div>
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-2xl blur-xl animate-glitch-2"></div>
+            
+            {/* Main Card */}
+            <div className="relative bg-gradient-to-br from-gray-900 via-black to-gray-900 border-2 border-[#00ff41] rounded-2xl shadow-[0_0_80px_rgba(0,255,65,0.6)] overflow-hidden backdrop-blur-xl">
+              {/* Animated scan lines */}
+              <div className="absolute inset-0 pointer-events-none opacity-10">
+                <div className="w-full h-full bg-gradient-to-b from-transparent via-[#00ff41] to-transparent animate-scan-line"></div>
+              </div>
+
+              {/* Close Button */}
+              <button
+                onClick={closeEasterEgg}
+                className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-red-500/20 border border-red-500 text-red-400 hover:bg-red-500 hover:text-white transition-all duration-300 hover:scale-110 hover:rotate-90"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+
+              {/* Content */}
+              <div className="p-8 md:p-12">
+                {/* Header */}
+                <div className="text-center mb-8">
+                  <div className="inline-block mb-4 animate-float">
+                    <div className="relative">
+                      <div className="absolute inset-0 animate-ping">
+                        <span className="text-7xl filter drop-shadow-[0_0_20px_rgba(0,255,65,1)]">👑</span>
+                      </div>
+                      <span className="relative text-7xl filter drop-shadow-[0_0_30px_rgba(0,255,65,1)]">👑</span>
+                    </div>
+                  </div>
+                  
+                  <h2 
+                    id="egg-title"
+                    className="text-4xl font-bold mb-3 bg-gradient-to-r from-[#00ff41] via-cyan-400 to-[#00ff41] bg-clip-text text-transparent animate-gradient-x"
+                    style={{ textShadow: '0 0 20px rgba(0,255,65,0.5)' }}
+                  >
+                    ACCESS GRANTED
+                  </h2>
+                  
+                  <p className="text-[#00ff41] text-lg font-mono mb-2">
+                    ▸ CLEARANCE: COSMIC TOP SECRET
+                  </p>
+                  <p className="text-cyan-400 text-sm font-mono">
+                    ▸ AUTHORIZATION CODE: {eggCount.toString().padStart(4, '0')}-ALPHA-{Math.random().toString(36).substr(2, 6).toUpperCase()}
+                  </p>
+                  
+                  {eggCount > 1 && (
+                    <p className="text-yellow-400 text-xs font-mono mt-2 animate-pulse">
+                      🎉 Easter egg discovered {eggCount} times
+                    </p>
+                  )}
+                </div>
+
+                {/* Admin Button */}
+                <button
+                  onClick={() => {
+                    closeEasterEgg();
+                    handleIdpClick({ alias: 'dive-v3-broker', displayName: 'Super Admin', protocol: 'oidc', enabled: true });
+                  }}
+                  className="group relative w-full p-6 border-2 border-[#00ff41] bg-gradient-to-br from-[#00ff41]/10 to-cyan-500/10 rounded-xl hover:border-cyan-400 hover:shadow-[0_0_40px_rgba(0,255,65,0.8)] transition-all duration-300 hover:scale-[1.02] overflow-hidden"
+                >
+                  {/* Animated background */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#00ff41]/0 via-[#00ff41]/20 to-[#00ff41]/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+                  
+                  <div className="relative flex items-center justify-center space-x-4">
+                    <div className="text-5xl group-hover:scale-110 group-hover:rotate-12 transition-transform duration-300 filter drop-shadow-[0_0_10px_rgba(0,255,65,1)]">
+                      🔓
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-[#00ff41] group-hover:text-cyan-400 transition-colors">
+                        Enter Super Administrator Portal
+                      </h3>
+                      <p className="text-sm text-cyan-400/80 mt-1 font-mono">
+                        {'>'} Click to authenticate with maximum privileges
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Secret Hint */}
+                <div className="mt-8 pt-6 border-t border-[#00ff41]/30">
+                  <details className="text-center">
+                    <summary className="text-xs text-gray-500 hover:text-[#00ff41] cursor-pointer transition-colors font-mono">
+                      How did I get here?
+                    </summary>
+                    <div className="mt-4 text-xs text-gray-400 font-mono space-y-1">
+                      <p>🎮 Konami Code: ↑ ↑ ↓ ↓ ← → ← → B A</p>
+                      <p>⌨️ Keyboard: Ctrl + Shift + A</p>
+                      <p>🖱️ Mouse: Triple-click the DIVE logo (if implemented)</p>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 text-center text-sm text-gray-500">
         <p>Showing {idps.length} federated identity provider{idps.length !== 1 ? 's' : ''}</p>

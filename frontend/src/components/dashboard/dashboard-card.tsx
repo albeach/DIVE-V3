@@ -10,6 +10,7 @@ interface DashboardCardProps {
   icon: ReactNode;
   gradient: string;
   delay?: number;
+  badge?: string;  // Optional badge (e.g., "NEW")
 }
 
 export function DashboardCard({ 
@@ -18,7 +19,8 @@ export function DashboardCard({
   description, 
   icon,
   gradient,
-  delay = 0 
+  delay = 0,
+  badge
 }: DashboardCardProps) {
   const content = (
     <div className="relative h-full overflow-hidden rounded-2xl">
@@ -51,9 +53,16 @@ export function DashboardCard({
         </div>
         
         {/* Title */}
-        <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:bg-gradient-to-r group-hover:from-[#4396ac] group-hover:to-[#90d56a] group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
-          {title}
-        </h3>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-xl font-bold text-gray-900 group-hover:bg-gradient-to-r group-hover:from-[#4396ac] group-hover:to-[#90d56a] group-hover:bg-clip-text group-hover:text-transparent transition-all duration-300">
+            {title}
+          </h3>
+          {badge && (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 animate-pulse">
+              {badge}
+            </span>
+          )}
+        </div>
         
         {/* Description */}
         <p className="text-sm text-gray-600 leading-relaxed mb-6 flex-grow">

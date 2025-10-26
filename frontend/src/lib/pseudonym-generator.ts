@@ -15,10 +15,29 @@
  * Example:
  * uniqueID: "550e8400-e29b-41d4-a716-446655440000"
  * Pseudonym: "Azure Whale" (deterministic, always same for this UUID)
+ * With nation: "Atlantic Azure Whale" (USA user)
  * 
  * Date: October 21, 2025
+ * Updated: October 24, 2025 (Added NATO nation prefixes)
  * Compliance: ACP-240 Section 6.2, NIST SP 800-53 (IA-4)
  */
+
+/**
+ * Nation-specific ocean prefixes
+ * Based on geographic/maritime associations of each nation
+ */
+const NATION_PREFIXES: Record<string, string> = {
+    'USA': 'Atlantic',      // Atlantic Ocean (US East Coast)
+    'FRA': 'Mediterranean', // Mediterranean Sea (French Riviera)
+    'CAN': 'Arctic',        // Arctic Ocean (Canadian North)
+    'GBR': 'North',         // North Sea (UK waters)
+    'DEU': 'Baltic',        // Baltic Sea (German coast)
+    'ITA': 'Adriatic',      // Adriatic Sea (Italian coast)
+    'ESP': 'Iberian',       // Iberian Peninsula (Spanish coast)
+    'POL': 'Vistula',       // Vistula Lagoon (Polish waters)
+    'NLD': 'Nordic',        // North Sea/Nordic waters (Dutch coast)
+    'INDUSTRY': 'Pacific'   // Pacific Ocean (neutral/global)
+};
 
 const OCEAN_ADJECTIVES = [
     'Azure', 'Blue', 'Cerulean', 'Deep', 'Electric', 'Frosted',
@@ -89,6 +108,32 @@ export function generatePseudonymWithNumber(uniqueID: string): string {
 }
 
 /**
+ * Generate pseudonym with nation prefix for coalition operations
+ * (NATO expansion feature - Phase 2)
+ * 
+ * @param uniqueID - User's uniqueID (UUID format)
+ * @param countryCode - ISO 3166 alpha-3 country code (e.g., "USA", "DEU")
+ * @returns Nation-prefixed pseudonym (e.g., "Baltic Azure Whale" for German user)
+ * 
+ * Examples:
+ * - USA user: "Atlantic Azure Whale"
+ * - DEU user: "Baltic Golden Dolphin"
+ * - GBR user: "North Silver Orca"
+ * - ITA user: "Adriatic Jade Marlin"
+ * - ESP user: "Iberian Coral Shark"
+ * - POL user: "Vistula Pearl Ray"
+ * - NLD user: "Nordic Teal Turtle"
+ * 
+ * @since October 24, 2025 (NATO Expansion Phase 2)
+ */
+export function generatePseudonymWithNation(uniqueID: string, countryCode: string): string {
+    const basePseudonym = generatePseudonym(uniqueID);
+    const prefix = NATION_PREFIXES[countryCode.toUpperCase()] || NATION_PREFIXES['USA']; // Default to Atlantic
+
+    return `${prefix} ${basePseudonym}`;
+}
+
+/**
  * Validate that uniqueID is UUID format (for safe hashing)
  * 
  * @param uniqueID - User's uniqueID
@@ -107,15 +152,25 @@ export function isValidUUID(uniqueID: string): boolean {
  * Fallback to email/username if UUID not available (migration period)
  * 
  * @param user - NextAuth session user object
+ * @param options - Optional settings for pseudonym generation
  * @returns Pseudonym for display
  */
-export function getPseudonymFromUser(user: {
-    uniqueID?: string;
-    email?: string;
-    name?: string;
-}): string {
+export function getPseudonymFromUser(
+    user: {
+        uniqueID?: string;
+        email?: string;
+        name?: string;
+        countryOfAffiliation?: string;
+    },
+    options?: {
+        includeNation?: boolean; // If true, prefix with nation (e.g., "Baltic Golden Dolphin")
+    }
+): string {
     // Prefer uniqueID (UUID format)
     if (user.uniqueID && isValidUUID(user.uniqueID)) {
+        if (options?.includeNation && user.countryOfAffiliation) {
+            return generatePseudonymWithNation(user.uniqueID, user.countryOfAffiliation);
+        }
         return generatePseudonym(user.uniqueID);
     }
 

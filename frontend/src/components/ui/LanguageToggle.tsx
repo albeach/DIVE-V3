@@ -7,6 +7,7 @@
  * - Persistent preference (localStorage)
  * - Smooth transitions
  * - Real-time updates via global context
+ * - Per-IdP locale preferences (when idpAlias provided)
  * 
  * Phase 4.7: Language Toggle Component
  */
@@ -20,39 +21,37 @@ import { useLocale } from '@/contexts/LocaleContext';
 import { locales, Locale, localeNames, localeFlags } from '@/i18n/config';
 
 // ============================================
+// Types
+// ============================================
+
+interface LanguageToggleProps {
+    /** Optional IdP alias for per-IdP locale preferences */
+    idpAlias?: string;
+}
+
+// ============================================
 // Component
 // ============================================
 
-export default function LanguageToggle() {
+export default function LanguageToggle({ idpAlias }: LanguageToggleProps = {}) {
     const { locale, changeLocale } = useLocale(); // Use global context
     const [isOpen, setIsOpen] = useState(false);
 
     const handleChangeLocale = (newLocale: Locale) => {
         changeLocale(newLocale);
+        
+        // If idpAlias is provided, set a flag that user manually overrode locale for this IdP
+        // This allows auto-detection to work when switching to different IdPs
+        if (idpAlias) {
+            const localeOverrideKey = `dive-v3-locale-override-${idpAlias}`;
+            localStorage.setItem(localeOverrideKey, 'true');
+            console.log(`[i18n] Set manual locale override for ${idpAlias}: ${newLocale}`);
+        }
+        
         setIsOpen(false);
     };
 
-    // Simple toggle for 2 languages
-    if (locales.length === 2) {
-        const otherLocale = locales.find(l => l !== locale)!;
-
-        return (
-            <button
-                onClick={() => handleChangeLocale(otherLocale)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                title={`Switch to ${localeNames[otherLocale]}`}
-            >
-                <span className="text-lg">{localeFlags[locale]}</span>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
-                    {localeNames[locale]}
-                </span>
-                <span className="text-xs text-gray-400">↔</span>
-                <span className="text-lg">{localeFlags[otherLocale]}</span>
-            </button>
-        );
-    }
-
-    // Dropdown for 3+ languages
+    // Dropdown for multiple languages
     return (
         <div className="relative">
             <button

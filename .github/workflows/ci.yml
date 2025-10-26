@@ -196,6 +196,11 @@ jobs:
           cd policies
           opa test . -v
       
+      - name: Run AAL/FAL Comprehensive Tests
+        run: |
+          cd policies
+          opa test fuel_inventory_abac_policy.rego tests/aal_fal_comprehensive_test.rego -v
+      
       - name: Verify Policy Compilation
         run: |
           cd policies

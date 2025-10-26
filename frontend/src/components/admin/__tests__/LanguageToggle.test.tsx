@@ -18,9 +18,9 @@ jest.mock('framer-motion', () => ({
     AnimatePresence: ({ children }: any) => <>{children}</>
 }));
 
-// Mock useTranslation hook
-jest.mock('@/hooks/useTranslation', () => ({
-    useTranslation: () => ({
+// Mock LocaleContext
+jest.mock('@/contexts/LocaleContext', () => ({
+    useLocale: () => ({
         locale: 'en',
         changeLocale: jest.fn()
     })
@@ -70,6 +70,32 @@ describe('LanguageToggle', () => {
         const stored = localStorage.getItem('dive-v3-locale');
         // Initially null or 'en'
         expect(stored === null || stored === 'en').toBe(true);
+    });
+
+    it('should accept optional idpAlias prop', () => {
+        // Should render without error when idpAlias is provided
+        render(<LanguageToggle idpAlias="usa-realm-broker" />);
+        expect(screen.getByText('English')).toBeInTheDocument();
+    });
+
+    it('should set per-IdP override flag when idpAlias provided', () => {
+        const mockChangeLocale = jest.fn();
+        jest.spyOn(require('@/contexts/LocaleContext'), 'useLocale').mockReturnValue({
+            locale: 'en',
+            changeLocale: mockChangeLocale
+        });
+
+        render(<LanguageToggle idpAlias="fra-realm-broker" />);
+        
+        // Simulate clicking the language toggle
+        const toggle = screen.getByText('English').closest('button');
+        if (toggle) {
+            fireEvent.click(toggle);
+            
+            // Should set the per-IdP override flag
+            const overrideKey = 'dive-v3-locale-override-fra-realm-broker';
+            expect(localStorage.getItem(overrideKey)).toBe('true');
+        }
     });
 });
 

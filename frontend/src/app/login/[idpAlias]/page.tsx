@@ -22,11 +22,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { EyeIcon, EyeOff, ShieldCheckIcon, CheckCircle } from 'lucide-react';
+import { EyeIcon, EyeOff, ShieldCheckIcon, CheckCircle, ArrowLeft, ChevronDown } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import LanguageToggle from '@/components/ui/LanguageToggle';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLocale } from '@/contexts/LocaleContext';
+import { getLocaleFromIdP } from '@/i18n/config';
 import type { Locale } from '@/i18n/config';
 
 // ============================================
@@ -101,7 +102,7 @@ export default function CustomLoginPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { t } = useTranslation('auth');
-    const { locale } = useLocale(); // Get current locale from global context
+    const { locale, changeLocale } = useLocale(); // Get current locale AND changeLocale from global context
 
     const idpAlias = params.idpAlias as string;
     const redirectUri = searchParams.get('redirect_uri') || '/';
@@ -124,6 +125,30 @@ export default function CustomLoginPage() {
     const [shake, setShake] = useState(false);
     const [loginAttempts, setLoginAttempts] = useState(0);
     const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+    const [showForgotPasswordInfo, setShowForgotPasswordInfo] = useState(false);
+
+    // Auto-detect and set locale based on IdP on first load
+    useEffect(() => {
+        const detectedLocale = getLocaleFromIdP(idpAlias);
+        
+        // Check if user manually changed locale for THIS specific IdP
+        // Store locale preferences per-IdP to allow auto-detection when switching IdPs
+        const localeOverrideKey = `dive-v3-locale-override-${idpAlias}`;
+        const hasManualOverride = localStorage.getItem(localeOverrideKey);
+        
+        // If user hasn't manually overridden locale for this IdP, auto-detect
+        if (!hasManualOverride && detectedLocale !== locale) {
+            console.log(`[i18n] Auto-detecting locale from IdP: ${idpAlias} → ${detectedLocale}`);
+            changeLocale(detectedLocale);
+        } else if (hasManualOverride) {
+            // Respect the manual override for this IdP
+            const overriddenLocale = localStorage.getItem('dive-v3-locale');
+            if (overriddenLocale && overriddenLocale !== locale) {
+                console.log(`[i18n] Applying manual locale override for ${idpAlias}: ${overriddenLocale}`);
+                changeLocale(overriddenLocale as any);
+            }
+        }
+    }, [idpAlias]); // Only run when idpAlias changes
 
     // Reload configuration when locale changes
     useEffect(() => {
@@ -288,9 +313,9 @@ export default function CustomLoginPage() {
                     inputStyle: 'outlined'
                 },
                 localization: {
-                    defaultLanguage: 'en',
+                    defaultLanguage: getLocaleFromIdP(idpAlias), // Auto-detect based on IdP
                     enableToggle: true,
-                    supportedLanguages: ['en', 'fr']
+                    supportedLanguages: ['en', 'fr', 'de', 'it', 'es', 'pl', 'nl']
                 }
             };
 
@@ -321,6 +346,14 @@ export default function CustomLoginPage() {
 
             const result = await response.json();
 
+            console.log('[Login handleSubmit] Backend response:', {
+                success: result.success,
+                hasData: !!result.data,
+                data: result.data,
+                error: result.error,
+                mfaRequired: result.mfaRequired
+            });
+
             if (result.success) {
                 // Step 2: Create NextAuth session with tokens
                 const sessionResponse = await fetch('/api/auth/custom-session', {
@@ -329,7 +362,7 @@ export default function CustomLoginPage() {
                     body: JSON.stringify({
                         accessToken: result.data.accessToken,
                         refreshToken: result.data.refreshToken,
-                        idToken: result.data.accessToken, // Use access token as ID token for now
+                        idToken: result.data.idToken || result.data.accessToken,
                         expiresIn: result.data.expiresIn
                     })
                 });
@@ -470,7 +503,7 @@ export default function CustomLoginPage() {
                         body: JSON.stringify({
                             accessToken: loginResult.data.accessToken,
                             refreshToken: loginResult.data.refreshToken,
-                            idToken: loginResult.data.accessToken,
+                            idToken: loginResult.data.idToken || loginResult.data.accessToken,
                             expiresIn: loginResult.data.expiresIn
                         })
                     });
@@ -540,10 +573,10 @@ export default function CustomLoginPage() {
                 </>
             )}
 
-            {/* Language Toggle */}
+            {/* Language Toggle (Top-Right) */}
             {theme.localization.enableToggle && (
                 <div className="absolute top-6 right-6 z-20">
-                    <LanguageToggle />
+                    <LanguageToggle idpAlias={idpAlias} />
                 </div>
             )}
 
@@ -840,15 +873,46 @@ export default function CustomLoginPage() {
                                     </button>
                                 )}
 
-                                {/* Forgot Password Link */}
+                                {/* Forgot Password - Expandable Info */}
                                 <div className="text-center pt-2">
-                                    <a
-                                        href="#"
-                                        className="text-sm font-medium hover:underline transition-colors"
-                                        style={{ color: theme.colors.primary }}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowForgotPasswordInfo(!showForgotPasswordInfo)}
+                                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-full transition-all duration-300 hover:scale-105 shadow-sm"
+                                        style={{ 
+                                            color: theme.colors.primary,
+                                            backgroundColor: 'rgba(255, 255, 255, 0.6)'
+                                        }}
                                     >
-                                        {t('login.forgotPassword')}
-                                    </a>
+                                        <span>{t('login.forgotPassword')}</span>
+                                        <ChevronDown 
+                                            className={`w-3.5 h-3.5 transition-transform duration-300 ${
+                                                showForgotPasswordInfo ? 'rotate-180' : ''
+                                            }`}
+                                        />
+                                    </button>
+                                    
+                                    {/* Expandable Info */}
+                                    <AnimatePresence>
+                                        {showForgotPasswordInfo && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="mt-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                                    <p className="text-sm text-blue-900 font-medium">
+                                                        {t('login.forgotPasswordInfo.title')}
+                                                    </p>
+                                                    <p className="text-xs text-blue-700 mt-2">
+                                                        {t('login.forgotPasswordInfo.description')}
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             </form>
 
@@ -857,6 +921,43 @@ export default function CustomLoginPage() {
                                 <p>DIVE V3 - Coalition-Friendly ICAM</p>
                             </div>
                         </div>
+
+                        {/* Back Button - Below Form */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.6, delay: 0.8 }}
+                            className="mt-6"
+                        >
+                            <button
+                                onClick={() => router.push('/')}
+                                className="w-full max-w-md mx-auto flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-white/90 backdrop-blur-sm border-2 border-gray-300 hover:border-gray-400 text-gray-700 hover:text-gray-900 font-semibold shadow-md hover:shadow-lg transition-all transform hover:scale-[1.01] active:scale-[0.99] group"
+                            >
+                                {/* Arrow Icon with continuous subtle animation */}
+                                <motion.div
+                                    animate={{ 
+                                        x: [-2, 0, -2]
+                                    }}
+                                    transition={{ 
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        ease: "easeInOut"
+                                    }}
+                                    className="flex items-center"
+                                >
+                                    <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-1" />
+                                </motion.div>
+                                
+                                <span className="text-base">
+                                    {t('login.backToIdPSelection')}
+                                </span>
+                            </button>
+                            
+                            {/* Helper Text */}
+                            <p className="text-center text-sm text-white/60 mt-2.5">
+                                {t('login.wrongProvider')}
+                            </p>
+                        </motion.div>
                     </motion.div>
 
                     {/* RIGHT: Custom Description Area */}

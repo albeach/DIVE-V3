@@ -76,11 +76,17 @@ export default function CertificatesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+  useEffect(() => {
+    if (status !== 'loading' && !session) {
+      router.push('/login');
+    }
+  }, [status, session, router]);
+
   useEffect(() => {
     if (status === 'loading') return;
     
     if (!session) {
-      router.push('/login');
       return;
     }
 

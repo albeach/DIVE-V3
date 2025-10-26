@@ -16,40 +16,69 @@ import { Request, Response } from 'express';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { IAdminAPIResponse } from '../types/admin.types';
+import { KeycloakConfigSyncService } from '../services/keycloak-config-sync.service';
 
 // ============================================
-// Rate Limiting
+// Rate Limiting (Dynamic)
 // ============================================
 
 interface LoginAttempt {
     ip: string;
     username: string;
     timestamp: number;
+    realmId: string;
 }
 
 // Export for testing purposes
 export const loginAttempts: LoginAttempt[] = [];
-const MAX_ATTEMPTS = 8; // Increased from 5 to match Keycloak brute force settings
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
-function isRateLimited(ip: string, username: string): boolean {
+/**
+ * Check if user is rate limited (dynamic rate limiting based on Keycloak config)
+ * @param ip Client IP address
+ * @param username Username
+ * @param realmId Keycloak realm ID (e.g., 'dive-v3-broker')
+ * @returns True if rate limited
+ */
+async function isRateLimited(ip: string, username: string, realmId: string): Promise<boolean> {
     const now = Date.now();
+
+    // Get dynamic rate limit config from Keycloak
+    const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts(realmId);
+    const windowMs = await KeycloakConfigSyncService.getWindowMs(realmId);
+
     const recentAttempts = loginAttempts.filter(
-        a => a.ip === ip && a.username === username && (now - a.timestamp) < WINDOW_MS
+        a => a.ip === ip && a.username === username && a.realmId === realmId && (now - a.timestamp) < windowMs
     );
 
-    return recentAttempts.length >= MAX_ATTEMPTS;
+    logger.debug('Rate limit check', {
+        ip,
+        username,
+        realmId,
+        recentAttempts: recentAttempts.length,
+        maxAttempts,
+        windowMinutes: Math.floor(windowMs / 60000),
+        isLimited: recentAttempts.length >= maxAttempts
+    });
+
+    return recentAttempts.length >= maxAttempts;
 }
 
-function recordLoginAttempt(ip: string, username: string): void {
+/**
+ * Record a login attempt
+ * @param ip Client IP address
+ * @param username Username
+ * @param realmId Keycloak realm ID
+ */
+function recordLoginAttempt(ip: string, username: string, realmId: string): void {
     loginAttempts.push({
         ip,
         username,
+        realmId,
         timestamp: Date.now()
     });
 
-    // Cleanup old attempts (older than 15 minutes)
-    const cutoff = Date.now() - WINDOW_MS;
+    // Cleanup old attempts (older than 1 hour)
+    const cutoff = Date.now() - (60 * 60 * 1000);
     const index = loginAttempts.findIndex(a => a.timestamp >= cutoff);
     if (index > 0) {
         loginAttempts.splice(0, index);
@@ -82,32 +111,6 @@ export const customLoginHandler = async (
             return;
         }
 
-        // Rate limiting
-        if (isRateLimited(clientIp, username)) {
-            logger.warn('Login rate limit exceeded', {
-                requestId,
-                ip: clientIp,
-                username
-            });
-
-            res.status(429).json({
-                success: false,
-                error: 'Too many login attempts. Please try again in 15 minutes.'
-            });
-            return;
-        }
-
-        // Record attempt
-        recordLoginAttempt(clientIp, username);
-
-        logger.info('Custom login attempt', {
-            requestId,
-            idpAlias,
-            username,
-            ip: clientIp,
-            hasOTP: !!otp
-        });
-
         // Get realm name from IdP alias
         // dive-v3-broker → dive-v3-broker (Super Admin)
         // usa-realm-broker → dive-v3-usa
@@ -124,6 +127,30 @@ export const customLoginHandler = async (
             // Fallback
             realmName = idpAlias.replace('-idp', '');
         }
+
+        // Rate limiting (dynamic based on Keycloak config)
+        if (await isRateLimited(clientIp, username, realmName)) {
+            // Get current window for error message
+            const windowMs = await KeycloakConfigSyncService.getWindowMs(realmName);
+            const windowMinutes = Math.floor(windowMs / 60000);
+
+            logger.warn('Login rate limit exceeded', {
+                requestId,
+                ip: clientIp,
+                username,
+                realmName,
+                windowMinutes
+            });
+
+            res.status(429).json({
+                success: false,
+                error: `Too many login attempts. Please try again in ${windowMinutes} minutes.`
+            });
+            return;
+        }
+
+        // Record attempt
+        recordLoginAttempt(clientIp, username, realmName);
 
         // Authenticate with Keycloak Direct Access Grants
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
@@ -162,13 +189,21 @@ export const customLoginHandler = async (
                 }
             });
 
-            const { access_token, refresh_token, expires_in } = response.data;
+            logger.info('Keycloak response received', {
+                requestId,
+                hasData: !!response.data,
+                dataKeys: Object.keys(response.data || {}),
+                statusCode: response.status
+            });
+
+            const { access_token, refresh_token, id_token, expires_in } = response.data;
 
             logger.info('Custom login successful', {
                 requestId,
                 idpAlias,
                 username,
-                expiresIn: expires_in
+                expiresIn: expires_in,
+                hasIdToken: !!id_token
             });
 
             // CRITICAL SECURITY CHECK: After successful authentication, verify if user
@@ -257,6 +292,7 @@ export const customLoginHandler = async (
                 data: {
                     accessToken: access_token,
                     refreshToken: refresh_token,
+                    idToken: id_token || access_token, // Fallback to access_token if id_token not provided
                     expiresIn: expires_in
                 },
                 message: 'Login successful'
