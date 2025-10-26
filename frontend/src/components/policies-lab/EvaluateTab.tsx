@@ -452,9 +452,9 @@ export default function EvaluateTab() {
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Releasability To *</label>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
+          <fieldset>
+            <legend className="block text-sm font-medium text-gray-700 mb-1">Releasability To *</legend>
+            <div className="space-y-1 max-h-32 overflow-y-auto" role="group" aria-label="Releasability To">
               {countries.map((c) => (
                 <label key={c} className="flex items-center">
                   <input
@@ -467,7 +467,7 @@ export default function EvaluateTab() {
                 </label>
               ))}
             </div>
-          </div>
+          </fieldset>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">COI (optional)</label>
