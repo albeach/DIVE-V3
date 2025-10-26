@@ -82,6 +82,11 @@ export default function ComplianceDashboard() {
   useEffect(() => {
     if (status === 'loading') return;
     
+    // Only run on client-side
+    if (typeof window === 'undefined') {
+      return;
+    }
+    
     if (!session) {
       return;
     }

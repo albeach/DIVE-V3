@@ -17,7 +17,19 @@ import rego.v1
 #
 # Default deny pattern (fail-secure)
 
-default allow := false
+allow := false
+
+decision_reason := "Authorization check not evaluated"
+
+# Obligations as a set (Rego v1 compatible)
+obligations contains obligation if {
+	input.resource.encrypted
+	obligation := {
+		"type": "KAS",
+		"resourceId": input.resource.resourceId,
+		"policy": "object_abac_policy (ACP-240 focused)",
+	}
+}
 
 # ============================================
 # Main Authorization Rule
@@ -42,7 +54,7 @@ allow if {
 is_ztdf_integrity_violation := msg if {
 	input.resource.encrypted
 	# If resource has signature field, it must be valid
-	input.resource.hasOwnProperty("ztdf_signature_valid")
+	input.resource.ztdf_signature_valid != null
 	not input.resource.ztdf_signature_valid
 	msg := "ZTDF signature verification failed (STANAG 4778 binding compromised)"
 }
@@ -50,8 +62,8 @@ is_ztdf_integrity_violation := msg if {
 is_ztdf_integrity_violation := msg if {
 	input.resource.encrypted
 	# If policy hash is present, it must match
-	input.resource.hasOwnProperty("policy_hash")
-	input.resource.hasOwnProperty("computed_policy_hash")
+	input.resource.policy_hash != null
+	input.resource.computed_policy_hash != null
 	input.resource.policy_hash != input.resource.computed_policy_hash
 	msg := "Policy hash mismatch - cryptographic binding broken"
 }
@@ -76,17 +88,17 @@ is_kas_unavailable := msg if {
 # Policy Binding Verification (ACP-240 §5.4)
 is_policy_binding_broken := msg if {
 	# If original classification exists, it must map correctly
-	input.resource.hasOwnProperty("originalClassification")
-	input.resource.hasOwnProperty("classification")
+	input.resource.originalClassification != null
+	input.resource.classification != null
 	# Verify equivalency mapping is consistent
 	not is_valid_classification_mapping(
 		input.resource.originalClassification,
 		input.resource.classification,
-		input.resource.originalCountry
+		input.resource.originalCountry,
 	)
 	msg := sprintf(
 		"Classification mapping inconsistent: %s (%s) should map to %s",
-		[input.resource.originalClassification, input.resource.originalCountry, input.resource.classification]
+		[input.resource.originalClassification, input.resource.originalCountry, input.resource.classification],
 	)
 }
 
@@ -116,8 +128,9 @@ clearance_levels := ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
 
 # Clearance check
 is_insufficient_clearance := msg if {
-	user_level := indexof(clearance_levels, input.subject.clearance)
-	resource_level := indexof(clearance_levels, input.resource.classification)
+	clearance_map := {"UNCLASSIFIED": 0, "CONFIDENTIAL": 1, "SECRET": 2, "TOP_SECRET": 3}
+	user_level := clearance_map[input.subject.clearance]
+	resource_level := clearance_map[input.resource.classification]
 	user_level < resource_level
 	msg := sprintf("Insufficient clearance: %s < %s", [input.subject.clearance, input.resource.classification])
 }
@@ -160,30 +173,22 @@ obligations contains obligation if {
 }
 
 # ============================================
-# Decision Structure
+# Decision Structure (Simplified for Rego v1)
 # ============================================
 
-decision := {
-	"allow": allow,
-	"reason": reason,
-	"obligations": obligations,
-	"evaluation_details": {
-		"policy": "object_abac_policy (ACP-240 focused)",
-		"ztdf_integrity_check": not is_ztdf_integrity_violation,
-		"kas_availability_check": not is_kas_unavailable,
-		"policy_binding_check": not is_policy_binding_broken,
-		"encryption_requirement_check": not is_encryption_required_but_missing,
-		"clearance_check": not is_insufficient_clearance,
-		"releasability_check": not is_not_releasable_to_country,
-		"coi_check": not is_coi_violation,
-	},
+decision := d if {
+	d := {
+		"allow": allow,
+		"reason": decision_reason,
+		"obligations": obligations,
+	}
 }
 
-reason := "All object security and ABAC conditions satisfied" if {
+decision_reason := "All object security and ABAC conditions satisfied" if {
 	allow
 }
 
-reason := violation_message if {
+decision_reason := violation_message if {
 	not allow
 	violations := [
 		is_ztdf_integrity_violation,

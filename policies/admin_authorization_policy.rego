@@ -14,23 +14,25 @@ import rego.v1
 # Reference: Week 3.3 requirements
 
 # Default deny
-default allow := false
+allow := false
+
+evaluation_details := {}
 
 # ============================================
 # Allowed Admin Operations
 # ============================================
 
 allowed_admin_operations := {
-    "view_logs",
-    "export_logs",
-    "approve_idp",
-    "reject_idp",
-    "create_idp",
-    "update_idp",
-    "delete_idp",
-    "manage_users",
-    "view_violations",
-    "view_system_health"
+	"view_logs",
+	"export_logs",
+	"approve_idp",
+	"reject_idp",
+	"create_idp",
+	"update_idp",
+	"delete_idp",
+	"manage_users",
+	"view_violations",
+	"view_system_health",
 }
 
 # ============================================
@@ -39,20 +41,20 @@ allowed_admin_operations := {
 
 # Check if subject is not authenticated
 is_not_authenticated := msg if {
-    not input.subject.authenticated
-    msg := "Subject is not authenticated"
+	not input.subject.authenticated
+	msg := "Subject is not authenticated"
 }
 
 # Check if subject does not have super_admin role
 is_not_super_admin := msg if {
-    not "super_admin" in input.subject.roles
-    msg := "Subject does not have super_admin role"
+	not "super_admin" in input.subject.roles
+	msg := "Subject does not have super_admin role"
 }
 
 # Check if operation is not allowed
 is_invalid_operation := msg if {
-    not input.action.operation in allowed_admin_operations
-    msg := sprintf("Operation '%s' is not a valid admin operation", [input.action.operation])
+	not input.action.operation in allowed_admin_operations
+	msg := sprintf("Operation '%s' is not a valid admin operation", [input.action.operation])
 }
 
 # ============================================
@@ -61,34 +63,35 @@ is_invalid_operation := msg if {
 
 # Allow if all checks pass
 allow if {
-    not is_not_authenticated
-    not is_not_super_admin
-    not is_invalid_operation
+	not is_not_authenticated
+	not is_not_super_admin
+	not is_invalid_operation
 }
 
 # Collect all violations
 violations := array.concat(
-    array.concat(
-        [is_not_authenticated | is_not_authenticated],
-        [is_not_super_admin | is_not_super_admin]
-    ),
-    [is_invalid_operation | is_invalid_operation]
+	array.concat(
+		[is_not_authenticated | is_not_authenticated],
+		[is_not_super_admin | is_not_super_admin],
+	),
+	[is_invalid_operation | is_invalid_operation],
 )
 
 # Generate reason
 reason := msg if {
-    count(violations) > 0
-    msg := concat("; ", violations)
+	count(violations) > 0
+	msg := concat("; ", violations)
 } else := "Admin access granted"
 
 # ============================================
-# Decision Output (for PEP consumption)
+# Decision Output (Simplified for Rego v1)
 # ============================================
 
-decision := {
-	"allow": allow,
-	"reason": reason,
-	"evaluation_details": evaluation_details,
+decision := d if {
+	d := {
+		"allow": allow,
+		"reason": reason,
+	}
 }
 
 evaluation_details := {
@@ -101,14 +104,14 @@ evaluation_details := {
 }
 
 # Helper rules for evaluation details (always return boolean)
-check_authenticated := true if {
+check_authenticated if {
 	not is_not_authenticated
 } else := false
 
-check_has_super_admin := true if {
+check_has_super_admin if {
 	not is_not_super_admin
 } else := false
 
-check_valid_operation := true if {
+check_valid_operation if {
 	not is_invalid_operation
 } else := false

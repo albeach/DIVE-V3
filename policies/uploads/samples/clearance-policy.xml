@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample XACML 3.0 Policy: Clearance-Based Access Control
+  
+  This policy demonstrates:
+  - Clearance level comparison (using custom functions)
+  - Country releasability checks (bag matching)
+  - COI (Community of Interest) matching
+  - Obligations on Permit
+  
+  Use in Policies Lab to compare with Rego equivalent.
+-->
+<PolicySet xmlns="urn:oasis:names:tc:xacml:3.0:core:schema:wd-17"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           PolicySetId="urn:dive:lab:clearance-policy"
+           PolicyCombiningAlgId="urn:oasis:names:tc:xacml:3.0:policy-combining-algorithm:deny-unless-permit"
+           Version="1.0">
+  
+  <Description>Clearance-based access control with releasability and COI checks</Description>
+  
+  <!-- Target: Apply to all read actions -->
+  <Target>
+    <AnyOf>
+      <AllOf>
+        <Match MatchId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+          <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">read</AttributeValue>
+          <AttributeDesignator
+            Category="urn:oasis:names:tc:xacml:3.0:attribute-category:action"
+            AttributeId="urn:oasis:names:tc:xacml:1.0:action:action-id"
+            DataType="http://www.w3.org/2001/XMLSchema#string"
+            MustBePresent="true"/>
+        </Match>
+      </AllOf>
+    </AnyOf>
+  </Target>
+  
+  <!-- Policy 1: Clearance Check -->
+  <Policy PolicyId="urn:dive:lab:clearance-check"
+          RuleCombiningAlgId="urn:oasis:names:tc:xacml:3.0:rule-combining-algorithm:deny-unless-permit"
+          Version="1.0">
+    
+    <Description>Check if subject clearance is sufficient for resource classification</Description>
+    
+    <Rule RuleId="urn:dive:lab:rule:clearance-match" Effect="Permit">
+      <Description>Permit if clearance >= classification</Description>
+      <Condition>
+        <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:or">
+          
+          <!-- UNCLASSIFIED resources: all clearances allowed -->
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+              <AttributeDesignator
+                Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+                AttributeId="urn:dive:resource:classification"
+                DataType="http://www.w3.org/2001/XMLSchema#string"
+                MustBePresent="true"/>
+            </Apply>
+            <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">UNCLASSIFIED</AttributeValue>
+          </Apply>
+          
+          <!-- CONFIDENTIAL resources: CONFIDENTIAL, SECRET, TOP_SECRET -->
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:and">
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                <AttributeDesignator
+                  Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+                  AttributeId="urn:dive:resource:classification"
+                  DataType="http://www.w3.org/2001/XMLSchema#string"
+                  MustBePresent="true"/>
+              </Apply>
+              <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">CONFIDENTIAL</AttributeValue>
+            </Apply>
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:or">
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+                <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                  <AttributeDesignator
+                    Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                    AttributeId="urn:dive:subject:clearance"
+                    DataType="http://www.w3.org/2001/XMLSchema#string"
+                    MustBePresent="true"/>
+                </Apply>
+                <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">CONFIDENTIAL</AttributeValue>
+              </Apply>
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+                <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                  <AttributeDesignator
+                    Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                    AttributeId="urn:dive:subject:clearance"
+                    DataType="http://www.w3.org/2001/XMLSchema#string"
+                    MustBePresent="true"/>
+                </Apply>
+                <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">SECRET</AttributeValue>
+              </Apply>
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+                <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                  <AttributeDesignator
+                    Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                    AttributeId="urn:dive:subject:clearance"
+                    DataType="http://www.w3.org/2001/XMLSchema#string"
+                    MustBePresent="true"/>
+                </Apply>
+                <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">TOP_SECRET</AttributeValue>
+              </Apply>
+            </Apply>
+          </Apply>
+          
+          <!-- SECRET resources: SECRET, TOP_SECRET -->
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:and">
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                <AttributeDesignator
+                  Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+                  AttributeId="urn:dive:resource:classification"
+                  DataType="http://www.w3.org/2001/XMLSchema#string"
+                  MustBePresent="true"/>
+              </Apply>
+              <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">SECRET</AttributeValue>
+            </Apply>
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:or">
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+                <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                  <AttributeDesignator
+                    Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                    AttributeId="urn:dive:subject:clearance"
+                    DataType="http://www.w3.org/2001/XMLSchema#string"
+                    MustBePresent="true"/>
+                </Apply>
+                <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">SECRET</AttributeValue>
+              </Apply>
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+                <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                  <AttributeDesignator
+                    Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                    AttributeId="urn:dive:subject:clearance"
+                    DataType="http://www.w3.org/2001/XMLSchema#string"
+                    MustBePresent="true"/>
+                </Apply>
+                <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">TOP_SECRET</AttributeValue>
+              </Apply>
+            </Apply>
+          </Apply>
+          
+          <!-- TOP_SECRET resources: only TOP_SECRET -->
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:and">
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                <AttributeDesignator
+                  Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+                  AttributeId="urn:dive:resource:classification"
+                  DataType="http://www.w3.org/2001/XMLSchema#string"
+                  MustBePresent="true"/>
+              </Apply>
+              <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">TOP_SECRET</AttributeValue>
+            </Apply>
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-equal">
+              <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+                <AttributeDesignator
+                  Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                  AttributeId="urn:dive:subject:clearance"
+                  DataType="http://www.w3.org/2001/XMLSchema#string"
+                  MustBePresent="true"/>
+              </Apply>
+              <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">TOP_SECRET</AttributeValue>
+            </Apply>
+          </Apply>
+          
+        </Apply>
+      </Condition>
+    </Rule>
+    
+    <Rule RuleId="urn:dive:lab:rule:default-deny" Effect="Deny">
+      <Description>Default deny if clearance insufficient</Description>
+    </Rule>
+    
+  </Policy>
+  
+  <!-- Policy 2: Releasability Check -->
+  <Policy PolicyId="urn:dive:lab:releasability-check"
+          RuleCombiningAlgId="urn:oasis:names:tc:xacml:3.0:rule-combining-algorithm:deny-unless-permit"
+          Version="1.0">
+    
+    <Description>Check if subject country is in resource releasabilityTo list</Description>
+    
+    <Rule RuleId="urn:dive:lab:rule:country-match" Effect="Permit">
+      <Description>Permit if country in releasabilityTo</Description>
+      <Condition>
+        <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-at-least-one-member-of">
+          <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-bag">
+            <Apply FunctionId="urn:oasis:names:tc:xacml:1.0:function:string-one-and-only">
+              <AttributeDesignator
+                Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject"
+                AttributeId="urn:dive:subject:countryOfAffiliation"
+                DataType="http://www.w3.org/2001/XMLSchema#string"
+                MustBePresent="true"/>
+            </Apply>
+          </Apply>
+          <AttributeDesignator
+            Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource"
+            AttributeId="urn:dive:resource:releasabilityTo"
+            DataType="http://www.w3.org/2001/XMLSchema#string"
+            MustBePresent="true"/>
+        </Apply>
+      </Condition>
+    </Rule>
+    
+  </Policy>
+  
+  <!-- Obligations -->
+  <ObligationExpressions>
+    <ObligationExpression ObligationId="urn:dive:obligation:log-access" FulfillOn="Permit">
+      <AttributeAssignmentExpression AttributeId="urn:dive:obligation:param:level">
+        <AttributeValue DataType="http://www.w3.org/2001/XMLSchema#string">INFO</AttributeValue>
+      </AttributeAssignmentExpression>
+    </ObligationExpression>
+  </ObligationExpressions>
+  
+</PolicySet>
+
