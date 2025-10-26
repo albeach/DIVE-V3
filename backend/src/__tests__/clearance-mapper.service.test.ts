@@ -149,7 +149,140 @@ describe('Clearance Mapper Service', () => {
     });
 
     // ============================================
-    // 5. Industry Clearance Mapping Tests (4 tests)
+    // 5. Germany (DEU) Clearance Mapping Tests (4 tests)
+    // ============================================
+
+    describe('German Clearance Mappings', () => {
+        it('should map German OFFEN to UNCLASSIFIED', () => {
+            const result = mapNationalClearance('OFFEN', 'DEU');
+            expect(result).toBe('UNCLASSIFIED');
+        });
+
+        it('should map German VS-VERTRAULICH to CONFIDENTIAL', () => {
+            expect(mapNationalClearance('VS-VERTRAULICH', 'DEU')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('VS-NUR FÜR DEN DIENSTGEBRAUCH', 'DEU')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('VS-NUR FUR DEN DIENSTGEBRAUCH', 'DEU')).toBe('CONFIDENTIAL');
+        });
+
+        it('should map German GEHEIM to SECRET', () => {
+            const result = mapNationalClearance('GEHEIM', 'DEU');
+            expect(result).toBe('SECRET');
+        });
+
+        it('should map German STRENG GEHEIM to TOP_SECRET', () => {
+            const result = mapNationalClearance('STRENG GEHEIM', 'DEU');
+            expect(result).toBe('TOP_SECRET');
+        });
+    });
+
+    // ============================================
+    // 6. Italy (ITA) Clearance Mapping Tests (4 tests)
+    // ============================================
+
+    describe('Italian Clearance Mappings', () => {
+        it('should map Italian NON CLASSIFICATO to UNCLASSIFIED', () => {
+            const result = mapNationalClearance('NON CLASSIFICATO', 'ITA');
+            expect(result).toBe('UNCLASSIFIED');
+        });
+
+        it('should map Italian RISERVATO to CONFIDENTIAL', () => {
+            expect(mapNationalClearance('RISERVATO', 'ITA')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('RISERVATISSIMO', 'ITA')).toBe('CONFIDENTIAL');
+        });
+
+        it('should map Italian SEGRETO to SECRET', () => {
+            const result = mapNationalClearance('SEGRETO', 'ITA');
+            expect(result).toBe('SECRET');
+        });
+
+        it('should map Italian SEGRETISSIMO to TOP_SECRET', () => {
+            const result = mapNationalClearance('SEGRETISSIMO', 'ITA');
+            expect(result).toBe('TOP_SECRET');
+        });
+    });
+
+    // ============================================
+    // 7. Spain (ESP) Clearance Mapping Tests (4 tests)
+    // ============================================
+
+    describe('Spanish Clearance Mappings', () => {
+        it('should map Spanish NO CLASIFICADO to UNCLASSIFIED', () => {
+            const result = mapNationalClearance('NO CLASIFICADO', 'ESP');
+            expect(result).toBe('UNCLASSIFIED');
+        });
+
+        it('should map Spanish CONFIDENCIAL to CONFIDENTIAL', () => {
+            expect(mapNationalClearance('DIFUSIÓN LIMITADA', 'ESP')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('DIFUSION LIMITADA', 'ESP')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('CONFIDENCIAL', 'ESP')).toBe('CONFIDENTIAL');
+        });
+
+        it('should map Spanish SECRETO to SECRET', () => {
+            const result = mapNationalClearance('SECRETO', 'ESP');
+            expect(result).toBe('SECRET');
+        });
+
+        it('should map Spanish ALTO SECRETO to TOP_SECRET', () => {
+            const result = mapNationalClearance('ALTO SECRETO', 'ESP');
+            expect(result).toBe('TOP_SECRET');
+        });
+    });
+
+    // ============================================
+    // 8. Poland (POL) Clearance Mapping Tests (4 tests)
+    // ============================================
+
+    describe('Polish Clearance Mappings', () => {
+        it('should map Polish NIEJAWNE to UNCLASSIFIED', () => {
+            const result = mapNationalClearance('NIEJAWNE', 'POL');
+            expect(result).toBe('UNCLASSIFIED');
+        });
+
+        it('should map Polish POUFNE to CONFIDENTIAL', () => {
+            expect(mapNationalClearance('ZASTRZEŻONE', 'POL')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('ZASTRZEZIONE', 'POL')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('POUFNE', 'POL')).toBe('CONFIDENTIAL');
+        });
+
+        it('should map Polish TAJNE to SECRET', () => {
+            const result = mapNationalClearance('TAJNE', 'POL');
+            expect(result).toBe('SECRET');
+        });
+
+        it('should map Polish ŚCIŚLE TAJNE to TOP_SECRET', () => {
+            expect(mapNationalClearance('ŚCIŚLE TAJNE', 'POL')).toBe('TOP_SECRET');
+            expect(mapNationalClearance('SCISLE TAJNE', 'POL')).toBe('TOP_SECRET');
+        });
+    });
+
+    // ============================================
+    // 9. Netherlands (NLD) Clearance Mapping Tests (4 tests)
+    // ============================================
+
+    describe('Dutch Clearance Mappings', () => {
+        it('should map Dutch NIET-GERUBRICEERD to UNCLASSIFIED', () => {
+            const result = mapNationalClearance('NIET-GERUBRICEERD', 'NLD');
+            expect(result).toBe('UNCLASSIFIED');
+        });
+
+        it('should map Dutch VERTROUWELIJK to CONFIDENTIAL', () => {
+            expect(mapNationalClearance('DEPARTEMENTAAL VERTROUWELIJK', 'NLD')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('VERTROUWELIJK', 'NLD')).toBe('CONFIDENTIAL');
+        });
+
+        it('should map Dutch GEHEIM to SECRET', () => {
+            const result = mapNationalClearance('GEHEIM', 'NLD');
+            expect(result).toBe('SECRET');
+        });
+
+        it('should map Dutch ZEER GEHEIM to TOP_SECRET', () => {
+            const result = mapNationalClearance('ZEER GEHEIM', 'NLD');
+            expect(result).toBe('TOP_SECRET');
+        });
+    });
+
+    // ============================================
+    // 10. Industry Clearance Mapping Tests (4 tests)
     // ============================================
 
     describe('Industry Partner Clearance Mappings', () => {
@@ -256,7 +389,7 @@ describe('Clearance Mapper Service', () => {
     });
 
     // ============================================
-    // 9. Realm Detection Tests (6 tests)
+    // 12. Realm Detection Tests (11 tests)
     // ============================================
 
     describe('Realm to Country Detection', () => {
@@ -282,6 +415,42 @@ describe('Clearance Mapper Service', () => {
             expect(getCountryFromRealm('dive-v3-gbr')).toBe('GBR');
             expect(getCountryFromRealm('gbr-realm-broker')).toBe('GBR');
             expect(getCountryFromRealm('uk-idp')).toBe('GBR');
+            expect(getCountryFromRealm('britain-idp')).toBe('GBR');
+        });
+
+        it('should detect Germany from realm name', () => {
+            expect(getCountryFromRealm('dive-v3-deu')).toBe('DEU');
+            expect(getCountryFromRealm('deu-realm-broker')).toBe('DEU');
+            expect(getCountryFromRealm('germany-idp')).toBe('DEU');
+            expect(getCountryFromRealm('german-idp')).toBe('DEU');
+        });
+
+        it('should detect Italy from realm name', () => {
+            expect(getCountryFromRealm('dive-v3-ita')).toBe('ITA');
+            expect(getCountryFromRealm('ita-realm-broker')).toBe('ITA');
+            expect(getCountryFromRealm('italy-idp')).toBe('ITA');
+            expect(getCountryFromRealm('italian-idp')).toBe('ITA');
+        });
+
+        it('should detect Spain from realm name', () => {
+            expect(getCountryFromRealm('dive-v3-esp')).toBe('ESP');
+            expect(getCountryFromRealm('esp-realm-broker')).toBe('ESP');
+            expect(getCountryFromRealm('spain-idp')).toBe('ESP');
+            expect(getCountryFromRealm('spanish-idp')).toBe('ESP');
+        });
+
+        it('should detect Poland from realm name', () => {
+            expect(getCountryFromRealm('dive-v3-pol')).toBe('POL');
+            expect(getCountryFromRealm('pol-realm-broker')).toBe('POL');
+            expect(getCountryFromRealm('poland-idp')).toBe('POL');
+            expect(getCountryFromRealm('polish-idp')).toBe('POL');
+        });
+
+        it('should detect Netherlands from realm name', () => {
+            expect(getCountryFromRealm('dive-v3-nld')).toBe('NLD');
+            expect(getCountryFromRealm('nld-realm-broker')).toBe('NLD');
+            expect(getCountryFromRealm('netherlands-idp')).toBe('NLD');
+            expect(getCountryFromRealm('dutch-idp')).toBe('NLD');
         });
 
         it('should detect Industry from realm name', () => {
@@ -297,7 +466,7 @@ describe('Clearance Mapper Service', () => {
     });
 
     // ============================================
-    // 10. National Equivalents Tests (4 tests)
+    // 10. National Equivalents Tests (6 tests)
     // ============================================
 
     describe('National Equivalents Lookup', () => {
@@ -313,13 +482,25 @@ describe('Clearance Mapper Service', () => {
             expect(equivalents).toContain('PROTECTED C');
         });
 
+        it('should return German equivalents for SECRET', () => {
+            const equivalents = getNationalEquivalents('SECRET', 'DEU');
+            expect(equivalents).toContain('GEHEIM');
+        });
+
+        it('should return Italian equivalents for TOP_SECRET', () => {
+            const equivalents = getNationalEquivalents('TOP_SECRET', 'ITA');
+            expect(equivalents).toContain('SEGRETISSIMO');
+        });
+
         it('should return all equivalents when country not specified', () => {
             const equivalents = getNationalEquivalents('SECRET');
-            expect(equivalents.length).toBeGreaterThan(5);
-            expect(equivalents).toContain('SECRET');
-            expect(equivalents).toContain('SECRET DÉFENSE');
-            // Note: GEHEIM is not in our current mapping (German not included yet)
-            // Check for countries we do support
+            expect(equivalents.length).toBeGreaterThan(8); // Now includes all 10 countries
+            expect(equivalents).toContain('SECRET'); // USA/GBR/CAN
+            expect(equivalents).toContain('SECRET DÉFENSE'); // France
+            expect(equivalents).toContain('GEHEIM'); // Germany/Netherlands
+            expect(equivalents).toContain('SEGRETO'); // Italy
+            expect(equivalents).toContain('SECRETO'); // Spain
+            expect(equivalents).toContain('TAJNE'); // Poland
             expect(equivalents).toContain('PROTECTED C'); // Canadian
         });
 
@@ -330,7 +511,7 @@ describe('Clearance Mapper Service', () => {
     });
 
     // ============================================
-    // 11. Validation Tests (3 tests)
+    // 14. Validation Tests (3 tests)
     // ============================================
 
     describe('Clearance Mapping Validation', () => {
@@ -358,8 +539,10 @@ describe('Clearance Mapper Service', () => {
             });
         });
 
-        it('should have equivalents for all countries', () => {
-            const countries: NationalClearanceSystem[] = ['USA', 'FRA', 'CAN', 'GBR', 'INDUSTRY'];
+        it('should have equivalents for all 10 countries', () => {
+            const countries: NationalClearanceSystem[] = [
+                'USA', 'FRA', 'CAN', 'GBR', 'DEU', 'ITA', 'ESP', 'POL', 'NLD', 'INDUSTRY'
+            ];
 
             countries.forEach(country => {
                 const result = mapNationalClearance('SECRET', country);
@@ -407,23 +590,29 @@ describe('Clearance Mapper Service', () => {
 // ============================================
 
 /**
- * Total Tests: 54 tests
+ * Total Tests: 78 tests
  * 
  * Coverage:
  * - USA Clearance Mappings: 5 tests
  * - French Clearance Mappings: 6 tests
  * - Canadian Clearance Mappings: 5 tests
  * - UK Clearance Mappings: 4 tests
+ * - German Clearance Mappings: 4 tests (NEW)
+ * - Italian Clearance Mappings: 4 tests (NEW)
+ * - Spanish Clearance Mappings: 4 tests (NEW)
+ * - Polish Clearance Mappings: 4 tests (NEW)
+ * - Dutch Clearance Mappings: 4 tests (NEW)
  * - Industry Clearance Mappings: 4 tests
  * - Case Insensitivity: 3 tests
  * - MFA Requirements: 4 tests
  * - Token Mapping: 5 tests
- * - Realm Detection: 6 tests
- * - National Equivalents: 4 tests
+ * - Realm Detection: 11 tests (expanded from 6)
+ * - National Equivalents: 6 tests (expanded from 4)
  * - Validation: 3 tests
  * - Edge Cases: 5 tests
  * 
- * All 5 realms tested: USA, France, Canada, UK, Industry
+ * All 10 national systems tested: USA, France, Canada, UK, Germany, Italy, Spain, Poland, Netherlands, Industry
  * All 4 clearance levels tested: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
+ * All 6 new NATO nations fully covered: DEU, GBR, ITA, ESP, POL, NLD
  */
 

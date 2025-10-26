@@ -203,7 +203,7 @@ export const verifyAndEnableOTP = async (
             secret: secret,
             encoding: 'base32',
             token: otp,
-            window: 1 // Allow 1 time step tolerance
+            window: 1 // ±1 step = 90 seconds total (30s per step × 3 = current + ±1)
         });
 
         if (!verified) {
