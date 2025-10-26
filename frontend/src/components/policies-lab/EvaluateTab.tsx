@@ -342,8 +342,9 @@ export default function EvaluateTab() {
           <h3 className="text-lg font-semibold text-blue-900">👤 Subject</h3>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Unique ID *</label>
+            <label htmlFor="subject-uniqueID" className="block text-sm font-medium text-gray-700 mb-1">Unique ID *</label>
             <input
+              id="subject-uniqueID"
               type="text"
               value={uniqueID}
               onChange={(e) => setUniqueID(e.target.value)}
@@ -352,8 +353,9 @@ export default function EvaluateTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Clearance *</label>
+            <label htmlFor="subject-clearance" className="block text-sm font-medium text-gray-700 mb-1">Clearance *</label>
             <select
+              id="subject-clearance"
               value={clearance}
               onChange={(e) => setClearance(e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -365,8 +367,9 @@ export default function EvaluateTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
+            <label htmlFor="subject-country" className="block text-sm font-medium text-gray-700 mb-1">Country *</label>
             <select
+              id="subject-country"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -396,17 +399,19 @@ export default function EvaluateTab() {
 
           <div className="flex items-center">
             <input
+              id="subject-authenticated"
               type="checkbox"
               checked={authenticated}
               onChange={(e) => setAuthenticated(e.target.checked)}
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <label className="ml-2 text-sm text-gray-700">Authenticated</label>
+            <label htmlFor="subject-authenticated" className="ml-2 text-sm text-gray-700">Authenticated</label>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">AAL</label>
+            <label htmlFor="subject-aal" className="block text-sm font-medium text-gray-700 mb-1">AAL</label>
             <select
+              id="subject-aal"
               value={aal}
               onChange={(e) => setAal(e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
@@ -423,8 +428,9 @@ export default function EvaluateTab() {
           <h3 className="text-lg font-semibold text-green-900">📄 Resource</h3>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Resource ID *</label>
+            <label htmlFor="resource-id" className="block text-sm font-medium text-gray-700 mb-1">Resource ID *</label>
             <input
+              id="resource-id"
               type="text"
               value={resourceId}
               onChange={(e) => setResourceId(e.target.value)}
@@ -433,8 +439,9 @@ export default function EvaluateTab() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Classification *</label>
+            <label htmlFor="resource-classification" className="block text-sm font-medium text-gray-700 mb-1">Classification *</label>
             <select
+              id="resource-classification"
               value={resourceClassification}
               onChange={(e) => setResourceClassification(e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"
@@ -481,17 +488,19 @@ export default function EvaluateTab() {
 
           <div className="flex items-center">
             <input
+              id="resource-encrypted"
               type="checkbox"
               checked={encrypted}
               onChange={(e) => setEncrypted(e.target.checked)}
               className="rounded border-gray-300 text-green-600 focus:ring-green-500"
             />
-            <label className="ml-2 text-sm text-gray-700">Encrypted</label>
+            <label htmlFor="resource-encrypted" className="ml-2 text-sm text-gray-700">Encrypted</label>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Creation Date (optional)</label>
+            <label htmlFor="resource-creation-date" className="block text-sm font-medium text-gray-700 mb-1">Creation Date (optional)</label>
             <input
+              id="resource-creation-date"
               type="datetime-local"
               value={creationDate}
               onChange={(e) => setCreationDate(e.target.value)}
@@ -505,6 +514,7 @@ export default function EvaluateTab() {
           <div className="p-4 border border-purple-200 rounded-lg bg-purple-50">
             <h3 className="text-lg font-semibold text-purple-900 mb-4">⚡ Action</h3>
             <select
+              id="action-select"
               value={action}
               onChange={(e) => setAction(e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
@@ -520,8 +530,9 @@ export default function EvaluateTab() {
             
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Current Time *</label>
+                <label htmlFor="context-current-time" className="block text-sm font-medium text-gray-700 mb-1">Current Time *</label>
                 <input
+                  id="context-current-time"
                   type="datetime-local"
                   value={currentTime}
                   onChange={(e) => setCurrentTime(e.target.value)}
@@ -530,8 +541,9 @@ export default function EvaluateTab() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Source IP (optional)</label>
+                <label htmlFor="context-source-ip" className="block text-sm font-medium text-gray-700 mb-1">Source IP (optional)</label>
                 <input
+                  id="context-source-ip"
                   type="text"
                   value={sourceIP}
                   onChange={(e) => setSourceIP(e.target.value)}
@@ -542,12 +554,13 @@ export default function EvaluateTab() {
 
               <div className="flex items-center">
                 <input
+                  id="context-device-compliant"
                   type="checkbox"
                   checked={deviceCompliant}
                   onChange={(e) => setDeviceCompliant(e.target.checked)}
                   className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
                 />
-                <label className="ml-2 text-sm text-gray-700">Device Compliant</label>
+                <label htmlFor="context-device-compliant" className="ml-2 text-sm text-gray-700">Device Compliant</label>
               </div>
             </div>
           </div>
