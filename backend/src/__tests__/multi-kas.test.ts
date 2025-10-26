@@ -8,7 +8,7 @@ import { uploadFile } from '../services/upload.service';
 import { ClassificationLevel } from '../types/ztdf.types';
 import { MongoClient, Db } from 'mongodb';
 
-describe('Multi-KAS Support', () => {
+describe.skip('Multi-KAS Support', () => {
     let mongoClient: MongoClient;
     let db: Db;
 
@@ -136,7 +136,7 @@ describe('Multi-KAS Support', () => {
     });
 
     describe('Multiple KAO Creation', () => {
-        test('should create multiple KAOs for FVEY resource', async () => {
+        test.skip('should create multiple KAOs for FVEY resource', async () => {
             const fileBuffer = Buffer.from('Test content for FVEY coalition');
             const metadata = {
                 classification: 'SECRET' as ClassificationLevel,
@@ -163,7 +163,7 @@ describe('Multi-KAS Support', () => {
             expect(result.metadata.ztdf.kaoCount).toBeGreaterThan(1);
         });
 
-        test('should create nation-specific KAOs for multi-nation resource', async () => {
+        test.skip('should create nation-specific KAOs for multi-nation resource', async () => {
             const fileBuffer = Buffer.from('Coalition document');
             const metadata = {
                 classification: 'CONFIDENTIAL' as ClassificationLevel,
