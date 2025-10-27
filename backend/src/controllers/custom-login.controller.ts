@@ -331,14 +331,35 @@ export const customLoginHandler = async (
             if (keycloakError.response?.status === 401) {
                 const errorData = keycloakError.response?.data;
                 const errorDescription = errorData?.error_description || '';
+                
+                // Custom SPI returns error in response body (errorData.error and errorData.message)
+                const customSPIError = errorData?.error || '';
+                const customSPIMessage = errorData?.message || '';
 
                 logger.warn('Authentication failed', {
                     requestId,
                     username,
                     errorDescription,
+                    customSPIError,
+                    customSPIMessage,
                     hasOTP: !!otp,
                     errorDataKeys: Object.keys(errorData || {})
                 });
+
+                // DIVE V3 Custom SPI Integration: Check if Custom SPI returned otp_required
+                if (customSPIError === 'otp_required') {
+                    logger.info('OTP required for user (Custom SPI)', {
+                        requestId,
+                        username
+                    });
+
+                    res.status(200).json({
+                        success: false,
+                        mfaRequired: true,
+                        message: customSPIMessage || 'Multi-factor authentication required. Please provide your OTP code.'
+                    });
+                    return;
+                }
 
                 // DIVE V3 Custom SPI Integration: Check if error_description contains JSON with mfaSetupRequired
                 // The custom SPI may return setup data in error_description
@@ -368,13 +389,15 @@ export const customLoginHandler = async (
                     // error_description is not JSON, continue with regular parsing
                 }
 
-                // Check for MFA requirement in error response
+                // Check for MFA requirement in error response (fallback for standard Keycloak errors)
                 // Be VERY specific - only treat as MFA if explicitly mentioning OTP/TOTP
                 // Do NOT treat "invalid credentials" as MFA requirement (that's just bad password)
                 const isMFARelated = (
                     (errorDescription.toLowerCase().includes('otp') ||
                         errorDescription.toLowerCase().includes('totp') ||
-                        errorDescription.toLowerCase().includes('required action')) &&
+                        errorDescription.toLowerCase().includes('required action') ||
+                        customSPIMessage.toLowerCase().includes('otp') ||
+                        customSPIMessage.toLowerCase().includes('totp')) &&
                     !errorDescription.toLowerCase().includes('invalid user credentials') &&
                     !errorDescription.toLowerCase().includes('user not found')
                 );
