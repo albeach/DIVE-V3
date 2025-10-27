@@ -472,17 +472,29 @@ export default function CustomLoginPage() {
         try {
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
             
+            // Prepare payload
+            const payload = {
+                idpAlias,
+                username: formData.username,
+                secret: otpSecret,
+                otp: formData.otp,
+                userId
+            };
+            
+            // Debug: Log payload (redact sensitive fields)
+            console.log('OTP verification payload:', {
+                idpAlias: payload.idpAlias || 'MISSING',
+                username: payload.username || 'MISSING',
+                secret: payload.secret ? '[REDACTED]' : 'MISSING',
+                otp: payload.otp ? '[REDACTED]' : 'MISSING',
+                userId: payload.userId || 'MISSING'
+            });
+            
             // Step 1: Verify OTP code and create credential via backend
             const verifyResponse = await fetch(`${backendUrl}/api/auth/otp/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    idpAlias,
-                    username: formData.username,
-                    secret: otpSecret,
-                    otp: formData.otp,
-                    userId
-                })
+                body: JSON.stringify(payload)
             });
 
             const verifyResult = await verifyResponse.json();

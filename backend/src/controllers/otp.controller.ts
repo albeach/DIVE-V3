@@ -136,11 +136,30 @@ export const otpVerifyHandler = async (
     const { idpAlias, username, secret, otp, userId } = req.body;
 
     try {
-        // Validation
-        if (!idpAlias || !username || !secret || !otp || !userId) {
+        // Validation - check each field individually for better debugging
+        const missingFields: string[] = [];
+        if (!idpAlias) missingFields.push('idpAlias');
+        if (!username) missingFields.push('username');
+        if (!secret) missingFields.push('secret');
+        if (!otp) missingFields.push('otp');
+        if (!userId) missingFields.push('userId');
+        
+        if (missingFields.length > 0) {
+            logger.warn('OTP verification failed - missing fields', {
+                requestId,
+                missingFields,
+                receivedFields: { 
+                    idpAlias: idpAlias || 'MISSING',
+                    username: username || 'MISSING',
+                    secret: secret ? '[REDACTED]' : 'MISSING',
+                    otp: otp ? '[REDACTED]' : 'MISSING',
+                    userId: userId || 'MISSING'
+                }
+            });
+            
             res.status(400).json({
                 success: false,
-                error: 'Missing required fields: idpAlias, username, secret, otp, userId'
+                error: `Missing required fields: ${missingFields.join(', ')}`
             });
             return;
         }
