@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
+import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // Create QueryClient instance (only once per component lifecycle)
@@ -24,11 +25,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <LocaleProvider>
         <QueryClientProvider client={queryClient}>
           <SessionProvider 
-            refetchInterval={30} // FIX #5: Re-enable session refetch every 30 seconds for state sync
-            refetchOnWindowFocus={true} // FIX #5: Re-enable focus refetch for better UX
-            refetchWhenOffline={false} // Don't refetch when offline (saves bandwidth)
+            refetchInterval={30}
+            refetchOnWindowFocus={true}
+            refetchWhenOffline={false}
           >
-            {children}
+            <IdentityDrawerProvider>
+              {children}
+            </IdentityDrawerProvider>
           </SessionProvider>
         </QueryClientProvider>
       </LocaleProvider>

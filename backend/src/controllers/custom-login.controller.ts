@@ -98,7 +98,7 @@ export const customLoginHandler = async (
     res: Response
 ): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
-    const { idpAlias, username, password, otp } = req.body; // Extract OTP from request body
+    const { idpAlias, username, password, otp } = req.body;
     const clientIp = req.ip || 'unknown';
 
     try {
@@ -152,6 +152,10 @@ export const customLoginHandler = async (
         // Record attempt
         recordLoginAttempt(clientIp, username, realmName);
 
+        // ============================================
+        // Standard Authentication (with or without OTP)
+        // ============================================
+
         // Authenticate with Keycloak Direct Access Grants
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
         const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-client-broker';
@@ -195,6 +199,29 @@ export const customLoginHandler = async (
                 dataKeys: Object.keys(response.data || {}),
                 statusCode: response.status
             });
+
+            // DIVE V3 Custom SPI Integration: Check if OTP setup is required
+            // The custom SPI returns mfaSetupRequired: true in the response body
+            if (response.data.mfaSetupRequired === true) {
+                logger.info('OTP setup required (custom SPI)', {
+                    requestId,
+                    username,
+                    hasOtpSecret: !!response.data.otpSecret
+                });
+
+                res.status(200).json({
+                    success: false,
+                    mfaRequired: true,
+                    mfaSetupRequired: true,
+                    message: response.data.message || 'Multi-factor authentication setup required',
+                    otpSecret: response.data.otpSecret,
+                    otpUrl: response.data.otpUrl,
+                    qrCode: response.data.qrCode || response.data.otpUrl,
+                    userId: response.data.userId,
+                    setupToken: response.data.setupToken
+                });
+                return;
+            }
 
             const { access_token, refresh_token, id_token, expires_in } = response.data;
 
@@ -309,8 +336,37 @@ export const customLoginHandler = async (
                     requestId,
                     username,
                     errorDescription,
-                    hasOTP: !!otp
+                    hasOTP: !!otp,
+                    errorDataKeys: Object.keys(errorData || {})
                 });
+
+                // DIVE V3 Custom SPI Integration: Check if error_description contains JSON with mfaSetupRequired
+                // The custom SPI may return setup data in error_description
+                try {
+                    const parsedError = JSON.parse(errorDescription);
+                    if (parsedError.mfaSetupRequired === true) {
+                        logger.info('OTP setup required (custom SPI via error_description)', {
+                            requestId,
+                            username,
+                            hasOtpSecret: !!parsedError.otpSecret
+                        });
+
+                        res.status(200).json({
+                            success: false,
+                            mfaRequired: true,
+                            mfaSetupRequired: true,
+                            message: parsedError.message || 'Multi-factor authentication setup required',
+                            otpSecret: parsedError.otpSecret,
+                            otpUrl: parsedError.otpUrl,
+                            qrCode: parsedError.qrCode || parsedError.otpUrl,
+                            userId: parsedError.userId,
+                            setupToken: parsedError.setupToken
+                        });
+                        return;
+                    }
+                } catch (e) {
+                    // error_description is not JSON, continue with regular parsing
+                }
 
                 // Check for MFA requirement in error response
                 // Be VERY specific - only treat as MFA if explicitly mentioning OTP/TOTP

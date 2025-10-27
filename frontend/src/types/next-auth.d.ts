@@ -5,6 +5,9 @@ declare module "next-auth" {
         idToken?: string;
         refreshToken?: string;
         accessToken?: string;
+        acr?: string;
+        amr?: string[];
+        authTime?: number;
         user: {
             id: string;
             uniqueID?: string;
@@ -12,6 +15,9 @@ declare module "next-auth" {
             countryOfAffiliation?: string;
             acpCOI?: string[];
             roles?: string[];
+            acr?: string;
+            amr?: string[];
+            authTime?: number;
         } & DefaultSession["user"];
     }
 

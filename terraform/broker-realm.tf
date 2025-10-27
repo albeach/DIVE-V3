@@ -349,8 +349,11 @@ resource "keycloak_user" "broker_super_admin" {
     temporary = false
   }
   
-  # NOTE: Attributes are synced via null_resource in broker-realm-attribute-fix.tf
-  # This works around Terraform Provider 5.5.0 bug where attributes don't persist
+  # Lifecycle: Ignore runtime attribute changes
+  # This allows backend to set/modify attributes (like otp_secret_pending) without Terraform conflicts
+  lifecycle {
+    ignore_changes = [attributes]
+  }
 }
 
 # Get the offline_access role (default realm role)

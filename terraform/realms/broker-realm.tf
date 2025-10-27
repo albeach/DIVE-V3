@@ -95,6 +95,7 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
+    "basic",  # Keycloak 26: includes auth_time and sub mappers (NIST SP 800-63B requirement)
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
 }
@@ -202,15 +203,18 @@ resource "keycloak_generic_protocol_mapper" "broker_orgunit" {
   }
 }
 
+# Keycloak 26 Fix: Use session note mapper instead of user attribute
+# ACR (Authentication Context Class Reference) is set by Keycloak during authentication flow
+# Session note "AUTH_CONTEXT_CLASS_REF" contains: 0 (AAL1), 1 (AAL2), 2 (AAL3)
 resource "keycloak_generic_protocol_mapper" "broker_acr" {
   realm_id   = keycloak_realm.dive_v3_broker.id
   client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "acr"
+  name       = "acr-from-session"
   protocol   = "openid-connect"
-  protocol_mapper = "oidc-usermodel-attribute-mapper"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # Changed from usermodel-attribute-mapper
 
   config = {
-    "user.attribute"       = "acr"
+    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"  # Keycloak's internal ACR storage
     "claim.name"           = "acr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
@@ -219,15 +223,17 @@ resource "keycloak_generic_protocol_mapper" "broker_acr" {
   }
 }
 
+# Keycloak 26 Fix: Use session note mapper for AMR
+# AMR (Authentication Methods Reference) contains array of auth factors: ["pwd"], ["pwd","otp"], ["webauthn"]
 resource "keycloak_generic_protocol_mapper" "broker_amr" {
   realm_id   = keycloak_realm.dive_v3_broker.id
   client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "amr"
+  name       = "amr-from-session"
   protocol   = "openid-connect"
-  protocol_mapper = "oidc-usermodel-attribute-mapper"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # Changed from usermodel-attribute-mapper
 
   config = {
-    "user.attribute"       = "amr"
+    "user.session.note"    = "AUTH_METHODS_REF"  # Keycloak's internal AMR storage
     "claim.name"           = "amr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
