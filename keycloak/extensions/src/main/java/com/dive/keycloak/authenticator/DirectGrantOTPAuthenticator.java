@@ -321,7 +321,13 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         System.out.println("[DIVE SPI] Secret length: " + secret.length());
         System.out.println("[DIVE SPI] OTP Code: " + otpCode);
 
-        // Validate the OTP code against the secret
+        // Create OTP credential model for validation
+        OTPCredentialModel validationModel = OTPCredentialModel.createFromPolicy(
+            context.getRealm(),
+            secret
+        );
+        
+        // Validate using Keycloak's TimeBasedOTP
         TimeBasedOTP totp = new TimeBasedOTP(
             context.getRealm().getOTPPolicy().getAlgorithm(),
             context.getRealm().getOTPPolicy().getDigits(),
@@ -333,7 +339,8 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         System.out.println("[DIVE SPI] OTP Policy - Digits: " + context.getRealm().getOTPPolicy().getDigits());
         System.out.println("[DIVE SPI] OTP Policy - Period: " + context.getRealm().getOTPPolicy().getPeriod());
         
-        boolean valid = totp.validateTOTP(otpCode, secret.getBytes(StandardCharsets.UTF_8));
+        // Use the decoded secret from the credential model
+        boolean valid = totp.validateTOTP(otpCode, validationModel.getOTPSecretData().getValue().getBytes(StandardCharsets.UTF_8));
         System.out.println("[DIVE SPI] OTP validation result: " + valid);
         
         if (!valid) {
@@ -391,31 +398,21 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
      * Validate existing OTP credential
      */
     private void validateExistingOTP(AuthenticationFlowContext context, UserModel user, String otpCode) {
-        // Get user's OTP credential
-        CredentialModel credential = user.credentialManager()
-            .getStoredCredentialsByTypeStream(OTPCredentialModel.TYPE)
-            .findFirst()
-            .orElse(null);
+        // Use Keycloak's OTP credential provider for validation
+        OTPCredentialProvider otpProvider = (OTPCredentialProvider) context.getSession()
+            .getProvider(org.keycloak.credential.CredentialProvider.class, "keycloak-otp");
         
-        if (credential == null) {
-            context.failure(AuthenticationFlowError.INVALID_CREDENTIALS);
+        if (otpProvider == null) {
+            System.out.println("[DIVE SPI] ERROR: OTP credential provider not found");
+            context.failure(AuthenticationFlowError.INTERNAL_ERROR);
             return;
         }
-
-        // Validate the OTP code
-        OTPCredentialModel otpCredential = OTPCredentialModel.createFromCredentialModel(credential);
         
-        TimeBasedOTP totp = new TimeBasedOTP(
-            otpCredential.getOTPCredentialData().getAlgorithm(),
-            otpCredential.getOTPCredentialData().getDigits(),
-            otpCredential.getOTPCredentialData().getPeriod(),
-            context.getRealm().getOTPPolicy().getLookAheadWindow()
-        );
+        // Validate OTP using Keycloak's built-in validator
+        boolean valid = otpProvider.isValid(context.getRealm(), user, 
+            new UserCredentialModel(null, OTPCredentialModel.TYPE, otpCode));
         
-        boolean valid = totp.validateTOTP(
-            otpCode,
-            otpCredential.getOTPSecretData().getValue().getBytes(StandardCharsets.UTF_8)
-        );
+        System.out.println("[DIVE SPI] OTP validation result: " + valid);
         
         if (valid) {
             // ============================================
@@ -427,8 +424,10 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             // Set AMR (Authentication Methods Reference) to ["pwd","otp"]
             context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
             
+            System.out.println("[DIVE SPI] OTP validated successfully - AAL2 achieved");
             context.success();
         } else {
+            System.out.println("[DIVE SPI] OTP validation failed");
             context.getEvent().error("invalid_totp");
             context.challenge(
                 Response.status(Response.Status.UNAUTHORIZED)
