@@ -1,4 +1,4 @@
-/workspace/src/main/java/com/dive/keycloak/action/ConfigureOTPRequiredActionFactory.java
-/workspace/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.java
-/workspace/src/main/java/com/dive/keycloak/action/ConfigureOTPRequiredAction.java
-/workspace/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticatorFactory.java
+/app/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.java
+/app/src/main/java/com/dive/keycloak/action/ConfigureOTPRequiredAction.java
+/app/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticatorFactory.java
+/app/src/main/java/com/dive/keycloak/action/ConfigureOTPRequiredActionFactory.java
