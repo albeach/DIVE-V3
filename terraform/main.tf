@@ -421,6 +421,10 @@ resource "keycloak_user" "test_user_us_secret" {
     value     = "Password123!"
     temporary = false
   }
+  
+  lifecycle {
+    ignore_changes = [attributes]
+  }
 }
 
 # U.S. Test User - CONFIDENTIAL clearance
@@ -451,6 +455,10 @@ resource "keycloak_user" "test_user_us_confid" {
     value     = "Password123!"
     temporary = false
   }
+  
+  lifecycle {
+    ignore_changes = [attributes]
+  }
 }
 
 # U.S. Test User - UNCLASSIFIED
@@ -480,6 +488,10 @@ resource "keycloak_user" "test_user_us_unclass" {
   initial_password {
     value     = "Password123!"
     temporary = false
+  }
+  
+  lifecycle {
+    ignore_changes = [attributes]
   }
 }
 

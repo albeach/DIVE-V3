@@ -430,12 +430,29 @@ export default function CustomLoginPage() {
             });
 
             const result = await response.json();
+            
+            // Debug: Log full setup response
+            console.log('OTP setup response received:', {
+                success: result.success,
+                hasData: !!result.data,
+                secret: result.data?.secret ? '[REDACTED]' : 'MISSING',
+                qrCodeUrl: result.data?.qrCodeUrl ? 'PRESENT' : 'MISSING',
+                qrCodeDataUrl: result.data?.qrCodeDataUrl ? 'PRESENT' : 'MISSING',
+                userId: result.data?.userId || 'MISSING'
+            });
 
             if (result.success && result.data) {
                 // Store OTP setup data
                 setOtpSecret(result.data.secret);
                 setQrCodeUrl(result.data.qrCodeUrl);
                 setUserId(result.data.userId);
+                
+                // Debug: Verify state was set
+                console.log('State variables set:', {
+                    otpSecret: result.data.secret ? '[REDACTED]' : 'MISSING',
+                    qrCodeUrl: result.data.qrCodeUrl ? 'PRESENT' : 'MISSING',
+                    userId: result.data.userId || 'MISSING'
+                });
                 
                 // Show OTP setup screen
                 setShowOTPSetup(true);
@@ -467,6 +484,15 @@ export default function CustomLoginPage() {
             return;
         }
         
+        // Debug: Check state variables BEFORE sending request
+        console.log('State check before verify:', {
+            otpSecret: otpSecret || 'EMPTY/MISSING',
+            userId: userId || 'EMPTY/MISSING',
+            username: formData.username || 'EMPTY/MISSING',
+            otp: formData.otp || 'EMPTY/MISSING',
+            idpAlias: idpAlias || 'EMPTY/MISSING'
+        });
+        
         setIsLoading(true);
 
         try {
@@ -482,12 +508,26 @@ export default function CustomLoginPage() {
             };
             
             // Debug: Log payload (redact sensitive fields)
-            console.log('OTP verification payload:', {
+            console.log('OTP verification payload to be sent:', {
                 idpAlias: payload.idpAlias || 'MISSING',
                 username: payload.username || 'MISSING',
                 secret: payload.secret ? '[REDACTED]' : 'MISSING',
                 otp: payload.otp ? '[REDACTED]' : 'MISSING',
                 userId: payload.userId || 'MISSING'
+            });
+            
+            // Debug: Log actual payload structure
+            console.log('Payload structure check:', {
+                idpAliasType: typeof payload.idpAlias,
+                usernameType: typeof payload.username,
+                secretType: typeof payload.secret,
+                otpType: typeof payload.otp,
+                userIdType: typeof payload.userId,
+                idpAliasValue: payload.idpAlias,
+                usernameValue: payload.username,
+                secretLength: payload.secret?.length || 0,
+                otpLength: payload.otp?.length || 0,
+                userIdValue: payload.userId
             });
             
             // Step 1: Verify OTP code and create credential via backend

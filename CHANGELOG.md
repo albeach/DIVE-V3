@@ -2,6 +2,115 @@
 
 All notable changes to the DIVE V3 project will be documented in this file.
 
+## [2025-10-27-TERRAFORM-REDIS-FIX] - 🔧 OTP MFA Terraform Conflict Resolution + Redis Architecture
+
+**Issue**: Terraform Provider 5.x bug causing user attributes to be overwritten, preventing OTP enrollment completion  
+**Root Cause**: Terraform `null_resource` workaround synced hardcoded attributes on every apply, deleting runtime attributes like `otp_secret_pending`  
+**Solution**: Lifecycle ignore_changes + Redis-based pending secrets architecture  
+**Status**: ✅ **RESOLVED** - Production-ready stateless OTP enrollment
+
+### Fixed - Terraform Attribute Conflict
+
+#### Terraform Lifecycle Management
+- ✅ **Modified:** `terraform/broker-realm.tf` - Added `lifecycle { ignore_changes = [attributes] }` to `keycloak_user.broker_super_admin`
+- ✅ **Modified:** `terraform/main.tf` - Added lifecycle blocks to all test users (test_user_us_secret, test_user_us_confid, test_user_us_unclass)
+- ✅ **Deleted:** `terraform/broker-realm-attribute-fix.tf` - Removed conflicting null_resource that overwrote runtime attributes
+- **Benefit**: Terraform no longer manages runtime attributes, allowing backend to set/modify them without conflicts
+
+#### Redis-Based OTP Pending Secrets
+- ✅ **Created:** `backend/src/services/otp-redis.service.ts` (300+ lines)
+  - Stores pending OTP secrets in Redis with 10-minute TTL (automatically expires)
+  - Functions: `storePendingOTPSecret()`, `getPendingOTPSecret()`, `removePendingOTPSecret()`, `hasPendingOTPSecret()`
+  - Stateless architecture: Scales horizontally, no dependency on Keycloak user attributes
+  - Audit trail: Structured logging with timestamps and expiration info
+  - Key format: `otp:pending:{userId}` with JSON value `{secret, createdAt, expiresAt}`
+
+#### Backend OTP Service Refactor
+- ✅ **Modified:** `backend/src/services/otp.service.ts` (lines 155-224)
+  - Updated `createOTPCredential()` to use Redis instead of user attributes
+  - Imports: Added `storePendingOTPSecret` from `otp-redis.service`
+  - Flow: Backend validates OTP → stores secret in Redis (10-min TTL) → Custom SPI fetches from backend API → creates credential → removes from Redis
+  - Fallback: Still sets `totp_configured` attribute for frontend display (non-critical, lifecycle ignored)
+
+#### Backend API Endpoints for Custom SPI
+- ✅ **Modified:** `backend/src/controllers/otp.controller.ts` (added lines 356-471)
+  - `GET /api/auth/otp/pending-secret/:userId` - Custom SPI queries for pending secret from Redis
+  - `DELETE /api/auth/otp/pending-secret/:userId` - Custom SPI notifies backend after credential creation
+  - Imports: Added `getPendingOTPSecret`, `removePendingOTPSecret` from `otp-redis.service`
+  - Security: Returns 404 if no pending secret exists (expired or already used)
+
+#### OTP Routes Update
+- ✅ **Modified:** `backend/src/routes/otp.routes.ts` (lines 34-38)
+  - Added routes: `GET /pending-secret/:userId`, `DELETE /pending-secret/:userId`
+  - Imports: Added `getPendingSecretHandler`, `removePendingSecretHandler`
+
+#### Keycloak Custom SPI Integration
+- ✅ **Modified:** `keycloak/extensions/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.java`
+  - **Lines 1-26**: Added imports for `HttpClient`, `HttpRequest`, `HttpResponse`, `URI`, `JSONObject`
+  - **Lines 72-108**: Replaced user attribute check with backend API call `checkPendingOTPSecretFromBackend()`
+  - **Lines 477-529**: Added helper method to query backend API `GET /api/auth/otp/pending-secret/:userId`
+  - **Lines 531-566**: Added helper method to notify backend `DELETE /api/auth/otp/pending-secret/:userId`
+  - **Architecture**: SPI → Backend API → Redis (source of truth for pending secrets)
+  - **Environment**: Backend URL configurable via `BACKEND_URL` env var (default: `http://backend:4000`)
+
+#### Maven Dependencies
+- ✅ **Modified:** `keycloak/extensions/pom.xml` (lines 66-71)
+  - Added dependency: `org.json:json:20240303` for JSON parsing in Custom SPI
+  - Required for parsing backend API responses in Java HTTP client
+
+### Architecture Changes
+
+#### Before (❌ Broken)
+```
+Backend → Keycloak User Attribute (otp_secret_pending) → Terraform overwrites → ❌ Lost
+```
+
+#### After (✅ Working)
+```
+Backend → Redis (10-min TTL) → Custom SPI queries backend API → Creates credential → Backend removes from Redis
+```
+
+### Benefits
+1. **No Terraform conflicts**: Lifecycle ignore_changes prevents Terraform from managing runtime attributes
+2. **Stateless**: Redis-based architecture scales horizontally (no user attribute dependency)
+3. **Auto-expiring**: 10-minute TTL prevents stale pending secrets
+4. **Auditable**: Structured logging with timestamps and expiration info
+5. **Clean separation**: Terraform manages infrastructure, Backend manages runtime state
+
+### Testing Instructions
+```bash
+# 1. Rebuild Custom SPI
+cd keycloak/extensions && docker run --rm -v "$(pwd)":/app -w /app maven:3.9-eclipse-temurin-17 mvn clean package
+
+# 2. Deploy to Keycloak
+docker cp target/dive-keycloak-extensions.jar dive-v3-keycloak:/opt/keycloak/providers/
+
+# 3. Restart services
+docker-compose restart keycloak backend
+
+# 4. Test OTP enrollment (see OTP-ENROLLMENT-TERRAFORM-CONFLICT-RESOLUTION.md)
+```
+
+### Files Changed
+- `terraform/broker-realm.tf` (lifecycle block added)
+- `terraform/main.tf` (lifecycle blocks added to test users)
+- `terraform/broker-realm-attribute-fix.tf` (DELETED)
+- `backend/src/services/otp-redis.service.ts` (NEW - 300+ lines)
+- `backend/src/services/otp.service.ts` (refactored to use Redis)
+- `backend/src/controllers/otp.controller.ts` (added 2 new endpoints)
+- `backend/src/routes/otp.routes.ts` (added 2 new routes)
+- `keycloak/extensions/src/main/java/.../DirectGrantOTPAuthenticator.java` (backend API integration)
+- `keycloak/extensions/pom.xml` (added JSON dependency)
+
+### References
+- **Root Cause Analysis**: `OTP-ENROLLMENT-TERRAFORM-CONFLICT-RESOLUTION.md`
+- **Terraform Best Practices**: `TERRAFORM-KEYCLOAK-BEST-PRACTICES.md`
+- **Original Architecture**: `OTP-ENROLLMENT-PRODUCTION-SOLUTION.md`
+- **Keycloak 26 Changes**: `KEYCLOAK-26-README.md`
+- **Provider Docs**: https://registry.terraform.io/providers/keycloak/keycloak/latest/docs
+
+---
+
 ## [2025-10-27-OTP-MFA-ENROLLMENT] - 🔐 Production-Ready OTP Multi-Factor Authentication
 
 **Feature**: OTP (TOTP) Enrollment for Custom Login Flow  

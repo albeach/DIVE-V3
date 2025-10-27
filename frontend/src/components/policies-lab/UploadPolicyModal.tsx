@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useCallback } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { useSession } from 'next-auth/react';
+import { useDropzone } from 'react-dropzone';
 
 interface UploadPolicyModalProps {
   isOpen: boolean;
@@ -13,6 +14,8 @@ interface UploadPolicyModalProps {
 type UploadState = 'idle' | 'uploading' | 'validating' | 'success' | 'error';
 
 export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: UploadPolicyModalProps) {
+  console.log('[UploadPolicyModal] RENDER - isOpen:', isOpen);
+  
   const { data: session } = useSession();
   const [state, setState] = useState<UploadState>('idle');
   const [file, setFile] = useState<File | null>(null);
@@ -22,18 +25,37 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [uploadedPolicyId, setUploadedPolicyId] = useState('');
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    console.log('[UploadPolicyModal] onDrop called with files:', acceptedFiles);
+    if (acceptedFiles.length > 0) {
+      const selectedFile = acceptedFiles[0];
+      console.log('[UploadPolicyModal] File selected:', selectedFile.name, selectedFile.size, selectedFile.type);
       setFile(selectedFile);
       
       // Auto-fill name from filename
       if (!name) {
         const filename = selectedFile.name.replace(/\.(rego|xml)$/, '');
         setName(filename);
+        console.log('[UploadPolicyModal] Auto-filled name:', filename);
       }
     }
-  };
+  }, [name]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'text/plain': ['.rego'],
+      'application/xml': ['.xml'],
+    },
+    maxSize: 256 * 1024, // 256KB
+    maxFiles: 1,
+    multiple: false,
+    disabled: state === 'uploading' || state === 'validating',
+    noClick: false,
+    noKeyboard: false
+  });
+  
+  console.log('[UploadPolicyModal] Dropzone state - isDragActive:', isDragActive, 'disabled:', state === 'uploading' || state === 'validating');
 
   const handleUpload = async () => {
     if (!file || !name) {
@@ -162,11 +184,20 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
                   <div className="space-y-6">
                     {/* File Input */}
                     <div>
-                      <label htmlFor="policy-file-input" className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Policy File *
                       </label>
-                      <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-blue-400 transition-colors">
-                        <div className="space-y-1 text-center">
+                      <div
+                        {...getRootProps()}
+                        onClick={() => console.log('[UploadPolicyModal] Dropzone CLICKED')}
+                        className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md transition-colors cursor-pointer ${
+                          isDragActive
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 hover:border-blue-400 bg-white'
+                        }`}
+                      >
+                        <input {...getInputProps()} onClick={() => console.log('[UploadPolicyModal] Input CLICKED')} />
+                        <div className="space-y-1 text-center w-full">
                           {file ? (
                             <div className="flex items-center justify-center space-x-2">
                               <span className="text-2xl">
@@ -184,7 +215,12 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
                                 </p>
                               </div>
                               <button
-                                onClick={() => setFile(null)}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  console.log('[UploadPolicyModal] Remove file clicked');
+                                  setFile(null);
+                                }}
                                 className="text-red-600 hover:text-red-800"
                                 aria-label="Remove file"
                               >
@@ -196,22 +232,16 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
                               <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
                                 <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                               </svg>
-                              <div className="flex text-sm text-gray-600">
-                                <label htmlFor="policy-file-input" className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
-                                  <span>Upload a file</span>
-                                  <input
-                                    id="policy-file-input"
-                                    type="file"
-                                    className="sr-only"
-                                    accept=".rego,.xml"
-                                    onChange={handleFileChange}
-                                    disabled={state === 'uploading' || state === 'validating'}
-                                    aria-label="Policy File"
-                                  />
-                                </label>
-                                <p className="pl-1">or drag and drop</p>
-                              </div>
-                              <p className="text-xs text-gray-500">.rego or .xml up to 256KB</p>
+                              {isDragActive ? (
+                                <p className="text-lg text-blue-600 font-medium">Drop file here...</p>
+                              ) : (
+                                <>
+                                  <p className="text-sm font-medium text-blue-600">
+                                    📁 Click here or drag and drop
+                                  </p>
+                                  <p className="text-xs text-gray-500">.rego or .xml up to 256KB</p>
+                                </>
+                              )}
                             </>
                           )}
                         </div>

@@ -16,6 +16,7 @@
 import { Request, Response } from 'express';
 import { otpService } from '../services/otp.service';
 import { logger } from '../utils/logger';
+import { getPendingOTPSecret, removePendingOTPSecret } from '../services/otp-redis.service';
 
 /**
  * POST /api/auth/otp/setup
@@ -220,11 +221,14 @@ export const otpVerifyHandler = async (
             return;
         }
 
-        // Step 2: Create OTP credential in Keycloak via Admin API
-        const credentialCreated = await otpService.createOTPCredential(userId, realmName, secret);
+        // Step 2: Store the validated secret for Custom SPI to create credential
+        // KEYCLOAK 26 FIX: Cannot create OTP credential via Admin API
+        // Instead, store the validated secret in user attribute
+        // The Custom SPI will create the credential on next login
+        const credentialMarked = await otpService.createOTPCredential(userId, realmName, secret);
 
-        if (!credentialCreated) {
-            logger.error('Failed to create OTP credential in Keycloak', {
+        if (!credentialMarked) {
+            logger.error('Failed to store pending OTP secret', {
                 requestId,
                 username,
                 realmName,
@@ -233,21 +237,24 @@ export const otpVerifyHandler = async (
 
             res.status(500).json({
                 success: false,
-                error: 'Failed to save OTP credential. Please try again.'
+                error: 'Failed to save OTP configuration. Please try again.'
             });
             return;
         }
 
-        logger.info('OTP enrollment completed successfully', {
+        logger.info('OTP verification completed - credential will be created on next login', {
             requestId,
             username,
             realmName,
             userId
         });
 
+        // SUCCESS: OTP validated and secret stored
+        // The Custom SPI will create the actual credential on next authentication
         res.status(200).json({
             success: true,
-            message: 'OTP enrollment completed successfully. You can now log in with your password and OTP code.'
+            message: 'OTP verification successful. Your OTP has been configured. Please log in again.',
+            requiresReauth: true  // Tell frontend to trigger re-authentication
         });
     } catch (error) {
         logger.error('OTP verification failed', {
@@ -342,6 +349,123 @@ export const otpStatusHandler = async (
         res.status(500).json({
             success: false,
             error: 'Failed to check OTP status'
+        });
+    }
+};
+
+/**
+ * GET /api/auth/otp/pending-secret/:userId
+ * Get pending OTP secret from Redis (called by Custom SPI)
+ * 
+ * This endpoint is called by the Keycloak Custom SPI during Direct Grant authentication
+ * to retrieve the pending OTP secret for credential creation.
+ */
+export const getPendingSecretHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const { userId } = req.params;
+
+    try {
+        // Validation
+        if (!userId) {
+            res.status(400).json({
+                success: false,
+                error: 'Missing required parameter: userId'
+            });
+            return;
+        }
+
+        // Get pending secret from Redis
+        const pendingSecret = await getPendingOTPSecret(userId);
+
+        if (!pendingSecret) {
+            logger.debug('No pending OTP secret found for user', {
+                requestId,
+                userId
+            });
+
+            res.status(404).json({
+                success: false,
+                error: 'No pending OTP secret found'
+            });
+            return;
+        }
+
+        logger.info('Pending OTP secret retrieved for Custom SPI', {
+            requestId,
+            userId
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                secret: pendingSecret,
+                userId
+            }
+        });
+    } catch (error) {
+        logger.error('Failed to get pending OTP secret', {
+            requestId,
+            userId: req.params.userId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to retrieve pending OTP secret'
+        });
+    }
+};
+
+/**
+ * DELETE /api/auth/otp/pending-secret/:userId
+ * Remove pending OTP secret from Redis (called by Custom SPI after credential creation)
+ */
+export const removePendingSecretHandler = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const { userId } = req.params;
+
+    try {
+        // Validation
+        if (!userId) {
+            res.status(400).json({
+                success: false,
+                error: 'Missing required parameter: userId'
+            });
+            return;
+        }
+
+        // Remove pending secret from Redis
+        const removed = await removePendingOTPSecret(userId);
+
+        logger.info('Pending OTP secret removal requested', {
+            requestId,
+            userId,
+            removed
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                removed,
+                userId
+            }
+        });
+    } catch (error) {
+        logger.error('Failed to remove pending OTP secret', {
+            requestId,
+            userId: req.params.userId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to remove pending OTP secret'
         });
     }
 };
