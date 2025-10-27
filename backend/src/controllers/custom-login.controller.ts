@@ -331,7 +331,7 @@ export const customLoginHandler = async (
             if (keycloakError.response?.status === 401) {
                 const errorData = keycloakError.response?.data;
                 const errorDescription = errorData?.error_description || '';
-                
+
                 // Custom SPI returns error in response body (errorData.error and errorData.message)
                 const customSPIError = errorData?.error || '';
                 const customSPIMessage = errorData?.message || '';
