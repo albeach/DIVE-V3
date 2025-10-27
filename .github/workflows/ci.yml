@@ -37,7 +37,7 @@ jobs:
           test -f backend/dist/server.js
       
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-dist
           path: backend/dist/
@@ -102,7 +102,7 @@ jobs:
       
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: backend-test-results
           path: |
@@ -257,7 +257,7 @@ jobs:
           echo "Frontend build completed successfully"
       
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: frontend-build
           path: frontend/.next/
@@ -482,7 +482,7 @@ jobs:
           fi
       
       - name: Upload Coverage Reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: backend/coverage/

@@ -184,7 +184,7 @@ jobs:
           echo "   - MFA enforcement: 1 test"
       
       - name: Upload E2E Test Results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: nato-e2e-results
