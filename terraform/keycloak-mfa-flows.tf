@@ -18,7 +18,7 @@ module "broker_mfa" {
   realm_name         = "dive-v3-broker"
   realm_display_name = "DIVE V3 Broker"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Keycloak 26 fix: sets ACR/AMR session notes
 }
 
 # ============================================

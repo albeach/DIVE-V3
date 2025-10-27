@@ -2,11 +2,10 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/page-layout";
 import { DashboardCard } from "@/components/dashboard/dashboard-card";
-import { ProfileBadge } from "@/components/dashboard/profile-badge";
-import { PseudonymNotice } from "@/components/dashboard/pseudonym-notice";
 import { IdpInfo } from "@/components/dashboard/idp-info";
 import { FederationPartnersRevamped } from "@/components/dashboard/federation-partners-revamped";
 import { InformationPanelModern } from "@/components/dashboard/information-panel-modern";
+import { getPseudonymFromUser } from "@/lib/pseudonym-generator";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -22,9 +21,9 @@ export default async function DashboardPage() {
         { label: 'Dashboard', href: null }
       ]}
     >
-      {/* Hero Section with inline Profile Badge */}
+      {/* Hero Section with concise identity context strip */}
       <div className="mb-8 animate-fade-in-up">
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-6">
+        <div className="flex flex-col gap-4 mb-6">
           <div className="flex-1">
             <h1 className="text-4xl md:text-5xl font-bold mb-3">
               <span className="bg-gradient-to-r from-[#4396ac] via-[#6cb38b] to-[#90d56a] bg-clip-text text-transparent animate-gradient">
@@ -36,20 +35,35 @@ export default async function DashboardPage() {
               for attribute-based authorization decisions across the federation.
             </p>
           </div>
-          
-          {/* Inline Profile Badge */}
-          <div className="flex-shrink-0 lg:max-w-xl">
-            <ProfileBadge user={session.user || {}} />
+
+          {/* Context strip (pseudonym · clearance · country · COI) */}
+          <div className="w-full">
+            <div className="inline-flex items-center gap-2 rounded-xl bg-white/80 backdrop-blur-sm border border-gray-200 px-4 py-2 shadow-sm">
+              <span className="text-sm font-bold text-gray-900">
+                {getPseudonymFromUser((session.user || {}) as any)}
+              </span>
+              {session.user?.clearance && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-50 text-blue-900 border border-blue-200">
+                  {session.user.clearance}
+                </span>
+              )}
+              {session.user?.countryOfAffiliation && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold text-green-900 bg-green-50 border border-green-200">
+                  {session.user.countryOfAffiliation}
+                </span>
+              )}
+              {Array.isArray(session.user?.acpCOI) && session.user!.acpCOI!.length > 0 && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold text-purple-900 bg-purple-50 border border-purple-200">
+                  COI: {session.user!.acpCOI![0]}{session.user!.acpCOI!.length > 1 ? ` +${session.user!.acpCOI!.length - 1}` : ''}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Side-by-side: Pseudonym Notice & IdP Info */}
-      <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left: Pseudonym Explanation */}
-        <PseudonymNotice user={session.user || {}} />
-
-        {/* Right: IdP Info */}
+      {/* Identity Provider Info */}
+      <div className="mb-8">
         <IdpInfo user={session.user || {}} />
       </div>
 

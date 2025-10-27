@@ -32,7 +32,6 @@ import {
     FileText, 
     ScrollText, 
     CheckCircle2, 
-    Upload,
     Library,
     Clock,
     Star,
@@ -54,8 +53,11 @@ import {
     FileCheck,
     ArrowRight,
     BookOpen,
-    GitMerge
+		GitMerge,
+		FlaskConical
 } from 'lucide-react';
+import { IdentityDrawer } from '@/components/identity/IdentityDrawer';
+import { useIdentityDrawer } from '@/contexts/IdentityDrawerContext';
 
 // National classification mappings (ACP-240 Section 4.3)
 const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
@@ -88,20 +90,54 @@ function getCountryName(code: string | null | undefined): string {
   return countryNames[code || ''] || code || 'Unknown';
 }
 
+// Clearance color mapping (chips)
+function clearanceColor(level: string | null | undefined): 'red' | 'orange' | 'blue' | 'gray' {
+    switch ((level || 'UNCLASSIFIED').toUpperCase()) {
+        case 'TOP_SECRET':
+            return 'red';
+        case 'SECRET':
+            return 'orange';
+        case 'CONFIDENTIAL':
+            return 'blue';
+        default:
+            return 'gray';
+    }
+}
+
+function Claim({ label, value, color }: { label: string; value: string; color?: 'red' | 'orange' | 'blue' | 'gray' }) {
+    const chipClasses = color === 'red'
+        ? 'bg-red-50 text-red-800 border-red-200'
+        : color === 'orange'
+        ? 'bg-orange-50 text-orange-800 border-orange-200'
+        : color === 'blue'
+        ? 'bg-blue-50 text-blue-800 border-blue-200'
+        : 'bg-gray-50 text-gray-800 border-gray-200';
+    return (
+        <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+            <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{label}</div>
+            <div className={`text-xs font-bold px-2 py-1 rounded-md border ${chipClasses}`}>{value}</div>
+        </div>
+    );
+}
+
 interface INavigationProps {
     user?: {
         uniqueID?: string | null;
         email?: string | null;
         clearance?: string | null;
         countryOfAffiliation?: string | null;
+        acpCOI?: string[] | null;
         roles?: string[];
     };
 }
 
 export default function Navigation({ user }: INavigationProps) {
     const pathname = usePathname();
+    const { isOpen: identityOpenGlobal, open: openIdentity, close: closeIdentity } = useIdentityDrawer();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
+    const [identityOpen, setIdentityOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
     const [megaMenuOpen, setMegaMenuOpen] = useState<string | null>(null);
     const [hoveredNavItem, setHoveredNavItem] = useState<string | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -145,6 +181,7 @@ export default function Navigation({ user }: INavigationProps) {
             if (e.key === 'Escape') {
                 setMobileMenuOpen(false);
                 setAdminDropdownOpen(false);
+                setIdentityOpen(false);
                 setMegaMenuOpen(null);
             }
         };
@@ -188,32 +225,33 @@ export default function Navigation({ user }: INavigationProps) {
                 { 
                     category: 'Actions', 
                     items: [
-                        { name: 'Upload New', href: '/upload', icon: ArrowUpCircle },
                         { name: 'Request Access', href: '/resources/request', icon: Unlock },
                     ]
                 }
             ]
         },
         { 
-            name: 'Policies', 
-            href: '/policies', 
-            icon: ScrollText,
-            description: 'Authorization policies',
-            hasMegaMenu: false
-        },
-        { 
-            name: 'Compliance & Testing', 
-            href: '/compliance', 
-            icon: CheckCircle2,
-            description: 'ACP-240 compliance, standards integration, testing',
-            hasMegaMenu: false
-        },
-        { 
-            name: 'Upload', 
-            href: '/upload', 
-            icon: Upload,
-            description: 'Upload new documents',
-            hasMegaMenu: false
+            name: 'Policy Lab', 
+            href: '/policies/lab', 
+            icon: FlaskConical,
+            description: 'Evaluate, compare, and test policies',
+            hasMegaMenu: true,
+            megaMenuItems: [
+                { 
+                    category: 'Workspaces', 
+                    items: [
+                        { name: 'Evaluate', href: '/policies/lab?tab=evaluate', icon: ScrollText },
+                        { name: 'Compare', href: '/policies/lab?tab=compare', icon: CheckCircle2 },
+                        { name: 'Upload', href: '/policies/lab?tab=upload', icon: ArrowUpCircle },
+                    ]
+                },
+                { 
+                    category: 'Browse', 
+                    items: [
+                        { name: 'All Policies', href: '/policies', icon: Library },
+                    ]
+                },
+            ]
         },
     ];
 
@@ -472,7 +510,7 @@ export default function Navigation({ user }: INavigationProps) {
                             {/* Unified User + Admin Dropdown - Enhanced */}
                             <div ref={dropdownRef} className="hidden lg:block relative">
                                 <button
-                                    onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
+                                    onClick={() => openIdentity(user)}
                                     className="group flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-xl bg-gradient-to-r from-white/90 to-gray-50/90 border border-gray-100/80 shadow-sm hover:shadow-xl hover:border-[#4497ac]/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
                                     aria-expanded={adminDropdownOpen}
                                     aria-haspopup="true"
@@ -495,7 +533,7 @@ export default function Navigation({ user }: INavigationProps) {
                                     </div>
                                     
                                     {/* User Info - Enhanced readability */}
-                                    <div className="hidden xl:flex flex-col min-w-0 max-w-[200px] text-left">
+                                    <div className="hidden xl:flex flex-col min-w-0 max-w-[260px] text-left">
                                         <span className="text-xs font-bold text-gray-900 leading-tight truncate">
                                             {getPseudonymFromUser(user as any)}
                                         </span>
@@ -507,6 +545,11 @@ export default function Navigation({ user }: INavigationProps) {
                                                 <span className="text-[10px] font-semibold text-gray-600">
                                                     {user?.countryOfAffiliation || 'USA'}
                                                 </span>
+                                                {Array.isArray(user?.acpCOI) && user.acpCOI.length > 0 && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 border border-purple-200" title={`COI: ${user.acpCOI.join(', ')}`}> 
+                                                        COI: {user.acpCOI[0]}{user.acpCOI.length > 1 ? ` +${user.acpCOI.length - 1}` : ''}
+                                                    </span>
+                                                )}
                                             </div>
                                             {getNationalClearance(user?.clearance, user?.countryOfAffiliation) !== (user?.clearance || 'UNCLASS') && (
                                                 <span className="text-[8px] text-gray-500 font-medium">
@@ -516,12 +559,17 @@ export default function Navigation({ user }: INavigationProps) {
                                         </div>
                                     </div>
                                     
-                                    {/* Dropdown Arrow with enhanced animation */}
-                                    <svg className={`w-4 h-4 text-gray-500 transition-all duration-300 ${
-                                        adminDropdownOpen ? 'rotate-180 text-[#4497ac]' : ''
-                                    }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                                    </svg>
+                                    {/* Dropdown Arrow triggers admin menu */}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setAdminDropdownOpen(!adminDropdownOpen); }}
+                                        aria-label="Open user menu"
+                                        className={`p-1 rounded-md transition-colors ${adminDropdownOpen ? 'text-[#4497ac]' : 'text-gray-500'}`}
+                                    >
+                                        <svg className={`w-4 h-4 transition-transform duration-300 ${adminDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
                                 </button>
 
                                 {/* Enhanced Unified Dropdown Menu */}
@@ -555,6 +603,11 @@ export default function Navigation({ user }: INavigationProps) {
                                                                 <span className="text-xs font-semibold text-gray-600 px-2 py-0.5 bg-gray-100 rounded-md">
                                                                     {user?.countryOfAffiliation || 'USA'}
                                                                 </span>
+                                                                {Array.isArray(user?.acpCOI) && user.acpCOI.length > 0 && (
+                                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200" title={`COI: ${user.acpCOI.join(', ')}`}> 
+                                                                        COI: {user.acpCOI[0]}{user.acpCOI.length > 1 ? ` +${user.acpCOI.length - 1}` : ''}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             {getNationalClearance(user?.clearance, user?.countryOfAffiliation) !== (user?.clearance || 'UNCLASSIFIED') && (
                                                                 <p className="text-[10px] text-gray-600 flex items-center gap-1.5 bg-white/50 px-2 py-1 rounded">
@@ -667,6 +720,11 @@ export default function Navigation({ user }: INavigationProps) {
                 </div>
             </nav>
 
+            {/* Identity Drawer (reusable component) */}
+            {(identityOpen || identityOpenGlobal) && (
+                <IdentityDrawer open={identityOpen || identityOpenGlobal} onClose={() => { setIdentityOpen(false); closeIdentity(); }} user={user} />
+            )}
+
             {/* Enhanced Mobile Menu - Slide Down Animation */}
             {mobileMenuOpen && (
                 <div 
@@ -716,6 +774,12 @@ export default function Navigation({ user }: INavigationProps) {
                                                 <span className="text-xs font-semibold text-gray-600 px-2 py-0.5 bg-gray-100 rounded-md">
                                                     {user?.countryOfAffiliation || 'USA'}
                                                 </span>
+                                                {/* AAL badge (acr) if available */}
+                                                {(user as any)?.acr && (
+                                                    <span className="text-[10px] font-semibold text-gray-600 px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-md" title={`AAL: ${(user as any).acr}`}>
+                                                        {(user as any).acr.toUpperCase()}
+                                                    </span>
+                                                )}
                                             </div>
                                             {getNationalClearance(user?.clearance, user?.countryOfAffiliation) !== (user?.clearance || 'UNCLASSIFIED') && (
                                                 <p className="text-[10px] text-gray-600 flex items-center gap-1.5 bg-white/70 px-2 py-1 rounded">

@@ -17,8 +17,13 @@ import org.keycloak.utils.CredentialHelper;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import org.json.JSONObject;
 
 /**
  * DIVE V3 Custom OTP Authenticator
@@ -49,33 +54,153 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         UserModel user = context.getUser();
         
         if (user == null) {
+            System.out.println("[DIVE SPI] ERROR: User is null");
             context.failure(AuthenticationFlowError.UNKNOWN_USER);
             return;
         }
 
+        System.out.println("[DIVE SPI] ====== OTP Authentication Request ======");
+        System.out.println("[DIVE SPI] Username: " + user.getUsername());
+        System.out.println("[DIVE SPI] User ID: " + user.getId());
+
+        // KEYCLOAK 26 FIX: Always set minimum session notes for password authentication
+        // These will be upgraded to AAL2 if OTP validation succeeds
+        // Without this, Direct Grant flow won't have ACR/AMR claims in Keycloak 26+
+        context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "0"); // AAL1 (password only)
+        context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\"]");
+
+        // ============================================
+        // KEYCLOAK 26 + TERRAFORM CONFLICT FIX
+        // ============================================
+        // Problem: User attributes don't persist due to Terraform lifecycle management
+        // Solution: Check backend API for pending OTP secret stored in Redis
+        // 
+        // Architecture:
+        // 1. Backend validates OTP and stores secret in Redis (10-min TTL)
+        // 2. Custom SPI calls backend API: GET /api/auth/otp/pending-secret/:userId
+        // 3. If pending secret exists, create OTP credential
+        // 4. Notify backend to remove secret: DELETE /api/auth/otp/pending-secret/:userId
+        // ============================================
+        String pendingSecretFromBackend = checkPendingOTPSecretFromBackend(user.getId());
+        if (pendingSecretFromBackend != null && !pendingSecretFromBackend.isEmpty()) {
+            System.out.println("[DIVE SPI] Found pending OTP secret from backend Redis - creating credential");
+            try {
+                // Create OTP credential using the pending secret
+                OTPCredentialProvider otpProvider = (OTPCredentialProvider) context.getSession()
+                    .getProvider(org.keycloak.credential.CredentialProvider.class, "keycloak-otp");
+                
+                OTPCredentialModel credentialModel = OTPCredentialModel.createFromPolicy(
+                    context.getRealm(),
+                    pendingSecretFromBackend
+                );
+                
+                user.credentialManager().createStoredCredential(credentialModel);
+                
+                // Notify backend to remove pending secret from Redis
+                removePendingOTPSecretFromBackend(user.getId());
+                
+                System.out.println("[DIVE SPI] SUCCESS: OTP credential created from backend Redis");
+                
+            } catch (Exception e) {
+                System.out.println("[DIVE SPI] EXCEPTION creating credential from backend secret: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+
         // Check if user already has OTP configured
         boolean hasOTP = hasOTPCredential(context.getSession(), context.getRealm(), user);
+        System.out.println("[DIVE SPI] User has OTP credential: " + hasOTP);
         
         MultivaluedMap<String, String> formData = context.getHttpRequest().getDecodedFormParameters();
         String otpCode = formData.getFirst(OTP_CODE);
-        String otpSecret = formData.getFirst(OTP_SECRET);
-        String setupMode = formData.getFirst(SETUP_MODE);
+
+        System.out.println("[DIVE SPI] OTP Code present: " + (otpCode != null));
 
         if (!hasOTP) {
+            // ============================================
             // User needs OTP setup
-            if (setupMode != null && "true".equals(setupMode)) {
-                // User is submitting OTP setup with secret + code
-                handleOTPSetup(context, user, otpSecret, otpCode);
+            // ============================================
+            
+            // Check if there's a pending OTP secret in the session
+            String pendingSecret = context.getAuthenticationSession().getUserSessionNotes().get("OTP_SECRET_PENDING");
+            
+            System.out.println("[DIVE SPI] Pending secret in session: " + (pendingSecret != null));
+            
+            if (pendingSecret != null && otpCode != null && !otpCode.isEmpty()) {
+                // User is submitting OTP code after scanning QR - validate and create credential
+                System.out.println("[DIVE SPI] Validating OTP enrollment with pending secret");
+                
+                // Validate OTP against pending secret
+                TimeBasedOTP totp = new TimeBasedOTP(
+                    "HmacSHA256",  // Algorithm
+                    6,              // Digits
+                    30,             // Period (seconds)
+                    1               // Look-ahead window
+                );
+                
+                boolean valid = totp.validateTOTP(
+                    otpCode,
+                    pendingSecret.getBytes(StandardCharsets.UTF_8)
+                );
+                
+                System.out.println("[DIVE SPI] OTP validation result: " + valid);
+                
+                if (valid) {
+                    System.out.println("[DIVE SPI] OTP valid - creating credential");
+                    
+                    try {
+                        // Create OTP credential using CredentialProvider SPI
+                        OTPCredentialProvider otpProvider = (OTPCredentialProvider) context.getSession()
+                            .getProvider(org.keycloak.credential.CredentialProvider.class, "keycloak-otp");
+                        
+                        OTPCredentialModel credentialModel = OTPCredentialModel.createFromPolicy(
+                            context.getRealm(),
+                            pendingSecret
+                        );
+                        
+                        user.credentialManager().createStoredCredential(credentialModel);
+                        
+                        // Clear pending secret (set to null to remove)
+                        context.getAuthenticationSession().setUserSessionNote("OTP_SECRET_PENDING", null);
+                        
+                        // Set AAL2 session notes
+                        context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
+                        context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+                        
+                        System.out.println("[DIVE SPI] SUCCESS: OTP credential created and AAL2 set");
+                        context.success();
+                        
+                    } catch (Exception e) {
+                        System.out.println("[DIVE SPI] EXCEPTION: " + e.getMessage());
+                        e.printStackTrace();
+                        context.getEvent().error("otp_setup_failed");
+                        context.failure(AuthenticationFlowError.INTERNAL_ERROR);
+                    }
+                    
+                } else {
+                    System.out.println("[DIVE SPI] OTP invalid during enrollment");
+                    context.getEvent().error("invalid_totp");
+                    context.challenge(
+                        Response.status(Response.Status.UNAUTHORIZED)
+                            .entity(createError("invalid_otp", "Invalid OTP code"))
+                            .build()
+                    );
+                }
+                
             } else {
-                // No OTP credential, no setup attempt - return setup required
+                // No OTP credential, no pending secret or no code - return setup required
+                System.out.println("[DIVE SPI] Requiring OTP setup");
                 requireOTPSetup(context, user);
             }
+            
         } else {
             // User has OTP, validate the provided code
             if (otpCode != null && !otpCode.isEmpty()) {
+                System.out.println("[DIVE SPI] Validating existing OTP credential");
                 validateExistingOTP(context, user, otpCode);
             } else {
                 // OTP required but not provided
+                System.out.println("[DIVE SPI] OTP required but not provided");
                 context.challenge(
                     Response.status(Response.Status.UNAUTHORIZED)
                         .entity(createError("otp_required", "OTP code required"))
@@ -100,6 +225,13 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
     private void requireOTPSetup(AuthenticationFlowContext context, UserModel user) {
         // Generate OTP secret
         String secret = HmacOTP.generateSecret(20); // 20 bytes = 160 bits
+        
+        // ============================================
+        // CRITICAL: Store secret in authentication session
+        // This allows validation on next authentication attempt
+        // ============================================
+        context.getAuthenticationSession().setUserSessionNote("OTP_SECRET_PENDING", secret);
+        System.out.println("[DIVE SPI] Stored OTP secret in session for user: " + user.getUsername());
         
         // Generate OTP URL for QR code
         String issuer = context.getRealm().getDisplayName();
@@ -128,16 +260,12 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             "\"mfaRequired\": true," +
             "\"mfaSetupRequired\": true," +
             "\"message\": \"Multi-factor authentication setup required\"," +
-            "\"setupToken\": \"%s\"," +
             "\"otpSecret\": \"%s\"," +
             "\"otpUrl\": \"%s\"," +
-            "\"qrCode\": \"%s\"," +
             "\"userId\": \"%s\"" +
             "}",
-            Base64.getEncoder().encodeToString(secret.getBytes(StandardCharsets.UTF_8)),
             secret,
             otpUrl,
-            otpUrl, // Frontend can generate QR from this
             user.getId()
         );
         
@@ -153,7 +281,12 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
      * Handle OTP setup - validate code and create credential
      */
     private void handleOTPSetup(AuthenticationFlowContext context, UserModel user, String secret, String otpCode) {
+        System.out.println("[DIVE SPI] ====== handleOTPSetup Called ======");
+        System.out.println("[DIVE SPI] Secret present: " + (secret != null));
+        System.out.println("[DIVE SPI] OTP Code present: " + (otpCode != null));
+        
         if (secret == null || secret.isEmpty()) {
+            System.out.println("[DIVE SPI] ERROR: Secret is missing");
             context.challenge(
                 Response.status(Response.Status.BAD_REQUEST)
                     .entity(createError("missing_secret", "OTP secret is required for setup"))
@@ -163,6 +296,7 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         }
         
         if (otpCode == null || otpCode.isEmpty()) {
+            System.out.println("[DIVE SPI] ERROR: OTP code is missing");
             context.challenge(
                 Response.status(Response.Status.BAD_REQUEST)
                     .entity(createError("missing_otp", "OTP code is required for setup"))
@@ -170,6 +304,9 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             );
             return;
         }
+
+        System.out.println("[DIVE SPI] Secret length: " + secret.length());
+        System.out.println("[DIVE SPI] OTP Code: " + otpCode);
 
         // Validate the OTP code against the secret
         TimeBasedOTP totp = new TimeBasedOTP(
@@ -179,9 +316,15 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             context.getRealm().getOTPPolicy().getLookAheadWindow()
         );
         
+        System.out.println("[DIVE SPI] OTP Policy - Algorithm: " + context.getRealm().getOTPPolicy().getAlgorithm());
+        System.out.println("[DIVE SPI] OTP Policy - Digits: " + context.getRealm().getOTPPolicy().getDigits());
+        System.out.println("[DIVE SPI] OTP Policy - Period: " + context.getRealm().getOTPPolicy().getPeriod());
+        
         boolean valid = totp.validateTOTP(otpCode, secret.getBytes(StandardCharsets.UTF_8));
+        System.out.println("[DIVE SPI] OTP validation result: " + valid);
         
         if (!valid) {
+            System.out.println("[DIVE SPI] ERROR: OTP validation failed");
             context.challenge(
                 Response.status(Response.Status.UNAUTHORIZED)
                     .entity(createError("invalid_otp", "Invalid OTP code. Please try again."))
@@ -192,6 +335,7 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
 
         // OTP is valid - create the credential
         try {
+            System.out.println("[DIVE SPI] Creating OTP credential...");
             OTPCredentialProvider otpProvider = (OTPCredentialProvider) context.getSession()
                 .getProvider(org.keycloak.credential.CredentialProvider.class, "keycloak-otp");
             
@@ -203,11 +347,28 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             
             // Store the credential
             user.credentialManager().createStoredCredential(credentialModel);
+            System.out.println("[DIVE SPI] SUCCESS: OTP credential created for user: " + user.getUsername());
+            
+            // ============================================
+            // Keycloak 26 Fix: Set ACR/AMR session notes
+            // ============================================
+            // Set ACR (Authentication Context Class Reference) to "1" = AAL2 (Multi-Factor)
+            // Keycloak's protocol mappers will read these session notes and add them to JWT tokens
+            context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
+            
+            // Set AMR (Authentication Methods Reference) to ["pwd","otp"]
+            // This indicates password + OTP authentication
+            context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+            
+            System.out.println("[DIVE SPI] ACR/AMR session notes set (AAL2)");
             
             // Success - OTP credential created
             context.success();
+            System.out.println("[DIVE SPI] context.success() called - enrollment complete!");
             
         } catch (Exception e) {
+            System.out.println("[DIVE SPI] EXCEPTION during credential creation: " + e.getMessage());
+            e.printStackTrace();
             context.getEvent().error("otp_setup_failed");
             context.failure(AuthenticationFlowError.INTERNAL_ERROR);
         }
@@ -244,6 +405,15 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         );
         
         if (valid) {
+            // ============================================
+            // Keycloak 26 Fix: Set ACR/AMR session notes
+            // ============================================
+            // Set ACR (Authentication Context Class Reference) to "1" = AAL2 (Multi-Factor)
+            context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
+            
+            // Set AMR (Authentication Methods Reference) to ["pwd","otp"]
+            context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+            
             context.success();
         } else {
             context.getEvent().error("invalid_totp");
@@ -302,6 +472,97 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             code,
             message
         );
+    }
+
+    /**
+     * Check backend API for pending OTP secret in Redis
+     * @param userId User ID from Keycloak
+     * @return Pending OTP secret (Base32) or null if not found
+     */
+    private String checkPendingOTPSecretFromBackend(String userId) {
+        try {
+            // Backend API endpoint (Docker Compose service name: backend, port: 4000)
+            String backendUrl = System.getenv().getOrDefault("BACKEND_URL", "http://backend:4000");
+            String endpoint = backendUrl + "/api/auth/otp/pending-secret/" + userId;
+            
+            System.out.println("[DIVE SPI] Checking pending secret from backend: " + endpoint);
+            
+            HttpClient client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .GET()
+                .build();
+            
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            System.out.println("[DIVE SPI] Backend response status: " + response.statusCode());
+            
+            if (response.statusCode() == 200) {
+                JSONObject json = new JSONObject(response.body());
+                boolean success = json.optBoolean("success", false);
+                
+                if (success && json.has("data")) {
+                    JSONObject data = json.getJSONObject("data");
+                    String secret = data.optString("secret", null);
+                    
+                    if (secret != null && !secret.isEmpty()) {
+                        System.out.println("[DIVE SPI] Pending secret retrieved from backend");
+                        return secret;
+                    }
+                }
+            } else if (response.statusCode() == 404) {
+                System.out.println("[DIVE SPI] No pending secret found in backend Redis");
+            } else {
+                System.out.println("[DIVE SPI] Backend error: " + response.body());
+            }
+            
+            return null;
+            
+        } catch (Exception e) {
+            System.out.println("[DIVE SPI] Exception checking backend for pending secret: " + e.getMessage());
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Notify backend to remove pending OTP secret from Redis
+     * @param userId User ID from Keycloak
+     */
+    private void removePendingOTPSecretFromBackend(String userId) {
+        try {
+            // Backend API endpoint
+            String backendUrl = System.getenv().getOrDefault("BACKEND_URL", "http://backend:4000");
+            String endpoint = backendUrl + "/api/auth/otp/pending-secret/" + userId;
+            
+            System.out.println("[DIVE SPI] Removing pending secret from backend: " + endpoint);
+            
+            HttpClient client = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .build();
+            
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .DELETE()
+                .build();
+            
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            System.out.println("[DIVE SPI] Backend removal response status: " + response.statusCode());
+            
+            if (response.statusCode() == 200) {
+                System.out.println("[DIVE SPI] Pending secret removed from backend Redis");
+            } else {
+                System.out.println("[DIVE SPI] Backend removal error: " + response.body());
+            }
+            
+        } catch (Exception e) {
+            System.out.println("[DIVE SPI] Exception removing pending secret from backend: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
 

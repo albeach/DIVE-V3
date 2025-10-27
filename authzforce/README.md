@@ -47,3 +47,5 @@ AUTHZFORCE_URL=http://authzforce:8080/authzforce-ce
 - Read-only access to uploaded policies
 - Resource limits: 256MB-512MB memory
 
+
+

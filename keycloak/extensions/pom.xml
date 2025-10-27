@@ -62,6 +62,13 @@
             <version>2.0.1.Final</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- JSON library for parsing backend API responses -->
+        <dependency>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20240303</version>
+        </dependency>
     </dependencies>
 
     <build>
