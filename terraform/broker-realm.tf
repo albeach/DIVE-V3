@@ -264,40 +264,6 @@ resource "keycloak_generic_protocol_mapper" "broker_orgunit" {
   }
 }
 
-resource "keycloak_generic_protocol_mapper" "broker_acr" {
-  realm_id        = keycloak_realm.dive_v3_broker.id
-  client_id       = keycloak_openid_client.dive_v3_app_broker.id
-  name            = "acr"
-  protocol        = "openid-connect"
-  protocol_mapper = "oidc-usermodel-attribute-mapper"
-
-  config = {
-    "user.attribute"       = "acr"
-    "claim.name"           = "acr"
-    "jsonType.label"       = "String"
-    "id.token.claim"       = "true"
-    "access.token.claim"   = "true"
-    "userinfo.token.claim" = "false"
-  }
-}
-
-resource "keycloak_generic_protocol_mapper" "broker_amr" {
-  realm_id        = keycloak_realm.dive_v3_broker.id
-  client_id       = keycloak_openid_client.dive_v3_app_broker.id
-  name            = "amr"
-  protocol        = "openid-connect"
-  protocol_mapper = "oidc-usermodel-attribute-mapper"
-
-  config = {
-    "user.attribute"       = "amr"
-    "claim.name"           = "amr"
-    "jsonType.label"       = "String"
-    "id.token.claim"       = "true"
-    "access.token.claim"   = "true"
-    "userinfo.token.claim" = "false"
-  }
-}
-
 # Roles mapper for broker realm (includes realm roles in token)
 resource "keycloak_generic_protocol_mapper" "broker_roles" {
   realm_id        = keycloak_realm.dive_v3_broker.id
