@@ -238,7 +238,7 @@ jobs:
     
     steps:
       - name: Download coverage
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v6
         with:
           name: backend-test-results
           path: ./coverage
