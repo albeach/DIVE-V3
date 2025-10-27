@@ -242,4 +242,22 @@ resource "keycloak_generic_protocol_mapper" "broker_amr" {
   }
 }
 
+# Auth time mapper - Keycloak tracks this automatically in user session
+resource "keycloak_generic_protocol_mapper" "broker_auth_time" {
+  realm_id   = keycloak_realm.dive_v3_broker.id
+  client_id  = keycloak_openid_client.dive_v3_app_broker.id
+  name       = "auth-time"
+  protocol   = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"    = "AUTH_TIME"
+    "claim.name"           = "auth_time"
+    "jsonType.label"       = "long"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
 
