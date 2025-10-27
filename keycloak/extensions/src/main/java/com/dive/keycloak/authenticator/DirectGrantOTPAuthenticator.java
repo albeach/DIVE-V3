@@ -101,9 +101,22 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
                 
                 System.out.println("[DIVE SPI] SUCCESS: OTP credential created from backend Redis");
                 
+                // Set AAL2 session notes for MFA compliance
+                context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
+                context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+                
+                // Allow authentication to proceed without OTP validation in this request
+                // The credential was just created and validated by the backend
+                System.out.println("[DIVE SPI] Credential enrolled - allowing authentication without OTP in this request");
+                context.success();
+                return;
+                
             } catch (Exception e) {
                 System.out.println("[DIVE SPI] EXCEPTION creating credential from backend secret: " + e.getMessage());
                 e.printStackTrace();
+                context.getEvent().error("otp_credential_creation_failed");
+                context.failure(AuthenticationFlowError.INTERNAL_ERROR);
+                return;
             }
         }
 
