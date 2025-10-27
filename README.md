@@ -9,13 +9,14 @@
 DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential, and Access Management (ICAM) for USA/NATO partners. The system showcases:
 
 - **Federated Identity:** Multi-IdP authentication (U.S., France, Canada, Industry) via Keycloak broker
+- **Multi-Factor Authentication:** OTP (TOTP) enrollment with QR code generation, AAL2 compliant ✨ **NEW**
 - **ABAC Authorization:** Policy-driven access control using OPA/Rego with NATO ACP-240 compliance
 - **PEP/PDP Pattern:** Backend API enforces authorization decisions from OPA policy engine
 - **Data-Centric Security:** ZTDF format with STANAG 4774/4778 cryptographic binding
 - **Key Access Service:** Policy-bound encryption with KAS mediation and integrity validation
 - **Secure Document Sharing:** Clearance-based, releasability-based, and COI-based access control
 - **Modern Content Viewer:** Intelligent rendering for images, PDFs, text with zoom/fullscreen capabilities
-- **Policies Lab:** Interactive environment for comparing OPA Rego and XACML 3.0 policies ✨ **NEW**
+- **Policies Lab:** Interactive environment for comparing OPA Rego and XACML 3.0 policies
 
 ## 📊 Testing Status (October 26, 2025)
 
@@ -226,6 +227,191 @@ act push -W .github/workflows/policies-lab-ci.yml
 - Policies have 5s hard timeout
 - Simplify policy logic to reduce complexity
 - Check for infinite loops or recursive rules
+
+---
+
+## 🔐 OTP Multi-Factor Authentication (NEW - October 2025)
+
+**AAL2-Compliant TOTP Enrollment for Custom Login Flow**
+
+DIVE V3 requires multi-factor authentication (MFA) for users with classified clearances (CONFIDENTIAL, SECRET, TOP_SECRET). OTP enrollment is handled via backend REST API to support Direct Grant flow's stateless nature.
+
+### Features
+
+- ✅ **TOTP (RFC 6238) Enrollment** with QR code generation
+- ✅ **Authenticator App Support**: Google Authenticator, Authy, Microsoft Authenticator
+- ✅ **Backend-Validated Enrollment**: Bypasses Direct Grant stateless limitations
+- ✅ **AAL2 Compliant**: JWT tokens include `acr="1"` and `amr=["pwd","otp"]`
+- ✅ **Clock Skew Tolerance**: ±30 seconds (window=1)
+- ✅ **Keycloak Admin API Integration**: Credential creation via REST API
+- ✅ **Security First**: Credential validation before secret generation (prevents enumeration)
+
+### Architecture
+
+```
+Frontend → Backend OTP Service → Speakeasy (validation) → Keycloak Admin API (credential)
+```
+
+**Enrollment Flow:**
+1. User enters username/password on custom login page
+2. Backend detects MFA required (based on clearance level)
+3. Frontend calls `POST /api/auth/otp/setup` → Backend generates TOTP secret + QR code
+4. User scans QR code with authenticator app
+5. User enters 6-digit code
+6. Frontend calls `POST /api/auth/otp/verify` → Backend validates code, creates Keycloak credential
+7. User authenticates with username + password + OTP
+8. JWT token includes `acr="1"`, `amr=["pwd","otp"]`
+
+### Quick Start: Testing OTP Enrollment
+
+```bash
+# 1. Ensure all services are running
+docker-compose up -d
+cd backend && npm run dev  # Terminal 1
+cd frontend && npm run dev # Terminal 2
+
+# 2. Navigate to http://localhost:3000
+# 3. Click "DIVE V3 Super Administrator"
+# 4. Login with: admin-dive / DiveAdmin2025!
+# 5. Scan QR code with authenticator app (Google Authenticator, Authy, etc.)
+# 6. Enter 6-digit code
+
+# 7. Verify ACR/AMR claims in JWT token
+./scripts/verify-keycloak-26-claims.sh admin-dive DiveAdmin2025!
+# Expected output: acr="1", amr=["pwd","otp"]
+```
+
+### API Endpoints
+
+#### Generate OTP Secret and QR Code
+```bash
+POST /api/auth/otp/setup
+Content-Type: application/json
+
+{
+  "idpAlias": "dive-v3-broker",
+  "username": "admin-dive",
+  "password": "DiveAdmin2025!"
+}
+
+# Response:
+{
+  "success": true,
+  "data": {
+    "secret": "JBSWY3DPEHPK3PXP",        # Base32-encoded TOTP secret
+    "qrCodeUrl": "otpauth://totp/...",   # otpauth:// URL
+    "qrCodeDataUrl": "data:image/png;base64,...",  # QR code PNG
+    "userId": "50242513-9d1c-4842-909d-fa1c0800c3a1"
+  },
+  "message": "Scan the QR code with your authenticator app and enter the 6-digit code"
+}
+```
+
+#### Verify OTP Code and Create Credential
+```bash
+POST /api/auth/otp/verify
+Content-Type: application/json
+
+{
+  "idpAlias": "dive-v3-broker",
+  "username": "admin-dive",
+  "secret": "JBSWY3DPEHPK3PXP",
+  "otp": "123456",
+  "userId": "50242513-9d1c-4842-909d-fa1c0800c3a1"
+}
+
+# Response:
+{
+  "success": true,
+  "message": "OTP enrollment completed successfully. You can now log in with your password and OTP code."
+}
+```
+
+#### Check OTP Status
+```bash
+POST /api/auth/otp/status
+Content-Type: application/json
+
+{
+  "idpAlias": "dive-v3-broker",
+  "username": "admin-dive"
+}
+
+# Response:
+{
+  "success": true,
+  "data": {
+    "hasOTP": true,
+    "username": "admin-dive",
+    "realmName": "dive-v3-broker"
+  }
+}
+```
+
+### Security & Compliance
+
+#### RFC 6238 - TOTP Algorithm
+- ✅ **Algorithm**: HMAC-SHA1
+- ✅ **Digits**: 6
+- ✅ **Time Step**: 30 seconds
+- ✅ **Secret Length**: 256-bit entropy (32-byte base32)
+- ✅ **Clock Skew**: ±30 seconds (window=1)
+
+#### NIST SP 800-63B - AAL2
+- ✅ **Multi-Factor**: Password (something you know) + OTP (something you have)
+- ✅ **ACR Claim**: `"acr": "1"` (Authenticator Assurance Level 2)
+- ✅ **AMR Claim**: `"amr": ["pwd", "otp"]` (Authentication Methods Reference)
+- ✅ **Token Lifetime**: 15 minutes (access), 8 hours (refresh)
+
+#### NATO ACP-240 - Access Control Policy
+- ✅ **MFA Required**: TOP_SECRET clearance mandates MFA
+- ✅ **Authorization Enforcement**: OPA policies check `acr` and `amr` claims
+- ✅ **Audit Logging**: All enrollment attempts logged with request IDs
+
+#### Production Hardening
+- ✅ **Credential Validation**: Username/password validated before secret generation (prevents enumeration)
+- ✅ **HTTPS Enforcement**: Secrets transmitted over TLS in production
+- ✅ **Admin API Security**: Admin credentials in environment variables (never hardcoded)
+- ⏳ **Rate Limiting**: Recommended: 5 setup attempts per 15 minutes per user
+- ⏳ **Brute Force Protection**: Recommended: 5 verify attempts per 15 minutes per user
+
+### Troubleshooting
+
+#### OTP code validation fails with valid code
+- **Check system clock**: TOTP is time-based; ensure server/client clocks are synchronized
+- **Use fresh code**: Codes expire every 30 seconds
+- **Clock skew tolerance**: Backend allows ±30 seconds (window=1)
+
+#### QR code doesn't display
+- **Check backend logs**: Look for errors in `generateOTPSecret()`
+- **Verify dependencies**: Run `cd backend && npm list speakeasy qrcode`
+- **Browser console**: Check for image rendering errors
+
+#### Keycloak Admin API returns 401
+- **Verify credentials**: Check `KEYCLOAK_ADMIN_USERNAME` and `KEYCLOAK_ADMIN_PASSWORD` in `.env`
+- **Token expiration**: Admin tokens expire after 60 seconds; service refreshes automatically
+- **Admin CLI client**: Ensure `admin-cli` client is enabled in master realm
+
+#### ACR/AMR claims missing from JWT
+- **Check Protocol Mappers**: Verify `dive-v3-client-broker` has ACR/AMR mappers
+- **Direct Grant Flow**: Ensure OTP validation step is included
+- **Terraform Config**: Review `terraform/modules/realm-mfa/direct-grant.tf`
+- **Verification Script**: Run `./scripts/verify-keycloak-26-claims.sh admin-dive DiveAdmin2025!`
+
+### Documentation
+
+For detailed implementation, architecture, and deployment guide, see:
+- **[OTP-ENROLLMENT-PRODUCTION-SOLUTION.md](OTP-ENROLLMENT-PRODUCTION-SOLUTION.md)** - Complete implementation guide (459 lines)
+- **[KEYCLOAK-26-README.md](KEYCLOAK-26-README.md)** - Keycloak 26 migration, ACR/AMR claims
+- **[docs/AAL2-MFA-TESTING-GUIDE.md](docs/AAL2-MFA-TESTING-GUIDE.md)** - MFA testing procedures
+- **[CHANGELOG.md](CHANGELOG.md)** - Detailed changelog entry (2025-10-27-OTP-MFA-ENROLLMENT)
+
+### References
+
+- [RFC 6238 - TOTP Algorithm](https://datatracker.ietf.org/doc/html/rfc6238)
+- [NIST SP 800-63B - Digital Identity Guidelines (AAL2)](https://pages.nist.gov/800-63-3/sp800-63b.html)
+- [Keycloak Admin API v26 - Credential Management](https://www.keycloak.org/docs-api/26.0.0/rest-api/index.html#_users_resource)
+- [speakeasy npm package](https://www.npmjs.com/package/speakeasy)
 
 ---
 

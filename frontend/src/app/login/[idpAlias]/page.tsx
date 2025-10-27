@@ -415,7 +415,10 @@ export default function CustomLoginPage() {
     const initiateOTPSetup = async () => {
         try {
             setIsLoading(true);
+            setError(null);
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+            
+            // Call the new OTP setup endpoint
             const response = await fetch(`${backendUrl}/api/auth/otp/setup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -428,18 +431,27 @@ export default function CustomLoginPage() {
 
             const result = await response.json();
 
-            if (result.success) {
+            if (result.success && result.data) {
+                // Store OTP setup data
                 setOtpSecret(result.data.secret);
                 setQrCodeUrl(result.data.qrCodeUrl);
                 setUserId(result.data.userId);
+                
+                // Show OTP setup screen
                 setShowOTPSetup(true);
                 setError(null);
+                
+                // OTP setup initiated successfully
+                console.log('OTP setup initiated successfully', {
+                    username: formData.username,
+                    userId: result.data.userId
+                });
             } else {
-                setError(result.error || 'Failed to initiate OTP setup');
+                showErrorWithShake(result.error || 'Failed to initiate OTP setup');
             }
         } catch (error) {
             console.error('OTP setup error:', error);
-            setError('Failed to initiate OTP setup');
+            showErrorWithShake('Failed to initiate OTP setup. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -459,29 +471,25 @@ export default function CustomLoginPage() {
 
         try {
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-            const response = await fetch(`${backendUrl}/api/auth/otp/verify`, {
+            
+            // Step 1: Verify OTP code and create credential via backend
+            const verifyResponse = await fetch(`${backendUrl}/api/auth/otp/verify`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     idpAlias,
                     username: formData.username,
-                    password: formData.password,
-                    otp: formData.otp,
                     secret: otpSecret,
+                    otp: formData.otp,
                     userId
                 })
             });
 
-            const result = await response.json();
+            const verifyResult = await verifyResponse.json();
 
-            // Check for success regardless of HTTP status code
-            // Backend may return 401 for invalid OTP but still include JSON
-            if (result.success) {
-                // OTP setup complete - now authenticate with the OTP
-                // Wait a moment for Keycloak to sync the credential
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Now authenticate with username + password + OTP
+            if (verifyResult.success) {
+                // Step 2: Now authenticate with username, password, and OTP
+                // The credential is now in Keycloak, so Direct Grant should work
                 const loginResponse = await fetch(`${backendUrl}/api/auth/custom-login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -496,7 +504,7 @@ export default function CustomLoginPage() {
                 const loginResult = await loginResponse.json();
 
                 if (loginResult.success && loginResult.data) {
-                    // Create NextAuth session
+                    // Step 3: Create NextAuth session
                     const sessionResponse = await fetch('/api/auth/custom-session', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -511,7 +519,8 @@ export default function CustomLoginPage() {
                     const sessionResult = await sessionResponse.json();
 
                     if (sessionResult.success) {
-                        // Success! Redirect to dashboard
+                        // Success! OTP enrolled and authenticated
+                        console.log('[OTP] Enrollment and authentication successful');
                         router.push(redirectUri);
                     } else {
                         showErrorWithShake('Failed to create session. Please try again.');
@@ -520,15 +529,15 @@ export default function CustomLoginPage() {
                         setFormData({ ...formData, otp: '' });
                     }
                 } else {
-                    showErrorWithShake(loginResult.error || 'Login failed after OTP setup. Please try again.');
+                    // Login failed after enrollment - should not happen
+                    showErrorWithShake(loginResult.error || 'OTP enrolled but authentication failed. Please try logging in again.');
                     setShowOTPSetup(false);
                     setShowMFA(false);
                     setFormData({ ...formData, otp: '' });
                 }
             } else {
-                // Show error and keep the OTP setup screen open
-                showErrorWithShake(result.error || 'Invalid OTP code. Please try again.');
-                // Clear the OTP input so user can try again
+                // OTP code verification failed
+                showErrorWithShake(verifyResult.error || 'Invalid OTP code. Please try again.');
                 setFormData({ ...formData, otp: '' });
                 setLoginAttempts(prev => prev + 1);
             }
