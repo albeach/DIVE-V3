@@ -87,8 +87,8 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/coi-keys', coiKeysRoutes);
+app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints (must be before /api/auth)
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
-app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints
 app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
 
 // Root endpoint
