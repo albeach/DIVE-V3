@@ -33,13 +33,14 @@ resource "keycloak_authentication_execution" "direct_grant_password" {
   ]
 }
 
-# Step 3: Conditional OTP subflow
+# Step 3: OTP subflow (TEMPORARY: REQUIRED for testing)
+# TODO: Change back to CONDITIONAL after OTP testing is complete
 resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.direct_grant_mfa[0].alias
   alias             = "Conditional OTP - Direct Grant - ${var.realm_display_name}"
-  requirement       = "CONDITIONAL"  # Allows initial login, enforces MFA after setup
+  requirement       = "REQUIRED"  # TEMPORARY: Forces OTP for ALL users (testing)
   
   depends_on = [
     keycloak_authentication_execution.direct_grant_password
@@ -47,12 +48,13 @@ resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
 }
 
 # Condition: User attribute "clearance" != "UNCLASSIFIED"
+# TEMPORARY: DISABLED for testing - all users will be prompted for OTP
 resource "keycloak_authentication_execution" "direct_grant_condition_user_attribute" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.direct_grant_otp_conditional[0].alias
   authenticator     = "conditional-user-attribute"
-  requirement       = "REQUIRED"
+  requirement       = "DISABLED"  # TEMPORARY: Disabled to test OTP enrollment
 }
 
 # Configuration for conditional-user-attribute
@@ -68,13 +70,14 @@ resource "keycloak_authentication_execution_config" "direct_grant_condition_conf
   }
 }
 
-# Action: Standard OTP Direct Grant Authenticator (NOT custom SPI)
-# Uses Keycloak's built-in OTP validation
+# Action: Custom DIVE V3 OTP Direct Grant Authenticator
+# Enables OTP enrollment AND validation within Direct Grant flow
+# Allows users to scan QR codes and enroll OTP directly in custom login page
 resource "keycloak_authentication_execution" "direct_grant_otp" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.direct_grant_otp_conditional[0].alias
-  authenticator     = "direct-grant-validate-otp"  # Built-in Keycloak authenticator
+  authenticator     = "direct-grant-otp-setup"  # Custom SPI (dive-keycloak-spi.jar)
   requirement       = "REQUIRED"
   
   depends_on = [

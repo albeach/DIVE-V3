@@ -17,6 +17,7 @@ import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { storePendingOTPSecret, getPendingOTPSecret, removePendingOTPSecret } from './otp-redis.service';
 
 interface OTPSetupData {
     secret: string;
@@ -153,68 +154,66 @@ export class OTPService {
      */
     async createOTPCredential(userId: string, realmName: string, secret: string): Promise<boolean> {
         try {
-            // Get admin access token
-            const adminToken = await this.getAdminToken();
+            // ============================================
+            // KEYCLOAK 26 + TERRAFORM CONFLICT FIX
+            // ============================================
+            // Problem 1: Keycloak 26 removed POST /admin/realms/{realm}/users/{userId}/credentials endpoint
+            // Problem 2: Terraform Provider 5.x bug where user attributes don't persist to PostgreSQL
+            // Problem 3: Terraform null_resource workaround overwrites runtime attributes
+            //
+            // SOLUTION: Store pending secret in Redis with 10-minute TTL
+            // The Custom SPI will query backend API for pending secret on next login
+            // After credential creation, backend removes secret from Redis
+            //
+            // Architecture:
+            // 1. Backend validates OTP and stores secret in Redis (this method)
+            // 2. User re-authenticates with password + OTP code
+            // 3. Custom SPI calls backend API endpoint /api/auth/otp/pending-secret/:userId
+            // 4. SPI creates OTP credential using OTPCredentialProvider
+            // 5. SPI notifies backend to remove secret from Redis
+            // ============================================
 
-            // Create TOTP credential via Admin API
-            // https://www.keycloak.org/docs-api/26.0.0/rest-api/index.html#_users_resource
-            const credentialUrl = `${this.keycloakUrl}/admin/realms/${realmName}/users/${userId}/credentials`;
-
-            const credentialPayload = {
-                type: 'otp',
-                value: secret,
-                temporary: false,
-                // IMPORTANT: Keycloak expects secretData and credentialData as stringified JSON
-                secretData: JSON.stringify({
-                    value: secret,
-                    algorithm: 'HmacSHA1', // Standard TOTP algorithm
-                    digits: 6,
-                    period: 30
-                }),
-                credentialData: JSON.stringify({
-                    subType: 'totp',
-                    algorithm: 'HmacSHA1',
-                    digits: 6,
-                    period: 30,
-                    counter: 0
-                })
-            };
-
-            logger.info('Creating OTP credential in Keycloak', {
+            logger.info('Storing pending OTP secret in Redis', {
                 userId,
                 realmName,
-                credentialUrl
+                note: 'Credential will be created by Custom SPI on next login'
             });
 
-            const response = await axios.post(credentialUrl, credentialPayload, {
-                headers: {
-                    'Authorization': `Bearer ${adminToken}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            // Store secret in Redis with 10-minute TTL
+            const stored = await storePendingOTPSecret(userId, secret, 600);
 
-            if (response.status === 204 || response.status === 201) {
-                logger.info('OTP credential created successfully', {
+            if (!stored) {
+                logger.error('Failed to store pending OTP secret in Redis', {
                     userId,
-                    realmName,
-                    statusCode: response.status
-                });
-
-                // Set totp_configured custom attribute to true
-                await this.setUserAttribute(userId, realmName, 'totp_configured', 'true', adminToken);
-
-                return true;
-            } else {
-                logger.warn('Unexpected status code when creating OTP credential', {
-                    userId,
-                    realmName,
-                    statusCode: response.status,
-                    responseData: response.data
+                    realmName
                 });
                 return false;
             }
+
+            // Also set totp_configured custom attribute to true in Keycloak
+            // This helps frontend show OTP status, but uses lifecycle.ignore_changes
+            // so it won't conflict with Terraform
+            try {
+                const adminToken = await this.getAdminToken();
+                await this.setUserAttribute(userId, realmName, 'totp_configured', 'true', adminToken);
+                logger.info('Set totp_configured attribute (Terraform lifecycle ignored)');
+            } catch (attrError) {
+                // Non-critical: Redis is the source of truth
+                logger.warn('Could not set totp_configured attribute (non-critical)', {
+                    userId,
+                    error: attrError instanceof Error ? attrError.message : 'Unknown error'
+                });
+            }
+
+            logger.info('OTP pending secret stored successfully in Redis', {
+                userId,
+                realmName,
+                ttl: 600
+            });
+
+            return true;
         } catch (error: any) {
-            logger.error('Failed to create OTP credential in Keycloak', {
+            logger.error('Failed to store pending OTP secret', {
                 userId,
                 realmName,
                 error: error.message,
@@ -258,6 +257,14 @@ export class OTPService {
                 }
             };
 
+            logger.info('Updating user with attributes', {
+                userId,
+                realmName,
+                attributeName,
+                currentAttributes: user.attributes,
+                newAttributes: updatedUser.attributes
+            });
+
             // Update user
             await axios.put(userUrl, updatedUser, {
                 headers: {
@@ -266,7 +273,7 @@ export class OTPService {
                 }
             });
 
-            logger.info('User attribute updated', {
+            logger.info('User attribute updated successfully', {
                 userId,
                 realmName,
                 attributeName,

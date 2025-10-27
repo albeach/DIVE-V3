@@ -26,6 +26,7 @@ import {
 import { useIdPManagement } from '@/contexts/IdPManagementContext';
 import { useIdPs } from '@/lib/api/idp-management';
 import { IIdPListItem } from '@/types/admin.types';
+import { useIdentityDrawer } from '@/contexts/IdentityDrawerContext';
 
 // ============================================
 // Types
@@ -48,6 +49,7 @@ export default function IdPQuickSwitcher() {
     const router = useRouter();
     const { selectIdP, triggerRefresh } = useIdPManagement();
     const { data: idps, refetch } = useIdPs();
+    const { open: openIdentity } = useIdentityDrawer();
     
     const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -80,6 +82,17 @@ export default function IdPQuickSwitcher() {
         
         // Quick Actions
         actions.push(
+            {
+                id: 'action-show-identity',
+                label: 'Show Identity Drawer',
+                description: 'View your normalized claims',
+                icon: Cog6ToothIcon,
+                action: () => {
+                    openIdentity();
+                    setIsOpen(false);
+                },
+                category: 'action'
+            },
             {
                 id: 'action-add-idp',
                 label: 'Add New IdP',

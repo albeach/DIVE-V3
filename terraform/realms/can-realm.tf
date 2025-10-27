@@ -165,15 +165,17 @@ resource "keycloak_generic_protocol_mapper" "can_orgunit_mapper" {
   }
 }
 
+# Keycloak 26 Fix: Use session note mapper instead of user attribute
+# ACR (Authentication Context Class Reference) is set by Keycloak during authentication flow
 resource "keycloak_generic_protocol_mapper" "can_acr_mapper" {
   realm_id   = keycloak_realm.dive_v3_can.id
   client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "acr-mapper"
+  name       = "acr-from-session"
   protocol   = "openid-connect"
-  protocol_mapper = "oidc-usermodel-attribute-mapper"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # Changed from usermodel-attribute-mapper
 
   config = {
-    "user.attribute"       = "acr"
+    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"  # Keycloak's internal ACR storage
     "claim.name"           = "acr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
@@ -182,15 +184,17 @@ resource "keycloak_generic_protocol_mapper" "can_acr_mapper" {
   }
 }
 
+# Keycloak 26 Fix: Use session note mapper for AMR
+# AMR (Authentication Methods Reference) contains array of auth factors
 resource "keycloak_generic_protocol_mapper" "can_amr_mapper" {
   realm_id   = keycloak_realm.dive_v3_can.id
   client_id  = keycloak_openid_client.can_realm_client.id
-  name       = "amr-mapper"
+  name       = "amr-from-session"
   protocol   = "openid-connect"
-  protocol_mapper = "oidc-usermodel-attribute-mapper"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # Changed from usermodel-attribute-mapper
 
   config = {
-    "user.attribute"       = "amr"
+    "user.session.note"    = "AUTH_METHODS_REF"  # Keycloak's internal AMR storage
     "claim.name"           = "amr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
