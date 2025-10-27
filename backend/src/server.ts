@@ -14,6 +14,7 @@ import publicRoutes from './routes/public.routes';
 import complianceRoutes from './routes/compliance.routes';
 import coiKeysRoutes from './routes/coi-keys.routes';
 import authRoutes from './controllers/auth.controller';  // Gap #7: Token revocation
+import otpRoutes from './routes/otp.routes';  // OTP enrollment endpoints
 import decisionReplayRoutes from './routes/decision-replay.routes';
 import policiesLabRoutes from './routes/policies-lab.routes';  // Policies Lab
 import { initializeThemesCollection } from './services/idp-theme.service';
@@ -87,6 +88,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/coi-keys', coiKeysRoutes);
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
+app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints
 app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
 
 // Root endpoint
