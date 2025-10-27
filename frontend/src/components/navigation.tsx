@@ -509,11 +509,14 @@ export default function Navigation({ user }: INavigationProps) {
                             
                             {/* Unified User + Admin Dropdown - Enhanced */}
                             <div ref={dropdownRef} className="hidden lg:block relative">
-                                <button
+                                <div
                                     onClick={() => openIdentity(user)}
-                                    className="group flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-xl bg-gradient-to-r from-white/90 to-gray-50/90 border border-gray-100/80 shadow-sm hover:shadow-xl hover:border-[#4497ac]/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300"
+                                    className="group flex items-center gap-3 pl-3 pr-4 py-2.5 rounded-xl bg-gradient-to-r from-white/90 to-gray-50/90 border border-gray-100/80 shadow-sm hover:shadow-xl hover:border-[#4497ac]/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
+                                    role="button"
                                     aria-expanded={adminDropdownOpen}
                                     aria-haspopup="true"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openIdentity(user); }}
                                 >
                                     {/* Enhanced Avatar with ring effect */}
                                     <div className="relative">
@@ -570,7 +573,7 @@ export default function Navigation({ user }: INavigationProps) {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
                                         </svg>
                                     </button>
-                                </button>
+                                </div>
 
                                 {/* Enhanced Unified Dropdown Menu */}
                                 {adminDropdownOpen && (
