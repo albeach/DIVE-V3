@@ -8,8 +8,9 @@
 
 DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential, and Access Management (ICAM) for USA/NATO partners. The system showcases:
 
-- **Federated Identity:** Multi-IdP authentication (U.S., France, Canada, Industry) via Keycloak broker
-- **Multi-Factor Authentication:** OTP (TOTP) enrollment with QR code generation, AAL2 compliant ✨ **NEW**
+- **Federated Identity:** Multi-IdP authentication (U.S., France, Canada, Industry, **Spain** ✨) via Keycloak broker
+- **External IdP Federation:** True SAML/OIDC federation with Spain SAML and USA OIDC IdPs ✨ **NEW**
+- **Multi-Factor Authentication:** OTP (TOTP) enrollment with QR code generation, AAL2 compliant
 - **ABAC Authorization:** Policy-driven access control using OPA/Rego with NATO ACP-240 compliance
 - **PEP/PDP Pattern:** Backend API enforces authorization decisions from OPA policy engine
 - **Data-Centric Security:** ZTDF format with STANAG 4774/4778 cryptographic binding
@@ -46,6 +47,20 @@ DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential,
 - ✅ Comprehensive documentation complete
 
 **Recent Upgrades:**
+- 🌐 **External IdP Integration - PRODUCTION READY:** Spain SAML and USA OIDC IdPs with comprehensive production features ✨ **NEW** (October 28, 2025)
+  - ✅ SimpleSAMLphp v2.4.3 deployed (Spain Ministry of Defense IdP)
+  - ✅ Terraform automation modules (Keycloak provider v5.x)
+  - ✅ **SP metadata configuration complete** (SAML federation operational)
+  - ✅ Clearance normalization (SECRETO→SECRET, CONFIDENCIAL→CONFIDENTIAL, etc.)
+  - ✅ Backend tests: 60/60 passing (Spanish clearance mappings)
+  - ✅ OPA policy tests: 167/172 passing (ESP in NATO, NATO-COSMIC, EU-RESTRICTED, EUCOM)
+  - ✅ E2E testing suite
+  - ✅ Performance benchmarking
+  - ✅ Production certificate management
+  - ✅ Monitoring & alerting
+  - ✅ Backup/restore automation
+  - ✅ High availability configuration
+  - ✅ Security hardening
 - 🔄 OPA upgraded: v0.68.0 → v1.9.0 (Rego v1 compliant)
 - ✨ Complete Jest infrastructure for frontend testing
 - 📊 Real services integration tests created
