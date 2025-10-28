@@ -23,7 +23,7 @@ module "spain_saml_idp" {
   idp_certificate = file("${path.module}/../external-idps/spain-saml/cert/server.crt")
 
   # SAML Settings
-  name_id_policy_format     = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"
+  name_id_policy_format     = "Transient"  # keycloak/keycloak v5.x format (was: urn:oasis:names:tc:SAML:2.0:nameid-format:transient)
   signature_algorithm       = "RSA_SHA256"
   want_assertions_signed    = true
   want_assertions_encrypted = false
