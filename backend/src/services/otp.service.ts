@@ -60,8 +60,9 @@ export class OTPService {
                 length: 32 // 256-bit secret (recommended)
             });
 
-            // Generate QR code URL (otpauth:// format)
-            const qrCodeUrl = secret.otpauth_url || '';
+            // CRITICAL FIX: Manually construct otpauth URL with SHA256 algorithm
+            // speakeasy.generateSecret() defaults to SHA1, but Keycloak uses SHA256
+            const qrCodeUrl = `otpauth://totp/DIVE%20V3%20Coalition%20ICAM:${encodeURIComponent(username)}?secret=${secret.base32}&issuer=DIVE%20V3%20Coalition%20ICAM&algorithm=SHA256&digits=6&period=30`;
 
             // Generate QR code as data URL (PNG image)
             const qrCodeDataUrl = await QRCode.toDataURL(qrCodeUrl);
@@ -114,11 +115,13 @@ export class OTPService {
 
             // Verify TOTP code
             // window=1 allows for ±30 seconds clock skew (recommended)
+            // CRITICAL: Use SHA256 to match Keycloak's OTP policy
             const verified = speakeasy.totp.verify({
                 secret,
                 encoding: 'base32',
                 token,
-                window: 1 // Allow 1 step before/after (±30s)
+                window: 1, // Allow 1 step before/after (±30s)
+                algorithm: 'sha256' // Must match Keycloak OTP policy
             });
 
             if (verified) {
@@ -381,6 +384,26 @@ export class OTPService {
             });
             return false;
         }
+    }
+
+    /**
+     * Get pending OTP secret from Redis
+     * Wrapper method for otp-enrollment.controller.ts compatibility
+     * @param userId User ID
+     * @returns Pending OTP secret or null
+     */
+    async getPendingSecret(userId: string): Promise<string | null> {
+        return await getPendingOTPSecret(userId);
+    }
+
+    /**
+     * Remove pending OTP secret from Redis
+     * Wrapper method for otp-enrollment.controller.ts compatibility
+     * @param userId User ID
+     * @returns True if removed successfully
+     */
+    async removePendingSecret(userId: string): Promise<boolean> {
+        return await removePendingOTPSecret(userId);
     }
 }
 
