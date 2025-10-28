@@ -1,0 +1,226 @@
+name: Spain SAML Integration Tests
+
+on:
+  push:
+    branches: [main, develop, feature/**]
+    paths:
+      - 'external-idps/spain-saml/**'
+      - 'terraform/external-idp-spain-saml.tf'
+      - 'backend/src/services/clearance-normalization.service.ts'
+      - 'backend/src/config/external-idp-config.ts'
+      - 'policies/fuel_inventory_abac_policy.rego'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'external-idps/spain-saml/**'
+      - 'terraform/external-idp-spain-saml.tf'
+      - 'backend/src/services/clearance-normalization.service.ts'
+
+jobs:
+  test-simplesamlphp-deployment:
+    name: SimpleSAMLphp v2.4.3 Deployment Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build SimpleSAMLphp Docker Image
+        run: |
+          cd external-idps
+          docker-compose build spain-saml
+      
+      - name: Start SimpleSAMLphp Service
+        run: |
+          cd external-idps
+          docker-compose up -d spain-saml
+      
+      - name: Wait for SimpleSAMLphp to be Ready
+        run: |
+          timeout 120 bash -c 'until curl -sf http://localhost:9443/simplesaml/; do 
+            echo "Waiting for SimpleSAMLphp..."; 
+            sleep 3; 
+          done'
+          echo "SimpleSAMLphp is ready!"
+      
+      - name: Test SAML Metadata Endpoint
+        run: |
+          echo "Testing SAML metadata endpoint..."
+          METADATA=$(curl -sf http://localhost:9443/simplesaml/saml2/idp/metadata.php)
+          
+          # Check for required SAML elements
+          echo "$METADATA" | grep -q "EntityDescriptor" || (echo "Missing EntityDescriptor"; exit 1)
+          echo "$METADATA" | grep -q "IDPSSODescriptor" || (echo "Missing IDPSSODescriptor"; exit 1)
+          echo "$METADATA" | grep -q "SingleSignOnService" || (echo "Missing SingleSignOnService"; exit 1)
+          echo "$METADATA" | grep -q "X509Certificate" || (echo "Missing X509Certificate"; exit 1)
+          
+          echo "✅ SAML metadata valid"
+      
+      - name: Test SimpleSAMLphp Admin Page
+        run: |
+          echo "Testing SimpleSAMLphp admin page..."
+          curl -sf http://localhost:9443/simplesaml/module.php/core/frontpage_welcome.php
+          echo "✅ Admin page accessible"
+      
+      - name: Verify Spanish Test User Configuration
+        run: |
+          echo "Verifying authsources.php contains Spanish test users..."
+          docker exec dive-spain-saml-idp bash -c "grep -q 'juan.garcia' /var/www/simplesamlphp/config/authsources.php"
+          docker exec dive-spain-saml-idp bash -c "grep -q 'SECRETO' /var/www/simplesamlphp/config/authsources.php"
+          docker exec dive-spain-saml-idp bash -c "grep -q 'NATO-COSMIC' /var/www/simplesamlphp/config/authsources.php"
+          echo "✅ Spanish test users configured"
+      
+      - name: View SimpleSAMLphp Logs
+        if: failure()
+        run: |
+          docker logs dive-spain-saml-idp
+
+  test-clearance-normalization:
+    name: Backend Clearance Normalization Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Backend Dependencies
+        run: |
+          cd backend
+          npm ci
+      
+      - name: Run Clearance Normalization Tests
+        run: |
+          cd backend
+          npm test -- clearance-normalization.service.test.ts --coverage
+      
+      - name: Run Spanish SAML Integration Tests
+        run: |
+          cd backend
+          npm test -- external-idp-spain-saml.test.ts --coverage
+      
+      - name: Upload Test Coverage
+        if: always()
+        uses: codecov/codecov-action@v3
+        with:
+          files: backend/coverage/lcov.info
+          flags: backend-clearance-normalization
+
+  test-opa-policies:
+    name: OPA Policy Tests (ESP Country Code)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup OPA
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x opa
+          sudo mv opa /usr/local/bin/
+          opa version
+      
+      - name: Run OPA Policy Tests
+        run: |
+          cd policies
+          opa test . --verbose --format=json | tee opa-test-results.json
+      
+      - name: Verify ESP Country Code in Policies
+        run: |
+          cd policies
+          echo "Verifying ESP country code in COI membership..."
+          grep -q '"ESP"' fuel_inventory_abac_policy.rego || (echo "ESP not found in policy"; exit 1)
+          
+          echo "Verifying ESP in NATO COI..."
+          grep -A 5 'NATO":' fuel_inventory_abac_policy.rego | grep -q 'ESP'
+          
+          echo "Verifying ESP in NATO-COSMIC COI..."
+          grep -A 5 'NATO-COSMIC":' fuel_inventory_abac_policy.rego | grep -q 'ESP'
+          
+          echo "✅ ESP country code verified in OPA policies"
+      
+      - name: Upload OPA Test Results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: opa-test-results
+          path: policies/opa-test-results.json
+
+  test-terraform-validation:
+    name: Terraform Configuration Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.13.4
+      
+      - name: Terraform Format Check
+        run: |
+          cd terraform
+          terraform fmt -check external-idp-spain-saml.tf
+      
+      - name: Terraform Validate
+        run: |
+          cd terraform
+          terraform init -backend=false
+          terraform validate
+      
+      - name: Verify SimpleSAMLphp Endpoints
+        run: |
+          cd terraform
+          echo "Verifying SimpleSAMLphp v2.4.3 endpoints in Terraform config..."
+          grep -q 'http://localhost:9443/simplesaml/saml2/idp/metadata.php' external-idp-spain-saml.tf
+          grep -q 'singleSignOnService' external-idp-spain-saml.tf
+          grep -q 'singleLogout' external-idp-spain-saml.tf
+          echo "✅ SimpleSAMLphp endpoints configured correctly"
+
+  integration-test-summary:
+    name: Integration Test Summary
+    runs-on: ubuntu-latest
+    needs: [test-simplesamlphp-deployment, test-clearance-normalization, test-opa-policies, test-terraform-validation]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "# Spain SAML Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| SimpleSAMLphp Deployment | ${{ needs.test-simplesamlphp-deployment.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Clearance Normalization | ${{ needs.test-clearance-normalization.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OPA Policy Tests | ${{ needs.test-opa-policies.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform Validation | ${{ needs.test-terraform-validation.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Components Tested" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SimpleSAMLphp v2.4.3 container build" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ SAML metadata endpoint" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Spanish test user configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Backend clearance normalization (SECRETO → SECRET)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ OPA policies with ESP country code" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Terraform configuration validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Apply Terraform configuration to register IdP in Keycloak" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Run E2E tests with actual Spanish user authentication" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Verify SAML federation flow through browser" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] Test clearance normalization in live environment" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Check Overall Status
+        if: needs.test-simplesamlphp-deployment.result != 'success' || needs.test-clearance-normalization.result != 'success' || needs.test-opa-policies.result != 'success' || needs.test-terraform-validation.result != 'success'
+        run: |
+          echo "❌ One or more test suites failed"
+          exit 1
+
