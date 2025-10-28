@@ -24,6 +24,8 @@ resource "keycloak_saml_identity_provider" "external_idp" {
   single_logout_service_url      = var.idp_slo_url != "" ? var.idp_slo_url : null
   signing_certificate            = var.idp_certificate
   name_id_policy_format          = var.name_id_policy_format
+  principal_type                 = "ATTRIBUTE"  # Required for Transient NameID format
+  principal_attribute            = "uid"        # Use uid attribute as principal
   signature_algorithm            = var.signature_algorithm
   want_assertions_signed         = var.want_assertions_signed
   want_assertions_encrypted      = var.want_assertions_encrypted
