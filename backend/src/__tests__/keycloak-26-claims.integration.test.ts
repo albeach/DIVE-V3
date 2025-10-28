@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeAll } from '@jest/globals';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 
 // Configuration
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8081';
@@ -66,11 +66,11 @@ describe('Keycloak 26 Migration - ACR/AMR Claims', () => {
         });
 
         if (!response.ok) {
-            const error = await response.json();
+            const error = await response.json() as { error?: string; error_description?: string };
             throw new Error(`Failed to obtain token: ${error.error_description || error.error}`);
         }
 
-        const tokenResponse = await response.json();
+        const tokenResponse = await response.json() as { access_token: string; id_token: string };
         accessToken = tokenResponse.access_token;
         idToken = tokenResponse.id_token;
 
@@ -172,7 +172,7 @@ describe('Keycloak 26 Migration - ACR/AMR Claims', () => {
             });
 
             expect(response.status).toBe(200);
-            const data = await response.json();
+            const data = await response.json() as { resourceId: string };
             expect(data.resourceId).toBe(resourceId);
         });
 
@@ -185,7 +185,7 @@ describe('Keycloak 26 Migration - ACR/AMR Claims', () => {
                 },
             });
 
-            const data = await response.json();
+            const data = await response.json() as { message?: string };
 
             if (response.status === 403) {
                 expect(data.message).not.toContain('Authentication strength insufficient');
@@ -207,6 +207,24 @@ describe('Keycloak 26 Migration - ACR/AMR Claims', () => {
             expect(decodedAccess.sub).toBe(decodedId.sub);
         });
     });
+
+    describe('Backwards Compatibility', () => {
+        it('should not break existing user attributes', () => {
+            expect(decodedAccess.clearance).toBeDefined();
+            expect(decodedAccess.countryOfAffiliation).toBeDefined();
+            expect(decodedAccess.uniqueID).toBeDefined();
+        });
+
+        it('should maintain token expiration claims', () => {
+            expect(decodedAccess.exp).toBeDefined();
+            expect(decodedAccess.iat).toBeDefined();
+
+            const exp = decodedAccess.exp!;
+            const iat = decodedAccess.iat!;
+
+            expect(exp).toBeGreaterThan(iat);
+        });
+    });
 });
 
 describe('Keycloak 26 Migration - Claims for Different Realms', () => {
@@ -220,24 +238,6 @@ describe('Keycloak 26 Migration - Claims for Different Realms', () => {
                 expect(realm).toBeTruthy();
             });
         });
-    });
-});
-
-describe('Keycloak 26 Migration - Backwards Compatibility', () => {
-    it('should not break existing user attributes', () => {
-        expect(decodedAccess.clearance).toBeDefined();
-        expect(decodedAccess.countryOfAffiliation).toBeDefined();
-        expect(decodedAccess.uniqueID).toBeDefined();
-    });
-
-    it('should maintain token expiration claims', () => {
-        expect(decodedAccess.exp).toBeDefined();
-        expect(decodedAccess.iat).toBeDefined();
-
-        const exp = decodedAccess.exp!;
-        const iat = decodedAccess.iat!;
-
-        expect(exp).toBeGreaterThan(iat);
     });
 });
 
