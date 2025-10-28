@@ -5,8 +5,8 @@ terraform {
   required_version = ">= 1.0"
   required_providers {
     keycloak = {
-      source  = "mrparkers/keycloak"
-      version = "~> 4.0"
+      source  = "keycloak/keycloak"
+      version = "~> 5.0"
     }
   }
 }
