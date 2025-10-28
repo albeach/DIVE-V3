@@ -51,7 +51,6 @@ resource "keycloak_attribute_importer_identity_provider_mapper" "unique_id" {
   name                    = "${var.idp_alias}-uniqueID-mapper"
   identity_provider_alias = keycloak_saml_identity_provider.external_idp.alias
 
-  attribute_name         = "uid"
   attribute_friendly_name = "uid"
   user_attribute         = "uniqueID"
 
@@ -66,7 +65,6 @@ resource "keycloak_attribute_importer_identity_provider_mapper" "email" {
   name                    = "${var.idp_alias}-email-mapper"
   identity_provider_alias = keycloak_saml_identity_provider.external_idp.alias
 
-  attribute_name         = "mail"
   attribute_friendly_name = "mail"
   user_attribute         = "email"
 
@@ -83,6 +81,7 @@ resource "keycloak_hardcoded_attribute_identity_provider_mapper" "country" {
 
   attribute_name  = "countryOfAffiliation"
   attribute_value = var.country_code
+  user_session    = false
 
   extra_config = {
     syncMode = "INHERIT"
@@ -97,8 +96,7 @@ resource "keycloak_attribute_importer_identity_provider_mapper" "custom_attribut
   name                    = "${var.idp_alias}-${each.key}-mapper"
   identity_provider_alias = keycloak_saml_identity_provider.external_idp.alias
 
-  attribute_name          = each.value.saml_attribute_name
-  attribute_friendly_name = each.value.saml_attribute_name_format
+  attribute_friendly_name = each.value.saml_attribute_name
   user_attribute          = each.value.user_attribute_name
 
   extra_config = {
