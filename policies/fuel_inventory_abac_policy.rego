@@ -15,18 +15,13 @@ import rego.v1
 # - Enhanced KAS obligations for encrypted resources
 # - Data-centric security policy enforcement
 
-allow := false
-
-obligations := []
-
-evaluation_details := {}
-
 # ============================================
 # Main Authorization Rule
 # ============================================
 # Allow only when ALL violation checks pass
+# Using if-else syntax for Rego v1 compatibility
 
-allow if {
+allow := true if {
 	not is_not_authenticated
 	not is_missing_required_attributes
 	not is_insufficient_clearance
@@ -38,7 +33,10 @@ allow if {
 	not is_upload_not_releasable_to_uploader
 	not is_authentication_strength_insufficient
 	not is_mfa_not_verified
-}
+} else := false # Default case when conditions not met
+
+# Default obligations (empty array)
+default obligations := []
 
 # ============================================
 # COI Coherence Checks (NEW)
