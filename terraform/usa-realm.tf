@@ -77,7 +77,7 @@ resource "keycloak_role" "usa_admin" {
   description = "U.S. realm administrator"
 }
 
-# U.S. Realm OIDC Client (for broker federation)
+# U.S. Realm OIDC Client (for broker federation AND direct grant)
 resource "keycloak_openid_client" "usa_realm_client" {
   realm_id  = keycloak_realm.dive_v3_usa.id
   client_id = "dive-v3-broker-client"
@@ -86,7 +86,7 @@ resource "keycloak_openid_client" "usa_realm_client" {
   
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
-  direct_access_grants_enabled = false
+  direct_access_grants_enabled = true  # Phase 2.1: Enable for custom login pages
   
   # Redirect to broker realm
   valid_redirect_uris = [
