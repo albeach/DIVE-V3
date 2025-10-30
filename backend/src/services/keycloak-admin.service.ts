@@ -714,6 +714,39 @@ class KeycloakAdminService {
         }
     }
 
+    /**
+     * Get user by username from specific realm
+     */
+    async getUserByUsername(realmName: string, username: string): Promise<any> {
+        await this.ensureAuthenticated();
+
+        try {
+            // Temporarily switch to target realm
+            const originalRealm = this.client.realmName;
+            this.client.setConfig({ realmName });
+
+            const users = await this.client.users.find({ username, exact: true });
+
+            // Switch back to original realm
+            this.client.setConfig({ realmName: originalRealm });
+
+            if (users.length === 0) {
+                logger.warn('User not found in realm', { username, realmName });
+                return null;
+            }
+
+            logger.debug('Found user in realm', { username, realmName, userId: users[0].id });
+            return users[0];
+        } catch (error) {
+            logger.error('Failed to get user by username', {
+                username,
+                realmName,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
     // ============================================
     // MFA Configuration (Phase 1.5)
     // ============================================

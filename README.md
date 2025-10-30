@@ -295,39 +295,56 @@ DIVE V3 now automatically normalizes clearance levels from 10 countries while pr
 
 ### AAL Attributes (Authentication Assurance Level)
 
-**Before (❌ Hardcoded)**:
+**Phase 1 Complete (Oct 30, 2025)**: Token format standardized across all 11 realms
+
+**Before (❌ Hardcoded - Pre-Phase 1)**:
 ```typescript
 // User attributes - WRONG!
 {
   clearance: "SECRET",
-  acr: "urn:mace:incommon:iap:silver",  // ❌ Hardcoded
-  amr: "[\"pwd\",\"otp\"]"              // ❌ Hardcoded
+  acr: "urn:mace:incommon:iap:silver",  // ❌ Hardcoded in user attributes
+  amr: "[\"pwd\",\"otp\"]"              // ❌ Hardcoded in user attributes
+}
+
+// JWT Token - Inconsistent format
+{
+  clearance: "SECRET",
+  acr: "urn:mace:incommon:iap:silver",  // ❌ URN format (legacy)
+  amr: "[\"pwd\",\"otp\"]"              // ❌ JSON string format (legacy)
 }
 ```
 
-**After (✅ Session-Based)**:
+**After (✅ Session-Based - Phase 1 Complete)**:
 ```typescript
 // User attributes - CORRECT!
 {
   clearance: "SECRET",
   clearanceOriginal: "SECRET"  // ✅ Audit trail
-  // acr/amr dynamically set from Keycloak session
+  // acr/amr dynamically set from Keycloak session notes (no hardcoded values)
 }
 
-// JWT Token (from session)
+// JWT Token (from session notes via custom SPI)
 {
   clearance: "SECRET",
   clearanceOriginal: "SECRET",
-  acr: "urn:mace:incommon:iap:silver",  // ✅ From session
-  amr: ["pwd", "otp"]                    // ✅ From session
+  acr: "1",                              // ✅ Numeric format (0=AAL1, 1=AAL2, 2=AAL3)
+  amr: ["pwd", "otp"]                    // ✅ Array format
 }
 ```
 
+**Token Format (Standardized in Phase 1)**:
+- `acr`: **Numeric string** - `"0"` (AAL1), `"1"` (AAL2), `"2"` (AAL3)
+- `amr`: **Array** - `["pwd"]` (password only) or `["pwd", "otp"]` (password + MFA)
+- Session notes set by custom SPI: `AUTH_CONTEXT_CLASS_REF`, `AUTH_METHODS_REF`
+- Protocol mappers: `oidc-session-note-mapper` (not `oidc-usermodel-attribute-mapper`)
+
 **Benefits**:
-- ✅ AAL levels accurately reflect authentication methods used
+- ✅ **Consistent format** across all 11 realms (broker + 10 national)
+- ✅ AAL levels accurately reflect authentication methods used (dynamic, not hardcoded)
 - ✅ No false-positive MFA indicators
 - ✅ NIST SP 800-63B compliant (AAL1 = password, AAL2 = password + MFA)
 - ✅ Proper security auditing of authentication strength
+- ✅ Backend supports backward compatibility during migration
 
 ### Test Credentials
 
