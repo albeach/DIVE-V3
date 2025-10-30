@@ -17,6 +17,7 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { IAdminAPIResponse } from '../types/admin.types';
 import { KeycloakConfigSyncService } from '../services/keycloak-config-sync.service';
+import { getClientSecretForRealm } from '../config/realm-client-secrets';
 
 // ============================================
 // Rate Limiting (Dynamic)
@@ -158,8 +159,10 @@ export const customLoginHandler = async (
 
         // Authenticate with Keycloak Direct Access Grants
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
-        const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-client-broker';
-        const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET || '';
+        const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker-client';
+        
+        // Phase 2.1: Use realm-specific client secret
+        const clientSecret = getClientSecretForRealm(realmName);
 
         logger.info('Attempting Keycloak authentication', {
             requestId,

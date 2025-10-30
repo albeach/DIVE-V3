@@ -17,6 +17,7 @@ import { Request, Response } from 'express';
 import { otpService } from '../services/otp.service';
 import { logger } from '../utils/logger';
 import { getPendingOTPSecret, removePendingOTPSecret } from '../services/otp-redis.service';
+import { getClientSecretForRealm } from '../config/realm-client-secrets';
 
 /**
  * POST /api/auth/otp/setup
@@ -53,8 +54,10 @@ export const otpSetupHandler = async (
         // First, verify username and password are correct (security check)
         // We don't want to generate OTP secrets for invalid credentials
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
-        const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-client-broker';
-        const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET || '';
+        const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker-client';
+        
+        // Phase 2.1: Use realm-specific client secret
+        const clientSecret = getClientSecretForRealm(realmName);
 
         try {
             const axios = (await import('axios')).default;
