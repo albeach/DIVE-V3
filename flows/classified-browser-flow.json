@@ -1,0 +1,27 @@
+{
+  "id": "0a27bce0-2860-4989-96a7-67cde1223e8e",
+  "alias": "Classified Access Browser Flow - DIVE V3 Broker",
+  "description": "AAL2 enforcement: MFA required for CONFIDENTIAL, SECRET, TOP_SECRET clearances",
+  "providerId": "basic-flow",
+  "topLevel": true,
+  "builtIn": false,
+  "authenticationExecutions": [
+    {
+      "authenticatorFlow": true,
+      "requirement": "ALTERNATIVE",
+      "priority": 0,
+      "autheticatorFlow": true,
+      "flowAlias": "Classified User Conditional - DIVE V3 Broker",
+      "userSetupAllowed": false
+    },
+    {
+      "authenticatorConfig": "IdP Redirector Config - DIVE V3 Broker",
+      "authenticator": "identity-provider-redirector",
+      "authenticatorFlow": false,
+      "requirement": "ALTERNATIVE",
+      "priority": 0,
+      "autheticatorFlow": false,
+      "userSetupAllowed": false
+    }
+  ]
+}

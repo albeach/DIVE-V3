@@ -1,0 +1,215 @@
+#
+# DIVE V3 Alerting Rules
+# Phase 5 Task 5.2: Production Monitoring
+#
+# Alerts for critical system failures and performance degradation
+#
+
+groups:
+  - name: dive_v3_critical_alerts
+    interval: 30s
+    rules:
+      # Backend API Alerts
+      - alert: BackendAPIDown
+        expr: up{job="dive-v3-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Backend API is down"
+          description: "Backend API has been down for more than 1 minute"
+
+      - alert: HighAuthorizationLatency
+        expr: histogram_quantile(0.95, dive_v3_authorization_latency_seconds_bucket) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High authorization latency (p95 > 200ms)"
+          description: "p95 authorization latency is {{ $value }}s (threshold: 0.2s)"
+
+      - alert: HighLoginFailureRate
+        expr: rate(dive_v3_logins_total{status="failure"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High login failure rate (>10%)"
+          description: "Login failure rate is {{ $value }} per second"
+
+      # OPA Alerts
+      - alert: OPAServiceDown
+        expr: up{job="dive-v3-opa"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: opa
+        annotations:
+          summary: "OPA service is down"
+          description: "OPA has been down for more than 1 minute. Authorization decisions will fail."
+
+      - alert: HighOPAPolicyEvaluationTime
+        expr: histogram_quantile(0.95, opa_policy_evaluation_duration_seconds_bucket) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: opa
+        annotations:
+          summary: "OPA policy evaluation is slow (p95 > 100ms)"
+          description: "p95 OPA evaluation time is {{ $value }}s"
+
+      # Redis Alerts
+      - alert: RedisDown
+        expr: up{job="dive-v3-redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 1 minute. OTP enrollment will fail."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis memory usage is high (>90%)"
+          description: "Redis is using {{ $value | humanizePercentage }} of max memory"
+
+      # MongoDB Alerts
+      - alert: MongoDBDown
+        expr: up{job="dive-v3-mongo"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: mongodb
+        annotations:
+          summary: "MongoDB is down"
+          description: "MongoDB has been down for more than 1 minute. Resource access and decision logging will fail."
+
+      - alert: MongoDBHighConnections
+        expr: mongodb_connections{state="current"} / mongodb_connections{state="available"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: mongodb
+        annotations:
+          summary: "MongoDB connection pool is nearly exhausted (>80%)"
+          description: "MongoDB is using {{ $value | humanizePercentage }} of available connections"
+
+      # PostgreSQL Alerts (Keycloak database)
+      - alert: PostgreSQLDown
+        expr: up{job="dive-v3-postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been down for more than 1 minute. Keycloak authentication will fail."
+
+      # KAS Alerts
+      - alert: KASServiceDown
+        expr: up{job="dive-v3-kas"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: kas
+        annotations:
+          summary: "KAS service is down"
+          description: "KAS has been down for more than 2 minutes. Encrypted resource access will fail."
+
+      - alert: HighKASKeyDenialRate
+        expr: rate(dive_v3_kas_key_releases_total{decision="DENY"}[5m]) / rate(dive_v3_kas_key_releases_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: kas
+        annotations:
+          summary: "High KAS key denial rate (>50%)"
+          description: "KAS is denying {{ $value | humanizePercentage }} of key requests"
+
+      # Crypto Service Alerts (Phase 4)
+      - alert: HighMetadataSigningFailures
+        expr: rate(dive_v3_crypto_signature_errors_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: crypto
+        annotations:
+          summary: "High metadata signing failure rate"
+          description: "Crypto service is experiencing {{ $value }} signature errors per second"
+
+      - alert: MetadataTamperingDetected
+        expr: increase(dive_v3_crypto_tampering_detected_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: crypto
+        annotations:
+          summary: "Metadata tampering detected"
+          description: "{{ $value }} instances of metadata tampering detected in the last 5 minutes"
+
+      # MFA Enrollment Alerts (Phase 5)
+      - alert: HighMFAEnrollmentFailures
+        expr: rate(dive_v3_mfa_enrollment_failures_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High MFA enrollment failure rate"
+          description: "MFA enrollment is failing at {{ $value }} per second"
+
+  - name: dive_v3_performance_alerts
+    interval: 60s
+    rules:
+      # Resource usage alerts
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total{job=~"dive-v3-.*"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.job }}"
+          description: "CPU usage is {{ $value | humanizePercentage }} on {{ $labels.job }}"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job=~"dive-v3-.*"} / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.job }}"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.job }}"
+
+  - name: dive_v3_decision_logging_alerts
+    interval: 60s
+    rules:
+      # Decision logging health
+      - alert: DecisionLoggingFailures
+        expr: rate(dive_v3_decision_log_failures_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High decision logging failure rate"
+          description: "Decision logging is failing at {{ $value }} per second. Audit trail may be incomplete."
+
+      - alert: MongoDBDecisionLogTTLNotWorking
+        expr: mongodb_collection_size_bytes{collection="decisions"} > 10737418240  # 10GB
+        for: 1h
+        labels:
+          severity: warning
+          service: mongodb
+        annotations:
+          summary: "Decision log collection size is growing (>10GB)"
+          description: "TTL index may not be working. Manual cleanup may be required."
+

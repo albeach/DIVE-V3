@@ -1,0 +1,81 @@
+# DIVE V3 - External IdP Monitoring Configuration
+# Prometheus configuration for monitoring Spain SAML and USA OIDC IdPs
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dive-v3-external-idps'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load rules from files
+rule_files:
+  - 'alert_rules.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Spain SAML IdP (SimpleSAMLphp)
+  - job_name: 'spain-saml'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - 'spain-saml:9090'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'spain-saml-idp'
+
+  # USA OIDC IdP (Keycloak)
+  - job_name: 'usa-oidc'
+    metrics_path: '/realms/us-dod/metrics'
+    static_configs:
+      - targets:
+          - 'usa-oidc:8080'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'usa-oidc-idp'
+
+  # PostgreSQL (USA OIDC database)
+  - job_name: 'usa-postgres'
+    static_configs:
+      - targets:
+          - 'usa-postgres:9187'
+
+  # NGINX (IdP Manager)
+  - job_name: 'idp-manager'
+    static_configs:
+      - targets:
+          - 'idp-manager:9113'
+
+  # Node Exporter (System metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets:
+          - 'node-exporter:9100'
+
+  # Blackbox Exporter (Endpoint probing)
+  - job_name: 'blackbox'
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://spain-saml:8443/simplesaml/
+          - http://usa-oidc:8082/realms/us-dod/.well-known/openid-configuration
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+

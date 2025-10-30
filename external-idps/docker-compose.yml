@@ -1,0 +1,141 @@
+version: '3.8'
+
+# External IdP Infrastructure for DIVE V3
+# This compose file deploys actual SAML (Spain) and OIDC (USA) identity providers
+# on a separate Docker network to demonstrate true federation
+
+networks:
+  dive-external-idps:
+    name: dive-external-idps
+  # Connect to main DIVE network for broker communication
+  dive-network:
+    external: true
+    name: dive-v3_dive-network
+
+volumes:
+  spain_saml_config:
+  usa_postgres_data:
+
+services:
+  # ============================================================================
+  # SPAIN SAML IdP - SimpleSAMLphp
+  # Official SimpleSAMLphp v2.4.3 from GitHub
+  # https://github.com/simplesamlphp/simplesamlphp/releases/tag/v2.4.3
+  # ============================================================================
+  spain-saml:
+    build:
+      context: ./spain-saml
+      dockerfile: Dockerfile
+    image: dive-v3-spain-saml:v2.4.3
+    container_name: dive-spain-saml-idp
+    hostname: spain-saml
+    environment:
+      # SimpleSAMLphp configuration
+      SIMPLESAMLPHP_SP_ENTITY_ID: http://localhost:9443/simplesaml/module.php/saml/sp/metadata.php/default-sp
+      SIMPLESAMLPHP_SP_ASSERTION_CONSUMER_SERVICE: http://localhost:9443/simplesaml/module.php/saml/sp/saml2-acs.php/default-sp
+      SIMPLESAMLPHP_SP_SINGLE_LOGOUT_SERVICE: http://localhost:9443/simplesaml/module.php/saml/sp/saml2-logout.php/default-sp
+      # Admin password
+      SIMPLESAMLPHP_ADMIN_PASSWORD: ${SPAIN_ADMIN_PASSWORD:-admin123}
+      # Technical contact
+      SIMPLESAMLPHP_TECHNICALCONTACT_NAME: Spanish Defense Ministry IT
+      SIMPLESAMLPHP_TECHNICALCONTACT_EMAIL: tic@mde.es
+      # SSL Configuration  
+      SIMPLESAMLPHP_BASEURLPATH: http://localhost:9443/simplesaml/
+      # Disable error email reporting (no mail server configured)
+      SIMPLESAMLPHP_CONFIG_ERRORREPORTING: 'false'
+    ports:
+      - "9443:8080"  # SimpleSAMLphp HTTP port (Apache listens on 8080)
+    volumes:
+      - ./spain-saml/config/config.php:/var/www/simplesamlphp/config/config.php
+      - ./spain-saml/config/authsources.php:/var/www/simplesamlphp/config/authsources.php
+      - ./spain-saml/metadata:/var/www/simplesamlphp/metadata
+      - ./spain-saml/cert:/var/www/simplesamlphp/cert
+    networks:
+      - dive-external-idps
+      - dive-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/simplesaml/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================================
+  # USA OIDC IdP - Keycloak (separate instance)
+  # ============================================================================
+  usa-postgres:
+    image: postgres:15-alpine
+    container_name: dive-usa-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${USA_DB_PASSWORD:-password}
+    volumes:
+      - usa_postgres_data:/var/lib/postgresql/data
+    networks:
+      - dive-external-idps
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  usa-oidc:
+    image: quay.io/keycloak/keycloak:26.0.0
+    container_name: dive-usa-oidc-idp
+    hostname: usa-oidc
+    environment:
+      # Database
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://usa-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${USA_DB_PASSWORD:-password}
+      # Admin credentials
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${USA_ADMIN_PASSWORD:-admin}
+      # HTTP configuration (development)
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      # Logging
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: true
+      KC_HEALTH_ENABLED: true
+    command:
+      - start-dev
+      - --import-realm
+    ports:
+      - "9082:8080"  # HTTP - using 9000-level port
+    volumes:
+      - ./usa-oidc/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ./usa-oidc/themes:/opt/keycloak/themes:ro
+    networks:
+      - dive-external-idps
+      - dive-network
+    depends_on:
+      usa-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================================
+  # Management UI - Optional Web Interface for External IdPs
+  # ============================================================================
+  idp-manager:
+    image: nginx:alpine
+    container_name: dive-external-idp-manager
+    ports:
+      - "9090:80"
+    volumes:
+      - ./manager/html:/usr/share/nginx/html:ro
+      - ./manager/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - dive-external-idps
+    depends_on:
+      - spain-saml
+      - usa-oidc
+
