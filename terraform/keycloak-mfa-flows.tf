@@ -32,7 +32,7 @@ module "usa_mfa" {
   realm_name         = "dive-v3-usa"
   realm_display_name = "United States"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -46,7 +46,7 @@ module "fra_mfa" {
   realm_name         = "dive-v3-fra"
   realm_display_name = "France"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -60,7 +60,7 @@ module "can_mfa" {
   realm_name         = "dive-v3-can"
   realm_display_name = "Canada"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -74,7 +74,7 @@ module "industry_mfa" {
   realm_name         = "dive-v3-industry"
   realm_display_name = "Industry"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -88,7 +88,7 @@ module "deu_mfa" {
   realm_name         = "dive-v3-deu"
   realm_display_name = "Germany"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -102,7 +102,7 @@ module "gbr_mfa" {
   realm_name         = "dive-v3-gbr"
   realm_display_name = "United Kingdom"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -116,7 +116,7 @@ module "ita_mfa" {
   realm_name         = "dive-v3-ita"
   realm_display_name = "Italy"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -130,7 +130,7 @@ module "esp_mfa" {
   realm_name         = "dive-v3-esp"
   realm_display_name = "Spain"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -144,7 +144,7 @@ module "pol_mfa" {
   realm_name         = "dive-v3-pol"
   realm_display_name = "Poland"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
@@ -158,7 +158,7 @@ module "nld_mfa" {
   realm_name         = "dive-v3-nld"
   realm_display_name = "Netherlands"
   
-  enable_direct_grant_mfa = false  # DISABLED - custom SPI causing token issues
+  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
 }
 
 # ============================================
