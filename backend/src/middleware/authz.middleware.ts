@@ -52,8 +52,10 @@ interface IKeycloakToken {
     jti?: string;              // JWT ID for revocation
     // AAL2/FAL2 claims (NIST SP 800-63B/C)
     aud?: string | string[];  // Audience (FAL2 - prevents token theft)
-    acr?: string;              // Authentication Context Class Reference (AAL level)
-    amr?: string[];            // Authentication Methods Reference (MFA factors)
+    // Phase 1: Support both numeric (new) and URN (legacy) ACR formats during migration
+    acr?: string | number;     // Authentication Context Class Reference: numeric (0,1,2) or URN (urn:mace:incommon:iap:silver)
+    // Phase 1: Support both array (new) and JSON string (legacy) AMR formats during migration
+    amr?: string[] | string;   // Authentication Methods Reference: array ["pwd","otp"] or JSON string "[\"pwd\",\"otp\"]"
     auth_time?: number;        // Time of authentication (Unix timestamp)
 }
 
@@ -423,6 +425,94 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 };
 
 /**
+ * Normalize ACR claim to numeric AAL level (Phase 1: Backward Compatibility)
+ * 
+ * Supports both formats during migration:
+ * - Numeric format (new): 0=AAL1, 1=AAL2, 2=AAL3 (set by custom SPI session notes)
+ * - URN format (legacy): urn:mace:incommon:iap:bronze/silver/gold (from hardcoded user attributes)
+ * 
+ * @param acr - ACR claim from JWT (string or number)
+ * @returns Numeric AAL level (0 = AAL1, 1 = AAL2, 2 = AAL3)
+ */
+function normalizeACR(acr: string | number | undefined): number {
+    if (acr === undefined || acr === null) {
+        logger.debug('ACR not provided, defaulting to AAL1');
+        return 0;  // Default: AAL1
+    }
+
+    // Handle numeric format (new)
+    if (typeof acr === 'number') {
+        logger.debug('ACR is numeric (new format)', { acr });
+        return acr;
+    }
+
+    // Handle numeric strings (Keycloak custom SPI returns "0", "1", "2")
+    const numericACR = parseInt(acr as string, 10);
+    if (!isNaN(numericACR)) {
+        logger.debug('ACR is numeric string (new format)', { acr, parsed: numericACR });
+        return numericACR;
+    }
+
+    // Handle URN format (legacy - from hardcoded user attributes)
+    const acrLower = (acr as string).toLowerCase();
+    if (acrLower.includes('bronze') || acrLower.includes('aal1')) {
+        logger.debug('ACR is URN format: AAL1 (legacy)', { acr });
+        return 0;  // AAL1
+    }
+    if (acrLower.includes('silver') || acrLower.includes('aal2')) {
+        logger.debug('ACR is URN format: AAL2 (legacy)', { acr });
+        return 1;  // AAL2
+    }
+    if (acrLower.includes('gold') || acrLower.includes('aal3')) {
+        logger.debug('ACR is URN format: AAL3 (legacy)', { acr });
+        return 2;  // AAL3
+    }
+
+    // Fallback: Unknown format, default to AAL1 (fail-secure)
+    logger.warn('Unknown ACR format, defaulting to AAL1 (fail-secure)', { acr });
+    return 0;
+}
+
+/**
+ * Normalize AMR claim to array format (Phase 1: Backward Compatibility)
+ * 
+ * Supports both formats during migration:
+ * - Array format (new): ["pwd", "otp"] (set by custom SPI session notes)
+ * - JSON string format (legacy): "[\"pwd\",\"otp\"]" (from hardcoded user attributes)
+ * 
+ * @param amr - AMR claim from JWT (array or JSON string)
+ * @returns Array of authentication methods
+ */
+function normalizeAMR(amr: string | string[] | undefined): string[] {
+    if (amr === undefined || amr === null) {
+        logger.debug('AMR not provided, defaulting to password-only');
+        return ['pwd'];  // Default: password only
+    }
+
+    // Handle array format (new)
+    if (Array.isArray(amr)) {
+        logger.debug('AMR is array (new format)', { amr });
+        return amr;
+    }
+
+    // Handle JSON string format (legacy - from hardcoded user attributes)
+    try {
+        const parsed = JSON.parse(amr as string);
+        if (Array.isArray(parsed)) {
+            logger.debug('AMR is JSON string (legacy), parsed to array', { amr, parsed });
+            return parsed;
+        }
+    } catch (e) {
+        // Not JSON, treat as single method
+        logger.debug('AMR is not JSON, treating as single method', { amr });
+    }
+
+    // Single string value (edge case)
+    logger.debug('AMR is single string value', { amr });
+    return [amr as string];
+}
+
+/**
  * Validate AAL2 (Authentication Assurance Level 2) requirements
  * Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 46-94
  * 
@@ -437,6 +527,11 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
  * - AMR may be JSON-encoded string from user attributes
  * - Must parse AMR before checking array length
  * 
+ * Phase 1 (Oct 30, 2025):
+ * - Uses normalizeACR() and normalizeAMR() for backward compatibility
+ * - Supports both numeric and URN ACR formats
+ * - Supports both array and JSON string AMR formats
+ * 
  * @param token - Decoded Keycloak token
  * @param classification - Resource classification level
  * @throws Error if AAL2 requirements not met for classified resources
@@ -447,43 +542,21 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
         return;
     }
 
-    // Parse AMR - may be JSON-encoded string from Keycloak mapper
-    let amrArray: string[] = [];
-    if (token.amr) {
-        if (Array.isArray(token.amr)) {
-            amrArray = token.amr;
-        } else if (typeof token.amr === 'string') {
-            try {
-                const parsed = JSON.parse(token.amr);
-                amrArray = Array.isArray(parsed) ? parsed : [parsed];
-            } catch {
-                amrArray = [token.amr];
-            }
-        }
-    }
+    // Phase 1: Use normalization functions for backward compatibility
+    const aal = normalizeACR(token.acr);
+    const amrArray = normalizeAMR(token.amr);
 
-    // Check ACR (Authentication Context Class Reference)
-    const acr = String(token.acr || '');
-
-    // AAL2 indicators:
-    // - String descriptors: "silver", "aal2", "multi-factor", "gold"
-    // - Numeric levels: "1" (AAL2), "2" (AAL3)
-    // - URN format: "urn:mace:incommon:iap:silver"
-    const isAAL2 =
-        acr.includes('silver') ||       // InCommon IAP Silver = AAL2
-        acr.includes('aal2') ||          // Explicit AAL2
-        acr.includes('multi-factor') ||  // Generic MFA indicator
-        acr.includes('gold') ||          // InCommon IAP Gold = AAL3 (also satisfies AAL2)
-        acr === '1' ||                   // Keycloak numeric: 1 = AAL2
-        acr === '2' ||                   // Keycloak numeric: 2 = AAL3 (satisfies AAL2)
-        acr === '3';                     // Keycloak numeric: 3 = AAL3+ (satisfies AAL2)
+    // Check if ACR indicates AAL2+ (numeric: 1 or higher)
+    const isAAL2 = aal >= 1;
 
     // If ACR indicates AAL2+, accept it
     if (isAAL2) {
         logger.debug('AAL2 validation passed via ACR', {
             classification,
-            acr,
-            amr: amrArray,
+            originalACR: token.acr,
+            normalizedAAL: aal,
+            originalAMR: token.amr,
+            normalizedAMR: amrArray,
             factorCount: amrArray.length
         });
         return;
@@ -492,10 +565,12 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
     // Fallback: Check AMR for 2+ factors (allows AAL2 via MFA even if ACR not set correctly)
     // This handles cases where IdP doesn't set proper ACR but does provide AMR
     if (amrArray.length >= 2) {
-        logger.info('AAL2 validated via AMR (2+ factors), despite ACR not matching expected values', {
+        logger.info('AAL2 validated via AMR (2+ factors), despite ACR indicating AAL1', {
             classification,
-            acr,
-            amr: amrArray,
+            originalACR: token.acr,
+            normalizedAAL: aal,
+            originalAMR: token.amr,
+            normalizedAMR: amrArray,
             factorCount: amrArray.length,
             note: 'Accepting based on AMR factors - consider configuring IdP to set proper ACR value'
         });
@@ -505,12 +580,14 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
     // Reject: Neither ACR nor AMR indicate AAL2
     logger.warn('AAL2 validation failed', {
         classification,
-        acr,
-        amr: amrArray,
+        originalACR: token.acr,
+        normalizedAAL: aal,
+        originalAMR: token.amr,
+        normalizedAMR: amrArray,
         factorCount: amrArray.length,
         reason: 'Classified resources require AAL2 (MFA)'
     });
-    throw new Error(`Classified resources require AAL2 (MFA). Current ACR: ${acr || 'missing'}, AMR factors: ${amrArray.length}`);
+    throw new Error(`Classified resources require AAL2 (MFA). Current ACR: ${token.acr || 'missing'} (AAL${aal}), AMR factors: ${amrArray.length}`);
 };
 
 /**
@@ -1032,6 +1109,11 @@ export const authzMiddleware = async (
             : (resource as any).creationDate;
         const encrypted = isZTDF ? true : ((resource as any).encrypted || false);
 
+        // Phase 1: Normalize ACR/AMR for OPA input (ensure consistent format)
+        const normalizedAAL = normalizeACR(decodedToken.acr);
+        const normalizedAMR = normalizeAMR(decodedToken.amr);
+        const acrForOPA = String(normalizedAAL); // OPA expects string format
+
         const opaInput: IOPAInput = {
             input: {
                 subject: {
@@ -1065,9 +1147,9 @@ export const authzMiddleware = async (
                     sourceIP: (req.ip || req.socket.remoteAddress || 'unknown'),
                     deviceCompliant: true, // Week 3: Add device compliance check
                     requestId,
-                    // AAL2/FAL2 context (NIST SP 800-63B/C) - for OPA policy evaluation
-                    acr: decodedToken.acr,        // Authentication Context Class Reference
-                    amr: decodedToken.amr,        // Authentication Methods Reference
+                    // AAL2/FAL2 context (NIST SP 800-63B/C) - normalized for consistent OPA evaluation
+                    acr: acrForOPA,              // Normalized to string ("0", "1", "2")
+                    amr: normalizedAMR,          // Normalized to array (["pwd"], ["pwd","otp"])
                     auth_time: decodedToken.auth_time, // Time of authentication
                 },
             },

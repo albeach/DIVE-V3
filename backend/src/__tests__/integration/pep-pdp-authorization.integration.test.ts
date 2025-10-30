@@ -23,7 +23,7 @@
 
 import request from 'supertest';
 import { MongoClient } from 'mongodb';
-import { app } from '../../server';
+import app from '../../server';
 import { createMockJWT } from '../helpers/mock-jwt';
 
 // Test configuration
@@ -622,7 +622,7 @@ describe('PEP/PDP Integration Tests - Phase 3', () => {
                 });
 
                 const resourceId = `test-phase3-${country.code.toLowerCase()}-secret`;
-                
+
                 const response = await request(app)
                     .get(`/api/resources/${resourceId}`)
                     .set('Authorization', `Bearer ${token}`);

@@ -14,15 +14,21 @@ export interface IJWTPayload {
     email?: string;
     preferred_username?: string;
     clearance?: string;
+    clearanceOriginal?: string;        // ACP-240 Section 4.3: Original national clearance
+    clearanceCountry?: string;         // ACP-240 Section 4.3: Country that issued clearance
     countryOfAffiliation?: string;
     acpCOI?: string[];
+    dutyOrg?: string;                  // Gap #4: User's duty organization
+    orgUnit?: string;                  // Gap #4: User's organizational unit
     iss?: string;
     exp?: number;
     iat?: number;
     // AAL2/FAL2 claims
     aud?: string | string[];
-    acr?: string;
-    amr?: string[];
+    // Phase 1: Support both numeric (new) and URN (legacy) ACR formats during migration
+    acr?: string | number;             // Numeric (0,1,2) or URN (urn:mace:incommon:iap:silver)
+    // Phase 1: Support both array (new) and JSON string (legacy) AMR formats during migration
+    amr?: string[] | string;           // Array ["pwd","otp"] or JSON string "[\"pwd\",\"otp\"]"
     auth_time?: number;
 }
 
