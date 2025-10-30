@@ -98,6 +98,13 @@ resource "keycloak_openid_client" "usa_realm_client" {
   base_url = var.app_url
 }
 
+# Output client secret for backend configuration
+output "usa_client_secret" {
+  description = "Client secret for dive-v3-broker-client in USA realm"
+  value       = keycloak_openid_client.usa_realm_client.client_secret
+  sensitive   = true
+}
+
 # Protocol mappers for U.S. realm client
 resource "keycloak_generic_protocol_mapper" "usa_uniqueid_mapper" {
   realm_id   = keycloak_realm.dive_v3_usa.id
