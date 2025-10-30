@@ -162,7 +162,7 @@ services:
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-client  # Phase 2.1: Correct client name for national realms
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/dive-v3-broker/protocol/openid-connect/certs
       MONGODB_URL: mongodb://admin:password@mongo:27017
@@ -221,7 +221,7 @@ services:
       KEYCLOAK_REALM: dive-v3-broker
       # IdP Revamp: Disable issuer validation (Keycloak returns localhost:8081 but we use keycloak:8080)
       AUTH_TRUST_HOST: "true"
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-client  # Phase 2.1: Correct client name for national realms
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       # Public Keycloak URLs (for browser-side logout)
       NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8081
@@ -262,7 +262,7 @@ services:
       # Multi-realm migration (Oct 21, 2025): KAS needs Keycloak config for JWT validation
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-client  # Phase 2.1: Correct client name for national realms
       # Backend should be internal Docker network when fully containerized
       # Change to http://backend:4000 when running backend in Docker
       # Currently: http://host.docker.internal:4000 (backend runs outside Docker)
