@@ -135,3 +135,21 @@ env/
 
 bin/
 notes/
+
+# Policy uploads (runtime user uploads, not source code)
+backend/policies/uploads/
+
+# Backups (local only)
+backups/
+
+# Build artifacts
+**/target/classes/
+keycloak/extensions/target/
+
+# Terraform plan outputs
+terraform/*.txt
+terraform/tfplan*
+
+# Personal notes in root
+*.txt
+!package*.json

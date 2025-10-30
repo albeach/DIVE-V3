@@ -1,0 +1,273 @@
+[ {
+  "id" : "3c0ea51b-a303-45aa-a1fd-2bd9c5f63dbc",
+  "alias" : "browser",
+  "description" : "Browser based authentication",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticator" : "auth-cookie",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 10,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "auth-spnego",
+    "authenticatorFlow" : false,
+    "requirement" : "DISABLED",
+    "priority" : 20,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "identity-provider-redirector",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 25,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 26,
+    "autheticatorFlow" : true,
+    "flowAlias" : "Organization",
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 30,
+    "autheticatorFlow" : true,
+    "flowAlias" : "forms",
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "6396f0a1-686b-46fd-a9cc-0e68d0d55a36",
+  "alias" : "direct grant",
+  "description" : "OpenID Connect Resource Owner Grant",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticator" : "direct-grant-validate-username",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 10,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "direct-grant-validate-password",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 20,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "CONDITIONAL",
+    "priority" : 30,
+    "autheticatorFlow" : true,
+    "flowAlias" : "Direct Grant - Conditional OTP",
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "05f950f9-dfd2-43da-9a24-a8aa96857cf7",
+  "alias" : "registration",
+  "description" : "Registration flow",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticator" : "registration-page-form",
+    "authenticatorFlow" : true,
+    "requirement" : "REQUIRED",
+    "priority" : 10,
+    "autheticatorFlow" : true,
+    "flowAlias" : "registration form",
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "27b6592c-76f1-4a98-9b9c-a431220596b5",
+  "alias" : "reset credentials",
+  "description" : "Reset credentials for a user if they forgot their password or something",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticator" : "reset-credentials-choose-user",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 10,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "reset-credential-email",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 20,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "reset-password",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 30,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "CONDITIONAL",
+    "priority" : 40,
+    "autheticatorFlow" : true,
+    "flowAlias" : "Reset - Conditional OTP",
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "d327186f-97fa-4310-b0f9-51d1658a0298",
+  "alias" : "clients",
+  "description" : "Base authentication for clients",
+  "providerId" : "client-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticator" : "client-secret",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 10,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "client-jwt",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 20,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "client-secret-jwt",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 30,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "client-x509",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 40,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "7105b0c2-8b57-4444-8aee-fb95d58d1805",
+  "alias" : "first broker login",
+  "description" : "Actions taken after first broker login with identity provider account, which is not yet linked to any Keycloak account",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticatorConfig" : "review profile config",
+    "authenticator" : "idp-review-profile",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 10,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "REQUIRED",
+    "priority" : 20,
+    "autheticatorFlow" : true,
+    "flowAlias" : "User creation or linking",
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "CONDITIONAL",
+    "priority" : 50,
+    "autheticatorFlow" : true,
+    "flowAlias" : "First Broker Login - Conditional Organization",
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "e4024864-c2f5-4a41-9f81-195730d35d1d",
+  "alias" : "docker auth",
+  "description" : "Used by Docker clients to authenticate against the IDP",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : true,
+  "authenticationExecutions" : [ {
+    "authenticator" : "docker-http-basic-authenticator",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 10,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "0a27bce0-2860-4989-96a7-67cde1223e8e",
+  "alias" : "Classified Access Browser Flow - DIVE V3 Broker",
+  "description" : "AAL2 enforcement: MFA required for CONFIDENTIAL, SECRET, TOP_SECRET clearances",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : false,
+  "authenticationExecutions" : [ {
+    "authenticatorFlow" : true,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 0,
+    "autheticatorFlow" : true,
+    "flowAlias" : "Classified User Conditional - DIVE V3 Broker",
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorConfig" : "IdP Redirector Config - DIVE V3 Broker",
+    "authenticator" : "identity-provider-redirector",
+    "authenticatorFlow" : false,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 0,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "6fe995d4-c027-4cd5-af80-9a04999921a3",
+  "alias" : "Direct Grant with Conditional MFA - DIVE V3 Broker",
+  "description" : "Direct Grant flow with conditional MFA for classified clearances",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : false,
+  "authenticationExecutions" : [ {
+    "authenticator" : "direct-grant-validate-username",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 0,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticator" : "direct-grant-validate-password",
+    "authenticatorFlow" : false,
+    "requirement" : "REQUIRED",
+    "priority" : 0,
+    "autheticatorFlow" : false,
+    "userSetupAllowed" : false
+  }, {
+    "authenticatorFlow" : true,
+    "requirement" : "CONDITIONAL",
+    "priority" : 0,
+    "autheticatorFlow" : true,
+    "flowAlias" : "Conditional OTP - Direct Grant - DIVE V3 Broker",
+    "userSetupAllowed" : false
+  } ]
+}, {
+  "id" : "587328d6-224f-4769-9de3-383ef74fc07c",
+  "alias" : "Post-Broker Classified MFA - DIVE V3 Broker",
+  "description" : "Post-broker MFA enforcement for classified clearances (AAL2)",
+  "providerId" : "basic-flow",
+  "topLevel" : true,
+  "builtIn" : false,
+  "authenticationExecutions" : [ {
+    "authenticatorFlow" : true,
+    "requirement" : "ALTERNATIVE",
+    "priority" : 0,
+    "autheticatorFlow" : true,
+    "flowAlias" : "Post-Broker MFA Conditional - DIVE V3 Broker",
+    "userSetupAllowed" : false
+  } ]
+} ]
