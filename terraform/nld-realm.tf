@@ -98,6 +98,13 @@ resource "keycloak_openid_client" "nld_realm_client" {
   base_url = var.app_url
 }
 
+# Output client secret for backend configuration
+output "nld_client_secret" {
+  description = "Client secret for dive-v3-broker-client in Netherlands realm"
+  value       = keycloak_openid_client.nld_realm_client.client_secret
+  sensitive   = true
+}
+
 # Protocol mappers for Netherlands realm client
 resource "keycloak_generic_protocol_mapper" "nld_uniqueid_mapper" {
   realm_id   = keycloak_realm.dive_v3_nld.id
