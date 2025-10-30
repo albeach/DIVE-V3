@@ -1,0 +1,76 @@
+#
+# Prometheus Configuration for DIVE V3
+# Phase 5 Task 5.2: Production Monitoring
+#
+
+global:
+  scrape_interval: 15s       # Scrape targets every 15 seconds
+  evaluation_interval: 15s   # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'dive-v3-pilot'
+    environment: 'development'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load alerting rules
+rule_files:
+  - "/etc/prometheus/alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Backend API metrics
+  - job_name: 'dive-v3-backend'
+    static_configs:
+      - targets: ['backend:4000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # OPA metrics
+  - job_name: 'dive-v3-opa'
+    static_configs:
+      - targets: ['opa:8181']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # KAS metrics
+  - job_name: 'dive-v3-kas'
+    static_configs:
+      - targets: ['kas:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Keycloak metrics (if JMX exporter enabled)
+  - job_name: 'dive-v3-keycloak'
+    static_configs:
+      - targets: ['keycloak:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # MongoDB exporter
+  - job_name: 'dive-v3-mongo'
+    static_configs:
+      - targets: ['mongo-exporter:9216']
+    scrape_interval: 30s
+
+  # PostgreSQL exporter
+  - job_name: 'dive-v3-postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Redis exporter
+  - job_name: 'dive-v3-redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 20s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+

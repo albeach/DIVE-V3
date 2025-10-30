@@ -1,0 +1,151 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  npm-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace: [backend, frontend, kas]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Run npm audit
+        working-directory: ./${{ matrix.workspace }}
+        run: |
+          npm audit --audit-level=moderate
+          npm audit --json > audit-report.json || true
+      
+      - name: Upload audit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.workspace }}-audit-report
+          path: ${{ matrix.workspace }}/audit-report.json
+
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run OWASP Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'DIVE-V3'
+          path: '.'
+          format: 'HTML'
+          out: 'reports'
+      
+      - name: Upload Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-check-report
+          path: reports
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for secret scanning
+      
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  docker-scan:
+    name: Docker Image Scanning
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [backend, frontend, kas]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build Docker Image
+        run: |
+          docker build -t dive-v3-${{ matrix.service }}:test ./${{ matrix.service }}
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: dive-v3-${{ matrix.service }}:test
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  terraform-security:
+    name: Terraform Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: terraform
+          soft_fail: false
+      
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-report.sarif
+      
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: checkov-report.sarif
+
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for better analysis
+      
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=dive-v3
+            -Dsonar.organization=your-org
+            -Dsonar.sources=backend/src,frontend/src,kas/src
+            -Dsonar.tests=backend/src/__tests__,frontend/src/__tests__
+            -Dsonar.typescript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
+
