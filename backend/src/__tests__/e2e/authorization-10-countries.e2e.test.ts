@@ -12,7 +12,7 @@
 
 import request from 'supertest';
 import app from '../../server';
-import { generateTestJWT } from '../helpers/jwt-helper';
+import { generateTestJWT } from '../helpers/mock-jwt';
 
 describe('Authorization E2E Tests - 10 Countries', () => {
     describe('USA Authorization Scenarios', () => {
