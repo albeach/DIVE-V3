@@ -86,7 +86,7 @@ resource "keycloak_openid_client" "esp_realm_client" {
   
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
-  direct_access_grants_enabled = false
+  direct_access_grants_enabled = true  # Phase 2.1: Enable for custom login pages
   
   # Redirect to broker realm
   valid_redirect_uris = [
