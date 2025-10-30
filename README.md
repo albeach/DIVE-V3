@@ -295,7 +295,16 @@ DIVE V3 now automatically normalizes clearance levels from 10 countries while pr
 
 ### AAL Attributes (Authentication Assurance Level)
 
-**Phase 1 Complete (Oct 30, 2025)**: Token format standardized across all 11 realms
+**Phase 2 Complete (Oct 30, 2025)**: Custom SPI enabled for all 11 realms
+
+**Phase 1 (Complete)**: Token format standardized - all realms use session notes  
+**Phase 2 (Complete)**: Custom SPI enabled - all realms use custom login pages
+
+**Current State** (Post Phase 2):
+- ✅ All 11 realms generate consistent token format (numeric ACR, array AMR)
+- ✅ All 11 realms use custom login pages (`/login/[idpAlias]`)
+- ✅ Conditional MFA enforced (AAL1 for UNCLASSIFIED, AAL2 for CONFIDENTIAL+)
+- ✅ Backend supports backward compatibility during migration
 
 **Before (❌ Hardcoded - Pre-Phase 1)**:
 ```typescript

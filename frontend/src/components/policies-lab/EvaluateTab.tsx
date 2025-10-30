@@ -195,7 +195,7 @@ export default function EvaluateTab() {
     setUniqueID(input.subject.uniqueID);
     setClearance(input.subject.clearance);
     setCountry(input.subject.countryOfAffiliation);
-    setAcpCOI(input.subject.acpCOI || []);
+    setAcpCOI('acpCOI' in input.subject ? input.subject.acpCOI : []);
     setAuthenticated(input.subject.authenticated ?? true);
     setAal(input.subject.aal || 'AAL2');
 
@@ -206,7 +206,7 @@ export default function EvaluateTab() {
     setResourceId(input.resource.resourceId);
     setResourceClassification(input.resource.classification);
     setReleasabilityTo(input.resource.releasabilityTo);
-    setResourceCOI(input.resource.COI || []);
+    setResourceCOI('COI' in input.resource ? input.resource.COI : []);
     setEncrypted(input.resource.encrypted ?? false);
     setCreationDate('');
 
