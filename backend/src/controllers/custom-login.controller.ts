@@ -189,7 +189,7 @@ export const customLoginHandler = async (
             
             const publicKeycloakUrl = process.env.PUBLIC_KEYCLOAK_URL || 'http://localhost:8081';
             const appUrl = process.env.APP_URL || 'http://localhost:3000';
-            const clientId = 'dive-v3-client';  // Application client (not broker-client)
+            const clientId = 'dive-v3-client-broker';  // Broker realm application client
             
             const authUrl = new URL(`${publicKeycloakUrl}/realms/dive-v3-broker/protocol/openid-connect/auth`);
             authUrl.searchParams.set('client_id', clientId);
