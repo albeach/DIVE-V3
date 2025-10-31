@@ -12,9 +12,9 @@ resource "keycloak_oidc_identity_provider" "esp_realm_broker" {
   
   # OIDC endpoints from Spanish realm
   authorization_url = "http://localhost:8081/realms/dive-v3-esp/protocol/openid-connect/auth"
-  token_url         = "http://keycloak:8080/realms/dive-v3-esp/protocol/openid-connect/token"
-  jwks_url          = "http://keycloak:8080/realms/dive-v3-esp/protocol/openid-connect/certs"
-  user_info_url     = "http://keycloak:8080/realms/dive-v3-esp/protocol/openid-connect/userinfo"
+  token_url         = "http://localhost:8081/realms/dive-v3-esp/protocol/openid-connect/token"
+  jwks_url          = "http://localhost:8081/realms/dive-v3-esp/protocol/openid-connect/certs"
+  user_info_url     = "http://localhost:8081/realms/dive-v3-esp/protocol/openid-connect/userinfo"
   
   # Client credentials from Spanish realm
   client_id     = keycloak_openid_client.esp_realm_client.client_id
