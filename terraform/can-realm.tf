@@ -34,7 +34,7 @@ resource "keycloak_realm" "dive_v3_can" {
     }
   }
   
-  ssl_required = "external"
+  ssl_required = "none"  # Development: allow HTTP for federation
 }
 
 resource "keycloak_role" "can_user" {

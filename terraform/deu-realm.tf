@@ -61,7 +61,7 @@ resource "keycloak_realm" "dive_v3_deu" {
   }
   
   # SSL/TLS requirements
-  ssl_required = "external"
+  ssl_required = "none"  # Development: allow HTTP for federation
 }
 
 # Germany Realm Roles

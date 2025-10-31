@@ -60,7 +60,7 @@ resource "keycloak_realm" "dive_v3_fra" {
     }
   }
   
-  ssl_required = "external"
+  ssl_required = "none"  # Development: allow HTTP for federation
 }
 
 # France Realm Roles

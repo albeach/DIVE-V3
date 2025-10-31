@@ -61,7 +61,7 @@ resource "keycloak_realm" "dive_v3_gbr" {
   }
   
   # SSL/TLS requirements
-  ssl_required = "external"
+  ssl_required = "none"  # Development: allow HTTP for federation
 }
 
 # UK Realm Roles
