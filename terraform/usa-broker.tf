@@ -11,11 +11,13 @@ resource "keycloak_oidc_identity_provider" "usa_realm_broker" {
   enabled      = true
   
   # OIDC endpoints from U.S. realm
-  # Phase 2.3: Use localhost URLs to match token issuer (federation fix)
+  # Phase 2.3: Mixed URLs for Docker federation
+  # - authorization_url: localhost (user's browser)
+  # - token_url, jwks_url, user_info_url: keycloak service (internal Docker)
   authorization_url = "http://localhost:8081/realms/dive-v3-usa/protocol/openid-connect/auth"
-  token_url         = "http://localhost:8081/realms/dive-v3-usa/protocol/openid-connect/token"
-  jwks_url          = "http://localhost:8081/realms/dive-v3-usa/protocol/openid-connect/certs"
-  user_info_url     = "http://localhost:8081/realms/dive-v3-usa/protocol/openid-connect/userinfo"
+  token_url         = "http://keycloak:8080/realms/dive-v3-usa/protocol/openid-connect/token"
+  jwks_url          = "http://keycloak:8080/realms/dive-v3-usa/protocol/openid-connect/certs"
+  user_info_url     = "http://keycloak:8080/realms/dive-v3-usa/protocol/openid-connect/userinfo"
   
   # Client credentials from U.S. realm
   client_id     = keycloak_openid_client.usa_realm_client.client_id
