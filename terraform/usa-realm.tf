@@ -279,3 +279,40 @@ resource "keycloak_user_roles" "usa_test_user_roles" {
   ]
 }
 
+# U.S. Test User - TOP_SECRET clearance (alice.general)
+resource "keycloak_user" "usa_alice_general" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_usa.id
+  username = "alice.general"
+  enabled  = true
+
+  email      = "alice.general@army.mil"
+  first_name = "Alice"
+  last_name  = "General"
+  
+  attributes = {
+    uniqueID             = "550e8400-e29b-41d4-a716-446655440004"
+    clearance            = "TOP_SECRET"
+    clearanceOriginal    = "TOP_SECRET"
+    countryOfAffiliation = "USA"
+    acpCOI               = "[\"NATO-COSMIC\",\"FVEY\"]"
+    dutyOrg              = "US_ARMY"
+    orgUnit              = "INTELLIGENCE"
+  }
+
+  initial_password {
+    value     = "Password123!"
+    temporary = false
+  }
+}
+
+resource "keycloak_user_roles" "usa_alice_general_roles" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_usa.id
+  user_id  = keycloak_user.usa_alice_general[0].id
+
+  role_ids = [
+    keycloak_role.usa_user.id
+  ]
+}
+
