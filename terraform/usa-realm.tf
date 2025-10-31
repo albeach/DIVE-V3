@@ -235,7 +235,7 @@ resource "keycloak_generic_protocol_mapper" "usa_amr_mapper" {
   config = {
     "user.session.note"    = "AUTH_METHODS_REF"
     "claim.name"           = "amr"
-    "jsonType.label"       = "String"
+    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
