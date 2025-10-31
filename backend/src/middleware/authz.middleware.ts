@@ -384,10 +384,20 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
         const validAudiences: [string, ...string[]] = [
-            'dive-v3-client',         // Legacy client
-            'dive-v3-client-broker',  // Multi-realm broker client
+            'dive-v3-client',         // Legacy client (broker realm)
+            'dive-v3-client-broker',  // Multi-realm broker client (old name - deprecated)
+            'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
         ];
+
+        // Phase 2.2: Direct Grant tokens often have NO 'aud' claim, only 'azp'
+        // Check if token has azp (authorized party) and use that if aud is missing
+        const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+        const hasAudClaim = tokenPayload.aud !== null && tokenPayload.aud !== undefined;
+        const azpClaim = tokenPayload.azp;
+
+        // If no aud claim but azp exists and is valid, skip audience validation
+        const skipAudienceValidation = !hasAudClaim && azpClaim && validAudiences.includes(azpClaim);
 
         // Verify the token with the public key
         return new Promise((resolve, reject) => {
@@ -397,7 +407,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
                 {
                     algorithms: ['RS256'],
                     issuer: validIssuers,      // Array of valid issuers (FAL2 compliant)
-                    audience: validAudiences,  // Array of valid audiences (FAL2 compliant)
+                    audience: skipAudienceValidation ? undefined : validAudiences,  // Skip if using azp
                 },
                 (err: any, decoded: any) => {
                     if (err) {
