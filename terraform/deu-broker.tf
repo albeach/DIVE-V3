@@ -12,9 +12,9 @@ resource "keycloak_oidc_identity_provider" "deu_realm_broker" {
   
   # OIDC endpoints from German realm
   authorization_url = "http://localhost:8081/realms/dive-v3-deu/protocol/openid-connect/auth"
-  token_url         = "http://localhost:8081/realms/dive-v3-deu/protocol/openid-connect/token"
-  jwks_url          = "http://localhost:8081/realms/dive-v3-deu/protocol/openid-connect/certs"
-  user_info_url     = "http://localhost:8081/realms/dive-v3-deu/protocol/openid-connect/userinfo"
+  token_url         = "http://keycloak:8080/realms/dive-v3-deu/protocol/openid-connect/token"
+  jwks_url          = "http://keycloak:8080/realms/dive-v3-deu/protocol/openid-connect/certs"
+  user_info_url     = "http://keycloak:8080/realms/dive-v3-deu/protocol/openid-connect/userinfo"
   
   # Client credentials from German realm
   client_id     = keycloak_openid_client.deu_realm_client.client_id
