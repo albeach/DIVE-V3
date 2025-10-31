@@ -113,20 +113,37 @@ export const customLoginHandler = async (
         }
 
         // Get realm name from IdP alias
-        // dive-v3-broker → dive-v3-broker (Super Admin)
-        // usa-realm-broker → dive-v3-usa
-        // can-realm-broker → dive-v3-can
-        // fra-realm-broker → dive-v3-fra
+        // FEDERATION ARCHITECTURE (Option A):
+        // - IdP brokers (usa-realm-broker, fra-realm-broker, etc.) → BROKER REALM
+        // - Broker realm (dive-v3-broker) → BROKER REALM  
+        // - Direct realm access (dive-v3-usa) → National realm (testing only)
+        //
+        // Phase 2.3: Preserve federation - IdP brokers authenticate via broker realm
         let realmName: string;
-        if (idpAlias === 'dive-v3-broker') {
+        if (idpAlias.includes('-realm-broker')) {
+            // IdP broker aliases: usa-realm-broker, fra-realm-broker, etc.
+            // These are IdP brokers IN THE BROKER REALM that federate with national realms
+            // Authentication MUST go through broker for proper federation
+            realmName = 'dive-v3-broker';  // ✅ FEDERATION via broker
+            
+            logger.info('Federated IdP broker detected - authenticating via broker realm', {
+                requestId,
+                idpAlias,
+                brokerRealm: realmName
+            });
+        } else if (idpAlias === 'dive-v3-broker') {
+            // Direct broker realm access (super admin)
             realmName = 'dive-v3-broker';
-        } else if (idpAlias.includes('-realm-broker')) {
-            // Extract country code: "usa-realm-broker" → "usa"
-            const countryCode = idpAlias.split('-')[0];
-            realmName = `dive-v3-${countryCode}`;
         } else {
-            // Fallback
+            // Direct national realm access (testing/admin only - bypasses federation)
             realmName = idpAlias.replace('-idp', '');
+            
+            logger.warn('Direct national realm access - bypasses federation', {
+                requestId,
+                idpAlias,
+                nationalRealm: realmName,
+                warning: 'This bypasses broker and claim normalization'
+            });
         }
 
         // Rate limiting (dynamic based on Keycloak config)
@@ -157,6 +174,50 @@ export const customLoginHandler = async (
         // Standard Authentication (with or without OTP)
         // ============================================
 
+        // ============================================
+        // Phase 2.3: Handle IdP Broker Federation
+        // ============================================
+        // Problem: Direct Grant doesn't support IdP delegation!
+        // Solution: For IdP brokers, return Authorization Code flow URL
+        //
+        // IdP brokers (usa-realm-broker, fra-realm-broker) must use browser flow
+        // Direct Grant only works for direct broker realm users
+        
+        if (idpAlias.includes('-realm-broker') && idpAlias !== 'dive-v3-broker') {
+            // This is an IdP broker - cannot use Direct Grant
+            // Must use Authorization Code flow with kc_idp_hint
+            
+            const publicKeycloakUrl = process.env.PUBLIC_KEYCLOAK_URL || 'http://localhost:8081';
+            const appUrl = process.env.APP_URL || 'http://localhost:3000';
+            const clientId = 'dive-v3-client';  // Application client (not broker-client)
+            
+            const authUrl = new URL(`${publicKeycloakUrl}/realms/dive-v3-broker/protocol/openid-connect/auth`);
+            authUrl.searchParams.set('client_id', clientId);
+            authUrl.searchParams.set('redirect_uri', `${appUrl}/api/auth/callback/keycloak`);
+            authUrl.searchParams.set('response_type', 'code');
+            authUrl.searchParams.set('scope', 'openid profile email');
+            authUrl.searchParams.set('kc_idp_hint', idpAlias);  // Trigger IdP broker
+            
+            logger.info('Returning Authorization Code flow URL for IdP broker', {
+                requestId,
+                idpAlias,
+                authUrl: authUrl.toString()
+            });
+            
+            res.status(200).json({
+                success: false,
+                requiresRedirect: true,
+                redirectUrl: authUrl.toString(),
+                message: 'Please use federated login for this identity provider',
+                idpAlias: idpAlias
+            });
+            return;
+        }
+        
+        // ============================================
+        // Direct Grant Authentication (Broker Realm Only)
+        // ============================================
+        
         // Authenticate with Keycloak Direct Access Grants
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
         const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker-client';
