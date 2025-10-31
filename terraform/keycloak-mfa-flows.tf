@@ -32,7 +32,7 @@ module "usa_mfa" {
   realm_name         = "dive-v3-usa"
   realm_display_name = "United States"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (usa-realm-broker IdP)
 }
 
 # ============================================
@@ -46,7 +46,7 @@ module "fra_mfa" {
   realm_name         = "dive-v3-fra"
   realm_display_name = "France"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (fra-realm-broker IdP)
 }
 
 # ============================================
@@ -60,7 +60,7 @@ module "can_mfa" {
   realm_name         = "dive-v3-can"
   realm_display_name = "Canada"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (can-realm-broker IdP)
 }
 
 # ============================================
@@ -74,7 +74,7 @@ module "industry_mfa" {
   realm_name         = "dive-v3-industry"
   realm_display_name = "Industry"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (industry-realm-broker IdP)
 }
 
 # ============================================
@@ -88,7 +88,7 @@ module "deu_mfa" {
   realm_name         = "dive-v3-deu"
   realm_display_name = "Germany"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (deu-realm-broker IdP)
 }
 
 # ============================================
@@ -102,7 +102,7 @@ module "gbr_mfa" {
   realm_name         = "dive-v3-gbr"
   realm_display_name = "United Kingdom"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (gbr-realm-broker IdP)
 }
 
 # ============================================
@@ -116,7 +116,7 @@ module "ita_mfa" {
   realm_name         = "dive-v3-ita"
   realm_display_name = "Italy"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (ita-realm-broker IdP)
 }
 
 # ============================================
@@ -130,7 +130,7 @@ module "esp_mfa" {
   realm_name         = "dive-v3-esp"
   realm_display_name = "Spain"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (esp-realm-broker IdP)
 }
 
 # ============================================
@@ -144,7 +144,7 @@ module "pol_mfa" {
   realm_name         = "dive-v3-pol"
   realm_display_name = "Poland"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (pol-realm-broker IdP)
 }
 
 # ============================================
@@ -158,7 +158,7 @@ module "nld_mfa" {
   realm_name         = "dive-v3-nld"
   realm_display_name = "Netherlands"
   
-  enable_direct_grant_mfa = true  # ENABLED - Phase 2: custom SPI with session notes
+  enable_direct_grant_mfa = false  # DISABLED - Federation via broker (nld-realm-broker IdP)
 }
 
 # ============================================
