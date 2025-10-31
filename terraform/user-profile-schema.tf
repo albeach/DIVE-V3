@@ -14,6 +14,83 @@ resource "keycloak_realm_user_profile" "usa_profile" {
   
   # Allow unmanaged attributes (don't force removal of built-in ones)
   unmanaged_attribute_policy = "ENABLED"
+  
+  # ============================================
+  # REQUIRED BUILT-IN ATTRIBUTES (Keycloak 26)
+  # ============================================
+  # Keycloak 26 requires username and email to be explicitly declared
+  # Omitting them causes "can not be removed" errors
+  
+  attribute {
+    name         = "username"
+    display_name = "Username"
+    
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin"]
+    }
+    
+    validator {
+      name = "length"
+      config = {
+        min = "3"
+        max = "255"
+      }
+    }
+    
+    validator {
+      name = "username-prohibited-characters"
+    }
+    
+    validator {
+      name = "up-username-not-idn-homograph"
+    }
+  }
+  
+  attribute {
+    name         = "email"
+    display_name = "Email"
+    
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+    
+    validator {
+      name = "email"
+    }
+    
+    validator {
+      name = "length"
+      config = {
+        max = "255"
+      }
+    }
+  }
+  
+  attribute {
+    name         = "firstName"
+    display_name = "First name"
+    
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+  }
+  
+  attribute {
+    name         = "lastName"
+    display_name = "Last name"
+    
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+  }
+  
+  # ============================================
+  # DIVE CUSTOM ATTRIBUTES
+  # ============================================
 
   attribute {
     name         = "uniqueID"
@@ -114,6 +191,48 @@ resource "keycloak_realm_user_profile" "usa_profile" {
 # ============================================
 resource "keycloak_realm_user_profile" "esp_profile" {
   realm_id = keycloak_realm.dive_v3_esp.id
+  
+  unmanaged_attribute_policy = "ENABLED"
+  
+  # Required built-in attributes
+  attribute {
+    name = "username"
+    display_name = "Nombre de Usuario"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin"]
+    }
+  }
+  
+  attribute {
+    name = "email"
+    display_name = "Correo Electrónico"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+    validator {
+      name = "email"
+    }
+  }
+  
+  attribute {
+    name = "firstName"
+    display_name = "Nombre"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+  }
+  
+  attribute {
+    name = "lastName"
+    display_name = "Apellido"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+  }
 
   attribute {
     name         = "uniqueID"
@@ -179,6 +298,48 @@ resource "keycloak_realm_user_profile" "esp_profile" {
 # ============================================
 resource "keycloak_realm_user_profile" "fra_profile" {
   realm_id = keycloak_realm.dive_v3_fra.id
+  
+  unmanaged_attribute_policy = "ENABLED"
+  
+  # Required built-in attributes
+  attribute {
+    name = "username"
+    display_name = "Nom d'utilisateur"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin"]
+    }
+  }
+  
+  attribute {
+    name = "email"
+    display_name = "Email"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+    validator {
+      name = "email"
+    }
+  }
+  
+  attribute {
+    name = "firstName"
+    display_name = "Prénom"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+  }
+  
+  attribute {
+    name = "lastName"
+    display_name = "Nom"
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+  }
 
   attribute {
     name         = "uniqueID"
