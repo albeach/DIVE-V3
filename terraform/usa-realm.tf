@@ -60,8 +60,8 @@ resource "keycloak_realm" "dive_v3_usa" {
     }
   }
   
-  # SSL/TLS requirements
-  ssl_required = "external"
+  # SSL/TLS requirements (Phase 2.3: none for development, external for production)
+  ssl_required = "none"  # Development: allow HTTP for localhost federation
 }
 
 # U.S. Realm Roles
