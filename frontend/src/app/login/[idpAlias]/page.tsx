@@ -354,6 +354,16 @@ export default function CustomLoginPage() {
                 mfaRequired: result.mfaRequired
             });
 
+            // Phase 2.3: Handle IdP broker federation redirect
+            if (result.requiresRedirect && result.redirectUrl) {
+                console.log('[Custom Login] IdP broker detected - redirecting to federated login');
+                console.log('[Custom Login] Redirect URL:', result.redirectUrl);
+                
+                // Redirect to Authorization Code flow with kc_idp_hint
+                window.location.href = result.redirectUrl;
+                return;
+            }
+            
             if (result.success) {
                 // Step 2: Create NextAuth session with tokens
                 const sessionResponse = await fetch('/api/auth/custom-session', {
