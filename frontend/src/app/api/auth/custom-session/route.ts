@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { users, accounts, sessions } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         const expiresAt = Math.floor(Date.now() / 1000) + (expiresIn || 900);
 
         if (existingAccounts.length > 0) {
-            // Update existing account
+            // Update existing account (use compound primary key: provider + providerAccountId)
             await db.update(accounts)
                 .set({
                     access_token: accessToken,
@@ -82,11 +82,15 @@ export async function POST(request: NextRequest) {
                     id_token: idToken,
                     expires_at: expiresAt,
                 })
-                .where(eq(accounts.id, existingAccounts[0].id));
+                .where(
+                    and(
+                        eq(accounts.provider, 'keycloak'),
+                        eq(accounts.providerAccountId, payload.sub)
+                    )
+                );
         } else {
-            // Create new account
+            // Create new account (no 'id' field - uses compound PK)
             await db.insert(accounts).values({
-                id: randomUUID(),
                 userId: user.id,
                 type: 'oauth',
                 provider: 'keycloak',
@@ -105,7 +109,6 @@ export async function POST(request: NextRequest) {
         const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
         await db.insert(sessions).values({
-            id: randomUUID(),
             sessionToken,
             userId: user.id,
             expires: sessionExpiry,

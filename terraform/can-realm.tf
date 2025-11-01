@@ -83,7 +83,7 @@ resource "keycloak_generic_protocol_mapper" "can_uniqueid_mapper" {
   config = {
     "user.attribute"       = "uniqueID"
     "claim.name"           = "uniqueID"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -100,7 +100,7 @@ resource "keycloak_generic_protocol_mapper" "can_clearance_mapper" {
   config = {
     "user.attribute"       = "clearance"
     "claim.name"           = "clearance"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -117,7 +117,7 @@ resource "keycloak_generic_protocol_mapper" "can_country_mapper" {
   config = {
     "user.attribute"       = "countryOfAffiliation"
     "claim.name"           = "countryOfAffiliation"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -134,7 +134,7 @@ resource "keycloak_generic_protocol_mapper" "can_coi_mapper" {
   config = {
     "user.attribute"       = "acpCOI"
     "claim.name"           = "acpCOI"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -151,7 +151,7 @@ resource "keycloak_generic_protocol_mapper" "can_dutyorg_mapper" {
   config = {
     "user.attribute"       = "dutyOrg"
     "claim.name"           = "dutyOrg"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -168,7 +168,7 @@ resource "keycloak_generic_protocol_mapper" "can_orgunit_mapper" {
   config = {
     "user.attribute"       = "orgUnit"
     "claim.name"           = "orgUnit"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
@@ -185,7 +185,7 @@ resource "keycloak_generic_protocol_mapper" "can_acr_mapper" {
   config = {
     "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"
     "claim.name"           = "acr"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
@@ -202,7 +202,7 @@ resource "keycloak_generic_protocol_mapper" "can_amr_mapper" {
   config = {
     "user.session.note"    = "AUTH_METHODS_REF"
     "claim.name"           = "amr"
-    "jsonType.label"       = "JSON"  # Phase 2.2: JSON array (not String!)
+    "jsonType.label"       = "String"  # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
