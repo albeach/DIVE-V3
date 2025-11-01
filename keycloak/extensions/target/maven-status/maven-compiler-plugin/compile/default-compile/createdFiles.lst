@@ -1,0 +1,6 @@
+com/dive/keycloak/action/ConfigureOTPRequiredAction.class
+com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.class
+com/dive/keycloak/authenticator/DirectGrantOTPAuthenticatorFactory.class
+com/dive/keycloak/redis/RedisOTPStore$PendingOTPSecret.class
+com/dive/keycloak/redis/RedisOTPStore.class
+com/dive/keycloak/action/ConfigureOTPRequiredActionFactory.class
