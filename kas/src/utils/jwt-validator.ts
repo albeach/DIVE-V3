@@ -91,7 +91,15 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 
     // Determine which realm to fetch JWKS from
     const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
-    const jwksUri = `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`;
+    
+    // Try multiple JWKS URLs (Docker internal, HTTP external, HTTPS external)
+    const jwksUris = [
+        `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal
+        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External HTTP
+        `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // External HTTPS
+    ];
+    
+    const jwksUri = jwksUris[0]; // Primary URI for logging
 
     kasLogger.debug('Getting signing key for token', {
         requestId,
@@ -114,9 +122,25 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
             return cachedKey;
         }
 
-        // Fetch JWKS directly from Keycloak
-        const response = await axios.get(jwksUri, { timeout: 5000 });
-        const jwks = response.data;
+        // Fetch JWKS directly from Keycloak (try multiple URIs)
+        let jwks: any = null;
+        let lastError: Error | null = null;
+        
+        for (const uri of jwksUris) {
+            try {
+                const response = await axios.get(uri, { timeout: 5000 });
+                jwks = response.data;
+                kasLogger.debug('Successfully fetched JWKS', { uri, realm });
+                break;
+            } catch (err) {
+                lastError = err as Error;
+                kasLogger.debug('JWKS fetch failed, trying next URI', { uri, error: lastError.message });
+            }
+        }
+        
+        if (!jwks) {
+            throw new Error(`Failed to fetch JWKS from all URIs. Last error: ${lastError?.message}`);
+        }
 
         // Find the key with matching kid and use="sig"
         const key = jwks.keys.find((k: any) => k.kid === header.kid && k.use === 'sig');
@@ -197,11 +221,14 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
         // Multi-realm: Accept tokens from both dive-v3-pilot AND dive-v3-broker
         // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
+        // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
         const validIssuers: [string, ...string[]] = [
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
-            'http://localhost:8081/realms/dive-v3-pilot',          // External: dive-v3-pilot
-            'http://localhost:8081/realms/dive-v3-broker',         // External: dive-v3-broker
+            'http://localhost:8081/realms/dive-v3-pilot',          // External HTTP: dive-v3-pilot
+            'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
+            'https://localhost:8443/realms/dive-v3-pilot',         // External HTTPS: dive-v3-pilot
+            'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
