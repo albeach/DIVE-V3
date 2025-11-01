@@ -296,6 +296,70 @@ resource "keycloak_generic_protocol_mapper" "broker_roles" {
 }
 
 # ============================================
+# Authentication Context Mappers (AAL/FAL Compliance)
+# ============================================
+# NIST SP 800-63B/C: Authentication Assurance Level (AAL) and Federation Assurance Level (FAL)
+# Reference: docs/IDENTITY-ASSURANCE-LEVELS.md
+
+# Auth time mapper - tracks when user authenticated (required for session management)
+resource "keycloak_generic_protocol_mapper" "broker_auth_time" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "auth-time-mapper"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"    = "AUTH_TIME"
+    "claim.name"           = "auth_time"
+    "jsonType.label"       = "long"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# ACR (Authentication Context Class Reference) mapper
+# Maps Keycloak's internal ACR session note to token claim
+# Keycloak sets this based on authentication flow (AAL1: pwd, AAL2: pwd+otp, AAL3: hardware)
+resource "keycloak_generic_protocol_mapper" "broker_acr" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "acr-mapper"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"
+    "claim.name"           = "acr"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# AMR (Authentication Methods Reference) mapper
+# Maps Keycloak's internal AMR session note to token claim
+# Contains array of auth methods: ["pwd"], ["pwd","otp"], ["webauthn"]
+resource "keycloak_generic_protocol_mapper" "broker_amr" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "amr-mapper"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"    = "AUTH_METHODS_REF"
+    "claim.name"           = "amr"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+}
+
+# ============================================
 # Super Admin User (Direct Broker Login)
 # ============================================
 # Gap Remediation: Add super_admin user directly in broker realm
