@@ -44,9 +44,13 @@ app.use(helmet({
   }
 }));
 
-// CORS
+// CORS - Allow HTTPS frontend
 app.use(cors({
-  origin: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
+  origin: [
+    process.env.NEXT_PUBLIC_BASE_URL || 'https://localhost:3000',
+    'https://localhost:3000',
+    'http://localhost:3000'  // Fallback for development
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
@@ -111,8 +115,11 @@ app.use(errorHandler);
 // Server Startup
 // ============================================
 
-// Only start server if not in test environment (to avoid port conflicts)
-if (process.env.NODE_ENV !== 'test') {
+// Only start server if not in test environment AND not imported by https-server
+// This allows https-server.ts to import app without starting HTTP server
+const isImported = require.main !== module;
+
+if (process.env.NODE_ENV !== 'test' && !isImported) {
   app.listen(PORT, async () => {
     logger.info('DIVE V3 Backend API started', {
       port: PORT,
