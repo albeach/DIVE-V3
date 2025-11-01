@@ -231,6 +231,27 @@ export default function Navigation({ user }: INavigationProps) {
             ]
         },
         { 
+            name: 'Upload', 
+            href: '/upload', 
+            icon: ArrowUpCircle,
+            description: 'Upload classified documents',
+            hasMegaMenu: false
+        },
+        { 
+            name: 'Policies', 
+            href: '/policies', 
+            icon: ScrollText,
+            description: 'Browse authorization policies',
+            hasMegaMenu: false
+        },
+        { 
+            name: 'Compliance', 
+            href: '/compliance', 
+            icon: CheckCircle2,
+            description: 'Standards and compliance',
+            hasMegaMenu: false
+        },
+        { 
             name: 'Policy Lab', 
             href: '/policies/lab', 
             icon: FlaskConical,
