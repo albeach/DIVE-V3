@@ -1,4 +1,0 @@
-com/dive/keycloak/action/ConfigureOTPRequiredAction.class
-com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.class
-com/dive/keycloak/action/ConfigureOTPRequiredActionFactory.class
-com/dive/keycloak/authenticator/DirectGrantOTPAuthenticatorFactory.class
