@@ -4,24 +4,30 @@ import type { NextRequest } from "next/server";
 /**
  * Edge Middleware for Security Headers
  * 
- * NOTE: Database sessions cannot use auth() in middleware (Edge runtime limitation)
- * Authentication/authorization handled by authorized() callback in auth.ts
- * This middleware only sets security headers (CSP, etc.)
+ * NOTE: Edge Runtime CANNOT use auth() with database adapter  
+ * (postgres-js requires Node.js 'net' module which Edge Runtime doesn't support)
+ * 
+ * Authentication/authorization is handled by:
+ * 1. NextAuth route handlers (run in Node.js runtime, CAN access database)
+ * 2. authorized() callback in auth.ts (called by route handlers, NOT middleware)
+ * 3. Server components checking auth() in layouts/pages
+ * 
+ * This middleware ONLY sets security headers (CSP, etc.)
  */
 export function middleware(req: NextRequest) {
     const response = NextResponse.next();
 
     // Content Security Policy
-    const keycloakBaseUrl = process.env.KEYCLOAK_BASE_URL || 'http://localhost:8081';
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    const keycloakBaseUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:4000';
 
     const csp = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-        `style-src 'self' 'unsafe-inline' ${keycloakBaseUrl}`,
+        `style-src 'self' 'unsafe-inline'`,
         "img-src 'self' data: https:",
-        `font-src 'self' ${keycloakBaseUrl}`,
-        `connect-src 'self' ${keycloakBaseUrl} ${apiUrl}`,
+        `font-src 'self'`,
+        `connect-src 'self' ${keycloakBaseUrl} ${apiUrl} https://localhost:8443 https://localhost:4000`,
         `frame-src 'self' ${keycloakBaseUrl}`,
     ].join("; ");
 
