@@ -675,8 +675,8 @@ resource "keycloak_saml_user_attribute_protocol_mapper" "france_coi" {
 resource "keycloak_saml_identity_provider" "france_idp" {
   realm        = keycloak_realm.dive_v3.id
   alias        = "france-idp"
-  display_name = "France (SAML)"
-  enabled      = true
+  display_name = "France (SAML) [DEPRECATED - Use fra-realm-broker]"
+  enabled      = false  # Disabled in favor of fra-realm-broker
   
   # SAML configuration
   entity_id                    = "dive-v3-saml-client"
@@ -981,8 +981,8 @@ resource "keycloak_generic_protocol_mapper" "canada_client_coi" {
 resource "keycloak_oidc_identity_provider" "canada_idp" {
   realm        = keycloak_realm.dive_v3.id
   alias        = "canada-idp"
-  display_name = "Canada (OIDC)"
-  enabled      = true
+  display_name = "Canada (OIDC) [DEPRECATED - Use can-realm-broker]"
+  enabled      = false  # Disabled in favor of can-realm-broker
   
   # Browser-facing URL (user redirected here)
   authorization_url = "http://localhost:8081/realms/canada-mock-idp/protocol/openid-connect/auth"
@@ -1189,8 +1189,8 @@ resource "keycloak_generic_protocol_mapper" "industry_client_email" {
 resource "keycloak_oidc_identity_provider" "industry_idp" {
   realm        = keycloak_realm.dive_v3.id
   alias        = "industry-idp"
-  display_name = "Industry Partner (OIDC)"
-  enabled      = true
+  display_name = "Industry Partner (OIDC) [DEPRECATED - Use industry-realm-broker]"
+  enabled      = false  # Disabled in favor of industry-realm-broker
   
   # Browser-facing URL (user redirected here)
   authorization_url = "http://localhost:8081/realms/industry-mock-idp/protocol/openid-connect/auth"
