@@ -191,9 +191,22 @@ function checkSubsetSupersetConflicts(cois: string[], operator: COIOperator): st
 
 /**
  * INVARIANT 3: Releasability must be subset of COI membership union
+ * 
+ * NOTE: When COI is empty, releasability alignment check is skipped.
+ * Empty COI means "no COI-based restrictions" - not "deny all".
  */
 async function checkReleasabilityAlignment(releasabilityTo: string[], cois: string[]): Promise<string[]> {
     const errors: string[] = [];
+
+    // If no COI tags specified, skip releasability alignment check
+    // Empty COI = no COI restrictions (not deny all)
+    if (!cois || cois.length === 0) {
+        logger.debug('Skipping releasability alignment - no COI tags specified', {
+            releasabilityTo,
+            note: 'Empty COI allows releasability without COI-based key encryption'
+        });
+        return errors; // Return empty errors array (validation passes)
+    }
 
     // Get live COI membership data from database
     const membershipMap = await getCOIMembershipMapFromDB();
