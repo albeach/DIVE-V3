@@ -332,7 +332,7 @@ export default function CustomLoginPage() {
 
         try {
             // Step 1: Authenticate with backend (includes OTP if MFA is active)
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
             const response = await fetch(`${backendUrl}/api/auth/custom-login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -426,7 +426,7 @@ export default function CustomLoginPage() {
         try {
             setIsLoading(true);
             setError(null);
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
             
             // Call the new OTP setup endpoint
             const response = await fetch(`${backendUrl}/api/auth/otp/setup`, {
@@ -506,7 +506,7 @@ export default function CustomLoginPage() {
         setIsLoading(true);
 
         try {
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
             
             // Prepare payload
             const payload = {

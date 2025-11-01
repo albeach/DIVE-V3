@@ -155,7 +155,7 @@ export default function AdminCertificatesPage() {
   }, [session, status, router]);
 
   async function fetchData() {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
     
     try {
       // Get auth token from session
@@ -242,7 +242,7 @@ export default function AdminCertificatesPage() {
   async function handleRotateCertificate() {
     setRotationLoading(true);
     setRotationMessage('');
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
 
     try {
       const token = (session as any)?.accessToken;
@@ -283,7 +283,7 @@ export default function AdminCertificatesPage() {
 
   async function handleRevokeCertificate() {
     setRevokeLoading(true);
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
 
     try {
       const token = (session as any)?.accessToken;

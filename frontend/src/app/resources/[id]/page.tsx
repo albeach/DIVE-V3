@@ -109,7 +109,7 @@ export default function ResourceDetailPage() {
     }
 
     async function fetchResource() {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
       const accessToken = (session as any)?.accessToken;
 
       if (!accessToken) {
@@ -156,7 +156,7 @@ export default function ResourceDetailPage() {
 
     async function fetchSuggestedResources() {
       // Fetch resources that user might be able to access
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
       
       try {
         const response = await fetch(`${backendUrl}/api/resources`, {
@@ -494,7 +494,7 @@ export default function ResourceDetailPage() {
                           <button
                             onClick={async () => {
                               try {
-                                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+                                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
                                 const accessToken = (session as any)?.accessToken;
                                 const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
                                   headers: {

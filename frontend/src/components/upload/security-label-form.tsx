@@ -208,7 +208,7 @@ export default function SecurityLabelForm({
   useEffect(() => {
     const fetchCOIs = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
         const response = await fetch(`${backendUrl}/api/coi-keys?status=active`);
         const data = await response.json();
         

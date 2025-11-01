@@ -19,7 +19,7 @@ import React from 'react';
 // API Client
 // ============================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:4000';
 
 class IdPManagementAPI {
     private static getHeaders(token?: string): HeadersInit {

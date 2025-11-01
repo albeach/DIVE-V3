@@ -126,7 +126,7 @@ export default function UploadPage() {
       formData.append('originalCountry', userCountry);
 
       // Upload to backend
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
       const accessToken = (session as any)?.accessToken;
 
       const response = await fetch(`${backendUrl}/api/upload`, {

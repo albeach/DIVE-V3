@@ -66,7 +66,7 @@ export function IdpSelector() {
   const fetchEnabledIdPs = async () => {
     try {
       // Fetch public list of enabled IdPs from backend
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
       console.log('[IdP Selector] Fetching from:', `${backendUrl}/api/idps/public`);
       
       // Create abort controller for timeout
