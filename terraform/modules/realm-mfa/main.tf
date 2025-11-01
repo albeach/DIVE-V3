@@ -108,9 +108,9 @@ resource "keycloak_authentication_execution_config" "classified_otp_acr_config" 
 }
 
 # Bind the flow to realm browser authentication
-# DISABLED: Option 3 - Use default "browser" flow (custom theme handles UI, not custom flow)
-# resource "keycloak_authentication_bindings" "classified_bindings" {
-#   realm_id     = var.realm_id
-#   browser_flow = keycloak_authentication_flow.classified_browser.alias
-# }
+# ENABLED: Use custom browser flow with conditional MFA and ACR support
+resource "keycloak_authentication_bindings" "classified_bindings" {
+  realm_id     = var.realm_id
+  browser_flow = keycloak_authentication_flow.classified_browser.alias
+}
 
