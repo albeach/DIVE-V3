@@ -352,7 +352,7 @@ resource "keycloak_generic_protocol_mapper" "broker_amr" {
   config = {
     "user.session.note"    = "AUTH_METHODS_REF"
     "claim.name"           = "amr"
-    "jsonType.label"       = "String"
+    "jsonType.label"       = "String" # Note: Keycloak stores as JSON string, backend parses it
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
