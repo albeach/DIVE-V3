@@ -193,9 +193,11 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
 
     // FIX: Try both internal (Docker) and external (localhost) URLs for JWKS
+    // HTTPS Support: Also try HTTPS port 8443 (production setup)
     const jwksUris = [
         `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal: http://keycloak:8080
-        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External: http://localhost:8081
+        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External HTTP: http://localhost:8081
+        `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // External HTTPS: https://localhost:8443
     ];
 
     logger.debug('Getting signing key for token', {
@@ -338,47 +340,60 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Multi-realm: Accept tokens from all DIVE realms (broker + individual IdP realms)
         // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
         // Keycloak 26 Fix: Also accept localhost:8080 (frontend container accessing Keycloak)
+        // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
         const validIssuers: [string, ...string[]] = [
             // Legacy pilot realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
-            'http://localhost:8081/realms/dive-v3-pilot',          // External: dive-v3-pilot
+            'http://localhost:8081/realms/dive-v3-pilot',          // External HTTP: dive-v3-pilot
+            'https://localhost:8443/realms/dive-v3-pilot',         // External HTTPS: dive-v3-pilot
             'http://localhost:8080/realms/dive-v3-pilot',          // Frontend container: dive-v3-pilot
 
             // Main broker realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
-            'http://localhost:8081/realms/dive-v3-broker',         // External: dive-v3-broker
+            'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
+            'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker ← CRITICAL
             'http://localhost:8080/realms/dive-v3-broker',         // Frontend container: dive-v3-broker
 
             // Individual IdP realms (for direct login to sub-realms)
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-usa`,      // Internal: dive-v3-usa
-            'http://localhost:8081/realms/dive-v3-usa',            // External: dive-v3-usa
+            'http://localhost:8081/realms/dive-v3-usa',            // External HTTP: dive-v3-usa
+            'https://localhost:8443/realms/dive-v3-usa',           // External HTTPS: dive-v3-usa
             'http://localhost:8080/realms/dive-v3-usa',            // Frontend container: dive-v3-usa
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-fra`,      // Internal: dive-v3-fra
-            'http://localhost:8081/realms/dive-v3-fra',            // External: dive-v3-fra
+            'http://localhost:8081/realms/dive-v3-fra',            // External HTTP: dive-v3-fra
+            'https://localhost:8443/realms/dive-v3-fra',           // External HTTPS: dive-v3-fra
             'http://localhost:8080/realms/dive-v3-fra',            // Frontend container: dive-v3-fra
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-can`,      // Internal: dive-v3-can
-            'http://localhost:8081/realms/dive-v3-can',            // External: dive-v3-can
+            'http://localhost:8081/realms/dive-v3-can',            // External HTTP: dive-v3-can
+            'https://localhost:8443/realms/dive-v3-can',           // External HTTPS: dive-v3-can
             'http://localhost:8080/realms/dive-v3-can',            // Frontend container: dive-v3-can
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-industry`, // Internal: dive-v3-industry
-            'http://localhost:8081/realms/dive-v3-industry',       // External: dive-v3-industry
+            'http://localhost:8081/realms/dive-v3-industry',       // External HTTP: dive-v3-industry
+            'https://localhost:8443/realms/dive-v3-industry',      // External HTTPS: dive-v3-industry
             'http://localhost:8080/realms/dive-v3-industry',       // Frontend container: dive-v3-industry
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-gbr`,      // Internal: dive-v3-gbr
-            'http://localhost:8081/realms/dive-v3-gbr',            // External: dive-v3-gbr
+            'http://localhost:8081/realms/dive-v3-gbr',            // External HTTP: dive-v3-gbr
+            'https://localhost:8443/realms/dive-v3-gbr',           // External HTTPS: dive-v3-gbr
             'http://localhost:8080/realms/dive-v3-gbr',            // Frontend container: dive-v3-gbr
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-deu`,      // Internal: dive-v3-deu
-            'http://localhost:8081/realms/dive-v3-deu',            // External: dive-v3-deu
+            'http://localhost:8081/realms/dive-v3-deu',            // External HTTP: dive-v3-deu
+            'https://localhost:8443/realms/dive-v3-deu',           // External HTTPS: dive-v3-deu
             'http://localhost:8080/realms/dive-v3-deu',            // Frontend container: dive-v3-deu
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-nld`,      // Internal: dive-v3-nld
-            'http://localhost:8081/realms/dive-v3-nld',            // External: dive-v3-nld
+            'http://localhost:8081/realms/dive-v3-nld',            // External HTTP: dive-v3-nld
+            'https://localhost:8443/realms/dive-v3-nld',           // External HTTPS: dive-v3-nld
             'http://localhost:8080/realms/dive-v3-nld',            // Frontend container: dive-v3-nld
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pol`,      // Internal: dive-v3-pol
-            'http://localhost:8081/realms/dive-v3-pol',            // External: dive-v3-pol
+            'http://localhost:8081/realms/dive-v3-pol',            // External HTTP: dive-v3-pol
+            'https://localhost:8443/realms/dive-v3-pol',           // External HTTPS: dive-v3-pol
             'http://localhost:8080/realms/dive-v3-pol',            // Frontend container: dive-v3-pol
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-ita`,      // Internal: dive-v3-ita
-            'http://localhost:8081/realms/dive-v3-ita',            // External: dive-v3-ita
+            'http://localhost:8081/realms/dive-v3-ita',            // External HTTP: dive-v3-ita
+            'https://localhost:8443/realms/dive-v3-ita',           // External HTTPS: dive-v3-ita
             'http://localhost:8080/realms/dive-v3-ita',            // Frontend container: dive-v3-ita
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-esp`,      // Internal: dive-v3-esp
-            'http://localhost:8081/realms/dive-v3-esp',            // External: dive-v3-esp
+            'http://localhost:8081/realms/dive-v3-esp',            // External HTTP: dive-v3-esp
+            'https://localhost:8443/realms/dive-v3-esp',           // External HTTPS: dive-v3-esp
             'http://localhost:8080/realms/dive-v3-esp',            // Frontend container: dive-v3-esp
         ];
 
