@@ -185,14 +185,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
             issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
             authorization: {
-                url: `http://localhost:8081/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+                url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email offline_access",
                 }
             },
-            token: `http://keycloak:8080/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
-            userinfo: `http://keycloak:8080/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
-            checks: [],
+            token: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
+            userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
+            checks: ["pkce", "state"],
             allowDangerousEmailAccountLinking: true,
         }),
     ],
