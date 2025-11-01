@@ -36,17 +36,16 @@ interface ITokenClaims {
     iat?: number;
 }
 
-describe('Keycloak 26 Migration - ACR/AMR Claims', () => {
+// Skip this test suite if KC_CLIENT_SECRET is not set (integration test requires real Keycloak)
+const describeIf = (condition: boolean) => condition ? describe : describe.skip;
+
+describeIf(!!CLIENT_SECRET)('Keycloak 26 Migration - ACR/AMR Claims', () => {
     let accessToken: string;
     let idToken: string;
     let decodedAccess: ITokenClaims;
     let decodedId: ITokenClaims;
 
     beforeAll(async () => {
-        if (!CLIENT_SECRET) {
-            throw new Error('KC_CLIENT_SECRET environment variable is required');
-        }
-
         // Obtain token via password grant (simulating OTP authentication)
         const tokenEndpoint = `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`;
 
