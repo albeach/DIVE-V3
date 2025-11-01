@@ -113,21 +113,14 @@ export function IdpSelector() {
   };
 
   const handleIdpClick = async (idp: IdPOption) => {
-    // Option 3: Custom Keycloak Theme - Redirect directly to Keycloak with custom theme
-    // Federation flow: Broker delegates to national realm, all with custom branded themes
-    const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
-    const redirectUri = `${window.location.origin}/api/auth/callback/keycloak`;
-    
-    // Build Keycloak authorization URL with IdP hint for federation
-    const authUrl = new URL(`${keycloakUrl}/realms/dive-v3-broker/protocol/openid-connect/auth`);
-    authUrl.searchParams.set('client_id', 'dive-v3-client-broker');
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', 'openid profile email');
-    authUrl.searchParams.set('kc_idp_hint', idp.alias);  // Trigger federation
-    
-    // Redirect to Keycloak (will show custom themed login page)
-    window.location.href = authUrl.toString();
+    // Option 3: Custom Keycloak Theme - Use NextAuth signIn with kc_idp_hint
+    // This ensures state cookie is properly set before redirecting to Keycloak
+    const { signIn } = await import('next-auth/react');
+    await signIn('keycloak', {
+      callbackUrl: '/dashboard',
+    }, {
+      kc_idp_hint: idp.alias,  // Trigger federation to specific national realm
+    });
   };
 
   // 🥚 Easter egg setup

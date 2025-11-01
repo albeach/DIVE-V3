@@ -4,7 +4,8 @@
     "description": "DIVE V3 Frontend - Coalition ICAM Pilot",
     "private": true,
     "scripts": {
-        "dev": "next dev",
+        "dev": "node server.js",
+        "dev:http": "next dev",
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
