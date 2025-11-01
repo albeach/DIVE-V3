@@ -128,6 +128,8 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
+    "acr",    # Keycloak 26: ACR/AMR support via built-in oidc-acr-mapper
+    "basic",  # Keycloak 26: auth_time and sub claims
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
   # Note: offline_access added to default scopes for admin-dive user login
