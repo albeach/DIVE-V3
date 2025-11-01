@@ -18,6 +18,15 @@ resource "keycloak_realm" "dive_v3_broker" {
   remember_me                    = false
   reset_password_allowed         = false
   edit_username_allowed          = false
+  
+  # Custom DIVE V3 Theme (Option 3: Full UI Customization)
+  login_theme = "dive-v3"
+  
+  # Internationalization for custom theme
+  internationalization {
+    supported_locales = ["en", "fr"]
+    default_locale    = "en"
+  }
 
   # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
   # Broker realm: Used by admin-dive super admin for management console
@@ -81,11 +90,15 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
 
   valid_redirect_uris = [
     "${var.app_url}/*",
-    "${var.app_url}/api/auth/callback/keycloak"
+    "${var.app_url}/dashboard",
+    "${var.app_url}/api/auth/callback/keycloak",
+    "https://localhost:3000/*",
+    "https://localhost:3000/dashboard"
   ]
 
   web_origins = [
     var.app_url,
+    "https://localhost:3000",
     "+"
   ]
 

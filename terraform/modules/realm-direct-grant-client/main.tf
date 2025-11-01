@@ -86,3 +86,5 @@ output "resource_id" {
   value       = keycloak_openid_client.direct_grant_client.id
 }
 
+
+

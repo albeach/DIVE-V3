@@ -15,6 +15,9 @@ provider "keycloak" {
   url           = var.keycloak_url
   realm         = "master"
   initial_login = true
+  
+  # Development: Skip TLS verification for self-signed certificates
+  tls_insecure_skip_verify = true
 }
 
 # ============================================

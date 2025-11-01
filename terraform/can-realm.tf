@@ -13,6 +13,9 @@ resource "keycloak_realm" "dive_v3_can" {
   
   registration_allowed = false
   
+  # Custom DIVE V3 Theme (Option 3: Per-Country Customization)
+  login_theme = "dive-v3-can"
+  
   internationalization {
     supported_locales = ["en", "fr"]  # Bilingual
     default_locale    = "en"
@@ -54,8 +57,8 @@ resource "keycloak_openid_client" "can_realm_client" {
   direct_access_grants_enabled = true  # Phase 2.1: Enable for custom login pages
   
   valid_redirect_uris = [
-    "http://localhost:8081/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
-    "http://keycloak:8080/realms/dive-v3-broker/broker/can-realm-broker/endpoint"
+    "https://localhost:8443/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
+    "https://keycloak:8443/realms/dive-v3-broker/broker/can-realm-broker/endpoint"
   ]
   
   root_url = var.app_url
