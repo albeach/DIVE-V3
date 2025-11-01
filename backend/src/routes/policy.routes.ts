@@ -7,6 +7,7 @@
  */
 
 import { Router } from 'express';
+import { authenticateJWT } from '../middleware/authz.middleware';
 import {
     listPoliciesHandler,
     getPolicyHandler,
@@ -23,7 +24,7 @@ const router = Router();
  * Authentication: Required (JWT token)
  * Authorization: None (read-only access)
  */
-router.get('/', listPoliciesHandler);
+router.get('/', authenticateJWT, listPoliciesHandler);
 
 /**
  * GET /api/policies/:id
@@ -35,7 +36,7 @@ router.get('/', listPoliciesHandler);
  * 
  * Example: GET /api/policies/fuel_inventory_abac_policy
  */
-router.get('/:id', getPolicyHandler);
+router.get('/:id', authenticateJWT, getPolicyHandler);
 
 /**
  * POST /api/policies/:id/test
@@ -49,7 +50,7 @@ router.get('/:id', getPolicyHandler);
  * Example: POST /api/policies/fuel_inventory_abac_policy/test
  * Body: { input: { subject: {...}, action: {...}, resource: {...}, context: {...} } }
  */
-router.post('/:id/test', testDecisionHandler);
+router.post('/:id/test', authenticateJWT, testDecisionHandler);
 
 export default router;
 
