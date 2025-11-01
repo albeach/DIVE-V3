@@ -48,25 +48,25 @@ output "test_user_credentials" {
   description = "Test user credentials for U.S. IdP simulation (SENSITIVE)"
   value = var.create_test_users ? {
     us_secret = {
-      username = "testuser-us"
-      password = "Password123!"
-      email    = "john.doe@army.mil"
+      username  = "testuser-us"
+      password  = "Password123!"
+      email     = "john.doe@army.mil"
       clearance = "SECRET"
-      country = "USA"
+      country   = "USA"
     }
     us_confidential = {
-      username = "testuser-us-confid"
-      password = "Password123!"
-      email    = "jane.smith@navy.mil"
+      username  = "testuser-us-confid"
+      password  = "Password123!"
+      email     = "jane.smith@navy.mil"
       clearance = "CONFIDENTIAL"
-      country = "USA"
+      country   = "USA"
     }
     us_unclassified = {
-      username = "testuser-us-unclass"
-      password = "Password123!"
-      email    = "bob.jones@contractor.mil"
+      username  = "testuser-us-unclass"
+      password  = "Password123!"
+      email     = "bob.jones@contractor.mil"
       clearance = "UNCLASSIFIED"
-      country = "USA"
+      country   = "USA"
     }
   } : null
   sensitive = true
