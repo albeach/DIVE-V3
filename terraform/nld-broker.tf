@@ -11,10 +11,10 @@ resource "keycloak_oidc_identity_provider" "nld_realm_broker" {
   enabled      = true
   
   # OIDC endpoints from Dutch realm
-  authorization_url = "http://localhost:8081/realms/dive-v3-nld/protocol/openid-connect/auth"
-  token_url         = "http://keycloak:8080/realms/dive-v3-nld/protocol/openid-connect/token"
-  jwks_url          = "http://keycloak:8080/realms/dive-v3-nld/protocol/openid-connect/certs"
-  user_info_url     = "http://keycloak:8080/realms/dive-v3-nld/protocol/openid-connect/userinfo"
+  authorization_url = "https://localhost:8443/realms/dive-v3-nld/protocol/openid-connect/auth"
+  token_url         = "https://localhost:8443/realms/dive-v3-nld/protocol/openid-connect/token"
+  jwks_url          = "https://localhost:8443/realms/dive-v3-nld/protocol/openid-connect/certs"
+  user_info_url     = "https://localhost:8443/realms/dive-v3-nld/protocol/openid-connect/userinfo"
   
   # Client credentials from Dutch realm
   client_id     = keycloak_openid_client.nld_realm_client.client_id
