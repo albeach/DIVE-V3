@@ -38,6 +38,18 @@ resource "keycloak_authentication_execution" "classified_username_password" {
   requirement       = "REQUIRED"
 }
 
+# Configure ACR for password authentication (AAL1 baseline)
+# This sets ACR="0" (AAL1) for password-only authentication
+# Will be upgraded to ACR="1" (AAL2) if OTP is also completed
+resource "keycloak_authentication_execution_config" "classified_password_acr_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.classified_username_password.id
+  alias        = "Password ACR Level - ${var.realm_display_name}"
+  config = {
+    acr_level = "0"  # AAL1 for password-only
+  }
+}
+
 # Step 4: Conditional OTP subflow (conditional execution container)
 resource "keycloak_authentication_subflow" "classified_otp_conditional" {
   realm_id          = var.realm_id
@@ -82,6 +94,17 @@ resource "keycloak_authentication_execution" "classified_otp_form" {
     keycloak_authentication_execution.classified_condition_user_attribute,
     keycloak_authentication_execution_config.classified_condition_config
   ]
+}
+
+# Configure ACR (Authentication Context Class Reference) for OTP authenticator
+# Keycloak 26+: This sets ACR="1" (AAL2) when OTP is successfully completed
+resource "keycloak_authentication_execution_config" "classified_otp_acr_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.classified_otp_form.id
+  alias        = "OTP ACR Level - ${var.realm_display_name}"
+  config = {
+    acr_level = "1"  # Set ACR to "1" (AAL2) when OTP succeeds
+  }
 }
 
 # Bind the flow to realm browser authentication

@@ -33,6 +33,19 @@ resource "keycloak_authentication_execution" "direct_grant_password" {
   ]
 }
 
+# Configure ACR for password authentication (AAL1 baseline)
+# This sets ACR="0" (AAL1) for password-only authentication  
+# Will be upgraded to ACR="1" (AAL2) if OTP is also completed
+resource "keycloak_authentication_execution_config" "direct_grant_password_acr_config" {
+  count        = var.enable_direct_grant_mfa ? 1 : 0
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.direct_grant_password[0].id
+  alias        = "Direct Grant Password ACR - ${var.realm_display_name}"
+  config = {
+    acr_level = "0"  # AAL1 for password-only
+  }
+}
+
 # Step 3: OTP subflow (CONDITIONAL - clearance-based MFA enforcement)
 resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
@@ -83,6 +96,18 @@ resource "keycloak_authentication_execution" "direct_grant_otp" {
     keycloak_authentication_execution.direct_grant_condition_user_attribute,
     keycloak_authentication_execution_config.direct_grant_condition_config
   ]
+}
+
+# Configure ACR (Authentication Context Class Reference) for Direct Grant OTP
+# Keycloak 26+: This sets ACR="1" (AAL2) when OTP is successfully completed
+resource "keycloak_authentication_execution_config" "direct_grant_otp_acr_config" {
+  count        = var.enable_direct_grant_mfa ? 1 : 0
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.direct_grant_otp[0].id
+  alias        = "Direct Grant OTP ACR - ${var.realm_display_name}"
+  config = {
+    acr_level = "1"  # Set ACR to "1" (AAL2) when OTP succeeds in Direct Grant
+  }
 }
 
 # Bind the flow to realm direct grant authentication
