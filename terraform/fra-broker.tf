@@ -9,26 +9,26 @@ resource "keycloak_oidc_identity_provider" "fra_realm_broker" {
   alias        = "fra-realm-broker"
   display_name = "France (Ministère des Armées)"
   enabled      = true
-  
+
   # OIDC endpoints from France realm
   authorization_url = "https://localhost:8443/realms/dive-v3-fra/protocol/openid-connect/auth"
   token_url         = "https://localhost:8443/realms/dive-v3-fra/protocol/openid-connect/token"
   jwks_url          = "https://localhost:8443/realms/dive-v3-fra/protocol/openid-connect/certs"
   user_info_url     = "https://localhost:8443/realms/dive-v3-fra/protocol/openid-connect/userinfo"
-  
+
   # Client credentials from France realm
   client_id     = keycloak_openid_client.fra_realm_client.client_id
   client_secret = keycloak_openid_client.fra_realm_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  
+
   store_token = true
   trust_email = true
   sync_mode   = "FORCE"
-  
+
   first_broker_login_flow_alias = "first broker login"
-  link_only = false
-  
+  link_only                     = false
+
   gui_order = "2"
 }
 
@@ -38,7 +38,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_uniqueid" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "uniqueID"
@@ -51,7 +51,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_clearance" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearance"
@@ -64,7 +64,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_country" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "countryOfAffiliation"
@@ -77,7 +77,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_coi" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acpCOI"
@@ -90,7 +90,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_dutyorg" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "dutyOrg"
@@ -103,7 +103,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_orgunit" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "orgUnit"
@@ -116,7 +116,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_acr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-acr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acr"
@@ -129,7 +129,7 @@ resource "keycloak_custom_identity_provider_mapper" "fra_broker_amr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
   name                     = "fra-amr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "amr"

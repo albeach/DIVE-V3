@@ -32,7 +32,7 @@
 variable "enable_multi_realm" {
   description = "Enable multi-realm architecture (dive-v3-usa, dive-v3-fra, dive-v3-can, dive-v3-industry, dive-v3-broker)"
   type        = bool
-  default     = false  # Default: use single realm (dive-v3-pilot)
+  default     = false # Default: use single realm (dive-v3-pilot)
 }
 
 # ============================================

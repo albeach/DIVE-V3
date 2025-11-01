@@ -18,10 +18,10 @@ resource "keycloak_realm" "dive_v3_broker" {
   remember_me                    = false
   reset_password_allowed         = false
   edit_username_allowed          = false
-  
+
   # Custom DIVE V3 Theme (Option 3: Full UI Customization)
   login_theme = "dive-v3"
-  
+
   # Internationalization for custom theme
   internationalization {
     supported_locales = ["en", "fr"]
@@ -31,32 +31,32 @@ resource "keycloak_realm" "dive_v3_broker" {
   # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
   # Broker realm: Used by admin-dive super admin for management console
   # Allow reasonable session for admin work (not enforcing 1s like national realms)
-  access_token_lifespan        = "15m"   # Access token (aligns with NextAuth session)
-  
+  access_token_lifespan = "15m" # Access token (aligns with NextAuth session)
+
   # Broker realm sessions: Allow normal sessions for super admin
   # MFA is still enforced via authentication flow, but sessions can persist
-  sso_session_idle_timeout     = "30m"   # SSO idle: 30 minutes
-  sso_session_max_lifespan     = "8h"    # Max session: 8 hours
-  
+  sso_session_idle_timeout = "30m" # SSO idle: 30 minutes
+  sso_session_max_lifespan = "8h"  # Max session: 8 hours
+
   offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
   offline_session_max_lifespan = "1440h" # Offline max (60 days)
 
   # OTP Policy (AAL2 MFA Enforcement)
   otp_policy {
-    algorithm = "HmacSHA256"
-    digits    = 6
-    period    = 30
-    type      = "totp"
+    algorithm         = "HmacSHA256"
+    digits            = 6
+    period            = 30
+    type              = "totp"
     look_ahead_window = 1
   }
 
   # Brute-force detection (balanced for MFA setup attempts)
   security_defenses {
     brute_force_detection {
-      max_login_failures         = 8  # Increased for MFA setup attempts
+      max_login_failures         = 8 # Increased for MFA setup attempts
       wait_increment_seconds     = 60
       max_failure_wait_seconds   = 300  # Reduced from 900 to 5 minutes
-      failure_reset_time_seconds = 3600  # Reduced from 12 hours to 1 hour
+      failure_reset_time_seconds = 3600 # Reduced from 12 hours to 1 hour
     }
     headers {
       x_frame_options           = "DENY"
@@ -66,7 +66,7 @@ resource "keycloak_realm" "dive_v3_broker" {
     }
   }
 
-  ssl_required = "none"  # Development: Allow HTTP
+  ssl_required = "none" # Development: Allow HTTP
 }
 
 # Application Client in Broker Realm
@@ -79,7 +79,7 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
-  direct_access_grants_enabled = true  # Required for custom login form
+  direct_access_grants_enabled = true # Required for custom login form
   service_accounts_enabled     = false
 
   # Use same client secret as original dive-v3-client for consistency
@@ -327,7 +327,7 @@ resource "keycloak_user" "broker_super_admin" {
     value     = "DiveAdmin2025!"
     temporary = false
   }
-  
+
   # Lifecycle: Ignore runtime attribute changes
   # This allows backend to set/modify attributes (like otp_secret_pending) without Terraform conflicts
   lifecycle {

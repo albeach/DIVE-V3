@@ -13,12 +13,12 @@
 
 module "broker_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_broker.id
   realm_name         = "dive-v3-broker"
   realm_display_name = "DIVE V3 Broker"
-  
-  enable_direct_grant_mfa = false  # DISABLED - Custom SPI not deployed yet (Option 3: Theme-based auth)
+
+  enable_direct_grant_mfa = false # DISABLED - Custom SPI not deployed yet (Option 3: Theme-based auth)
 }
 
 # ============================================
@@ -27,12 +27,12 @@ module "broker_mfa" {
 
 module "usa_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_usa.id
   realm_name         = "dive-v3-usa"
   realm_display_name = "United States"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -41,12 +41,12 @@ module "usa_mfa" {
 
 module "fra_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_fra.id
   realm_name         = "dive-v3-fra"
   realm_display_name = "France"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -55,12 +55,12 @@ module "fra_mfa" {
 
 module "can_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_can.id
   realm_name         = "dive-v3-can"
   realm_display_name = "Canada"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -69,12 +69,12 @@ module "can_mfa" {
 
 module "industry_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_industry.id
   realm_name         = "dive-v3-industry"
   realm_display_name = "Industry"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -83,12 +83,12 @@ module "industry_mfa" {
 
 module "deu_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_deu.id
   realm_name         = "dive-v3-deu"
   realm_display_name = "Germany"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -97,12 +97,12 @@ module "deu_mfa" {
 
 module "gbr_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_gbr.id
   realm_name         = "dive-v3-gbr"
   realm_display_name = "United Kingdom"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -111,12 +111,12 @@ module "gbr_mfa" {
 
 module "ita_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_ita.id
   realm_name         = "dive-v3-ita"
   realm_display_name = "Italy"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -125,12 +125,12 @@ module "ita_mfa" {
 
 module "esp_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_esp.id
   realm_name         = "dive-v3-esp"
   realm_display_name = "Spain"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -139,12 +139,12 @@ module "esp_mfa" {
 
 module "pol_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_pol.id
   realm_name         = "dive-v3-pol"
   realm_display_name = "Poland"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================
@@ -153,12 +153,12 @@ module "pol_mfa" {
 
 module "nld_mfa" {
   source = "./modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_nld.id
   realm_name         = "dive-v3-nld"
   realm_display_name = "Netherlands"
-  
-  enable_direct_grant_mfa = true  # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
 }
 
 # ============================================

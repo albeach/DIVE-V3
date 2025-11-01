@@ -9,7 +9,7 @@ resource "keycloak_oidc_identity_provider" "usa_realm_broker" {
   alias        = "usa-realm-broker"
   display_name = "United States (DoD)"
   enabled      = true
-  
+
   # OIDC endpoints from U.S. realm
   # Best Practice: Use consistent hostname (localhost:8443) for all URLs
   # KC_HOSTNAME ensures tokens always have issuer=https://localhost:8443
@@ -18,20 +18,20 @@ resource "keycloak_oidc_identity_provider" "usa_realm_broker" {
   token_url         = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/token"
   jwks_url          = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/certs"
   user_info_url     = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/userinfo"
-  
+
   # Client credentials from U.S. realm
   client_id     = keycloak_openid_client.usa_realm_client.client_id
   client_secret = keycloak_openid_client.usa_realm_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  
+
   store_token = true
   trust_email = true
-  sync_mode   = "FORCE"  # Always sync from U.S. realm
-  
+  sync_mode   = "FORCE" # Always sync from U.S. realm
+
   first_broker_login_flow_alias = "first broker login"
-  link_only = false  # Auto-create users
-  
+  link_only                     = false # Auto-create users
+
   gui_order = "1"
 }
 
@@ -41,7 +41,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_uniqueid" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "uniqueID"
@@ -54,7 +54,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_clearance" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearance"
@@ -67,7 +67,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_country" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "countryOfAffiliation"
@@ -80,7 +80,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_coi" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acpCOI"
@@ -93,7 +93,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_dutyorg" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "dutyOrg"
@@ -106,7 +106,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_orgunit" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "orgUnit"
@@ -119,7 +119,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_acr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-acr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acr"
@@ -132,7 +132,7 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_amr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.usa_realm_broker.alias
   name                     = "usa-amr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "amr"

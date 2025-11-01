@@ -9,26 +9,26 @@ resource "keycloak_oidc_identity_provider" "gbr_realm_broker" {
   alias        = "gbr-realm-broker"
   display_name = "United Kingdom (MOD)"
   enabled      = true
-  
+
   # OIDC endpoints from UK realm
   authorization_url = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/auth"
   token_url         = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/token"
   jwks_url          = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/certs"
   user_info_url     = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/userinfo"
-  
+
   # Client credentials from UK realm
   client_id     = keycloak_openid_client.gbr_realm_client.client_id
   client_secret = keycloak_openid_client.gbr_realm_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  
+
   store_token = true
   trust_email = true
-  sync_mode   = "FORCE"  # Always sync from UK realm
-  
+  sync_mode   = "FORCE" # Always sync from UK realm
+
   first_broker_login_flow_alias = "first broker login"
-  link_only = false  # Auto-create users
-  
+  link_only                     = false # Auto-create users
+
   gui_order = "5"
 }
 
@@ -38,7 +38,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_uniqueid" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "uniqueID"
@@ -51,7 +51,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_clearance" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearance"
@@ -64,7 +64,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_country" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "countryOfAffiliation"
@@ -77,7 +77,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_coi" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acpCOI"
@@ -90,7 +90,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_dutyorg" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "dutyOrg"
@@ -103,7 +103,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_orgunit" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "orgUnit"
@@ -116,7 +116,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_acr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-acr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acr"
@@ -129,7 +129,7 @@ resource "keycloak_custom_identity_provider_mapper" "gbr_broker_amr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.gbr_realm_broker.alias
   name                     = "gbr-amr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "amr"
