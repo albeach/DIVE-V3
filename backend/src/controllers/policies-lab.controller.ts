@@ -357,20 +357,32 @@ export async function listUserPolicies(req: Request, res: Response, next: NextFu
         }
 
         // Get user's policies
-        const policies = await getPoliciesByOwner(uniqueID);
+        const userPolicies = await getPoliciesByOwner(uniqueID);
+        
+        // Also get example policies (system-examples) to show to all users
+        const examplePolicies = await getPoliciesByOwner('system-examples');
+
+        // Combine user's policies with examples (user's first)
+        const allPolicies = [...userPolicies, ...examplePolicies];
 
         // Return list (without full structure, just metadata)
-        const response = policies.map(policy => ({
+        const response = allPolicies.map(policy => ({
             policyId: policy.policyId,
             type: policy.type,
             filename: policy.filename,
             validated: policy.validated,
             metadata: policy.metadata,
             createdAt: policy.createdAt,
-            updatedAt: policy.updatedAt
+            updatedAt: policy.updatedAt,
+            isExample: policy.ownerId === 'system-examples'  // Flag example policies
         }));
 
-        res.status(200).json({ policies: response, count: response.length });
+        res.status(200).json({ 
+            policies: response, 
+            count: response.length,
+            userPolicyCount: userPolicies.length,
+            examplePolicyCount: examplePolicies.length
+        });
 
     } catch (error: any) {
         logger.error('List policies error', { error: error.message });
