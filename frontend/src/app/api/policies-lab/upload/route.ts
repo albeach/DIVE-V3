@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Get backend URL
-        const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
 
         // Get access token from session
         const accessToken = (session as any).accessToken;

@@ -91,7 +91,7 @@ export default function CertificatesPage() {
     }
 
     async function fetchCertificateData() {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
       
       try {
         const response = await fetch(`${backendUrl}/api/compliance/certificates`, {
