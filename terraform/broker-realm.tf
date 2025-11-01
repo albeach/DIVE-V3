@@ -395,10 +395,11 @@ resource "keycloak_user" "broker_super_admin" {
     temporary = false
   }
 
-  # Lifecycle: Ignore runtime attribute changes
+  # Lifecycle: Ignore runtime changes
   # This allows backend to set/modify attributes (like otp_secret_pending) without Terraform conflicts
+  # Also ignore required_actions - Keycloak removes CONFIGURE_TOTP after user completes setup
   lifecycle {
-    ignore_changes = [attributes]
+    ignore_changes = [attributes, required_actions]
   }
 }
 
