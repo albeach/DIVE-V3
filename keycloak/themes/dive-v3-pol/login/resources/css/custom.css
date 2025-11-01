@@ -1,0 +1,23 @@
+/* Poland Custom Colors - White and Red */
+
+.dive-background {
+    background: linear-gradient(135deg, #FFFFFF 0%, #DC143C 100%);
+}
+
+.dive-button-primary {
+    background: linear-gradient(135deg, #DC143C 0%, #B8000D 100%);
+}
+
+.dive-header h1 {
+    color: #DC143C;
+}
+
+.dive-input:focus {
+    border-color: #DC143C;
+    box-shadow: 0 0 0 3px rgba(220, 20, 60, 0.1);
+}
+
+.dive-social-link:hover {
+    border-color: #DC143C;
+}
+

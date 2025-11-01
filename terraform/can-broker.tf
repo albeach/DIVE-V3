@@ -9,10 +9,10 @@ resource "keycloak_oidc_identity_provider" "can_realm_broker" {
   display_name = "Canada (Forces canadiennes)"
   enabled      = true
   
-  authorization_url = "http://localhost:8081/realms/dive-v3-can/protocol/openid-connect/auth"
-  token_url         = "http://keycloak:8080/realms/dive-v3-can/protocol/openid-connect/token"
-  jwks_url          = "http://keycloak:8080/realms/dive-v3-can/protocol/openid-connect/certs"
-  user_info_url     = "http://keycloak:8080/realms/dive-v3-can/protocol/openid-connect/userinfo"
+  authorization_url = "https://localhost:8443/realms/dive-v3-can/protocol/openid-connect/auth"
+  token_url         = "https://localhost:8443/realms/dive-v3-can/protocol/openid-connect/token"
+  jwks_url          = "https://localhost:8443/realms/dive-v3-can/protocol/openid-connect/certs"
+  user_info_url     = "https://localhost:8443/realms/dive-v3-can/protocol/openid-connect/userinfo"
   
   client_id     = keycloak_openid_client.can_realm_client.client_id
   client_secret = keycloak_openid_client.can_realm_client.client_secret
