@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Keycloak from "next-auth/providers/keycloak";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/lib/db";
-import { accounts, sessions } from "@/lib/db/schema";
+import { accounts, sessions, users, verificationTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -165,12 +165,29 @@ async function refreshAccessToken(account: any) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-    adapter: DrizzleAdapter(db),
+    adapter: DrizzleAdapter(db, {
+        usersTable: users,
+        accountsTable: accounts,
+        sessionsTable: sessions,
+        verificationTokensTable: verificationTokens,
+    }),
     trustHost: true, // Required for NextAuth v5 in development
     debug: process.env.NODE_ENV === "development",  // ENABLE VERBOSE DEBUG LOGGING
     logger: {
         error(code, ...message) {
             console.error('[NextAuth Error]', code, message);
+            // Enhanced error logging to expose [Object] details
+            if (code instanceof Error) {
+                console.error('[NextAuth Error Details]', {
+                    name: code.name,
+                    message: code.message,
+                    stack: code.stack,
+                    cause: code.cause,
+                });
+                if (code.cause && typeof code.cause === 'object') {
+                    console.error('[NextAuth Error Cause]', JSON.stringify(code.cause, null, 2));
+                }
+            }
         },
         warn(code, ...message) {
             console.warn('[NextAuth Warn]', code, message);
