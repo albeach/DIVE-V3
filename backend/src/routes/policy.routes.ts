@@ -2,8 +2,12 @@
  * Policy Routes
  * Week 3.2: OPA Policy Viewer
  * 
- * REST API routes for policy management (read-only)
- * All routes require authentication
+ * REST API routes for SYSTEM policy management (read-only)
+ * These are the built-in OPA Rego policies that power DIVE's authorization
+ * 
+ * NOTE: This is different from /api/policies-lab (user-uploaded policies)
+ * - /api/policies → System OPA policies (filesystem) - Public read-only
+ * - /api/policies-lab → User-uploaded policies (database) - Requires authentication
  */
 
 import { Router } from 'express';
@@ -18,34 +22,36 @@ const router = Router();
 
 /**
  * GET /api/policies
- * List all available policies
+ * List all SYSTEM OPA policies (built-in authorization policies)
  * Returns: Array of policy metadata with statistics
  * 
- * Authentication: Required (JWT token)
- * Authorization: None (read-only access)
+ * Authentication: None (system policies are public information)
+ * Authorization: None (read-only access to system policies)
+ * 
+ * NOTE: Shows policies from policies/*.rego directory
  */
-router.get('/', authenticateJWT, listPoliciesHandler);
+router.get('/', listPoliciesHandler);
 
 /**
  * GET /api/policies/:id
- * Get policy content by ID
+ * Get SYSTEM policy content by ID
  * Returns: Full Rego source code with metadata
  * 
- * Authentication: Required (JWT token)
+ * Authentication: None (system policies are public information)
  * Authorization: None (read-only access)
  * 
  * Example: GET /api/policies/fuel_inventory_abac_policy
  */
-router.get('/:id', authenticateJWT, getPolicyHandler);
+router.get('/:id', getPolicyHandler);
 
 /**
  * POST /api/policies/:id/test
- * Test policy decision with custom input
+ * Test SYSTEM policy decision with custom input
  * Body: IOPAInput (subject, action, resource, context)
  * Returns: Decision (allow/deny) with evaluation details
  * 
- * Authentication: Required (JWT token)
- * Authorization: None (testing endpoint)
+ * Authentication: Required (JWT token for testing)
+ * Authorization: None (any authenticated user can test policies)
  * 
  * Example: POST /api/policies/fuel_inventory_abac_policy/test
  * Body: { input: { subject: {...}, action: {...}, resource: {...}, context: {...} } }
