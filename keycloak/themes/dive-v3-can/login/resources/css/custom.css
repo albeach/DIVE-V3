@@ -1,0 +1,23 @@
+/* Canada Custom Colors - Red and White */
+
+.dive-background {
+    background: linear-gradient(135deg, #FF0000 0%, #FFFFFF 50%, #FF0000 100%);
+}
+
+.dive-button-primary {
+    background: linear-gradient(135deg, #FF0000 0%, #C8102E 100%);
+}
+
+.dive-header h1 {
+    color: #FF0000;
+}
+
+.dive-input:focus {
+    border-color: #FF0000;
+    box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.1);
+}
+
+.dive-social-link:hover {
+    border-color: #FF0000;
+}
+

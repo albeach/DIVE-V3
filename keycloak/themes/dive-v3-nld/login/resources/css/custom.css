@@ -1,0 +1,23 @@
+/* Netherlands Custom Colors - Orange, White, Blue */
+
+.dive-background {
+    background: linear-gradient(135deg, #21468B 0%, #AE1C28 100%);
+}
+
+.dive-button-primary {
+    background: linear-gradient(135deg, #21468B 0%, #AE1C28 100%);
+}
+
+.dive-header h1 {
+    color: #21468B;
+}
+
+.dive-input:focus {
+    border-color: #AE1C28;
+    box-shadow: 0 0 0 3px rgba(174, 28, 40, 0.1);
+}
+
+.dive-social-link:hover {
+    border-color: #21468B;
+}
+

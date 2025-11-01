@@ -1,0 +1,23 @@
+/* Spain Custom Colors - Red and Yellow */
+
+.dive-background {
+    background: linear-gradient(135deg, #AA151B 0%, #F1BF00 100%);
+}
+
+.dive-button-primary {
+    background: linear-gradient(135deg, #AA151B 0%, #F1BF00 100%);
+}
+
+.dive-header h1 {
+    color: #AA151B;
+}
+
+.dive-input:focus {
+    border-color: #AA151B;
+    box-shadow: 0 0 0 3px rgba(170, 21, 27, 0.1);
+}
+
+.dive-social-link:hover {
+    border-color: #AA151B;
+}
+
