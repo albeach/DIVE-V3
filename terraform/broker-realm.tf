@@ -323,6 +323,9 @@ resource "keycloak_user" "broker_super_admin" {
     # Not hardcoded in user attributes (AAL2 fix)
   }
 
+  # Force MFA enrollment on first login (TOP_SECRET clearance requires MFA)
+  required_actions = ["CONFIGURE_TOTP"]
+
   initial_password {
     value     = "DiveAdmin2025!"
     temporary = false
