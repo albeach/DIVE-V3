@@ -1,7 +1,7 @@
 variable "keycloak_url" {
   description = "The URL of the Keycloak server"
   type        = string
-  default     = "http://localhost:8081"
+  default     = "https://localhost:8443"  # Use HTTPS for admin operations
 }
 
 variable "keycloak_admin_username" {

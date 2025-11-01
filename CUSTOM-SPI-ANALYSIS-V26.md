@@ -685,3 +685,4 @@ The Custom SPI is well-implemented and follows Keycloak v26 best practices. The 
 
 **END OF CUSTOM SPI ANALYSIS**
 
+

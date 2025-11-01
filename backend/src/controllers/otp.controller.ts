@@ -55,7 +55,7 @@ export const otpSetupHandler = async (
         // We don't want to generate OTP secrets for invalid credentials
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://keycloak:8080';
         const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker-client';
-        
+
         // Phase 2.1: Use realm-specific client secret
         const clientSecret = getClientSecretForRealm(realmName);
 
