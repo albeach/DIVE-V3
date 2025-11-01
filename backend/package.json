@@ -4,9 +4,10 @@
     "description": "DIVE V3 Backend API with PEP for ABAC authorization",
     "main": "dist/server.js",
     "scripts": {
-        "dev": "tsx watch src/server.ts",
+        "dev": "tsx watch src/https-server.ts",
+        "dev:http": "tsx watch src/server.ts",
         "build": "tsc",
-        "start": "node dist/server.js",
+        "start": "node dist/https-server.js",
         "test": "NODE_ENV=test jest --testTimeout=15000 --runInBand",
         "test:unit": "NODE_ENV=test jest --testPathIgnorePatterns=integration --testTimeout=15000 --maxWorkers=50%",
         "test:integration": "NODE_ENV=test jest --testPathPattern=integration --testTimeout=15000 --runInBand",
