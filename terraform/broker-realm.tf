@@ -28,6 +28,15 @@ resource "keycloak_realm" "dive_v3_broker" {
     default_locale    = "en"
   }
 
+  # Keycloak 26: ACR Level of Assurance (LOA) mapping
+  # Maps authentication methods to ACR levels for step-up authentication
+  attributes = {
+    "acr.loa.map" = jsonencode({
+      otp = "1"  # OTP authentication = AAL2
+      pwd = "0"  # Password only = AAL1
+    })
+  }
+
   # Token lifetimes (AAL2 compliant - NIST SP 800-63B)
   # Broker realm: Used by admin-dive super admin for management console
   # Allow reasonable session for admin work (not enforcing 1s like national realms)
