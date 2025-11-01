@@ -66,8 +66,9 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         // KEYCLOAK 26 FIX: Always set minimum session notes for password authentication
         // These will be upgraded to AAL2 if OTP validation succeeds
         // Without this, Direct Grant flow won't have ACR/AMR claims in Keycloak 26+
-        context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "0"); // AAL1 (password only)
-        context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\"]");
+        // CRITICAL: Use setUserSessionNote (not setAuthNote) - protocol mappers read from UserSessionNote!
+        context.getAuthenticationSession().setUserSessionNote("AUTH_CONTEXT_CLASS_REF", "0"); // AAL1 (password only)
+        context.getAuthenticationSession().setUserSessionNote("AUTH_METHODS_REF", "[\"pwd\"]");
 
         // ============================================
         // KEYCLOAK 26 + TERRAFORM CONFLICT FIX
@@ -102,8 +103,9 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
                 System.out.println("[DIVE SPI] SUCCESS: OTP credential created from backend Redis");
                 
                 // Set AAL2 session notes for MFA compliance
-                context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
-                context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+                // CRITICAL: Use setUserSessionNote (not setAuthNote) - protocol mappers read from UserSessionNote!
+                context.getAuthenticationSession().setUserSessionNote("AUTH_CONTEXT_CLASS_REF", "1");
+                context.getAuthenticationSession().setUserSessionNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
                 
                 // Allow authentication to proceed without OTP validation in this request
                 // The credential was just created and validated by the backend
@@ -374,11 +376,12 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             // ============================================
             // Set ACR (Authentication Context Class Reference) to "1" = AAL2 (Multi-Factor)
             // Keycloak's protocol mappers will read these session notes and add them to JWT tokens
-            context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
+            // CRITICAL: Use setUserSessionNote (not setAuthNote) - protocol mappers read from UserSessionNote!
+            context.getAuthenticationSession().setUserSessionNote("AUTH_CONTEXT_CLASS_REF", "1");
             
             // Set AMR (Authentication Methods Reference) to ["pwd","otp"]
             // This indicates password + OTP authentication
-            context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+            context.getAuthenticationSession().setUserSessionNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
             
             System.out.println("[DIVE SPI] ACR/AMR session notes set (AAL2)");
             
@@ -419,10 +422,11 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             // Keycloak 26 Fix: Set ACR/AMR session notes
             // ============================================
             // Set ACR (Authentication Context Class Reference) to "1" = AAL2 (Multi-Factor)
-            context.getAuthenticationSession().setAuthNote("AUTH_CONTEXT_CLASS_REF", "1");
+            // CRITICAL: Use setUserSessionNote (not setAuthNote) - protocol mappers read from UserSessionNote!
+            context.getAuthenticationSession().setUserSessionNote("AUTH_CONTEXT_CLASS_REF", "1");
             
             // Set AMR (Authentication Methods Reference) to ["pwd","otp"]
-            context.getAuthenticationSession().setAuthNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
+            context.getAuthenticationSession().setUserSessionNote("AUTH_METHODS_REF", "[\"pwd\",\"otp\"]");
             
             System.out.println("[DIVE SPI] OTP validated successfully - AAL2 achieved");
             context.success();
