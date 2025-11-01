@@ -9,26 +9,26 @@ resource "keycloak_oidc_identity_provider" "esp_realm_broker" {
   alias        = "esp-realm-broker"
   display_name = "Spain (Ministerio de Defensa)"
   enabled      = true
-  
+
   # OIDC endpoints from Spanish realm
   authorization_url = "https://localhost:8443/realms/dive-v3-esp/protocol/openid-connect/auth"
   token_url         = "https://localhost:8443/realms/dive-v3-esp/protocol/openid-connect/token"
   jwks_url          = "https://localhost:8443/realms/dive-v3-esp/protocol/openid-connect/certs"
   user_info_url     = "https://localhost:8443/realms/dive-v3-esp/protocol/openid-connect/userinfo"
-  
+
   # Client credentials from Spanish realm
   client_id     = keycloak_openid_client.esp_realm_client.client_id
   client_secret = keycloak_openid_client.esp_realm_client.client_secret
-  
+
   default_scopes = "openid profile email"
-  
+
   store_token = true
   trust_email = true
-  sync_mode   = "FORCE"  # Always sync from Spanish realm
-  
+  sync_mode   = "FORCE" # Always sync from Spanish realm
+
   first_broker_login_flow_alias = "first broker login"
-  link_only = false  # Auto-create users
-  
+  link_only                     = false # Auto-create users
+
   gui_order = "7"
 }
 
@@ -38,7 +38,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_uniqueid" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "uniqueID"
@@ -51,7 +51,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_clearance" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearance"
@@ -64,7 +64,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_country" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "countryOfAffiliation"
@@ -77,7 +77,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_coi" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acpCOI"
@@ -90,7 +90,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_dutyorg" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "dutyOrg"
@@ -103,7 +103,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_orgunit" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "orgUnit"
@@ -116,7 +116,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_acr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-acr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "acr"
@@ -129,7 +129,7 @@ resource "keycloak_custom_identity_provider_mapper" "esp_broker_amr" {
   identity_provider_alias  = keycloak_oidc_identity_provider.esp_realm_broker.alias
   name                     = "esp-amr-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "amr"

@@ -11,25 +11,25 @@
 # ============================================
 resource "keycloak_realm_user_profile" "usa_profile" {
   realm_id = keycloak_realm.dive_v3_usa.id
-  
+
   # Allow unmanaged attributes (don't force removal of built-in ones)
   unmanaged_attribute_policy = "ENABLED"
-  
+
   # ============================================
   # REQUIRED BUILT-IN ATTRIBUTES (Keycloak 26)
   # ============================================
   # Keycloak 26 requires username and email to be explicitly declared
   # Omitting them causes "can not be removed" errors
-  
+
   attribute {
     name         = "username"
     display_name = "Username"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
-    
+
     validator {
       name = "length"
       config = {
@@ -37,29 +37,29 @@ resource "keycloak_realm_user_profile" "usa_profile" {
         max = "255"
       }
     }
-    
+
     validator {
       name = "username-prohibited-characters"
     }
-    
+
     validator {
       name = "up-username-not-idn-homograph"
     }
   }
-  
+
   attribute {
     name         = "email"
     display_name = "Email"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
-    
+
     validator {
       name = "email"
     }
-    
+
     validator {
       name = "length"
       config = {
@@ -67,27 +67,27 @@ resource "keycloak_realm_user_profile" "usa_profile" {
       }
     }
   }
-  
+
   attribute {
     name         = "firstName"
     display_name = "First name"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name         = "lastName"
     display_name = "Last name"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   # ============================================
   # DIVE CUSTOM ATTRIBUTES
   # ============================================
@@ -95,12 +95,12 @@ resource "keycloak_realm_user_profile" "usa_profile" {
   attribute {
     name         = "uniqueID"
     display_name = "Unique Identifier"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
-    
+
     validator {
       name = "length"
       config = {
@@ -109,16 +109,16 @@ resource "keycloak_realm_user_profile" "usa_profile" {
       }
     }
   }
-  
+
   attribute {
     name         = "clearance"
     display_name = "Security Clearance"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
-    
+
     validator {
       name = "options"
       config = {
@@ -126,26 +126,26 @@ resource "keycloak_realm_user_profile" "usa_profile" {
       }
     }
   }
-  
+
   attribute {
     name         = "clearanceOriginal"
     display_name = "Original Clearance"
-    
+
     permissions {
       view = ["admin"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "countryOfAffiliation"
     display_name = "Country of Affiliation"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
-    
+
     validator {
       name = "options"
       config = {
@@ -153,32 +153,32 @@ resource "keycloak_realm_user_profile" "usa_profile" {
       }
     }
   }
-  
+
   attribute {
     name         = "acpCOI"
     display_name = "Community of Interest"
     multi_valued = true
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name         = "dutyOrg"
     display_name = "Duty Organization"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "orgUnit"
     display_name = "Organizational Unit"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
@@ -191,21 +191,21 @@ resource "keycloak_realm_user_profile" "usa_profile" {
 # ============================================
 resource "keycloak_realm_user_profile" "esp_profile" {
   realm_id = keycloak_realm.dive_v3_esp.id
-  
+
   unmanaged_attribute_policy = "ENABLED"
-  
+
   # Required built-in attributes
   attribute {
-    name = "username"
+    name         = "username"
     display_name = "Nombre de Usuario"
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "email"
+    name         = "email"
     display_name = "Correo Electrónico"
     permissions {
       view = ["admin", "user"]
@@ -215,18 +215,18 @@ resource "keycloak_realm_user_profile" "esp_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
-    name = "firstName"
+    name         = "firstName"
     display_name = "Nombre"
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
-    name = "lastName"
+    name         = "lastName"
     display_name = "Apellido"
     permissions {
       view = ["admin", "user"]
@@ -237,48 +237,48 @@ resource "keycloak_realm_user_profile" "esp_profile" {
   attribute {
     name         = "uniqueID"
     display_name = "Identificador Único"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearance"
     display_name = "Nivel de Seguridad"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearanceOriginal"
     display_name = "Clasificación Original"
-    
+
     permissions {
       view = ["admin"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "countryOfAffiliation"
     display_name = "País de Afiliación"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "acpCOI"
     display_name = "Comunidad de Interés"
     multi_valued = true
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
@@ -291,21 +291,21 @@ resource "keycloak_realm_user_profile" "esp_profile" {
 # ============================================
 resource "keycloak_realm_user_profile" "fra_profile" {
   realm_id = keycloak_realm.dive_v3_fra.id
-  
+
   unmanaged_attribute_policy = "ENABLED"
-  
+
   # Required built-in attributes
   attribute {
-    name = "username"
+    name         = "username"
     display_name = "Nom d'utilisateur"
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "email"
+    name         = "email"
     display_name = "Email"
     permissions {
       view = ["admin", "user"]
@@ -315,18 +315,18 @@ resource "keycloak_realm_user_profile" "fra_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
-    name = "firstName"
+    name         = "firstName"
     display_name = "Prénom"
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
-    name = "lastName"
+    name         = "lastName"
     display_name = "Nom"
     permissions {
       view = ["admin", "user"]
@@ -337,48 +337,48 @@ resource "keycloak_realm_user_profile" "fra_profile" {
   attribute {
     name         = "uniqueID"
     display_name = "Identifiant Unique"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearance"
     display_name = "Niveau de Sécurité"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearanceOriginal"
     display_name = "Classification Originale"
-    
+
     permissions {
       view = ["admin"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "countryOfAffiliation"
     display_name = "Pays d'Affiliation"
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "acpCOI"
     display_name = "Communauté d'Intérêt"
     multi_valued = true
-    
+
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
@@ -390,20 +390,20 @@ resource "keycloak_realm_user_profile" "fra_profile" {
 # Canada Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "can_profile" {
-  realm_id = keycloak_realm.dive_v3_can.id
+  realm_id                   = keycloak_realm.dive_v3_can.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
-    name = "username"
+    name         = "username"
     display_name = "Username"
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "email"
+    name         = "email"
     display_name = "Email"
     permissions {
       view = ["admin", "user"]
@@ -413,18 +413,18 @@ resource "keycloak_realm_user_profile" "can_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
-    name = "firstName"
+    name         = "firstName"
     display_name = "First name"
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
-    name = "lastName"
+    name         = "lastName"
     display_name = "Last name"
     permissions {
       view = ["admin", "user"]
@@ -440,7 +440,7 @@ resource "keycloak_realm_user_profile" "can_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearance"
     display_name = "Clearance Level"
@@ -449,7 +449,7 @@ resource "keycloak_realm_user_profile" "can_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearanceOriginal"
     display_name = "Original Clearance"
@@ -458,7 +458,7 @@ resource "keycloak_realm_user_profile" "can_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "countryOfAffiliation"
     display_name = "Country"
@@ -467,7 +467,7 @@ resource "keycloak_realm_user_profile" "can_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "acpCOI"
     display_name = "COI"
@@ -483,20 +483,20 @@ resource "keycloak_realm_user_profile" "can_profile" {
 # Germany Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "deu_profile" {
-  realm_id = keycloak_realm.dive_v3_deu.id
+  realm_id                   = keycloak_realm.dive_v3_deu.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
-    name = "username"
+    name         = "username"
     display_name = "Benutzername"
     permissions {
       view = ["admin", "user"]
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "email"
+    name         = "email"
     display_name = "E-Mail"
     permissions {
       view = ["admin", "user"]
@@ -506,18 +506,18 @@ resource "keycloak_realm_user_profile" "deu_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
-    name = "firstName"
+    name         = "firstName"
     display_name = "Vorname"
     permissions {
       view = ["admin", "user"]
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
-    name = "lastName"
+    name         = "lastName"
     display_name = "Nachname"
     permissions {
       view = ["admin", "user"]
@@ -533,7 +533,7 @@ resource "keycloak_realm_user_profile" "deu_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearance"
     display_name = "Sicherheitsfreigabe"
@@ -542,7 +542,7 @@ resource "keycloak_realm_user_profile" "deu_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "clearanceOriginal"
     display_name = "Originale Klassifizierung"
@@ -551,7 +551,7 @@ resource "keycloak_realm_user_profile" "deu_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "countryOfAffiliation"
     display_name = "Land"
@@ -560,7 +560,7 @@ resource "keycloak_realm_user_profile" "deu_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name         = "acpCOI"
     display_name = "COI"
@@ -578,9 +578,9 @@ resource "keycloak_realm_user_profile" "deu_profile" {
 # Using simplified schema for remaining realms
 
 resource "keycloak_realm_user_profile" "gbr_profile" {
-  realm_id = keycloak_realm.dive_v3_gbr.id
+  realm_id                   = keycloak_realm.dive_v3_gbr.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
     name = "username"
     permissions {
@@ -588,7 +588,7 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "email"
     permissions {
@@ -599,7 +599,7 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
     name = "firstName"
     permissions {
@@ -607,7 +607,7 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name = "lastName"
     permissions {
@@ -623,7 +623,7 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearance"
     permissions {
@@ -631,7 +631,7 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearanceOriginal"
     permissions {
@@ -639,7 +639,7 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "countryOfAffiliation"
     permissions {
@@ -647,9 +647,9 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "acpCOI"
+    name         = "acpCOI"
     multi_valued = true
     permissions {
       view = ["admin", "user"]
@@ -662,9 +662,9 @@ resource "keycloak_realm_user_profile" "gbr_profile" {
 # Italy Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "ita_profile" {
-  realm_id = keycloak_realm.dive_v3_ita.id
+  realm_id                   = keycloak_realm.dive_v3_ita.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
     name = "username"
     permissions {
@@ -672,7 +672,7 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "email"
     permissions {
@@ -683,7 +683,7 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
     name = "firstName"
     permissions {
@@ -691,7 +691,7 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name = "lastName"
     permissions {
@@ -707,7 +707,7 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearance"
     permissions {
@@ -715,7 +715,7 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearanceOriginal"
     permissions {
@@ -723,7 +723,7 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "countryOfAffiliation"
     permissions {
@@ -731,9 +731,9 @@ resource "keycloak_realm_user_profile" "ita_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "acpCOI"
+    name         = "acpCOI"
     multi_valued = true
     permissions {
       view = ["admin", "user"]
@@ -746,9 +746,9 @@ resource "keycloak_realm_user_profile" "ita_profile" {
 # Netherlands Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "nld_profile" {
-  realm_id = keycloak_realm.dive_v3_nld.id
+  realm_id                   = keycloak_realm.dive_v3_nld.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
     name = "username"
     permissions {
@@ -756,7 +756,7 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "email"
     permissions {
@@ -767,7 +767,7 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
     name = "firstName"
     permissions {
@@ -775,7 +775,7 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name = "lastName"
     permissions {
@@ -791,7 +791,7 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearance"
     permissions {
@@ -799,7 +799,7 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearanceOriginal"
     permissions {
@@ -807,7 +807,7 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "countryOfAffiliation"
     permissions {
@@ -815,9 +815,9 @@ resource "keycloak_realm_user_profile" "nld_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "acpCOI"
+    name         = "acpCOI"
     multi_valued = true
     permissions {
       view = ["admin", "user"]
@@ -830,9 +830,9 @@ resource "keycloak_realm_user_profile" "nld_profile" {
 # Poland Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "pol_profile" {
-  realm_id = keycloak_realm.dive_v3_pol.id
+  realm_id                   = keycloak_realm.dive_v3_pol.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
     name = "username"
     permissions {
@@ -840,7 +840,7 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "email"
     permissions {
@@ -851,7 +851,7 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
     name = "firstName"
     permissions {
@@ -859,7 +859,7 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name = "lastName"
     permissions {
@@ -875,7 +875,7 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearance"
     permissions {
@@ -883,7 +883,7 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearanceOriginal"
     permissions {
@@ -891,7 +891,7 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "countryOfAffiliation"
     permissions {
@@ -899,9 +899,9 @@ resource "keycloak_realm_user_profile" "pol_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "acpCOI"
+    name         = "acpCOI"
     multi_valued = true
     permissions {
       view = ["admin", "user"]
@@ -914,9 +914,9 @@ resource "keycloak_realm_user_profile" "pol_profile" {
 # Industry Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "industry_profile" {
-  realm_id = keycloak_realm.dive_v3_industry.id
+  realm_id                   = keycloak_realm.dive_v3_industry.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
     name = "username"
     permissions {
@@ -924,7 +924,7 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "email"
     permissions {
@@ -935,7 +935,7 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
     name = "firstName"
     permissions {
@@ -943,7 +943,7 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name = "lastName"
     permissions {
@@ -959,7 +959,7 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearance"
     permissions {
@@ -967,7 +967,7 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearanceOriginal"
     permissions {
@@ -975,7 +975,7 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "countryOfAffiliation"
     permissions {
@@ -983,9 +983,9 @@ resource "keycloak_realm_user_profile" "industry_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "acpCOI"
+    name         = "acpCOI"
     multi_valued = true
     permissions {
       view = ["admin", "user"]
@@ -998,9 +998,9 @@ resource "keycloak_realm_user_profile" "industry_profile" {
 # Broker Realm User Profile
 # ============================================
 resource "keycloak_realm_user_profile" "broker_profile" {
-  realm_id = keycloak_realm.dive_v3_broker.id
+  realm_id                   = keycloak_realm.dive_v3_broker.id
   unmanaged_attribute_policy = "ENABLED"
-  
+
   attribute {
     name = "username"
     permissions {
@@ -1008,7 +1008,7 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "email"
     permissions {
@@ -1019,7 +1019,7 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       name = "email"
     }
   }
-  
+
   attribute {
     name = "firstName"
     permissions {
@@ -1027,7 +1027,7 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       edit = ["admin", "user"]
     }
   }
-  
+
   attribute {
     name = "lastName"
     permissions {
@@ -1043,7 +1043,7 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearance"
     permissions {
@@ -1051,7 +1051,7 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "clearanceOriginal"
     permissions {
@@ -1059,7 +1059,7 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
     name = "countryOfAffiliation"
     permissions {
@@ -1067,9 +1067,9 @@ resource "keycloak_realm_user_profile" "broker_profile" {
       edit = ["admin"]
     }
   }
-  
+
   attribute {
-    name = "acpCOI"
+    name         = "acpCOI"
     multi_valued = true
     permissions {
       view = ["admin", "user"]
