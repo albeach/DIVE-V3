@@ -171,6 +171,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         sessionsTable: sessions,
         verificationTokensTable: verificationTokens,
     }),
+    session: {
+        strategy: "database",  // Use database sessions with adapter
+        maxAge: 8 * 60 * 60,   // 8 hours
+        updateAge: 15 * 60,    // Update session every 15 minutes
+    },
     trustHost: true, // Required for NextAuth v5 in development
     debug: process.env.NODE_ENV === "development",  // ENABLE VERBOSE DEBUG LOGGING
     logger: {
