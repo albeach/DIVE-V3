@@ -18,7 +18,7 @@ module "broker_mfa" {
   realm_name         = "dive-v3-broker"
   realm_display_name = "DIVE V3 Broker"
 
-  enable_direct_grant_mfa = false # DISABLED - Custom SPI not deployed yet (Option 3: Theme-based auth)
+  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening complete)
 }
 
 # ============================================
