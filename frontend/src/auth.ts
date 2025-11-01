@@ -183,13 +183,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Keycloak({
             clientId: process.env.KEYCLOAK_CLIENT_ID as string,
             clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
-            issuer: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
+            // CRITICAL: issuer must match KC_HOSTNAME (https://localhost:8443), not internal keycloak:8443
+            issuer: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
             authorization: {
                 url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email offline_access",
                 }
             },
+            // token and userinfo use internal Docker network (keycloak:8443) for server-side calls
             token: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
             userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
             checks: ["pkce", "state"],  // Best practice: Enable security checks
