@@ -85,8 +85,9 @@ resource "keycloak_authentication_execution" "classified_otp_form" {
 }
 
 # Bind the flow to realm browser authentication
-resource "keycloak_authentication_bindings" "classified_bindings" {
-  realm_id     = var.realm_id
-  browser_flow = keycloak_authentication_flow.classified_browser.alias
-}
+# DISABLED: Option 3 - Use default "browser" flow (custom theme handles UI, not custom flow)
+# resource "keycloak_authentication_bindings" "classified_bindings" {
+#   realm_id     = var.realm_id
+#   browser_flow = keycloak_authentication_flow.classified_browser.alias
+# }
 

@@ -20,8 +20,8 @@ resource "keycloak_realm" "dive_v3_ita" {
   edit_username_allowed          = false
   login_with_email_allowed       = true
   
-  # Theming
-  login_theme = "keycloak"
+  # Custom DIVE V3 Theme (Option 3: Per-Country Customization)
+  login_theme = "dive-v3-ita"
   
   # Internationalization (Italian + English)
   internationalization {
@@ -90,8 +90,8 @@ resource "keycloak_openid_client" "ita_realm_client" {
   
   # Redirect to broker realm
   valid_redirect_uris = [
-    "http://localhost:8081/realms/dive-v3-broker/broker/ita-realm-broker/endpoint",
-    "http://keycloak:8080/realms/dive-v3-broker/broker/ita-realm-broker/endpoint"
+    "https://localhost:8443/realms/dive-v3-broker/broker/ita-realm-broker/endpoint",
+    "https://keycloak:8443/realms/dive-v3-broker/broker/ita-realm-broker/endpoint"
   ]
   
   root_url = var.app_url
