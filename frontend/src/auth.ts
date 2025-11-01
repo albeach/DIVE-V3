@@ -192,7 +192,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
             token: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
             userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
-            checks: ["pkce", "state"],
+            checks: ["pkce", "state"],  // Best practice: Enable security checks
             allowDangerousEmailAccountLinking: true,
         }),
     ],

@@ -192,6 +192,8 @@ services:
       - ./backend/src:/app/src
       - ./backend/package.json:/app/package.json:ro
       - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      # Mount SSL certificates for HTTPS server
+      - ./keycloak/certs:/opt/keycloak/certs:ro
       # CRITICAL: Mount policies directory so backend can read OPA Rego files
       - ./policies:/app/policies:ro
       # CRITICAL: Mount certs directory for X.509 PKI certificates
@@ -213,9 +215,9 @@ services:
       # BEST PRACTICE: Pure Docker networking (no extra_hosts)
       # Browser (NEXT_PUBLIC_*): Uses localhost (exposed ports)
       # Server-side: Uses Docker service names (internal network)
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-      NEXT_PUBLIC_BACKEND_URL: http://localhost:4000
-      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: https://localhost:4000
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4000
+      NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # Server-side backend URL (Docker internal network)
       BACKEND_URL: http://backend:4000
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm
@@ -233,9 +235,9 @@ services:
       NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       # NextAuth configuration
-      AUTH_URL: http://localhost:3000
+      AUTH_URL: https://localhost:3000
       AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: https://localhost:3000
       # Database for NextAuth sessions
       DATABASE_URL: postgresql://postgres:password@postgres:5432/dive_v3_app
     ports:
@@ -248,6 +250,8 @@ services:
     volumes:
       # Development: Mount entire source for hot reload
       - ./frontend:/app
+      # Mount SSL certificates for HTTPS server
+      - ./keycloak/certs:/opt/keycloak/certs:ro
       # Exclude node_modules and .next from host (use container's versions)
       - /app/node_modules
       - /app/.next
