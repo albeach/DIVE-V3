@@ -33,14 +33,13 @@ resource "keycloak_authentication_execution" "direct_grant_password" {
   ]
 }
 
-# Step 3: OTP subflow (TEMPORARY: REQUIRED for testing)
-# TODO: Change back to CONDITIONAL after OTP testing is complete
+# Step 3: OTP subflow (CONDITIONAL - clearance-based MFA enforcement)
 resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.direct_grant_mfa[0].alias
   alias             = "Conditional OTP - Direct Grant - ${var.realm_display_name}"
-  requirement       = "REQUIRED"  # TEMPORARY: Forces OTP for ALL users (testing)
+  requirement       = "CONDITIONAL"  # Only enforce if condition (clearance) is met
   
   depends_on = [
     keycloak_authentication_execution.direct_grant_password
@@ -48,13 +47,13 @@ resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
 }
 
 # Condition: User attribute "clearance" != "UNCLASSIFIED"
-# TEMPORARY: DISABLED for testing - all users will be prompted for OTP
+# MFA required for CONFIDENTIAL, SECRET, TOP_SECRET users
 resource "keycloak_authentication_execution" "direct_grant_condition_user_attribute" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.direct_grant_otp_conditional[0].alias
   authenticator     = "conditional-user-attribute"
-  requirement       = "DISABLED"  # TEMPORARY: Disabled to test OTP enrollment
+  requirement       = "REQUIRED"  # Enforce clearance-based MFA
 }
 
 # Configuration for conditional-user-attribute

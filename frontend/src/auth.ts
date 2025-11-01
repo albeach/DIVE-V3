@@ -528,11 +528,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         verifyRequest: "/login", // Redirect for email verification
         newUser: "/dashboard" // Redirect for new users
     },
-    session: {
-        strategy: "database",
-        maxAge: 30 * 60, // 30 minutes (more reasonable for admin tasks)
-        updateAge: 5 * 60, // Update session every 5 minutes (keep session alive with activity)
-    },
     cookies: {
         sessionToken: {
             name: `authjs.session-token`,
