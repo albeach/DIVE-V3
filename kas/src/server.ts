@@ -32,7 +32,7 @@ config({ path: '.env.local' });
 const app: Application = express();
 const PORT = process.env.KAS_PORT || 8080;
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://localhost:4000';
 
 // ============================================
 // DEK Cache (In-Memory)
