@@ -28,7 +28,7 @@ import speakeasy from 'speakeasy';
 // ============================================
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:4000';
+const BACKEND_API_URL = process.env.BACKEND_API_URL || 'https://localhost:4000';
 
 // Test user credentials
 const TEST_USERS = {

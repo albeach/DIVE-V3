@@ -146,7 +146,7 @@ export default function KASRequestModal({
                 updateStep(2, 'IN_PROGRESS', 'Contacting KAS at localhost:8080...');
 
                 // Make actual KAS request
-                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
                 const response = await fetch(`${backendUrl}/api/resources/request-key`, {
                     method: 'POST',
                     headers: {
