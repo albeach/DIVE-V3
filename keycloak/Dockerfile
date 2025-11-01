@@ -22,26 +22,28 @@ RUN chmod +x /usr/bin/curl
 RUN /usr/bin/curl --version
 
 # ============================================
-# Import Self-Signed SSL Certificate into Java Truststore
+# Import mkcert SSL Certificate into Java Truststore
 # ============================================
-# Copy SSL certificates into the image
+# Copy mkcert-generated SSL certificates into the image
+# These are locally-trusted certificates (no browser warnings in development)
 COPY --chown=1000:1000 certs/ /opt/keycloak/certs/
 
 # Copy custom DIVE V3 themes (base + all country variants)
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 
-# Import self-signed certificate into Java truststore
+# Import mkcert certificate into Java truststore
+# Java doesn't automatically use system trust store, so we must import explicitly
 # This allows Keycloak's Java HTTP client to trust HTTPS calls to itself during federation
 # (e.g., broker realm calling national realm token endpoints)
 RUN keytool -import -trustcacerts \
-    -alias localhost-selfsigned \
+    -alias localhost-mkcert \
     -file /opt/keycloak/certs/certificate.pem \
     -keystore /etc/pki/ca-trust/extracted/java/cacerts \
     -storepass changeit \
     -noprompt
 
-# Verify certificate was imported
-RUN keytool -list -keystore /etc/pki/ca-trust/extracted/java/cacerts -storepass changeit -alias localhost-selfsigned
+# Verify certificate was imported successfully
+RUN keytool -list -keystore /etc/pki/ca-trust/extracted/java/cacerts -storepass changeit -alias localhost-mkcert
 
 USER 1000
 
