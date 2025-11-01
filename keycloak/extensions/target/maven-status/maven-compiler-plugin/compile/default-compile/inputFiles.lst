@@ -1,3 +1,4 @@
+/app/src/main/java/com/dive/keycloak/redis/RedisOTPStore.java
 /app/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.java
 /app/src/main/java/com/dive/keycloak/action/ConfigureOTPRequiredAction.java
 /app/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticatorFactory.java
