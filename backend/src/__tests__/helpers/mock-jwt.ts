@@ -191,5 +191,14 @@ export function verifyTestJWT(token: string): IJWTPayload {
     return jwt.verify(token, TEST_SECRET) as IJWTPayload;
 }
 
+/**
+ * Alias for createMockJWT (backward compatibility with E2E tests)
+ * @param claims Custom claims to include in the token
+ * @param secret Signing secret (defaults to test secret)
+ * @returns Signed JWT token string
+ */
+export function generateTestJWT(claims: Partial<IJWTPayload> = {}, secret: string = TEST_SECRET): Promise<string> {
+    return Promise.resolve(createMockJWT(claims, secret));
+}
 
 
