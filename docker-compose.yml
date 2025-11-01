@@ -162,7 +162,7 @@ services:
     container_name: dive-v3-backend
     environment:
       NODE_ENV: development
-      PORT: 4000
+      PORT: 4000                      # HTTPS port (all access)
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm with HTTPS
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
@@ -179,7 +179,7 @@ services:
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
     ports:
-      - "4000:4000"
+      - "4000:4000"    # HTTPS (all access)
     depends_on:
       - keycloak
       - mongo
@@ -219,7 +219,8 @@ services:
       NEXT_PUBLIC_BACKEND_URL: https://localhost:4000
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # Server-side backend URL (Docker internal network)
-      BACKEND_URL: http://backend:4000
+      # Uses HTTPS with self-signed certs (NODE_TLS_REJECT_UNAUTHORIZED=0)
+      BACKEND_URL: https://backend:4000
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm
       # Server-side NextAuth: Use keycloak:8443 (Docker network for container-to-container with HTTPS)
       # NextAuth running inside the container needs to reach Keycloak via Docker network
