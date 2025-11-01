@@ -387,8 +387,9 @@ resource "keycloak_user" "broker_super_admin" {
     # Not hardcoded in user attributes (AAL2 fix)
   }
 
-  # Force MFA enrollment on first login (TOP_SECRET clearance requires MFA)
-  required_actions = ["CONFIGURE_TOTP"]
+  # NOTE: required_actions removed - let Keycloak manage MFA setup dynamically
+  # Initial setup will be triggered by MFA enforcement policy, not hardcoded action
+  # This prevents Terraform from resetting MFA after user completes enrollment
 
   initial_password {
     value     = "DiveAdmin2025!"
@@ -396,8 +397,7 @@ resource "keycloak_user" "broker_super_admin" {
   }
 
   # Lifecycle: Ignore runtime changes
-  # This allows backend to set/modify attributes (like otp_secret_pending) without Terraform conflicts
-  # Also ignore required_actions - Keycloak removes CONFIGURE_TOTP after user completes setup
+  # This allows backend to set/modify attributes and Keycloak to manage required actions
   lifecycle {
     ignore_changes = [attributes, required_actions]
   }
