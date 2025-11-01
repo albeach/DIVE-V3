@@ -31,6 +31,9 @@ COPY --chown=1000:1000 certs/ /opt/keycloak/certs/
 # Copy custom DIVE V3 themes (base + all country variants)
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 
+# Copy Custom SPI JARs for conditional MFA and clearance downgrade
+COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
+
 # Import mkcert certificate into Java truststore
 # Java doesn't automatically use system trust store, so we must import explicitly
 # This allows Keycloak's Java HTTP client to trust HTTPS calls to itself during federation
