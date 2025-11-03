@@ -265,15 +265,33 @@ echo ""
 if [ -d terraform ]; then
     cd terraform
     
-    # Check if Terraform is installed
+    # Check if Terraform is installed and verify version
+    TERRAFORM_REQUIRED_VERSION="1.13.4"
+    TERRAFORM_INSTALL_VERSION="1.9.8"  # Use latest stable 1.x version
+    
     if ! command -v terraform &> /dev/null; then
-        echo "Installing Terraform..."
-        wget -q https://releases.hashicorp.com/terraform/1.6.5/terraform_1.6.5_linux_amd64.zip
-        sudo unzip -q -o terraform_1.6.5_linux_amd64.zip -d /usr/local/bin/
-        rm terraform_1.6.5_linux_amd64.zip
-        echo -e "${GREEN}✓${NC} Terraform installed"
+        echo "Installing Terraform ${TERRAFORM_INSTALL_VERSION}..."
+        wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_INSTALL_VERSION}/terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+        sudo unzip -q -o terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip -d /usr/local/bin/
+        rm terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+        echo -e "${GREEN}✓${NC} Terraform ${TERRAFORM_INSTALL_VERSION} installed"
     else
-        echo -e "${GREEN}✓${NC} Terraform already installed: $(terraform version -json | grep -o '"version":"[^"]*' | cut -d'"' -f4)"
+        CURRENT_VERSION=$(terraform version -json 2>/dev/null | grep -o '"version":"v[^"]*' | cut -d'v' -f2 || echo "unknown")
+        echo -e "${GREEN}✓${NC} Terraform already installed: ${CURRENT_VERSION}"
+        
+        # Check if version is too old
+        if [ "$CURRENT_VERSION" != "unknown" ]; then
+            MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
+            MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
+            if [ "$MAJOR" -eq 1 ] && [ "$MINOR" -lt 13 ]; then
+                echo -e "${YELLOW}⚠️  Terraform version ${CURRENT_VERSION} is too old (requires >= ${TERRAFORM_REQUIRED_VERSION})${NC}"
+                echo "Upgrading to ${TERRAFORM_INSTALL_VERSION}..."
+                wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_INSTALL_VERSION}/terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+                sudo unzip -q -o terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip -d /usr/local/bin/
+                rm terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+                echo -e "${GREEN}✓${NC} Terraform upgraded to ${TERRAFORM_INSTALL_VERSION}"
+            fi
+        fi
     fi
     
     echo "Initializing Terraform..."
