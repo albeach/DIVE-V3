@@ -27,12 +27,57 @@ ADMIN_USER="admin"
 ADMIN_PASSWORD="admin"
 
 echo "Checking Keycloak availability..."
-if ! curl -k -sf "${KEYCLOAK_URL}/health/ready" > /dev/null 2>&1; then
-    echo -e "${RED}❌ Keycloak is not accessible at ${KEYCLOAK_URL}${NC}"
-    echo "Please ensure Keycloak is running: docker compose ps keycloak"
+echo "Trying multiple endpoints and protocols..."
+
+KEYCLOAK_ACCESSIBLE=0
+
+# Try HTTPS on 8443 with /health/ready
+if curl -k -sf "${KEYCLOAK_URL}/health/ready" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} HTTPS endpoint accessible: ${KEYCLOAK_URL}/health/ready"
+    KEYCLOAK_ACCESSIBLE=1
+# Try HTTPS on 8443 with /health
+elif curl -k -sf "${KEYCLOAK_URL}/health" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} HTTPS endpoint accessible: ${KEYCLOAK_URL}/health"
+    KEYCLOAK_ACCESSIBLE=1
+# Try HTTP on 8081
+elif curl -sf "http://localhost:8081/health/ready" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} HTTP endpoint accessible: http://localhost:8081/health/ready"
+    KEYCLOAK_URL="http://localhost:8081"
+    KEYCLOAK_ACCESSIBLE=1
+elif curl -sf "http://localhost:8081/health" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} HTTP endpoint accessible: http://localhost:8081/health"
+    KEYCLOAK_URL="http://localhost:8081"
+    KEYCLOAK_ACCESSIBLE=1
+# Try master realm endpoint (always works if Keycloak is up)
+elif curl -k -sf "${KEYCLOAK_URL}/realms/master" > /dev/null 2>&1; then
+    echo -e "${GREEN}✓${NC} Master realm accessible: ${KEYCLOAK_URL}/realms/master"
+    KEYCLOAK_ACCESSIBLE=1
+fi
+
+if [ $KEYCLOAK_ACCESSIBLE -eq 0 ]; then
+    echo -e "${RED}❌ Keycloak is not accessible${NC}"
+    echo ""
+    echo "Debugging information:"
+    echo "1. Container status:"
+    docker compose ps keycloak 2>/dev/null || echo "   Could not check container status"
+    echo ""
+    echo "2. Trying to reach endpoints:"
+    echo -n "   - https://localhost:8443/health/ready: "
+    curl -k -s -o /dev/null -w "HTTP %{http_code}" https://localhost:8443/health/ready 2>/dev/null || echo "Failed"
+    echo ""
+    echo -n "   - http://localhost:8081/health/ready: "
+    curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:8081/health/ready 2>/dev/null || echo "Failed"
+    echo ""
+    echo "3. Last 20 lines of Keycloak logs:"
+    docker compose logs keycloak --tail 20 2>/dev/null || echo "   Could not fetch logs"
+    echo ""
+    echo "Please ensure:"
+    echo "  - Keycloak container is running: docker compose ps keycloak"
+    echo "  - Keycloak has fully started (look for 'started' in logs)"
+    echo "  - Ports 8443 and 8081 are accessible"
     exit 1
 fi
-echo -e "${GREEN}✓${NC} Keycloak is accessible"
+echo -e "${GREEN}✓${NC} Keycloak is accessible at ${KEYCLOAK_URL}"
 echo ""
 
 # Get admin token
