@@ -41,3 +41,15 @@ variable "create_test_users" {
   default     = true
 }
 
+variable "backend_url" {
+  description = "The URL of the DIVE V3 backend API"
+  type        = string
+  default     = "http://localhost:4000"
+}
+
+variable "create_example_sp" {
+  description = "Whether to create an example external SP for testing"
+  type        = bool
+  default     = false
+}
+

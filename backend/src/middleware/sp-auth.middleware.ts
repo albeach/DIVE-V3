@@ -78,8 +78,8 @@ export async function validateSPToken(token: string): Promise<ISPContext | null>
     const payload = decodedHeader.payload as any;
     
     // Look up SP by issuer
-    const allSPs = await spService.getAllSPs({ status: 'ACTIVE' });
-    const sp = allSPs.find(s => s.jwksUri && payload.iss === s.clientId);
+    const allSPs = await spService.listSPs({ status: 'ACTIVE' });
+    const sp = allSPs.sps.find((s: any) => s.jwksUri && payload.iss === s.clientId);
     
     if (!sp || !sp.jwksUri) {
       logger.warn('No SP found for issuer', { issuer: payload.iss });

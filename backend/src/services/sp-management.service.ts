@@ -149,6 +149,200 @@ export class SPManagementService {
   }
 
   /**
+   * Get SP by SP ID (alias for getBySPId for consistency)
+   */
+  async getById(spId: string): Promise<IExternalSP | null> {
+    return this.getBySPId(spId);
+  }
+
+  /**
+   * List SPs with filtering and pagination
+   */
+  async listSPs(filter: {
+    status?: string;
+    country?: string;
+    organizationType?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ sps: IExternalSP[]; total: number; page: number; limit: number; totalPages: number }> {
+    await this.initialize();
+    
+    const query: any = {};
+    if (filter.status) query.status = filter.status;
+    if (filter.country) query.country = filter.country;
+    if (filter.organizationType) query.organizationType = filter.organizationType;
+    if (filter.search) {
+      query.$or = [
+        { name: { $regex: filter.search, $options: 'i' } },
+        { clientId: { $regex: filter.search, $options: 'i' } },
+        { 'technicalContact.email': { $regex: filter.search, $options: 'i' } }
+      ];
+    }
+    
+    const page = filter.page || 1;
+    const limit = filter.limit || 20;
+    const skip = (page - 1) * limit;
+    
+    const total = await this.collection!.countDocuments(query);
+    const sps = await this.collection!
+      .find(query)
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .toArray();
+    
+    return {
+      sps,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    };
+  }
+
+  /**
+   * Update SP configuration
+   */
+  async updateSP(spId: string, updates: Partial<IExternalSP>): Promise<IExternalSP | null> {
+    await this.initialize();
+    
+    // Remove fields that shouldn't be updated directly
+    const { spId: _, clientId: __, clientSecret: ___, createdAt: ____, ...safeUpdates } = updates as any;
+    
+    const result = await this.collection!.findOneAndUpdate(
+      { spId },
+      {
+        $set: {
+          ...safeUpdates,
+          updatedAt: new Date()
+        }
+      },
+      { returnDocument: 'after' }
+    );
+    
+    return result || null;
+  }
+
+  /**
+   * Delete SP
+   */
+  async deleteSP(spId: string): Promise<boolean> {
+    await this.initialize();
+    
+    const sp = await this.getBySPId(spId);
+    if (!sp) {
+      return false;
+    }
+    
+    // Delete client from Keycloak
+    try {
+      const kcAdmin = await this.initializeKeycloak();
+      kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+      await kcAdmin.clients.del({ id: sp.clientId });
+    } catch (error) {
+      logger.warn('Failed to delete client from Keycloak', {
+        spId,
+        clientId: sp.clientId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+    
+    // Delete from database
+    const result = await this.collection!.deleteOne({ spId });
+    
+    logger.info('SP deleted', { spId, clientId: sp.clientId });
+    
+    return result.deletedCount === 1;
+  }
+
+  /**
+   * Approve or reject SP
+   */
+  async approveSP(spId: string, approve: boolean, reason?: string, approvedBy?: string): Promise<IExternalSP | null> {
+    await this.initialize();
+    
+    if (approve) {
+      // Approve SP - call the internal approval method
+      await this._approveSPInternal(spId, approvedBy || 'system');
+    } else {
+      // Reject SP
+      await this.collection!.updateOne(
+        { spId },
+        {
+          $set: {
+            status: 'REVOKED',
+            updatedAt: new Date()
+          }
+        }
+      );
+      
+      logger.info('SP rejected', { spId, reason, rejectedBy: approvedBy });
+    }
+    
+    return this.getBySPId(spId);
+  }
+
+  /**
+   * Regenerate client secret
+   */
+  async regenerateClientSecret(spId: string): Promise<{ clientSecret: string } | null> {
+    await this.initialize();
+    
+    const sp = await this.getBySPId(spId);
+    if (!sp || sp.clientType !== 'confidential') {
+      return null;
+    }
+    
+    // Generate new secret
+    const newSecret = generateSecureSecret();
+    
+    // Update in Keycloak
+    try {
+      const kcAdmin = await this.initializeKeycloak();
+      kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+      await kcAdmin.clients.update(
+        { id: sp.clientId },
+        { secret: newSecret }
+      );
+    } catch (error) {
+      logger.error('Failed to regenerate secret in Keycloak', {
+        spId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw new Error('Failed to regenerate client secret');
+    }
+    
+    // Update in database (hashed)
+    await this.collection!.updateOne(
+      { spId },
+      {
+        $set: {
+          clientSecret: newSecret, // In production, hash this
+          updatedAt: new Date()
+        }
+      }
+    );
+    
+    logger.info('Client secret regenerated', { spId, clientId: sp.clientId });
+    
+    return { clientSecret: newSecret };
+  }
+
+  /**
+   * Get activity logs for SP
+   */
+  async getActivityLogs(spId: string, limit: number = 50, offset: number = 0): Promise<any[]> {
+    await this.initialize();
+    
+    // In a production system, this would query a separate activity logs collection
+    // For now, return empty array as placeholder
+    logger.info('Activity logs requested', { spId, limit, offset });
+    
+    return [];
+  }
+
+  /**
    * Get SP by SP ID
    */
   async getBySPId(spId: string): Promise<IExternalSP | null> {
@@ -157,27 +351,9 @@ export class SPManagementService {
   }
 
   /**
-   * Get all SPs
+   * Approve SP (internal method)
    */
-  async getAllSPs(filter?: {
-    status?: string;
-    country?: string;
-    organizationType?: string;
-  }): Promise<IExternalSP[]> {
-    await this.initialize();
-    
-    const query: any = {};
-    if (filter?.status) query.status = filter.status;
-    if (filter?.country) query.country = filter.country;
-    if (filter?.organizationType) query.organizationType = filter.organizationType;
-    
-    return this.collection!.find(query).toArray();
-  }
-
-  /**
-   * Approve SP
-   */
-  async approveSP(spId: string, approvedBy: string): Promise<void> {
+  private async _approveSPInternal(spId: string, approvedBy: string): Promise<void> {
     await this.initialize();
     const kcAdmin = await this.initializeKeycloak();
     
@@ -220,7 +396,7 @@ export class SPManagementService {
   /**
    * Suspend SP
    */
-  async suspendSP(spId: string, reason: string): Promise<void> {
+  async suspendSP(spId: string, reason: string, suspendedBy?: string): Promise<IExternalSP | null> {
     await this.initialize();
     const kcAdmin = await this.initializeKeycloak();
     
@@ -250,8 +426,11 @@ export class SPManagementService {
     logger.warn('SP suspended', {
       spId,
       reason,
+      suspendedBy,
       clientId: sp.clientId
     });
+    
+    return this.getBySPId(spId);
   }
 
   /**

@@ -17,6 +17,10 @@ import authRoutes from './controllers/auth.controller';  // Gap #7: Token revoca
 import otpRoutes from './routes/otp.routes';  // OTP enrollment endpoints
 import decisionReplayRoutes from './routes/decision-replay.routes';
 import policiesLabRoutes from './routes/policies-lab.routes';  // Policies Lab
+import oauthRoutes from './routes/oauth.routes';  // OAuth 2.0 for SP federation
+import scimRoutes from './routes/scim.routes';  // SCIM 2.0 user provisioning
+import federationRoutes from './routes/federation.routes';  // Federation endpoints
+import spManagementRoutes from './routes/sp-management.routes';  // SP Registry management
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 
@@ -44,16 +48,24 @@ app.use(helmet({
   }
 }));
 
-// CORS - Allow HTTPS frontend
+// CORS - Allow HTTPS frontend and federation partners
+const corsOrigins = [
+  process.env.NEXT_PUBLIC_BASE_URL || 'https://localhost:3000',
+  'https://localhost:3000',
+  'http://localhost:3000'  // Fallback for development
+];
+
+// Add federation partner origins from environment
+if (process.env.FEDERATION_ALLOWED_ORIGINS) {
+  corsOrigins.push(...process.env.FEDERATION_ALLOWED_ORIGINS.split(','));
+}
+
 app.use(cors({
-  origin: [
-    process.env.NEXT_PUBLIC_BASE_URL || 'https://localhost:3000',
-    'https://localhost:3000',
-    'http://localhost:3000'  // Fallback for development
-  ],
+  origin: corsOrigins,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-DIVE-Signature'],
+  exposedHeaders: ['Location', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset']
 }));
 
 // Body parsing
@@ -94,6 +106,12 @@ app.use('/api/coi-keys', coiKeysRoutes);
 app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints (must be before /api/auth)
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
 app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
+
+// Federation endpoints (Phase 1)
+app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server
+app.use('/scim/v2', scimRoutes);  // SCIM 2.0 User Provisioning
+app.use('/federation', federationRoutes);  // Federation metadata and resource exchange
+app.use('/api/sp-management', spManagementRoutes);  // SP Registry management (admin-only)
 
 // Root endpoint
 app.get('/', (_req, res) => {

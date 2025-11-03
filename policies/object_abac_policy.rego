@@ -16,8 +16,7 @@ import rego.v1
 # - COI-based key selection
 #
 # Default deny pattern (fail-secure)
-
-allow := false
+default allow := false
 
 decision_reason := "Authorization check not evaluated"
 
@@ -184,11 +183,11 @@ decision := d if {
 	}
 }
 
-decision_reason := "All object security and ABAC conditions satisfied" if {
+decision_reason_message := "All object security and ABAC conditions satisfied" if {
 	allow
 }
 
-decision_reason := violation_message if {
+decision_reason_message := violation_message if {
 	not allow
 	violations := [
 		is_ztdf_integrity_violation,

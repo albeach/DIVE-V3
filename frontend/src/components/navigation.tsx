@@ -53,8 +53,9 @@ import {
     FileCheck,
     ArrowRight,
     BookOpen,
-		GitMerge,
-		FlaskConical
+    GitMerge,
+    FlaskConical,
+    Building2
 } from 'lucide-react';
 import { IdentityDrawer } from '@/components/identity/IdentityDrawer';
 import { useIdentityDrawer } from '@/contexts/IdentityDrawerContext';
@@ -283,6 +284,13 @@ export default function Navigation({ user }: INavigationProps) {
             icon: BarChart3, 
             badge: null,
             description: 'Admin overview'
+        },
+        { 
+            name: 'SP Registry', 
+            href: '/admin/sp-registry', 
+            icon: Building2, 
+            badge: null,
+            description: 'Manage Service Providers'
         },
         { 
             name: 'Certificates', 
