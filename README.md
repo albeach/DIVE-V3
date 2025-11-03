@@ -10,7 +10,7 @@ DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential,
 
 - **Federated Identity:** Multi-IdP authentication (U.S., France, Canada, Industry, **Spain** ✨) via Keycloak broker
 - **External IdP Federation:** True SAML/OIDC federation with Spain SAML and USA OIDC IdPs ✨ **NEW**
-- **Multi-Factor Authentication:** OTP (TOTP) enrollment with QR code generation, AAL2 compliant
+- **Multi-Factor Authentication (AAL/MFA):** ✨ **NIST SP 800-63B Compliant** - OTP (TOTP) enrollment with QR code generation, AAL1/AAL2/AAL3 enforcement, SECRET resources require MFA (November 3, 2025) ✨
 - **ABAC Authorization:** Policy-driven access control using OPA/Rego with NATO ACP-240 compliance
 - **PEP/PDP Pattern:** Backend API enforces authorization decisions from OPA policy engine
 - **Data-Centric Security:** ZTDF format with STANAG 4774/4778 cryptographic binding
@@ -368,6 +368,70 @@ docker-compose -f docker-compose.yml -f docker-compose.federation.yml up -d
 | Rate limit enforcement | 100 req/s sustained | ✅ |
 | Federation uptime | 99.9% | 🔄 Monitoring |
 
+### SP Registry Management UI ✅ NEW
+
+Administrators can manage external Service Providers through a comprehensive web interface:
+
+**Access**: `/admin/sp-registry` (requires admin role)
+
+**Features**:
+- **Dashboard**: List all SPs with status filtering (PENDING, ACTIVE, SUSPENDED, REVOKED)
+- **Search & Filter**: Find SPs by name, client ID, technical contact, country, or organization type
+- **Registration Wizard**: Multi-step form (4 steps) for registering new external SPs
+  - Basic Information (name, org type, country, technical contact)
+  - OAuth Configuration (client type, redirect URIs, PKCE, JWKS)
+  - Authorization & Rate Limits (scopes, grant types, quotas)
+  - Review & Submit
+- **SP Detail View**: Comprehensive information display with tabs
+  - Overview: SP metadata, scopes, grant types, rate limits
+  - OAuth Credentials: Client ID/Secret management, one-click copy
+  - Activity: Recent requests and usage metrics
+- **Approval Workflow**: Approve or reject pending SP registrations
+- **Credential Management**: Regenerate client secrets with confirmation
+- **Suspension Control**: Suspend or reactivate SPs with reason tracking
+
+**Security**:
+- Admin-only access with role-based authorization
+- Client secrets shown only once on creation/regeneration
+- Confirmation dialogs for destructive actions
+- Real-time Zod validation on all forms
+- Audit trail integration (activity logs)
+
+**UI/UX**:
+- Modern gradient design (blue-purple accents)
+- Responsive layouts (desktop-first, mobile-friendly)
+- Loading states and progress indicators
+- Empty states with helpful CTAs
+- Status badges with color coding
+
+**Registration Process**:
+1. Admin navigates to `/admin/sp-registry`
+2. Click "Register New SP"
+3. Complete 4-step wizard with real-time validation
+4. Submit for approval (or auto-approve if configured)
+5. SP receives OAuth credentials securely
+
+**Example Usage**:
+```typescript
+// Register new SP programmatically
+POST /api/admin/sp-registry
+{
+  "name": "France Defense Ministry",
+  "organizationType": "GOVERNMENT",
+  "country": "FRA",
+  "technicalContact": {
+    "name": "Jean Dupont",
+    "email": "jean.dupont@defense.gouv.fr"
+  },
+  "clientType": "confidential",
+  "redirectUris": ["https://fra-sp.defense.mil/callback"],
+  "allowedScopes": ["openid", "profile", "resource:read"],
+  "allowedGrantTypes": ["authorization_code", "refresh_token"]
+}
+```
+
+**Screenshots**: See [docs/screenshots/sp-registry/](./docs/screenshots/sp-registry/) for UI examples.
+
 ### Next Steps (Phase 2 - Weeks 4-8)
 
 - 🔄 **Refresh Token Rotation**: Automatic rotation on use
@@ -377,6 +441,7 @@ docker-compose -f docker-compose.yml -f docker-compose.federation.yml up -d
 - 🔄 **SCIM Bulk**: Bulk operations for large-scale provisioning
 - 🔄 **Federation Trust Framework**: X.509 certificate validation
 - 🔄 **Monitoring Dashboard**: Real-time SP activity metrics
+- 🔄 **Advanced SP Management**: Bulk operations, import/export, analytics
 
 ### Contact & Support
 
@@ -3338,6 +3403,42 @@ curl -X POST http://localhost:8181/v1/data/dive/authorization \
 - **[Scripts](scripts/)** - Diagnostic and utility scripts
 
 ## 🔒 Security Features
+
+### Authentication Assurance Levels (AAL/MFA) - November 3, 2025 ✨ **NEW**
+
+**NIST SP 800-63B Compliant** - Multi-Factor Authentication enforcement for classified resources
+
+#### AAL Requirements by Classification
+- **AAL1** (password only): UNCLASSIFIED resources
+- **AAL2** (password + OTP): SECRET/CONFIDENTIAL resources ✅ **ENFORCED**
+- **AAL3** (hardware token): TOP_SECRET resources (future)
+
+#### Implementation Features
+- ✅ **Backend AAL Enforcement**: Validates authentication level BEFORE OPA authorization (lines 1268-1322)
+- ✅ **Frontend JWT Extraction**: Extracts `acr`, `amr`, `auth_time` from Keycloak tokens
+- ✅ **Keycloak MFA Flows**: OTP enrollment triggered for SECRET+ clearance users
+- ✅ **11 Realms Enabled**: All national and broker realms have MFA flows bound
+- ✅ **Audit Logging**: All AAL validation decisions logged for compliance
+- ✅ **Clear Error Messages**: Users guided to enroll in MFA when required
+
+#### Example: AAL2 Enforcement
+```json
+// User with password-only (AAL1) tries to access SECRET resource
+{
+  "error": "Forbidden",
+  "message": "Classified resources require AAL2 (MFA). Current ACR: 0 (AAL1), AMR factors: 1",
+  "details": {
+    "required_aal": "AAL2",
+    "user_aal": "AAL1",
+    "classification": "SECRET",
+    "note": "Multi-Factor Authentication (MFA) is required for classified resources. Please contact your administrator to enroll in MFA."
+  }
+}
+```
+
+**Documentation**: See `AAL-MFA-ROOT-CAUSE-ANALYSIS.md`, `QA-TEST-RESULTS.md`, and `CHANGELOG.md` for details.
+
+---
 
 ### ACP-240 Data-Centric Security (Week 3.1)
 - **ZTDF Format:** Zero Trust Data Format with embedded security metadata

@@ -108,10 +108,11 @@ resource "keycloak_authentication_execution_config" "classified_otp_acr_config" 
 }
 
 # Bind the flow to realm browser authentication
-# DISABLED: Option 3 - Use default "browser" flow (custom theme handles UI, not custom flow)
-# DO NOT ENABLE - System works with default flow, custom flow breaks authentication
-# resource "keycloak_authentication_bindings" "classified_bindings" {
-#   realm_id     = var.realm_id
-#   browser_flow = keycloak_authentication_flow.classified_browser.alias
-# }
+# ENABLED (Nov 3, 2025): AAL/MFA enforcement now active
+# This replaces the default "browser" flow with our custom MFA flow
+# Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #4)
+resource "keycloak_authentication_bindings" "classified_bindings" {
+  realm_id     = var.realm_id
+  browser_flow = keycloak_authentication_flow.classified_browser.alias
+}
 
