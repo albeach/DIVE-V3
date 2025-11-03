@@ -4,7 +4,10 @@
 
 set -e
 
-PROJECT_ROOT="/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3"
+# Detect project root directory (works on any system)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+
 CERT_SOURCE="$PROJECT_ROOT/dive-certs"
 BACKEND_CERTS="$PROJECT_ROOT/backend/certs/dive-root-cas"
 FRONTEND_CERTS="$PROJECT_ROOT/frontend/certs/dive-root-cas"
