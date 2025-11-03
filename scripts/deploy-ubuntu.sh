@@ -345,7 +345,7 @@ if [ -d terraform ]; then
     
     # Check if Terraform is installed and verify version
     TERRAFORM_REQUIRED_VERSION="1.13.4"
-    TERRAFORM_INSTALL_VERSION="1.9.8"  # Use latest stable 1.x version
+    TERRAFORM_INSTALL_VERSION="1.13.4"  # Latest version as of Oct 2025
     
     if ! command -v terraform &> /dev/null; then
         echo "Installing Terraform ${TERRAFORM_INSTALL_VERSION}..."
@@ -357,12 +357,11 @@ if [ -d terraform ]; then
         CURRENT_VERSION=$(terraform version -json 2>/dev/null | grep -o '"version":"v[^"]*' | cut -d'v' -f2 || echo "unknown")
         echo -e "${GREEN}✓${NC} Terraform already installed: ${CURRENT_VERSION}"
         
-        # Check if version is too old
-        if [ "$CURRENT_VERSION" != "unknown" ]; then
-            MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
-            MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-            if [ "$MAJOR" -eq 1 ] && [ "$MINOR" -lt 13 ]; then
-                echo -e "${YELLOW}⚠️  Terraform version ${CURRENT_VERSION} is too old (requires >= ${TERRAFORM_REQUIRED_VERSION})${NC}"
+        # Check if version matches required
+        if [ "$CURRENT_VERSION" != "$TERRAFORM_REQUIRED_VERSION" ] && [ "$CURRENT_VERSION" != "unknown" ]; then
+            echo -e "${YELLOW}⚠️  Terraform version ${CURRENT_VERSION} installed, config requires ${TERRAFORM_REQUIRED_VERSION}${NC}"
+            read -p "Upgrade to ${TERRAFORM_INSTALL_VERSION}? (y/N): " UPGRADE_TF
+            if [[ $UPGRADE_TF =~ ^[Yy]$ ]]; then
                 echo "Upgrading to ${TERRAFORM_INSTALL_VERSION}..."
                 wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_INSTALL_VERSION}/terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
                 sudo unzip -q -o terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip -d /usr/local/bin/
