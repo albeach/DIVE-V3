@@ -1,3 +1,117 @@
+## [Phase 1: SP Federation Foundation] - 2025-11-03
+
+**Type**: Major Feature Enhancement  
+**Component**: OAuth 2.0, SCIM 2.0, Federation Framework  
+**Status**: ✅ **COMPLETE** - Core federation infrastructure implemented
+
+### Summary
+
+Implemented Phase 1 of the DIVE V3 Federation Enhancement Plan, transforming DIVE V3 into a federated authorization server capable of serving external Service Providers (SPs). This foundation enables NATO partners to authenticate users and access DIVE V3 resources through standardized protocols.
+
+**Impact**: External systems can now integrate with DIVE V3 as an OAuth 2.0 Authorization Server, enabling secure cross-domain resource sharing.
+
+### Major Features
+
+#### 1. OAuth 2.0 Authorization Server
+- **Endpoints**: `/oauth/authorize`, `/oauth/token`, `/oauth/introspect`, `/oauth/jwks`
+- **Grant Types**: authorization_code (with PKCE), client_credentials, refresh_token
+- **Discovery**: OpenID Connect discovery at `/oauth/.well-known/openid-configuration`
+- **Security**: PKCE required, RS256 signing, token introspection
+
+#### 2. SCIM 2.0 User Provisioning
+- **Endpoints**: `/scim/v2/Users`, `/scim/v2/Groups`, `/scim/v2/Schemas`
+- **Operations**: Create, Read, Update, Delete, Search, Bulk
+- **Extensions**: DIVE V3 specific attributes (clearance, countryOfAffiliation, COI)
+- **Integration**: Automatic Keycloak user synchronization
+
+#### 3. SP Management Framework
+- **Registration**: Dynamic SP registration with approval workflow
+- **Configuration**: Per-SP rate limits, scopes, and federation agreements
+- **Security**: JWKS validation, request signatures, mutual TLS support
+- **Monitoring**: Activity tracking and usage metrics
+
+#### 4. Federation Protocol
+- **Metadata**: `/federation/metadata` endpoint for capability discovery
+- **Search**: `/federation/search` for cross-domain resource discovery
+- **Access**: Resource request/grant workflow with policy enforcement
+
+### Technical Implementation
+
+#### Backend Services
+- `sp-management.service.ts`: SP registry and lifecycle management
+- `authorization-code.service.ts`: OAuth code flow with Redis caching
+- `scim.service.ts`: SCIM protocol implementation with Keycloak sync
+- `sp-auth.middleware.ts`: SP token validation alongside user tokens
+- `sp-rate-limit.middleware.ts`: Per-SP rate limiting with burst support
+
+#### Controllers
+- `oauth.controller.ts`: OAuth 2.0 endpoints
+- `scim.controller.ts`: SCIM 2.0 endpoints
+- `federation.controller.ts`: Federation metadata and resource exchange
+
+#### Infrastructure
+- Redis for OAuth authorization codes and rate limiting
+- Keycloak external-sp realm for SP client management
+- Docker Compose federation overlay for additional services
+
+#### Middleware Updates
+- `authz.middleware.ts`: Extended to support SP tokens
+- Dual authentication paths: user tokens and SP tokens
+- Simplified authorization for SPs based on federation agreements
+
+### Configuration
+
+#### New Environment Variables
+```bash
+# Federation
+ENABLE_FEDERATION=true
+ENTITY_ID=https://dive-v3.usa.mil
+OAUTH_ISSUER=https://api.dive-v3.mil
+OAUTH_TOKEN_LIFETIME=3600
+OAUTH_REFRESH_LIFETIME=86400
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Rate Limiting
+DEFAULT_SP_RATE_LIMIT=60
+DEFAULT_SP_BURST=10
+```
+
+#### Terraform
+- `keycloak-external-sp-realm.tf`: New realm for external SP management
+- Client scopes for resource access and SCIM
+- Example SP template for testing
+
+### Testing
+
+- OAuth 2.0 integration tests with PKCE validation
+- SCIM user provisioning tests
+- SP rate limiting tests
+- Federation search authorization tests
+
+### Security Enhancements
+
+1. **SP Authentication**: Separate authentication path for service providers
+2. **Rate Limiting**: Per-SP configurable limits with burst allowance
+3. **JWKS Validation**: External SP public key verification
+4. **Scope Enforcement**: Fine-grained access control per SP
+
+### Migration Notes
+
+- No breaking changes to existing functionality
+- SP features are additive and disabled by default
+- Existing user authentication flows remain unchanged
+- Backward compatible with all current integrations
+
+### Next Steps (Phase 2)
+
+- Extended policy framework for partner-specific attributes
+- Attribute extension schema for custom claims
+- Policy composition framework for partner rules
+- Enhanced attribute validation services
+
 ## [Frontend HTTPS URL Fixes + ACR/AMR Event Listener] - 2025-11-01
 
 **Type**: Critical Bug Fix + Authentication Enhancement  
