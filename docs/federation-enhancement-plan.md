@@ -122,13 +122,65 @@ GET    /scim/v2/Schemas
 - `backend/src/utils/scim.utils.ts` (245 lines)
 - `backend/src/__tests__/scim.integration.test.ts` (NEW, 680 lines)
 
-#### 1.3 External SP Registration Portal ✅
+#### 1.3 External SP Registration Portal ✅ COMPLETE
 
-**Frontend Enhancement**: ⏳ DEFERRED TO PHASE 2
-- Admin UI for SP registration
-- Client credential management
-- Scope and permission configuration
-- API key generation with rate limits
+**Frontend Enhancement**: ✅ **COMPLETE** (November 3, 2025)
+
+**Admin UI Pages**:
+- **SP Registry Dashboard** (`/admin/sp-registry`)
+  - List all external SPs with status filtering
+  - Search by name, client ID, technical contact
+  - Status badges: PENDING, ACTIVE, SUSPENDED, REVOKED
+  - Quick actions: View, Approve, Suspend
+  - Pagination support
+
+- **SP Registration Form** (`/admin/sp-registry/new`)
+  - Multi-step wizard (4 steps) with progress indicator
+  - Step 1: Basic information (name, org type, country, contact)
+  - Step 2: OAuth configuration (client type, redirect URIs, PKCE, JWKS)
+  - Step 3: Authorization & rate limits (scopes, grants, quotas)
+  - Step 4: Review and submit
+  - Real-time Zod validation
+
+- **SP Detail View** (`/admin/sp-registry/[spId]`)
+  - Tabbed interface: Overview, OAuth Credentials, Activity
+  - Client credential management (view ID, regenerate secret)
+  - Secure secret display (shown once, then hidden)
+  - One-click copy to clipboard
+  - Approval/suspension actions with confirmation
+
+**API Routes** (Next.js 15 App Router):
+- `GET/POST /api/admin/sp-registry` - List and create SPs
+- `GET/PUT/DELETE /api/admin/sp-registry/[spId]` - SP CRUD
+- `POST /api/admin/sp-registry/[spId]/approve` - Approval workflow
+- `POST /api/admin/sp-registry/[spId]/suspend` - Suspension workflow
+- `POST /api/admin/sp-registry/[spId]/credentials` - Regenerate secret
+- `GET /api/admin/sp-registry/[spId]/activity` - Activity logs
+
+**Type Definitions**:
+- `frontend/src/types/sp-federation.types.ts` (280 lines)
+  - IExternalSP, ISPRegistrationRequest, ISPUpdateRequest
+  - ISPListFilter, ISPListResponse, IClientCredentialResponse
+  - Constants: AVAILABLE_SCOPES, AVAILABLE_GRANT_TYPES, NATO_COUNTRIES
+
+**Validation Schemas**:
+- `frontend/src/lib/validations/sp-registry.ts` (180 lines)
+  - spRegistrationSchema with comprehensive validation
+  - URL, email, phone validation
+  - Custom validators for scopes, grant types, rate limits
+
+**Testing**:
+- `frontend/tests/e2e/sp-registry.spec.ts` (120 lines)
+  - E2E test structure for SP workflows
+  - Dashboard navigation, registration, approval tests
+
+**Frontend Deliverables**:
+- 12 files, ~1,990 lines of code
+- Types: 1 file (280 lines)
+- Validation: 1 file (180 lines)
+- API Routes: 6 files (560 lines)
+- Pages: 3 files (850 lines)
+- Tests: 1 file (120 lines)
 
 **Backend Services**: ✅ COMPLETE
 ```typescript

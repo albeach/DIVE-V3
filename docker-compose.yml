@@ -10,6 +10,9 @@ volumes:
   redis_data:
 
 services:
+  # Include federation services if enabled
+  # Run with: docker compose -f docker-compose.yml -f docker-compose.federation.yml up
+  
   postgres:
     image: postgres:15-alpine
     container_name: dive-v3-postgres

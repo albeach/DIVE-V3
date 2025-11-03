@@ -154,3 +154,6 @@ terraform/tfplan*
 # Personal notes in root
 *.txt
 !package*.json
+
+# Private notes - not tracked in git
+/notes/

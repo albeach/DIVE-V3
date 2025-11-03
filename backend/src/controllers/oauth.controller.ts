@@ -399,7 +399,8 @@ async function handleClientCredentialsGrant(params: {
   const { client_id, client_secret, scope, requestId: _requestId } = params;
 
   // Validate client credentials
-  const sp = await validateClient(client_id, client_secret);
+  const fetchedSp = await spService.getByClientId(client_id);
+  const sp = validateClient(client_id, client_secret, fetchedSp);
   if (!sp || sp.status !== 'ACTIVE') {
     throw new Error('invalid_client');
   }
@@ -541,7 +542,8 @@ router.post('/introspect', async (req: Request, res: Response) => {
     const [clientId, clientSecret] = credentials;
 
     // Validate client
-    const client = await validateClient(clientId, clientSecret);
+    const fetchedClient = await spService.getByClientId(clientId);
+    const client = validateClient(clientId, clientSecret, fetchedClient);
     if (!client) {
       return res.status(401).json({ error: 'invalid_client' });
     }

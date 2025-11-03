@@ -15,6 +15,13 @@
       "when": 1761973819095,
       "tag": "0001_flowery_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1762137843937,
+      "tag": "0002_military_lethal_legion",
+      "breakpoints": true
     }
   ]
 }

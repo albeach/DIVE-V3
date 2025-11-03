@@ -321,6 +321,101 @@ export async function getZTDFObject(resourceId: string): Promise<IZTDFObject | n
     }
 }
 
+/**
+ * Query resources with flexible criteria (for federation)
+ */
+export async function getResourcesByQuery(
+    query: any, 
+    options?: { 
+        limit?: number; 
+        offset?: number; 
+        fields?: any;
+    }
+): Promise<any[]> {
+    const client = await getMongoClient();
+    const db = client.db(DB_NAME);
+    const collection = db.collection(COLLECTION_NAME);
+
+    try {
+        // Default options
+        const limit = options?.limit || 100;
+        const offset = options?.offset || 0;
+        const projection = options?.fields || {};
+
+        // Build MongoDB query
+        const mongoQuery: any = {};
+        
+        // Handle resourceId queries (single or array)
+        if (query.resourceId) {
+            if (typeof query.resourceId === 'string') {
+                mongoQuery.resourceId = query.resourceId;
+            } else if (query.resourceId.$in) {
+                mongoQuery.resourceId = { $in: query.resourceId.$in };
+            }
+        }
+
+        // Handle classification
+        if (query.classification) {
+            mongoQuery['ztdf.policy.securityLabel.classification'] = query.classification;
+        }
+
+        // Handle releasabilityTo
+        if (query.releasabilityTo) {
+            mongoQuery['ztdf.policy.securityLabel.releasabilityTo'] = query.releasabilityTo;
+        }
+
+        // Handle COI
+        if (query.COI) {
+            mongoQuery['ztdf.policy.securityLabel.COI'] = query.COI;
+        }
+
+        // Handle text search
+        if (query.$text) {
+            mongoQuery.$text = query.$text;
+        }
+
+        logger.debug('Executing resource query', {
+            query: mongoQuery,
+            limit,
+            offset,
+            projection
+        });
+
+        // Execute query
+        const cursor = collection
+            .find(mongoQuery)
+            .project(projection)
+            .skip(offset)
+            .limit(limit);
+
+        const resources = await cursor.toArray();
+
+        // Transform ZTDF resources to simplified format for federation
+        return resources.map(resource => {
+            if (isZTDFResource(resource)) {
+                return {
+                    resourceId: resource.resourceId,
+                    title: resource.title,
+                    classification: resource.ztdf.policy.securityLabel.classification,
+                    releasabilityTo: resource.ztdf.policy.securityLabel.releasabilityTo,
+                    COI: resource.ztdf.policy.securityLabel.COI || [],
+                    creationDate: resource.ztdf.policy.securityLabel.creationDate,
+                    encrypted: true
+                };
+            }
+            // Legacy resource format
+            return resource;
+        });
+
+    } catch (error) {
+        logger.error('Resource query failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            query
+        });
+        throw error;
+    }
+}
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
     if (cachedClient) {
