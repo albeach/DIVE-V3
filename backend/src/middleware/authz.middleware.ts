@@ -1078,9 +1078,10 @@ export const authzMiddleware = async (
             const releasabilityTo = isZTDF
                 ? resource.ztdf.policy.securityLabel.releasabilityTo
                 : (resource as any).releasabilityTo;
-            const _COI = isZTDF
-                ? (resource.ztdf.policy.securityLabel.COI || [])
-                : ((resource as any).COI || []);
+            // COI is available but not used in SP validation
+            // const COI = isZTDF
+            //     ? (resource.ztdf.policy.securityLabel.COI || [])
+            //     : ((resource as any).COI || []);
                 
             // Check releasability to SP's country
             if (!releasabilityTo.includes(spContext.sp.country)) {
