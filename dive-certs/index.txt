@@ -1,0 +1,8 @@
+NLD-ECC-DIVE-chain.pem			#NLD ECC PKI full chain PEM format
+NLDECCDIVEROOTCAG1.cacert.crt		#NLD ECC Root CA der format
+NLDECCDIVEROOTCAG1.cacert.pem		#NLD ECC Root CA pem format
+NLD-RSA-DIVE-chain.pem			#NLD RSA PKI full chain PEM format
+NLDRSADIVEROOTCAG1.cacert.crt		#NLD RSA Root CA der format
+NLDRSADIVEROOTCAG1.cacert.pem		#NLD RSA Root CA pem format
+test_ecc.crt				#NLD ECC test cert
+test_rsa.crt				#NLD RSA test cert
