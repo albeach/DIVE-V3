@@ -1253,14 +1253,79 @@ export const authzMiddleware = async (
         }
 
         // ============================================
-        // Step 5: Construct OPA input
+        // Step 4.5: Validate AAL BEFORE calling OPA (NEW - Nov 3, 2025)
         // ============================================
+        // AAL enforcement happens at PEP (backend), not PDP (OPA)
+        // This is cleaner separation: AuthN (AAL) vs AuthZ (ABAC)
+        // Reference: AAL-MFA-IMPLEMENTATION-STATUS.md (Option 3 - Backend AAL Enforcement)
 
-        // Extract legacy fields from ZTDF resource
+        // Extract classification first (needed for AAL validation)
         const isZTDF = resource && 'ztdf' in resource;
         const classification = isZTDF
             ? resource.ztdf.policy.securityLabel.classification
             : (resource as any).classification;
+
+        // AAL validation requires a valid token
+        if (!decodedToken) {
+            const latencyMs = Date.now() - startTime;
+            const errorMsg = 'Missing decoded token for AAL validation';
+            logger.error(errorMsg, { requestId, resourceId });
+            logDecision(requestId, uniqueID, resourceId, false, errorMsg, latencyMs);
+            
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Invalid or missing authentication token'
+            });
+            return;
+        }
+
+        try {
+            validateAAL2(decodedToken, classification);
+            logger.info('AAL validation passed', {
+                requestId,
+                classification,
+                acr: decodedToken?.acr,
+                amr: decodedToken?.amr,
+                uniqueID
+            });
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : 'AAL validation failed';
+            const latencyMs = Date.now() - startTime;
+            
+            logger.warn('AAL validation failed', {
+                requestId,
+                classification,
+                error: errorMsg,
+                acr: decodedToken?.acr,
+                amr: decodedToken?.amr,
+                uniqueID,
+                latencyMs
+            });
+            
+            // Log denial decision for audit trail
+            logDecision(requestId, uniqueID, resourceId, false, errorMsg, latencyMs);
+            
+            res.status(403).json({
+                error: 'Forbidden',
+                message: errorMsg,
+                details: {
+                    required_aal: classification === 'UNCLASSIFIED' ? 'AAL1' : 
+                                  classification === 'TOP_SECRET' ? 'AAL3' : 'AAL2',
+                    user_aal: `AAL${normalizeACR(decodedToken?.acr) + 1}`,
+                    user_acr: decodedToken?.acr || 'missing',
+                    user_amr: decodedToken?.amr || [],
+                    classification,
+                    note: 'Multi-Factor Authentication (MFA) is required for classified resources. Please contact your administrator to enroll in MFA.'
+                }
+            });
+            return;
+        }
+
+        // ============================================
+        // Step 5: Construct OPA input
+        // ============================================
+
+        // Extract remaining fields from ZTDF resource
 
         // NEW: Extract original classification fields (ACP-240 Section 4.3)
         const originalClassification = isZTDF

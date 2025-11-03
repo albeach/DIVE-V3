@@ -15,9 +15,10 @@ declare module "next-auth" {
             countryOfAffiliation?: string;
             acpCOI?: string[];
             roles?: string[];
-            acr?: string;
-            amr?: string[];
-            authTime?: number;
+            // AAL/MFA Claims (NIST SP 800-63B) - Added Nov 3, 2025
+            acr?: string;           // Authentication Context Class Reference (AAL level)
+            amr?: string[];         // Authentication Methods Reference (e.g., ["pwd", "otp"])
+            auth_time?: number;     // Unix timestamp of authentication event
         } & DefaultSession["user"];
     }
 
@@ -39,6 +40,10 @@ declare module "next-auth/jwt" {
         countryOfAffiliation?: string;
         acpCOI?: string[];
         roles?: string[];
+        // AAL/MFA Claims (NIST SP 800-63B) - Added Nov 3, 2025
+        acr?: string;           // Authentication Context Class Reference
+        amr?: string[];         // Authentication Methods Reference
+        auth_time?: number;     // Unix timestamp of authentication event
     }
 }
 
