@@ -17,7 +17,7 @@ import rego.v1
 #
 # Default deny pattern (fail-secure)
 
-allow := false
+default allow := false
 
 decision_reason := "Authorization check not evaluated"
 
@@ -48,42 +48,25 @@ is_not_authenticated := msg if {
 }
 
 # AAL Enforcement (ADatP-5663 §5.1.2, NIST SP 800-63B)
+# FIX (Nov 3, 2025): Changed to use input.context.acr instead of input.subject.acr
+# Backend passes acr/amr/auth_time in context field (authz.middleware.ts:1328-1332)
 is_insufficient_aal := msg if {
 	required_aal := get_required_aal(input.resource.classification)
-	user_aal := parse_aal(input.subject.acr)
+	user_aal := parse_aal(input.context.acr)
 	user_aal < required_aal
 	msg := sprintf("Insufficient AAL: user AAL%v < required AAL%v for %s", [user_aal, required_aal, input.resource.classification])
 }
 
 # AAL mapping function
-get_required_aal(classification) := 1 if {
-	classification == "UNCLASSIFIED"
-}
-
-get_required_aal(classification) := 2 if {
-	classification in ["CONFIDENTIAL", "SECRET"]
-}
-
-get_required_aal(classification) := 3 if {
-	classification == "TOP_SECRET"
-}
-
-get_required_aal(_) := 1  # Default
+get_required_aal(classification) := 1 if classification == "UNCLASSIFIED" else := 2 if classification in ["CONFIDENTIAL", "SECRET"] else := 3 if classification == "TOP_SECRET" else := 1  # Default to AAL1
 
 # Parse AAL from acr claim
-parse_aal(acr) := 1 if {
-	lower(acr) == "aal1"
-}
-
-parse_aal(acr) := 2 if {
-	lower(acr) == "aal2"
-}
-
-parse_aal(acr) := 3 if {
-	lower(acr) == "aal3"
-}
-
-parse_aal(_) := 0  # Invalid/missing
+# Support both numeric ("0", "1", "2") and string formats ("aal1", "aal2", "aal3")
+# Backend normalization (backend/src/middleware/authz.middleware.ts:464-501):
+#   normalizeACR() returns: 0=AAL1, 1=AAL2, 2=AAL3
+#   Then converted to string: String(normalizedAAL) → "0", "1", "2"
+# FIX (Nov 3, 2025): Correct mapping - "0"=AAL1, "1"=AAL2, "2"=AAL3
+parse_aal(acr) := 1 if lower(acr) in ["aal1", "0"] else := 2 if lower(acr) in ["aal2", "1"] else := 3 if lower(acr) in ["aal3", "2"] else := 0
 
 # Token Lifetime Check (ADatP-5663 §5.1.3)
 is_token_expired := msg if {
@@ -126,11 +109,12 @@ is_issuer_not_trusted := msg if {
 }
 
 # MFA Verification (ADatP-5663 §5.1.2)
+# FIX (Nov 3, 2025): Changed to use input.context.acr/amr
 is_mfa_not_verified := msg if {
 	# If AAL2+ is claimed, verify MFA factors present
-	user_aal := parse_aal(input.subject.acr)
+	user_aal := parse_aal(input.context.acr)
 	user_aal >= 2
-	amr := input.subject.amr
+	amr := input.context.amr
 	# AAL2 requires at least 2 factors
 	count(amr) < 2
 	msg := sprintf("AAL2 claimed but only %v auth factors provided", [count(amr)])
@@ -138,9 +122,9 @@ is_mfa_not_verified := msg if {
 
 is_mfa_not_verified := msg if {
 	# If AAL2+ is claimed, verify OTP or similar
-	user_aal := parse_aal(input.subject.acr)
+	user_aal := parse_aal(input.context.acr)
 	user_aal >= 2
-	amr := input.subject.amr
+	amr := input.context.amr
 	# Must include MFA factor (otp, hwtoken, etc.)
 	not "otp" in amr
 	not "hwtoken" in amr

@@ -21,7 +21,7 @@ let redisClient: Redis | null = null;
  */
 function getRedisClient(): Redis {
     if (!redisClient) {
-        const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+        const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
 
         logger.info('Initializing Redis client for token blacklist', { redisUrl });
 
