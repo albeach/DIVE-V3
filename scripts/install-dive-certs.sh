@@ -85,7 +85,8 @@ keytool -import -trustcacerts -noprompt \
 
 if [ -f "$KEYSTORE_PATH" ]; then
     echo "✅ Java KeyStore created: dive-truststore.jks"
-    keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASS" | grep "Alias name:"
+    # List aliases in the keystore (don't fail if grep finds nothing)
+    keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASS" 2>/dev/null | grep "Alias name:" || true
 else
     echo "⚠️  Java KeyStore not created (keytool required)"
 fi
