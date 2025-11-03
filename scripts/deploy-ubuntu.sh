@@ -320,14 +320,38 @@ done
 
 # Wait for Keycloak (this takes longest)
 echo -n "Waiting for Keycloak (this may take 1-2 minutes)..."
+KEYCLOAK_READY=0
 for i in {1..60}; do
+    # Try multiple health check endpoints
     if curl -k -sf https://localhost:8443/health/ready > /dev/null 2>&1; then
-        echo -e " ${GREEN}✓${NC}"
+        KEYCLOAK_READY=1
+        break
+    elif curl -k -sf https://localhost:8443/health > /dev/null 2>&1; then
+        KEYCLOAK_READY=1
+        break
+    elif curl -sf http://localhost:8081/health/ready > /dev/null 2>&1; then
+        KEYCLOAK_READY=1
         break
     fi
     echo -n "."
     sleep 3
 done
+
+if [ $KEYCLOAK_READY -eq 1 ]; then
+    echo -e " ${GREEN}✓${NC}"
+else
+    echo -e " ${YELLOW}⚠️${NC}"
+    echo -e "${YELLOW}Keycloak health check timeout after 3 minutes${NC}"
+    echo ""
+    echo "Debugging information:"
+    echo "Container status:"
+    docker compose ps keycloak
+    echo ""
+    echo "Last 30 lines of Keycloak logs:"
+    docker compose logs keycloak --tail 30
+    echo ""
+    echo -e "${YELLOW}Continuing anyway - Keycloak may still be starting...${NC}"
+fi
 
 echo ""
 echo -e "${GREEN}✓${NC} All infrastructure services are ready"
@@ -354,19 +378,47 @@ if [ -d terraform ]; then
         rm terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
         echo -e "${GREEN}✓${NC} Terraform ${TERRAFORM_INSTALL_VERSION} installed"
     else
-        CURRENT_VERSION=$(terraform version -json 2>/dev/null | grep -o '"version":"v[^"]*' | cut -d'v' -f2 || echo "unknown")
-        echo -e "${GREEN}✓${NC} Terraform already installed: ${CURRENT_VERSION}"
+        # Multiple methods to detect version (robust)
+        CURRENT_VERSION=""
         
-        # Check if version matches required
-        if [ "$CURRENT_VERSION" != "$TERRAFORM_REQUIRED_VERSION" ] && [ "$CURRENT_VERSION" != "unknown" ]; then
-            echo -e "${YELLOW}⚠️  Terraform version ${CURRENT_VERSION} installed, config requires ${TERRAFORM_REQUIRED_VERSION}${NC}"
-            read -p "Upgrade to ${TERRAFORM_INSTALL_VERSION}? (y/N): " UPGRADE_TF
-            if [[ $UPGRADE_TF =~ ^[Yy]$ ]]; then
-                echo "Upgrading to ${TERRAFORM_INSTALL_VERSION}..."
-                wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_INSTALL_VERSION}/terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
-                sudo unzip -q -o terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip -d /usr/local/bin/
-                rm terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
-                echo -e "${GREEN}✓${NC} Terraform upgraded to ${TERRAFORM_INSTALL_VERSION}"
+        # Method 1: terraform version -json
+        if [ -z "$CURRENT_VERSION" ]; then
+            CURRENT_VERSION=$(terraform version -json 2>/dev/null | python3 -c "import sys, json; print(json.load(sys.stdin)['terraform_version'])" 2>/dev/null || echo "")
+        fi
+        
+        # Method 2: terraform version plain output
+        if [ -z "$CURRENT_VERSION" ]; then
+            CURRENT_VERSION=$(terraform version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/v//' || echo "")
+        fi
+        
+        # Method 3: terraform --version
+        if [ -z "$CURRENT_VERSION" ]; then
+            CURRENT_VERSION=$(terraform --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+        fi
+        
+        if [ -z "$CURRENT_VERSION" ]; then
+            echo -e "${YELLOW}⚠️  Could not detect Terraform version${NC}"
+            echo "Terraform command: $(which terraform)"
+            echo "Reinstalling to be safe..."
+            wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_INSTALL_VERSION}/terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+            sudo unzip -q -o terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip -d /usr/local/bin/
+            rm terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+            CURRENT_VERSION="${TERRAFORM_INSTALL_VERSION}"
+            echo -e "${GREEN}✓${NC} Terraform ${TERRAFORM_INSTALL_VERSION} installed"
+        else
+            echo -e "${GREEN}✓${NC} Terraform already installed: ${CURRENT_VERSION}"
+            
+            # Check if version matches required
+            if [ "$CURRENT_VERSION" != "$TERRAFORM_REQUIRED_VERSION" ]; then
+                echo -e "${YELLOW}⚠️  Terraform version ${CURRENT_VERSION} installed, config requires ${TERRAFORM_REQUIRED_VERSION}${NC}"
+                read -p "Upgrade to ${TERRAFORM_INSTALL_VERSION}? (y/N): " UPGRADE_TF
+                if [[ $UPGRADE_TF =~ ^[Yy]$ ]]; then
+                    echo "Upgrading to ${TERRAFORM_INSTALL_VERSION}..."
+                    wget -q https://releases.hashicorp.com/terraform/${TERRAFORM_INSTALL_VERSION}/terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+                    sudo unzip -q -o terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip -d /usr/local/bin/
+                    rm terraform_${TERRAFORM_INSTALL_VERSION}_linux_amd64.zip
+                    echo -e "${GREEN}✓${NC} Terraform upgraded to ${TERRAFORM_INSTALL_VERSION}"
+                fi
             fi
         fi
     fi
