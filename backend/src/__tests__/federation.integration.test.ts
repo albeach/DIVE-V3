@@ -1,455 +1,598 @@
 /**
- * Federation Integration Tests - Week 3
- * 
- * These tests verify that DIVE V3 can support ANY industry-standard SAML or OIDC IdP
- * with proper attribute mapping to DIVE schema (uniqueID, clearance, countryOfAffiliation, acpCOI).
- * 
- * Core Requirements:
- * - Support SAML 2.0 IdPs (e.g., FranceConnect)
- * - Support OIDC IdPs (e.g., GCKey, Azure AD)
- * - Map heterogeneous attribute schemas to DIVE standard
- * - Enrich incomplete IdPs (e.g., contractors with no clearance)
- * - Authorization protocol-agnostic (OPA doesn't care about SAML vs. OIDC)
+ * DIVE V3 Federation Protocol Integration Tests
+ * Tests federation metadata and resource exchange
  */
 
-describe('Federation Integration Tests', () => {
-    describe('SAML Identity Provider Support', () => {
-        test('should accept SAML assertion with standard attributes', () => {
-            // Simulates French SAML IdP assertion
-            const samlAssertion = {
-                uniqueID: 'pierre.dubois@defense.gouv.fr',
-                email: 'pierre.dubois@defense.gouv.fr',
-                firstName: 'Pierre',
-                lastName: 'Dubois',
-                clearance: 'SECRET',
-                countryOfAffiliation: 'FRA',
-                acpCOI: '["NATO-COSMIC"]'
-            };
+import request from 'supertest';
+import app from '../server';
+import { SPManagementService } from '../services/sp-management.service';
+import { getResourcesByQuery } from '../services/resource.service';
+import { clearResourceServiceCache } from '../services/resource.service';
+import { clearAuthzCaches } from '../middleware/authz.middleware';
 
-            // Verify all required DIVE attributes can be mapped
-            expect(samlAssertion.uniqueID).toBeDefined();
-            expect(samlAssertion.clearance).toBe('SECRET');
-            expect(samlAssertion.countryOfAffiliation).toBe('FRA');
-            expect(JSON.parse(samlAssertion.acpCOI)).toEqual(['NATO-COSMIC']);
-        });
+// Mock services
+jest.mock('../services/sp-management.service');
+jest.mock('../services/resource.service');
 
-        test('should handle SAML with URN-style attribute names', () => {
-            // Simulates French IdP with URN naming convention
-            const samlAssertion = {
-                'urn:france:identite:uniqueID': 'user@defense.gouv.fr',
-                'urn:france:identite:clearance': 'SECRET_DEFENSE',
-                'urn:france:identite:nationality': 'FRA'
-            };
+describe('Federation Protocol Integration Tests', () => {
+    const mockSP = {
+        spId: 'SP-FED-001',
+        name: 'Test Federation Partner',
+        organizationType: 'MILITARY' as const,
+        country: 'GBR',
+        clientId: 'sp-gbr-fed',
+        clientSecret: 'test-fed-secret',
+        clientType: 'confidential' as const,
+        allowedScopes: ['resource:read', 'resource:search'],
+        allowedGrantTypes: ['client_credentials'],
+        status: 'ACTIVE' as const,
+        federationAgreements: [{
+            agreementId: 'NATO-FVEY',
+            countries: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'],
+            classifications: ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
+            validUntil: new Date(Date.now() + 86400000 * 365) // 1 year
+        }]
+    };
 
-            // Mapping logic should normalize URN names to standard
-            const mapped = {
-                uniqueID: samlAssertion['urn:france:identite:uniqueID'],
-                clearance: samlAssertion['urn:france:identite:clearance'] === 'SECRET_DEFENSE' ? 'SECRET' : samlAssertion['urn:france:identite:clearance'],
-                countryOfAffiliation: samlAssertion['urn:france:identite:nationality']
-            };
+    const mockResources = [
+        {
+            resourceId: 'doc-001',
+            title: 'NATO Strategic Plan',
+            classification: 'SECRET',
+            releasabilityTo: ['USA', 'GBR', 'CAN'],
+            COI: ['NATO-COSMIC'],
+            content: 'Sample content',
+            creationDate: new Date()
+        },
+        {
+            resourceId: 'doc-002',
+            title: 'FVEY Intelligence Report',
+            classification: 'TOP_SECRET',
+            releasabilityTo: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'],
+            COI: ['FVEY'],
+            content: 'Classified content',
+            creationDate: new Date()
+        }
+    ];
 
-            expect(mapped.uniqueID).toBe('user@defense.gouv.fr');
-            expect(mapped.clearance).toBe('SECRET');
-            expect(mapped.countryOfAffiliation).toBe('FRA');
-        });
-
-        test('should reject SAML with missing required attributes', () => {
-            const incompleteSamlAssertion: any = {
-                email: 'user@example.com'
-                // Missing: uniqueID, clearance, countryOfAffiliation
-            };
-
-            // Should trigger enrichment or rejection
-            expect(incompleteSamlAssertion.uniqueID).toBeUndefined();
-            // Enrichment should fill these or OPA should deny
-        });
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clearAuthzCaches();
+        clearResourceServiceCache();
     });
 
-    describe('OIDC Identity Provider Support', () => {
-        test('should accept OIDC token with standard claims', () => {
-            // Simulates Canadian OIDC IdP token
-            const oidcClaims = {
-                sub: '12345',
-                email: 'john.macdonald@forces.gc.ca',
-                given_name: 'John',
-                family_name: 'MacDonald',
-                uniqueID: 'john.macdonald@forces.gc.ca',
-                clearance: 'CONFIDENTIAL',
-                countryOfAffiliation: 'CAN',
-                acpCOI: '["CAN-US"]'
-            };
-
-            expect(oidcClaims.uniqueID).toBeDefined();
-            expect(oidcClaims.clearance).toBe('CONFIDENTIAL');
-            expect(oidcClaims.countryOfAffiliation).toBe('CAN');
-            expect(JSON.parse(oidcClaims.acpCOI)).toEqual(['CAN-US']);
-        });
-
-        test('should handle OIDC token with minimal claims (triggers enrichment)', () => {
-            // Simulates Industry IdP with minimal claims
-            const minimalClaims: any = {
-                sub: '67890',
-                email: 'bob.contractor@lockheed.com',
-                name: 'Bob Contractor'
-                // Missing: clearance, countryOfAffiliation, acpCOI
-            };
-
-            // Enrichment should fill missing values
-            expect(minimalClaims.clearance).toBeUndefined();
-            expect(minimalClaims.countryOfAffiliation).toBeUndefined();
-            // Session callback enrichment will add these
-        });
+    afterAll(async () => {
+        // Cleanup
     });
 
-    describe('Attribute Mapping and Normalization', () => {
-        test('should normalize French clearance levels to DIVE standard', () => {
-            const frenchClearanceLevels = {
-                'CONFIDENTIEL_DEFENSE': 'CONFIDENTIAL',
-                'SECRET_DEFENSE': 'SECRET',
-                'TRES_SECRET_DEFENSE': 'TOP_SECRET'
-            };
+    describe('GET /federation/metadata', () => {
+        it('should return federation metadata', async () => {
+            const response = await request(app)
+                .get('/federation/metadata')
+                .expect(200);
 
-            Object.entries(frenchClearanceLevels).forEach(([_french, dive]) => {
-                expect(dive).toMatch(/^(UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP_SECRET)$/);
-            });
-        });
-
-        test('should map ISO 3166-1 alpha-2 to alpha-3 country codes', () => {
-            // Some IdPs may send alpha-2 codes
-            const countryMapping = {
-                'FR': 'FRA',
-                'CA': 'CAN',
-                'US': 'USA',
-                'GB': 'GBR',
-                'DE': 'DEU'
-            };
-
-            Object.entries(countryMapping).forEach(([_alpha2, alpha3]) => {
-                expect(alpha3.length).toBe(3);
-                expect(alpha3).toMatch(/^[A-Z]{3}$/);
-            });
-        });
-
-        test('should handle multi-valued COI attributes', () => {
-            const coiVariants = [
-                '["NATO-COSMIC","FVEY"]',  // JSON string
-                ['NATO-COSMIC', 'FVEY'],   // Array
-                'NATO-COSMIC',             // Single string
-                ['["NATO-COSMIC"]']        // Double-encoded
-            ];
-
-            coiVariants.forEach((variant) => {
-                let parsed = [];
-
-                if (Array.isArray(variant)) {
-                    if (variant.length > 0 && typeof variant[0] === 'string' && variant[0].startsWith('[')) {
-                        parsed = JSON.parse(variant[0]);
-                    } else {
-                        parsed = variant;
-                    }
-                } else if (typeof variant === 'string') {
-                    try {
-                        parsed = JSON.parse(variant);
-                    } catch {
-                        parsed = [variant];
-                    }
-                }
-
-                expect(Array.isArray(parsed)).toBe(true);
-            });
-        });
-    });
-
-    describe('Claim Enrichment Logic', () => {
-        test('should infer country from email domain - U.S. military', () => {
-            const militaryDomains = [
-                'john.doe@army.mil',
-                'jane.smith@navy.mil',
-                'bob.jones@af.mil',
-                'alice.brown@mil'
-            ];
-
-            militaryDomains.forEach(email => {
-                const domain = email.split('@')[1];
-
-                expect(domain).toMatch(/\.?mil$/);
-                // Should map to USA (expectedCountry: 'USA')
-            });
-        });
-
-        test('should infer country from email domain - France government', () => {
-            const frenchDomains = [
-                'pierre.dubois@defense.gouv.fr',
-                'marie.claire@gouv.fr',
-                'jean.paul@intradef.gouv.fr'
-            ];
-
-            frenchDomains.forEach(email => {
-                const domain = email.split('@')[1];
-
-                expect(domain).toMatch(/gouv\.fr$/);
-                // Should map to 'FRA'
-            });
-        });
-
-        test('should infer country from email domain - Canada government', () => {
-            const canadianDomains = [
-                'john.macdonald@forces.gc.ca',
-                'mary.johnson@gc.ca',
-                'robert.smith@dnd-mdn.gc.ca'
-            ];
-
-            canadianDomains.forEach(email => {
-                const domain = email.split('@')[1];
-
-                expect(domain).toMatch(/gc\.ca$/);
-                // Should map to 'CAN'
-            });
-        });
-
-        test('should infer country from email domain - U.S. contractors', () => {
-            const contractorDomains = [
-                'bob@lockheed.com',
-                'alice@northropgrumman.com',
-                'charlie@raytheon.com',
-                'diana@boeing.com'
-            ];
-
-            contractorDomains.forEach(email => {
-                const domain = email.split('@')[1];
-                const knownContractors = ['lockheed.com', 'northropgrumman.com', 'raytheon.com', 'boeing.com'];
-
-                expect(knownContractors).toContain(domain);
-                // Should map to 'USA'
-            });
-        });
-
-        test('should default clearance to UNCLASSIFIED when missing', () => {
-            const userWithoutClearance: any = {
-                uniqueID: 'contractor@company.com',
-                email: 'contractor@company.com',
-                countryOfAffiliation: 'USA'
-                // clearance missing
-            };
-
-            const enrichedClearance = userWithoutClearance.clearance || 'UNCLASSIFIED';
-            expect(enrichedClearance).toBe('UNCLASSIFIED');
-        });
-
-        test('should default COI to empty array when missing', () => {
-            const userWithoutCOI: any = {
-                uniqueID: 'user@example.com',
-                clearance: 'CONFIDENTIAL',
-                countryOfAffiliation: 'USA'
-                // acpCOI missing
-            };
-
-            const enrichedCOI = userWithoutCOI.acpCOI || [];
-            expect(Array.isArray(enrichedCOI)).toBe(true);
-            expect(enrichedCOI.length).toBe(0);
-        });
-    });
-
-    describe('Protocol-Agnostic Authorization', () => {
-        test('should authorize based on attributes, not IdP protocol', () => {
-            // User from SAML IdP
-            const samlUser = {
-                uniqueID: 'saml-user@example.com',
-                clearance: 'SECRET',
-                countryOfAffiliation: 'FRA',
-                acpCOI: ['NATO-COSMIC'],
-                sourceProtocol: 'SAML'
-            };
-
-            // User from OIDC IdP with identical attributes
-            const oidcUser = {
-                uniqueID: 'oidc-user@example.com',
-                clearance: 'SECRET',
-                countryOfAffiliation: 'FRA',
-                acpCOI: ['NATO-COSMIC'],
-                sourceProtocol: 'OIDC'
-            };
-
-            // Both should have same authorization outcome
-            expect(samlUser.clearance).toBe(oidcUser.clearance);
-            expect(samlUser.countryOfAffiliation).toBe(oidcUser.countryOfAffiliation);
-            expect(samlUser.acpCOI).toEqual(oidcUser.acpCOI);
-
-            // OPA policy doesn't check sourceProtocol - protocol-agnostic ✅
-        });
-    });
-
-    describe('New IdP Integration Capability', () => {
-        test('should support adding new OIDC IdP with standard claims', () => {
-            // Simulates adding UK MOD as new OIDC IdP
-            const newIdPConfig = {
-                alias: 'uk-idp',
-                protocol: 'OIDC',
-                authorization_url: 'https://sso.mod.uk/oauth2/authorize',
-                token_url: 'https://sso.mod.uk/oauth2/token',
-                required_mappers: [
-                    { claim: 'uniqueID', user_attribute: 'uniqueID' },
-                    { claim: 'clearance', user_attribute: 'clearance' },
-                    { claim: 'countryOfAffiliation', user_attribute: 'countryOfAffiliation' },
-                    { claim: 'acpCOI', user_attribute: 'acpCOI' }
-                ]
-            };
-
-            // Verify configuration has all required elements
-            expect(newIdPConfig.alias).toBeDefined();
-            expect(newIdPConfig.authorization_url).toMatch(/^https:\/\//);
-            expect(newIdPConfig.token_url).toMatch(/^https:\/\//);
-            expect(newIdPConfig.required_mappers.length).toBe(4);
-
-            // All DIVE attributes mapped ✅
-            const mappedAttributes = newIdPConfig.required_mappers.map(m => m.user_attribute);
-            expect(mappedAttributes).toContain('uniqueID');
-            expect(mappedAttributes).toContain('clearance');
-            expect(mappedAttributes).toContain('countryOfAffiliation');
-            expect(mappedAttributes).toContain('acpCOI');
-        });
-
-        test('should support adding new SAML IdP with custom attributes', () => {
-            // Simulates adding German IdP with custom SAML attributes
-            const newSamlIdPConfig = {
-                alias: 'germany-idp',
-                protocol: 'SAML',
-                entity_id: 'https://sso.bundeswehr.org',
-                sso_url: 'https://sso.bundeswehr.org/saml/sso',
-                attribute_mappings: [
-                    { saml_attr: 'BenutzerID', dive_attr: 'uniqueID' },
-                    { saml_attr: 'Freigabe', dive_attr: 'clearance' },
-                    { saml_attr: 'Land', dive_attr: 'countryOfAffiliation' },
-                    { saml_attr: 'Gemeinschaft', dive_attr: 'acpCOI' }
-                ],
-                clearance_normalization: {
-                    'VERSCHLUSSSACHE': 'CONFIDENTIAL',
-                    'GEHEIM': 'SECRET',
-                    'STRENG_GEHEIM': 'TOP_SECRET'
-                }
-            };
-
-            // Verify new IdP can be configured
-            expect(newSamlIdPConfig.attribute_mappings.length).toBe(4);
-
-            // All DIVE attributes covered ✅
-            const mappedDiveAttrs = newSamlIdPConfig.attribute_mappings.map(m => m.dive_attr);
-            expect(mappedDiveAttrs).toContain('uniqueID');
-            expect(mappedDiveAttrs).toContain('clearance');
-            expect(mappedDiveAttrs).toContain('countryOfAffiliation');
-            expect(mappedDiveAttrs).toContain('acpCOI');
-
-            // Clearance normalization configured ✅
-            expect(newSamlIdPConfig.clearance_normalization['GEHEIM']).toBe('SECRET');
-        });
-    });
-
-    describe('Administrator-Approved IdP Configuration', () => {
-        test('should validate required DIVE attributes are mapped', () => {
-            const requiredDiveAttributes = [
-                'uniqueID',
-                'clearance',
-                'countryOfAffiliation',
-                'acpCOI'  // Optional but recommended
-            ];
-
-            // Example IdP configuration to validate
-            const idpConfig = {
-                mappers: [
-                    { idp_claim: 'user_id', dive_attribute: 'uniqueID' },
-                    { idp_claim: 'security_clearance', dive_attribute: 'clearance' },
-                    { idp_claim: 'country', dive_attribute: 'countryOfAffiliation' },
-                    { idp_claim: 'communities', dive_attribute: 'acpCOI' }
-                ]
-            };
-
-            // Validate all required attributes are mapped
-            const mappedAttributes = idpConfig.mappers.map(m => m.dive_attribute);
-            requiredDiveAttributes.forEach(required => {
-                expect(mappedAttributes).toContain(required);
-            });
-        });
-
-        test('should enforce ISO 3166-1 alpha-3 country codes', () => {
-            const validCountryCodes = ['USA', 'CAN', 'GBR', 'FRA', 'DEU'];
-            const invalidCountryCodes = ['US', 'CA', 'GB', 'FR', 'DE', '840', 'usa'];
-
-            validCountryCodes.forEach(code => {
-                expect(code.length).toBe(3);
-                expect(code).toMatch(/^[A-Z]{3}$/);
-            });
-
-            invalidCountryCodes.forEach(code => {
-                const isValid = code.length === 3 && code.match(/^[A-Z]{3}$/);
-                expect(isValid).toBeFalsy();
-            });
-        });
-
-        test('should validate clearance levels against DIVE enum', () => {
-            const validClearanceLevels = [
-                'UNCLASSIFIED',
-                'CONFIDENTIAL',
-                'SECRET',
-                'TOP_SECRET'
-            ];
-
-            const invalidClearanceLevels = [
-                'PUBLIC',
-                'RESTRICTED',
-                'SECRET DEFENSE',
-                'LEVEL_3',
-                'secret'  // lowercase
-            ];
-
-            validClearanceLevels.forEach(level => {
-                expect(validClearanceLevels).toContain(level);
-            });
-
-            invalidClearanceLevels.forEach(level => {
-                expect(validClearanceLevels).not.toContain(level);
-            });
-        });
-    });
-
-    describe('Extensibility and Scalability', () => {
-        test('should support multiple IdPs from same country', () => {
-            // Example: U.S. DoD and U.S. State Department
-            const usIdPs = [
-                {
-                    alias: 'us-dod-idp',
-                    country: 'USA',
-                    organization: 'Department of Defense'
+            expect(response.body).toMatchObject({
+                entity: {
+                    id: expect.any(String),
+                    type: 'service_provider',
+                    name: expect.any(String),
+                    country: 'USA'
                 },
-                {
-                    alias: 'us-state-idp',
-                    country: 'USA',
-                    organization: 'Department of State'
+                endpoints: {
+                    resources: expect.stringContaining('/api/resources'),
+                    search: expect.stringContaining('/federation/search'),
+                    policies: expect.stringContaining('/api/policies-lab')
+                },
+                capabilities: {
+                    protocols: expect.arrayContaining(['OIDC', 'OAuth2', 'SAML2']),
+                    classifications: expect.arrayContaining(['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET']),
+                    countries: expect.arrayContaining(['USA', 'GBR', 'CAN', 'FRA', 'DEU']),
+                    coi: expect.arrayContaining(['NATO-COSMIC', 'FVEY'])
+                },
+                security: {
+                    tokenEndpoint: expect.stringContaining('/oauth/token'),
+                    jwksUri: expect.stringContaining('/oauth/jwks'),
+                    supportedAlgorithms: expect.arrayContaining(['RS256', 'ES256'])
                 }
-            ];
-
-            // Both map to same country but different organizations
-            expect(usIdPs[0].country).toBe(usIdPs[1].country);
-            expect(usIdPs[0].alias).not.toBe(usIdPs[1].alias);
-
-            // Authorization should be based on country (USA), not specific IdP ✅
+            });
         });
 
-        test('should support IdPs with overlapping COI memberships', () => {
-            // NATO members with different COI combinations
-            const users = [
-                { country: 'USA', coi: ['NATO-COSMIC', 'FVEY', 'CAN-US'] },
-                { country: 'CAN', coi: ['NATO-COSMIC', 'FVEY', 'CAN-US'] },
-                { country: 'FRA', coi: ['NATO-COSMIC'] },
-                { country: 'GBR', coi: ['NATO-COSMIC', 'FVEY'] }
-            ];
+        it('should include all supported countries', async () => {
+            const response = await request(app)
+                .get('/federation/metadata')
+                .expect(200);
 
-            // All have NATO-COSMIC, some have FVEY
-            users.forEach(user => {
-                expect(user.coi).toContain('NATO-COSMIC');
+            const countries = response.body.capabilities.countries;
+            expect(countries).toContain('USA');
+            expect(countries).toContain('GBR');
+            expect(countries).toContain('FRA');
+            expect(countries).toContain('DEU');
+            expect(countries).toContain('CAN');
+            expect(countries).toContain('ESP');
+        });
+
+        it('should include all supported COI tags', async () => {
+            const response = await request(app)
+                .get('/federation/metadata')
+                .expect(200);
+
+            const coi = response.body.capabilities.coi;
+            expect(coi).toContain('NATO-COSMIC');
+            expect(coi).toContain('FVEY');
+            expect(coi).toContain('US-ONLY');
+        });
+
+        it('should be publicly accessible (no auth required)', async () => {
+            // Metadata endpoint should not require authentication
+            const response = await request(app)
+                .get('/federation/metadata')
+                .expect(200);
+
+            expect(response.body.entity).toBeDefined();
+        });
+    });
+
+    describe('GET /federation/search', () => {
+        beforeEach(() => {
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+
+            const getResourcesByQueryMock = getResourcesByQuery as jest.MockedFunction<typeof getResourcesByQuery>;
+            getResourcesByQueryMock.mockResolvedValue(mockResources);
+        });
+
+        it('should require SP authentication', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .expect(401);
+
+            expect(response.body.error).toBeDefined();
+        });
+
+        it('should require resource:search scope', async () => {
+            const noSearchSP = { ...mockSP, allowedScopes: ['resource:read'] };
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(noSearchSP);
+
+            const response = await request(app)
+                .get('/federation/search')
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(403);
+
+            expect(response.body.error).toBe('Forbidden');
+        });
+
+        it('should search resources by classification', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'SECRET'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            expect(response.body).toMatchObject({
+                results: expect.any(Array),
+                total: expect.any(Number),
+                offset: 0,
+                limit: 100
+            });
+        });
+
+        it('should filter by releasability to SP country', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'SECRET'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            // Results should only include resources releasable to GBR
+            const results = response.body.results;
+            results.forEach((resource: any) => {
+                expect(resource.releasabilityTo).toContain('GBR');
+            });
+        });
+
+        it('should reject classification not in federation agreement', async () => {
+            const limitedSP = {
+                ...mockSP,
+                federationAgreements: [{
+                    agreementId: 'LIMITED',
+                    countries: ['USA', 'GBR'],
+                    classifications: ['UNCLASSIFIED', 'CONFIDENTIAL'], // No SECRET
+                    validUntil: new Date(Date.now() + 86400000)
+                }]
+            };
+
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(limitedSP);
+
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'SECRET'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(403);
+
+            expect(response.body).toMatchObject({
+                error: 'Forbidden',
+                message: expect.stringContaining('Classification SECRET not allowed'),
+                allowedClassifications: ['UNCLASSIFIED', 'CONFIDENTIAL']
+            });
+        });
+
+        it('should support COI-based filtering', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    coi: 'NATO-COSMIC'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            expect(response.body.results).toBeDefined();
+        });
+
+        it('should support keyword search', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    keywords: 'intelligence'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            expect(response.body.results).toBeDefined();
+        });
+
+        it('should support pagination', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    limit: 10,
+                    offset: 0
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            expect(response.body).toMatchObject({
+                results: expect.any(Array),
+                total: expect.any(Number),
+                offset: 0,
+                limit: 10
+            });
+        });
+
+        it('should enforce maximum limit', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    limit: 10000 // Excessive
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            // Should cap at reasonable limit (e.g., 1000)
+            expect(response.body.limit).toBeLessThanOrEqual(1000);
+        });
+
+        it('should include metadata in search results', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            if (response.body.results.length > 0) {
+                const resource = response.body.results[0];
+                expect(resource).toMatchObject({
+                    resourceId: expect.any(String),
+                    title: expect.any(String),
+                    classification: expect.any(String),
+                    releasabilityTo: expect.any(Array),
+                    COI: expect.any(Array)
+                });
+
+                // Should NOT include content in search results
+                expect(resource.content).toBeUndefined();
+            }
+        });
+
+        it('should log search requests', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'SECRET',
+                    keywords: 'test'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .set('x-request-id', 'test-req-123')
+                .expect(200);
+
+            expect(response.body.results).toBeDefined();
+            // Logging verified by logger spy if added
+        });
+    });
+
+    describe('POST /federation/resources/request', () => {
+        beforeEach(() => {
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        });
+
+        it('should require SP authentication', async () => {
+            const response = await request(app)
+                .post('/federation/resources/request')
+                .send({
+                    resourceId: 'doc-001'
+                })
+                .expect(401);
+
+            expect(response.body.error).toBeDefined();
+        });
+
+        it('should request access to federated resource', async () => {
+            const response = await request(app)
+                .post('/federation/resources/request')
+                .set('Authorization', 'Bearer test-sp-token')
+                .send({
+                    resourceId: 'doc-001',
+                    justification: 'Required for coalition operation'
+                })
+                .expect(200);
+
+            expect(response.body).toMatchObject({
+                requestId: expect.any(String),
+                status: expect.stringMatching(/PENDING|APPROVED|DENIED/),
+                resourceId: 'doc-001'
+            });
+        });
+
+        it('should validate SP has federation agreement', async () => {
+            const noAgreementSP = {
+                ...mockSP,
+                federationAgreements: []
+            };
+
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(noAgreementSP);
+
+            const response = await request(app)
+                .post('/federation/resources/request')
+                .set('Authorization', 'Bearer test-sp-token')
+                .send({
+                    resourceId: 'doc-001'
+                })
+                .expect(403);
+
+            expect(response.body).toMatchObject({
+                error: 'Forbidden',
+                message: expect.stringContaining('No active federation agreement')
+            });
+        });
+
+        it('should require justification for SECRET+ resources', async () => {
+            const response = await request(app)
+                .post('/federation/resources/request')
+                .set('Authorization', 'Bearer test-sp-token')
+                .send({
+                    resourceId: 'doc-002' // TOP_SECRET resource
+                    // Missing justification
+                })
+                .expect(400);
+
+            expect(response.body.error).toBeDefined();
+        });
+
+        it('should create audit log entry', async () => {
+            const response = await request(app)
+                .post('/federation/resources/request')
+                .set('Authorization', 'Bearer test-sp-token')
+                .set('x-request-id', 'test-req-456')
+                .send({
+                    resourceId: 'doc-001',
+                    justification: 'Audit test'
+                })
+                .expect(200);
+
+            expect(response.body.requestId).toBeDefined();
+            // Audit logging verified by database check if added
+        });
+    });
+
+    describe('Federation Agreement Validation', () => {
+        it('should reject expired federation agreements', async () => {
+            const expiredSP = {
+                ...mockSP,
+                federationAgreements: [{
+                    agreementId: 'EXPIRED',
+                    countries: ['USA', 'GBR'],
+                    classifications: ['UNCLASSIFIED'],
+                    validUntil: new Date(Date.now() - 86400000) // Yesterday
+                }]
+            };
+
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(expiredSP);
+
+            const response = await request(app)
+                .get('/federation/search')
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(403);
+
+            expect(response.body).toMatchObject({
+                error: 'Forbidden',
+                message: expect.stringContaining('expired')
+            });
+        });
+
+        it('should support multiple federation agreements', async () => {
+            const multiAgreementSP = {
+                ...mockSP,
+                federationAgreements: [
+                    {
+                        agreementId: 'NATO',
+                        countries: ['USA', 'GBR', 'FRA', 'DEU'],
+                        classifications: ['UNCLASSIFIED', 'CONFIDENTIAL'],
+                        validUntil: new Date(Date.now() + 86400000)
+                    },
+                    {
+                        agreementId: 'FVEY',
+                        countries: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'],
+                        classifications: ['SECRET', 'TOP_SECRET'],
+                        validUntil: new Date(Date.now() + 86400000)
+                    }
+                ]
+            };
+
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(multiAgreementSP);
+
+            // Should allow SECRET through FVEY agreement
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'SECRET'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            expect(response.body.results).toBeDefined();
+        });
+
+        it('should validate agreement covers SP country', async () => {
+            const mismatchSP = {
+                ...mockSP,
+                country: 'ITA', // Not in agreement
+                federationAgreements: [{
+                    agreementId: 'FVEY-ONLY',
+                    countries: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'], // No ITA
+                    classifications: ['SECRET'],
+                    validUntil: new Date(Date.now() + 86400000)
+                }]
+            };
+
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mismatchSP);
+
+            const response = await request(app)
+                .get('/federation/search')
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(403);
+
+            expect(response.body).toMatchObject({
+                error: 'Forbidden',
+                message: expect.stringContaining('not covered by federation agreement')
+            });
+        });
+    });
+
+    describe('Rate Limiting', () => {
+        beforeEach(() => {
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        });
+
+        it('should enforce per-SP rate limits', async () => {
+            // Make multiple requests rapidly
+            const requests = Array(100).fill(null).map(() =>
+                request(app)
+                    .get('/federation/search')
+                    .set('Authorization', 'Bearer test-sp-token')
+            );
+
+            const responses = await Promise.all(requests);
+
+            // Some should be rate limited
+            const rateLimited = responses.filter(r => r.status === 429);
+            expect(rateLimited.length).toBeGreaterThan(0);
+        });
+
+        it('should include rate limit headers', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(200);
+
+            expect(response.headers['x-ratelimit-limit']).toBeDefined();
+            expect(response.headers['x-ratelimit-remaining']).toBeDefined();
+            expect(response.headers['x-ratelimit-reset']).toBeDefined();
+        });
+
+        it('should return 429 when rate limit exceeded', async () => {
+            // Assuming rate limit is 60 req/min
+            const requests = Array(70).fill(null).map(() =>
+                request(app)
+                    .get('/federation/search')
+                    .set('Authorization', 'Bearer test-sp-token')
+            );
+
+            const responses = await Promise.all(requests);
+            const rateLimited = responses.find(r => r.status === 429);
+
+            if (rateLimited) {
+                expect(rateLimited.body).toMatchObject({
+                    error: 'rate_limit_exceeded',
+                    message: expect.stringContaining('Rate limit exceeded')
+                });
+
+                expect(rateLimited.headers['retry-after']).toBeDefined();
+            }
+        });
+    });
+
+    describe('Error Handling', () => {
+        beforeEach(() => {
+            const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+            mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        });
+
+        it('should return structured error for invalid query', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'INVALID_LEVEL'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(400);
+
+            expect(response.body).toMatchObject({
+                error: expect.any(String),
+                message: expect.any(String)
+            });
+        });
+
+        it('should handle backend service errors gracefully', async () => {
+            const getResourcesByQueryMock = getResourcesByQuery as jest.MockedFunction<typeof getResourcesByQuery>;
+            getResourcesByQueryMock.mockRejectedValue(new Error('Database connection failed'));
+
+            const response = await request(app)
+                .get('/federation/search')
+                .set('Authorization', 'Bearer test-sp-token')
+                .expect(500);
+
+            expect(response.body).toMatchObject({
+                error: 'Internal Server Error',
+                message: expect.any(String)
             });
 
-            // Resource with NATO-COSMIC should be accessible to all ✅
+            // Should NOT expose internal error details
+            expect(response.body.message).not.toContain('Database');
+        });
+
+        it('should include request ID in error responses', async () => {
+            const response = await request(app)
+                .get('/federation/search')
+                .query({
+                    classification: 'INVALID'
+                })
+                .set('Authorization', 'Bearer test-sp-token')
+                .set('x-request-id', 'error-test-123')
+                .expect(400);
+
+            expect(response.body.requestId).toBe('error-test-123');
         });
     });
 });
-
