@@ -118,10 +118,31 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 3: Set Up DIVE Root CA Certificates
+# Phase 3: Create Certificate Directories
 ###############################################################################
 
-echo -e "${YELLOW}📜 Phase 3: Setting Up DIVE Root CA Certificates${NC}"
+echo -e "${YELLOW}📁 Phase 3: Creating Certificate Directories${NC}"
+echo ""
+
+# Create certificate directories BEFORE changing ownership
+# This allows the cert installation script to write to them
+mkdir -p backend/certs/dive-root-cas
+mkdir -p frontend/certs/dive-root-cas
+mkdir -p keycloak/certs/dive-root-cas
+mkdir -p kas/certs/dive-root-cas
+mkdir -p backend/logs
+mkdir -p backend/uploads
+mkdir -p kas/logs
+mkdir -p policies/uploads
+
+echo -e "${GREEN}✓${NC} Certificate directories created"
+echo ""
+
+###############################################################################
+# Phase 4: Set Up DIVE Root CA Certificates
+###############################################################################
+
+echo -e "${YELLOW}📜 Phase 4: Setting Up DIVE Root CA Certificates${NC}"
 echo ""
 
 if [ -f scripts/install-dive-certs.sh ]; then
@@ -134,27 +155,27 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 4: Fix Directory Permissions
+# Phase 5: Fix Directory Permissions for Containers
 ###############################################################################
 
-echo -e "${YELLOW}🔧 Phase 4: Setting Directory Permissions${NC}"
+echo -e "${YELLOW}🔧 Phase 5: Setting Directory Permissions for Containers${NC}"
 echo ""
 
-# Create directories and set ownership for container users (UID 1001)
+# NOW set ownership for container users (UID 1001) after certs are installed
+echo "Setting ownership to UID 1001 for container access..."
 sudo chown -R 1001:1001 frontend/ 2>/dev/null || chown -R 1001:1001 frontend/
-sudo chown -R 1001:1001 backend/logs backend/uploads 2>/dev/null || chown -R 1001:1001 backend/logs backend/uploads 2>/dev/null || true
-sudo chown -R 1001:1001 kas/logs 2>/dev/null || chown -R 1001:1001 kas/logs 2>/dev/null || true
-mkdir -p policies/uploads
+sudo chown -R 1001:1001 backend/logs backend/uploads backend/certs 2>/dev/null || chown -R 1001:1001 backend/logs backend/uploads backend/certs 2>/dev/null || true
+sudo chown -R 1001:1001 kas/logs kas/certs 2>/dev/null || chown -R 1001:1001 kas/logs kas/certs 2>/dev/null || true
 sudo chown -R 1001:1001 policies/uploads 2>/dev/null || chown -R 1001:1001 policies/uploads 2>/dev/null || true
 
-echo -e "${GREEN}✓${NC} Directory permissions set"
+echo -e "${GREEN}✓${NC} Directory permissions set for containers"
 echo ""
 
 ###############################################################################
-# Phase 5: Clean Previous Deployment
+# Phase 6: Clean Previous Deployment
 ###############################################################################
 
-echo -e "${YELLOW}🧹 Phase 5: Cleaning Previous Deployment${NC}"
+echo -e "${YELLOW}🧹 Phase 6: Cleaning Previous Deployment${NC}"
 echo ""
 
 echo "Stopping all DIVE V3 containers..."
@@ -167,10 +188,10 @@ echo -e "${GREEN}✓${NC} Previous deployment cleaned"
 echo ""
 
 ###############################################################################
-# Phase 6: Start Docker Services
+# Phase 7: Start Docker Services
 ###############################################################################
 
-echo -e "${YELLOW}🐳 Phase 6: Starting Docker Services${NC}"
+echo -e "${YELLOW}🐳 Phase 7: Starting Docker Services${NC}"
 echo ""
 
 echo "Building and starting all services..."
@@ -180,10 +201,10 @@ echo -e "${GREEN}✓${NC} Docker services started"
 echo ""
 
 ###############################################################################
-# Phase 7: Wait for Services to be Ready
+# Phase 8: Wait for Services to be Ready
 ###############################################################################
 
-echo -e "${YELLOW}⏳ Phase 7: Waiting for Services to be Ready${NC}"
+echo -e "${YELLOW}⏳ Phase 8: Waiting for Services to be Ready${NC}"
 echo ""
 
 # Wait for PostgreSQL
@@ -235,10 +256,10 @@ echo -e "${GREEN}✓${NC} All infrastructure services are ready"
 echo ""
 
 ###############################################################################
-# Phase 8: Apply Terraform Configuration
+# Phase 9: Apply Terraform Configuration
 ###############################################################################
 
-echo -e "${YELLOW}🏗️  Phase 8: Applying Terraform Configuration${NC}"
+echo -e "${YELLOW}🏗️  Phase 9: Applying Terraform Configuration${NC}"
 echo ""
 
 if [ -d terraform ]; then
@@ -270,10 +291,10 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 9: Seed MongoDB Database
+# Phase 10: Seed MongoDB Database
 ###############################################################################
 
-echo -e "${YELLOW}🌱 Phase 9: Seeding MongoDB Database${NC}"
+echo -e "${YELLOW}🌱 Phase 10: Seeding MongoDB Database${NC}"
 echo ""
 
 cd backend
@@ -292,10 +313,10 @@ echo -e "${GREEN}✓${NC} Database seeded"
 echo ""
 
 ###############################################################################
-# Phase 10: Restart Application Services
+# Phase 11: Restart Application Services
 ###############################################################################
 
-echo -e "${YELLOW}🔄 Phase 10: Restarting Application Services${NC}"
+echo -e "${YELLOW}🔄 Phase 11: Restarting Application Services${NC}"
 echo ""
 
 echo "Restarting backend to pick up Keycloak configuration..."
@@ -310,10 +331,10 @@ echo -e "${GREEN}✓${NC} Application services restarted"
 echo ""
 
 ###############################################################################
-# Phase 11: Verify Deployment
+# Phase 12: Verify Deployment
 ###############################################################################
 
-echo -e "${YELLOW}✅ Phase 11: Verifying Deployment${NC}"
+echo -e "${YELLOW}✅ Phase 12: Verifying Deployment${NC}"
 echo ""
 
 # Check container status
