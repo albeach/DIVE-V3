@@ -1815,7 +1815,7 @@ open http://localhost:3000/integration/federation-vs-object
 
 ### Prerequisites
 
-- **Docker** & **Docker Compose**
+- **Docker** & **Docker Compose** (v24.0+)
 - **Node.js 20+**
 - **OPA v1.9.0** (latest - included in Docker Compose)
 - **PostgreSQL 15** (Keycloak - included in Docker Compose)
@@ -1823,7 +1823,21 @@ open http://localhost:3000/integration/federation-vs-object
 - **Terraform** (will be installed automatically)
 - **OpenSSL** (for secret generation)
 
+### Supported Platforms
+
+✅ **macOS (Apple Silicon)** - ARM64 native  
+✅ **Ubuntu 24.04.3 LTS** - AMD64 native  
+✅ **Windows WSL2** - AMD64 (tested)
+
+**Multi-platform deployment:** See [Multi-Platform Deployment Guide](docs/MULTI-PLATFORM-DEPLOYMENT.md) for architecture-specific setup.
+
 ### Installation
+
+**For Ubuntu 24.04.3 LTS users, run the automated setup first:**
+```bash
+sudo ./scripts/setup-ubuntu.sh
+# Log out and back in after completion
+```
 
 ```bash
 # 1. Clone repository
