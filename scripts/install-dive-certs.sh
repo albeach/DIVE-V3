@@ -288,3 +288,6 @@ echo "5. Verify certificate trust:"
 echo "   ./scripts/test-dive-cert-trust.sh"
 echo ""
 
+# Explicitly exit successfully
+exit 0
+

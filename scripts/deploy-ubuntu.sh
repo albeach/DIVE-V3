@@ -222,11 +222,14 @@ echo ""
 
 if [ -f scripts/install-dive-certs.sh ]; then
     ./scripts/install-dive-certs.sh
+    echo ""
     echo -e "${GREEN}✓${NC} DIVE Root CA certificates installed"
 else
     echo -e "${YELLOW}⚠️  Warning: install-dive-certs.sh not found, skipping...${NC}"
 fi
 
+echo ""
+echo -e "${BLUE}Continuing to Phase 5...${NC}"
 echo ""
 
 ###############################################################################
