@@ -499,11 +499,55 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     }
                                     session.user.roles = roles;
 
+                                    // ============================================
+                                    // AAL/MFA Claims Extraction (NIST SP 800-63B)
+                                    // ============================================
+                                    // FIX: Extract acr (Authentication Context Class Reference) and amr (Authentication Methods Reference)
+                                    // These are critical for AAL2/AAL3 enforcement in OPA policies
+                                    // Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #1)
+                                    
+                                    // ACR: Normalize to string format
+                                    // Keycloak may return numeric (0,1,2) or string ("aal1","aal2","aal3")
+                                    if (payload.acr !== undefined && payload.acr !== null) {
+                                        session.user.acr = String(payload.acr);
+                                    } else {
+                                        session.user.acr = '0'; // Default to AAL1
+                                        console.log('[DIVE] ACR not present in JWT, defaulting to AAL1');
+                                    }
+
+                                    // AMR: Normalize to array format
+                                    // Keycloak may return array ["pwd","otp"] or JSON string "[\"pwd\",\"otp\"]"
+                                    if (payload.amr) {
+                                        if (Array.isArray(payload.amr)) {
+                                            session.user.amr = payload.amr;
+                                        } else if (typeof payload.amr === 'string') {
+                                            try {
+                                                const parsed = JSON.parse(payload.amr);
+                                                session.user.amr = Array.isArray(parsed) ? parsed : [parsed];
+                                            } catch {
+                                                session.user.amr = [payload.amr];
+                                            }
+                                        } else {
+                                            session.user.amr = ['pwd']; // Default to password-only
+                                        }
+                                    } else {
+                                        session.user.amr = ['pwd']; // Default to password-only
+                                        console.log('[DIVE] AMR not present in JWT, defaulting to ["pwd"]');
+                                    }
+
+                                    // auth_time: Unix timestamp of authentication event
+                                    // Used for token freshness validation in OPA
+                                    session.user.auth_time = payload.auth_time;
+
                                     console.log('[DIVE] Custom claims extracted:', {
                                         uniqueID: session.user.uniqueID,
                                         clearance: session.user.clearance,
                                         country: session.user.countryOfAffiliation,
                                         roles: session.user.roles,
+                                        // AAL/MFA claims
+                                        acr: session.user.acr,
+                                        amr: session.user.amr,
+                                        auth_time: session.user.auth_time,
                                     });
                                 }
                             } catch (error) {
