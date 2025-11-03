@@ -11,15 +11,24 @@ FROM quay.io/keycloak/keycloak:26.0.7
 
 USER root
 
-# Download statically-linked curl binary
-# Using curl-static from stunnel/static-curl project which provides precompiled static binaries
-ADD https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-amd64 /usr/bin/curl
-
-# Make it executable
-RUN chmod +x /usr/bin/curl
-
-# Verify it works
-RUN /usr/bin/curl --version
+# ============================================
+# Multi-Platform curl Installation
+# ============================================
+# Detect architecture and download appropriate curl binary
+# Supports: AMD64 (x86_64) and ARM64 (aarch64)
+ARG TARGETARCH
+RUN echo "Building for architecture: ${TARGETARCH}" && \
+    if [ "$TARGETARCH" = "amd64" ]; then \
+        CURL_ARCH="amd64"; \
+    elif [ "$TARGETARCH" = "arm64" ]; then \
+        CURL_ARCH="aarch64"; \
+    else \
+        echo "Unsupported architecture: ${TARGETARCH}" && exit 1; \
+    fi && \
+    echo "Downloading curl for: ${CURL_ARCH}" && \
+    curl -L -o /usr/bin/curl "https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-${CURL_ARCH}" && \
+    chmod +x /usr/bin/curl && \
+    /usr/bin/curl --version
 
 # ============================================
 # Import mkcert SSL Certificate into Java Truststore
