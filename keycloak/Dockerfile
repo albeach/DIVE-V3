@@ -14,19 +14,25 @@ USER root
 # ============================================
 # Multi-Platform curl Installation
 # ============================================
-# Detect architecture and download appropriate curl binary
+# Download appropriate curl binary based on architecture
 # Supports: AMD64 (x86_64) and ARM64 (aarch64)
+# Use ADD instead of curl to avoid chicken-and-egg problem
 ARG TARGETARCH
-RUN echo "Building for architecture: ${TARGETARCH}" && \
-    if [ "$TARGETARCH" = "amd64" ]; then \
-        CURL_ARCH="amd64"; \
+RUN echo "Building for architecture: ${TARGETARCH}"
+
+# Download curl binary using ADD (works without curl being present)
+ADD --chmod=755 https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-amd64 /tmp/curl-amd64
+ADD --chmod=755 https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-aarch64 /tmp/curl-aarch64
+
+# Copy the appropriate binary based on architecture
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+        cp /tmp/curl-amd64 /usr/bin/curl; \
     elif [ "$TARGETARCH" = "arm64" ]; then \
-        CURL_ARCH="aarch64"; \
+        cp /tmp/curl-aarch64 /usr/bin/curl; \
     else \
         echo "Unsupported architecture: ${TARGETARCH}" && exit 1; \
     fi && \
-    echo "Downloading curl for: ${CURL_ARCH}" && \
-    curl -L -o /usr/bin/curl "https://github.com/moparisthebest/static-curl/releases/download/v8.4.0/curl-${CURL_ARCH}" && \
+    rm /tmp/curl-* && \
     chmod +x /usr/bin/curl && \
     /usr/bin/curl --version
 
