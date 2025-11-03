@@ -81,14 +81,37 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 2: Generate SSL Certificates
+# Phase 2: Generate SSL Certificates with mkcert
 ###############################################################################
 
-echo -e "${YELLOW}🔐 Phase 2: Generating SSL Certificates${NC}"
+echo -e "${YELLOW}🔐 Phase 2: Generating SSL Certificates with mkcert${NC}"
 echo ""
 
 mkdir -p keycloak/certs
 
+# Check if mkcert is installed
+if ! command -v mkcert &> /dev/null; then
+    echo "Installing mkcert for trusted local certificates..."
+    
+    # Install prerequisites
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq libnss3-tools wget
+    
+    # Download and install mkcert
+    MKCERT_VERSION="v1.4.4"
+    wget -q "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-amd64"
+    chmod +x mkcert-${MKCERT_VERSION}-linux-amd64
+    sudo mv mkcert-${MKCERT_VERSION}-linux-amd64 /usr/local/bin/mkcert
+    
+    echo -e "${GREEN}✓${NC} mkcert installed"
+fi
+
+# Install the local CA (only needs to be done once per system)
+echo "Installing local Certificate Authority..."
+CAROOT="$HOME/.local/share/mkcert" mkcert -install 2>&1 | grep -v "is already installed" || true
+echo -e "${GREEN}✓${NC} Local CA installed (certificates will be trusted by browsers)"
+
+# Check if certificates exist
 if [ -f keycloak/certs/certificate.pem ] && [ -f keycloak/certs/key.pem ]; then
     echo -e "${GREEN}✓${NC} SSL certificates already exist"
     read -p "Do you want to regenerate them? (y/N): " REGENERATE
@@ -99,18 +122,31 @@ if [ -f keycloak/certs/certificate.pem ] && [ -f keycloak/certs/key.pem ]; then
     fi
 fi
 
+# Generate certificates if they don't exist
 if [ ! -f keycloak/certs/certificate.pem ]; then
-    echo "Generating self-signed certificates for localhost..."
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-      -keyout keycloak/certs/key.pem \
-      -out keycloak/certs/certificate.pem \
-      -subj "/C=US/ST=State/L=City/O=DIVE/CN=localhost" \
-      -addext "subjectAltName=DNS:localhost,DNS:keycloak,DNS:backend,DNS:nextjs,IP:127.0.0.1"
+    echo "Generating trusted certificates for localhost..."
+    cd keycloak/certs
     
-    chmod 644 keycloak/certs/certificate.pem
-    chmod 644 keycloak/certs/key.pem
+    # Generate certificate for all required hostnames
+    mkcert \
+      -cert-file certificate.pem \
+      -key-file key.pem \
+      localhost \
+      127.0.0.1 \
+      ::1 \
+      keycloak \
+      backend \
+      nextjs \
+      dive-v3-keycloak \
+      dive-v3-backend \
+      dive-v3-frontend
     
-    echo -e "${GREEN}✓${NC} SSL certificates generated"
+    # Make readable by containers
+    chmod 644 certificate.pem
+    chmod 644 key.pem
+    
+    cd "$PROJECT_ROOT"
+    echo -e "${GREEN}✓${NC} Trusted SSL certificates generated (no browser warnings!)"
 else
     echo -e "${GREEN}✓${NC} SSL certificates exist"
 fi
