@@ -1,0 +1,55 @@
+# DIVE V3 Federation Services
+# Additional services for Phase 1 SP Federation
+
+services:
+  # Redis for OAuth authorization codes and token caching
+  redis:
+    image: redis:7-alpine
+    container_name: dive-v3-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - dive-network
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    command: >
+      sh -c "
+        if [ -n \"$$REDIS_PASSWORD\" ]; then
+          redis-server --requirepass $$REDIS_PASSWORD
+        else
+          redis-server
+        fi
+      "
+
+  # Federation monitoring (optional)
+  federation-monitor:
+    image: grafana/grafana:latest
+    container_name: dive-v3-federation-monitor
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    networks:
+      - dive-network
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
+  grafana_data:
+
+networks:
+  dive-network:
+    external: true
