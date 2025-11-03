@@ -6,6 +6,8 @@ import jwkToPem from 'jwk-to-pem';
 import { logger } from '../utils/logger';
 import { getResourceById } from '../services/resource.service';
 import { isTokenBlacklisted, areUserTokensRevoked } from '../services/token-blacklist.service';
+import { validateSPToken } from './sp-auth.middleware';
+import { IRequestWithSP } from '../types/sp-federation.types';
 
 // ============================================
 // PEP (Policy Enforcement Point) Middleware
@@ -876,49 +878,76 @@ export const authzMiddleware = async (
             tokenPrefix: token.substring(0, 20) + '...',
         });
 
-        let decodedToken: IKeycloakToken;
+        // Try user token first
+        let decodedToken: IKeycloakToken | null = null;
+        let isSPToken = false;
+        
         try {
             decodedToken = await verifyToken(token);
-        } catch (error) {
-            logger.warn('JWT verification failed', {
+        } catch (userTokenError) {
+            // User token failed, try SP token
+            logger.debug('User token verification failed, trying SP token', {
                 requestId,
-                error: error instanceof Error ? error.message : 'Unknown error',
-                tokenLength: token.length,
-                tokenHeader: tokenHeader,
-                keycloakUrl: process.env.KEYCLOAK_URL,
-                realm: process.env.KEYCLOAK_REALM,
+                error: userTokenError instanceof Error ? userTokenError.message : 'Unknown error'
             });
-            res.status(401).json({
-                error: 'Unauthorized',
-                message: 'Invalid or expired JWT token',
-                details: {
-                    reason: error instanceof Error ? error.message : 'Token verification failed',
-                },
-            });
-            return;
+            
+            const spContext = await validateSPToken(token);
+            if (spContext) {
+                // SP token is valid
+                (req as IRequestWithSP).sp = spContext;
+                isSPToken = true;
+                
+                logger.info('Using SP token for authorization', {
+                    requestId,
+                    clientId: spContext.clientId,
+                    scopes: spContext.scopes
+                });
+            } else {
+                // Neither user nor SP token is valid
+                logger.warn('Both user and SP token verification failed', {
+                    requestId,
+                    userError: userTokenError instanceof Error ? userTokenError.message : 'Unknown error',
+                    tokenLength: token.length,
+                    tokenHeader: tokenHeader,
+                    keycloakUrl: process.env.KEYCLOAK_URL,
+                    realm: process.env.KEYCLOAK_REALM,
+                });
+                res.status(401).json({
+                    error: 'Unauthorized',
+                    message: 'Invalid or expired JWT token',
+                    details: {
+                        reason: userTokenError instanceof Error ? userTokenError.message : 'Token verification failed',
+                    },
+                });
+                return;
+            }
         }
 
         // ============================================
         // Step 1.5: Check Token Revocation (Gap #7)
         // ============================================
-        // Check if token has been blacklisted (logout or manual revocation)
-        const jti = decodedToken.jti;
-        if (jti && await isTokenBlacklisted(jti)) {
-            logger.warn('Blacklisted token detected', {
-                requestId,
-                jti,
-                sub: decodedToken.sub
-            });
-            res.status(401).json({
-                error: 'Unauthorized',
-                message: 'Token has been revoked',
-                details: {
-                    reason: 'Token was blacklisted (user logged out or token manually revoked)',
-                    jti: jti,
-                    recommendation: 'Please re-authenticate to obtain a new token'
-                },
-            });
-            return;
+        
+        // Skip revocation check for SP tokens (they manage their own revocation)
+        if (!isSPToken && decodedToken) {
+            // Check if token has been blacklisted (logout or manual revocation)
+            const jti = decodedToken.jti;
+            if (jti && await isTokenBlacklisted(jti)) {
+                logger.warn('Blacklisted token detected', {
+                    requestId,
+                    jti,
+                    sub: decodedToken.sub
+                });
+                res.status(401).json({
+                    error: 'Unauthorized',
+                    message: 'Token has been revoked',
+                    details: {
+                        reason: 'Token was blacklisted (user logged out or token manually revoked)',
+                        jti: jti,
+                        recommendation: 'Please re-authenticate to obtain a new token'
+                    },
+                });
+                return;
+            }
         }
 
         // ============================================
@@ -926,11 +955,36 @@ export const authzMiddleware = async (
         // Week 3: Use enriched claims if available (from enrichmentMiddleware)
         // ============================================
 
-        // Check if enrichment middleware ran and provided enriched claims
+        // Handle SP tokens differently - they don't have user attributes
+        if (isSPToken) {
+            const spContext = (req as IRequestWithSP).sp!;
+            
+            // Check if SP has resource:read scope
+            if (!spContext.scopes.includes('resource:read')) {
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Insufficient scope',
+                    details: {
+                        required: 'resource:read',
+                        provided: spContext.scopes
+                    }
+                });
+                return;
+            }
+            
+            // For SP tokens, we'll do simplified authorization based on federation agreements
+            // The actual resource access will be checked against SP's allowed classifications and countries
+            // Continue to resource fetch to check releasability
+            
+        }
+
+        // User token flow - extract user attributes
         const tokenData = (req as any).enrichedUser || decodedToken;
         const wasEnriched = (req as any).wasEnriched || false;
 
-        const uniqueID = tokenData.uniqueID || tokenData.preferred_username || tokenData.sub;
+        const uniqueID = isSPToken ? 
+            `sp:${(req as IRequestWithSP).sp!.clientId}` : 
+            (tokenData?.uniqueID || tokenData?.preferred_username || tokenData?.sub);
 
         // Check if all user tokens are revoked (global logout)
         if (await areUserTokensRevoked(uniqueID)) {
@@ -949,12 +1003,12 @@ export const authzMiddleware = async (
             });
             return;
         }
-        const clearance = tokenData.clearance;
-        const countryOfAffiliation = tokenData.countryOfAffiliation;
+        const clearance = isSPToken ? undefined : tokenData?.clearance;
+        const countryOfAffiliation = isSPToken ? (req as IRequestWithSP).sp!.sp.country : tokenData?.countryOfAffiliation;
 
         // Handle acpCOI - might be double-encoded from Keycloak mapper
         let acpCOI: string[] = [];
-        if (tokenData.acpCOI) {
+        if (!isSPToken && tokenData?.acpCOI) {
             if (Array.isArray(tokenData.acpCOI)) {
                 // If it's an array, check if first element is a JSON string
                 if (tokenData.acpCOI.length > 0 && typeof tokenData.acpCOI[0] === 'string') {
@@ -1011,33 +1065,131 @@ export const authzMiddleware = async (
         }
 
         // ============================================
-        // AAL2/FAL2 Validation (NIST SP 800-63B/C)
+        // SP Token Authorization Path
+        // ============================================
+        if (isSPToken) {
+            const spContext = (req as IRequestWithSP).sp!;
+            
+            // Extract resource metadata
+            const isZTDF = resource && 'ztdf' in resource;
+            const classification = isZTDF
+                ? resource.ztdf.policy.securityLabel.classification
+                : (resource as any).classification;
+            const releasabilityTo = isZTDF
+                ? resource.ztdf.policy.securityLabel.releasabilityTo
+                : (resource as any).releasabilityTo;
+            const _COI = isZTDF
+                ? (resource.ztdf.policy.securityLabel.COI || [])
+                : ((resource as any).COI || []);
+                
+            // Check releasability to SP's country
+            if (!releasabilityTo.includes(spContext.sp.country)) {
+                logger.warn('SP access denied - releasability', {
+                    requestId,
+                    spId: spContext.sp.spId,
+                    country: spContext.sp.country,
+                    releasabilityTo
+                });
+                
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Resource not releasable to your country',
+                    details: {
+                        yourCountry: spContext.sp.country,
+                        releasableTo: releasabilityTo,
+                        resource: {
+                            resourceId: resource.resourceId,
+                            classification
+                        }
+                    }
+                });
+                return;
+            }
+            
+            // Check classification agreements
+            const activeAgreements = spContext.sp.federationAgreements
+                .filter(agreement => agreement.validUntil > new Date());
+            
+            const allowedClassifications = activeAgreements
+                .flatMap(agreement => agreement.classifications);
+                
+            if (!allowedClassifications.includes(classification)) {
+                logger.warn('SP access denied - classification', {
+                    requestId,
+                    spId: spContext.sp.spId,
+                    classification,
+                    allowedClassifications
+                });
+                
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Classification not covered by federation agreement',
+                    details: {
+                        resourceClassification: classification,
+                        allowedClassifications,
+                        activeAgreements: activeAgreements.map(a => ({
+                            agreementId: a.agreementId,
+                            validUntil: a.validUntil
+                        }))
+                    }
+                });
+                return;
+            }
+            
+            // Log SP access decision
+            const latencyMs = Date.now() - startTime;
+            logger.info('SP authorization granted', {
+                requestId,
+                spId: spContext.sp.spId,
+                clientId: spContext.clientId,
+                resourceId,
+                classification,
+                latency_ms: latencyMs
+            });
+            
+            // Attach SP context and continue to resource handler
+            (req as any).authzDecision = {
+                allow: true,
+                reason: 'SP federation access granted',
+                spAccess: true,
+                spId: spContext.sp.spId,
+                country: spContext.sp.country
+            };
+            
+            next();
+            return;
+        }
+
+        // ============================================
+        // AAL2/FAL2 Validation (NIST SP 800-63B/C) - User tokens only
         // ============================================
         // Validate AAL2 (Authentication Assurance Level 2) for classified resources
         // This check must happen BEFORE OPA authorization to ensure authentication strength
         // Reference: docs/IDENTITY-ASSURANCE-LEVELS.md
-        try {
-            const classification = resource && 'ztdf' in resource
-                ? resource.ztdf.policy.securityLabel.classification
-                : (resource as any)?.classification || 'UNCLASSIFIED';
+        if (decodedToken) {
+            try {
+                const classification = resource && 'ztdf' in resource
+                    ? resource.ztdf.policy.securityLabel.classification
+                    : (resource as any)?.classification || 'UNCLASSIFIED';
 
-            validateAAL2(decodedToken, classification);
-        } catch (error) {
-            logger.warn('AAL2 validation failed', {
-                requestId,
-                error: error instanceof Error ? error.message : 'Unknown error',
-                resourceId,
-            });
-            res.status(403).json({
-                error: 'Forbidden',
-                message: 'Authentication strength insufficient',
-                details: {
-                    reason: error instanceof Error ? error.message : 'AAL2 validation failed',
-                    requirement: 'Classified resources require AAL2 (Multi-Factor Authentication)',
-                    reference: 'NIST SP 800-63B, IDENTITY-ASSURANCE-LEVELS.md'
-                },
-            });
-            return;
+                validateAAL2(decodedToken, classification);
+            } catch (error) {
+                logger.warn('AAL2 validation failed', {
+                    requestId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    resourceId,
+                });
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Authentication strength insufficient',
+                    details: {
+                        reason: error instanceof Error ? error.message : 'AAL2 validation failed',
+                        requirement: 'Classified resources require AAL2 (Multi-Factor Authentication)',
+                        reference: 'NIST SP 800-63B, IDENTITY-ASSURANCE-LEVELS.md'
+                    },
+                });
+                return;
+            }
         }
 
         // ============================================
@@ -1135,8 +1287,8 @@ export const authzMiddleware = async (
         const encrypted = isZTDF ? true : ((resource as any).encrypted || false);
 
         // Phase 1: Normalize ACR/AMR for OPA input (ensure consistent format)
-        const normalizedAAL = normalizeACR(decodedToken.acr);
-        const normalizedAMR = normalizeAMR(decodedToken.amr);
+        const normalizedAAL = decodedToken ? normalizeACR(decodedToken.acr) : 0;
+        const normalizedAMR = decodedToken ? normalizeAMR(decodedToken.amr) : ['sp_auth'];
         const acrForOPA = String(normalizedAAL); // OPA expects string format
 
         const opaInput: IOPAInput = {
@@ -1145,12 +1297,12 @@ export const authzMiddleware = async (
                     authenticated: true,
                     uniqueID,
                     clearance,
-                    clearanceOriginal: tokenData.clearanceOriginal || clearance, // NEW: ACP-240 Section 4.3
-                    clearanceCountry: tokenData.clearanceCountry || countryOfAffiliation, // NEW: ACP-240 Section 4.3
+                    clearanceOriginal: tokenData?.clearanceOriginal || clearance, // NEW: ACP-240 Section 4.3
+                    clearanceCountry: tokenData?.clearanceCountry || countryOfAffiliation, // NEW: ACP-240 Section 4.3
                     countryOfAffiliation,
                     acpCOI,
-                    dutyOrg: tokenData.dutyOrg,      // Gap #4: Organization attribute
-                    orgUnit: tokenData.orgUnit,      // Gap #4: Organizational unit
+                    dutyOrg: tokenData?.dutyOrg,      // Gap #4: Organization attribute
+                    orgUnit: tokenData?.orgUnit,      // Gap #4: Organizational unit
                 },
                 action: {
                     operation: 'view',
@@ -1175,7 +1327,7 @@ export const authzMiddleware = async (
                     // AAL2/FAL2 context (NIST SP 800-63B/C) - normalized for consistent OPA evaluation
                     acr: acrForOPA,              // Normalized to string ("0", "1", "2")
                     amr: normalizedAMR,          // Normalized to array (["pwd"], ["pwd","otp"])
-                    auth_time: decodedToken.auth_time, // Time of authentication
+                    auth_time: decodedToken?.auth_time, // Time of authentication
                 },
             },
         };
