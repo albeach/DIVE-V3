@@ -57,6 +57,22 @@ for cmd in docker node npm openssl; do
     fi
 done
 
+# Check for Java (optional but recommended for Keycloak truststore)
+if ! command -v keytool &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Java JDK not installed (needed for Keycloak truststore)${NC}"
+    read -p "Install OpenJDK 17? (recommended) (y/N): " INSTALL_JAVA
+    if [[ $INSTALL_JAVA =~ ^[Yy]$ ]]; then
+        echo "Installing OpenJDK 17..."
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq openjdk-17-jdk-headless
+        echo -e "${GREEN}✓${NC} Java JDK installed"
+    else
+        echo -e "${YELLOW}⚠️  Skipping Java installation (truststore will not be created)${NC}"
+    fi
+else
+    echo -e "${GREEN}✓${NC} keytool: $(which keytool)"
+fi
+
 if [ $MISSING_DEPS -eq 1 ]; then
     echo -e "${RED}Please install missing dependencies first${NC}"
     exit 1
@@ -173,8 +189,26 @@ mkdir -p policies/uploads
 # Reset ownership to current user (in case they were owned by UID 1001 from previous run)
 # This ensures the cert installation script can write to them
 echo "Resetting directory ownership to current user..."
-sudo chown -R $USER:$USER backend/certs frontend/certs kas/certs backend/logs backend/uploads kas/logs policies/uploads 2>/dev/null || \
-    chown -R $USER:$USER backend/certs frontend/certs kas/certs backend/logs backend/uploads kas/logs policies/uploads 2>/dev/null || true
+sudo chown -R $USER:$USER \
+    backend/certs \
+    backend/logs \
+    backend/uploads \
+    frontend/certs \
+    frontend/ \
+    kas/certs \
+    kas/logs \
+    policies/uploads \
+    2>/dev/null || \
+    chown -R $USER:$USER \
+    backend/certs \
+    backend/logs \
+    backend/uploads \
+    frontend/certs \
+    frontend/ \
+    kas/certs \
+    kas/logs \
+    policies/uploads \
+    2>/dev/null || true
 
 echo -e "${GREEN}✓${NC} Certificate directories created and ownership reset"
 echo ""
