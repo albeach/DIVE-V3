@@ -154,14 +154,13 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 3: Create Certificate Directories
+# Phase 3: Create Certificate Directories and Reset Permissions
 ###############################################################################
 
 echo -e "${YELLOW}📁 Phase 3: Creating Certificate Directories${NC}"
 echo ""
 
-# Create certificate directories BEFORE changing ownership
-# This allows the cert installation script to write to them
+# Create certificate directories
 mkdir -p backend/certs/dive-root-cas
 mkdir -p frontend/certs/dive-root-cas
 mkdir -p keycloak/certs/dive-root-cas
@@ -171,7 +170,13 @@ mkdir -p backend/uploads
 mkdir -p kas/logs
 mkdir -p policies/uploads
 
-echo -e "${GREEN}✓${NC} Certificate directories created"
+# Reset ownership to current user (in case they were owned by UID 1001 from previous run)
+# This ensures the cert installation script can write to them
+echo "Resetting directory ownership to current user..."
+sudo chown -R $USER:$USER backend/certs frontend/certs kas/certs backend/logs backend/uploads kas/logs policies/uploads 2>/dev/null || \
+    chown -R $USER:$USER backend/certs frontend/certs kas/certs backend/logs backend/uploads kas/logs policies/uploads 2>/dev/null || true
+
+echo -e "${GREEN}✓${NC} Certificate directories created and ownership reset"
 echo ""
 
 ###############################################################################
