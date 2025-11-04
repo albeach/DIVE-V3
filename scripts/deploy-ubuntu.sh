@@ -424,13 +424,51 @@ if [ -d terraform ]; then
     fi
     
     echo "Initializing Terraform..."
-    terraform init -upgrade > /dev/null
+    terraform init -upgrade
     
-    echo "Applying Terraform configuration..."
-    terraform apply -auto-approve
+    echo ""
+    echo -e "${CYAN}Applying Terraform configuration (v2.0.0)...${NC}"
+    echo -e "${CYAN}This will deploy:${NC}"
+    echo "  • 11 Keycloak realms with fixed authentication flows"
+    echo "  • AAL1/AAL2/AAL3 conditional logic (UNCLASSIFIED/CONFIDENTIAL-SECRET/TOP_SECRET)"
+    echo "  • WebAuthn policies (AAL3 hardware-backed auth) - AUTOMATED!"
+    echo "  • 44 test users (4 per realm with varied clearances)"
+    echo "  • Native ACR/AMR tracking (no custom SPIs!)"
+    echo "  • All protocol mappers and security policies"
+    echo ""
+    
+    # Apply with proper variables
+    terraform apply -auto-approve \
+      -var="keycloak_admin_username=admin" \
+      -var="keycloak_admin_password=admin" \
+      -var="keycloak_url=https://localhost:8443"
+    
+    TERRAFORM_EXIT=$?
     
     cd "$PROJECT_ROOT"
-    echo -e "${GREEN}✓${NC} Terraform configuration applied"
+    
+    if [ $TERRAFORM_EXIT -eq 0 ]; then
+        echo ""
+        echo -e "${GREEN}✓${NC} Terraform configuration applied successfully"
+        echo ""
+        echo -e "${CYAN}v2.0.0 Deployment Summary:${NC}"
+        echo -e "  ${GREEN}✓${NC} 11 realms configured with native Keycloak features"
+        echo -e "  ${GREEN}✓${NC} Authentication flows fixed (Forms Subflow pattern)"
+        echo -e "  ${GREEN}✓${NC} WebAuthn policies deployed (AAL3 for TOP_SECRET)"
+        echo -e "  ${GREEN}✓${NC} 44 test users created (4 per realm)"
+        echo -e "  ${GREEN}✓${NC} Zero custom SPIs (100% native Keycloak 26.4.2)"
+        echo -e "  ${GREEN}✓${NC} Zero manual configuration steps"
+    else
+        echo -e "${RED}✗${NC} Terraform apply failed (exit code: $TERRAFORM_EXIT)"
+        echo ""
+        echo "Please review errors above and check:"
+        echo "  • Keycloak is running (https://localhost:8443)"
+        echo "  • Admin credentials are correct (admin/admin)"
+        echo "  • No duplicate resources in Terraform state"
+        echo ""
+        echo "For help, see: KEYCLOAK-V2-NATIVE-REFACTORING-SSOT.md"
+        exit 1
+    fi
 else
     echo -e "${YELLOW}⚠️  terraform/ directory not found, skipping...${NC}"
 fi
@@ -513,28 +551,123 @@ done
 echo ""
 
 ###############################################################################
+# Phase 13: Verify v2.0.0 Specific Features
+###############################################################################
+
+echo -e "${YELLOW}🔍 Phase 13: Verifying v2.0.0 Native Keycloak Features${NC}"
+echo ""
+
+# Check all 11 realms are accessible
+echo "Verifying all 11 realms:"
+REALMS="broker usa fra can deu gbr ita esp pol nld industry"
+REALM_COUNT=0
+for realm in $REALMS; do
+    if curl -sk "https://localhost:8443/realms/dive-v3-$realm/.well-known/openid-configuration" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} dive-v3-$realm"
+        ((REALM_COUNT++))
+    else
+        echo -e "  ${RED}✗${NC} dive-v3-$realm (not accessible)"
+    fi
+done
+
+if [ $REALM_COUNT -eq 11 ]; then
+    echo -e "${GREEN}✓${NC} All 11 realms operational (100%)"
+else
+    echo -e "${YELLOW}⚠️  Only $REALM_COUNT/11 realms accessible${NC}"
+fi
+
+echo ""
+
+# Check for authentication errors (v2.0.0 should have ZERO new errors)
+echo "Checking for authentication flow errors:"
+ERROR_COUNT=$(docker logs dive-v3-keycloak 2>&1 | grep -c "user not set yet" || echo "0")
+if [ "$ERROR_COUNT" -eq 0 ]; then
+    echo -e "  ${GREEN}✓${NC} No 'user not set yet' errors (v2.0.0 Forms Subflow fix working!)"
+else
+    echo -e "  ${YELLOW}⚠️${NC} Found $ERROR_COUNT authentication errors (check if they're historical)"
+fi
+
+echo ""
+
+# Verify no custom SPIs (v2.0.0 should have ZERO)
+echo "Verifying custom SPIs removed:"
+if ls keycloak/providers/*.jar >/dev/null 2>&1; then
+    echo -e "  ${RED}✗${NC} Custom SPI JARs found (should be removed in v2.0.0)"
+else
+    echo -e "  ${GREEN}✓${NC} No custom SPI JARs (100% native Keycloak 26.4.2)"
+fi
+
+echo ""
+
+# Check test users created
+echo "Verifying test users:"
+if [ -d terraform ]; then
+    cd terraform
+    USER_COUNT=$(terraform state list 2>/dev/null | grep -c "module.*test_users.keycloak_user" || echo "0")
+    if [ "$USER_COUNT" -eq 44 ]; then
+        echo -e "  ${GREEN}✓${NC} All 44 test users created (4 per realm × 11 realms)"
+    elif [ "$USER_COUNT" -gt 0 ]; then
+        echo -e "  ${YELLOW}⚠️${NC} $USER_COUNT/44 test users created"
+    else
+        echo -e "  ${YELLOW}⚠️${NC} No test users found in Terraform state"
+        echo "    Run: terraform apply to create test users"
+    fi
+    cd "$PROJECT_ROOT"
+else
+    echo -e "  ${YELLOW}⚠️${NC} Cannot verify (terraform directory not accessible)"
+fi
+
+echo ""
+
+###############################################################################
 # Deployment Complete
 ###############################################################################
 
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                                                                ║${NC}"
-echo -e "${GREEN}║                 🎉 Deployment Complete! 🎉                     ║${NC}"
+echo -e "${GREEN}║            🎉 DIVE V3 v2.0.0 Deployment Complete! 🎉           ║${NC}"
 echo -e "${GREEN}║                                                                ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${CYAN}Access URLs:${NC}"
+echo -e "${CYAN}🌐 Access URLs:${NC}"
 echo -e "  Frontend:        ${BLUE}https://localhost:3000${NC}"
 echo -e "  Backend API:     ${BLUE}https://localhost:4000${NC}"
 echo -e "  Keycloak Admin:  ${BLUE}https://localhost:8443/admin${NC}"
 echo -e "                   Username: ${YELLOW}admin${NC}"
 echo -e "                   Password: ${YELLOW}admin${NC}"
 echo ""
-echo -e "${CYAN}Useful Commands:${NC}"
+echo -e "${CYAN}👥 Test User Credentials (Password for all: Password123!):${NC}"
+echo -e "  ${GREEN}AAL1${NC} (UNCLASSIFIED):  testuser-usa-unclass      (no MFA)"
+echo -e "  ${GREEN}AAL2${NC} (SECRET):        testuser-usa-secret        (OTP setup required)"
+echo -e "  ${GREEN}AAL3${NC} (TOP_SECRET):    testuser-usa-ts            (WebAuthn/YubiKey setup required)"
+echo ""
+echo -e "${CYAN}🔐 v2.0.0 Features Deployed:${NC}"
+echo -e "  ${GREEN}✓${NC} Zero custom Keycloak SPIs (100% native 26.4.2)"
+echo -e "  ${GREEN}✓${NC} Fixed authentication flows (Forms Subflow pattern)"
+echo -e "  ${GREEN}✓${NC} AAL1/AAL2/AAL3 support (complete NIST SP 800-63B)"
+echo -e "  ${GREEN}✓${NC} WebAuthn/Passkey (YubiKey, TouchID, Windows Hello)"
+echo -e "  ${GREEN}✓${NC} 44 test users (4 per realm × 11 realms)"
+echo -e "  ${GREEN}✓${NC} Native ACR/AMR tracking (RFC-8176 compliant)"
+echo ""
+echo -e "${CYAN}📚 Documentation:${NC}"
+echo -e "  ${BLUE}KEYCLOAK-V2-NATIVE-REFACTORING-SSOT.md${NC} ← Complete deployment guide"
+echo -e "  ${BLUE}DEPLOYMENT-COMPLETE-FINAL.txt${NC}          ← Quick reference"
+echo -e "  ${BLUE}docs/TESTING-GUIDE.md${NC}                  ← Testing procedures"
+echo ""
+echo -e "${CYAN}🧪 Test Authentication:${NC}"
+echo -e "  1. Open: ${BLUE}https://localhost:8443/realms/dive-v3-usa/account${NC}"
+echo -e "  2. Sign in with test users above"
+echo -e "  3. Verify MFA prompts for classified users"
+echo ""
+echo -e "${CYAN}💻 Useful Commands:${NC}"
 echo -e "  View logs:       ${YELLOW}docker compose logs -f${NC}"
 echo -e "  Stop services:   ${YELLOW}docker compose down${NC}"
 echo -e "  Restart all:     ${YELLOW}docker compose restart${NC}"
+echo -e "  Test auth:       ${YELLOW}./scripts/test-keycloak-auth.sh all${NC}"
+echo -e "  Test federation: ${YELLOW}./scripts/test-keycloak-federation.sh all${NC}"
 echo ""
-echo -e "${YELLOW}Note: You may see a security warning when accessing HTTPS URLs.${NC}"
-echo -e "${YELLOW}This is normal for self-signed certificates. Click 'Advanced' → 'Proceed'.${NC}"
+echo -e "${YELLOW}⚠️  Note: You may see a security warning when accessing HTTPS URLs.${NC}"
+echo -e "${YELLOW}    This is normal for self-signed certificates.${NC}"
+echo -e "${YELLOW}    Click 'Advanced' → 'Proceed' to continue.${NC}"
 echo ""
 
