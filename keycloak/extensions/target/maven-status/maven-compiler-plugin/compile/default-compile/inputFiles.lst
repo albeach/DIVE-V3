@@ -1,4 +1,5 @@
 /app/src/main/java/com/dive/keycloak/redis/RedisOTPStore.java
+/app/src/main/java/com/dive/keycloak/mapper/AMRProtocolMapper.java
 /app/src/main/java/com/dive/keycloak/authenticator/DirectGrantOTPAuthenticator.java
 /app/src/main/java/com/dive/keycloak/event/AMREnrichmentEventListenerFactory.java
 /app/src/main/java/com/dive/keycloak/event/AMREnrichmentEventListener.java

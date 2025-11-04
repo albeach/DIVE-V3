@@ -58,8 +58,14 @@ variable "otp_policy" {
 }
 
 variable "enable_direct_grant_mfa" {
-  description = "Enable MFA for Direct Grant (Resource Owner Password Credentials) flow"
+  description = "⚠️ DEPRECATED: Enable MFA for Direct Grant (ROPC) flow. Default is FALSE (disabled). Use browser-based flows only. See docs/NATIVE-KEYCLOAK-REFACTORING.md"
   type        = bool
-  default     = true
+  default     = false  # CHANGED in v2.0.0: Direct Grant is DEPRECATED
+}
+
+variable "use_standard_browser_flow" {
+  description = "Use standard Keycloak browser flow instead of custom MFA flow (for federated realms)"
+  type        = bool
+  default     = false
 }
 

@@ -36,13 +36,17 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
 
     @Override
     public void onEvent(Event event) {
-        // Only process successful login events
-        if (event.getType() != EventType.LOGIN) {
+        // Process all authentication success events (browser, password grant, token exchange, etc.)
+        // This ensures AMR is set regardless of how the user authenticates
+        if (event.getType() != EventType.LOGIN && 
+            event.getType() != EventType.CODE_TO_TOKEN &&
+            event.getType() != EventType.REFRESH_TOKEN &&
+            event.getType() != EventType.TOKEN_EXCHANGE) {
             return;
         }
 
         try {
-            System.out.println("[DIVE AMR] Login event detected for user: " + event.getUserId());
+            System.out.println("[DIVE AMR] Authentication event detected: " + event.getType() + " for user: " + event.getUserId());
 
             RealmModel realm = session.realms().getRealm(event.getRealmId());
             UserModel user = session.users().getUserById(realm, event.getUserId());
@@ -60,20 +64,27 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                 return;
             }
 
+            // Check if AMR already set (avoid redundant processing on token refresh)
+            String existingAmr = userSession.getNote("AUTH_METHODS_REF");
+            if (existingAmr != null && event.getType() != EventType.LOGIN) {
+                System.out.println("[DIVE AMR] AMR already set for session: " + existingAmr);
+                return;
+            }
+
             // Build AMR array based on credentials validated
             List<String> amrMethods = new ArrayList<>();
             
-            // Password is always required in browser flow
+            // Password is always required for authentication
             amrMethods.add("pwd");
             
-            // Check if user has OTP configured and session required it
+            // Check if user has OTP configured
             boolean hasOTP = user.credentialManager()
                 .getStoredCredentialsByTypeStream("otp")
                 .findFirst()
                 .isPresent();
             
             if (hasOTP) {
-                // User has OTP credential, so it was validated during login
+                // User has OTP credential configured - they must use it for authentication
                 amrMethods.add("otp");
                 System.out.println("[DIVE AMR] User has OTP credential - adding 'otp' to AMR");
             }
@@ -81,17 +92,24 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             // Build AMR JSON array string
             String amrJson = "[\"" + String.join("\",\"", amrMethods) + "\"]";
             
+            // Calculate ACR based on AMR factors (NIST SP 800-63B)
+            // AAL1 (0) = single factor, AAL2 (1) = two factor, AAL3 (2) = hardware token
+            String acr = hasOTP ? "1" : "0";  // 1 = AAL2 (MFA), 0 = AAL1 (password only)
+            
             System.out.println("[DIVE AMR] Setting AUTH_METHODS_REF: " + amrJson);
+            System.out.println("[DIVE AMR] Setting ACR: " + acr + " (AAL" + (Integer.parseInt(acr) + 1) + ")");
             
-            // Set session note for protocol mappers to read
+            // Set session notes for protocol mappers to read
             userSession.setNote("AUTH_METHODS_REF", amrJson);
+            userSession.setNote("ACR", acr);
             
-            System.out.println("[DIVE AMR] AMR enrichment complete for user: " + user.getUsername());
+            System.out.println("[DIVE AMR] AMR/ACR enrichment complete for user: " + user.getUsername() + 
+                             " (session: " + userSession.getId() + ")");
             
         } catch (Exception e) {
-            System.err.println("[DIVE AMR] Error enriching AMR: " + e.getMessage());
+            System.err.println("[DIVE AMR] Error enriching AMR/ACR: " + e.getMessage());
             e.printStackTrace();
-            // Don't fail login, just log error
+            // Don't fail authentication, just log error
         }
     }
 

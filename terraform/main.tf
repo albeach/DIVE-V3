@@ -21,12 +21,16 @@ provider "keycloak" {
 }
 
 # ============================================
-# DIVE V3 Realm Configuration
+# DIVE V3 Realm Configuration (DEPRECATED)
 # ============================================
+# This legacy realm is DEPRECATED in favor of multi-realm architecture
+# See: broker-realm.tf, usa-realm.tf, fra-realm.tf, etc.
+# DO NOT USE - kept for reference only
 
-resource "keycloak_realm" "dive_v3" {
-  realm   = var.realm_name
-  enabled = true
+# DISABLED: Conflicts with multi-realm architecture
+# resource "keycloak_realm" "dive_v3" {
+#   realm   = var.realm_name
+#   enabled = true
 
   display_name      = "DIVE V3 Coalition Pilot"
   display_name_html = "<b>DIVE V3</b> - USA/NATO ICAM Pilot"

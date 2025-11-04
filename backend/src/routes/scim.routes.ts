@@ -12,3 +12,12 @@ const router = Router();
 router.use('/', scimController);
 
 export default router;
+
+
+
+
+
+
+
+
+

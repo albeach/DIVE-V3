@@ -267,3 +267,12 @@ export interface IOAuthClient {
   defaultClientScopes: string[];
   optionalClientScopes: string[];
 }
+
+
+
+
+
+
+
+
+

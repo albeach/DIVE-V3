@@ -29,7 +29,7 @@ resource "keycloak_oidc_identity_provider" "usa_realm_broker" {
   trust_email = true
   sync_mode   = "FORCE" # Always sync from U.S. realm
 
-  first_broker_login_flow_alias = "first broker login"
+  first_broker_login_flow_alias = module.broker_mfa.post_broker_mfa_flow_alias
   link_only                     = false # Auto-create users
 
   gui_order = "1"

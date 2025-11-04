@@ -157,3 +157,7 @@ terraform/tfplan*
 
 # Private notes - not tracked in git
 /notes/
+/docs/notes/
+
+*.bak
+*.bak2

@@ -62,3 +62,12 @@ Make sure to:
 3. Share the public key with federation partners for token validation
 4. Add keys/ to .gitignore if not already present
 `);
+
+
+
+
+
+
+
+
+

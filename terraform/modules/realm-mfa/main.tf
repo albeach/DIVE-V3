@@ -1,118 +1,198 @@
 # ============================================
-# MFA Browser Authentication Flow
+# MFA Browser Authentication Flow (NATIVE KEYCLOAK 26.4.2) - FIXED
 # ============================================
-# AAL2 Enforcement: Conditional MFA based on clearance level
-# Compatible with all DIVE V3 realms (USA, France, Canada, Industry)
+# Multi-Level AAL Enforcement: AAL1/AAL2/AAL3 Using ONLY Native Keycloak Features
+# 
+# CRITICAL FIX (Nov 4, 2025):
+# - Restructured flow to fix "user not set yet" error
+# - Username-Password and MFA now in SAME subflow (proper user context)
+# - Added AAL3 (WebAuthn) for TOP_SECRET clearance
+#
+# Flow Structure (CORRECTED):
+# 1. Cookie (ALTERNATIVE) - SSO reuse
+# 2. Forms Subflow (ALTERNATIVE) - Contains auth + MFA together
+#    ├─ Username-Password (REQUIRED) - Authenticates user FIRST
+#    ├─ Conditional AAL3 (CONDITIONAL) - TOP_SECRET → WebAuthn
+#    └─ Conditional AAL2 (CONDITIONAL) - CONFIDENTIAL/SECRET → OTP
+#
+# ACR/AMR Mapping:
+# - AAL1 (password only): acr="0", amr=["pwd"]
+# - AAL2 (password+OTP): acr="1", amr=["pwd","otp"]
+# - AAL3 (password+WebAuthn): acr="2", amr=["pwd","hwk"]
 
 resource "keycloak_authentication_flow" "classified_browser" {
   realm_id    = var.realm_id
   alias       = "Classified Access Browser Flow - ${var.realm_display_name}"
-  description = "AAL2 enforcement: MFA required for CONFIDENTIAL, SECRET, TOP_SECRET clearances"
+  description = "Multi-level AAL (AAL1/AAL2/AAL3) using NATIVE Keycloak 26.4.2 features"
 }
 
-# SECURITY FIX (Oct 26, 2025): Removed SSO cookie bypass for AAL2 compliance
-# The auth-cookie execution was allowing users to bypass MFA by reusing SSO sessions
-# For TOP_SECRET clearance, AAL2 requires MFA on EVERY authentication (NIST SP 800-63B)
-# 
-# PREVIOUS DESIGN (INSECURE):
-# ├─ Cookie (SSO) [ALTERNATIVE] ← Would bypass MFA if session exists!
-# └─ Classified User Conditional [ALTERNATIVE]
-#
-# NEW DESIGN (SECURE):
-# └─ Classified User Conditional [REQUIRED] ← Always requires authentication + MFA check
+# ============================================
+# Top Level: Cookie vs Forms
+# ============================================
 
-# Step 1: Conditional subflow for classified users (REQUIRED - no SSO bypass)
-resource "keycloak_authentication_subflow" "classified_conditional" {
+# Option 1: SSO Cookie (returning users, already authenticated)
+resource "keycloak_authentication_execution" "browser_cookie" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
-  alias             = "Classified User Conditional - ${var.realm_display_name}"
-  requirement       = "REQUIRED"  # Changed from ALTERNATIVE to prevent SSO bypass
-  provider_id       = "basic-flow"
+  authenticator     = "auth-cookie"
+  requirement       = "ALTERNATIVE"
 }
 
-# Step 3: Username + Password
-resource "keycloak_authentication_execution" "classified_username_password" {
+# Option 2: Forms Subflow (new authentication required)
+resource "keycloak_authentication_subflow" "browser_forms_subflow" {
   realm_id          = var.realm_id
-  parent_flow_alias = keycloak_authentication_subflow.classified_conditional.alias
+  parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
+  alias             = "Forms - ${var.realm_display_name}"
+  requirement       = "ALTERNATIVE"
+  
+  depends_on = [keycloak_authentication_execution.browser_cookie]
+}
+
+# ============================================
+# Forms Subflow: Auth THEN Conditional MFA
+# ============================================
+# CRITICAL: User authentication happens FIRST, creating user context
+# THEN conditional checks can access user attributes
+
+# Step 1: Username + Password (REQUIRED - creates user context)
+resource "keycloak_authentication_execution" "browser_forms" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   authenticator     = "auth-username-password-form"
   requirement       = "REQUIRED"
 }
 
-# Configure ACR for password authentication (AAL1 baseline)
-# This sets ACR="0" (AAL1) for password-only authentication
-# Will be upgraded to ACR="1" (AAL2) if OTP is also completed
-resource "keycloak_authentication_execution_config" "classified_password_acr_config" {
+# Configure ACR and AMR for password authentication (AAL1 baseline)
+resource "keycloak_authentication_execution_config" "browser_password_acr" {
   realm_id     = var.realm_id
-  execution_id = keycloak_authentication_execution.classified_username_password.id
-  alias        = "Password ACR Level - ${var.realm_display_name}"
+  execution_id = keycloak_authentication_execution.browser_forms.id
+  alias        = "Password ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "0"  # AAL1 for password-only
+    acr_level = "0"      # AAL1 for password-only
+    reference = "pwd"    # AMR reference (RFC-8176 compliant)
   }
 }
 
-# Step 4: Conditional OTP subflow (conditional execution container)
-resource "keycloak_authentication_subflow" "classified_otp_conditional" {
+# ============================================
+# Step 2: Conditional AAL3 (TOP_SECRET → WebAuthn)
+# ============================================
+
+resource "keycloak_authentication_subflow" "browser_conditional_webauthn" {
   realm_id          = var.realm_id
-  parent_flow_alias = keycloak_authentication_subflow.classified_conditional.alias
-  alias             = "Conditional OTP for Classified - ${var.realm_display_name}"
-  requirement       = "CONDITIONAL"  # This makes it a conditional flow
-  # provider_id is omitted for conditional flows (Keycloak sets authenticationFlow=true internally)
+  parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
+  alias             = "Conditional WebAuthn AAL3 - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
+  
+  depends_on = [keycloak_authentication_execution.browser_forms]
 }
 
-# Condition: User attribute "clearance" != "UNCLASSIFIED"
-resource "keycloak_authentication_execution" "classified_condition_user_attribute" {
+# Condition: clearance == "TOP_SECRET"
+resource "keycloak_authentication_execution" "browser_condition_top_secret" {
   realm_id          = var.realm_id
-  parent_flow_alias = keycloak_authentication_subflow.classified_otp_conditional.alias
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
   authenticator     = "conditional-user-attribute"
   requirement       = "REQUIRED"
 }
 
-# Configuration for conditional-user-attribute
-resource "keycloak_authentication_execution_config" "classified_condition_config" {
+resource "keycloak_authentication_execution_config" "browser_condition_top_secret_config" {
   realm_id     = var.realm_id
-  execution_id = keycloak_authentication_execution.classified_condition_user_attribute.id
-  alias        = "Classified Clearance Check - ${var.realm_display_name}"
+  execution_id = keycloak_authentication_execution.browser_condition_top_secret.id
+  alias        = "TOP SECRET Check - ${var.realm_display_name}"
   config = {
-    # Attribute name
-    attribute_name = var.clearance_attribute_name
-    # Attribute value regex (match anything EXCEPT UNCLASSIFIED)
-    attribute_value = var.clearance_attribute_value_regex
-    # Negate: false (we want to match the regex)
-    negate = "false"
+    attribute_name  = var.clearance_attribute_name
+    attribute_value = "^TOP_SECRET$"  # Exact match
+    negate          = "false"
   }
 }
 
-# Action: Require OTP if condition passes
-resource "keycloak_authentication_execution" "classified_otp_form" {
+# WebAuthn Authenticator (hardware-backed, AAL3)
+resource "keycloak_authentication_execution" "browser_webauthn_form" {
   realm_id          = var.realm_id
-  parent_flow_alias = keycloak_authentication_subflow.classified_otp_conditional.alias
-  authenticator     = "auth-otp-form"
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
+  authenticator     = "webauthn-authenticator"
   requirement       = "REQUIRED"
   
-  # Ensure condition is created before OTP form to maintain proper execution order
   depends_on = [
-    keycloak_authentication_execution.classified_condition_user_attribute,
-    keycloak_authentication_execution_config.classified_condition_config
+    keycloak_authentication_execution.browser_condition_top_secret,
+    keycloak_authentication_execution_config.browser_condition_top_secret_config
   ]
 }
 
-# Configure ACR (Authentication Context Class Reference) for OTP authenticator
-# Keycloak 26+: This sets ACR="1" (AAL2) when OTP is successfully completed
-resource "keycloak_authentication_execution_config" "classified_otp_acr_config" {
+# Configure ACR and AMR for WebAuthn (AAL3)
+resource "keycloak_authentication_execution_config" "browser_webauthn_acr" {
   realm_id     = var.realm_id
-  execution_id = keycloak_authentication_execution.classified_otp_form.id
-  alias        = "OTP ACR Level - ${var.realm_display_name}"
+  execution_id = keycloak_authentication_execution.browser_webauthn_form.id
+  alias        = "WebAuthn ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "1"  # Set ACR to "1" (AAL2) when OTP succeeds
+    acr_level = "2"      # AAL3 for hardware key
+    reference = "hwk"    # AMR reference (RFC-8176: hardware key)
   }
 }
 
-# Bind the flow to realm browser authentication
-# ENABLED (Nov 3, 2025): AAL/MFA enforcement now active
-# This replaces the default "browser" flow with our custom MFA flow
-# Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #4)
-resource "keycloak_authentication_bindings" "classified_bindings" {
-  realm_id     = var.realm_id
-  browser_flow = keycloak_authentication_flow.classified_browser.alias
+# ============================================
+# Step 3: Conditional AAL2 (CONFIDENTIAL/SECRET → OTP)
+# ============================================
+
+resource "keycloak_authentication_subflow" "browser_conditional_otp" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
+  alias             = "Conditional OTP AAL2 - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
+  
+  depends_on = [keycloak_authentication_subflow.browser_conditional_webauthn]
 }
 
+# Condition: clearance in (CONFIDENTIAL, SECRET)
+resource "keycloak_authentication_execution" "browser_condition_user_attribute" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
+  authenticator     = "conditional-user-attribute"
+  requirement       = "REQUIRED"
+}
+
+resource "keycloak_authentication_execution_config" "browser_condition_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_condition_user_attribute.id
+  alias        = "CONFIDENTIAL SECRET Check - ${var.realm_display_name}"
+  config = {
+    attribute_name  = var.clearance_attribute_name
+    attribute_value = "^(CONFIDENTIAL|SECRET)$"  # Regex for both levels
+    negate          = "false"
+  }
+}
+
+# OTP Form (only for CONFIDENTIAL/SECRET)
+resource "keycloak_authentication_execution" "browser_otp_form" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
+  authenticator     = "auth-otp-form"
+  requirement       = "REQUIRED"
+  
+  depends_on = [
+    keycloak_authentication_execution.browser_condition_user_attribute,
+    keycloak_authentication_execution_config.browser_condition_config
+  ]
+}
+
+# Configure ACR and AMR for OTP (AAL2)
+resource "keycloak_authentication_execution_config" "browser_otp_acr" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_otp_form.id
+  alias        = "OTP ACR AMR - ${var.realm_display_name}"
+  config = {
+    acr_level = "1"      # AAL2 when OTP succeeds
+    reference = "otp"    # AMR reference (RFC-8176 compliant)
+  }
+}
+
+# ============================================
+# Authentication Flow Bindings  
+# ============================================
+# PERMANENT FIX (Nov 3, 2025):
+# - Broker realm: Uses custom MFA flow
+# - Federated realms: Use standard browser flow (federation compatible)
+# - MFA enforcement happens via post-broker login flow
+resource "keycloak_authentication_bindings" "classified_bindings" {
+  realm_id     = var.realm_id
+  browser_flow = var.use_standard_browser_flow ? "browser" : keycloak_authentication_flow.classified_browser.alias
+}

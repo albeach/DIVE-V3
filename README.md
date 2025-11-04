@@ -22,6 +22,76 @@ DIVE V3 is a 4-week pilot demonstrating coalition-friendly Identity, Credential,
 
 ---
 
+## 🎖️ NATO Compliance Initiative (November 4, 2025)
+
+**Status:** ⚠️ In Progress - Gap Analysis Complete  
+**Target:** Full ACP-240 & ADatP-5663 Compliance by February 2026
+
+DIVE V3 is undergoing comprehensive compliance alignment with:
+- **NATO ACP-240 (A):** Data-Centric Security
+- **NATO ADatP-5663:** Identity, Credential and Access Management
+
+### Current Compliance Status
+
+| Standard | Baseline (Nov 4, 2025) | Target (Feb 2026) | Gap |
+|----------|------------------------|-------------------|-----|
+| **ACP-240** | 90% | 100% | -10% |
+| **ADatP-5663** | 63% | 98% | -35% |
+
+### Key Deliverables
+
+✅ **Completed:**
+- Comprehensive gap analysis (14 categories, 49 pages)
+- 5-phase implementation plan (13 weeks, February 2026 completion)
+- MCP-powered Keycloak capability research
+
+🚧 **In Progress:**
+- Phase 1: Quick Wins (2 weeks) - Metadata signing, ACR/LoA mapping, SAML IdP integration
+- Phase 2: Federation Infrastructure (3 weeks) - Delegation, attribute caching, LDAP federation
+- Phase 3: PKI & Revocation (3 weeks) - Enterprise PKI, cross-realm revocation
+- Phase 4: Attribute Authority (3 weeks) - External AA service, attribute signing
+- Phase 5: Conformance Testing (2 weeks) - NATO ICAM Test Framework, compliance reports
+
+### Compliance Highlights
+
+**Already Compliant:**
+- ✅ Federated Identity (UUID, ISO 3166, clearance, COI)
+- ✅ ABAC enforcement with PEP/PDP pattern
+- ✅ AAL1/AAL2/AAL3 step-up authentication (excellent Keycloak support)
+- ✅ Multi-protocol federation (SAML & OIDC)
+- ✅ Comprehensive audit logging (ACP-240 events)
+- ✅ Fail-closed enforcement
+- ✅ Strong AuthN (MFA, short-lived tokens)
+- ✅ Session management & backchannel logout
+
+**High Priority Gaps (Phases 2-4):**
+- ⚠️ Attribute Authority integration (external AA service with attribute signing)
+- ⚠️ Delegation support (OAuth 2.0 Token Exchange RFC 8693)
+- ⚠️ Identity revocation broadcasting (cross-realm notification)
+- ⚠️ PKI trust establishment (enterprise PKI, CRL/OCSP)
+
+### Documentation
+
+- 📊 **[Gap Analysis](docs/compliance/ACP-240-ADatP-5663-GAP-ANALYSIS.md)** - Comprehensive 14-category analysis with Keycloak MCP research
+- 📋 **[Implementation Plan](docs/NATO-COMPLIANCE-IMPLEMENTATION-PLAN.md)** - 5-phase roadmap with detailed tasks and acceptance criteria
+- 📖 **[ACP-240 Requirements](notes/ACP240-llms.txt)** - Data-Centric Security specification
+- 📖 **[ADatP-5663 Requirements](notes/ADatP-5663_ICAM_EdA_v1_LLM.md)** - ICAM specification (1140 lines)
+
+### Compliance Metrics
+
+| Category | Status | Implementation Effort |
+|----------|--------|----------------------|
+| Federation Metadata Exchange | ⚠️ Partial | Phase 1-2 (5 days) |
+| AAL Step-Up Authentication | ✅ Full | **None** (already compliant) |
+| Multi-Protocol Federation | ✅ Full | Phase 1 (3 days) |
+| Session Management | ✅ Full | **None** (already compliant) |
+| Attribute Authority | ❌ Missing | Phase 4 (25 days) |
+| Delegation Support | ❌ Missing | Phase 2 (15 days) |
+| PKI Trust | ⚠️ Partial | Phase 3 (15 days) |
+| Identity Revocation | ❌ Missing | Phase 3 (20 days) |
+
+---
+
 ## 🤝 Service Provider Federation (Phase 1 - November 3, 2025)
 
 **OAuth 2.0 Authorization Server + SCIM 2.0 User Provisioning**

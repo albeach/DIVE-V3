@@ -141,3 +141,12 @@ echo "  3. Check: docker-compose.yml environment variables"
 echo "  4. Restart: docker-compose down && docker-compose up -d"
 echo ""
 
+
+
+
+
+
+
+
+
+

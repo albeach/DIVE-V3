@@ -88,3 +88,12 @@ output "resource_id" {
 
 
 
+
+
+
+
+
+
+
+
+

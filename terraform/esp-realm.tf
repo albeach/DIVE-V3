@@ -39,6 +39,22 @@ resource "keycloak_realm" "dive_v3_esp" {
   password_policy = "upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and length(12) and notUsername"
 
   # Brute-force detection (Spanish settings)
+
+  # WebAuthn Policy (AAL3 Hardware-Backed Authentication) - v2.0.0
+  # AUTOMATED via Terraform - No manual configuration needed!
+  web_authn_policy {
+    relying_party_entity_name            = "DIVE V3 Coalition Platform"
+    relying_party_id                     = ""  # Empty for localhost
+    signature_algorithms                 = ["ES256", "RS256"]
+    attestation_conveyance_preference    = "none"
+    authenticator_attachment             = "cross-platform"
+    require_resident_key                 = "No"
+    user_verification_requirement        = "required"  # CRITICAL for AAL3
+    create_timeout                       = 300
+    avoid_same_authenticator_register    = false
+    acceptable_aaguids                   = []
+  }
+
   security_defenses {
     brute_force_detection {
       permanent_lockout                = false

@@ -10,9 +10,6 @@ volumes:
   redis_data:
 
 services:
-  # Include federation services if enabled
-  # Run with: docker compose -f docker-compose.yml -f docker-compose.federation.yml up
-  
   postgres:
     image: postgres:15-alpine
     container_name: dive-v3-postgres
@@ -61,8 +58,6 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       # Gap #6: Enable JavaScript providers for script-based protocol mappers
       KC_FEATURES: scripts
-      # DIVE Root CA Trust Store - for federation with external DIVE IdPs
-      JAVA_OPTS: -Djavax.net.ssl.trustStore=/opt/keycloak/certs/dive-root-cas/dive-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     depends_on:
       postgres:
@@ -74,8 +69,6 @@ services:
       - dive-network
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
-      # DIVE Root CA certificates for federation trust
-      - ./keycloak/certs/dive-root-cas:/opt/keycloak/certs/dive-root-cas:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/realms/master || exit 1"]
       interval: 30s
@@ -121,8 +114,7 @@ services:
   opa:
     image: openpolicyagent/opa:latest
     container_name: dive-v3-opa
-    # Multi-platform: Uses native arch (ARM64 on Mac, AMD64 on Ubuntu)
-    # Override with: docker compose -f docker-compose.yml -f docker-compose.platform.yml up
+    platform: linux/amd64
     command:
       - "run"
       - "--server"
@@ -186,8 +178,6 @@ services:
       LOG_LEVEL: info
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
-      # DIVE Root CA Trust - for federation with external DIVE IdPs
-      NODE_EXTRA_CA_CERTS: /app/certs/dive-root-cas/dive-root-cas.pem
     ports:
       - "4000:4000"    # HTTPS (all access)
     depends_on:
@@ -208,8 +198,6 @@ services:
       - ./policies:/app/policies:ro
       # CRITICAL: Mount certs directory for X.509 PKI certificates
       - ./backend/certs:/app/certs:ro
-      # DIVE Root CA certificates for federation trust
-      - ./backend/certs/dive-root-cas:/app/certs/dive-root-cas:ro
       # Logs directory
       - ./backend/logs:/app/logs
       # IdP Management Revamp: Theme uploads directory
@@ -253,8 +241,6 @@ services:
       NEXTAUTH_URL: https://localhost:3000
       # Database for NextAuth sessions
       DATABASE_URL: postgresql://postgres:password@postgres:5432/dive_v3_app
-      # DIVE Root CA Trust - for server-side federation requests
-      NODE_EXTRA_CA_CERTS: /app/certs/dive-root-cas/dive-root-cas.pem
     ports:
       - "3000:3000"
     depends_on:
@@ -267,8 +253,6 @@ services:
       - ./frontend:/app
       # Mount SSL certificates for HTTPS server
       - ./keycloak/certs:/opt/keycloak/certs:ro
-      # DIVE Root CA certificates for federation trust
-      - ./frontend/certs/dive-root-cas:/app/certs/dive-root-cas:ro
       # Exclude node_modules and .next from host (use container's versions)
       - /app/node_modules
       - /app/.next
@@ -294,8 +278,6 @@ services:
       # Backend should be internal Docker network when fully containerized
       # Change to http://backend:4000 when running backend in Docker
       # Currently: http://host.docker.internal:4000 (backend runs outside Docker)
-      # DIVE Root CA Trust - for federation with external DIVE IdPs
-      NODE_EXTRA_CA_CERTS: /app/certs/dive-root-cas/dive-root-cas.pem
     ports:
       - "8080:8080"
     depends_on:
@@ -306,7 +288,5 @@ services:
     volumes:
       - ./kas/src:/app/src
       - ./kas/logs:/app/logs
-      # DIVE Root CA certificates for federation trust
-      - ./kas/certs/dive-root-cas:/app/certs/dive-root-cas:ro
     command: npm run dev
 

@@ -26,3 +26,6 @@ terraform.rc
 # Lock file (commit this in real projects, but ignoring for flexibility)
 .terraform.lock.hcl
 
+*.tf.backup-webauthn
+
+keycloak-docs-mcp/*

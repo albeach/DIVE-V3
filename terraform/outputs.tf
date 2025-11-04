@@ -1,47 +1,47 @@
 output "realm_id" {
-  description = "The ID of the DIVE V3 realm"
-  value       = keycloak_realm.dive_v3.id
+  description = "The ID of the DIVE V3 broker realm (v2.0.0 multi-realm)"
+  value       = keycloak_realm.dive_v3_broker.id
 }
 
 output "realm_name" {
-  description = "The name of the DIVE V3 realm"
-  value       = keycloak_realm.dive_v3.realm
+  description = "The name of the DIVE V3 broker realm (v2.0.0 multi-realm)"
+  value       = keycloak_realm.dive_v3_broker.realm
 }
 
 output "client_id" {
-  description = "The client ID for the Next.js application"
-  value       = keycloak_openid_client.dive_v3_app.client_id
+  description = "The client ID for the Next.js application (broker realm)"
+  value       = keycloak_openid_client.dive_v3_app_broker.client_id
 }
 
 output "client_secret" {
   description = "The client secret for the Next.js application (SENSITIVE)"
-  value       = keycloak_openid_client.dive_v3_app.client_secret
+  value       = keycloak_openid_client.dive_v3_app_broker.client_secret
   sensitive   = true
 }
 
 output "issuer_url" {
-  description = "The OIDC issuer URL for DIVE V3"
-  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3.realm}"
+  description = "The OIDC issuer URL for DIVE V3 (broker realm)"
+  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3_broker.realm}"
 }
 
 output "authorization_url" {
-  description = "The authorization endpoint URL"
-  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3.realm}/protocol/openid-connect/auth"
+  description = "The authorization endpoint URL (broker realm)"
+  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3_broker.realm}/protocol/openid-connect/auth"
 }
 
 output "token_url" {
-  description = "The token endpoint URL"
-  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3.realm}/protocol/openid-connect/token"
+  description = "The token endpoint URL (broker realm)"
+  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3_broker.realm}/protocol/openid-connect/token"
 }
 
 output "userinfo_url" {
-  description = "The userinfo endpoint URL"
-  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3.realm}/protocol/openid-connect/userinfo"
+  description = "The userinfo endpoint URL (broker realm)"
+  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3_broker.realm}/protocol/openid-connect/userinfo"
 }
 
 output "jwks_uri" {
-  description = "The JWKS (public keys) endpoint"
-  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3.realm}/protocol/openid-connect/certs"
+  description = "The JWKS (public keys) endpoint (broker realm)"
+  value       = "${var.keycloak_url}/realms/${keycloak_realm.dive_v3_broker.realm}/protocol/openid-connect/certs"
 }
 
 output "test_user_credentials" {
@@ -73,7 +73,7 @@ output "test_user_credentials" {
 }
 
 output "admin_console_url" {
-  description = "Keycloak admin console URL"
-  value       = "${var.keycloak_url}/admin/${keycloak_realm.dive_v3.realm}/console/"
+  description = "Keycloak admin console URL (broker realm)"
+  value       = "${var.keycloak_url}/admin/${keycloak_realm.dive_v3_broker.realm}/console/"
 }
 
