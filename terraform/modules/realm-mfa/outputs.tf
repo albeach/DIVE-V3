@@ -24,6 +24,6 @@ output "direct_grant_flow_alias" {
 
 output "otp_conditional_flow_alias" {
   description = "Alias of the conditional OTP subflow (for reference)"
-  value       = keycloak_authentication_subflow.classified_otp_conditional.alias
+  value       = keycloak_authentication_subflow.browser_conditional_otp.alias
 }
 

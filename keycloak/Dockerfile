@@ -7,7 +7,7 @@
 # NOTE: Keycloak 26.0.7 uses a minimal base image with NO package managers
 # We download a statically-linked curl binary from the official curl project
 
-FROM quay.io/keycloak/keycloak:26.0.7
+FROM quay.io/keycloak/keycloak:26.4.2
 
 USER root
 
@@ -46,22 +46,68 @@ COPY --chown=1000:1000 certs/ /opt/keycloak/certs/
 # Copy custom DIVE V3 themes (base + all country variants)
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 
-# Copy Custom SPI JARs for conditional MFA and clearance downgrade
-COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
+# ============================================
+# v2.0.0 CHANGE: Custom SPIs REMOVED
+# ============================================
+# Custom SPI JARs have been REMOVED in favor of native Keycloak 26.4.2 features
+# All ACR/AMR tracking, conditional MFA, and OTP handling now use built-in capabilities
+# See: docs/NATIVE-KEYCLOAK-REFACTORING.md for migration details
+#
+# REMOVED LINE (v1.x):
+# COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
 
-# Import mkcert certificate into Java truststore
-# Java doesn't automatically use system trust store, so we must import explicitly
-# This allows Keycloak's Java HTTP client to trust HTTPS calls to itself during federation
-# (e.g., broker realm calling national realm token endpoints)
-RUN keytool -import -trustcacerts \
-    -alias localhost-mkcert \
-    -file /opt/keycloak/certs/certificate.pem \
-    -keystore /etc/pki/ca-trust/extracted/java/cacerts \
-    -storepass changeit \
-    -noprompt
+# ============================================
+# Import SSL Certificates into Java Truststore (PERMANENT FIX)
+# ============================================
+# Import all SSL certificates that Keycloak needs to trust
+# Critical for federation: broker realm → federated realms (USA, FRA, CAN, etc.)
+#
+# Java truststore location: /usr/lib/jvm/java-21-openjdk-*/lib/security/cacerts
+# We use a wildcard to handle different patch versions
 
-# Verify certificate was imported successfully
-RUN keytool -list -keystore /etc/pki/ca-trust/extracted/java/cacerts -storepass changeit -alias localhost-mkcert
+RUN set -e && \
+    JAVA_CACERTS="/usr/lib/jvm/java-21-openjdk-21.0.5.0.11-2.el9.aarch64/lib/security/cacerts" && \
+    echo "Using Java cacerts at: $JAVA_CACERTS" && \
+    # Import mkcert root CA (localhost HTTPS)
+    if [ -f /opt/keycloak/certs/mkcert-rootCA.pem ]; then \
+        echo "Importing mkcert root CA..." && \
+        keytool -import -noprompt -trustcacerts \
+            -alias mkcert-root-ca \
+            -file /opt/keycloak/certs/mkcert-rootCA.pem \
+            -keystore "$JAVA_CACERTS" \
+            -storepass changeit && \
+        echo "✓ mkcert CA imported"; \
+    else \
+        echo "⚠ mkcert-rootCA.pem not found"; \
+    fi && \
+    # Import Keycloak's own certificate
+    if [ -f /opt/keycloak/certs/certificate.pem ]; then \
+        echo "Importing Keycloak certificate..." && \
+        keytool -import -noprompt -trustcacerts \
+            -alias keycloak-localhost \
+            -file /opt/keycloak/certs/certificate.pem \
+            -keystore "$JAVA_CACERTS" \
+            -storepass changeit && \
+        echo "✓ Keycloak cert imported"; \
+    else \
+        echo "⚠ certificate.pem not found"; \
+    fi && \
+    # Import DIVE root CAs
+    if [ -f /opt/keycloak/certs/dive-root-cas/dive-root-cas.pem ]; then \
+        echo "Importing DIVE root CAs..." && \
+        keytool -import -noprompt -trustcacerts \
+            -alias dive-root-cas \
+            -file /opt/keycloak/certs/dive-root-cas/dive-root-cas.pem \
+            -keystore "$JAVA_CACERTS" \
+            -storepass changeit && \
+        echo "✓ DIVE CA imported"; \
+    else \
+        echo "⚠ dive-root-cas.pem not found"; \
+    fi && \
+    # Verify imports
+    echo "Verifying certificate imports..." && \
+    keytool -list -keystore "$JAVA_CACERTS" -storepass changeit | grep -E "(mkcert|keycloak|dive)" && \
+    echo "✓ All certificates imported successfully"
 
 USER 1000
 

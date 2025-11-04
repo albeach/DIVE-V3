@@ -19,7 +19,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         
         <!-- Match Keycloak version in docker-compose -->
-        <keycloak.version>26.0.7</keycloak.version>
+        <keycloak.version>26.4.2</keycloak.version>
     </properties>
 
     <dependencies>

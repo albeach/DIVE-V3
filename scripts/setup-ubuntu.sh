@@ -251,3 +251,12 @@ echo ""
 echo -e "${YELLOW}⚠️  IMPORTANT: You must log out and log back in for Docker permissions to take effect${NC}"
 echo ""
 
+
+
+
+
+
+
+
+
+

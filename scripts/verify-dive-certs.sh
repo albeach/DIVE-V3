@@ -94,3 +94,12 @@ echo "1. Review certificate details above"
 echo "2. If valid, run: ./scripts/install-dive-certs.sh"
 echo "3. Restart all services to pick up new trust store"
 
+
+
+
+
+
+
+
+
+

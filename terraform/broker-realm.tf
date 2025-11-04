@@ -59,6 +59,21 @@ resource "keycloak_realm" "dive_v3_broker" {
     look_ahead_window = 1
   }
 
+  # WebAuthn Policy (AAL3 Hardware-Backed Authentication) - v2.0.0
+  # AUTOMATED: No manual configuration needed!
+  web_authn_policy {
+    relying_party_entity_name            = "DIVE V3 Coalition Platform - Broker"
+    relying_party_id                     = ""  # Empty for localhost
+    signature_algorithms                 = ["ES256", "RS256"]
+    attestation_conveyance_preference    = "none"
+    authenticator_attachment             = "cross-platform"
+    require_resident_key                 = "No"
+    user_verification_requirement        = "required"  # CRITICAL for AAL3
+    create_timeout                       = 300
+    avoid_same_authenticator_register    = false
+    acceptable_aaguids                   = []
+  }
+
   # Brute-force detection (balanced for MFA setup attempts)
   security_defenses {
     brute_force_detection {
@@ -330,18 +345,34 @@ resource "keycloak_generic_protocol_mapper" "broker_auth_time" {
   }
 }
 
+# ============================================
+# ACR/AMR Protocol Mappers (NATIVE KC 26.4.2)
+# ============================================
+# v2.0.0 CHANGES: Fully native Keycloak features, NO custom SPIs
+#
+# How it works (NATIVE):
+# 1. Authenticator executions set ACR level via config: acr_level = "0" or "1"
+# 2. Authenticator executions set AMR reference via config: reference = "pwd" or "otp"
+# 3. Keycloak automatically sets session notes:
+#    - AUTH_CONTEXT_CLASS_REF (ACR value)
+#    - AUTH_METHODS_REF (AMR array)
+# 4. These mappers read session notes and add to JWT tokens
+#
+# ❌ REMOVED: Custom AMREnrichmentEventListener SPI (no longer needed!)
+# ✅ NATIVE: Keycloak 26.4 handles everything automatically
+
 # ACR (Authentication Context Class Reference) mapper
 # Maps Keycloak's internal ACR session note to token claim
-# Keycloak sets this based on authentication flow (AAL1: pwd, AAL2: pwd+otp, AAL3: hardware)
+# Values: "0" (AAL1: password), "1" (AAL2: password+OTP), "2" (AAL3: hardware)
 resource "keycloak_generic_protocol_mapper" "broker_acr" {
   realm_id        = keycloak_realm.dive_v3_broker.id
   client_id       = keycloak_openid_client.dive_v3_app_broker.id
   name            = "acr-mapper"
   protocol        = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # NATIVE KC mapper
 
   config = {
-    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"
+    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"  # Set automatically by KC 26.4
     "claim.name"           = "acr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
@@ -351,19 +382,19 @@ resource "keycloak_generic_protocol_mapper" "broker_acr" {
 }
 
 # AMR (Authentication Methods Reference) mapper
-# Maps Keycloak's internal AMR session note to token claim
-# Contains array of auth methods: ["pwd"], ["pwd","otp"], ["webauthn"]
+# Maps Keycloak's internal AMR session note to token claim (RFC-8176 compliant)
+# Values: ["pwd"], ["pwd","otp"], ["hwk"] (hardware key)
 resource "keycloak_generic_protocol_mapper" "broker_amr" {
   realm_id        = keycloak_realm.dive_v3_broker.id
   client_id       = keycloak_openid_client.dive_v3_app_broker.id
   name            = "amr-mapper"
   protocol        = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # NATIVE KC mapper
 
   config = {
-    "user.session.note"    = "AUTH_METHODS_REF"
+    "user.session.note"    = "AUTH_METHODS_REF"  # Set automatically by KC 26.4
     "claim.name"           = "amr"
-    "jsonType.label"       = "String" # Note: Keycloak stores as JSON string, backend parses it
+    "jsonType.label"       = "JSON"  # v2.0.0: Changed to JSON for proper array handling
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"

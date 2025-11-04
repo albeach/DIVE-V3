@@ -18,7 +18,8 @@ module "broker_mfa" {
   realm_name         = "dive-v3-broker"
   realm_display_name = "DIVE V3 Broker"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening complete)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening complete)
+  use_standard_browser_flow = true # CRITICAL FIX: Broker realm ALSO needs standard flow to avoid conditional-user-attribute bug
 }
 
 # ============================================
@@ -33,6 +34,7 @@ module "usa_mfa" {
   realm_display_name = "United States"
 
   enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -47,6 +49,7 @@ module "fra_mfa" {
   realm_display_name = "France"
 
   enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -61,6 +64,7 @@ module "can_mfa" {
   realm_display_name = "Canada"
 
   enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -74,7 +78,8 @@ module "industry_mfa" {
   realm_name         = "dive-v3-industry"
   realm_display_name = "Industry"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -88,7 +93,8 @@ module "deu_mfa" {
   realm_name         = "dive-v3-deu"
   realm_display_name = "Germany"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -102,7 +108,8 @@ module "gbr_mfa" {
   realm_name         = "dive-v3-gbr"
   realm_display_name = "United Kingdom"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -116,7 +123,8 @@ module "ita_mfa" {
   realm_name         = "dive-v3-ita"
   realm_display_name = "Italy"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -130,7 +138,8 @@ module "esp_mfa" {
   realm_name         = "dive-v3-esp"
   realm_display_name = "Spain"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -144,7 +153,8 @@ module "pol_mfa" {
   realm_name         = "dive-v3-pol"
   realm_display_name = "Poland"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -158,7 +168,8 @@ module "nld_mfa" {
   realm_name         = "dive-v3-nld"
   realm_display_name = "Netherlands"
 
-  enable_direct_grant_mfa = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  enable_direct_grant_mfa   = true # ENABLED - Custom SPI deployed (Phase 3 Post-Hardening)
+  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================

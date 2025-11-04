@@ -88,3 +88,12 @@ echo ""
 echo "Configuration snippet saved to: dive-certs-compose.snippet.yml"
 echo ""
 
+
+
+
+
+
+
+
+
+
