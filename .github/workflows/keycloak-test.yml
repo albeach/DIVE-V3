@@ -1,0 +1,393 @@
+name: DIVE V3 Keycloak Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'keycloak/**'
+      - 'terraform/**'
+      - 'scripts/test-*.sh'
+      - '.github/workflows/keycloak-test.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'keycloak/**'
+      - 'terraform/**'
+      - 'scripts/test-*.sh'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  KEYCLOAK_URL: https://localhost:8443
+  COMPOSE_FILE: docker-compose.yml
+
+jobs:
+  # ============================================
+  # Job 1: Keycloak Health Check
+  # ============================================
+  health-check:
+    name: Keycloak Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start DIVE V3 stack
+        run: |
+          docker compose up -d postgres keycloak
+      
+      - name: Wait for PostgreSQL
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in {1..30}; do
+            if docker compose exec -T postgres pg_isready -U postgres; then
+              echo "PostgreSQL is ready"
+              break
+            fi
+            echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 2
+          done
+      
+      - name: Wait for Keycloak
+        run: |
+          echo "Waiting for Keycloak to start..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:8081/health | jq -e '.status == "UP"' > /dev/null 2>&1; then
+              echo "Keycloak is healthy"
+              break
+            fi
+            echo "Waiting for Keycloak... ($i/60)"
+            sleep 5
+          done
+          
+          # Final health check
+          if ! curl -sf http://localhost:8081/health | jq -e '.status == "UP"' > /dev/null 2>&1; then
+            echo "ERROR: Keycloak failed to start"
+            docker compose logs keycloak
+            exit 1
+          fi
+      
+      - name: Verify Keycloak version
+        run: |
+          echo "Checking Keycloak version..."
+          curl -sk https://localhost:8443 | grep -o "Keycloak [0-9.]*" || echo "Version check failed"
+      
+      - name: Check logs for errors
+        if: failure()
+        run: |
+          echo "=== Keycloak Logs ==="
+          docker compose logs keycloak
+          echo ""
+          echo "=== PostgreSQL Logs ==="
+          docker compose logs postgres
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v
+
+  # ============================================
+  # Job 2: Realm Configuration Tests
+  # ============================================
+  realm-config:
+    name: Realm Configuration Tests
+    runs-on: ubuntu-latest
+    needs: health-check
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start DIVE V3 stack
+        run: |
+          docker compose up -d postgres keycloak
+      
+      - name: Wait for Keycloak
+        run: |
+          for i in {1..60}; do
+            if curl -sf http://localhost:8081/health | jq -e '.status == "UP"' > /dev/null 2>&1; then
+              break
+            fi
+            sleep 5
+          done
+      
+      - name: Test broker realm exists
+        run: |
+          curl -sk https://localhost:8443/realms/dive-v3-broker/.well-known/openid-configuration | jq -e '.issuer'
+      
+      - name: Test USA realm exists
+        run: |
+          curl -sk https://localhost:8443/realms/dive-v3-usa/.well-known/openid-configuration | jq -e '.issuer'
+      
+      - name: Test all 11 realms
+        run: |
+          REALMS=(
+            "dive-v3-broker"
+            "dive-v3-usa"
+            "dive-v3-fra"
+            "dive-v3-can"
+            "dive-v3-deu"
+            "dive-v3-gbr"
+            "dive-v3-ita"
+            "dive-v3-esp"
+            "dive-v3-pol"
+            "dive-v3-nld"
+            "dive-v3-industry"
+          )
+          
+          for realm in "${REALMS[@]}"; do
+            echo "Testing realm: $realm"
+            if curl -sk "https://localhost:8443/realms/$realm/.well-known/openid-configuration" | jq -e '.issuer' > /dev/null 2>&1; then
+              echo "✓ $realm exists and is accessible"
+            else
+              echo "✗ $realm NOT accessible"
+              exit 1
+            fi
+          done
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v
+
+  # ============================================
+  # Job 3: Federation Tests
+  # ============================================
+  federation-tests:
+    name: Federation Configuration Tests
+    runs-on: ubuntu-latest
+    needs: health-check
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start DIVE V3 stack
+        run: |
+          docker compose up -d postgres keycloak
+      
+      - name: Wait for Keycloak
+        run: |
+          for i in {1..60}; do
+            if curl -sf http://localhost:8081/health | jq -e '.status == "UP"' > /dev/null 2>&1; then
+              break
+            fi
+            sleep 5
+          done
+      
+      - name: Run federation tests
+        run: |
+          ./scripts/test-keycloak-federation.sh all
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: federation-test-results
+          path: |
+            *.log
+            test-results/
+          retention-days: 7
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v
+
+  # ============================================
+  # Job 4: Authentication Flow Tests
+  # ============================================
+  auth-flow-tests:
+    name: Authentication Flow Tests
+    runs-on: ubuntu-latest
+    needs: health-check
+    timeout-minutes: 20
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start DIVE V3 stack
+        run: |
+          docker compose up -d postgres keycloak
+      
+      - name: Wait for Keycloak
+        run: |
+          for i in {1..60}; do
+            if curl -sf http://localhost:8081/health | jq -e '.status == "UP"' > /dev/null 2>&1; then
+              break
+            fi
+            sleep 5
+          done
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      
+      - name: Apply Terraform configuration (test users)
+        run: |
+          cd terraform
+          terraform init
+          terraform apply -auto-approve \
+            -var="keycloak_admin_username=admin" \
+            -var="keycloak_admin_password=admin" \
+            -var="keycloak_url=https://localhost:8443" \
+            -var="create_test_users=true"
+        env:
+          TF_VAR_keycloak_admin_password: admin
+      
+      - name: Run authentication tests
+        run: |
+          # Test UNCLASSIFIED users only (no OTP needed)
+          # Full MFA testing requires browser automation
+          ./scripts/test-keycloak-auth.sh broker
+        env:
+          KEYCLOAK_URL: https://localhost:8443
+          KEYCLOAK_CLIENT_SECRET: ${{ secrets.KEYCLOAK_CLIENT_SECRET || '8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L' }}
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-test-results
+          path: |
+            *.log
+            test-results/
+          retention-days: 7
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v
+
+  # ============================================
+  # Job 5: Token Claims Validation
+  # ============================================
+  token-validation:
+    name: Token Claims Validation
+    runs-on: ubuntu-latest
+    needs: auth-flow-tests
+    if: always()
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download auth test results
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-test-results
+          path: ./test-results/
+        continue-on-error: true
+      
+      - name: Validate sample token (if available)
+        run: |
+          if [ -f test-results/sample-token.txt ]; then
+            ./scripts/test-token-claims.sh $(cat test-results/sample-token.txt)
+          else
+            echo "No sample token found, skipping validation"
+          fi
+        continue-on-error: true
+
+  # ============================================
+  # Job 6: Security Checks
+  # ============================================
+  security-checks:
+    name: Security Compliance Checks
+    runs-on: ubuntu-latest
+    needs: health-check
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check for custom SPIs (should be NONE in v2.0.0)
+        run: |
+          echo "Verifying NO custom SPIs present..."
+          
+          if [ -f keycloak/providers/dive-keycloak-extensions.jar ]; then
+            echo "ERROR: Custom SPI JAR found (should be removed in v2.0.0)"
+            exit 1
+          fi
+          
+          if [ -f keycloak/providers/dive-keycloak-spi.jar ]; then
+            echo "ERROR: Custom SPI JAR found (should be removed in v2.0.0)"
+            exit 1
+          fi
+          
+          echo "✓ No custom SPI JARs found (v2.0.0 compliance)"
+      
+      - name: Check Dockerfile for SPI references
+        run: |
+          echo "Verifying Dockerfile has NO SPI copy lines..."
+          
+          if grep -q "COPY.*providers/\*.jar" keycloak/Dockerfile; then
+            echo "ERROR: Dockerfile still copies SPI JARs (should be removed in v2.0.0)"
+            exit 1
+          fi
+          
+          echo "✓ Dockerfile does not copy SPI JARs (v2.0.0 compliance)"
+      
+      - name: Check for hardcoded secrets
+        run: |
+          echo "Checking for hardcoded secrets..."
+          
+          # Check for potential hardcoded passwords (excluding test files)
+          if grep -r "password.*=" --include="*.tf" --include="*.yml" terraform/ | grep -v "variable\|description\|#" | grep -v "test"; then
+            echo "WARNING: Potential hardcoded passwords found"
+            # Don't fail, just warn
+          fi
+          
+          echo "✓ Secret check complete"
+      
+      - name: Verify HTTPS configuration
+        run: |
+          echo "Verifying HTTPS configuration in docker-compose..."
+          
+          if ! grep -q "KC_HTTPS_CERTIFICATE" docker-compose.yml; then
+            echo "WARNING: HTTPS might not be configured"
+          else
+            echo "✓ HTTPS configuration found"
+          fi
+
+  # ============================================
+  # Job 7: Test Summary
+  # ============================================
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [health-check, realm-config, federation-tests, auth-flow-tests, security-checks]
+    if: always()
+    
+    steps:
+      - name: Print summary
+        run: |
+          echo "============================================"
+          echo "DIVE V3 Keycloak Test Suite - Summary"
+          echo "============================================"
+          echo ""
+          echo "Job Results:"
+          echo "  Health Check: ${{ needs.health-check.result }}"
+          echo "  Realm Config: ${{ needs.realm-config.result }}"
+          echo "  Federation:   ${{ needs.federation-tests.result }}"
+          echo "  Auth Flows:   ${{ needs.auth-flow-tests.result }}"
+          echo "  Security:     ${{ needs.security-checks.result }}"
+          echo ""
+          
+          if [[ "${{ needs.health-check.result }}" == "success" ]] && \
+             [[ "${{ needs.realm-config.result }}" == "success" ]] && \
+             [[ "${{ needs.federation-tests.result }}" == "success" ]] && \
+             [[ "${{ needs.security-checks.result }}" == "success" ]]; then
+            echo "✓ ALL CRITICAL TESTS PASSED"
+            exit 0
+          else
+            echo "✗ SOME TESTS FAILED"
+            exit 1
+          fi
+
