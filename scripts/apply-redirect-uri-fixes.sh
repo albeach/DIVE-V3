@@ -11,14 +11,27 @@ echo "Applying Terraform Redirect URI Fixes"
 echo "====================================="
 echo ""
 
-# Get current hostname from docker-compose.hostname.yml if it exists
-if [ -f "$PROJECT_ROOT/docker-compose.hostname.yml" ]; then
-    CUSTOM_HOSTNAME=$(grep "KC_HOSTNAME:" "$PROJECT_ROOT/docker-compose.hostname.yml" | head -1 | awk '{print $2}' | tr -d '${} ')
-    echo "Detected custom hostname: $CUSTOM_HOSTNAME"
-else
-    CUSTOM_HOSTNAME="localhost"
-    echo "No custom hostname found, using localhost"
+# Check if docker-compose.hostname.yml exists
+if [ ! -f "$PROJECT_ROOT/docker-compose.hostname.yml" ]; then
+    echo "❌ ERROR: docker-compose.hostname.yml not found!"
+    echo ""
+    echo "You need to set a custom hostname first."
+    echo "Run: ./scripts/set-custom-hostname.sh"
+    echo ""
+    exit 1
 fi
+
+# Get current hostname from docker-compose.hostname.yml
+CUSTOM_HOSTNAME=$(grep "KC_HOSTNAME:" "$PROJECT_ROOT/docker-compose.hostname.yml" | head -1 | awk '{print $2}' | tr -d '${}')
+if [ -z "$CUSTOM_HOSTNAME" ]; then
+    echo "❌ ERROR: Could not detect hostname from docker-compose.hostname.yml"
+    echo ""
+    echo "Run: ./scripts/set-custom-hostname.sh"
+    echo ""
+    exit 1
+fi
+
+echo "Detected custom hostname: $CUSTOM_HOSTNAME"
 
 echo ""
 echo "Step 1: Restart Keycloak with updated Admin Console settings..."
