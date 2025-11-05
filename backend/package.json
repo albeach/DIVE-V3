@@ -19,7 +19,7 @@
         "lint:coi": "tsx src/scripts/coi-logic-lint.ts",
         "purge:invalid": "tsx src/scripts/purge-invalid-coi.ts",
         "typecheck": "tsc --noEmit",
-        "seed-database": "tsx src/scripts/seed-resources.ts",
+        "seed-database": "tsx src/scripts/seed-7000-ztdf-documents.ts",
         "seed-ztdf": "tsx src/scripts/seed-ztdf-resources.ts",
         "seed:fixed": "tsx src/scripts/seed-1000-ztdf-documents-fixed.ts",
         "migrate-logs": "tsx src/scripts/migrate-logs-to-mongodb.ts",
