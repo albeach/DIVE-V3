@@ -28,6 +28,11 @@ resource "keycloak_oidc_identity_provider" "pol_realm_broker" {
 
   first_broker_login_flow_alias = module.broker_mfa.post_broker_mfa_flow_alias
   link_only                     = false # Auto-create users
+  
+  # CRITICAL: Enable backchannel logout to cascade logout to national realm
+  backchannel_supported = true
+  logout_url            = "${local.realm_urls.pol}${local.oidc_logout_path}"
+
 
   gui_order = "8"
 }
