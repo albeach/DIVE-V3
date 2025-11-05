@@ -263,16 +263,42 @@ echo ""
 
 # Check if unified certificate system is in place
 if [ -f docker-compose.mkcert.yml ]; then
-    echo "Building and starting all services with mkcert certificate support..."
+    echo "Building and starting main services with mkcert certificate support..."
+    echo "  • Keycloak (8443) - HTTPS"
+    echo "  • Backend (4000) - HTTPS"
+    echo "  • Frontend (3000) - HTTPS"
+    echo "  • KAS (8080) - HTTPS"
+    echo "  • MongoDB, PostgreSQL, Redis, OPA"
+    echo ""
     docker compose -f docker-compose.yml -f docker-compose.mkcert.yml up -d --build
-    echo -e "${GREEN}✓${NC} Docker services started with HTTPS support"
+    echo -e "${GREEN}✓${NC} Main services started with HTTPS support"
 else
     echo "Building and starting all services (basic configuration)..."
     docker compose up -d --build
-    echo -e "${GREEN}✓${NC} Docker services started"
+    echo -e "${GREEN}✓${NC} Main services started"
 fi
 
 echo ""
+
+# Optional: Start external IdPs if directory exists
+if [ -d external-idps ] && [ -f external-idps/docker-compose.yml ]; then
+    echo -e "${CYAN}External IdPs Available:${NC}"
+    echo "  Spain SAML IdP (9443)"
+    echo "  USA OIDC IdP (9082)"
+    echo ""
+    read -p "Do you want to start external IdPs for federation testing? (y/N): " START_IDPS
+    if [[ $START_IDPS =~ ^[Yy]$ ]]; then
+        echo "Starting external IdP services..."
+        cd external-idps
+        docker compose up -d --build
+        cd "$PROJECT_ROOT"
+        echo -e "${GREEN}✓${NC} External IdPs started"
+        echo ""
+    else
+        echo -e "${YELLOW}⚠️  External IdPs not started (can start later with: cd external-idps && docker compose up -d)${NC}"
+        echo ""
+    fi
+fi
 
 ###############################################################################
 # Phase 8: Wait for Services to be Ready
@@ -525,7 +551,8 @@ docker compose ps
 echo ""
 echo "Service Health Checks:"
 
-# Test endpoints
+# Test main service endpoints
+echo "Main Services:"
 SERVICES=(
     "Frontend:https://localhost:3000"
     "Backend:https://localhost:4000/health"
@@ -545,6 +572,27 @@ for SERVICE in "${SERVICES[@]}"; do
 done
 
 echo ""
+
+# Test external IdPs if they were started
+if docker ps --format '{{.Names}}' | grep -q "dive-spain-saml-idp" 2>/dev/null; then
+    echo "External IdPs:"
+    EXTERNAL_SERVICES=(
+        "Spain SAML:http://localhost:9443/simplesaml/"
+        "USA OIDC:http://localhost:9082/health/ready"
+    )
+    
+    for SERVICE in "${EXTERNAL_SERVICES[@]}"; do
+        NAME="${SERVICE%%:*}"
+        URL="${SERVICE#*:}"
+        
+        if curl -k -sf "$URL" > /dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} $NAME: $URL"
+        else
+            echo -e "  ${RED}✗${NC} $NAME: $URL (not responding)"
+        fi
+    done
+    echo ""
+fi
 
 ###############################################################################
 # Phase 13: Verify v2.0.0 Specific Features
@@ -626,12 +674,22 @@ echo -e "${GREEN}║                                                            
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${CYAN}🌐 Access URLs:${NC}"
+echo ""
+echo -e "${CYAN}Main Services:${NC}"
 echo -e "  Frontend:        ${BLUE}https://localhost:3000${NC}"
 echo -e "  Backend API:     ${BLUE}https://localhost:4000${NC}"
 echo -e "  Keycloak Admin:  ${BLUE}https://localhost:8443/admin${NC}"
 echo -e "                   Username: ${YELLOW}admin${NC}"
 echo -e "                   Password: ${YELLOW}admin${NC}"
 echo ""
+
+# Show external IdP URLs if they're running
+if docker ps --format '{{.Names}}' | grep -q "dive-spain-saml-idp" 2>/dev/null; then
+    echo -e "${CYAN}External IdPs:${NC}"
+    echo -e "  Spain SAML:      ${BLUE}http://localhost:9443/simplesaml/${NC}"
+    echo -e "  USA OIDC:        ${BLUE}http://localhost:9082${NC}"
+    echo ""
+fi
 echo -e "${CYAN}👥 Test User Credentials (Password for all: Password123!):${NC}"
 echo -e "  ${GREEN}AAL1${NC} (UNCLASSIFIED):  testuser-usa-unclass      (no MFA)"
 echo -e "  ${GREEN}AAL2${NC} (SECRET):        testuser-usa-secret        (OTP setup required)"
