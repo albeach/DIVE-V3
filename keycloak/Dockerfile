@@ -57,57 +57,20 @@ COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 # COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
 
 # ============================================
-# Import SSL Certificates into Java Truststore (PERMANENT FIX)
+# Certificate Trust Configuration
 # ============================================
-# Import all SSL certificates that Keycloak needs to trust
-# Critical for federation: broker realm → federated realms (USA, FRA, CAN, etc.)
+# Certificates are imported at RUNTIME (not build time) for flexibility
+# This allows the same image to work with different certificates
+# See: scripts/import-keycloak-certs-runtime.sh
 #
-# Java truststore location: /usr/lib/jvm/java-21-openjdk-*/lib/security/cacerts
-# We use a wildcard to handle different patch versions
-
-RUN set -e && \
-    JAVA_CACERTS="/usr/lib/jvm/java-21-openjdk-21.0.5.0.11-2.el9.aarch64/lib/security/cacerts" && \
-    echo "Using Java cacerts at: $JAVA_CACERTS" && \
-    # Import mkcert root CA (localhost HTTPS)
-    if [ -f /opt/keycloak/certs/mkcert-rootCA.pem ]; then \
-        echo "Importing mkcert root CA..." && \
-        keytool -import -noprompt -trustcacerts \
-            -alias mkcert-root-ca \
-            -file /opt/keycloak/certs/mkcert-rootCA.pem \
-            -keystore "$JAVA_CACERTS" \
-            -storepass changeit && \
-        echo "✓ mkcert CA imported"; \
-    else \
-        echo "⚠ mkcert-rootCA.pem not found"; \
-    fi && \
-    # Import Keycloak's own certificate
-    if [ -f /opt/keycloak/certs/certificate.pem ]; then \
-        echo "Importing Keycloak certificate..." && \
-        keytool -import -noprompt -trustcacerts \
-            -alias keycloak-localhost \
-            -file /opt/keycloak/certs/certificate.pem \
-            -keystore "$JAVA_CACERTS" \
-            -storepass changeit && \
-        echo "✓ Keycloak cert imported"; \
-    else \
-        echo "⚠ certificate.pem not found"; \
-    fi && \
-    # Import DIVE root CAs
-    if [ -f /opt/keycloak/certs/dive-root-cas/dive-root-cas.pem ]; then \
-        echo "Importing DIVE root CAs..." && \
-        keytool -import -noprompt -trustcacerts \
-            -alias dive-root-cas \
-            -file /opt/keycloak/certs/dive-root-cas/dive-root-cas.pem \
-            -keystore "$JAVA_CACERTS" \
-            -storepass changeit && \
-        echo "✓ DIVE CA imported"; \
-    else \
-        echo "⚠ dive-root-cas.pem not found"; \
-    fi && \
-    # Verify imports
-    echo "Verifying certificate imports..." && \
-    keytool -list -keystore "$JAVA_CACERTS" -storepass changeit | grep -E "(mkcert|keycloak|dive)" && \
-    echo "✓ All certificates imported successfully"
+# Certificate mounting handled via docker-compose volumes:
+#   - /opt/keycloak/certs/certificate.pem (Keycloak's own cert)
+#   - /opt/keycloak/certs/key.pem (Keycloak's private key)
+#   - /opt/app/certs/rootCA.pem (mkcert CA for trust)
+#   - /opt/keycloak/certs/dive-root-cas/ (DIVE Root CAs for federation)
+#
+# Runtime import is handled by deploy-ubuntu.sh Phase 10
+# or manually via: ./scripts/import-keycloak-certs-runtime.sh
 
 USER 1000
 
