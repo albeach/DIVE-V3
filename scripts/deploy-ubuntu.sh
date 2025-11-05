@@ -97,13 +97,11 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 2: Generate SSL Certificates with mkcert
+# Phase 2: Generate SSL Certificates with Unified Certificate Management
 ###############################################################################
 
-echo -e "${YELLOW}🔐 Phase 2: Generating SSL Certificates with mkcert${NC}"
+echo -e "${YELLOW}🔐 Phase 2: Generating SSL Certificates (Unified System)${NC}"
 echo ""
-
-mkdir -p keycloak/certs
 
 # Check if mkcert is installed
 if ! command -v mkcert &> /dev/null; then
@@ -120,51 +118,42 @@ if ! command -v mkcert &> /dev/null; then
     sudo mv mkcert-${MKCERT_VERSION}-linux-amd64 /usr/local/bin/mkcert
     
     echo -e "${GREEN}✓${NC} mkcert installed"
-fi
-
-# Install the local CA (only needs to be done once per system)
-echo "Installing local Certificate Authority..."
-CAROOT="$HOME/.local/share/mkcert" mkcert -install 2>&1 | grep -v "is already installed" || true
-echo -e "${GREEN}✓${NC} Local CA installed (certificates will be trusted by browsers)"
-
-# Check if certificates exist
-if [ -f keycloak/certs/certificate.pem ] && [ -f keycloak/certs/key.pem ]; then
-    echo -e "${GREEN}✓${NC} SSL certificates already exist"
-    read -p "Do you want to regenerate them? (y/N): " REGENERATE
-    if [[ $REGENERATE =~ ^[Yy]$ ]]; then
-        rm -f keycloak/certs/certificate.pem keycloak/certs/key.pem
-    else
-        echo -e "${GREEN}✓${NC} Using existing certificates"
-    fi
-fi
-
-# Generate certificates if they don't exist
-if [ ! -f keycloak/certs/certificate.pem ]; then
-    echo "Generating trusted certificates for localhost..."
-    cd keycloak/certs
-    
-    # Generate certificate for all required hostnames
-    mkcert \
-      -cert-file certificate.pem \
-      -key-file key.pem \
-      localhost \
-      127.0.0.1 \
-      ::1 \
-      keycloak \
-      backend \
-      nextjs \
-      dive-v3-keycloak \
-      dive-v3-backend \
-      dive-v3-frontend
-    
-    # Make readable by containers
-    chmod 644 certificate.pem
-    chmod 644 key.pem
-    
-    cd "$PROJECT_ROOT"
-    echo -e "${GREEN}✓${NC} Trusted SSL certificates generated (no browser warnings!)"
 else
-    echo -e "${GREEN}✓${NC} SSL certificates exist"
+    echo -e "${GREEN}✓${NC} mkcert already installed"
+fi
+
+# Use unified certificate setup script (localhost mode)
+if [ -f scripts/setup-mkcert-for-all-services.sh ]; then
+    echo "Running unified certificate setup for all services..."
+    DIVE_HOSTNAME=localhost ./scripts/setup-mkcert-for-all-services.sh
+    echo -e "${GREEN}✓${NC} Unified certificates generated for all services"
+else
+    echo -e "${YELLOW}⚠️  Warning: Unified certificate script not found${NC}"
+    echo "Falling back to basic certificate generation..."
+    
+    mkdir -p keycloak/certs
+    
+    # Install the local CA
+    echo "Installing local Certificate Authority..."
+    CAROOT="$HOME/.local/share/mkcert" mkcert -install 2>&1 | grep -v "is already installed" || true
+    
+    # Generate basic certificates
+    if [ ! -f keycloak/certs/certificate.pem ]; then
+        echo "Generating certificates for localhost..."
+        cd keycloak/certs
+        mkcert \
+          -cert-file certificate.pem \
+          -key-file key.pem \
+          localhost \
+          127.0.0.1 \
+          ::1 \
+          keycloak \
+          backend \
+          nextjs
+        chmod 644 certificate.pem key.pem
+        cd "$PROJECT_ROOT"
+    fi
+    echo -e "${GREEN}✓${NC} Basic certificates generated"
 fi
 
 echo ""
@@ -266,16 +255,23 @@ echo -e "${GREEN}✓${NC} Previous deployment cleaned"
 echo ""
 
 ###############################################################################
-# Phase 7: Start Docker Services
+# Phase 7: Start Docker Services (with Certificate Support)
 ###############################################################################
 
 echo -e "${YELLOW}🐳 Phase 7: Starting Docker Services${NC}"
 echo ""
 
-echo "Building and starting all services..."
-docker compose up -d --build
+# Check if unified certificate system is in place
+if [ -f docker-compose.mkcert.yml ]; then
+    echo "Building and starting all services with mkcert certificate support..."
+    docker compose -f docker-compose.yml -f docker-compose.mkcert.yml up -d --build
+    echo -e "${GREEN}✓${NC} Docker services started with HTTPS support"
+else
+    echo "Building and starting all services (basic configuration)..."
+    docker compose up -d --build
+    echo -e "${GREEN}✓${NC} Docker services started"
+fi
 
-echo -e "${GREEN}✓${NC} Docker services started"
 echo ""
 
 ###############################################################################
