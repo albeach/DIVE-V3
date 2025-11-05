@@ -107,7 +107,7 @@ else
     echo -e "${RED}✗${NC} No resources found in MongoDB!"
     echo ""
     echo "Seed the database with:"
-    echo "  cd backend && npm run seed"
+    echo "  cd backend && npm run seed-database"
 fi
 
 # Check backend API endpoint

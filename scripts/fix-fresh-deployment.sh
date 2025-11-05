@@ -81,8 +81,8 @@ if [ "$RESEED" = "y" ]; then
     fi
     
     # Run seed script (WITHOUT || true so we see real errors!)
-    echo "Running: npm run seed"
-    npm run seed
+    echo "Running: npm run seed-database"
+    npm run seed-database
     
     cd ..
     
