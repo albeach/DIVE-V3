@@ -52,7 +52,6 @@ services:
       KC_HOSTNAME: ${CUSTOM_HOSTNAME}
       KC_HOSTNAME_STRICT: false
       KC_HOSTNAME_ADMIN: ${CUSTOM_HOSTNAME}
-      KC_HOSTNAME_ADMIN_URL: https://${CUSTOM_HOSTNAME}:8443
 
   # Backend - Update CORS allowed origins
   backend:
