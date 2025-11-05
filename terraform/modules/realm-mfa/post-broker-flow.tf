@@ -32,7 +32,7 @@ resource "keycloak_authentication_execution" "post_broker_create_user" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-create-user-if-unique"
-  requirement       = "ALTERNATIVE"
+  requirement       = "REQUIRED"
   
   depends_on = [
     keycloak_authentication_execution.post_broker_review_profile
