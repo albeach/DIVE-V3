@@ -58,7 +58,10 @@ read -p "Selection [1-2] (default: 1): " HOSTNAME_CHOICE
 
 if [ "$HOSTNAME_CHOICE" == "2" ]; then
     echo ""
-    read -p "Enter custom hostname (e.g., dive.example.com): " RAW_HOSTNAME
+    echo "Enter your base hostname (just the domain/IP, no ports):"
+    echo "  Examples: dive.example.com, divedeeper.internal, 192.168.1.100"
+    echo "  Note: Ports will be added automatically (:3000, :5000, :8443)"
+    read -p "> " RAW_HOSTNAME
     
     if [ -z "$RAW_HOSTNAME" ]; then
         echo -e "${YELLOW}No hostname provided, using localhost${NC}"
