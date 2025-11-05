@@ -19,11 +19,31 @@ echo "  NextAuth Database Initialization"
 echo "========================================"
 echo ""
 
-# Get script directory
+# Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-cd "$PROJECT_ROOT"
+echo "Project root: $PROJECT_ROOT"
+
+# Change to project root
+cd "$PROJECT_ROOT" || {
+    echo -e "${RED}✗ Failed to change to project root: $PROJECT_ROOT${NC}"
+    exit 1
+}
+
+# Check if SQL file exists
+SQL_FILE="$PROJECT_ROOT/frontend/create-nextauth-tables.sql"
+if [ ! -f "$SQL_FILE" ]; then
+    echo -e "${RED}✗ SQL file not found: $SQL_FILE${NC}"
+    echo ""
+    echo "Current directory: $(pwd)"
+    echo "Looking for: frontend/create-nextauth-tables.sql"
+    echo ""
+    echo "Please ensure you're running this from the DIVE-V3 project directory"
+    echo "or that the file exists at: frontend/create-nextauth-tables.sql"
+    exit 1
+fi
+echo "Found SQL file: $SQL_FILE"
 
 # Check if docker is running
 if ! docker info > /dev/null 2>&1; then
@@ -56,19 +76,13 @@ for i in {1..30}; do
     sleep 1
 done
 
-# Check if SQL file exists
-if [ ! -f "frontend/create-nextauth-tables.sql" ]; then
-    echo -e "${RED}✗ SQL file not found: frontend/create-nextauth-tables.sql${NC}"
-    exit 1
-fi
-
 # Copy SQL file to container
 echo -n "Copying SQL file to PostgreSQL container..."
-if docker cp frontend/create-nextauth-tables.sql dive-v3-postgres:/tmp/create-tables.sql > /dev/null 2>&1; then
+if docker cp "$SQL_FILE" dive-v3-postgres:/tmp/create-tables.sql > /dev/null 2>&1; then
     echo -e " ${GREEN}✓${NC}"
 else
     echo -e " ${RED}✗${NC}"
-    echo "  Failed to copy SQL file"
+    echo "  Failed to copy SQL file: $SQL_FILE"
     exit 1
 fi
 
