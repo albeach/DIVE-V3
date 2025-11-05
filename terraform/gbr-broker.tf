@@ -11,10 +11,10 @@ resource "keycloak_oidc_identity_provider" "gbr_realm_broker" {
   enabled      = true
 
   # OIDC endpoints from UK realm
-  authorization_url = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/auth"
-  token_url         = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/token"
-  jwks_url          = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/certs"
-  user_info_url     = "https://localhost:8443/realms/dive-v3-gbr/protocol/openid-connect/userinfo"
+  authorization_url = "${local.realm_urls.gbr}${local.oidc_auth_path}"
+  token_url         = "${local.realm_urls.gbr}${local.oidc_token_path}"
+  jwks_url          = "${local.realm_urls.gbr}${local.oidc_certs_path}"
+  user_info_url     = "${local.realm_urls.gbr}${local.oidc_userinfo_path}"
 
   # Client credentials from UK realm
   client_id     = keycloak_openid_client.gbr_realm_client.client_id

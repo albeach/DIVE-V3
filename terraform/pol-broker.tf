@@ -11,10 +11,10 @@ resource "keycloak_oidc_identity_provider" "pol_realm_broker" {
   enabled      = true
 
   # OIDC endpoints from Polish realm
-  authorization_url = "https://localhost:8443/realms/dive-v3-pol/protocol/openid-connect/auth"
-  token_url         = "https://localhost:8443/realms/dive-v3-pol/protocol/openid-connect/token"
-  jwks_url          = "https://localhost:8443/realms/dive-v3-pol/protocol/openid-connect/certs"
-  user_info_url     = "https://localhost:8443/realms/dive-v3-pol/protocol/openid-connect/userinfo"
+  authorization_url = "${local.realm_urls.pol}${local.oidc_auth_path}"
+  token_url         = "${local.realm_urls.pol}${local.oidc_token_path}"
+  jwks_url          = "${local.realm_urls.pol}${local.oidc_certs_path}"
+  user_info_url     = "${local.realm_urls.pol}${local.oidc_userinfo_path}"
 
   # Client credentials from Polish realm
   client_id     = keycloak_openid_client.pol_realm_client.client_id

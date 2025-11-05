@@ -21,6 +21,38 @@ provider "keycloak" {
 }
 
 # ============================================
+# Local Variables for Dynamic URL Construction
+# ============================================
+# Constructs Keycloak URLs dynamically based on keycloak_url variable
+# This allows the same Terraform code to work with localhost or custom hostnames
+
+locals {
+  # Extract hostname from keycloak_url (e.g., "https://localhost:8443" → "localhost:8443")
+  keycloak_base = var.keycloak_url
+  
+  # Construct realm URLs dynamically
+  realm_urls = {
+    usa      = "${local.keycloak_base}/realms/dive-v3-usa"
+    fra      = "${local.keycloak_base}/realms/dive-v3-fra"
+    can      = "${local.keycloak_base}/realms/dive-v3-can"
+    gbr      = "${local.keycloak_base}/realms/dive-v3-gbr"
+    deu      = "${local.keycloak_base}/realms/dive-v3-deu"
+    esp      = "${local.keycloak_base}/realms/dive-v3-esp"
+    ita      = "${local.keycloak_base}/realms/dive-v3-ita"
+    nld      = "${local.keycloak_base}/realms/dive-v3-nld"
+    pol      = "${local.keycloak_base}/realms/dive-v3-pol"
+    industry = "${local.keycloak_base}/realms/dive-v3-industry"
+  }
+  
+  # Common OIDC endpoint paths
+  oidc_auth_path      = "/protocol/openid-connect/auth"
+  oidc_token_path     = "/protocol/openid-connect/token"
+  oidc_certs_path     = "/protocol/openid-connect/certs"
+  oidc_userinfo_path  = "/protocol/openid-connect/userinfo"
+  oidc_logout_path    = "/protocol/openid-connect/logout"
+}
+
+# ============================================
 # DIVE V3 Realm Configuration (DEPRECATED)
 # ============================================
 # This legacy realm is DEPRECATED in favor of multi-realm architecture
