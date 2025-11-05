@@ -237,9 +237,10 @@ services:
       - ./certs/mkcert:/opt/app/certs:ro
     environment:
       HTTPS_ENABLED: "true"
-      CERT_FILE: /opt/app/certs/certificate.pem
-      KEY_FILE: /opt/app/certs/key.pem
-      CA_FILE: /opt/app/certs/rootCA.pem
+      CERT_PATH: /opt/app/certs
+      CERT_FILE: certificate.pem
+      KEY_FILE: key.pem
+      CA_FILE: rootCA.pem
       NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
 
   # Frontend - Add HTTPS support
@@ -248,9 +249,10 @@ services:
       - ./certs/mkcert:/opt/app/certs:ro
     environment:
       HTTPS_ENABLED: "true"
-      CERT_FILE: /opt/app/certs/certificate.pem
-      KEY_FILE: /opt/app/certs/key.pem
-      CA_FILE: /opt/app/certs/rootCA.pem
+      CERT_PATH: /opt/app/certs
+      CERT_FILE: certificate.pem
+      KEY_FILE: key.pem
+      CA_FILE: rootCA.pem
       NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
 
   # KAS - Add HTTPS support
@@ -259,9 +261,10 @@ services:
       - ./certs/mkcert:/opt/app/certs:ro
     environment:
       HTTPS_ENABLED: "true"
-      CERT_FILE: /opt/app/certs/certificate.pem
-      KEY_FILE: /opt/app/certs/key.pem
-      CA_FILE: /opt/app/certs/rootCA.pem
+      CERT_PATH: /opt/app/certs
+      CERT_FILE: certificate.pem
+      KEY_FILE: key.pem
+      CA_FILE: rootCA.pem
       NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
 
   # Note: External IdPs (spain-saml, usa-oidc) are defined in external-idps/docker-compose.yml
