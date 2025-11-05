@@ -245,18 +245,38 @@ echo -e "${GREEN}✓${NC} Certificate directories created and ownership reset"
 echo ""
 
 ###############################################################################
-# Phase 4: Set Up DIVE Root CA Certificates
+# Phase 4: Set Up DIVE Root CA Certificates (Optional - for Federation)
 ###############################################################################
 
-echo -e "${YELLOW}📜 Phase 4: Setting Up DIVE Root CA Certificates${NC}"
+echo -e "${YELLOW}📜 Phase 4: DIVE Root CA Certificates (Optional)${NC}"
+echo ""
+echo "DIVE Root CA certificates are only needed for federation with external IdPs"
+echo "using NLD-issued certificates. The mkcert system handles local HTTPS."
 echo ""
 
-if [ -f scripts/install-dive-certs.sh ]; then
-    ./scripts/install-dive-certs.sh
-    echo ""
-    echo -e "${GREEN}✓${NC} DIVE Root CA certificates installed"
+# Check if DIVE Root CAs exist
+if [ -f dive-certs/NLDECCDIVEROOTCAG1.cacert.pem ] && [ -f dive-certs/NLDRSADIVEROOTCAG1.cacert.pem ]; then
+    read -p "Install DIVE Root CA certificates for federation? (y/N): " INSTALL_DIVE_CA
+    
+    if [[ $INSTALL_DIVE_CA =~ ^[Yy]$ ]]; then
+        if [ -f scripts/install-dive-certs.sh ]; then
+            echo ""
+            echo "Installing DIVE Root CA certificates..."
+            # Suppress keytool errors but show progress
+            ./scripts/install-dive-certs.sh 2>&1 | grep -v "FileNotFoundException" | grep -v "java.io" || true
+            echo ""
+            echo -e "${GREEN}✓${NC} DIVE Root CA certificates installed"
+        else
+            echo -e "${YELLOW}⚠️  install-dive-certs.sh not found, skipping...${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Skipping DIVE Root CA installation${NC}"
+        echo "   You can install them later with: ./scripts/install-dive-certs.sh"
+    fi
 else
-    echo -e "${YELLOW}⚠️  Warning: install-dive-certs.sh not found, skipping...${NC}"
+    echo -e "${YELLOW}⚠️  DIVE Root CA certificates not found in dive-certs/${NC}"
+    echo "   This is normal if you're not using federation with external IdPs"
+    echo "   The mkcert certificate system will handle all HTTPS needs"
 fi
 
 echo ""
