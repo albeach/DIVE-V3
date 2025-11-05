@@ -57,38 +57,47 @@ cp "$BACKEND_CERTS/dive-root-cas.pem" "$KAS_CERTS/"
 echo "✅ Combined CA bundle created: dive-root-cas.pem"
 echo ""
 
-echo "Step 4: Creating Java KeyStore for Keycloak..."
+echo "Step 4: Creating Java KeyStore for Keycloak (optional)..."
 # Keycloak uses Java KeyStore (JKS) for trust store
 KEYSTORE_PATH="$KEYCLOAK_CERTS/dive-truststore.jks"
 KEYSTORE_PASS="changeit"  # Default Java truststore password
 
-# Remove existing keystore if present
-rm -f "$KEYSTORE_PATH"
-
-# Import ECC Root CA
-keytool -import -trustcacerts -noprompt \
-    -alias nld-ecc-root-ca \
-    -file "$CERT_SOURCE/NLDECCDIVEROOTCAG1.cacert.pem" \
-    -keystore "$KEYSTORE_PATH" \
-    -storepass "$KEYSTORE_PASS" 2>/dev/null || {
-        echo "⚠️  keytool not found - Skipping JKS creation"
-        echo "   Install Java JDK to create Keycloak truststore"
-        echo "   Or manually import certificates into Keycloak later"
-    }
-
-# Import RSA Root CA
-keytool -import -trustcacerts -noprompt \
-    -alias nld-rsa-root-ca \
-    -file "$CERT_SOURCE/NLDRSADIVEROOTCAG1.cacert.pem" \
-    -keystore "$KEYSTORE_PATH" \
-    -storepass "$KEYSTORE_PASS" 2>/dev/null || true
-
-if [ -f "$KEYSTORE_PATH" ]; then
-    echo "✅ Java KeyStore created: dive-truststore.jks"
-    # List aliases in the keystore (don't fail if grep finds nothing)
-    keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASS" 2>/dev/null | grep "Alias name:" || true
+# Check if keytool is available
+if ! command -v keytool &> /dev/null; then
+    echo "⚠️  keytool not found - Skipping JKS creation"
+    echo "   Install Java JDK (e.g., openjdk-17-jdk-headless) to create Keycloak truststore"
+    echo "   Or manually import certificates into Keycloak later"
+    echo ""
+    echo "✅ Skipped Java KeyStore creation (keytool not available)"
 else
-    echo "⚠️  Java KeyStore not created (keytool required)"
+    # Remove existing keystore if present
+    rm -f "$KEYSTORE_PATH"
+
+    # Import ECC Root CA
+    keytool -import -trustcacerts -noprompt \
+        -alias nld-ecc-root-ca \
+        -file "$CERT_SOURCE/NLDECCDIVEROOTCAG1.cacert.pem" \
+        -keystore "$KEYSTORE_PATH" \
+        -storepass "$KEYSTORE_PASS" 2>&1 | grep -v "FileNotFoundException" || {
+            echo "⚠️  Warning: Could not import ECC Root CA"
+            echo "   This is non-critical if you're not using Keycloak federation with NLD IdPs"
+        }
+
+    # Import RSA Root CA
+    keytool -import -trustcacerts -noprompt \
+        -alias nld-rsa-root-ca \
+        -file "$CERT_SOURCE/NLDRSADIVEROOTCAG1.cacert.pem" \
+        -keystore "$KEYSTORE_PATH" \
+        -storepass "$KEYSTORE_PASS" 2>&1 | grep -v "FileNotFoundException" || true
+
+    if [ -f "$KEYSTORE_PATH" ]; then
+        echo "✅ Java KeyStore created: dive-truststore.jks"
+        # List aliases in the keystore (don't fail if grep finds nothing)
+        keytool -list -keystore "$KEYSTORE_PATH" -storepass "$KEYSTORE_PASS" 2>/dev/null | grep "Alias name:" || true
+    else
+        echo "⚠️  Java KeyStore not created"
+        echo "   This is non-critical for basic operation"
+    fi
 fi
 echo ""
 
