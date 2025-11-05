@@ -1,4 +1,7 @@
 import express, { Application } from 'express';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import { config } from 'dotenv';
@@ -29,6 +32,7 @@ config({ path: '../.env.local' });
 
 const app: Application = express();
 const PORT = process.env.PORT || 4000;
+const HTTPS_ENABLED = process.env.HTTPS_ENABLED === 'true';
 
 // ============================================
 // Middleware
@@ -184,6 +188,55 @@ if (process.env.NODE_ENV !== 'test' && !isImported) {
 
     logger.info('Periodic Keycloak configuration sync scheduled (every 5 minutes)');
   });
+}
+
+// ============================================
+// Start Server (HTTP or HTTPS)
+// ============================================
+function startServer() {
+  if (HTTPS_ENABLED) {
+    try {
+      const certPath = process.env.CERT_PATH || '/opt/app/certs';
+      const httpsOptions = {
+        key: fs.readFileSync(path.join(certPath, process.env.KEY_FILE || 'key.pem')),
+        cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
+      };
+
+      https.createServer(httpsOptions, app).listen(PORT, () => {
+        logger.info(`🔒 Backend API started with HTTPS`, {
+          port: PORT,
+          environment: process.env.NODE_ENV || 'development',
+          httpsEnabled: true,
+          certPath
+        });
+      });
+    } catch (error) {
+      logger.error('Failed to start HTTPS server, falling back to HTTP', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Fallback to HTTP if certificates are missing
+      app.listen(PORT, () => {
+        logger.warn(`⚠️  Backend API started with HTTP (HTTPS failed)`, {
+          port: PORT,
+          environment: process.env.NODE_ENV || 'development',
+          httpsEnabled: false
+        });
+      });
+    }
+  } else {
+    app.listen(PORT, () => {
+      logger.info(`Backend API started with HTTP`, {
+        port: PORT,
+        environment: process.env.NODE_ENV || 'development',
+        httpsEnabled: false
+      });
+    });
+  }
+}
+
+// Start the server if not being imported as a module
+if (require.main === module) {
+  startServer();
 }
 
 export default app;
