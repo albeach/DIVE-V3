@@ -218,7 +218,7 @@ resource "keycloak_generic_protocol_mapper" "can_amr_mapper" {
   config = {
     "user.session.note"    = "AUTH_METHODS_REF"
     "claim.name"           = "amr"
-    "jsonType.label"       = "String" # Fixed: Use String for scalar values
+    "jsonType.label" = "JSON" # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
