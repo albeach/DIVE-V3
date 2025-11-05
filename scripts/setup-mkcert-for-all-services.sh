@@ -44,12 +44,26 @@ echo ""
 
 # Create certificates directory structure
 echo -e "${YELLOW}Creating certificate directories...${NC}"
-mkdir -p "$PROJECT_ROOT/certs/mkcert"
-mkdir -p "$PROJECT_ROOT/keycloak/certs"
-mkdir -p "$PROJECT_ROOT/backend/certs"
-mkdir -p "$PROJECT_ROOT/frontend/certs"
-mkdir -p "$PROJECT_ROOT/kas/certs"
-mkdir -p "$PROJECT_ROOT/external-idps/certs"
+
+# Create directories with proper permissions
+CERT_DIRS=(
+    "$PROJECT_ROOT/certs/mkcert"
+    "$PROJECT_ROOT/keycloak/certs"
+    "$PROJECT_ROOT/backend/certs"
+    "$PROJECT_ROOT/frontend/certs"
+    "$PROJECT_ROOT/kas/certs"
+    "$PROJECT_ROOT/external-idps/certs"
+)
+
+for dir in "${CERT_DIRS[@]}"; do
+    mkdir -p "$dir" 2>/dev/null || sudo mkdir -p "$dir"
+    # Ensure current user owns the directory
+    if [ -d "$dir" ]; then
+        sudo chown -R $USER:$USER "$dir" 2>/dev/null || chown -R $USER:$USER "$dir" 2>/dev/null || true
+        chmod -R 755 "$dir"
+    fi
+done
+
 echo -e "${GREEN}✅ Directories created${NC}"
 echo ""
 
@@ -110,30 +124,33 @@ echo ""
 # Copy certificates to all service directories
 echo -e "${YELLOW}Distributing certificates to services...${NC}"
 
-# Keycloak
-cp certificate.pem "$PROJECT_ROOT/keycloak/certs/certificate.pem"
-cp key.pem "$PROJECT_ROOT/keycloak/certs/key.pem"
-echo -e "  ${GREEN}✓${NC} Keycloak"
+# Function to safely copy certificate files
+copy_cert() {
+    local src_cert="$1"
+    local src_key="$2"
+    local dest_dir="$3"
+    local service_name="$4"
+    
+    # Try normal copy first, use sudo if needed
+    if cp "$src_cert" "$dest_dir/certificate.pem" 2>/dev/null && \
+       cp "$src_key" "$dest_dir/key.pem" 2>/dev/null; then
+        chmod 644 "$dest_dir/certificate.pem" "$dest_dir/key.pem" 2>/dev/null || true
+        echo -e "  ${GREEN}✓${NC} $service_name"
+    else
+        sudo cp "$src_cert" "$dest_dir/certificate.pem"
+        sudo cp "$src_key" "$dest_dir/key.pem"
+        sudo chmod 644 "$dest_dir/certificate.pem" "$dest_dir/key.pem"
+        sudo chown $USER:$USER "$dest_dir/certificate.pem" "$dest_dir/key.pem" 2>/dev/null || true
+        echo -e "  ${GREEN}✓${NC} $service_name (required elevated permissions)"
+    fi
+}
 
-# Backend
-cp certificate.pem "$PROJECT_ROOT/backend/certs/certificate.pem"
-cp key.pem "$PROJECT_ROOT/backend/certs/key.pem"
-echo -e "  ${GREEN}✓${NC} Backend"
-
-# Frontend
-cp certificate.pem "$PROJECT_ROOT/frontend/certs/certificate.pem"
-cp key.pem "$PROJECT_ROOT/frontend/certs/key.pem"
-echo -e "  ${GREEN}✓${NC} Frontend"
-
-# KAS
-cp certificate.pem "$PROJECT_ROOT/kas/certs/certificate.pem"
-cp key.pem "$PROJECT_ROOT/kas/certs/key.pem"
-echo -e "  ${GREEN}✓${NC} KAS"
-
-# External IdPs
-cp certificate.pem "$PROJECT_ROOT/external-idps/certs/certificate.pem"
-cp key.pem "$PROJECT_ROOT/external-idps/certs/key.pem"
-echo -e "  ${GREEN}✓${NC} External IdPs"
+# Distribute to all services
+copy_cert "certificate.pem" "key.pem" "$PROJECT_ROOT/keycloak/certs" "Keycloak"
+copy_cert "certificate.pem" "key.pem" "$PROJECT_ROOT/backend/certs" "Backend"
+copy_cert "certificate.pem" "key.pem" "$PROJECT_ROOT/frontend/certs" "Frontend"
+copy_cert "certificate.pem" "key.pem" "$PROJECT_ROOT/kas/certs" "KAS"
+copy_cert "certificate.pem" "key.pem" "$PROJECT_ROOT/external-idps/certs" "External IdPs"
 
 echo ""
 
@@ -143,15 +160,26 @@ echo -e "${YELLOW}Installing mkcert CA in containers...${NC}"
 echo -e "  CA Root location: ${CAROOT}"
 
 # Copy CA certificate to shared location
-cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/certs/mkcert/rootCA.pem"
-cp "${CAROOT}/rootCA-key.pem" "$PROJECT_ROOT/certs/mkcert/rootCA-key.pem" 2>/dev/null || true
-
-# Distribute CA to service directories for Docker trust
-for dir in keycloak backend frontend kas external-idps; do
-    cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/${dir}/certs/rootCA.pem"
-done
-
-echo -e "${GREEN}✅ CA certificate distributed${NC}"
+if [ -f "${CAROOT}/rootCA.pem" ]; then
+    cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/certs/mkcert/rootCA.pem" 2>/dev/null || \
+        sudo cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/certs/mkcert/rootCA.pem"
+    cp "${CAROOT}/rootCA-key.pem" "$PROJECT_ROOT/certs/mkcert/rootCA-key.pem" 2>/dev/null || true
+    
+    # Distribute CA to service directories for Docker trust
+    for dir in keycloak backend frontend kas external-idps; do
+        if cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/${dir}/certs/rootCA.pem" 2>/dev/null; then
+            chmod 644 "$PROJECT_ROOT/${dir}/certs/rootCA.pem" 2>/dev/null || true
+        else
+            sudo cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/${dir}/certs/rootCA.pem"
+            sudo chmod 644 "$PROJECT_ROOT/${dir}/certs/rootCA.pem"
+            sudo chown $USER:$USER "$PROJECT_ROOT/${dir}/certs/rootCA.pem" 2>/dev/null || true
+        fi
+    done
+    
+    echo -e "${GREEN}✅ CA certificate distributed${NC}"
+else
+    echo -e "${YELLOW}⚠️  Warning: CA certificate not found at ${CAROOT}/rootCA.pem${NC}"
+fi
 echo ""
 
 # Create environment variable template
