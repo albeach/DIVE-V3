@@ -413,21 +413,38 @@ done
 
 # Wait for Keycloak (this takes longest)
 echo -n "Waiting for Keycloak (this may take 1-2 minutes)..."
+
+# Quick pre-check to show status
+if ! docker ps --format '{{.Names}}' | grep -q "dive-v3-keycloak"; then
+    echo ""
+    echo -e "${RED}❌ Keycloak container is not running!${NC}"
+    echo "Container status:"
+    docker compose ps keycloak
+    echo ""
+    echo "Cannot proceed without Keycloak. Exiting..."
+    exit 1
+fi
+
 KEYCLOAK_READY=0
 for i in {1..60}; do
-    # Check if container is running first
-    if ! docker ps --format '{{.Names}}' | grep -q "dive-v3-keycloak"; then
-        echo ""
-        echo -e "${RED}❌ Keycloak container is not running!${NC}"
-        docker compose ps keycloak
-        break
-    fi
-    
-    # Use docker exec to check health directly inside container (bypasses hostname issues)
+    # Method 1: Try docker exec with curl (if curl exists in container)
     if docker exec dive-v3-keycloak curl -sf http://localhost:8080/health/ready > /dev/null 2>&1; then
         KEYCLOAK_READY=1
         break
     fi
+    
+    # Method 2: Check Keycloak logs for "started in" message (reliable indicator)
+    if docker compose logs keycloak 2>/dev/null | grep -q "started in"; then
+        KEYCLOAK_READY=1
+        break
+    fi
+    
+    # Method 3: Try external health check as fallback
+    if curl -k -sf https://localhost:8443/health/ready > /dev/null 2>&1; then
+        KEYCLOAK_READY=1
+        break
+    fi
+    
     echo -n "."
     sleep 3
 done
@@ -439,11 +456,22 @@ else
     echo -e "${YELLOW}Keycloak health check timeout after 3 minutes${NC}"
     echo ""
     echo "Debugging information:"
+    echo ""
     echo "Container status:"
     docker compose ps keycloak
     echo ""
-    echo "Last 30 lines of Keycloak logs:"
-    docker compose logs keycloak --tail 30
+    echo "Container is running: $(docker ps --format '{{.Names}}' | grep dive-v3-keycloak || echo 'NO')"
+    echo ""
+    echo "Last 50 lines of Keycloak logs:"
+    docker compose logs keycloak --tail 50
+    echo ""
+    echo "Testing health check methods:"
+    echo -n "  - docker exec curl: "
+    docker exec dive-v3-keycloak curl -sf http://localhost:8080/health/ready > /dev/null 2>&1 && echo "✓ Works" || echo "✗ Failed"
+    echo -n "  - External HTTPS: "
+    curl -k -sf https://localhost:8443/health/ready > /dev/null 2>&1 && echo "✓ Works" || echo "✗ Failed"
+    echo -n "  - Logs contain 'started in': "
+    docker compose logs keycloak 2>/dev/null | grep -q "started in" && echo "✓ Yes" || echo "✗ No"
     echo ""
     echo -e "${YELLOW}Continuing anyway - Keycloak may still be starting...${NC}"
 fi
