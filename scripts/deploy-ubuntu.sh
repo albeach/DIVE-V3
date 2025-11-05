@@ -569,10 +569,43 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 10: Seed MongoDB Database
+# Phase 10: Import Certificates into Keycloak Truststore
 ###############################################################################
 
-echo -e "${YELLOW}🌱 Phase 10: Seeding MongoDB Database${NC}"
+echo -e "${YELLOW}🔐 Phase 10: Import Certificates into Keycloak Truststore${NC}"
+echo ""
+echo "Importing SSL/TLS certificates into Keycloak's Java truststore..."
+echo "This enables Keycloak to trust:"
+echo "  • Its own certificate (for callbacks)"
+echo "  • mkcert Root CA (for local HTTPS)"
+echo "  • DIVE Root CAs (for external IdP federation)"
+echo ""
+
+if [ -f scripts/import-keycloak-certs-runtime.sh ]; then
+    # Run the import script (it handles errors gracefully)
+    ./scripts/import-keycloak-certs-runtime.sh 2>&1 | grep -v "Warning" || {
+        echo -e "${YELLOW}⚠️  Certificate import had warnings (this is usually OK)${NC}"
+        echo "   Keycloak should still work for basic functionality"
+        echo "   Federation may require manual certificate import if issues persist"
+    }
+    echo ""
+    echo -e "${GREEN}✓${NC} Certificate import complete"
+else
+    echo -e "${YELLOW}⚠️  Certificate import script not found${NC}"
+    echo "   Keycloak will use default truststore"
+    echo "   Federation with external IdPs may not work"
+    echo ""
+    echo "   To import certificates manually later:"
+    echo "   ./scripts/import-keycloak-certs-runtime.sh"
+fi
+
+echo ""
+
+###############################################################################
+# Phase 11: Seed MongoDB Database
+###############################################################################
+
+echo -e "${YELLOW}🌱 Phase 11: Seeding MongoDB Database${NC}"
 echo ""
 
 cd backend
@@ -591,10 +624,10 @@ echo -e "${GREEN}✓${NC} Database seeded"
 echo ""
 
 ###############################################################################
-# Phase 11: Restart Application Services
+# Phase 12: Restart Application Services
 ###############################################################################
 
-echo -e "${YELLOW}🔄 Phase 11: Restarting Application Services${NC}"
+echo -e "${YELLOW}🔄 Phase 12: Restarting Application Services${NC}"
 echo ""
 
 echo "Restarting backend to pick up Keycloak configuration..."
@@ -609,10 +642,10 @@ echo -e "${GREEN}✓${NC} Application services restarted"
 echo ""
 
 ###############################################################################
-# Phase 12: Verify Deployment
+# Phase 13: Verify Deployment
 ###############################################################################
 
-echo -e "${YELLOW}✅ Phase 12: Verifying Deployment${NC}"
+echo -e "${YELLOW}✅ Phase 13: Verifying Deployment${NC}"
 echo ""
 
 # Check container status
