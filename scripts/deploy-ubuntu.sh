@@ -415,14 +415,16 @@ done
 echo -n "Waiting for Keycloak (this may take 1-2 minutes)..."
 KEYCLOAK_READY=0
 for i in {1..60}; do
-    # Try multiple health check endpoints
-    if curl -k -sf https://localhost:8443/health/ready > /dev/null 2>&1; then
-        KEYCLOAK_READY=1
+    # Check if container is running first
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-v3-keycloak"; then
+        echo ""
+        echo -e "${RED}❌ Keycloak container is not running!${NC}"
+        docker compose ps keycloak
         break
-    elif curl -k -sf https://localhost:8443/health > /dev/null 2>&1; then
-        KEYCLOAK_READY=1
-        break
-    elif curl -sf http://localhost:8081/health/ready > /dev/null 2>&1; then
+    fi
+    
+    # Use docker exec to check health directly inside container (bypasses hostname issues)
+    if docker exec dive-v3-keycloak curl -sf http://localhost:8080/health/ready > /dev/null 2>&1; then
         KEYCLOAK_READY=1
         break
     fi
