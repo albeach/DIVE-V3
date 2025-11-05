@@ -36,6 +36,46 @@ echo "  4. Apply Terraform configuration to Keycloak"
 echo "  5. Seed MongoDB database with sample resources"
 echo "  6. Verify all services are healthy"
 echo ""
+
+###############################################################################
+# Hostname Configuration
+###############################################################################
+
+echo -e "${CYAN}🌐 Hostname Configuration${NC}"
+echo ""
+echo "Choose how you want to access DIVE V3:"
+echo ""
+echo "  ${GREEN}1)${NC} localhost only (default)"
+echo "     - Access via: https://localhost:3000"
+echo "     - Best for: Local development on this machine"
+echo ""
+echo "  ${GREEN}2)${NC} Custom hostname (for remote access)"
+echo "     - Access via: https://your-hostname:3000"
+echo "     - Best for: Remote access, demos, team access"
+echo "     - Requires: DNS entry or /etc/hosts configuration"
+echo ""
+read -p "Selection [1-2] (default: 1): " HOSTNAME_CHOICE
+
+if [ "$HOSTNAME_CHOICE" == "2" ]; then
+    echo ""
+    read -p "Enter custom hostname (e.g., dive.example.com): " CUSTOM_HOSTNAME
+    
+    if [ -z "$CUSTOM_HOSTNAME" ]; then
+        echo -e "${YELLOW}No hostname provided, using localhost${NC}"
+        CUSTOM_HOSTNAME="localhost"
+    else
+        echo -e "${GREEN}✓${NC} Will use hostname: ${CUSTOM_HOSTNAME}"
+        echo ""
+        echo -e "${YELLOW}📝 Remember to configure DNS or /etc/hosts:${NC}"
+        echo "   $(ip route get 1 2>/dev/null | awk '{print $7}' | head -1 || echo '<your-ip>') ${CUSTOM_HOSTNAME}"
+        echo ""
+    fi
+else
+    CUSTOM_HOSTNAME="localhost"
+    echo -e "${GREEN}✓${NC} Using localhost"
+fi
+
+echo ""
 read -p "Press Enter to continue or Ctrl+C to cancel..."
 echo ""
 
@@ -122,10 +162,11 @@ else
     echo -e "${GREEN}✓${NC} mkcert already installed"
 fi
 
-# Use unified certificate setup script (localhost mode)
+# Use unified certificate setup script (with custom hostname if provided)
 if [ -f scripts/setup-mkcert-for-all-services.sh ]; then
     echo "Running unified certificate setup for all services..."
-    DIVE_HOSTNAME=localhost ./scripts/setup-mkcert-for-all-services.sh
+    echo "  Hostname: ${CUSTOM_HOSTNAME}"
+    DIVE_HOSTNAME="$CUSTOM_HOSTNAME" ./scripts/setup-mkcert-for-all-services.sh
     echo -e "${GREEN}✓${NC} Unified certificates generated for all services"
 else
     echo -e "${YELLOW}⚠️  Warning: Unified certificate script not found${NC}"
@@ -139,11 +180,12 @@ else
     
     # Generate basic certificates
     if [ ! -f keycloak/certs/certificate.pem ]; then
-        echo "Generating certificates for localhost..."
+        echo "Generating certificates for ${CUSTOM_HOSTNAME}..."
         cd keycloak/certs
         mkcert \
           -cert-file certificate.pem \
           -key-file key.pem \
+          "$CUSTOM_HOSTNAME" \
           localhost \
           127.0.0.1 \
           ::1 \
@@ -264,13 +306,22 @@ echo ""
 # Check if unified certificate system is in place
 if [ -f docker-compose.mkcert.yml ]; then
     echo "Building and starting main services with mkcert certificate support..."
+    echo "  Hostname: ${CUSTOM_HOSTNAME}"
     echo "  • Keycloak (8443) - HTTPS"
     echo "  • Backend (4000) - HTTPS"
     echo "  • Frontend (3000) - HTTPS"
     echo "  • KAS (8080) - HTTPS"
     echo "  • MongoDB, PostgreSQL, Redis, OPA"
     echo ""
-    docker compose -f docker-compose.yml -f docker-compose.mkcert.yml up -d --build
+    
+    # Use hostname override if custom hostname was provided
+    if [ "$CUSTOM_HOSTNAME" != "localhost" ] && [ -f docker-compose.hostname.yml ]; then
+        echo "Using custom hostname configuration..."
+        docker compose -f docker-compose.yml -f docker-compose.mkcert.yml -f docker-compose.hostname.yml up -d --build
+    else
+        docker compose -f docker-compose.yml -f docker-compose.mkcert.yml up -d --build
+    fi
+    
     echo -e "${GREEN}✓${NC} Main services started with HTTPS support"
 else
     echo "Building and starting all services (basic configuration)..."
@@ -676,9 +727,9 @@ echo ""
 echo -e "${CYAN}🌐 Access URLs:${NC}"
 echo ""
 echo -e "${CYAN}Main Services:${NC}"
-echo -e "  Frontend:        ${BLUE}https://localhost:3000${NC}"
-echo -e "  Backend API:     ${BLUE}https://localhost:4000${NC}"
-echo -e "  Keycloak Admin:  ${BLUE}https://localhost:8443/admin${NC}"
+echo -e "  Frontend:        ${BLUE}https://${CUSTOM_HOSTNAME}:3000${NC}"
+echo -e "  Backend API:     ${BLUE}https://${CUSTOM_HOSTNAME}:4000${NC}"
+echo -e "  Keycloak Admin:  ${BLUE}https://${CUSTOM_HOSTNAME}:8443/admin${NC}"
 echo -e "                   Username: ${YELLOW}admin${NC}"
 echo -e "                   Password: ${YELLOW}admin${NC}"
 echo ""
@@ -686,8 +737,27 @@ echo ""
 # Show external IdP URLs if they're running
 if docker ps --format '{{.Names}}' | grep -q "dive-spain-saml-idp" 2>/dev/null; then
     echo -e "${CYAN}External IdPs:${NC}"
-    echo -e "  Spain SAML:      ${BLUE}http://localhost:9443/simplesaml/${NC}"
-    echo -e "  USA OIDC:        ${BLUE}http://localhost:9082${NC}"
+    echo -e "  Spain SAML:      ${BLUE}http://${CUSTOM_HOSTNAME}:9443/simplesaml/${NC}"
+    echo -e "  USA OIDC:        ${BLUE}http://${CUSTOM_HOSTNAME}:9082${NC}"
+    echo ""
+fi
+
+# Show remote access instructions if custom hostname used
+if [ "$CUSTOM_HOSTNAME" != "localhost" ]; then
+    echo -e "${CYAN}🔐 Remote Access Setup:${NC}"
+    echo ""
+    echo "For remote clients to access DIVE V3:"
+    echo ""
+    echo "  1. ${YELLOW}Configure DNS or /etc/hosts:${NC}"
+    SERVER_IP=$(ip route get 1 2>/dev/null | awk '{print $7}' | head -1 || echo '<your-server-ip>')
+    echo "     ${SERVER_IP} ${CUSTOM_HOSTNAME}"
+    echo ""
+    echo "  2. ${YELLOW}Distribute CA certificate:${NC}"
+    echo "     Copy: certs/mkcert/rootCA.pem"
+    echo "     Install on client machines to trust certificates"
+    echo ""
+    echo "  3. ${YELLOW}Access from clients:${NC}"
+    echo "     https://${CUSTOM_HOSTNAME}:3000"
     echo ""
 fi
 echo -e "${CYAN}👥 Test User Credentials (Password for all: Password123!):${NC}"
