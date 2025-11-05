@@ -837,7 +837,7 @@ if [ ! -d node_modules ]; then
 fi
 
 echo "Seeding database with sample resources..."
-npm run seed 2>&1 | grep -E '(✅|✓|Successfully|Created|Seeded)' || true
+npm run seed-database
 
 cd "$PROJECT_ROOT"
 echo -e "${GREEN}✓${NC} Database seeded"

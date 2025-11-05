@@ -173,7 +173,7 @@ echo "   Then you run: cd terraform && terraform apply"
 echo ""
 echo "${GREEN}2. Fix Resources - Re-seed MongoDB:${NC}"
 echo "   cd backend"
-echo "   npm run seed"
+echo "   npm run seed-database"
 echo "   docker compose restart backend nextjs"
 echo ""
 
