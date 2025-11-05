@@ -530,11 +530,13 @@ if [ -d terraform ]; then
     echo "  • All protocol mappers and security policies"
     echo ""
     
-    # Apply with proper variables
+    # Apply with proper variables (use custom hostname if provided)
     terraform apply -auto-approve \
       -var="keycloak_admin_username=admin" \
       -var="keycloak_admin_password=admin" \
-      -var="keycloak_url=https://localhost:8443"
+      -var="keycloak_url=https://${CUSTOM_HOSTNAME}:8443" \
+      -var="app_url=https://${CUSTOM_HOSTNAME}:3000" \
+      -var="backend_url=https://${CUSTOM_HOSTNAME}:4000"
     
     TERRAFORM_EXIT=$?
     

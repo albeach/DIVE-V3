@@ -11,13 +11,13 @@ resource "keycloak_oidc_identity_provider" "usa_realm_broker" {
   enabled      = true
 
   # OIDC endpoints from U.S. realm
-  # Best Practice: Use consistent hostname (localhost:8443) for all URLs
-  # KC_HOSTNAME ensures tokens always have issuer=https://localhost:8443
+  # Dynamic URLs: Use local.realm_urls to support custom hostnames
+  # KC_HOSTNAME ensures tokens always have correct issuer
   # All URLs must match to avoid issuer validation errors
-  authorization_url = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/auth"
-  token_url         = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/token"
-  jwks_url          = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/certs"
-  user_info_url     = "https://localhost:8443/realms/dive-v3-usa/protocol/openid-connect/userinfo"
+  authorization_url = "${local.realm_urls.usa}${local.oidc_auth_path}"
+  token_url         = "${local.realm_urls.usa}${local.oidc_token_path}"
+  jwks_url          = "${local.realm_urls.usa}${local.oidc_certs_path}"
+  user_info_url     = "${local.realm_urls.usa}${local.oidc_userinfo_path}"
 
   # Client credentials from U.S. realm
   client_id     = keycloak_openid_client.usa_realm_client.client_id
