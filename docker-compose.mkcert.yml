@@ -45,18 +45,6 @@ services:
       CA_FILE: /opt/app/certs/rootCA.pem
       NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
 
-  # Spain SAML IdP - Add HTTPS support
-  spain-saml:
-    volumes:
-      - ./certs/mkcert:/opt/app/certs:ro
-    environment:
-      SSL_CERT_FILE: /opt/app/certs/certificate.pem
-      SSL_KEY_FILE: /opt/app/certs/key.pem
-
-  # USA OIDC IdP - Add HTTPS support  
-  usa-oidc:
-    volumes:
-      - ./certs/mkcert:/opt/app/certs:ro
-    environment:
-      KC_HTTPS_CERTIFICATE_FILE: /opt/app/certs/certificate.pem
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/app/certs/key.pem
+  # Note: External IdPs (spain-saml, usa-oidc) are defined in external-idps/docker-compose.yml
+  # To use certificates with external IdPs, use:
+  #   cd external-idps && docker-compose up -d
