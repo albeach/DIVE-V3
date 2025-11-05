@@ -362,7 +362,6 @@ services:
     environment:
       KC_HOSTNAME: ${CUSTOM_HOSTNAME}
       KC_HOSTNAME_STRICT: false
-      KC_HOSTNAME_ADMIN: ${CUSTOM_HOSTNAME}
 
   # Backend - Update CORS allowed origins
   backend:
