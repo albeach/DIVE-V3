@@ -106,8 +106,7 @@ resource "keycloak_openid_client" "usa_realm_client" {
 
   # Redirect to broker realm
   valid_redirect_uris = [
-    "https://localhost:8443/realms/dive-v3-broker/broker/usa-realm-broker/endpoint",
-    "https://keycloak:8443/realms/dive-v3-broker/broker/usa-realm-broker/endpoint"
+    "${var.keycloak_url}/realms/dive-v3-broker/broker/usa-realm-broker/endpoint"
   ]
 
   root_url = var.app_url

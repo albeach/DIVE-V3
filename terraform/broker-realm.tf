@@ -115,14 +115,11 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   valid_redirect_uris = [
     "${var.app_url}/*",
     "${var.app_url}/dashboard",
-    "${var.app_url}/api/auth/callback/keycloak",
-    "https://localhost:3000/*",
-    "https://localhost:3000/dashboard"
+    "${var.app_url}/api/auth/callback/keycloak"
   ]
 
   web_origins = [
     var.app_url,
-    "https://localhost:3000",
     "+"
   ]
 
