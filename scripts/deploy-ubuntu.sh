@@ -837,7 +837,14 @@ if [ ! -d node_modules ]; then
 fi
 
 echo "Seeding database with sample resources..."
-npm run seed-database
+# Run seed inside backend container where dependencies are available
+docker compose exec -T backend npm run seed-database || {
+    echo -e "${YELLOW}⚠️  Seed failed, trying alternative method...${NC}"
+    cd backend
+    npm install 2>/dev/null || true
+    npm run seed-database 2>&1 | tail -10
+    cd "$PROJECT_ROOT"
+}
 
 cd "$PROJECT_ROOT"
 echo -e "${GREEN}✓${NC} Database seeded"
