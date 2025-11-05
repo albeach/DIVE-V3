@@ -72,19 +72,17 @@ fi
 
 if [ "$RESEED" = "y" ]; then
     echo "Seeding MongoDB..."
-    cd backend
     
-    # Check if dependencies are installed
-    if [ ! -d node_modules ]; then
-        echo "Installing backend dependencies..."
-        npm install
+    # Check if backend container is running
+    if ! docker compose ps backend | grep -q "Up"; then
+        echo "Backend container not running, starting it..."
+        docker compose up -d backend
+        sleep 10
     fi
     
-    # Run seed script (WITHOUT || true so we see real errors!)
-    echo "Running: npm run seed-database"
-    npm run seed-database
-    
-    cd ..
+    # Run seed script INSIDE the backend container (has all dependencies)
+    echo "Running: docker compose exec backend npm run seed-database"
+    docker compose exec -T backend npm run seed-database
     
     # Verify seeding worked
     NEW_COUNT=$(docker compose exec -T mongo mongosh dive-v3 --quiet --eval "db.resources.countDocuments({})" 2>/dev/null | tail -1 || echo "0")
