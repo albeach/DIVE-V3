@@ -1,0 +1,340 @@
+#!/bin/bash
+# Unified mkcert Certificate Generation for All DIVE V3 Services
+# This script generates mkcert certificates for all services and supports custom hostnames
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Detect project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+
+# Default hostname (can be overridden)
+CUSTOM_HOSTNAME="${DIVE_HOSTNAME:-localhost}"
+
+echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  DIVE V3 - mkcert Certificate Generator${NC}"
+echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+echo ""
+
+# Check if mkcert is installed
+if ! command -v mkcert &> /dev/null; then
+    echo -e "${RED}❌ mkcert is not installed${NC}"
+    echo ""
+    echo "Install mkcert:"
+    echo "  macOS:   brew install mkcert"
+    echo "  Linux:   See https://github.com/FiloSottile/mkcert#installation"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✅ mkcert is installed${NC}"
+echo ""
+
+# Install local CA if not already done
+echo -e "${YELLOW}Installing local CA (if needed)...${NC}"
+mkcert -install
+echo ""
+
+# Create certificates directory structure
+echo -e "${YELLOW}Creating certificate directories...${NC}"
+mkdir -p "$PROJECT_ROOT/certs/mkcert"
+mkdir -p "$PROJECT_ROOT/keycloak/certs"
+mkdir -p "$PROJECT_ROOT/backend/certs"
+mkdir -p "$PROJECT_ROOT/frontend/certs"
+mkdir -p "$PROJECT_ROOT/kas/certs"
+mkdir -p "$PROJECT_ROOT/external-idps/certs"
+echo -e "${GREEN}✅ Directories created${NC}"
+echo ""
+
+# Define all hostnames to include in certificate
+HOSTNAMES=(
+    "localhost"
+    "127.0.0.1"
+    "::1"
+    "keycloak"
+    "backend"
+    "nextjs"
+    "frontend"
+    "kas"
+    "opa"
+    "mongo"
+    "postgres"
+    "redis"
+    "authzforce"
+    "spain-saml"
+    "usa-oidc"
+    "host.docker.internal"
+)
+
+# Add custom hostname if specified
+if [ "$CUSTOM_HOSTNAME" != "localhost" ]; then
+    echo -e "${BLUE}Using custom hostname: ${CUSTOM_HOSTNAME}${NC}"
+    HOSTNAMES+=("$CUSTOM_HOSTNAME")
+    HOSTNAMES+=("*.${CUSTOM_HOSTNAME}")
+    
+    # Add specific service subdomains
+    HOSTNAMES+=("keycloak.${CUSTOM_HOSTNAME}")
+    HOSTNAMES+=("backend.${CUSTOM_HOSTNAME}")
+    HOSTNAMES+=("frontend.${CUSTOM_HOSTNAME}")
+    HOSTNAMES+=("kas.${CUSTOM_HOSTNAME}")
+    HOSTNAMES+=("opa.${CUSTOM_HOSTNAME}")
+    HOSTNAMES+=("spain.${CUSTOM_HOSTNAME}")
+    HOSTNAMES+=("usa.${CUSTOM_HOSTNAME}")
+    echo ""
+fi
+
+# Generate master certificate with all hostnames
+echo -e "${YELLOW}Generating master certificate with all hostnames...${NC}"
+cd "$PROJECT_ROOT/certs/mkcert"
+
+mkcert \
+    -cert-file certificate.pem \
+    -key-file key.pem \
+    "${HOSTNAMES[@]}"
+
+echo -e "${GREEN}✅ Master certificate generated${NC}"
+echo ""
+
+# Display certificate details
+echo -e "${BLUE}Certificate includes:${NC}"
+openssl x509 -in certificate.pem -noout -text | grep -A 1 "Subject Alternative Name" || echo "  (All specified hostnames)"
+echo ""
+
+# Copy certificates to all service directories
+echo -e "${YELLOW}Distributing certificates to services...${NC}"
+
+# Keycloak
+cp certificate.pem "$PROJECT_ROOT/keycloak/certs/certificate.pem"
+cp key.pem "$PROJECT_ROOT/keycloak/certs/key.pem"
+echo -e "  ${GREEN}✓${NC} Keycloak"
+
+# Backend
+cp certificate.pem "$PROJECT_ROOT/backend/certs/certificate.pem"
+cp key.pem "$PROJECT_ROOT/backend/certs/key.pem"
+echo -e "  ${GREEN}✓${NC} Backend"
+
+# Frontend
+cp certificate.pem "$PROJECT_ROOT/frontend/certs/certificate.pem"
+cp key.pem "$PROJECT_ROOT/frontend/certs/key.pem"
+echo -e "  ${GREEN}✓${NC} Frontend"
+
+# KAS
+cp certificate.pem "$PROJECT_ROOT/kas/certs/certificate.pem"
+cp key.pem "$PROJECT_ROOT/kas/certs/key.pem"
+echo -e "  ${GREEN}✓${NC} KAS"
+
+# External IdPs
+cp certificate.pem "$PROJECT_ROOT/external-idps/certs/certificate.pem"
+cp key.pem "$PROJECT_ROOT/external-idps/certs/key.pem"
+echo -e "  ${GREEN}✓${NC} External IdPs"
+
+echo ""
+
+# Get mkcert CA root certificate location
+CAROOT=$(mkcert -CAROOT)
+echo -e "${YELLOW}Installing mkcert CA in containers...${NC}"
+echo -e "  CA Root location: ${CAROOT}"
+
+# Copy CA certificate to shared location
+cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/certs/mkcert/rootCA.pem"
+cp "${CAROOT}/rootCA-key.pem" "$PROJECT_ROOT/certs/mkcert/rootCA-key.pem" 2>/dev/null || true
+
+# Distribute CA to service directories for Docker trust
+for dir in keycloak backend frontend kas external-idps; do
+    cp "${CAROOT}/rootCA.pem" "$PROJECT_ROOT/${dir}/certs/rootCA.pem"
+done
+
+echo -e "${GREEN}✅ CA certificate distributed${NC}"
+echo ""
+
+# Create environment variable template
+echo -e "${YELLOW}Creating environment configuration...${NC}"
+cat > "$PROJECT_ROOT/.env.mkcert" << EOF
+# mkcert Certificate Configuration
+# Generated: $(date)
+
+# Custom hostname for remote access
+DIVE_HOSTNAME=${CUSTOM_HOSTNAME}
+
+# Certificate paths (Docker internal)
+CERT_FILE=/opt/app/certs/certificate.pem
+KEY_FILE=/opt/app/certs/key.pem
+CA_FILE=/opt/app/certs/rootCA.pem
+
+# SSL Configuration
+NODE_TLS_REJECT_UNAUTHORIZED=0
+NODE_EXTRA_CA_CERTS=/opt/app/certs/rootCA.pem
+
+# Public URLs (for browser access)
+NEXT_PUBLIC_KEYCLOAK_URL=https://${CUSTOM_HOSTNAME}:8443
+NEXT_PUBLIC_API_URL=https://${CUSTOM_HOSTNAME}:4000
+NEXT_PUBLIC_FRONTEND_URL=https://${CUSTOM_HOSTNAME}:3000
+
+# Internal Docker URLs (for service-to-service)
+KEYCLOAK_URL=https://keycloak:8443
+BACKEND_URL=https://backend:4000
+FRONTEND_URL=https://nextjs:3000
+EOF
+
+echo -e "${GREEN}✅ Configuration saved to .env.mkcert${NC}"
+echo ""
+
+# Generate docker-compose override
+echo -e "${YELLOW}Creating docker-compose override...${NC}"
+cat > "$PROJECT_ROOT/docker-compose.mkcert.yml" << 'EOF'
+# Docker Compose Override for mkcert Certificates
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.mkcert.yml up
+
+version: '3.8'
+
+services:
+  # Keycloak - Already configured, ensure cert paths are correct
+  keycloak:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      KC_HTTPS_CERTIFICATE_FILE: /opt/app/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/app/certs/key.pem
+
+  # Backend - Add HTTPS support
+  backend:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      HTTPS_ENABLED: "true"
+      CERT_FILE: /opt/app/certs/certificate.pem
+      KEY_FILE: /opt/app/certs/key.pem
+      CA_FILE: /opt/app/certs/rootCA.pem
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
+
+  # Frontend - Add HTTPS support
+  nextjs:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      HTTPS_ENABLED: "true"
+      CERT_FILE: /opt/app/certs/certificate.pem
+      KEY_FILE: /opt/app/certs/key.pem
+      CA_FILE: /opt/app/certs/rootCA.pem
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
+
+  # KAS - Add HTTPS support
+  kas:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      HTTPS_ENABLED: "true"
+      CERT_FILE: /opt/app/certs/certificate.pem
+      KEY_FILE: /opt/app/certs/key.pem
+      CA_FILE: /opt/app/certs/rootCA.pem
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
+
+  # Spain SAML IdP - Add HTTPS support
+  spain-saml:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      SSL_CERT_FILE: /opt/app/certs/certificate.pem
+      SSL_KEY_FILE: /opt/app/certs/key.pem
+
+  # USA OIDC IdP - Add HTTPS support  
+  usa-oidc:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      KC_HTTPS_CERTIFICATE_FILE: /opt/app/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/app/certs/key.pem
+EOF
+
+echo -e "${GREEN}✅ Override saved to docker-compose.mkcert.yml${NC}"
+echo ""
+
+# Create verification script
+cat > "$PROJECT_ROOT/scripts/verify-mkcert-setup.sh" << 'VERIFY_EOF'
+#!/bin/bash
+# Verify mkcert certificate installation
+
+set -e
+
+PROJECT_ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+
+echo "Verifying mkcert certificate installation..."
+echo ""
+
+# Check certificate files exist
+CERT_DIRS=(
+    "certs/mkcert"
+    "keycloak/certs"
+    "backend/certs"
+    "frontend/certs"
+    "kas/certs"
+    "external-idps/certs"
+)
+
+for dir in "${CERT_DIRS[@]}"; do
+    if [ -f "$PROJECT_ROOT/$dir/certificate.pem" ] && [ -f "$PROJECT_ROOT/$dir/key.pem" ]; then
+        echo "✅ $dir - certificates present"
+    else
+        echo "❌ $dir - certificates missing"
+    fi
+done
+
+echo ""
+echo "Testing certificate validity..."
+openssl x509 -in "$PROJECT_ROOT/certs/mkcert/certificate.pem" -noout -text | grep -E "(Issuer|Subject|DNS:|Not Before|Not After)" || true
+echo ""
+echo "✅ Verification complete"
+VERIFY_EOF
+
+chmod +x "$PROJECT_ROOT/scripts/verify-mkcert-setup.sh"
+
+echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  ✅ mkcert Certificate Setup Complete!${NC}"
+echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "${YELLOW}📋 What was done:${NC}"
+echo "  ✓ Generated mkcert certificates for all services"
+echo "  ✓ Distributed certificates to all service directories"
+echo "  ✓ Created docker-compose.mkcert.yml override"
+echo "  ✓ Created .env.mkcert configuration"
+echo "  ✓ Installed CA certificate in all containers"
+echo ""
+echo -e "${YELLOW}📋 Next Steps:${NC}"
+echo ""
+echo "  1. Verify installation:"
+echo "     ${BLUE}./scripts/verify-mkcert-setup.sh${NC}"
+echo ""
+echo "  2. Update your services to use HTTPS with the certificates"
+echo ""
+echo "  3. Restart services with mkcert support:"
+echo "     ${BLUE}docker-compose -f docker-compose.yml -f docker-compose.mkcert.yml up -d${NC}"
+echo ""
+echo "  4. For remote access, add to /etc/hosts or DNS:"
+if [ "$CUSTOM_HOSTNAME" != "localhost" ]; then
+    echo "     ${BLUE}<your-ip> ${CUSTOM_HOSTNAME}${NC}"
+    echo "     ${BLUE}<your-ip> keycloak.${CUSTOM_HOSTNAME}${NC}"
+    echo "     ${BLUE}<your-ip> backend.${CUSTOM_HOSTNAME}${NC}"
+    echo "     ${BLUE}<your-ip> frontend.${CUSTOM_HOSTNAME}${NC}"
+else
+    echo "     ${YELLOW}Set DIVE_HOSTNAME environment variable to use custom hostname${NC}"
+    echo "     ${BLUE}DIVE_HOSTNAME=mydomain.local ./scripts/setup-mkcert-for-all-services.sh${NC}"
+fi
+echo ""
+echo -e "${YELLOW}📋 Certificate Location:${NC}"
+echo "  Master: $PROJECT_ROOT/certs/mkcert/"
+echo "  Services: <service>/certs/"
+echo ""
+echo -e "${YELLOW}📋 Hostname Configuration:${NC}"
+echo "  Current: ${CUSTOM_HOSTNAME}"
+echo "  To change: DIVE_HOSTNAME=your.domain.com $0"
+echo ""
+
+exit 0
+

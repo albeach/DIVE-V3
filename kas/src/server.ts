@@ -11,6 +11,9 @@
  */
 
 import express, { Application, Request, Response } from 'express';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
 import cors from 'cors';
 import { config } from 'dotenv';
 import axios from 'axios';
@@ -31,6 +34,7 @@ config({ path: '.env.local' });
 
 const app: Application = express();
 const PORT = process.env.KAS_PORT || 8080;
+const HTTPS_ENABLED = process.env.HTTPS_ENABLED === 'true';
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 const BACKEND_URL = process.env.BACKEND_URL || 'https://localhost:4000';
 
@@ -541,18 +545,62 @@ app.post('/request-key', async (req: Request, res: Response) => {
 });
 
 // ============================================
-// Start Server
+// Start Server (HTTP or HTTPS)
 // ============================================
-app.listen(PORT, () => {
-    kasLogger.info(`🔑 KAS Service started`, {
-        port: PORT,
-        version: '1.0.0-acp240',
-        opaUrl: OPA_URL,
-        backendUrl: BACKEND_URL
+if (HTTPS_ENABLED) {
+    try {
+        const certPath = process.env.CERT_PATH || '/opt/app/certs';
+        const httpsOptions = {
+            key: fs.readFileSync(path.join(certPath, process.env.KEY_FILE || 'key.pem')),
+            cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
+        };
+
+        https.createServer(httpsOptions, app).listen(PORT, () => {
+            kasLogger.info(`🔑 KAS Service started with HTTPS`, {
+                port: PORT,
+                version: '1.0.0-acp240',
+                httpsEnabled: true,
+                certPath,
+                opaUrl: OPA_URL,
+                backendUrl: BACKEND_URL,
+                dekCacheTTL: '1 hour',
+                hsm: 'mock (dev)',
+                environment: process.env.NODE_ENV || 'development',
+                compliance: 'ACP-240 section 5.2',
+            });
+        });
+    } catch (error) {
+        kasLogger.error('Failed to start HTTPS server, falling back to HTTP', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        // Fallback to HTTP if certificates are missing
+        app.listen(PORT, () => {
+            kasLogger.warn(`⚠️  KAS Service started with HTTP (HTTPS failed)`, {
+                port: PORT,
+                version: '1.0.0-acp240',
+                httpsEnabled: false,
+                opaUrl: OPA_URL,
+                backendUrl: BACKEND_URL,
+                dekCacheTTL: '1 hour',
+                hsm: 'mock (dev)',
+                environment: process.env.NODE_ENV || 'development',
+                compliance: 'ACP-240 section 5.2',
+            });
+        });
+    }
+} else {
+    app.listen(PORT, () => {
+        kasLogger.info(`🔑 KAS Service started with HTTP`, {
+            port: PORT,
+            version: '1.0.0-acp240',
+            httpsEnabled: false,
+            opaUrl: OPA_URL,
+            backendUrl: BACKEND_URL,
+            dekCacheTTL: '1 hour',
+            hsm: 'mock (dev)',
+            environment: process.env.NODE_ENV || 'development',
+            compliance: 'ACP-240 section 5.2',
+        });
     });
-    console.log(`🔑 KAS Service started on port ${PORT}`);
-    console.log(`   Version: 1.0.0-acp240 (NATO ACP-240 Compliant)`);
-    console.log(`   OPA: ${OPA_URL}`);
-    console.log(`   Backend: ${BACKEND_URL}`);
-});
+}
 

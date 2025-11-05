@@ -1,0 +1,62 @@
+# Docker Compose Override for mkcert Certificates
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.mkcert.yml up
+
+version: '3.8'
+
+services:
+  # Keycloak - Already configured, ensure cert paths are correct
+  keycloak:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      KC_HTTPS_CERTIFICATE_FILE: /opt/app/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/app/certs/key.pem
+
+  # Backend - Add HTTPS support
+  backend:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      HTTPS_ENABLED: "true"
+      CERT_FILE: /opt/app/certs/certificate.pem
+      KEY_FILE: /opt/app/certs/key.pem
+      CA_FILE: /opt/app/certs/rootCA.pem
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
+
+  # Frontend - Add HTTPS support
+  nextjs:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      HTTPS_ENABLED: "true"
+      CERT_FILE: /opt/app/certs/certificate.pem
+      KEY_FILE: /opt/app/certs/key.pem
+      CA_FILE: /opt/app/certs/rootCA.pem
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
+
+  # KAS - Add HTTPS support
+  kas:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      HTTPS_ENABLED: "true"
+      CERT_FILE: /opt/app/certs/certificate.pem
+      KEY_FILE: /opt/app/certs/key.pem
+      CA_FILE: /opt/app/certs/rootCA.pem
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/rootCA.pem
+
+  # Spain SAML IdP - Add HTTPS support
+  spain-saml:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      SSL_CERT_FILE: /opt/app/certs/certificate.pem
+      SSL_KEY_FILE: /opt/app/certs/key.pem
+
+  # USA OIDC IdP - Add HTTPS support  
+  usa-oidc:
+    volumes:
+      - ./certs/mkcert:/opt/app/certs:ro
+    environment:
+      KC_HTTPS_CERTIFICATE_FILE: /opt/app/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/app/certs/key.pem

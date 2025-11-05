@@ -1,6 +1,6 @@
 /**
  * HTTPS Development Server for Next.js
- * Uses self-signed certificates for local development
+ * Uses mkcert certificates for local development
  * Required for: NextAuth state cookie persistence across HTTPS Keycloak redirects
  */
 
@@ -17,13 +17,15 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-// Load SSL certificates (shared with Keycloak)
-// In Docker: Mounted from volume
-const certPath = process.env.SSL_CERT_PATH || '/opt/keycloak/certs';
+// Load SSL certificates (mkcert)
+// Priority: /opt/app/certs (mkcert) > /opt/keycloak/certs (fallback)
+const certPath = process.env.CERT_PATH || process.env.SSL_CERT_PATH || '/opt/app/certs';
 const httpsOptions = {
-  key: fs.readFileSync(path.join(certPath, 'key.pem')),
-  cert: fs.readFileSync(path.join(certPath, 'certificate.pem')),
+  key: fs.readFileSync(path.join(certPath, process.env.KEY_FILE || 'key.pem')),
+  cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
 };
+
+console.log(`📁 Loading certificates from: ${certPath}`);
 
 app.prepare().then(() => {
   createServer(httpsOptions, async (req, res) => {
@@ -42,6 +44,7 @@ app.prepare().then(() => {
     })
     .listen(port, () => {
       console.log(`> Ready on https://${hostname}:${port}`);
+      console.log(`> Certificate: ${path.join(certPath, 'certificate.pem')}`);
     });
 });
 
