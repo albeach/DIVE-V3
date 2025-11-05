@@ -22,7 +22,7 @@ resource "keycloak_oidc_identity_provider" "can_realm_broker" {
   trust_email    = true
   sync_mode      = "FORCE"
 
-  first_broker_login_flow_alias = "first broker login"
+  first_broker_login_flow_alias = module.broker_mfa.post_broker_mfa_flow_alias
   link_only                     = false
   gui_order                     = "3"
 }

@@ -33,8 +33,9 @@ echo "  1. Generate SSL certificates"
 echo "  2. Set up DIVE Root CA certificates"
 echo "  3. Start all Docker services"
 echo "  4. Apply Terraform configuration to Keycloak"
-echo "  5. Seed MongoDB database with sample resources"
-echo "  6. Verify all services are healthy"
+echo "  5. Initialize PostgreSQL database (NextAuth tables)"
+echo "  6. Seed MongoDB database with sample resources"
+echo "  7. Verify all services are healthy"
 echo ""
 
 ###############################################################################
@@ -706,10 +707,33 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 11: Seed MongoDB Database
+# Phase 11: Initialize PostgreSQL Database (NextAuth Tables)
 ###############################################################################
 
-echo -e "${YELLOW}🌱 Phase 11: Seeding MongoDB Database${NC}"
+echo -e "${YELLOW}🗄️  Phase 11: Initializing PostgreSQL Database${NC}"
+echo ""
+
+echo "Creating NextAuth tables in dive_v3_app database..."
+if docker cp frontend/create-nextauth-tables.sql dive-v3-postgres:/tmp/create-tables.sql > /dev/null 2>&1; then
+    if docker compose exec -T postgres psql -U postgres -d dive_v3_app -f /tmp/create-tables.sql > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} NextAuth tables initialized"
+    else
+        echo -e "${YELLOW}⚠${NC}  Tables may already exist (this is OK)"
+    fi
+else
+    echo -e "${RED}✗${NC} Failed to copy SQL file"
+    echo "   You may need to run this manually:"
+    echo "   docker cp frontend/create-nextauth-tables.sql dive-v3-postgres:/tmp/create-tables.sql"
+    echo "   docker compose exec postgres psql -U postgres -d dive_v3_app -f /tmp/create-tables.sql"
+fi
+
+echo ""
+
+###############################################################################
+# Phase 12: Seed MongoDB Database
+###############################################################################
+
+echo -e "${YELLOW}🌱 Phase 12: Seeding MongoDB Database${NC}"
 echo ""
 
 cd backend
@@ -728,10 +752,10 @@ echo -e "${GREEN}✓${NC} Database seeded"
 echo ""
 
 ###############################################################################
-# Phase 12: Restart Application Services
+# Phase 13: Restart Application Services
 ###############################################################################
 
-echo -e "${YELLOW}🔄 Phase 12: Restarting Application Services${NC}"
+echo -e "${YELLOW}🔄 Phase 13: Restarting Application Services${NC}"
 echo ""
 
 echo "Restarting backend to pick up Keycloak configuration..."
@@ -746,7 +770,7 @@ echo -e "${GREEN}✓${NC} Application services restarted"
 echo ""
 
 ###############################################################################
-# Phase 13: Verify Deployment
+# Phase 14: Verify Deployment
 ###############################################################################
 
 echo -e "${YELLOW}✅ Phase 13: Verifying Deployment${NC}"

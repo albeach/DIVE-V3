@@ -39,17 +39,48 @@ resource "keycloak_authentication_execution" "post_broker_create_user" {
   ]
 }
 
-# Step 3: ALWAYS Require OTP Configuration on First Broker Login
-# NOTE: For production, you'd add conditional logic based on IdP token claims
-# For now, ALL users are required to setup OTP (demonstrates MFA enrollment flow)
-resource "keycloak_authentication_execution" "post_broker_configure_otp" {
+# Step 3: Conditional OTP Enforcement (based on clearance)
+resource "keycloak_authentication_subflow" "post_broker_conditional_otp" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
-  authenticator     = "auth-otp-form"  
-  requirement       = "REQUIRED"
+  alias             = "Conditional OTP - Post Broker - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
   
   depends_on = [
     keycloak_authentication_execution.post_broker_create_user
+  ]
+}
+
+# Condition: User attribute "clearance" != "UNCLASSIFIED"
+resource "keycloak_authentication_execution" "post_broker_condition_clearance" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_otp.alias
+  authenticator     = "conditional-user-attribute"
+  requirement       = "REQUIRED"
+}
+
+# Configuration for the clearance condition
+resource "keycloak_authentication_execution_config" "post_broker_condition_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.post_broker_condition_clearance.id
+  alias        = "Post Broker Clearance Check - ${var.realm_display_name}"
+  config = {
+    attribute_name  = var.clearance_attribute_name
+    attribute_value = var.clearance_attribute_value_regex
+    negate          = "false"
+  }
+}
+
+# Action: OTP Form (validates or prompts for OTP setup)
+resource "keycloak_authentication_execution" "post_broker_otp_form" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_otp.alias
+  authenticator     = "auth-otp-form"
+  requirement       = "REQUIRED"
+  
+  depends_on = [
+    keycloak_authentication_execution.post_broker_condition_clearance,
+    keycloak_authentication_execution_config.post_broker_condition_config
   ]
 }
 
@@ -61,7 +92,7 @@ resource "keycloak_authentication_execution" "post_broker_update_attributes" {
   requirement       = "DISABLED"
   
   depends_on = [
-    keycloak_authentication_execution.post_broker_configure_otp
+    keycloak_authentication_subflow.post_broker_conditional_otp
   ]
 }
 
