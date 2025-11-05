@@ -398,24 +398,66 @@ echo ""
 
 # Check if unified certificate system is in place
 if [ -f docker-compose.mkcert.yml ]; then
-    echo "Building and starting main services with mkcert certificate support..."
+    echo "Building and starting services in stages (prevents race conditions)..."
     echo "  Hostname: ${CUSTOM_HOSTNAME}"
-    echo "  • Keycloak (8443) - HTTPS"
-    echo "  • Backend (4000) - HTTPS"
-    echo "  • Frontend (3000) - HTTPS"
-    echo "  • KAS (8080) - HTTPS"
-    echo "  • MongoDB, PostgreSQL, Redis, OPA"
     echo ""
     
-    # Use hostname override if custom hostname was provided
+    # Compose file arguments
+    COMPOSE_FILES="-f docker-compose.yml -f docker-compose.mkcert.yml"
     if [ "$CUSTOM_HOSTNAME" != "localhost" ] && [ -f docker-compose.hostname.yml ]; then
-        echo "Using custom hostname configuration..."
-        docker compose -f docker-compose.yml -f docker-compose.mkcert.yml -f docker-compose.hostname.yml up -d --build
-    else
-        docker compose -f docker-compose.yml -f docker-compose.mkcert.yml up -d --build
+        COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.hostname.yml"
+        echo "Using custom hostname configuration"
     fi
     
-    echo -e "${GREEN}✓${NC} Main services started with HTTPS support"
+    # Stage 1: Start PostgreSQL and MongoDB FIRST
+    echo ""
+    echo "Stage 1: Starting databases (PostgreSQL, MongoDB, Redis)..."
+    docker compose $COMPOSE_FILES up -d postgres mongo redis
+    
+    # Wait for PostgreSQL to be REALLY ready (not just accepting connections)
+    echo -n "Waiting for PostgreSQL to be fully initialized..."
+    for i in {1..30}; do
+        if docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+            # Additional check: Verify we can actually query
+            if docker compose exec -T postgres psql -U postgres -c "SELECT 1" > /dev/null 2>&1; then
+                echo -e " ${GREEN}✓${NC}"
+                break
+            fi
+        fi
+        echo -n "."
+        sleep 2
+    done
+    
+    # CRITICAL: Explicitly create keycloak_db database if it doesn't exist
+    echo "Ensuring Keycloak database exists..."
+    docker compose exec -T postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname='keycloak_db'" | grep -q 1 || \
+        docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE keycloak_db OWNER postgres;"
+    echo -e "${GREEN}✓${NC} Database keycloak_db ready"
+    
+    # Wait for MongoDB
+    echo -n "Waiting for MongoDB..."
+    for i in {1..30}; do
+        if docker compose exec -T mongo mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+            echo -e " ${GREEN}✓${NC}"
+            break
+        fi
+        echo -n "."
+        sleep 1
+    done
+    
+    echo -e "${GREEN}✓${NC} Stage 1 complete: Databases ready"
+    echo ""
+    
+    # Stage 2: Start Keycloak (now that database is FULLY ready)
+    echo "Stage 2: Starting Keycloak..."
+    docker compose $COMPOSE_FILES up -d keycloak
+    echo -e "${GREEN}✓${NC} Stage 2 complete: Keycloak starting"
+    echo ""
+    
+    # Stage 3: Start remaining services
+    echo "Stage 3: Starting application services (Backend, Frontend, KAS, OPA)..."
+    docker compose $COMPOSE_FILES up -d --build
+    echo -e "${GREEN}✓${NC} Stage 3 complete: All services started"
     
     # Verify certificates exist in containers
     echo ""
