@@ -5,7 +5,8 @@ module "spain_saml_idp" {
   source = "./modules/external-idp-saml"
 
   # Basic Configuration
-  realm_id         = "dive-v3-broker"
+  # FIXED: Use realm resource reference instead of hardcoded string for proper dependency tracking
+  realm_id         = keycloak_realm.dive_v3_broker.id
   idp_alias        = "esp-realm-external"
   idp_display_name = "Spain Ministry of Defense (External SAML)"
   country_code     = "ESP"

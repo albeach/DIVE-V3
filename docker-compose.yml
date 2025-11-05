@@ -43,10 +43,11 @@ services:
       # Keycloak 26 Configuration with HTTPS (Best Practice)
       # Using self-signed certificate for development
       # Set KC_HOSTNAME for consistent token issuer (critical for federation)
+      # IMPORTANT: For remote access, set this to your public DNS name
       KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: 8443
       KC_HOSTNAME_STRICT: false
-      KC_HOSTNAME_STRICT_HTTPS: false
+      # KC_HOSTNAME_PORT removed - deprecated in Keycloak 26+ (Hostname v1)
+      # KC_HOSTNAME_STRICT_HTTPS removed - deprecated in Keycloak 26+ (Hostname v1)
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTP_ENABLED: true
