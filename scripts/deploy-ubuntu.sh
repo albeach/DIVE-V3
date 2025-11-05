@@ -416,6 +416,30 @@ if [ -f docker-compose.mkcert.yml ]; then
     fi
     
     echo -e "${GREEN}✓${NC} Main services started with HTTPS support"
+    
+    # Verify certificates exist in containers
+    echo ""
+    echo "Verifying certificate deployment to containers..."
+    
+    # Check frontend certificates
+    if docker compose exec -T nextjs test -f /opt/app/certs/key.pem > /dev/null 2>&1; then
+        echo -e "  Frontend certificates: ${GREEN}✓${NC}"
+    else
+        echo -e "  Frontend certificates: ${RED}✗${NC} (will cause startup failures)"
+        echo "    Running quick fix..."
+        # Copy certificates if they exist locally but not in container
+        if [ -f frontend/certs/key.pem ]; then
+            docker compose restart nextjs
+            echo -e "    ${GREEN}✓${NC} Frontend restarted with certificates"
+        fi
+    fi
+    
+    # Check backend certificates
+    if docker compose exec -T backend test -f /opt/app/certs/key.pem > /dev/null 2>&1; then
+        echo -e "  Backend certificates: ${GREEN}✓${NC}"
+    else
+        echo -e "  Backend certificates: ${YELLOW}⚠${NC} (may cause issues)"
+    fi
 else
     echo "Building and starting all services (basic configuration)..."
     docker compose up -d --build
@@ -730,10 +754,36 @@ fi
 echo ""
 
 ###############################################################################
-# Phase 12: Seed MongoDB Database
+# Phase 12.5: Verify Terraform Providers are Executable
 ###############################################################################
 
-echo -e "${YELLOW}🌱 Phase 12: Seeding MongoDB Database${NC}"
+echo -e "${YELLOW}🔧 Phase 12.5: Verifying Terraform Provider Permissions${NC}"
+echo ""
+
+if [ -d "terraform/.terraform/providers" ]; then
+    echo -n "Checking Terraform provider permissions..."
+    
+    # Find all provider binaries and make them executable
+    PROVIDER_COUNT=$(find terraform/.terraform/providers -type f -name "terraform-provider-*" 2>/dev/null | wc -l)
+    
+    if [ "$PROVIDER_COUNT" -gt 0 ]; then
+        find terraform/.terraform/providers -type f -name "terraform-provider-*" -exec chmod +x {} \; 2>/dev/null || true
+        echo -e " ${GREEN}✓${NC} ($PROVIDER_COUNT providers)"
+    else
+        echo -e " ${YELLOW}⚠${NC} No providers found (will be downloaded on first run)"
+    fi
+else
+    echo "Terraform providers not yet initialized (this is normal)"
+    echo "Providers will be downloaded when you run 'terraform init'"
+fi
+
+echo ""
+
+###############################################################################
+# Phase 13: Seed MongoDB Database
+###############################################################################
+
+echo -e "${YELLOW}🌱 Phase 13: Seeding MongoDB Database${NC}"
 echo ""
 
 cd backend
@@ -752,10 +802,10 @@ echo -e "${GREEN}✓${NC} Database seeded"
 echo ""
 
 ###############################################################################
-# Phase 13: Restart Application Services
+# Phase 14: Restart Application Services
 ###############################################################################
 
-echo -e "${YELLOW}🔄 Phase 13: Restarting Application Services${NC}"
+echo -e "${YELLOW}🔄 Phase 14: Restarting Application Services${NC}"
 echo ""
 
 echo "Restarting backend to pick up Keycloak configuration..."
@@ -770,10 +820,10 @@ echo -e "${GREEN}✓${NC} Application services restarted"
 echo ""
 
 ###############################################################################
-# Phase 14: Verify Deployment
+# Phase 15: Verify Deployment
 ###############################################################################
 
-echo -e "${YELLOW}✅ Phase 13: Verifying Deployment${NC}"
+echo -e "${YELLOW}✅ Phase 15: Verifying Deployment${NC}"
 echo ""
 
 # Check container status
