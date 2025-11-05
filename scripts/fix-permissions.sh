@@ -45,6 +45,7 @@ echo "  1. Change ownership of project to: $CURRENT_USER"
 echo "  2. Fix directory permissions (755)"
 echo "  3. Fix file permissions (644)"
 echo "  4. Make scripts executable"
+echo "  5. Make Terraform providers executable"
 echo ""
 
 read -p "Continue? (y/n) " -n 1 -r
@@ -76,6 +77,13 @@ echo -e " ${GREEN}✓${NC}"
 echo -n "Making scripts executable..."
 chmod +x "$PROJECT_ROOT"/scripts/*.sh 2>/dev/null || true
 echo -e " ${GREEN}✓${NC}"
+
+# Fix Terraform provider permissions
+if [ -d "$PROJECT_ROOT/terraform/.terraform/providers" ]; then
+    echo -n "Making Terraform providers executable..."
+    find "$PROJECT_ROOT/terraform/.terraform/providers" -type f -name "terraform-provider-*" -exec chmod +x {} \; 2>/dev/null || true
+    echo -e " ${GREEN}✓${NC}"
+fi
 
 # Fix git directory permissions
 if [ -d "$PROJECT_ROOT/.git" ]; then
