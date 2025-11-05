@@ -70,8 +70,13 @@ if [ "$HOSTNAME_CHOICE" == "2" ]; then
         # Sanitize hostname: remove protocol, port, paths
         CUSTOM_HOSTNAME=$(echo "$RAW_HOSTNAME" | sed -E 's|^https?://||' | sed -E 's|:[0-9]+.*$||' | sed -E 's|/.*$||')
         
-        # Validate hostname format (basic check)
-        if [[ ! "$CUSTOM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$ ]]; then
+        # Validate hostname format (allows subdomains, hyphens, short segments)
+        # Check for basic issues: empty, starts/ends with dot, double dots, invalid hyphen positions
+        if [[ -z "$CUSTOM_HOSTNAME" ]] || [[ "$CUSTOM_HOSTNAME" =~ ^\.|\.$|\.\.|\.-|-\. ]]; then
+            echo -e "${RED}✗ Invalid hostname format: $RAW_HOSTNAME${NC}"
+            echo -e "${YELLOW}Using localhost instead${NC}"
+            CUSTOM_HOSTNAME="localhost"
+        elif [[ ! "$CUSTOM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\.\-]*[a-zA-Z0-9])?$ ]]; then
             echo -e "${RED}✗ Invalid hostname format: $RAW_HOSTNAME${NC}"
             echo -e "${YELLOW}Using localhost instead${NC}"
             CUSTOM_HOSTNAME="localhost"

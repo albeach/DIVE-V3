@@ -33,11 +33,27 @@ else
     # Sanitize hostname: remove protocol, port, paths
     CUSTOM_HOSTNAME=$(echo "$RAW_HOSTNAME" | sed -E 's|^https?://||' | sed -E 's|:[0-9]+.*$||' | sed -E 's|/.*$||')
     
-    # Validate hostname format (basic check)
-    if [[ ! "$CUSTOM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$ ]]; then
+    # Validate hostname format (allows subdomains, hyphens, short segments like kas.js.usa.example.com)
+    # Check for basic issues: empty, starts/ends with dot, double dots, invalid hyphen positions
+    if [[ -z "$CUSTOM_HOSTNAME" ]] || [[ "$CUSTOM_HOSTNAME" =~ ^\.|\.$|\.\.|\.-|-\. ]]; then
+        echo "❌ ERROR: Invalid hostname format: $RAW_HOSTNAME"
+        echo "Hostname cannot:"
+        echo "  - Start or end with a dot (.example.com or example.com.)"
+        echo "  - Have consecutive dots (ex..ample.com)"
+        echo "  - Have hyphens next to dots (example.-com or example-.com)"
+        exit 1
+    elif [[ ! "$CUSTOM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\.\-]*[a-zA-Z0-9])?$ ]]; then
         echo "❌ ERROR: Invalid hostname format: $RAW_HOSTNAME"
         echo "Hostname should be: domain.com, subdomain.domain.com, or IP address"
-        echo "Should NOT include: https://, http://, ports (:8443), or paths (/admin)"
+        echo "Valid examples:"
+        echo "  ✓ kas.js.usa.divedeeper.internal"
+        echo "  ✓ dive.example.com"
+        echo "  ✓ 192.168.1.100"
+        echo ""
+        echo "Invalid examples:"
+        echo "  ✗ https://example.com (no protocol)"
+        echo "  ✗ example.com:8443 (no port)"
+        echo "  ✗ example.com/admin (no path)"
         exit 1
     fi
     
