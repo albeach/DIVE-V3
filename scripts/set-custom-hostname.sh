@@ -24,13 +24,30 @@ fi
 # Prompt for custom hostname
 echo "Enter your custom hostname (e.g., dive.example.com, 192.168.1.100, dive.local):"
 echo "Or press Enter to use 'localhost'"
-read -r INPUT_HOSTNAME
+read -r RAW_HOSTNAME
 
-if [ -z "$INPUT_HOSTNAME" ]; then
+if [ -z "$RAW_HOSTNAME" ]; then
     CUSTOM_HOSTNAME="localhost"
     echo "Using localhost"
 else
-    CUSTOM_HOSTNAME="$INPUT_HOSTNAME"
+    # Sanitize hostname: remove protocol, port, paths
+    CUSTOM_HOSTNAME=$(echo "$RAW_HOSTNAME" | sed -E 's|^https?://||' | sed -E 's|:[0-9]+.*$||' | sed -E 's|/.*$||')
+    
+    # Validate hostname format (basic check)
+    if [[ ! "$CUSTOM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$ ]]; then
+        echo "❌ ERROR: Invalid hostname format: $RAW_HOSTNAME"
+        echo "Hostname should be: domain.com, subdomain.domain.com, or IP address"
+        echo "Should NOT include: https://, http://, ports (:8443), or paths (/admin)"
+        exit 1
+    fi
+    
+    if [ "$RAW_HOSTNAME" != "$CUSTOM_HOSTNAME" ]; then
+        echo "⚠️  Sanitized your input:"
+        echo "   You entered: $RAW_HOSTNAME"
+        echo "   Using:       $CUSTOM_HOSTNAME"
+        echo ""
+    fi
+    
     echo "Using custom hostname: $CUSTOM_HOSTNAME"
 fi
 
