@@ -45,10 +45,9 @@ case $OPTION in
         
         docker compose exec -T postgres psql -U postgres -d dive_v3_app <<EOF
 SELECT 
-    s.id as session_id,
+    s."sessionToken" as session_token,
     u.email,
     u.name,
-    s."sessionToken",
     s.expires,
     CASE 
         WHEN s.expires > NOW() THEN 'Active'
