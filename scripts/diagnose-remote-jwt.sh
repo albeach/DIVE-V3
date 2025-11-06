@@ -257,11 +257,141 @@ docker compose exec -T backend curl -s "http://opa:8181/v1/policies" 2>/dev/null
 log ""
 
 ###############################################################################
-# Section 6: Sample JWT Token Analysis
+# Section 6: JWT Token Analysis
 ###############################################################################
 log_section "6. JWT TOKEN ANALYSIS"
 
-log_subsection "6.1 Test Token Generation"
+log_subsection "6.1 Detect Custom Hostname"
+log_info "Detecting actual hostname being used..."
+
+# Try to detect from NEXT_PUBLIC_KEYCLOAK_URL
+NEXT_PUBLIC_KC=$(grep "NEXT_PUBLIC_KEYCLOAK_URL:" docker-compose.yml | head -1 | awk '{print $2}' | tr -d '\r' | sed 's|https://||' | sed 's|:.*||')
+log "From docker-compose.yml NEXT_PUBLIC_KEYCLOAK_URL: $NEXT_PUBLIC_KC"
+
+# Get current hostname
+CURRENT_HOSTNAME=$(hostname)
+log "Server hostname: $CURRENT_HOSTNAME"
+
+# Get primary IP
+PRIMARY_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "N/A")
+log "Server primary IP: $PRIMARY_IP"
+
+log ""
+log_warning "IMPORTANT: If you're accessing the frontend via a custom hostname/IP,"
+log_warning "please provide it when prompted below for accurate diagnosis."
+log ""
+
+# Prompt for actual hostname
+read -p "Enter the hostname/IP you use to access the frontend (or press Enter to skip): " USER_HOSTNAME
+if [ -n "$USER_HOSTNAME" ]; then
+    ACTUAL_HOSTNAME="$USER_HOSTNAME"
+    log_success "Using custom hostname: $ACTUAL_HOSTNAME"
+else
+    ACTUAL_HOSTNAME="$NEXT_PUBLIC_KC"
+    log_info "Using hostname from config: $ACTUAL_HOSTNAME"
+fi
+log ""
+
+log_subsection "6.2 Live Token Capture (from actual hostname)"
+log_info "Attempting to capture a real token from the actual hostname..."
+log ""
+log_warning "To capture a live token:"
+log "  1. Open browser to: https://$ACTUAL_HOSTNAME:3000"
+log "  2. Login to the application"
+log "  3. Open Browser DevTools (F12)"
+log "  4. Go to: Application → Storage → Session Storage → https://$ACTUAL_HOSTNAME:3000"
+log "  5. Find 'next-auth.session-token' or similar"
+log "  6. Copy the token value"
+log "  7. Paste it below (or press Enter to skip)"
+log ""
+read -p "Paste your live token here (or Enter to skip): " LIVE_TOKEN
+
+if [ -n "$LIVE_TOKEN" ]; then
+    log_success "Live token captured!"
+    log ""
+    
+    log_subsection "6.3 Live Token Analysis"
+    log "Token header (decoded):"
+    echo "$LIVE_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || \
+        echo "$LIVE_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | tee -a "$OUTPUT_FILE"
+    log ""
+    
+    log "Token payload (decoded):"
+    LIVE_PAYLOAD=$(echo "$LIVE_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null || echo "{}")
+    echo "$LIVE_PAYLOAD" | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "$LIVE_PAYLOAD" | tee -a "$OUTPUT_FILE"
+    log ""
+    
+    log_subsection "6.4 Live Token Claims Analysis"
+    log "Issuer (iss):"
+    LIVE_ISS=$(echo "$LIVE_PAYLOAD" | jq -r '.iss' 2>/dev/null)
+    echo "  $LIVE_ISS" | tee -a "$OUTPUT_FILE"
+    
+    log "Audience (aud):"
+    echo "$LIVE_PAYLOAD" | jq -r '.aud' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    
+    log "Subject (sub):"
+    echo "$LIVE_PAYLOAD" | jq -r '.sub' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    
+    log "Authorized Party (azp):"
+    echo "$LIVE_PAYLOAD" | jq -r '.azp' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    
+    log "ACR (Authentication Context Class Reference):"
+    LIVE_ACR=$(echo "$LIVE_PAYLOAD" | jq -r '.acr' 2>/dev/null)
+    echo "  $LIVE_ACR" | tee -a "$OUTPUT_FILE"
+    
+    log "AMR (Authentication Methods Reference):"
+    LIVE_AMR=$(echo "$LIVE_PAYLOAD" | jq -r '.amr' 2>/dev/null)
+    echo "  $LIVE_AMR" | tee -a "$OUTPUT_FILE"
+    
+    log "Clearance:"
+    echo "$LIVE_PAYLOAD" | jq -r '.clearance' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    
+    log "Country of Affiliation:"
+    echo "$LIVE_PAYLOAD" | jq -r '.countryOfAffiliation' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    
+    log "Issued At (iat):"
+    IAT=$(echo "$LIVE_PAYLOAD" | jq -r '.iat' 2>/dev/null)
+    if [ "$IAT" != "null" ] && [ -n "$IAT" ]; then
+        IAT_DATE=$(date -d @$IAT 2>/dev/null || date -r $IAT 2>/dev/null || echo "N/A")
+        echo "  $IAT ($IAT_DATE)" | tee -a "$OUTPUT_FILE"
+    else
+        echo "  N/A" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    log "Expires At (exp):"
+    EXP=$(echo "$LIVE_PAYLOAD" | jq -r '.exp' 2>/dev/null)
+    if [ "$EXP" != "null" ] && [ -n "$EXP" ]; then
+        EXP_DATE=$(date -d @$EXP 2>/dev/null || date -r $EXP 2>/dev/null || echo "N/A")
+        NOW=$(date +%s)
+        if [ $EXP -lt $NOW ]; then
+            echo "  $EXP ($EXP_DATE) - ${RED}EXPIRED${NC}" | tee -a "$OUTPUT_FILE"
+        else
+            echo "  $EXP ($EXP_DATE) - ${GREEN}Valid${NC}" | tee -a "$OUTPUT_FILE"
+        fi
+    else
+        echo "  N/A" | tee -a "$OUTPUT_FILE"
+    fi
+    
+    log ""
+    
+    # Save live token for testing
+    echo "$LIVE_TOKEN" > live-token.txt
+    log_info "Live token saved to: live-token.txt"
+    
+    # Extract issuer hostname from live token
+    LIVE_ISSUER_HOSTNAME=$(echo "$LIVE_ISS" | sed -E 's|https?://([^:/]+).*|\1|')
+    log_info "Extracted issuer hostname from live token: $LIVE_ISSUER_HOSTNAME"
+    
+else
+    log_warning "No live token provided - will use test token instead"
+    LIVE_TOKEN=""
+    LIVE_PAYLOAD=""
+    LIVE_ISS=""
+    LIVE_ISSUER_HOSTNAME=""
+fi
+log ""
+
+log_subsection "6.5 Test Token Generation (via Keycloak API)"
 log_info "Attempting to generate test token via Keycloak..."
 
 # Try to get a token for testuser
@@ -277,54 +407,66 @@ if [ -n "$TEST_TOKEN" ]; then
     log_success "Test token acquired"
     log ""
     
-    log_subsection "6.2 Token Structure Analysis"
-    log "Token header (decoded):"
-    echo "$TEST_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || \
-        echo "$TEST_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | tee -a "$OUTPUT_FILE"
-    log ""
+    log_subsection "6.6 Test Token Claims Analysis"
+    TEST_PAYLOAD=$(echo "$TEST_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null || echo "{}")
     
-    log "Token payload (decoded):"
-    PAYLOAD=$(echo "$TEST_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null || echo "{}")
-    echo "$PAYLOAD" | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "$PAYLOAD" | tee -a "$OUTPUT_FILE"
-    log ""
-    
-    log_subsection "6.3 Critical Claims Analysis"
     log "Issuer (iss):"
-    echo "$PAYLOAD" | jq -r '.iss' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Audience (aud):"
-    echo "$PAYLOAD" | jq -r '.aud' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Subject (sub):"
-    echo "$PAYLOAD" | jq -r '.sub' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Authorized Party (azp):"
-    echo "$PAYLOAD" | jq -r '.azp' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    TEST_ISS=$(echo "$TEST_PAYLOAD" | jq -r '.iss' 2>/dev/null)
+    echo "  $TEST_ISS" | tee -a "$OUTPUT_FILE"
     
     log "ACR (Authentication Context Class Reference):"
-    echo "$PAYLOAD" | jq -r '.acr' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    TEST_ACR=$(echo "$TEST_PAYLOAD" | jq -r '.acr' 2>/dev/null)
+    echo "  $TEST_ACR" | tee -a "$OUTPUT_FILE"
     
     log "AMR (Authentication Methods Reference):"
-    echo "$PAYLOAD" | jq -r '.amr' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+    TEST_AMR=$(echo "$TEST_PAYLOAD" | jq -r '.amr' 2>/dev/null)
+    echo "  $TEST_AMR" | tee -a "$OUTPUT_FILE"
     
-    log "Clearance:"
-    echo "$PAYLOAD" | jq -r '.clearance' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Country of Affiliation:"
-    echo "$PAYLOAD" | jq -r '.countryOfAffiliation' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log ""
-    
-    log_subsection "6.4 Token Validation Test (Backend)"
-    log_info "Testing token validation via backend API..."
-    
-    # Save token for manual testing
+    # Save test token for manual testing
     echo "$TEST_TOKEN" > test-token.txt
-    log_info "Token saved to: test-token.txt"
+    log_info "Test token saved to: test-token.txt"
+    
+    # Extract issuer hostname from test token
+    TEST_ISSUER_HOSTNAME=$(echo "$TEST_ISS" | sed -E 's|https?://([^:/]+).*|\1|')
+    log_info "Extracted issuer hostname from test token: $TEST_ISSUER_HOSTNAME"
     
 else
     log_warning "Could not generate test token - user may not exist or credentials invalid"
-    log_info "This is OK if system is fresh - just means we can't test with real token"
+    TEST_TOKEN=""
+    TEST_PAYLOAD=""
+    TEST_ISS=""
+    TEST_ISSUER_HOSTNAME=""
+fi
+log ""
+
+log_subsection "6.7 Token Comparison (Live vs Test)"
+if [ -n "$LIVE_TOKEN" ] && [ -n "$TEST_TOKEN" ]; then
+    log "Comparing live token vs test token..."
+    log ""
+    log "Live token issuer: $LIVE_ISS"
+    log "Test token issuer: $TEST_ISS"
+    log ""
+    
+    if [ "$LIVE_ISS" == "$TEST_ISS" ]; then
+        log_success "Issuers match - tokens are consistent"
+    else
+        log_error "Issuer mismatch - tokens from different sources!"
+        log_warning "This may indicate configuration changed between token generation and now"
+    fi
+    log ""
+    
+    log "Live token ACR: $LIVE_ACR"
+    log "Test token ACR: $TEST_ACR"
+    log ""
+    
+    log "Live token AMR: $LIVE_AMR"
+    log "Test token AMR: $TEST_AMR"
+elif [ -n "$LIVE_TOKEN" ]; then
+    log_info "Using live token for analysis (test token unavailable)"
+elif [ -n "$TEST_TOKEN" ]; then
+    log_info "Using test token for analysis (no live token provided)"
+else
+    log_warning "No tokens available for analysis"
 fi
 log ""
 
@@ -368,12 +510,24 @@ log ""
 ###############################################################################
 log_section "10. RESOURCE ACCESS TEST"
 
-if [ -n "$TEST_TOKEN" ]; then
-    log_subsection "10.1 Testing /api/resources endpoint"
-    log_info "Attempting to fetch resources with test token..."
+# Use live token if available, otherwise test token
+if [ -n "$LIVE_TOKEN" ]; then
+    TOKEN_TO_USE="$LIVE_TOKEN"
+    TOKEN_TYPE="Live Token"
+elif [ -n "$TEST_TOKEN" ]; then
+    TOKEN_TO_USE="$TEST_TOKEN"
+    TOKEN_TYPE="Test Token"
+else
+    TOKEN_TO_USE=""
+    TOKEN_TYPE=""
+fi
+
+if [ -n "$TOKEN_TO_USE" ]; then
+    log_subsection "10.1 Testing /api/resources endpoint with $TOKEN_TYPE"
+    log_info "Attempting to fetch resources..."
     
     RESOURCE_RESPONSE=$(docker compose exec -T backend curl -s -w "\nHTTP_CODE:%{http_code}" \
-        -H "Authorization: Bearer $TEST_TOKEN" \
+        -H "Authorization: Bearer $TOKEN_TO_USE" \
         "http://localhost:4000/api/resources" 2>/dev/null || echo "FAILED")
     
     HTTP_CODE=$(echo "$RESOURCE_RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
@@ -387,13 +541,24 @@ if [ -n "$TEST_TOKEN" ]; then
         log_success "Resource access successful"
     elif [[ "$HTTP_CODE" == "401" ]]; then
         log_error "Unauthorized (401) - JWT validation likely failing"
+        log ""
+        log_warning "Common causes for 401 errors:"
+        log "  1. Token issuer doesn't match expected issuer (hostname mismatch)"
+        log "  2. Token expired"
+        log "  3. Token signature invalid (JWKS mismatch)"
+        log "  4. Backend can't reach Keycloak JWKS endpoint"
     elif [[ "$HTTP_CODE" == "403" ]]; then
         log_warning "Forbidden (403) - JWT valid but authorization denied"
+        log ""
+        log_info "Token is valid but OPA denied access. Check:"
+        log "  1. User clearance level"
+        log "  2. Resource classification"
+        log "  3. OPA policy rules"
     else
         log_error "Unexpected status code: $HTTP_CODE"
     fi
 else
-    log_warning "Skipping resource access test (no test token available)"
+    log_warning "Skipping resource access test (no token available)"
 fi
 log ""
 
@@ -409,32 +574,122 @@ KEYCLOAK_JWKS_URI=$(docker compose exec -T backend env 2>/dev/null | grep "KEYCL
 
 log "KC_HOSTNAME from docker-compose: $KC_HOSTNAME"
 log "KEYCLOAK_JWKS_URI from backend: $KEYCLOAK_JWKS_URI"
+log "Actual hostname you're using: $ACTUAL_HOSTNAME"
+log ""
 
-if [ -n "$TEST_TOKEN" ]; then
-    TOKEN_ISSUER=$(echo "$PAYLOAD" | jq -r '.iss' 2>/dev/null | tr -d '\r')
-    log "Token issuer (iss claim): $TOKEN_ISSUER"
-    
-    # Extract hostname from issuer
-    ISSUER_HOSTNAME=$(echo "$TOKEN_ISSUER" | sed -E 's|https?://([^:/]+).*|\1|')
+# Determine which token's issuer to use for comparison
+if [ -n "$LIVE_ISS" ]; then
+    TOKEN_ISSUER="$LIVE_ISS"
+    ISSUER_HOSTNAME="$LIVE_ISSUER_HOSTNAME"
+    TOKEN_SOURCE="Live Token"
+elif [ -n "$TEST_ISS" ]; then
+    TOKEN_ISSUER="$TEST_ISS"
+    ISSUER_HOSTNAME="$TEST_ISSUER_HOSTNAME"
+    TOKEN_SOURCE="Test Token"
+else
+    TOKEN_ISSUER=""
+    ISSUER_HOSTNAME=""
+    TOKEN_SOURCE=""
+fi
+
+if [ -n "$TOKEN_ISSUER" ]; then
+    log "Token issuer (iss claim from $TOKEN_SOURCE): $TOKEN_ISSUER"
     log "Extracted issuer hostname: $ISSUER_HOSTNAME"
+    log ""
     
     # Check consistency
+    ISSUES_COUNT=0
+    
+    # Check 1: Does token issuer hostname match KC_HOSTNAME?
+    log "Check 1: Token Issuer vs KC_HOSTNAME"
     if [[ "$ISSUER_HOSTNAME" == "$KC_HOSTNAME" ]]; then
-        log_success "Hostname consistency: PASS (issuer matches KC_HOSTNAME)"
+        log_success "PASS: Token issuer hostname matches KC_HOSTNAME"
     else
-        log_error "Hostname consistency: FAIL (issuer '$ISSUER_HOSTNAME' != KC_HOSTNAME '$KC_HOSTNAME')"
+        log_error "FAIL: Token issuer hostname '$ISSUER_HOSTNAME' != KC_HOSTNAME '$KC_HOSTNAME'"
+        ((ISSUES_COUNT++))
+    fi
+    log ""
+    
+    # Check 2: Does token issuer hostname match actual hostname?
+    log "Check 2: Token Issuer vs Actual Hostname"
+    if [[ "$ISSUER_HOSTNAME" == "$ACTUAL_HOSTNAME" ]]; then
+        log_success "PASS: Token issuer matches actual hostname you're using"
+    else
+        log_error "FAIL: Token issuer '$ISSUER_HOSTNAME' != Actual hostname '$ACTUAL_HOSTNAME'"
+        ((ISSUES_COUNT++))
+    fi
+    log ""
+    
+    # Check 3: Does KC_HOSTNAME match actual hostname?
+    log "Check 3: KC_HOSTNAME vs Actual Hostname"
+    if [[ "$KC_HOSTNAME" == "$ACTUAL_HOSTNAME" ]]; then
+        log_success "PASS: KC_HOSTNAME matches actual hostname"
+    else
+        log_error "FAIL: KC_HOSTNAME '$KC_HOSTNAME' != Actual hostname '$ACTUAL_HOSTNAME'"
+        ((ISSUES_COUNT++))
+    fi
+    log ""
+    
+    # Root cause analysis
+    if [ $ISSUES_COUNT -gt 0 ]; then
+        log_error "═══ ROOT CAUSE IDENTIFIED ═══"
         log ""
-        log_warning "THIS IS LIKELY YOUR PROBLEM!"
-        log_info "Keycloak is issuing tokens with hostname '$ISSUER_HOSTNAME'"
-        log_info "But KC_HOSTNAME is configured as '$KC_HOSTNAME'"
-        log_info "JWT validation will fail due to issuer mismatch"
+        log_warning "PROBLEM: Hostname Configuration Mismatch"
         log ""
-        log_info "Recommended fix:"
-        log "  1. Run: ./scripts/fix-remote-hostname.sh"
-        log "  2. Or manually set KC_HOSTNAME: $ISSUER_HOSTNAME in docker-compose.yml"
+        log "Your setup:"
+        log "  • You access frontend at: https://$ACTUAL_HOSTNAME:3000"
+        log "  • Keycloak issues tokens with: iss=$TOKEN_ISSUER"
+        log "  • KC_HOSTNAME is configured as: $KC_HOSTNAME"
+        log "  • Backend expects tokens from: https://$KC_HOSTNAME:8443/..."
+        log ""
+        
+        if [[ "$KC_HOSTNAME" == "localhost" ]] && [[ "$ACTUAL_HOSTNAME" != "localhost" ]]; then
+            log_error "CLASSIC REMOTE DEPLOYMENT ISSUE:"
+            log "  KC_HOSTNAME is 'localhost' but you're accessing remotely!"
+            log ""
+            log_info "FIX: Update KC_HOSTNAME to your actual hostname"
+            log "  Run: ./scripts/fix-remote-hostname.sh"
+            log "  Or manually set KC_HOSTNAME: $ACTUAL_HOSTNAME in docker-compose.yml"
+        elif [[ "$ISSUER_HOSTNAME" != "$KC_HOSTNAME" ]]; then
+            log_error "TOKEN ISSUER MISMATCH:"
+            log "  Tokens are issued with hostname '$ISSUER_HOSTNAME'"
+            log "  But KC_HOSTNAME is configured as '$KC_HOSTNAME'"
+            log ""
+            log_info "FIX: Update KC_HOSTNAME to match token issuer"
+            log "  Run: ./scripts/fix-remote-hostname.sh"
+            log "  Or manually set KC_HOSTNAME: $ISSUER_HOSTNAME in docker-compose.yml"
+        else
+            log_warning "HOSTNAME INCONSISTENCY:"
+            log "  Something doesn't match up between your configuration"
+            log ""
+            log_info "RECOMMENDED: Align all hostnames"
+            log "  1. Decide on ONE hostname: $ACTUAL_HOSTNAME"
+            log "  2. Run: ./scripts/fix-remote-hostname.sh"
+            log "  3. Enter: $ACTUAL_HOSTNAME when prompted"
+        fi
+        log ""
+        log_warning "IMPACT: JWT validation will FAIL with 401 Unauthorized"
+        log "  Backend will reject tokens because issuer doesn't match expected value"
+        log ""
+    else
+        log_success "═══ ALL HOSTNAME CHECKS PASSED ═══"
+        log ""
+        log_info "Hostname configuration is consistent"
+        log "  If you're still getting JWT errors, the issue is elsewhere"
+        log "  Check backend logs (Section 7) for other error causes"
+        log ""
     fi
 else
-    log_warning "Cannot check hostname consistency (no test token)"
+    log_warning "Cannot check hostname consistency (no token available)"
+    log ""
+    log_info "Expected values:"
+    log "  KC_HOSTNAME: $KC_HOSTNAME"
+    log "  Actual hostname: $ACTUAL_HOSTNAME"
+    log ""
+    if [[ "$KC_HOSTNAME" != "$ACTUAL_HOSTNAME" ]]; then
+        log_warning "POTENTIAL ISSUE: KC_HOSTNAME doesn't match actual hostname"
+        log_info "Consider running: ./scripts/fix-remote-hostname.sh"
+    fi
 fi
 log ""
 
