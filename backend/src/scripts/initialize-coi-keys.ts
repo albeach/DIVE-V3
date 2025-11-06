@@ -268,9 +268,18 @@ async function main() {
         process.exit(1);
     } finally {
         await client.close();
-        console.log('👋 MongoDB connection closed');
+        console.log('👋 MongoDB connection closed\n');
     }
 }
 
-main().catch(console.error);
+// Properly handle async main function
+main()
+    .then(() => {
+        console.log('✅ COI Keys initialization complete - exiting\n');
+        process.exit(0);
+    })
+    .catch((error) => {
+        console.error('❌ Fatal error:', error);
+        process.exit(1);
+    });
 

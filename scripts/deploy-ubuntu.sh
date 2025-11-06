@@ -937,20 +937,42 @@ if [ ! -d node_modules ]; then
     echo -e "${GREEN}✓${NC} Backend dependencies installed"
 fi
 
-echo "Seeding database with sample resources..."
+echo "Seeding database with ${SEED_QUANTITY} ZTDF documents..."
+echo "(This may take several minutes depending on quantity)"
+echo ""
+
 # Run seed inside backend container where dependencies are available
 set +e  # Temporarily disable exit-on-error for seeding
 docker compose exec -T -e SEED_QUANTITY=$SEED_QUANTITY backend npm run seed-database
 SEED_EXIT_CODE=$?
 set -e  # Re-enable exit-on-error
 
+# Give container time to flush output and fully exit
+sleep 2
+
 if [ $SEED_EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}✓${NC} Database seeded successfully"
+    echo -e "${GREEN}✓${NC} Database seeded successfully (exit code: 0)"
+    
+    # Verify documents were actually inserted
+    echo -n "Verifying seeded documents..."
+    DOC_COUNT=$(docker compose exec -T mongo mongosh -u admin -p password --authenticationDatabase admin --quiet dive-v3 --eval "db.resources.countDocuments({resourceId: {\$regex: /^doc-generated-/}})" 2>/dev/null | tail -1 | tr -d '\r')
+    
+    if [ ! -z "$DOC_COUNT" ] && [ "$DOC_COUNT" -gt 0 ]; then
+        echo -e " ${GREEN}✓${NC} ($DOC_COUNT documents)"
+    else
+        echo -e " ${YELLOW}⚠${NC} (could not verify count)"
+    fi
 else
-    echo -e "${YELLOW}⚠️  Seed exited with code $SEED_EXIT_CODE, trying alternative method...${NC}"
-    cd "$PROJECT_ROOT/backend"
-    npm install 2>/dev/null || true
-    SEED_QUANTITY=$SEED_QUANTITY npm run seed-database 2>&1 | tail -10 || true
+    echo -e "${YELLOW}⚠️  Seed exited with code $SEED_EXIT_CODE${NC}"
+    echo "   Attempting to verify if documents were seeded anyway..."
+    
+    DOC_COUNT=$(docker compose exec -T mongo mongosh -u admin -p password --authenticationDatabase admin --quiet dive-v3 --eval "db.resources.countDocuments({resourceId: {\$regex: /^doc-generated-/}})" 2>/dev/null | tail -1 | tr -d '\r')
+    
+    if [ ! -z "$DOC_COUNT" ] && [ "$DOC_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}✓${NC} Documents found: $DOC_COUNT (seeding succeeded despite non-zero exit)"
+    else
+        echo -e "${RED}✗${NC} No documents found - seeding may have failed"
+    fi
 fi
 
 cd "$PROJECT_ROOT"
