@@ -179,6 +179,9 @@ services:
       LOG_LEVEL: info
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
+      # CORS configuration - allows localhost by default
+      # Override with custom hostname: CORS_ALLOWED_ORIGINS=https://your-host:3000,https://your-host:8443
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000
     ports:
       - "4000:4000"    # HTTPS (all access)
     depends_on:
@@ -252,8 +255,9 @@ services:
     volumes:
       # Development: Mount entire source for hot reload
       - ./frontend:/app
-      # Mount SSL certificates for HTTPS server
+      # Mount SSL certificates for HTTPS server (both locations)
       - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./frontend/certs:/opt/app/certs:ro
       # Exclude node_modules and .next from host (use container's versions)
       - /app/node_modules
       - /app/.next
