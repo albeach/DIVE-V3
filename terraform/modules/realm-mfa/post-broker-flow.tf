@@ -32,22 +32,10 @@ resource "keycloak_authentication_execution" "post_broker_create_user" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-create-user-if-unique"
-  requirement       = "ALTERNATIVE"  # Changed from REQUIRED to ALTERNATIVE to fix first broker login
+  requirement       = "REQUIRED"
   
   depends_on = [
     keycloak_authentication_execution.post_broker_review_profile
-  ]
-}
-
-# Step 2.5: Automatically link user (bypasses confirmation screen)
-resource "keycloak_authentication_execution" "post_broker_auto_link" {
-  realm_id          = var.realm_id
-  parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
-  authenticator     = "idp-auto-link"
-  requirement       = "ALTERNATIVE"  # Alternative to create-user
-  
-  depends_on = [
-    keycloak_authentication_execution.post_broker_create_user
   ]
 }
 
@@ -59,7 +47,7 @@ resource "keycloak_authentication_subflow" "post_broker_conditional_otp" {
   requirement       = "CONDITIONAL"
   
   depends_on = [
-    keycloak_authentication_execution.post_broker_auto_link  # Changed: Wait for user to be created/linked
+    keycloak_authentication_execution.post_broker_create_user
   ]
 }
 
