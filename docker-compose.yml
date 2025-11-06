@@ -182,6 +182,9 @@ services:
       # CORS configuration - allows localhost by default
       # Override with custom hostname: CORS_ALLOWED_ORIGINS=https://your-host:3000,https://your-host:8443
       CORS_ALLOWED_ORIGINS: http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000
+      # Federation mode: Allow CORS from any origin (security via JWT authentication)
+      # Set to 'true' when using external IdP clients or federated deployments
+      ENABLE_FEDERATION_CORS: "false"
     ports:
       - "4000:4000"    # HTTPS (all access)
     depends_on:
