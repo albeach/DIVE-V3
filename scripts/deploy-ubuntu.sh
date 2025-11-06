@@ -468,6 +468,39 @@ fi
 echo -e "${YELLOW}🐳 Phase 7: Starting Docker Services${NC}"
 echo ""
 
+# CRITICAL: Verify certificates exist BEFORE starting services
+echo "Verifying certificates are in place..."
+CERT_MISSING=0
+
+if [ ! -f frontend/certs/key.pem ] || [ ! -f frontend/certs/certificate.pem ]; then
+    echo -e "${RED}✗${NC} Frontend certificates missing (frontend/certs/key.pem)"
+    CERT_MISSING=1
+fi
+
+if [ ! -f backend/certs/key.pem ] || [ ! -f backend/certs/certificate.pem ]; then
+    echo -e "${RED}✗${NC} Backend certificates missing (backend/certs/key.pem)"
+    CERT_MISSING=1
+fi
+
+if [ ! -f keycloak/certs/key.pem ] || [ ! -f keycloak/certs/certificate.pem ]; then
+    echo -e "${RED}✗${NC} Keycloak certificates missing (keycloak/certs/key.pem)"
+    CERT_MISSING=1
+fi
+
+if [ $CERT_MISSING -eq 1 ]; then
+    echo ""
+    echo -e "${RED}ERROR: Certificates are missing!${NC}"
+    echo "The mkcert certificate generation may have failed in Phase 3."
+    echo ""
+    echo "To fix this, run:"
+    echo "  DIVE_HOSTNAME='$CUSTOM_HOSTNAME' ./scripts/setup-mkcert-for-all-services.sh"
+    echo ""
+    exit 1
+fi
+
+echo -e "${GREEN}✓${NC} All certificates present"
+echo ""
+
 # Check if unified certificate system is in place
 if [ -f docker-compose.mkcert.yml ]; then
     echo "Building and starting services in stages (prevents race conditions)..."
