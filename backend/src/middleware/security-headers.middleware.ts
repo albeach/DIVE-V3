@@ -189,19 +189,31 @@ export const getCorsConfig = () => {
         'http://localhost:4000', // Backend development
     ];
 
+    // Federation mode: Allow any origin for federated deployments
+    // Security is enforced via JWT authentication, not CORS
+    const federationMode = process.env.ENABLE_FEDERATION_CORS === 'true';
+
     return {
         origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-            // Allow requests with no origin (e.g., mobile apps, Postman)
+            // Allow requests with no origin (e.g., mobile apps, Postman, server-to-server)
             if (!origin) {
                 return callback(null, true);
             }
 
+            // Federation mode: Allow all origins (security via JWT)
+            if (federationMode) {
+                logger.debug('CORS: Federation mode enabled - allowing origin', { origin });
+                return callback(null, true);
+            }
+
+            // Standard mode: Check allowlist
             if (allowedOrigins.includes(origin)) {
                 callback(null, true);
             } else {
                 logger.warn('CORS: Blocked request from unauthorized origin', {
                     origin,
                     allowedOrigins,
+                    hint: 'Set ENABLE_FEDERATION_CORS=true to allow all origins (federation mode)'
                 });
                 callback(new Error('Not allowed by CORS'));
             }
