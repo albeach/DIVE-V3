@@ -90,8 +90,35 @@ if [ "$HOSTNAME_CHOICE" == "2" ]; then
             fi
             echo -e "${GREEN}✓${NC} Will use hostname: ${CUSTOM_HOSTNAME}"
             echo ""
-            echo -e "${YELLOW}📝 Remember to configure DNS or /etc/hosts:${NC}"
-            echo "   $(ip route get 1 2>/dev/null | awk '{print $7}' | head -1 || echo '<your-ip>') ${CUSTOM_HOSTNAME}"
+            
+            # Configure hostname on the SERVER
+            SERVER_IP=$(ip route get 1 2>/dev/null | awk '{print $7}' | head -1 || echo "127.0.0.1")
+            echo -e "${CYAN}🔧 Configuring SERVER /etc/hosts...${NC}"
+            
+            # Check if hostname already exists in /etc/hosts
+            if grep -q "$CUSTOM_HOSTNAME" /etc/hosts 2>/dev/null; then
+                echo -e "${GREEN}✓${NC} ${CUSTOM_HOSTNAME} already in /etc/hosts"
+            else
+                echo "Adding ${CUSTOM_HOSTNAME} to SERVER /etc/hosts..."
+                echo "$SERVER_IP $CUSTOM_HOSTNAME" | sudo tee -a /etc/hosts > /dev/null
+                echo -e "${GREEN}✓${NC} Added to SERVER /etc/hosts: $SERVER_IP $CUSTOM_HOSTNAME"
+            fi
+            echo ""
+            
+            # CRITICAL: Warn about client-side configuration
+            echo -e "${RED}╔════════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${RED}║  ⚠️  CLIENT MACHINES NEED SEPARATE CONFIGURATION ⚠️           ║${NC}"
+            echo -e "${RED}╚════════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            echo -e "${YELLOW}The server is now configured, but YOUR LAPTOP/DESKTOP needs:${NC}"
+            echo ""
+            echo -e "${CYAN}On your browser machine (Linux/Mac):${NC}"
+            echo -e "${GREEN}echo \"${SERVER_IP} ${CUSTOM_HOSTNAME}\" | sudo tee -a /etc/hosts${NC}"
+            echo ""
+            echo -e "${CYAN}On your browser machine (Windows, as Administrator):${NC}"
+            echo -e "${GREEN}echo ${SERVER_IP} ${CUSTOM_HOSTNAME} >> C:\\Windows\\System32\\drivers\\etc\\hosts${NC}"
+            echo ""
+            read -p "Press Enter when you've configured your client machine, or Ctrl+C to configure later..."
             echo ""
         fi
     fi
