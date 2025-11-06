@@ -97,7 +97,21 @@ if [ "$HOSTNAME_CHOICE" == "2" ]; then
             
             # Check if hostname already exists in /etc/hosts
             if grep -q "$CUSTOM_HOSTNAME" /etc/hosts 2>/dev/null; then
-                echo -e "${GREEN}✓${NC} ${CUSTOM_HOSTNAME} already in /etc/hosts"
+                # Extract existing IP for this hostname
+                EXISTING_IP=$(grep "$CUSTOM_HOSTNAME" /etc/hosts | awk '{print $1}' | head -1)
+                
+                if [ "$EXISTING_IP" != "$SERVER_IP" ]; then
+                    echo -e "${YELLOW}⚠️  ${CUSTOM_HOSTNAME} exists with OLD IP: $EXISTING_IP${NC}"
+                    echo "Updating to current IP: $SERVER_IP"
+                    
+                    # Remove old entry and add new one
+                    sudo sed -i.bak "/$CUSTOM_HOSTNAME/d" /etc/hosts
+                    echo "$SERVER_IP $CUSTOM_HOSTNAME" | sudo tee -a /etc/hosts > /dev/null
+                    
+                    echo -e "${GREEN}✓${NC} Updated /etc/hosts: $EXISTING_IP → $SERVER_IP"
+                else
+                    echo -e "${GREEN}✓${NC} ${CUSTOM_HOSTNAME} already in /etc/hosts with correct IP: $SERVER_IP"
+                fi
             else
                 echo "Adding ${CUSTOM_HOSTNAME} to SERVER /etc/hosts..."
                 echo "$SERVER_IP $CUSTOM_HOSTNAME" | sudo tee -a /etc/hosts > /dev/null
