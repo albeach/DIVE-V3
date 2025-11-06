@@ -34,6 +34,39 @@ const nextConfig: NextConfig = {
             },
         ];
     },
+    async rewrites() {
+        // Proxy Keycloak endpoints for autodiscovery and OIDC flows
+        // This allows external clients to discover IdP metadata
+        const keycloakUrl = process.env.KEYCLOAK_URL || 'https://keycloak:8443';
+        
+        return [
+            {
+                // OIDC discovery endpoints
+                source: '/realms/:realm/.well-known/:path*',
+                destination: `${keycloakUrl}/realms/:realm/.well-known/:path*`,
+            },
+            {
+                // Keycloak auth endpoints
+                source: '/realms/:realm/protocol/:protocol/:path*',
+                destination: `${keycloakUrl}/realms/:realm/protocol/:protocol/:path*`,
+            },
+            {
+                // Keycloak broker endpoints
+                source: '/realms/:realm/broker/:path*',
+                destination: `${keycloakUrl}/realms/:realm/broker/:path*`,
+            },
+            {
+                // Keycloak token endpoints
+                source: '/realms/:realm/tokens/:path*',
+                destination: `${keycloakUrl}/realms/:realm/tokens/:path*`,
+            },
+            {
+                // Keycloak account console (if needed)
+                source: '/realms/:realm/account/:path*',
+                destination: `${keycloakUrl}/realms/:realm/account/:path*`,
+            },
+        ];
+    },
     experimental: {
         serverActions: {
             bodySizeLimit: "2mb",
