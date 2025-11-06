@@ -201,6 +201,7 @@ export const getCorsConfig = () => {
             }
 
             // Federation mode: Allow all origins (security via JWT)
+            // IMPORTANT: Return the actual origin (not '*') to support credentials: true
             if (federationMode) {
                 logger.debug('CORS: Federation mode enabled - allowing origin', { origin });
                 return callback(null, true);
@@ -233,6 +234,10 @@ export const getCorsConfig = () => {
             'RateLimit-Reset',
         ],
         maxAge: 86400, // Cache preflight requests for 24 hours
+        // Allow credentials in cross-origin requests (required for credentials: true)
+        // The origin function above returns true, which makes cors middleware
+        // set Access-Control-Allow-Origin to the requesting origin (not *)
+        optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
     };
 };
 
