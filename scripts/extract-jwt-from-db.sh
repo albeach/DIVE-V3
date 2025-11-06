@@ -54,8 +54,8 @@ SELECT
         WHEN s.expires > NOW() THEN 'Active'
         ELSE 'Expired'
     END as status
-FROM sessions s
-JOIN users u ON s."userId" = u.id
+FROM session s
+JOIN "user" u ON s."userId" = u.id
 ORDER BY s.expires DESC;
 EOF
         ;;
@@ -67,7 +67,7 @@ EOF
         echo ""
         
         TOKEN=$(docker compose exec -T postgres psql -U postgres -d dive_v3_app -t -c \
-            "SELECT s.\"sessionToken\" FROM sessions s JOIN users u ON s.\"userId\" = u.id WHERE u.email = '$USER_EMAIL' AND s.expires > NOW() ORDER BY s.expires DESC LIMIT 1;")
+            "SELECT s.\"sessionToken\" FROM session s JOIN \"user\" u ON s.\"userId\" = u.id WHERE u.email = '$USER_EMAIL' AND s.expires > NOW() ORDER BY s.expires DESC LIMIT 1;")
         
         TOKEN=$(echo "$TOKEN" | tr -d ' \n\r')
         
@@ -109,8 +109,8 @@ EOF
         RESULT=$(docker compose exec -T postgres psql -U postgres -d dive_v3_app -t <<EOF
 SELECT 
     u.email || '|' || s."sessionToken"
-FROM sessions s
-JOIN users u ON s."userId" = u.id
+FROM session s
+JOIN "user" u ON s."userId" = u.id
 WHERE s.expires > NOW()
 ORDER BY s.expires DESC
 LIMIT 1;
