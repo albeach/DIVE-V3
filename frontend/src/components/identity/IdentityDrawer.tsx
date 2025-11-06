@@ -11,6 +11,9 @@ interface IdentityUser {
   clearance?: string | null;
   countryOfAffiliation?: string | null;
   acpCOI?: string[] | null;
+  acr?: string | null;
+  amr?: string[] | null;
+  auth_time?: number | null;
 }
 
 export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose: () => void; user?: IdentityUser }) {
@@ -29,13 +32,14 @@ export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose
   if (!open) return null;
 
   const pseudonym = getPseudonymFromUser((user || {}) as any);
-  const authTime: string | null = decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null;
-  const acr: string | null = decoded?.acr || null;
-  const amr: string | null = Array.isArray(decoded?.amr) ? decoded!.amr.join(" + ") : decoded?.amr || null;
+  // Prefer user object (from session.user) over decoded JWT, as it's more reliable
+  const authTime: string | null = user?.auth_time ? new Date(user.auth_time * 1000).toLocaleString() : (decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null);
+  const acr: string | null = user?.acr || decoded?.acr || null;
+  const amr: string | null = Array.isArray(user?.amr) ? user!.amr.join(" + ") : (Array.isArray(decoded?.amr) ? decoded!.amr.join(" + ") : decoded?.amr || null);
   const missingClaims: string[] = [];
-  if (!decoded?.auth_time) missingClaims.push('auth_time');
-  if (!decoded?.acr) missingClaims.push('acr');
-  if (!decoded?.amr || (Array.isArray(decoded?.amr) && decoded!.amr.length === 0)) missingClaims.push('amr');
+  if (!authTime) missingClaims.push('auth_time');
+  if (!acr) missingClaims.push('acr');
+  if (!amr || amr === 'N/A') missingClaims.push('amr');
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">

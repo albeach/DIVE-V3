@@ -358,18 +358,24 @@ resource "keycloak_generic_protocol_mapper" "broker_auth_time" {
 # ❌ REMOVED: Custom AMREnrichmentEventListener SPI (no longer needed!)
 # ✅ NATIVE: Keycloak 26.4 handles everything automatically
 
-# ACR (Authentication Context Class Reference) mapper
-# Maps Keycloak's internal ACR session note to token claim
-# Values: "0" (AAL1: password), "1" (AAL2: password+OTP), "2" (AAL3: hardware)
-resource "keycloak_generic_protocol_mapper" "broker_acr" {
+# ACR (Authentication Context Class Reference) mapper - DUAL SOURCE APPROACH
+# 
+# FEDERATION FIX (Nov 6, 2025):
+# Session notes only exist for direct logins to THIS realm.
+# For federated logins (via IdP broker), ACR comes from IdP claims → user attributes.
+# Solution: Use TWO mappers (order matters - session note overwrites attribute if present)
+
+# ACR Mapper #1: User Attribute (for federated logins via IdP brokers)
+# This reads from user.attribute "acr" (set by IdP mapper: oidc-user-attribute-idp-mapper)
+resource "keycloak_generic_protocol_mapper" "broker_acr_attribute" {
   realm_id        = keycloak_realm.dive_v3_broker.id
   client_id       = keycloak_openid_client.dive_v3_app_broker.id
-  name            = "acr-mapper"
+  name            = "acr-from-attribute"
   protocol        = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # NATIVE KC mapper
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
-    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"  # Set automatically by KC 26.4
+    "user.attribute"       = "acr"
     "claim.name"           = "acr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
@@ -378,24 +384,75 @@ resource "keycloak_generic_protocol_mapper" "broker_acr" {
   }
 }
 
-# AMR (Authentication Methods Reference) mapper
-# Maps Keycloak's internal AMR session note to token claim (RFC-8176 compliant)
-# Values: ["pwd"], ["pwd","otp"], ["hwk"] (hardware key)
-resource "keycloak_generic_protocol_mapper" "broker_amr" {
+# ACR Mapper #2: Session Note (for direct logins to broker realm)
+# This reads from session note "AUTH_CONTEXT_CLASS_REF" (set by authentication flow)
+# Applied AFTER attribute mapper, so session note overwrites if present
+resource "keycloak_generic_protocol_mapper" "broker_acr_session" {
   realm_id        = keycloak_realm.dive_v3_broker.id
   client_id       = keycloak_openid_client.dive_v3_app_broker.id
-  name            = "amr-mapper"
+  name            = "acr-from-session"
   protocol        = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # NATIVE KC mapper
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
 
   config = {
-    "user.session.note"    = "AUTH_METHODS_REF"  # Set automatically by KC 26.4
-    "claim.name"           = "amr"
-    "jsonType.label"       = "JSON"  # v2.0.0: Changed to JSON for proper array handling
+    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"
+    "claim.name"           = "acr"
+    "jsonType.label"       = "String"
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
   }
+  
+  depends_on = [keycloak_generic_protocol_mapper.broker_acr_attribute]
+}
+
+# AMR (Authentication Methods Reference) mapper - DUAL SOURCE APPROACH
+# 
+# FEDERATION FIX (Nov 6, 2025):
+# Session notes only exist for direct logins to THIS realm.
+# For federated logins (via IdP broker), AMR comes from IdP claims → user attributes.
+# Solution: Use TWO mappers (order matters - session note overwrites attribute if present)
+
+# AMR Mapper #1: User Attribute (for federated logins via IdP brokers)
+# This reads from user.attribute "amr" (set by IdP mapper: oidc-user-attribute-idp-mapper)
+resource "keycloak_generic_protocol_mapper" "broker_amr_attribute" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "amr-from-attribute"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "amr"
+    "claim.name"           = "amr"
+    "jsonType.label"       = "JSON"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+    "aggregate.attrs"      = "false"
+  }
+}
+
+# AMR Mapper #2: Session Note (for direct logins to broker realm)
+# This reads from session note "AUTH_METHODS_REF" (set by authentication flow)
+# Applied AFTER attribute mapper, so session note overwrites if present
+resource "keycloak_generic_protocol_mapper" "broker_amr_session" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "amr-from-session"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"    = "AUTH_METHODS_REF"
+    "claim.name"           = "amr"
+    "jsonType.label"       = "JSON"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "false"
+  }
+  
+  depends_on = [keycloak_generic_protocol_mapper.broker_amr_attribute]
 }
 
 # ============================================
