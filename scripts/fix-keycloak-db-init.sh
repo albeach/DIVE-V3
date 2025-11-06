@@ -74,12 +74,12 @@ for i in {1..30}; do
 done
 echo ""
 
-# Drop and recreate the keycloak database
-echo "Dropping existing keycloak database..."
-docker compose exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS keycloak;" 2>/dev/null || true
+# Drop and recreate the keycloak_db database (with underscore!)
+echo "Dropping existing keycloak_db database..."
+docker compose exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS keycloak_db;" 2>/dev/null || true
 
-echo "Creating new keycloak database..."
-docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE keycloak OWNER postgres;" 
+echo "Creating new keycloak_db database..."
+docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE keycloak_db OWNER postgres;" 
 
 echo -e "${GREEN}✓${NC} Database recreated"
 echo ""
@@ -121,16 +121,16 @@ if [ $KEYCLOAK_READY -eq 1 ]; then
     echo ""
     echo -e "${YELLOW}Step 4: Verify database schema${NC}"
     
-    # Check if migration_model table exists
-    if docker compose exec -T postgres psql -U postgres -d keycloak -c "\dt migration_model" 2>/dev/null | grep -q "migration_model"; then
+    # Check if migration_model table exists (in keycloak_db database)
+    if docker compose exec -T postgres psql -U postgres -d keycloak_db -c "\dt migration_model" 2>/dev/null | grep -q "migration_model"; then
         echo -e "${GREEN}✓${NC} migration_model table exists"
     else
         echo -e "${RED}✗${NC} migration_model table missing"
         exit 1
     fi
     
-    # Check if databasechangeloglock table exists
-    if docker compose exec -T postgres psql -U postgres -d keycloak -c "\dt databasechangeloglock" 2>/dev/null | grep -q "databasechangeloglock"; then
+    # Check if databasechangeloglock table exists (in keycloak_db database)
+    if docker compose exec -T postgres psql -U postgres -d keycloak_db -c "\dt databasechangeloglock" 2>/dev/null | grep -q "databasechangeloglock"; then
         echo -e "${GREEN}✓${NC} databasechangeloglock table exists"
     else
         echo -e "${RED}✗${NC} databasechangeloglock table missing"
@@ -162,4 +162,5 @@ else
     echo "  docker compose logs keycloak --tail 50"
     echo ""
 fi
+
 
