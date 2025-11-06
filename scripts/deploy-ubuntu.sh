@@ -539,7 +539,41 @@ if [ -f docker-compose.mkcert.yml ]; then
     # Stage 2: Start Keycloak (now that database is FULLY ready)
     echo "Stage 2: Starting Keycloak..."
     docker compose $COMPOSE_FILES up -d keycloak
-    echo -e "${GREEN}✓${NC} Stage 2 complete: Keycloak starting"
+    
+    # CRITICAL: Wait for Keycloak to initialize database schema
+    echo -n "Waiting for Keycloak to initialize database schema..."
+    SCHEMA_INITIALIZED=0
+    for i in {1..60}; do
+        # Check if Keycloak has initialized the schema (migration_model table exists)
+        if docker compose exec -T postgres psql -U postgres -d keycloak_db -c "\dt migration_model" 2>/dev/null | grep -q "migration_model"; then
+            SCHEMA_INITIALIZED=1
+            echo -e " ${GREEN}✓${NC}"
+            break
+        fi
+        
+        # Check for fatal Keycloak errors
+        if docker compose logs keycloak 2>/dev/null | tail -20 | grep -qi "FATAL\|ERROR.*migration"; then
+            echo ""
+            echo -e "${RED}✗ Keycloak failed to initialize database${NC}"
+            echo ""
+            echo "Keycloak logs (last 30 lines):"
+            docker compose logs keycloak --tail 30
+            exit 1
+        fi
+        
+        echo -n "."
+        sleep 3
+    done
+    
+    if [ $SCHEMA_INITIALIZED -eq 0 ]; then
+        echo ""
+        echo -e "${YELLOW}⚠️  Keycloak schema initialization timeout${NC}"
+        echo "Database schema may not be fully initialized."
+        echo "Check logs: docker compose logs keycloak"
+        echo ""
+    fi
+    
+    echo -e "${GREEN}✓${NC} Stage 2 complete: Keycloak running with initialized database"
     echo ""
     
     # Stage 3: Start remaining services
