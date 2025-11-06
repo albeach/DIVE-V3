@@ -295,92 +295,155 @@ log ""
 log_subsection "6.2 Live Token Capture (from actual hostname)"
 log_info "Attempting to capture a real token from the actual hostname..."
 log ""
-log_warning "To capture a live token:"
+log_warning "IMPORTANT: How to find your JWT token (not the session cookie!)"
+log ""
+log "Option 1 - From Network Tab (RECOMMENDED):"
 log "  1. Open browser to: https://$ACTUAL_HOSTNAME:3000"
 log "  2. Login to the application"
 log "  3. Open Browser DevTools (F12)"
-log "  4. Go to: Application → Storage → Session Storage → https://$ACTUAL_HOSTNAME:3000"
-log "  5. Find 'next-auth.session-token' or similar"
-log "  6. Copy the token value"
-log "  7. Paste it below (or press Enter to skip)"
+log "  4. Go to: Network tab"
+log "  5. Navigate to any page (e.g., Documents)"
+log "  6. Look for API requests to 'resources' or 'api'"
+log "  7. Click on a request → Headers tab"
+log "  8. Find 'Authorization: Bearer <token>'"
+log "  9. Copy ONLY the token part (long string after 'Bearer ')"
 log ""
-read -p "Paste your live token here (or Enter to skip): " LIVE_TOKEN
+log "Option 2 - From Console:"
+log "  1. Open Browser DevTools (F12) → Console tab"
+log "  2. Type: document.cookie"
+log "  3. Look for a very long JWT token (starts with 'eyJ')"
+log "  4. Copy the entire token"
+log ""
+log "NOTE: The token should start with 'eyJ' and have 3 parts separated by dots (xxx.yyy.zzz)"
+log "      Do NOT use the short session cookie (e.g., 'next-auth.session-token=abc123')"
+log ""
+read -p "Paste your JWT token here (starts with eyJ..., or Enter to skip): " LIVE_TOKEN
 
 if [ -n "$LIVE_TOKEN" ]; then
-    log_success "Live token captured!"
-    log ""
+    # Validate token format (should have 3 parts: header.payload.signature)
+    TOKEN_PARTS=$(echo "$LIVE_TOKEN" | grep -o '\.' | wc -l)
     
-    log_subsection "6.3 Live Token Analysis"
-    log "Token header (decoded):"
-    echo "$LIVE_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || \
-        echo "$LIVE_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | tee -a "$OUTPUT_FILE"
-    log ""
-    
-    log "Token payload (decoded):"
-    LIVE_PAYLOAD=$(echo "$LIVE_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null || echo "{}")
-    echo "$LIVE_PAYLOAD" | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "$LIVE_PAYLOAD" | tee -a "$OUTPUT_FILE"
-    log ""
-    
-    log_subsection "6.4 Live Token Claims Analysis"
-    log "Issuer (iss):"
-    LIVE_ISS=$(echo "$LIVE_PAYLOAD" | jq -r '.iss' 2>/dev/null)
-    echo "  $LIVE_ISS" | tee -a "$OUTPUT_FILE"
-    
-    log "Audience (aud):"
-    echo "$LIVE_PAYLOAD" | jq -r '.aud' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Subject (sub):"
-    echo "$LIVE_PAYLOAD" | jq -r '.sub' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Authorized Party (azp):"
-    echo "$LIVE_PAYLOAD" | jq -r '.azp' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "ACR (Authentication Context Class Reference):"
-    LIVE_ACR=$(echo "$LIVE_PAYLOAD" | jq -r '.acr' 2>/dev/null)
-    echo "  $LIVE_ACR" | tee -a "$OUTPUT_FILE"
-    
-    log "AMR (Authentication Methods Reference):"
-    LIVE_AMR=$(echo "$LIVE_PAYLOAD" | jq -r '.amr' 2>/dev/null)
-    echo "  $LIVE_AMR" | tee -a "$OUTPUT_FILE"
-    
-    log "Clearance:"
-    echo "$LIVE_PAYLOAD" | jq -r '.clearance' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Country of Affiliation:"
-    echo "$LIVE_PAYLOAD" | jq -r '.countryOfAffiliation' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
-    
-    log "Issued At (iat):"
-    IAT=$(echo "$LIVE_PAYLOAD" | jq -r '.iat' 2>/dev/null)
-    if [ "$IAT" != "null" ] && [ -n "$IAT" ]; then
-        IAT_DATE=$(date -d @$IAT 2>/dev/null || date -r $IAT 2>/dev/null || echo "N/A")
-        echo "  $IAT ($IAT_DATE)" | tee -a "$OUTPUT_FILE"
+    if [ "$TOKEN_PARTS" -ne 2 ]; then
+        log_error "Invalid token format - JWT should have exactly 2 dots (3 parts)"
+        log_warning "You may have pasted a session cookie instead of a JWT token"
+        log_info "JWT format: eyJhbGc...xxxxx.eyJpc3M...yyyyy.signature_zzzzz"
+        log_info "Skipping live token analysis..."
+        LIVE_TOKEN=""
     else
-        echo "  N/A" | tee -a "$OUTPUT_FILE"
-    fi
-    
-    log "Expires At (exp):"
-    EXP=$(echo "$LIVE_PAYLOAD" | jq -r '.exp' 2>/dev/null)
-    if [ "$EXP" != "null" ] && [ -n "$EXP" ]; then
-        EXP_DATE=$(date -d @$EXP 2>/dev/null || date -r $EXP 2>/dev/null || echo "N/A")
-        NOW=$(date +%s)
-        if [ $EXP -lt $NOW ]; then
-            echo "  $EXP ($EXP_DATE) - ${RED}EXPIRED${NC}" | tee -a "$OUTPUT_FILE"
+        log_success "Live token captured!"
+        log_info "Token length: ${#LIVE_TOKEN} characters"
+        
+        # Check if it starts with eyJ (base64 encoded JSON header)
+        if [[ "$LIVE_TOKEN" == eyJ* ]]; then
+            log_success "Token format looks valid (starts with eyJ)"
         else
-            echo "  $EXP ($EXP_DATE) - ${GREEN}Valid${NC}" | tee -a "$OUTPUT_FILE"
+            log_warning "Token doesn't start with 'eyJ' - may not be a valid JWT"
         fi
-    else
-        echo "  N/A" | tee -a "$OUTPUT_FILE"
+        log ""
     fi
+fi
+
+if [ -n "$LIVE_TOKEN" ]; then
+    log_subsection "6.3 Live Token Analysis"
+    log "Decoding token header..."
     
+    # Try to decode header with error handling
+    HEADER_DECODE=$(echo "$LIVE_TOKEN" | cut -d. -f1 | base64 -d 2>&1)
+    if [ $? -eq 0 ]; then
+        log "Token header (decoded):"
+        echo "$HEADER_DECODE" | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "$HEADER_DECODE" | tee -a "$OUTPUT_FILE"
+    else
+        log_error "Failed to decode token header - invalid base64"
+        log "Raw header: $(echo "$LIVE_TOKEN" | cut -d. -f1)"
+        log ""
+        log_warning "This is likely not a valid JWT token"
+        log_info "Skipping live token analysis..."
+        LIVE_TOKEN=""
+    fi
     log ""
+fi
+
+if [ -n "$LIVE_TOKEN" ]; then
+    log "Decoding token payload..."
     
-    # Save live token for testing
-    echo "$LIVE_TOKEN" > live-token.txt
-    log_info "Live token saved to: live-token.txt"
-    
-    # Extract issuer hostname from live token
-    LIVE_ISSUER_HOSTNAME=$(echo "$LIVE_ISS" | sed -E 's|https?://([^:/]+).*|\1|')
-    log_info "Extracted issuer hostname from live token: $LIVE_ISSUER_HOSTNAME"
+    # Try to decode payload with error handling
+    LIVE_PAYLOAD=$(echo "$LIVE_TOKEN" | cut -d. -f2 | base64 -d 2>&1)
+    if [ $? -eq 0 ]; then
+        log "Token payload (decoded):"
+        echo "$LIVE_PAYLOAD" | jq . 2>/dev/null | tee -a "$OUTPUT_FILE" || echo "$LIVE_PAYLOAD" | tee -a "$OUTPUT_FILE"
+        log ""
+        
+        log_subsection "6.4 Live Token Claims Analysis"
+        log "Issuer (iss):"
+        LIVE_ISS=$(echo "$LIVE_PAYLOAD" | jq -r '.iss' 2>/dev/null)
+        echo "  $LIVE_ISS" | tee -a "$OUTPUT_FILE"
+        
+        log "Audience (aud):"
+        echo "$LIVE_PAYLOAD" | jq -r '.aud' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+        
+        log "Subject (sub):"
+        echo "$LIVE_PAYLOAD" | jq -r '.sub' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+        
+        log "Authorized Party (azp):"
+        echo "$LIVE_PAYLOAD" | jq -r '.azp' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+        
+        log "ACR (Authentication Context Class Reference):"
+        LIVE_ACR=$(echo "$LIVE_PAYLOAD" | jq -r '.acr' 2>/dev/null)
+        echo "  $LIVE_ACR" | tee -a "$OUTPUT_FILE"
+        
+        log "AMR (Authentication Methods Reference):"
+        LIVE_AMR=$(echo "$LIVE_PAYLOAD" | jq -r '.amr' 2>/dev/null)
+        echo "  $LIVE_AMR" | tee -a "$OUTPUT_FILE"
+        
+        log "Clearance:"
+        echo "$LIVE_PAYLOAD" | jq -r '.clearance' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+        
+        log "Country of Affiliation:"
+        echo "$LIVE_PAYLOAD" | jq -r '.countryOfAffiliation' 2>/dev/null | sed 's/^/  /' | tee -a "$OUTPUT_FILE"
+        
+        log "Issued At (iat):"
+        IAT=$(echo "$LIVE_PAYLOAD" | jq -r '.iat' 2>/dev/null)
+        if [ "$IAT" != "null" ] && [ -n "$IAT" ]; then
+            IAT_DATE=$(date -d @$IAT 2>/dev/null || date -r $IAT 2>/dev/null || echo "N/A")
+            echo "  $IAT ($IAT_DATE)" | tee -a "$OUTPUT_FILE"
+        else
+            echo "  N/A" | tee -a "$OUTPUT_FILE"
+        fi
+        
+        log "Expires At (exp):"
+        EXP=$(echo "$LIVE_PAYLOAD" | jq -r '.exp' 2>/dev/null)
+        if [ "$EXP" != "null" ] && [ -n "$EXP" ]; then
+            EXP_DATE=$(date -d @$EXP 2>/dev/null || date -r $EXP 2>/dev/null || echo "N/A")
+            NOW=$(date +%s)
+            if [ $EXP -lt $NOW ]; then
+                echo "  $EXP ($EXP_DATE) - ${RED}EXPIRED${NC}" | tee -a "$OUTPUT_FILE"
+            else
+                echo "  $EXP ($EXP_DATE) - ${GREEN}Valid${NC}" | tee -a "$OUTPUT_FILE"
+            fi
+        else
+            echo "  N/A" | tee -a "$OUTPUT_FILE"
+        fi
+        
+        log ""
+        
+        # Save live token for testing
+        echo "$LIVE_TOKEN" > live-token.txt
+        log_info "Live token saved to: live-token.txt"
+        
+        # Extract issuer hostname from live token
+        LIVE_ISSUER_HOSTNAME=$(echo "$LIVE_ISS" | sed -E 's|https?://([^:/]+).*|\1|')
+        log_info "Extracted issuer hostname from live token: $LIVE_ISSUER_HOSTNAME"
+    else
+        log_error "Failed to decode token payload - invalid base64"
+        log "Raw payload: $(echo "$LIVE_TOKEN" | cut -d. -f2 | head -c 50)..."
+        log ""
+        log_warning "This is likely not a valid JWT token"
+        log_info "Skipping live token analysis..."
+        LIVE_TOKEN=""
+        LIVE_PAYLOAD=""
+        LIVE_ISS=""
+        LIVE_ISSUER_HOSTNAME=""
+    fi
     
 else
     log_warning "No live token provided - will use test token instead"
