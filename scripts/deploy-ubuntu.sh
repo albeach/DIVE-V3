@@ -535,26 +535,6 @@ fi
 
 echo ""
 
-# Optional: Start external IdPs if directory exists
-if [ -d external-idps ] && [ -f external-idps/docker-compose.yml ]; then
-    echo -e "${CYAN}External IdPs Available:${NC}"
-    echo "  Spain SAML IdP (9443)"
-    echo "  USA OIDC IdP (9082)"
-    echo ""
-    read -p "Do you want to start external IdPs for federation testing? (y/N): " START_IDPS
-    if [[ $START_IDPS =~ ^[Yy]$ ]]; then
-        echo "Starting external IdP services..."
-        cd external-idps
-        docker compose up -d --build
-        cd "$PROJECT_ROOT"
-        echo -e "${GREEN}✓${NC} External IdPs started"
-        echo ""
-    else
-        echo -e "${YELLOW}⚠️  External IdPs not started (can start later with: cd external-idps && docker compose up -d)${NC}"
-        echo ""
-    fi
-fi
-
 ###############################################################################
 # Phase 8: Wait for Services to be Ready
 ###############################################################################
@@ -663,6 +643,55 @@ fi
 echo ""
 echo -e "${GREEN}✓${NC} All infrastructure services are ready"
 echo ""
+
+###############################################################################
+# Phase 8.5: Optional External IdPs (Federation Testing)
+###############################################################################
+
+# Optional: Start external IdPs if directory exists
+if [ -d external-idps ] && [ -f external-idps/docker-compose.yml ]; then
+    echo ""
+    echo -e "${CYAN}🌍 External IdPs Available:${NC}"
+    echo "  Spain SAML IdP (9443)"
+    echo "  USA OIDC IdP (9082)"
+    echo ""
+    read -p "Do you want to start external IdPs for federation testing? (y/N): " START_IDPS
+    if [[ $START_IDPS =~ ^[Yy]$ ]]; then
+        echo ""
+        echo "Starting external IdP services..."
+        
+        # Verify the main DIVE network exists
+        if ! docker network inspect dive-v3_dive-network >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠️  Main DIVE network not found, creating it...${NC}"
+            docker network create dive-v3_dive-network || true
+        fi
+        
+        # Start external IdPs (they connect to the main DIVE network)
+        cd external-idps
+        docker compose down 2>/dev/null || true  # Clean up any stale containers
+        docker compose up -d --build
+        cd "$PROJECT_ROOT"
+        
+        echo -e "${GREEN}✓${NC} External IdPs started"
+        echo ""
+        
+        # Brief health check
+        echo -n "Waiting for external IdPs to be ready..."
+        sleep 10
+        
+        if docker ps --format '{{.Names}}' | grep -q "dive-spain-saml-idp" && \
+           docker ps --format '{{.Names}}' | grep -q "dive-usa-oidc-idp"; then
+            echo -e " ${GREEN}✓${NC}"
+        else
+            echo -e " ${YELLOW}⚠️  Some IdPs may still be starting${NC}"
+        fi
+        echo ""
+    else
+        echo -e "${YELLOW}⚠️  External IdPs not started${NC}"
+        echo "   Start later with: cd external-idps && docker compose up -d"
+        echo ""
+    fi
+fi
 
 ###############################################################################
 # Phase 9: Apply Terraform Configuration
