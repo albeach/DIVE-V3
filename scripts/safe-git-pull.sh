@@ -30,10 +30,36 @@ if [ ! -d .git ]; then
 fi
 
 ###############################################################################
-# Step 1: Show what files would be overwritten
+# Step 1: Fix Docker-Generated File Permissions (if needed)
 ###############################################################################
 
-echo -e "${CYAN}Step 1: Checking what files Git thinks are changed...${NC}"
+echo -e "${CYAN}Step 1: Checking file permissions...${NC}"
+echo ""
+
+# Check if any files are owned by UID 1001 (Docker container user)
+DOCKER_OWNED_FILES=$(find frontend backend kas -user 1001 2>/dev/null | head -5)
+if [ ! -z "$DOCKER_OWNED_FILES" ]; then
+    echo -e "${YELLOW}⚠${NC}  Found Docker-generated files (owned by UID 1001)"
+    echo "   This is normal after running containers"
+    echo ""
+    echo "   Fixing permissions..."
+    
+    CURRENT_USER=$(whoami)
+    if [ "$CURRENT_USER" == "root" ]; then
+        chown -R $CURRENT_USER:$CURRENT_USER frontend/ backend/ kas/ 2>/dev/null || true
+    else
+        sudo chown -R $CURRENT_USER:$CURRENT_USER frontend/ backend/ kas/ 2>/dev/null || true
+    fi
+    
+    echo -e "${GREEN}✓${NC} Permissions fixed (you may need to re-run after deployment)"
+    echo ""
+fi
+
+###############################################################################
+# Step 2: Show what files would be overwritten
+###############################################################################
+
+echo -e "${CYAN}Step 2: Checking what files Git thinks are changed...${NC}"
 echo ""
 
 # Check if there are any changes
@@ -58,10 +84,10 @@ git diff --stat
 echo ""
 
 ###############################################################################
-# Step 2: Identify the type of changes
+# Step 3: Identify the type of changes
 ###############################################################################
 
-echo -e "${CYAN}Step 2: Analyzing changes...${NC}"
+echo -e "${CYAN}Step 3: Analyzing changes...${NC}"
 echo ""
 
 # Check for common deployment-generated files
@@ -93,10 +119,10 @@ fi
 echo ""
 
 ###############################################################################
-# Step 3: Backup current state (safety first!)
+# Step 4: Backup current state (safety first!)
 ###############################################################################
 
-echo -e "${CYAN}Step 3: Creating backup of current state...${NC}"
+echo -e "${CYAN}Step 4: Creating backup of current state...${NC}"
 echo ""
 
 BACKUP_DIR="backups/git-pull-$(date +%Y%m%d-%H%M%S)"
@@ -116,10 +142,10 @@ echo -e "${GREEN}✓${NC} Backup created: $BACKUP_DIR"
 echo ""
 
 ###############################################################################
-# Step 4: Ask user what to do
+# Step 5: Ask user what to do
 ###############################################################################
 
-echo -e "${CYAN}Step 4: Choose how to proceed${NC}"
+echo -e "${CYAN}Step 5: Choose how to proceed${NC}"
 echo ""
 echo "Options:"
 echo ""
@@ -147,7 +173,7 @@ CHOICE=${CHOICE:-1}
 echo ""
 
 ###############################################################################
-# Step 5: Execute chosen action
+# Step 6: Execute chosen action
 ###############################################################################
 
 case $CHOICE in
@@ -238,7 +264,7 @@ case $CHOICE in
 esac
 
 ###############################################################################
-# Step 6: Verify pull was successful
+# Step 7: Verify pull was successful
 ###############################################################################
 
 echo -e "${CYAN}Verifying pull...${NC}"
@@ -258,4 +284,5 @@ git log --oneline -5
 echo ""
 
 echo -e "${GREEN}All done! You now have the latest code.${NC}"
+
 
