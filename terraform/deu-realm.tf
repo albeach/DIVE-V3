@@ -106,7 +106,7 @@ resource "keycloak_openid_client" "deu_realm_client" {
 
   # Redirect to broker realm
   valid_redirect_uris = [
-    "${var.keycloak_url}/realms/dive-v3-broker/broker/deu-realm-broker/endpoint",
+    "${var.keycloak_public_url}/realms/dive-v3-broker/broker/deu-realm-broker/endpoint",
     ""
   ]
 

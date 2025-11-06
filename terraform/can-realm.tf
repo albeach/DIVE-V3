@@ -73,7 +73,7 @@ resource "keycloak_openid_client" "can_realm_client" {
   direct_access_grants_enabled = true # Phase 2.1: Enable for custom login pages
 
   valid_redirect_uris = [
-    "${var.keycloak_url}/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
+    "${var.keycloak_public_url}/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
     ""
   ]
 

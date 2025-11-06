@@ -23,25 +23,35 @@ provider "keycloak" {
 # ============================================
 # Local Variables for Dynamic URL Construction
 # ============================================
-# Constructs Keycloak URLs dynamically based on keycloak_url variable
-# This allows the same Terraform code to work with localhost or custom hostnames
+# CRITICAL: Separates Terraform admin connection from client-facing URLs
+# - keycloak_url: For Terraform provider (always localhost:8443)
+# - keycloak_public_url: For client redirects (custom hostname when configured)
 
 locals {
-  # Extract hostname from keycloak_url (e.g., "https://localhost:8443" → "localhost:8443")
-  keycloak_base = var.keycloak_url
+  # Admin API base (for Terraform provider connection)
+  keycloak_admin_base = var.keycloak_url
   
-  # Construct realm URLs dynamically
+  # Public-facing base (for client redirect URIs and browser access)
+  # This should be the custom hostname when configured, localhost otherwise
+  keycloak_public_base = var.keycloak_public_url
+  
+  # Construct realm URLs dynamically using PUBLIC URL for client-facing endpoints
+  # These URLs are used in:
+  # - IdP broker authorization/token/logout URLs
+  # - National realm client redirect URIs  
+  # - All browser-facing endpoints
   realm_urls = {
-    usa      = "${local.keycloak_base}/realms/dive-v3-usa"
-    fra      = "${local.keycloak_base}/realms/dive-v3-fra"
-    can      = "${local.keycloak_base}/realms/dive-v3-can"
-    gbr      = "${local.keycloak_base}/realms/dive-v3-gbr"
-    deu      = "${local.keycloak_base}/realms/dive-v3-deu"
-    esp      = "${local.keycloak_base}/realms/dive-v3-esp"
-    ita      = "${local.keycloak_base}/realms/dive-v3-ita"
-    nld      = "${local.keycloak_base}/realms/dive-v3-nld"
-    pol      = "${local.keycloak_base}/realms/dive-v3-pol"
-    industry = "${local.keycloak_base}/realms/dive-v3-industry"
+    usa      = "${local.keycloak_public_base}/realms/dive-v3-usa"
+    fra      = "${local.keycloak_public_base}/realms/dive-v3-fra"
+    can      = "${local.keycloak_public_base}/realms/dive-v3-can"
+    gbr      = "${local.keycloak_public_base}/realms/dive-v3-gbr"
+    deu      = "${local.keycloak_public_base}/realms/dive-v3-deu"
+    esp      = "${local.keycloak_public_base}/realms/dive-v3-esp"
+    ita      = "${local.keycloak_public_base}/realms/dive-v3-ita"
+    nld      = "${local.keycloak_public_base}/realms/dive-v3-nld"
+    pol      = "${local.keycloak_public_base}/realms/dive-v3-pol"
+    industry = "${local.keycloak_public_base}/realms/dive-v3-industry"
+    broker   = "${local.keycloak_public_base}/realms/dive-v3-broker"
   }
   
   # Common OIDC endpoint paths
