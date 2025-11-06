@@ -1,7 +1,13 @@
 variable "keycloak_url" {
-  description = "The URL of the Keycloak server"
+  description = "The URL of the Keycloak server for Terraform provider connection (admin API)"
   type        = string
-  default     = "https://localhost:8443" # Use HTTPS for admin operations
+  default     = "https://localhost:8443" # Use HTTPS for admin operations, always localhost for Terraform
+}
+
+variable "keycloak_public_url" {
+  description = "The public-facing URL of Keycloak for client redirects and browser access"
+  type        = string
+  default     = "https://localhost:8443" # Defaults to localhost, override with custom hostname for remote access
 }
 
 variable "keycloak_admin_username" {
