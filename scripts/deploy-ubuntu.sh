@@ -501,9 +501,25 @@ if [ -f docker-compose.mkcert.yml ]; then
     done
     
     # CRITICAL: Explicitly create keycloak_db database if it doesn't exist
-    echo "Ensuring Keycloak database exists..."
-    docker compose exec -T postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname='keycloak_db'" | grep -q 1 || \
+    echo "Ensuring Keycloak database exists and is initialized..."
+    
+    # Check if database exists, create if not
+    if ! docker compose exec -T postgres psql -U postgres -c "SELECT 1 FROM pg_database WHERE datname='keycloak_db'" | grep -q 1; then
+        echo "Creating keycloak_db database..."
         docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE keycloak_db OWNER postgres;"
+    else
+        echo "Database keycloak_db exists, checking schema..."
+        
+        # Check if schema is initialized (migration_model table exists)
+        if ! docker compose exec -T postgres psql -U postgres -d keycloak_db -c "\dt migration_model" 2>/dev/null | grep -q "migration_model"; then
+            echo -e "${YELLOW}⚠️  Database exists but schema not initialized - recreating...${NC}"
+            docker compose stop keycloak 2>/dev/null || true
+            docker compose exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS keycloak_db;" 
+            docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE keycloak_db OWNER postgres;"
+            echo "Database recreated - Keycloak will initialize schema on startup"
+        fi
+    fi
+    
     echo -e "${GREEN}✓${NC} Database keycloak_db ready"
     
     # Wait for MongoDB
