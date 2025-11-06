@@ -1,13 +1,18 @@
 /**
- * Seed 7,000 Valid ZTDF-Encrypted Documents (COI COHERENCE FIX)
+ * Seed ZTDF-Encrypted Documents (COI COHERENCE FIX)
  * 
  * Enhanced version with:
- * - 7,000 documents (up from 1,000)
+ * - Configurable quantity (1 - 20,000 documents)
  * - Dry-run validation mode
  * - Progress tracking
  * - All 20 validated COI templates
  * 
- * Date: October 23, 2025
+ * Usage:
+ *   npm run seed-database              # Seeds 7,000 docs (default)
+ *   npm run seed-database 10000        # Seeds 10,000 docs
+ *   npm run seed-database -- --dry-run # Tests with 10 docs
+ * 
+ * Date: November 6, 2025
  */
 
 import { MongoClient } from 'mongodb';
@@ -19,9 +24,30 @@ const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:2
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const KAS_URL = process.env.KAS_URL || 'http://kas:8080';
 
-// Check if dry-run mode
+// Parse arguments
 const DRY_RUN = process.argv.includes('--dry-run');
-const TOTAL_DOCS = DRY_RUN ? 10 : 7000; // Only 10 for dry-run, 7000 for real
+
+// Get quantity from:
+// 1. Environment variable SEED_QUANTITY (for script usage)
+// 2. First numeric argument (for direct calls)
+// 3. Default to 7000
+const envQuantity = process.env.SEED_QUANTITY ? Number(process.env.SEED_QUANTITY) : null;
+const argQuantity = process.argv.find(arg => !isNaN(Number(arg)) && Number(arg) > 0);
+const requestedQuantity = envQuantity || (argQuantity ? Number(argQuantity) : 7000);
+
+// Enforce limits
+const MAX_DOCS = 20000;
+const MIN_DOCS = 1;
+const QUANTITY = Math.max(MIN_DOCS, Math.min(MAX_DOCS, requestedQuantity));
+
+const TOTAL_DOCS = DRY_RUN ? 10 : QUANTITY; // Only 10 for dry-run
+
+if (!DRY_RUN && requestedQuantity > MAX_DOCS) {
+    console.warn(`⚠️  Requested ${requestedQuantity} docs, but limit is ${MAX_DOCS}. Using ${MAX_DOCS}.`);
+}
+if (!DRY_RUN && requestedQuantity < MIN_DOCS) {
+    console.warn(`⚠️  Requested ${requestedQuantity} docs, but minimum is ${MIN_DOCS}. Using ${MIN_DOCS}.`);
+}
 
 // Classification levels
 const CLASSIFICATIONS: ClassificationLevel[] = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
@@ -463,7 +489,14 @@ async function createValidZTDFDocument(index: number) {
 async function main() {
     console.log('🔑 Seeding ZTDF-Encrypted Documents (COI COHERENCE FIX)');
     console.log('=====================================================================');
-    console.log(`Mode: ${DRY_RUN ? '🧪 DRY-RUN (10 docs for validation)' : '🚀 PRODUCTION (7,000 docs)'}`);
+    if (DRY_RUN) {
+        console.log('Mode: 🧪 DRY-RUN (10 docs for validation)');
+    } else {
+        console.log(`Mode: 🚀 PRODUCTION (${TOTAL_DOCS.toLocaleString()} docs)`);
+        if (requestedQuantity !== QUANTITY) {
+            console.log(`      (Requested: ${requestedQuantity.toLocaleString()}, Capped at: ${MAX_DOCS.toLocaleString()})`);
+        }
+    }
     console.log('=====================================================================\n');
 
     // Validate all templates first
@@ -505,8 +538,10 @@ async function main() {
         }
 
         console.log('✅ DRY-RUN SUCCESSFUL!');
-        console.log('\nTo seed 7,000 documents, run without --dry-run:');
-        console.log('   npx ts-node src/scripts/seed-7000-ztdf-documents.ts\n');
+        console.log('\nTo seed documents, run:');
+        console.log('   npm run seed-database              # 7,000 docs (default)');
+        console.log('   npm run seed-database 10000        # 10,000 docs');
+        console.log('   npm run seed-database 20000        # 20,000 docs (max)\n');
         return;
     }
 
