@@ -174,13 +174,42 @@ for LOCATION in "${TRUSTSTORE_LOCATIONS[@]}"; do
         echo "Found CombinedTruststore.jks at: $LOCATION"
         echo ""
         
+        # Try multiple password options (CombinedTruststore.jks may use different password)
+        COMBINED_TRUSTSTORE_PASSWORD=""
+        PASSWORD_FOUND=false
+        
+        for TRY_PASS in "password" "changeit" ""; do
+            # Test if this password works - use keytool return code instead of parsing output
+            if docker exec -u root "${CONTAINER_NAME}" keytool -list -keystore "$LOCATION" -storepass "$TRY_PASS" > /dev/null 2>&1; then
+                COMBINED_TRUSTSTORE_PASSWORD="$TRY_PASS"
+                PASSWORD_FOUND=true
+                if [ -z "$TRY_PASS" ]; then
+                    echo "✓ Unlocked with empty password"
+                else
+                    echo "✓ Unlocked successfully"
+                fi
+                break
+            fi
+        done
+        
+        # Check if we found a valid password
+        if [ "$PASSWORD_FOUND" = "false" ]; then
+            echo -e "${YELLOW}⚠${NC}  Could not unlock CombinedTruststore.jks"
+            echo "   Tried passwords: password, changeit, (empty)"
+            echo "   Skipping this location, trying next..."
+            echo ""
+            continue
+        fi
+        
         # List all certificates in the combined truststore
         echo "Listing certificates in truststore..."
-        CERT_ALIASES=$(docker exec -u root "${CONTAINER_NAME}" bash -c "keytool -list -keystore '$LOCATION' -storepass changeit 2>/dev/null | grep 'Alias name:' | sed 's/Alias name: //' | tr -d '\r'")
+        # PKCS12 format shows: "alias, date, type," on one line
+        # We need to extract just the alias (first field before comma)
+        CERT_ALIASES=$(docker exec -u root "${CONTAINER_NAME}" keytool -list -keystore "$LOCATION" -storepass "$COMBINED_TRUSTSTORE_PASSWORD" 2>/dev/null | grep "trustedCertEntry" | awk -F',' '{print $1}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         
         if [ -z "$CERT_ALIASES" ]; then
             echo -e "${YELLOW}⚠${NC}  No certificate aliases found in $LOCATION"
-            echo "   This may indicate an issue with the truststore format or password"
+            echo "   This may indicate an empty truststore"
             continue
         fi
         
@@ -207,7 +236,7 @@ for LOCATION in "${TRUSTSTORE_LOCATIONS[@]}"; do
                     if keytool -exportcert -noprompt \
                         -alias '$alias' \
                         -keystore '$LOCATION' \
-                        -storepass changeit \
+                        -storepass '$COMBINED_TRUSTSTORE_PASSWORD' \
                         -file /tmp/cert-${alias}.crt 2>/dev/null; then
                         
                         # Import into Java cacerts
