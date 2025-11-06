@@ -673,12 +673,21 @@ async function main() {
 
     } catch (error) {
         console.error('❌ Error seeding documents:', error);
-        throw error;
+        process.exit(1);
     } finally {
         await client.close();
         console.log('🔌 MongoDB connection closed\n');
     }
 }
 
-main();
+// Properly handle async main function
+main()
+    .then(() => {
+        console.log('✅ Seeding complete - exiting\n');
+        process.exit(0);
+    })
+    .catch((error) => {
+        console.error('❌ Fatal error:', error);
+        process.exit(1);
+    });
 
