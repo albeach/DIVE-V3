@@ -20,21 +20,56 @@ interface IdPOption {
 }
 
 // Flag mapping for known IdPs
-const getFlagForIdP = (alias: string): string => {
+// Returns emoji flag OR Twemoji CDN fallback for better cross-platform rendering
+const getFlagForIdP = (alias: string): { emoji: string; code: string } => {
   // Match specific patterns (order matters - check specific before generic)
-  if (alias.includes('germany') || alias.includes('deu')) return '🇩🇪';
-  if (alias.includes('france') || alias.includes('fra')) return '🇫🇷';
-  if (alias.includes('canada') || alias.includes('can')) return '🇨🇦';
-  if (alias.includes('uk') || alias.includes('gbr')) return '🇬🇧';
-  if (alias.includes('italy') || alias.includes('ita')) return '🇮🇹';
-  if (alias.includes('spain') || alias.includes('esp')) return '🇪🇸';
-  if (alias.includes('poland') || alias.includes('pol')) return '🇵🇱';
-  if (alias.includes('netherlands') || alias.includes('nld')) return '🇳🇱';
-  if (alias.includes('industry') || alias.includes('contractor')) return '🏢';
+  if (alias.includes('germany') || alias.includes('deu')) return { emoji: '🇩🇪', code: 'DE' };
+  if (alias.includes('france') || alias.includes('fra')) return { emoji: '🇫🇷', code: 'FR' };
+  if (alias.includes('canada') || alias.includes('can')) return { emoji: '🇨🇦', code: 'CA' };
+  if (alias.includes('uk') || alias.includes('gbr')) return { emoji: '🇬🇧', code: 'GB' };
+  if (alias.includes('italy') || alias.includes('ita')) return { emoji: '🇮🇹', code: 'IT' };
+  if (alias.includes('spain') || alias.includes('esp')) return { emoji: '🇪🇸', code: 'ES' };
+  if (alias.includes('poland') || alias.includes('pol')) return { emoji: '🇵🇱', code: 'PL' };
+  if (alias.includes('netherlands') || alias.includes('nld')) return { emoji: '🇳🇱', code: 'NL' };
+  if (alias.includes('industry') || alias.includes('contractor')) return { emoji: '🏢', code: '' };
   // Check for US last (since "industry" doesn't contain "us")
-  if (alias.includes('usa') || alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return '🇺🇸';
+  if (alias.includes('usa') || alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return { emoji: '🇺🇸', code: 'US' };
   
-  return '🌐'; // Default globe icon
+  return { emoji: '🌐', code: '' }; // Default globe icon
+};
+
+// Component to render flag with fallback
+const FlagIcon = ({ alias }: { alias: string }) => {
+  const flag = getFlagForIdP(alias);
+  
+  // If country code exists, use Twemoji CDN as fallback
+  if (flag.code) {
+    return (
+      <span className="inline-flex items-center justify-center">
+        {/* Try emoji first */}
+        <span className="emoji-flag" style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>
+          {flag.emoji}
+        </span>
+        {/* Fallback image (hidden by default, shows if emoji fails) */}
+        <img 
+          src={`https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${flag.code.toLowerCase()}-flag.svg`}
+          alt={`${flag.code} flag`}
+          className="hidden emoji-fallback w-6 h-6"
+          onError={(e) => {
+            // If emoji AND image fail, try generic Twemoji CDN path
+            const countryCode = flag.code.toLowerCase();
+            const codepoints = [...countryCode].map(c => 
+              (c.charCodeAt(0) + 0x1F1A5).toString(16)
+            ).join('-');
+            (e.target as HTMLImageElement).src = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoints}.svg`;
+          }}
+        />
+      </span>
+    );
+  }
+  
+  // Non-country icons (industry, default)
+  return <span style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>{flag.emoji}</span>;
 };
 
 export function IdpSelector() {
@@ -271,7 +306,9 @@ export function IdpSelector() {
             className="group p-6 border-2 border-gray-200 rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left bg-gradient-to-br from-white to-gray-50"
           >
             <div className="flex items-center space-x-4">
-              <div className="text-5xl group-hover:scale-110 transition-transform duration-300">{getFlagForIdP(idp.alias)}</div>
+              <div className="text-5xl group-hover:scale-110 transition-transform duration-300">
+                <FlagIcon alias={idp.alias} />
+              </div>
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
                   {idp.displayName}
