@@ -899,6 +899,30 @@ fi
 echo ""
 
 ###############################################################################
+# Phase 12.8: Initialize COI Keys in MongoDB
+###############################################################################
+
+echo -e "${YELLOW}🔑 Phase 12.8: Initializing COI Keys${NC}"
+echo ""
+
+echo "Initializing COI keys (US-ONLY, FVEY, NATO, etc.)..."
+# Initialize COI keys using the TypeScript script inside the backend container
+docker compose exec -T backend npx tsx src/scripts/initialize-coi-keys.ts || {
+    echo -e "${YELLOW}⚠️  COI keys initialization failed, trying alternative method...${NC}"
+    # Fallback to MongoDB shell script if TypeScript fails
+    if docker compose exec -T mongo mongosh -u admin -p password --authenticationDatabase admin dive-v3 /docker-entrypoint-initdb.d/init-coi-keys.js > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} COI keys initialized via MongoDB shell"
+    else
+        echo -e "${RED}✗${NC} Failed to initialize COI keys"
+        echo "   This may cause seeding to fail"
+        echo "   You can manually run: docker compose exec backend npx tsx src/scripts/initialize-coi-keys.ts"
+    fi
+}
+
+echo -e "${GREEN}✓${NC} COI keys initialized"
+echo ""
+
+###############################################################################
 # Phase 13: Seed MongoDB Database
 ###############################################################################
 
