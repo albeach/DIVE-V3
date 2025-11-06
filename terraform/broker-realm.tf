@@ -402,8 +402,6 @@ resource "keycloak_generic_protocol_mapper" "broker_acr_session" {
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
   }
-  
-  depends_on = [keycloak_generic_protocol_mapper.broker_acr_attribute]
 }
 
 # AMR (Authentication Methods Reference) mapper - DUAL SOURCE APPROACH
@@ -451,8 +449,6 @@ resource "keycloak_generic_protocol_mapper" "broker_amr_session" {
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
   }
-  
-  depends_on = [keycloak_generic_protocol_mapper.broker_amr_attribute]
 }
 
 # ============================================
