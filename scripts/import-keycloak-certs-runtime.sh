@@ -159,53 +159,94 @@ echo ""
 echo -e "${YELLOW}Step 6.5: Import CombinedTruststore.jks entries...${NC}"
 COMBINED_TRUSTSTORE_IMPORTED=false
 
-# Check for CombinedTruststore.jks in multiple locations
+# Check for CombinedTruststore.jks in multiple locations (case variations)
 TRUSTSTORE_LOCATIONS=(
     "/opt/keycloak/certs/Combinedtruststore.jks"
+    "/opt/keycloak/certs/CombinedTruststore.jks"
+    "/opt/keycloak/certs/combinedtruststore.jks"
     "/opt/keycloak/certs/dive-root-cas/Combinedtruststore.jks"
+    "/opt/keycloak/certs/dive-root-cas/CombinedTruststore.jks"
+    "/opt/keycloak/certs/dive-root-cas/combinedtruststore.jks"
 )
 
 for LOCATION in "${TRUSTSTORE_LOCATIONS[@]}"; do
     if docker exec "${CONTAINER_NAME}" test -f "$LOCATION" 2>/dev/null; then
         echo "Found CombinedTruststore.jks at: $LOCATION"
+        echo ""
         
         # List all certificates in the combined truststore
-        CERT_ALIASES=$(docker exec -u root "${CONTAINER_NAME}" bash -c "
-            keytool -list -keystore $LOCATION -storepass changeit 2>/dev/null | \
-            grep 'Alias name:' | sed 's/Alias name: //'
-        ")
+        echo "Listing certificates in truststore..."
+        CERT_ALIASES=$(docker exec -u root "${CONTAINER_NAME}" bash -c "keytool -list -keystore '$LOCATION' -storepass changeit 2>/dev/null | grep 'Alias name:' | sed 's/Alias name: //' | tr -d '\r'")
         
-        if [ -n "$CERT_ALIASES" ]; then
-            echo "Importing certificates from CombinedTruststore.jks..."
+        if [ -z "$CERT_ALIASES" ]; then
+            echo -e "${YELLOW}⚠${NC}  No certificate aliases found in $LOCATION"
+            echo "   This may indicate an issue with the truststore format or password"
+            continue
+        fi
+        
+        # Count certificates
+        CERT_COUNT=$(echo "$CERT_ALIASES" | wc -l | tr -d ' ')
+        echo "Found $CERT_COUNT certificate(s) to import:"
+        echo "$CERT_ALIASES" | sed 's/^/  - /'
+        echo ""
+        
+        # Import each certificate from the combined truststore
+        IMPORT_COUNT=0
+        SKIP_COUNT=0
+        
+        while IFS= read -r alias; do
+            # Trim whitespace
+            alias=$(echo "$alias" | tr -d ' \t\r\n')
             
-            # Import each certificate from the combined truststore
-            while IFS= read -r alias; do
-                if [ -n "$alias" ]; then
+            if [ -n "$alias" ]; then
+                echo -n "Importing '$alias'... "
+                
+                # Export and import in one docker exec for better error handling
+                RESULT=$(docker exec -u root "${CONTAINER_NAME}" bash -c "
                     # Export certificate from combined truststore
-                    docker exec -u root "${CONTAINER_NAME}" bash -c "
-                        keytool -exportcert -noprompt \
-                            -alias '$alias' \
-                            -keystore $LOCATION \
-                            -storepass changeit \
-                            -file /tmp/${alias}.crt 2>/dev/null
+                    if keytool -exportcert -noprompt \
+                        -alias '$alias' \
+                        -keystore '$LOCATION' \
+                        -storepass changeit \
+                        -file /tmp/cert-${alias}.crt 2>/dev/null; then
                         
                         # Import into Java cacerts
-                        keytool -import -noprompt -trustcacerts \
-                            -alias 'combined-$alias' \
-                            -file /tmp/${alias}.crt \
-                            -keystore ${JAVA_CACERTS} \
-                            -storepass ${TRUSTSTORE_PASSWORD} 2>&1 | \
-                            grep -qE 'Certificate was added|already exists' && echo '✓ Imported: $alias' || echo '⚠ Skipped: $alias (may already exist)'
+                        if keytool -import -noprompt -trustcacerts \
+                            -alias 'combined-${alias}' \
+                            -file /tmp/cert-${alias}.crt \
+                            -keystore '${JAVA_CACERTS}' \
+                            -storepass '${TRUSTSTORE_PASSWORD}' 2>&1; then
+                            echo 'SUCCESS'
+                        else
+                            echo 'IMPORT_FAILED'
+                        fi
                         
-                        # Cleanup temp file
-                        rm -f /tmp/${alias}.crt
-                    " 2>/dev/null
+                        # Cleanup
+                        rm -f /tmp/cert-${alias}.crt
+                    else
+                        echo 'EXPORT_FAILED'
+                    fi
+                " 2>&1)
+                
+                if echo "$RESULT" | grep -q "SUCCESS"; then
+                    echo -e "${GREEN}✓${NC}"
+                    IMPORT_COUNT=$((IMPORT_COUNT + 1))
+                elif echo "$RESULT" | grep -q "already exists"; then
+                    echo -e "${YELLOW}⚠ (already exists)${NC}"
+                    SKIP_COUNT=$((SKIP_COUNT + 1))
+                else
+                    echo -e "${RED}✗${NC}"
+                    echo "   Error: $RESULT" | head -1
                 fi
-            done <<< "$CERT_ALIASES"
-            
-            COMBINED_TRUSTSTORE_IMPORTED=true
-            echo -e "${GREEN}✓${NC} CombinedTruststore.jks certificates imported"
-        fi
+            fi
+        done <<< "$CERT_ALIASES"
+        
+        echo ""
+        echo -e "${GREEN}✓${NC} CombinedTruststore.jks import complete"
+        echo "   Imported: $IMPORT_COUNT certificate(s)"
+        echo "   Skipped: $SKIP_COUNT certificate(s) (already existed)"
+        
+        COMBINED_TRUSTSTORE_IMPORTED=true
         break
     fi
 done
