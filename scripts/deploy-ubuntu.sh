@@ -774,10 +774,13 @@ if [ -d terraform ]; then
     echo ""
     
     # Apply with proper variables (use custom hostname if provided)
+    # NOTE: keycloak_url MUST always be localhost:8443 because Terraform runs on the HOST machine,
+    # not inside Docker. Keycloak is accessible via port-forwarding at localhost:8443.
+    # The custom hostname is only for browser access and is stored in redirect URIs.
     terraform apply -auto-approve \
       -var="keycloak_admin_username=admin" \
       -var="keycloak_admin_password=admin" \
-      -var="keycloak_url=https://${CUSTOM_HOSTNAME}:8443" \
+      -var="keycloak_url=https://localhost:8443" \
       -var="app_url=https://${CUSTOM_HOSTNAME}:3000" \
       -var="backend_url=https://${CUSTOM_HOSTNAME}:4000"
     
