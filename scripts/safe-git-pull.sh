@@ -37,21 +37,48 @@ echo -e "${CYAN}Step 1: Checking file permissions...${NC}"
 echo ""
 
 # Check if any files are owned by UID 1001 (Docker container user)
-DOCKER_OWNED_FILES=$(find frontend backend kas -user 1001 2>/dev/null | head -5)
+# Use timeout and exclude large directories to prevent hanging
+DOCKER_OWNED_FILES=""
+if command -v timeout >/dev/null 2>&1; then
+    # Linux: Use timeout command
+    DOCKER_OWNED_FILES=$(timeout 5s find frontend backend kas \
+        -path '*/node_modules' -prune -o \
+        -path '*/.next' -prune -o \
+        -path '*/dist' -prune -o \
+        -path '*/.turbo' -prune -o \
+        -user 1001 -print 2>/dev/null | head -5 || echo "")
+else
+    # macOS: Use find with maxdepth to limit scope
+    DOCKER_OWNED_FILES=$(find frontend backend kas -maxdepth 3 \
+        -path '*/node_modules' -prune -o \
+        -path '*/.next' -prune -o \
+        -path '*/dist' -prune -o \
+        -user 1001 -print 2>/dev/null | head -5 || echo "")
+fi
+
 if [ ! -z "$DOCKER_OWNED_FILES" ]; then
     echo -e "${YELLOW}⚠${NC}  Found Docker-generated files (owned by UID 1001)"
     echo "   This is normal after running containers"
+    echo ""
+    echo "   Sample files:"
+    echo "$DOCKER_OWNED_FILES" | sed 's/^/     /' | head -3
     echo ""
     echo "   Fixing permissions..."
     
     CURRENT_USER=$(whoami)
     if [ "$CURRENT_USER" == "root" ]; then
+        # Root user: Direct chown
         chown -R $CURRENT_USER:$CURRENT_USER frontend/ backend/ kas/ 2>/dev/null || true
     else
+        # Non-root: Use sudo
+        echo "   (This may require sudo password)"
         sudo chown -R $CURRENT_USER:$CURRENT_USER frontend/ backend/ kas/ 2>/dev/null || true
     fi
     
-    echo -e "${GREEN}✓${NC} Permissions fixed (you may need to re-run after deployment)"
+    echo -e "${GREEN}✓${NC} Permissions fixed"
+    echo ""
+else
+    echo -e "${GREEN}✓${NC} No Docker-generated permission issues found"
     echo ""
 fi
 
