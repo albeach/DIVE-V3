@@ -34,7 +34,7 @@ echo "  2. Set up DIVE Root CA certificates"
 echo "  3. Start all Docker services"
 echo "  4. Apply Terraform configuration to Keycloak"
 echo "  5. Initialize PostgreSQL database (NextAuth tables)"
-echo "  6. Seed MongoDB database with sample resources"
+echo "  6. Seed MongoDB database with configurable quantity of ZTDF documents"
 echo "  7. Verify all services are healthy"
 echo ""
 
@@ -99,6 +99,51 @@ else
     CUSTOM_HOSTNAME="localhost"
     echo -e "${GREEN}✓${NC} Using localhost"
 fi
+
+###############################################################################
+# Database Seeding Configuration
+###############################################################################
+
+echo ""
+echo -e "${CYAN}📊 Database Seeding Configuration${NC}"
+echo ""
+echo "How many ZTDF documents should be generated?"
+echo ""
+echo "  ${GREEN}1)${NC} 7,000 documents (default, ~2-3 minutes)"
+echo "  ${GREEN}2)${NC} 1,000 documents (quick testing, ~20 seconds)"
+echo "  ${GREEN}3)${NC} 15,000 documents (stress testing, ~5-7 minutes)"
+echo "  ${GREEN}4)${NC} 20,000 documents (maximum, ~8-10 minutes)"
+echo "  ${GREEN}5)${NC} Custom quantity (1-20,000)"
+echo ""
+read -p "Selection [1-5] (default: 1): " SEED_CHOICE
+
+case "$SEED_CHOICE" in
+    2)
+        SEED_QUANTITY=1000
+        ;;
+    3)
+        SEED_QUANTITY=15000
+        ;;
+    4)
+        SEED_QUANTITY=20000
+        ;;
+    5)
+        echo ""
+        read -p "Enter quantity (1-20000): " CUSTOM_SEED
+        if [[ "$CUSTOM_SEED" =~ ^[0-9]+$ ]] && [ "$CUSTOM_SEED" -ge 1 ] && [ "$CUSTOM_SEED" -le 20000 ]; then
+            SEED_QUANTITY=$CUSTOM_SEED
+        else
+            echo -e "${YELLOW}⚠️  Invalid quantity, using default: 7000${NC}"
+            SEED_QUANTITY=7000
+        fi
+        ;;
+    *)
+        SEED_QUANTITY=7000
+        ;;
+esac
+
+echo ""
+echo -e "${GREEN}✓${NC} Will generate: ${GREEN}${SEED_QUANTITY}${NC} ZTDF documents"
 
 echo ""
 read -p "Press Enter to continue or Ctrl+C to cancel..."
@@ -838,11 +883,11 @@ fi
 
 echo "Seeding database with sample resources..."
 # Run seed inside backend container where dependencies are available
-docker compose exec -T backend npm run seed-database || {
+docker compose exec -T -e SEED_QUANTITY=$SEED_QUANTITY backend npm run seed-database || {
     echo -e "${YELLOW}⚠️  Seed failed, trying alternative method...${NC}"
     cd backend
     npm install 2>/dev/null || true
-    npm run seed-database 2>&1 | tail -10
+    SEED_QUANTITY=$SEED_QUANTITY npm run seed-database 2>&1 | tail -10
     cd "$PROJECT_ROOT"
 }
 
