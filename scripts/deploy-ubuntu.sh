@@ -929,7 +929,7 @@ echo ""
 echo -e "${YELLOW}🌱 Phase 13: Seeding MongoDB Database${NC}"
 echo ""
 
-cd backend
+cd "$PROJECT_ROOT/backend"
 
 if [ ! -d node_modules ]; then
     echo "Installing backend dependencies..."
@@ -939,16 +939,21 @@ fi
 
 echo "Seeding database with sample resources..."
 # Run seed inside backend container where dependencies are available
-docker compose exec -T -e SEED_QUANTITY=$SEED_QUANTITY backend npm run seed-database || {
-    echo -e "${YELLOW}⚠️  Seed failed, trying alternative method...${NC}"
-    cd backend
+set +e  # Temporarily disable exit-on-error for seeding
+docker compose exec -T -e SEED_QUANTITY=$SEED_QUANTITY backend npm run seed-database
+SEED_EXIT_CODE=$?
+set -e  # Re-enable exit-on-error
+
+if [ $SEED_EXIT_CODE -eq 0 ]; then
+    echo -e "${GREEN}✓${NC} Database seeded successfully"
+else
+    echo -e "${YELLOW}⚠️  Seed exited with code $SEED_EXIT_CODE, trying alternative method...${NC}"
+    cd "$PROJECT_ROOT/backend"
     npm install 2>/dev/null || true
-    SEED_QUANTITY=$SEED_QUANTITY npm run seed-database 2>&1 | tail -10
-    cd "$PROJECT_ROOT"
-}
+    SEED_QUANTITY=$SEED_QUANTITY npm run seed-database 2>&1 | tail -10 || true
+fi
 
 cd "$PROJECT_ROOT"
-echo -e "${GREEN}✓${NC} Database seeded"
 echo ""
 
 ###############################################################################
