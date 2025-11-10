@@ -41,9 +41,6 @@ $config = [
     'language.available' => ['es', 'en'],
     'language.default' => 'es',
 
-    // Theme (DIVE V3 Custom Theme)
-    'theme.use' => 'dive-v3-spain:default',
-
     // Logging
     'logging.level' => SimpleSAML\Logger::INFO,
     'logging.handler' => 'syslog',
