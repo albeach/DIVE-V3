@@ -50,7 +50,7 @@ services:
       - ./spain-saml/config/authsources.php:/var/www/simplesamlphp/config/authsources.php
       - ./spain-saml/metadata:/var/www/simplesamlphp/metadata
       - ./spain-saml/cert:/var/www/simplesamlphp/cert
-      - ./spain-saml/themes/dive-v3-spain:/var/www/simplesamlphp/modules/dive-v3-spain
+      - ./spain-saml/themes/dive-v3-spain/default/assets/css/custom.css:/var/www/simplesamlphp/public/assets/base/css/stylesheet.css
     networks:
       - dive-external-idps
       - dive-network
