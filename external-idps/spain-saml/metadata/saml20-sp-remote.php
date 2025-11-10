@@ -20,15 +20,31 @@ $metadata['http://localhost:9443/simplesaml/saml2/idp/metadata.php'] = [
      * AssertionConsumerService (ACS) URL
      * This is where Keycloak expects to receive SAML assertions
      * Format: http(s)://keycloak-host/realms/{realm}/broker/{idp-alias}/endpoint
+     * Must be an array with Binding and Location
      */
-    'AssertionConsumerService' => 'http://localhost:8081/realms/dive-v3-broker/broker/esp-realm-external/endpoint',
+    'AssertionConsumerService' => [
+        [
+            'Binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
+            'Location' => 'http://localhost:8081/realms/dive-v3-broker/broker/esp-realm-external/endpoint',
+            'index' => 0,
+        ],
+    ],
 
     /**
      * SingleLogoutService (SLO) URL
      * Handles SAML logout requests and responses
-     * Same endpoint as ACS for Keycloak broker
+     * Must be an array with Binding and Location
      */
-    'SingleLogoutService' => 'http://localhost:8081/realms/dive-v3-broker/broker/esp-realm-external/endpoint',
+    'SingleLogoutService' => [
+        [
+            'Binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
+            'Location' => 'http://localhost:8081/realms/dive-v3-broker/broker/esp-realm-external/endpoint',
+        ],
+        [
+            'Binding' => 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect',
+            'Location' => 'http://localhost:8081/realms/dive-v3-broker/broker/esp-realm-external/endpoint',
+        ],
+    ],
 
     /**
      * X.509 Certificate (Base64 encoded)
