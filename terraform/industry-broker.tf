@@ -32,6 +32,18 @@ resource "keycloak_oidc_identity_provider" "industry_realm_broker" {
   gui_order                     = "4"
 }
 
+resource "keycloak_custom_identity_provider_mapper" "industry_broker_username" {
+  realm                    = keycloak_realm.dive_v3_broker.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.industry_realm_broker.alias
+  name                     = "industry-username-from-uniqueID"
+  identity_provider_mapper = "oidc-username-idp-mapper"
+
+  extra_config = {
+    "syncMode" = "FORCE"
+    "template" = "$${CLAIM.uniqueID}"  # Set username = uniqueID from token
+  }
+}
+
 # Attribute mappers for Industry broker
 resource "keycloak_custom_identity_provider_mapper" "industry_broker_uniqueid" {
   realm                    = keycloak_realm.dive_v3_broker.id

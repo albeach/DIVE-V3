@@ -72,9 +72,14 @@ resource "keycloak_openid_client" "can_realm_client" {
   standard_flow_enabled        = true
   direct_access_grants_enabled = true # Phase 2.1: Enable for custom login pages
 
+  # Redirect to broker realm
+  # CRITICAL: Include BOTH internal and external URLs for MFA flow
+  # - External (Cloudflare): For browser redirects
+  # - Internal (Docker): For server-to-server OAuth callbacks during MFA
   valid_redirect_uris = [
     "${var.keycloak_public_url}/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
-    ""
+    "https://keycloak:8443/realms/dive-v3-broker/broker/can-realm-broker/endpoint",
+    "http://keycloak:8080/realms/dive-v3-broker/broker/can-realm-broker/endpoint"
   ]
 
   root_url = var.app_url

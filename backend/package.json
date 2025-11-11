@@ -26,11 +26,19 @@
         "migrate:classification-equivalency": "tsx src/scripts/migrate-classification-equivalency.ts",
         "migrate:classification-equivalency:execute": "tsx src/scripts/migrate-classification-equivalency.ts -- --execute",
         "migrate:classification-equivalency:rollback": "tsx src/scripts/migrate-classification-equivalency.ts --",
+        "migrate:coi-capitalization": "tsx src/scripts/migrate-coi-capitalization.ts",
+        "migrate:coi-capitalization:dry-run": "tsx src/scripts/migrate-coi-capitalization.ts --dry-run",
         "optimize-database": "tsx src/scripts/optimize-database.ts",
         "generate-certs": "tsx src/scripts/generate-certificates.ts",
         "generate-ca": "tsx src/scripts/generate-three-tier-ca.ts",
         "generate-real-x509-ca": "tsx src/scripts/generate-real-x509-ca.ts",
-        "migrate-uuids": "tsx src/scripts/migrate-uniqueids-to-uuid.ts"
+        "migrate-uuids": "tsx src/scripts/migrate-uniqueids-to-uuid.ts",
+        "fix-webauthn-rpid": "tsx src/scripts/fix-webauthn-rpid.ts",
+        "fix-webauthn-warnings": "tsx src/scripts/fix-webauthn-warnings.ts",
+        "verify-webauthn": "tsx src/scripts/verify-webauthn-config.ts",
+        "verify-both-policies": "tsx src/scripts/verify-both-webauthn-policies.ts",
+        "check-webauthn-comprehensive": "tsx src/scripts/comprehensive-webauthn-check.ts",
+        "clear-sessions": "tsx src/scripts/clear-keycloak-sessions.ts"
     },
     "keywords": [
         "dive",

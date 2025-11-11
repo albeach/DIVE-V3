@@ -36,6 +36,18 @@ resource "keycloak_oidc_identity_provider" "fra_realm_broker" {
   gui_order = "2"
 }
 
+resource "keycloak_custom_identity_provider_mapper" "fra_broker_username" {
+  realm                    = keycloak_realm.dive_v3_broker.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.fra_realm_broker.alias
+  name                     = "fra-username-from-uniqueID"
+  identity_provider_mapper = "oidc-username-idp-mapper"
+
+  extra_config = {
+    "syncMode" = "FORCE"
+    "template" = "$${CLAIM.uniqueID}"  # Set username = uniqueID from token
+  }
+}
+
 # Attribute mappers for France broker (all DIVE attributes)
 resource "keycloak_custom_identity_provider_mapper" "fra_broker_uniqueid" {
   realm                    = keycloak_realm.dive_v3_broker.id

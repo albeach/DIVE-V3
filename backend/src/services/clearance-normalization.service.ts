@@ -29,6 +29,7 @@ import { logger } from '../utils/logger';
  */
 export enum StandardClearance {
     UNCLASSIFIED = 'UNCLASSIFIED',
+    RESTRICTED = 'RESTRICTED',
     CONFIDENTIAL = 'CONFIDENTIAL',
     SECRET = 'SECRET',
     TOP_SECRET = 'TOP_SECRET'
@@ -41,14 +42,14 @@ export enum StandardClearance {
 const SPANISH_CLEARANCE_MAP: Record<string, StandardClearance> = {
     // Spanish classification levels
     'NO_CLASIFICADO': StandardClearance.UNCLASSIFIED,
-    'DIFUSION_LIMITADA': StandardClearance.UNCLASSIFIED,  // Limited distribution, but unclassified
+    'DIFUSION_LIMITADA': StandardClearance.RESTRICTED,  // Limited distribution
     'CONFIDENCIAL': StandardClearance.CONFIDENTIAL,
     'SECRETO': StandardClearance.SECRET,
     'ALTO_SECRETO': StandardClearance.TOP_SECRET,
 
     // Alternate spellings/formats
     'NO CLASIFICADO': StandardClearance.UNCLASSIFIED,
-    'DIFUSIÓN LIMITADA': StandardClearance.UNCLASSIFIED,
+    'DIFUSIÓN LIMITADA': StandardClearance.RESTRICTED,
     'ALTO SECRETO': StandardClearance.TOP_SECRET,
 };
 
@@ -59,14 +60,14 @@ const SPANISH_CLEARANCE_MAP: Record<string, StandardClearance> = {
 const FRENCH_CLEARANCE_MAP: Record<string, StandardClearance> = {
     // French classification levels
     'NON_PROTEGE': StandardClearance.UNCLASSIFIED,
-    'DIFFUSION_RESTREINTE': StandardClearance.CONFIDENTIAL,
+    'DIFFUSION_RESTREINTE': StandardClearance.RESTRICTED,
     'CONFIDENTIEL_DEFENSE': StandardClearance.CONFIDENTIAL,
     'SECRET_DEFENSE': StandardClearance.SECRET,
     'TRES_SECRET_DEFENSE': StandardClearance.TOP_SECRET,
 
     // Alternate formats
     'NON PROTÉGÉ': StandardClearance.UNCLASSIFIED,
-    'DIFFUSION RESTREINTE': StandardClearance.CONFIDENTIAL,
+    'DIFFUSION RESTREINTE': StandardClearance.RESTRICTED,
     'CONFIDENTIEL DÉFENSE': StandardClearance.CONFIDENTIAL,
     'SECRET DÉFENSE': StandardClearance.SECRET,
     'TRÈS SECRET DÉFENSE': StandardClearance.TOP_SECRET,
@@ -77,7 +78,7 @@ const FRENCH_CLEARANCE_MAP: Record<string, StandardClearance> = {
  */
 const CANADIAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
     'UNCLASSIFIED': StandardClearance.UNCLASSIFIED,
-    'PROTECTED_A': StandardClearance.UNCLASSIFIED,
+    'PROTECTED_A': StandardClearance.RESTRICTED,
     'PROTECTED_B': StandardClearance.CONFIDENTIAL,
     'CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
     'SECRET': StandardClearance.SECRET,
@@ -89,7 +90,7 @@ const CANADIAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
  */
 const NATO_CLEARANCE_MAP: Record<string, StandardClearance> = {
     'NATO_UNCLASSIFIED': StandardClearance.UNCLASSIFIED,
-    'NATO_RESTRICTED': StandardClearance.CONFIDENTIAL,
+    'NATO_RESTRICTED': StandardClearance.RESTRICTED,
     'NATO_CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
     'NATO_SECRET': StandardClearance.SECRET,
     'COSMIC_TOP_SECRET': StandardClearance.TOP_SECRET,
@@ -108,7 +109,7 @@ const GERMAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
 
     // Alternate formats
     'STRENG GEHEIM': StandardClearance.TOP_SECRET,
-    'VS-NUR_FÜR_DEN_DIENSTGEBRAUCH': StandardClearance.CONFIDENTIAL, // VS-NFD
+    'VS-NUR_FÜR_DEN_DIENSTGEBRAUCH': StandardClearance.RESTRICTED, // VS-NFD
     'VS-VERTRAULICH': StandardClearance.CONFIDENTIAL,
     'VS-GEHEIM': StandardClearance.SECRET,
     'STRENGGEHEIM': StandardClearance.TOP_SECRET,
@@ -127,6 +128,8 @@ const ITALIAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
 
     // Alternate formats
     'NON CLASSIFICATO': StandardClearance.UNCLASSIFIED,
+    'USO UFFICIALE': StandardClearance.RESTRICTED,
+    'AD USO UFFICIALE': StandardClearance.RESTRICTED,
     'RISERVATISSIMO': StandardClearance.CONFIDENTIAL, // Highly Confidential
 };
 
@@ -137,14 +140,14 @@ const ITALIAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
 const DUTCH_CLEARANCE_MAP: Record<string, StandardClearance> = {
     // Dutch classification levels
     'NIET_GERUBRICEERD': StandardClearance.UNCLASSIFIED,
-    'DEPARTEMENTAAL_VERTROUWELIJK': StandardClearance.CONFIDENTIAL,
+    'DEPARTEMENTAAL_VERTROUWELIJK': StandardClearance.RESTRICTED,
     'VERTROUWELIJK': StandardClearance.CONFIDENTIAL,
     'GEHEIM': StandardClearance.SECRET,
     'ZEER_GEHEIM': StandardClearance.TOP_SECRET,
 
     // Alternate formats
     'NIET GERUBRICEERD': StandardClearance.UNCLASSIFIED,
-    'DEPARTEMENTAAL VERTROUWELIJK': StandardClearance.CONFIDENTIAL,
+    'DEPARTEMENTAAL VERTROUWELIJK': StandardClearance.RESTRICTED,
     'ZEER GEHEIM': StandardClearance.TOP_SECRET,
     'STGGEHEIM': StandardClearance.TOP_SECRET, // Staatsgeheim
 };
@@ -156,6 +159,9 @@ const DUTCH_CLEARANCE_MAP: Record<string, StandardClearance> = {
 const POLISH_CLEARANCE_MAP: Record<string, StandardClearance> = {
     // Polish classification levels
     'JAWNY': StandardClearance.UNCLASSIFIED,
+    'NIEJAWNE': StandardClearance.UNCLASSIFIED,
+    'UŻYTEK SŁUŻBOWY': StandardClearance.RESTRICTED, // Official use
+    'UZYTEK SLUZBOWY': StandardClearance.RESTRICTED, // Without diacritics
     'ZASTRZEŻONY': StandardClearance.CONFIDENTIAL, // Restricted
     'POUFNY': StandardClearance.CONFIDENTIAL,
     'TAJNY': StandardClearance.SECRET,
@@ -174,17 +180,18 @@ const POLISH_CLEARANCE_MAP: Record<string, StandardClearance> = {
 const UK_CLEARANCE_MAP: Record<string, StandardClearance> = {
     // UK classification levels
     'OFFICIAL': StandardClearance.UNCLASSIFIED,
-    'OFFICIAL-SENSITIVE': StandardClearance.CONFIDENTIAL,
+    'OFFICIAL-SENSITIVE': StandardClearance.RESTRICTED,
     'SECRET': StandardClearance.SECRET,
     'TOP_SECRET': StandardClearance.TOP_SECRET,
 
     // Alternate formats
     'TOP SECRET': StandardClearance.TOP_SECRET,
-    'OFFICIAL_SENSITIVE': StandardClearance.CONFIDENTIAL,
+    'OFFICIAL_SENSITIVE': StandardClearance.RESTRICTED,
+    'OFFICIAL SENSITIVE': StandardClearance.RESTRICTED,
 
     // Legacy classifications (pre-2014)
     'PROTECT': StandardClearance.UNCLASSIFIED,
-    'RESTRICTED': StandardClearance.CONFIDENTIAL,
+    'RESTRICTED': StandardClearance.RESTRICTED,
     'CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
 };
 
@@ -195,7 +202,8 @@ const UK_CLEARANCE_MAP: Record<string, StandardClearance> = {
 const INDUSTRY_CLEARANCE_MAP: Record<string, StandardClearance> = {
     // Industry classification levels
     'PUBLIC': StandardClearance.UNCLASSIFIED,
-    'INTERNAL': StandardClearance.CONFIDENTIAL,
+    'INTERNAL': StandardClearance.RESTRICTED,
+    'INTERNAL_USE_ONLY': StandardClearance.RESTRICTED,
     'CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
     'SENSITIVE': StandardClearance.SECRET,
     'HIGHLY_SENSITIVE': StandardClearance.TOP_SECRET,
@@ -204,7 +212,7 @@ const INDUSTRY_CLEARANCE_MAP: Record<string, StandardClearance> = {
     'HIGHLY SENSITIVE': StandardClearance.TOP_SECRET,
     'PROPRIETARY': StandardClearance.CONFIDENTIAL,
     'COMPANY_CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
-    'RESTRICTED': StandardClearance.CONFIDENTIAL,
+    'RESTRICTED': StandardClearance.RESTRICTED,
 };
 
 /**
@@ -400,11 +408,17 @@ export function isValidStandardClearance(clearance: string): boolean {
 
 /**
  * Get clearance hierarchy level (for comparison)
- * Returns numeric value: UNCLASSIFIED=0, CONFIDENTIAL=1, SECRET=2, TOP_SECRET=3
+ * Returns numeric value: UNCLASSIFIED=0, RESTRICTED=0.5, CONFIDENTIAL=1, SECRET=2, TOP_SECRET=3
+ * 
+ * CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+ * - UNCLASSIFIED users CANNOT access RESTRICTED content
+ * - RESTRICTED users CAN access UNCLASSIFIED content
+ * - Both remain AAL1 (no MFA required)
  */
 export function getClearanceLevel(clearance: StandardClearance): number {
     const levels: Record<StandardClearance, number> = {
         [StandardClearance.UNCLASSIFIED]: 0,
+        [StandardClearance.RESTRICTED]: 0.5,
         [StandardClearance.CONFIDENTIAL]: 1,
         [StandardClearance.SECRET]: 2,
         [StandardClearance.TOP_SECRET]: 3,

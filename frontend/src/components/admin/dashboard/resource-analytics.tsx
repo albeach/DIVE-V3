@@ -76,7 +76,8 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
 
     const classificationColors: Record<string, { bg: string; text: string }> = {
         'UNCLASSIFIED': { bg: 'bg-green-100', text: 'text-green-700' },
-        'CONFIDENTIAL': { bg: 'bg-blue-100', text: 'text-blue-700' },
+        'RESTRICTED': { bg: 'bg-blue-100', text: 'text-blue-700' },
+        'CONFIDENTIAL': { bg: 'bg-yellow-100', text: 'text-yellow-700' },
         'SECRET': { bg: 'bg-orange-100', text: 'text-orange-700' },
         'TOP_SECRET': { bg: 'bg-red-100', text: 'text-red-700' }
     };

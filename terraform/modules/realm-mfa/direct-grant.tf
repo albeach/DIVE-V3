@@ -74,8 +74,9 @@ resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
   ]
 }
 
-# Condition: User attribute "clearance" != "UNCLASSIFIED"
-# MFA required for CONFIDENTIAL, SECRET, TOP_SECRET users
+# Condition: User attribute "clearance" != "UNCLASSIFIED" AND != "RESTRICTED"
+# MFA required only for CONFIDENTIAL, SECRET, TOP_SECRET users
+# CRITICAL: Both UNCLASSIFIED and RESTRICTED remain AAL1 (no MFA)
 resource "keycloak_authentication_execution" "direct_grant_condition_user_attribute" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id

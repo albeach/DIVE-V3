@@ -25,7 +25,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { SessionStatusIndicator } from '@/components/auth/session-status-indicator';
-import { StandardsLensToggle } from '@/components/standards/StandardsLensToggle';
+// Removed: StandardsLensToggle - no longer needed
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
 import { 
     LayoutDashboard, 
@@ -531,11 +531,6 @@ export default function Navigation({ user }: INavigationProps) {
 
                         {/* Right: Unified Actions Menu - 2025 Pattern */}
                         <div className="flex items-center gap-3">
-                            {/* Standards Lens Toggle */}
-                            <div className="hidden lg:block">
-                                <StandardsLensToggle />
-                            </div>
-                            
                             {/* Unified User + Admin Dropdown - Enhanced */}
                             <div ref={dropdownRef} className="hidden lg:block relative">
                                 <div

@@ -43,6 +43,15 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
 # These are locally-trusted certificates (no browser warnings in development)
 COPY --chown=1000:1000 certs/ /opt/keycloak/certs/
 
+# Import mkcert root CA into Java truststore for IdP broker federation
+COPY certs/rootCA.pem /tmp/rootCA.pem
+RUN keytool -importcert -noprompt -trustcacerts \
+    -alias mkcert-root-ca \
+    -file /tmp/rootCA.pem \
+    -keystore /etc/pki/java/cacerts \
+    -storepass changeit && \
+    rm /tmp/rootCA.pem
+
 # Copy custom DIVE V3 themes (base + all country variants)
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 

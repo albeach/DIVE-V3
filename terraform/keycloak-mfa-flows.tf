@@ -23,18 +23,36 @@ module "broker_mfa" {
 }
 
 # ============================================
-# USA Realm MFA Configuration
+# USA Realm MFA Configuration (Step-Up Authentication)
 # ============================================
+# NIST SP 800-63B Compliant Multi-Level AAL
+# Uses proper Keycloak Step-Up Authentication with ACR/LoA mapping
 
-module "usa_mfa" {
-  source = "./modules/realm-mfa"
+module "usa_mfa_stepup" {
+  source = "./modules/realm-mfa-stepup"
 
   realm_id           = keycloak_realm.dive_v3_usa.id
   realm_name         = "dive-v3-usa"
   realm_display_name = "United States"
 
-  enable_direct_grant_mfa = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  # ACR/LoA Mappings (NIST AAL levels)
+  acr_loa_mappings = {
+    aal1 = {
+      acr_value = "urn:mace:incommon:iap:silver"      # AAL1: Password
+      loa_level = 1
+      max_age   = 300  # 5 minutes for basic auth
+    }
+    aal2 = {
+      acr_value = "urn:mace:incommon:iap:gold"        # AAL2: Password + OTP
+      loa_level = 2
+      max_age   = 0    # Always re-authenticate when explicitly requested
+    }
+    aal3 = {
+      acr_value = "urn:mace:incommon:iap:platinum"    # AAL3: Password + WebAuthn
+      loa_level = 3
+      max_age   = 0    # Always re-authenticate with hardware key
+    }
+  }
 }
 
 # ============================================
@@ -182,8 +200,8 @@ output "broker_mfa_browser_flow_id" {
 }
 
 output "usa_mfa_browser_flow_id" {
-  description = "USA realm MFA browser flow ID"
-  value       = module.usa_mfa.browser_flow_id
+  description = "USA realm Step-Up MFA browser flow ID"
+  value       = module.usa_mfa_stepup.browser_flow_id
 }
 
 output "fra_mfa_browser_flow_id" {

@@ -88,8 +88,12 @@ resource "keycloak_openid_client" "industry_realm_client" {
   direct_access_grants_enabled = false
   
   # Redirect to broker realm
+  # CRITICAL: Include BOTH internal and external URLs for MFA flow
+  # - External (Cloudflare): For browser redirects
+  # - Internal (Docker): For server-to-server OAuth callbacks during MFA
   valid_redirect_uris = [
-    "http://localhost:8081/realms/dive-v3-broker/broker/industry-realm-broker/endpoint",
+    "${var.keycloak_public_url}/realms/dive-v3-broker/broker/industry-realm-broker/endpoint",
+    "https://keycloak:8443/realms/dive-v3-broker/broker/industry-realm-broker/endpoint",
     "http://keycloak:8080/realms/dive-v3-broker/broker/industry-realm-broker/endpoint"
   ]
   

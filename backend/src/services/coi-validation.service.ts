@@ -85,7 +85,10 @@ export const COI_MEMBERSHIP: Record<string, Set<string>> = {
     'EUCOM': new Set(['USA', 'DEU', 'GBR', 'FRA', 'ITA', 'ESP', 'POL']),
     'PACOM': new Set(['USA', 'JPN', 'KOR', 'AUS', 'NZL', 'PHL']),
     'CENTCOM': new Set(['USA', 'SAU', 'ARE', 'QAT', 'KWT', 'BHR', 'JOR', 'EGY']),
-    'SOCOM': new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']) // FVEY special ops
+    'SOCOM': new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']), // FVEY special ops
+    'Alpha': new Set([]), // No country affiliation
+    'Beta': new Set([]), // No country affiliation
+    'Gamma': new Set([]) // No country affiliation
 };
 
 /**
@@ -194,6 +197,10 @@ function checkSubsetSupersetConflicts(cois: string[], operator: COIOperator): st
  * 
  * NOTE: When COI is empty, releasability alignment check is skipped.
  * Empty COI means "no COI-based restrictions" - not "deny all".
+ * 
+ * SPECIAL CASE: COIs with no country affiliation (Alpha, Beta, Gamma)
+ * These COIs are based on membership only, not country affiliation,
+ * so they skip releasability alignment checks.
  */
 async function checkReleasabilityAlignment(releasabilityTo: string[], cois: string[]): Promise<string[]> {
     const errors: string[] = [];
@@ -211,9 +218,21 @@ async function checkReleasabilityAlignment(releasabilityTo: string[], cois: stri
     // Get live COI membership data from database
     const membershipMap = await getCOIMembershipMapFromDB();
 
-    // Compute union of all COI member countries
+    // COIs with no country affiliation (membership-based only)
+    const noCountryAffiliationCOIs = new Set(['Alpha', 'Beta', 'Gamma']);
+
+    // Compute union of all COI member countries (excluding no-affiliation COIs)
     const union = new Set<string>();
+    let hasCountryBasedCOI = false;
+    
     for (const coi of cois) {
+        // Skip COIs with no country affiliation
+        if (noCountryAffiliationCOIs.has(coi)) {
+            logger.debug(`Skipping releasability check for no-affiliation COI: ${coi}`);
+            continue;
+        }
+
+        hasCountryBasedCOI = true;
         let members = membershipMap[coi];
 
         // Special case: NATO-COSMIC expands to full NATO membership
@@ -226,6 +245,15 @@ async function checkReleasabilityAlignment(releasabilityTo: string[], cois: stri
         } else {
             errors.push(`Unknown COI: ${coi} (cannot validate releasability)`);
         }
+    }
+
+    // If all COIs are no-affiliation COIs, skip releasability alignment check
+    if (!hasCountryBasedCOI) {
+        logger.debug('All COIs have no country affiliation - skipping releasability alignment', {
+            cois,
+            releasabilityTo
+        });
+        return errors;
     }
 
     // Check if releasabilityTo ⊆ union

@@ -44,7 +44,8 @@ services:
       # Using self-signed certificate for development
       # Set KC_HOSTNAME for consistent token issuer (critical for federation)
       # IMPORTANT: For remote access, set this to your public DNS name
-      KC_HOSTNAME: localhost
+      # Updated for Cloudflare Tunnel - Nov 10, 2025
+      KC_HOSTNAME: dev-auth.dive25.com
       KC_HOSTNAME_STRICT: false
       # KC_HOSTNAME_PORT removed - deprecated in Keycloak 26+ (Hostname v1)
       # KC_HOSTNAME_STRICT_HTTPS removed - deprecated in Keycloak 26+ (Hostname v1)
@@ -179,9 +180,11 @@ services:
       LOG_LEVEL: info
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
-      # CORS configuration - allows localhost by default
-      # Override with custom hostname: CORS_ALLOWED_ORIGINS=https://your-host:3000,https://your-host:8443
-      CORS_ALLOWED_ORIGINS: http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000
+      # CORS configuration - Updated for Cloudflare Tunnel
+      # Allows both local development and Cloudflare domains
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000,https://kas.js.usa.divedeeper.internal:3000,https://kas.js.usa.divedeeper.internal:4000,https://dev-app.dive25.com,https://dev-api.dive25.com,https://dev-auth.dive25.com
+      # Frontend base URL for CORS (used by server.ts)
+      NEXT_PUBLIC_BASE_URL: https://dev-app.dive25.com
       # Federation mode: Allow CORS from any origin (security via JWT authentication)
       # Set to 'true' when using external IdP clients or federated deployments
       ENABLE_FEDERATION_CORS: "false"
@@ -219,12 +222,12 @@ services:
     container_name: dive-v3-frontend
     environment:
       NODE_ENV: development
-      # BEST PRACTICE: Pure Docker networking (no extra_hosts)
-      # Browser (NEXT_PUBLIC_*): Uses localhost (exposed ports)
+      # CLOUDFLARE TUNNEL CONFIGURATION: Browser uses Cloudflare domains
+      # Browser (NEXT_PUBLIC_*): Uses Cloudflare tunnel domains
       # Server-side: Uses Docker service names (internal network)
-      NEXT_PUBLIC_API_URL: https://localhost:4000
-      NEXT_PUBLIC_BACKEND_URL: https://localhost:4000
-      NEXT_PUBLIC_BASE_URL: https://localhost:3000
+      NEXT_PUBLIC_API_URL: https://dev-api.dive25.com
+      NEXT_PUBLIC_BACKEND_URL: https://dev-api.dive25.com
+      NEXT_PUBLIC_BASE_URL: https://dev-app.dive25.com
       # Server-side backend URL (Docker internal network)
       # Uses HTTPS with self-signed certs (NODE_TLS_REJECT_UNAUTHORIZED=0)
       BACKEND_URL: https://backend:4000
@@ -234,18 +237,21 @@ services:
       KEYCLOAK_BASE_URL: https://keycloak:8443
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
-      # Option 3: Custom Theme - SSL enabled
-      AUTH_TRUST_HOST: "true"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
+      # Public Keycloak URLs (for browser-side using Cloudflare tunnel)
+      NEXT_PUBLIC_KEYCLOAK_URL: https://dev-auth.dive25.com
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      # Keycloak Issuer for JWT validation (must match token issuer)
+      KEYCLOAK_ISSUER: https://dev-auth.dive25.com/realms/dive-v3-broker
+      # NextAuth configuration - Updated for Cloudflare Tunnel
+      AUTH_URL: https://dev-app.dive25.com
+      AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
+      NEXTAUTH_URL: https://dev-app.dive25.com
+      # Client credentials
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
-      # Public Keycloak URLs (for browser-side logout with HTTPS)
-      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
-      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
-      # NextAuth configuration
-      AUTH_URL: https://localhost:3000
-      AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
-      NEXTAUTH_URL: https://localhost:3000
+      # SSL and host configuration
+      AUTH_TRUST_HOST: "true"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
       # Database for NextAuth sessions
       DATABASE_URL: postgresql://postgres:password@postgres:5432/dive_v3_app
     ports:
@@ -273,7 +279,7 @@ services:
     environment:
       NODE_ENV: development
       KAS_PORT: 8080
-      BACKEND_URL: https://host.docker.internal:4000
+      BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
       OPA_URL: http://opa:8181
       MONGODB_URL: mongodb://admin:password@mongo:27017

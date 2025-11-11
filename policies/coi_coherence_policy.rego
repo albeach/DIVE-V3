@@ -50,6 +50,9 @@ coi_members := {
 	"PACOM": {"USA", "JPN", "KOR", "AUS", "NZL", "PHL"},
 	"CENTCOM": {"USA", "SAU", "ARE", "QAT", "KWT", "BHR", "JOR", "EGY"},
 	"SOCOM": {"USA", "GBR", "CAN", "AUS", "NZL"}, # FVEY special ops
+	"Alpha": set(), # No country affiliation
+	"Beta": set(), # No country affiliation
+	"Gamma": set(), # No country affiliation
 }
 
 # ============================================
@@ -92,9 +95,19 @@ deny contains msg if {
 # VIOLATION 2: Releasability ⊆ COI Membership
 # ============================================
 
+# COIs with no country affiliation (membership-based only)
+no_affiliation_cois := {"Alpha", "Beta", "Gamma"}
+
 deny contains msg if {
-	# Compute union of all COI member countries
-	union := {c | some coi in input.resource.COI; some c in coi_members[coi]}
+	# Compute union of all COI member countries (excluding no-affiliation COIs)
+	union := {c | 
+		some resource_coi in input.resource.COI
+		not resource_coi in no_affiliation_cois
+		some c in coi_members[resource_coi]
+	}
+
+	# Only check if union is not empty (i.e., there are country-based COIs)
+	count(union) > 0
 
 	# Check if releasabilityTo ⊆ union
 	some r in input.resource.releasabilityTo

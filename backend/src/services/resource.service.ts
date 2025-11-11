@@ -13,7 +13,7 @@ const COLLECTION_NAME = 'resources';
 export interface IResource {
     resourceId: string;
     title: string;
-    classification: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
+    classification: 'UNCLASSIFIED' | 'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
     releasabilityTo: string[]; // ISO 3166-1 alpha-3 codes
     COI: string[];             // Communities of Interest
     creationDate?: string;     // ISO 8601 timestamp

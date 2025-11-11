@@ -1,0 +1,165 @@
+[
+  {
+    "resourceId": "doc-generated-1762442084103-0046",
+    "title": "Defense White Paper - Central Europe 46",
+    "classification": "UNCLASSIFIED",
+    "releasabilityTo": [
+      "USA",
+      "GBR",
+      "AUS",
+      "CAN"
+    ],
+    "COI": [
+      "Gamma"
+    ],
+    "coiOperator": "ALL",
+    "encryptionDetails": {
+      "algorithm": "AES-256-GCM",
+      "keyDerivation": "COI-based community key",
+      "ivBase64": "E0c6AYvnnwUb2Jgo",
+      "authTagBase64": "eLQXm79rs0TTuMz5/AB+gw==",
+      "encryptedContentBase64": "SrvJNZ+d7D0QhnS0XxUhOMe6Hpnuqiw+gKr195xMJF7EGypInim5tBQrMAh/WWRcvhGUT/x04pX/KT9KZNPatO5oSSxNmREXg67/Neb2Grl2ddYVb5m7q9kwxjU9hJ+Fi5g8y7CDen9l1DSZRV8qSQNfyBoO5heH22q/bDY6Q+cn0Qgx0xpGbMz7YJ+I+TemgNoqF+gaqZrAXGD+q0fWj4S4fitInO82xIJfSG/aKsIhuCIxyhMYD2n49WxcfCFsjtunBKHS2gRcxo2zq2rVDZOl0rnKsYphZulB2sfABNBQdKn1nA1BNFH0IxreBS+9lN0aJQzJRrXn5CYwbWv0aDWOpUuWN0f3A6VvwC7DWjATBfYIyAwufvmAi1zu4A7NpJWhQUWZH4YPpAnsqHnpJWWN95ZlC9PycwJ8YjgSJSN+RZQs+Ah4F+IFm3D/xRj60Xd2uHtdorrO/JgdSL5BpdnwYWYAn5TRNJwQGhzzJXirq8UYiuIXZ9OkIx5m1KUwnPvbjrxln19APF2xnH9sQyR1qrQstZ2YtyC4/TV3",
+      "encryptedContentSize": 414,
+      "coi": "Gamma"
+    },
+    "decryptionInstructions": "\nDECRYPTION INSTRUCTIONS\n=======================\n\nAlgorithm: AES-256-GCM\nKey Type: COI-based Community Key\n\nStep 1: Get the COI Community Key\n----------------------------------\nCOI: Gamma\n\nThe DEK (Data Encryption Key) is derived from the COI community key.\nIn the DIVE V3 system, COI keys are stored in the COI Key Registry.\n\nFor this COI (Gamma), retrieve the key using:\n- Service: coi-key-registry.ts\n- Function: getCOIKey('Gamma')\n- Key Size: 256 bits (32 bytes)\n\nStep 2: Extract Encryption Parameters\n--------------------------------------\nIV (Initialization Vector):\n  Base64: E0c6AYvnnwUb2Jgo\n  Hex: 13473a018be79f051bd89828\n  Size: 12 bytes (96 bits)\n\nAuth Tag (GCM Authentication Tag):\n  Base64: eLQXm79rs0TTuMz5/AB+gw==\n  Hex: 78b4179bbf6bb344d3b8ccf9fc007e83\n  Size: 16 bytes (128 bits)\n\nStep 3: Decrypt with AES-256-GCM\n---------------------------------\nPseudocode:\n  dek = getCOIKey('Gamma')\n  iv = base64Decode(IV)\n  authTag = base64Decode(AuthTag)\n  encryptedData = base64Decode(EncryptedContent)\n  \n  decipher = AES_256_GCM_Decrypt(dek, iv)\n  decipher.setAuthTag(authTag)\n  plaintext = decipher.update(encryptedData) + decipher.final()\n\nNode.js Code:\n  const crypto = require('crypto');\n  const { getCOIKey } = require('./services/coi-key-registry');\n  \n  const dek = getCOIKey('Gamma');\n  const iv = Buffer.from('E0c6AYvnnwUb2Jgo', 'base64');\n  const authTag = Buffer.from('eLQXm79rs0TTuMz5/AB+gw==', 'base64');\n  const encryptedData = '...'; // From encryptedContentBase64\n  \n  const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);\n  decipher.setAuthTag(authTag);\n  let plaintext = decipher.update(encryptedData, 'base64', 'utf8');\n  plaintext += decipher.final('utf8');\n  console.log(plaintext);\n\nPython Code:\n  from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n  import base64\n  \n  dek = get_coi_key('Gamma')  # 32 bytes\n  iv = base64.b64decode('E0c6AYvnnwUb2Jgo')\n  auth_tag = base64.b64decode('eLQXm79rs0TTuMz5/AB+gw==')\n  encrypted_data = base64.b64decode(encrypted_content_base64)\n  \n  aesgcm = AESGCM(dek)\n  plaintext = aesgcm.decrypt(iv, encrypted_data + auth_tag, None)\n  print(plaintext.decode('utf-8'))\n\nStep 4: Verify Integrity\n-------------------------\nAfter decryption, verify the authentication tag matches.\nIf auth tag verification fails, the content has been tampered with.\n\nSecurity Notes:\n- Never expose the DEK in logs\n- DEK should only exist in memory during decryption\n- Verify payload hash matches ZTDF manifest\n- Check policy binding before releasing DEK\n",
+    "ztdfMetadata": {
+      "version": "1.0",
+      "objectId": "doc-generated-1762442084103-0046",
+      "owner": "550e8400-e29b-41d4-a716-446655440001",
+      "createdAt": "2025-11-06T15:14:44.561Z",
+      "displayMarking": "UNCLASSIFIED//Gamma//REL USA, GBR, AUS, CAN"
+    }
+  },
+  {
+    "resourceId": "doc-generated-1762442084103-0057",
+    "title": "Training Manual - Middle East 57",
+    "classification": "UNCLASSIFIED",
+    "releasabilityTo": [
+      "USA",
+      "FRA",
+      "DEU"
+    ],
+    "COI": [
+      "Beta"
+    ],
+    "coiOperator": "ALL",
+    "encryptionDetails": {
+      "algorithm": "AES-256-GCM",
+      "keyDerivation": "COI-based community key",
+      "ivBase64": "ImDj2u8PO3kB++mU",
+      "authTagBase64": "sPy/zme7XMDFkRLVjAVCVg==",
+      "encryptedContentBase64": "9Pigpeogy5rA/zyzvzefyi5bn4vNhv8a/Awn0p9R2fQ+Bj7wfuXRbZlRs7mODvCf1HNmRpaNOz3wiDurYKt4yR86rdxKASoVU2VuYmTQRTwd2xphn7y0Khx+BYuTDon5DH2IEJR2ZRD4nFnP+ayD5h17vDHJqrlwaqCVTo+Nfl5iaXKdFCIzcV7Hui3QXA5Rbp2tImv9lrMdcB0cb1ql0ZyZv3iIkvL23369/3ORRIHI0uuNxisvJ2mWH3dbLdHqKfe3kEHODYQ9simDAuLMtvEwIXBs8nL02AoO7ql0nMjyrdswkifI0k1gGsA/lbUjaBdsCAxBE8BPOiujisPa+96nZpPPE8Hq7bszpyC6iDJmKgStvRbZ77+k2bDeJwjZP40cjr6bt3UbvPImtxseIG52GeWimOTRTN90waGtAEdk6QErrg/APn+4+cJW5MBYB2NS2E8ADQpkyMxMNifRWw7ztyxfeem9gyuQVYt6XNI/C7WTxtwYW2uqv7gLmfP3LbU5G2F4fgk12Uab0EWi0A==",
+      "encryptedContentSize": 400,
+      "coi": "Beta"
+    },
+    "decryptionInstructions": "\nDECRYPTION INSTRUCTIONS\n=======================\n\nAlgorithm: AES-256-GCM\nKey Type: COI-based Community Key\n\nStep 1: Get the COI Community Key\n----------------------------------\nCOI: Beta\n\nThe DEK (Data Encryption Key) is derived from the COI community key.\nIn the DIVE V3 system, COI keys are stored in the COI Key Registry.\n\nFor this COI (Beta), retrieve the key using:\n- Service: coi-key-registry.ts\n- Function: getCOIKey('Beta')\n- Key Size: 256 bits (32 bytes)\n\nStep 2: Extract Encryption Parameters\n--------------------------------------\nIV (Initialization Vector):\n  Base64: ImDj2u8PO3kB++mU\n  Hex: 2260e3daef0f3b7901fbe994\n  Size: 12 bytes (96 bits)\n\nAuth Tag (GCM Authentication Tag):\n  Base64: sPy/zme7XMDFkRLVjAVCVg==\n  Hex: b0fcbfce67bb5cc0c59112d58c054256\n  Size: 16 bytes (128 bits)\n\nStep 3: Decrypt with AES-256-GCM\n---------------------------------\nPseudocode:\n  dek = getCOIKey('Beta')\n  iv = base64Decode(IV)\n  authTag = base64Decode(AuthTag)\n  encryptedData = base64Decode(EncryptedContent)\n  \n  decipher = AES_256_GCM_Decrypt(dek, iv)\n  decipher.setAuthTag(authTag)\n  plaintext = decipher.update(encryptedData) + decipher.final()\n\nNode.js Code:\n  const crypto = require('crypto');\n  const { getCOIKey } = require('./services/coi-key-registry');\n  \n  const dek = getCOIKey('Beta');\n  const iv = Buffer.from('ImDj2u8PO3kB++mU', 'base64');\n  const authTag = Buffer.from('sPy/zme7XMDFkRLVjAVCVg==', 'base64');\n  const encryptedData = '...'; // From encryptedContentBase64\n  \n  const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);\n  decipher.setAuthTag(authTag);\n  let plaintext = decipher.update(encryptedData, 'base64', 'utf8');\n  plaintext += decipher.final('utf8');\n  console.log(plaintext);\n\nPython Code:\n  from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n  import base64\n  \n  dek = get_coi_key('Beta')  # 32 bytes\n  iv = base64.b64decode('ImDj2u8PO3kB++mU')\n  auth_tag = base64.b64decode('sPy/zme7XMDFkRLVjAVCVg==')\n  encrypted_data = base64.b64decode(encrypted_content_base64)\n  \n  aesgcm = AESGCM(dek)\n  plaintext = aesgcm.decrypt(iv, encrypted_data + auth_tag, None)\n  print(plaintext.decode('utf-8'))\n\nStep 4: Verify Integrity\n-------------------------\nAfter decryption, verify the authentication tag matches.\nIf auth tag verification fails, the content has been tampered with.\n\nSecurity Notes:\n- Never expose the DEK in logs\n- DEK should only exist in memory during decryption\n- Verify payload hash matches ZTDF manifest\n- Check policy binding before releasing DEK\n",
+    "ztdfMetadata": {
+      "version": "1.0",
+      "objectId": "doc-generated-1762442084103-0057",
+      "owner": "550e8400-e29b-41d4-a716-446655440001",
+      "createdAt": "2025-11-06T15:14:44.564Z",
+      "displayMarking": "UNCLASSIFIED//Beta//REL USA, FRA, DEU"
+    }
+  },
+  {
+    "resourceId": "doc-generated-1762442084611-0124",
+    "title": "Maritime Operations - Baltic Sea 124",
+    "classification": "UNCLASSIFIED",
+    "releasabilityTo": [
+      "USA",
+      "GBR",
+      "CAN",
+      "FRA",
+      "DEU"
+    ],
+    "COI": [
+      "Alpha",
+      "Beta"
+    ],
+    "coiOperator": "ANY",
+    "encryptionDetails": {
+      "algorithm": "AES-256-GCM",
+      "keyDerivation": "COI-based community key",
+      "ivBase64": "aooZgnNNWX7ym7MQ",
+      "authTagBase64": "JlruQulUVj4Fd1EnxmlhVg==",
+      "encryptedContentBase64": "APL7ZTtR9P6q++0WPcuN09ys89IEGyr8VQGzln9uTXzen3n/gYqk/Yea5Y/n0Ii5nIOY1Rn6hPKFbJxtkI01LuNh1lDpsBgXnsDDrW8Hi5esQINYpoolw2YWi7L92gGQPkWhhaa2cdsEXPiXOR7NigYy/4RySrDBUIgJPywniwi85diL1Gq4TPNfP6hDGBPRdo4krpwe7yTCWZ65yYxayDEZb9TvpgOREuPYAptR3/wFkft/BI8hFGrIbqrLeZmQMmv2U/o6QnRHuk/ey7KNNDbfsLPQ7tjXMCBcnheHw7LbTDIP6Ln/nHdlQCcgu+Ehk23zi4K0V73RuWC4jkpuItzYdln9UVXT+ITlMxkWnPSCmT0cX98hB64xSdYp6w5VtWjoocNJEgITqAY97QkusSMxzk35FSECVZF0CfrQhS1DkxpL7DvR//kBbN93AL0Kutu7hy5CrNOygVMLTewV5Zrs1XfU9mNn+JapQaCM+qIumKMuJUwB5DWTaPnhDROQHToO+SFEpK5ZqzaycORWQ0q3XAjZ7xvyUu971UUDGhgekrSBMDLpAF45FK0zyA==",
+      "encryptedContentSize": 430,
+      "coi": "Alpha"
+    },
+    "decryptionInstructions": "\nDECRYPTION INSTRUCTIONS\n=======================\n\nAlgorithm: AES-256-GCM\nKey Type: COI-based Community Key\n\nStep 1: Get the COI Community Key\n----------------------------------\nCOI: Alpha\n\nThe DEK (Data Encryption Key) is derived from the COI community key.\nIn the DIVE V3 system, COI keys are stored in the COI Key Registry.\n\nFor this COI (Alpha), retrieve the key using:\n- Service: coi-key-registry.ts\n- Function: getCOIKey('Alpha')\n- Key Size: 256 bits (32 bytes)\n\nStep 2: Extract Encryption Parameters\n--------------------------------------\nIV (Initialization Vector):\n  Base64: aooZgnNNWX7ym7MQ\n  Hex: 6a8a1982734d597ef29bb310\n  Size: 12 bytes (96 bits)\n\nAuth Tag (GCM Authentication Tag):\n  Base64: JlruQulUVj4Fd1EnxmlhVg==\n  Hex: 265aee42e954563e05775127c6696156\n  Size: 16 bytes (128 bits)\n\nStep 3: Decrypt with AES-256-GCM\n---------------------------------\nPseudocode:\n  dek = getCOIKey('Alpha')\n  iv = base64Decode(IV)\n  authTag = base64Decode(AuthTag)\n  encryptedData = base64Decode(EncryptedContent)\n  \n  decipher = AES_256_GCM_Decrypt(dek, iv)\n  decipher.setAuthTag(authTag)\n  plaintext = decipher.update(encryptedData) + decipher.final()\n\nNode.js Code:\n  const crypto = require('crypto');\n  const { getCOIKey } = require('./services/coi-key-registry');\n  \n  const dek = getCOIKey('Alpha');\n  const iv = Buffer.from('aooZgnNNWX7ym7MQ', 'base64');\n  const authTag = Buffer.from('JlruQulUVj4Fd1EnxmlhVg==', 'base64');\n  const encryptedData = '...'; // From encryptedContentBase64\n  \n  const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);\n  decipher.setAuthTag(authTag);\n  let plaintext = decipher.update(encryptedData, 'base64', 'utf8');\n  plaintext += decipher.final('utf8');\n  console.log(plaintext);\n\nPython Code:\n  from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n  import base64\n  \n  dek = get_coi_key('Alpha')  # 32 bytes\n  iv = base64.b64decode('aooZgnNNWX7ym7MQ')\n  auth_tag = base64.b64decode('JlruQulUVj4Fd1EnxmlhVg==')\n  encrypted_data = base64.b64decode(encrypted_content_base64)\n  \n  aesgcm = AESGCM(dek)\n  plaintext = aesgcm.decrypt(iv, encrypted_data + auth_tag, None)\n  print(plaintext.decode('utf-8'))\n\nStep 4: Verify Integrity\n-------------------------\nAfter decryption, verify the authentication tag matches.\nIf auth tag verification fails, the content has been tampered with.\n\nSecurity Notes:\n- Never expose the DEK in logs\n- DEK should only exist in memory during decryption\n- Verify payload hash matches ZTDF manifest\n- Check policy binding before releasing DEK\n",
+    "ztdfMetadata": {
+      "version": "1.0",
+      "objectId": "doc-generated-1762442084611-0124",
+      "owner": "550e8400-e29b-41d4-a716-446655440001",
+      "createdAt": "2025-11-06T15:14:44.947Z",
+      "displayMarking": "UNCLASSIFIED//Alpha-Beta//REL USA, GBR, CAN, FRA, DEU"
+    }
+  },
+  {
+    "resourceId": "doc-generated-1762442084611-0129",
+    "title": "Training Manual - Air Superiority 129",
+    "classification": "UNCLASSIFIED",
+    "releasabilityTo": [
+      "USA",
+      "GBR",
+      "AUS",
+      "CAN"
+    ],
+    "COI": [
+      "Gamma"
+    ],
+    "coiOperator": "ALL",
+    "encryptionDetails": {
+      "algorithm": "AES-256-GCM",
+      "keyDerivation": "COI-based community key",
+      "ivBase64": "RIEA51oX70ZsKqZf",
+      "authTagBase64": "RqY+3HA095gkkYL9f/ALlA==",
+      "encryptedContentBase64": "fAfQ5Tg5lE+n4F/IJ0AjKAda9F2ubVIUC5A6nR4NTIf+epIl8uZalNRfO+RPMD1rXpWjVurMtouZfnGAdmOi+IgIGssYKYjFgpRnxKoG43aNfJQ6KHWeWNuoZ4X5l6Dsoy4HlgFl6S3NbTBJc6wXl9EPT0qL0siAJJMxipbIiWi0rVknWIzdXgWsG2RZrWAQrVNmS0wRdPwrkObBN1B6q2WatdT1Wi5xEAm0m5MIWFhRDlhMV1yI8v9OZ4W0paUzA3IIqn0SwzBfFS23JFNu7qumAb+waMS6fIupJRHxl/IcU/Z1nMCPoTxa7Bd46xBKsB5lHN3wzL9TqJ0DXDdiIx8RkxBf3KzgADrv5sXDjxv3IzsR9EOQpg7waXXBKtn+YWA4Ik62tyxicWIxhPl6fzivOZHfh/mtalU2p86sgRsrpzITMCK9ekMaSvOqYz4fLToVFdCmwBJEuJM4fgstizqK9kg+eN3X/SIY9YpRhD1JFaUCZVNy1TrZKbnPMF03Q9e+qerNeJ7NIdKV3p+2Jvf64qiiZz4bhDuuvg==",
+      "encryptedContentSize": 412,
+      "coi": "Gamma"
+    },
+    "decryptionInstructions": "\nDECRYPTION INSTRUCTIONS\n=======================\n\nAlgorithm: AES-256-GCM\nKey Type: COI-based Community Key\n\nStep 1: Get the COI Community Key\n----------------------------------\nCOI: Gamma\n\nThe DEK (Data Encryption Key) is derived from the COI community key.\nIn the DIVE V3 system, COI keys are stored in the COI Key Registry.\n\nFor this COI (Gamma), retrieve the key using:\n- Service: coi-key-registry.ts\n- Function: getCOIKey('Gamma')\n- Key Size: 256 bits (32 bytes)\n\nStep 2: Extract Encryption Parameters\n--------------------------------------\nIV (Initialization Vector):\n  Base64: RIEA51oX70ZsKqZf\n  Hex: 448100e75a17ef466c2aa65f\n  Size: 12 bytes (96 bits)\n\nAuth Tag (GCM Authentication Tag):\n  Base64: RqY+3HA095gkkYL9f/ALlA==\n  Hex: 46a63edc7034f798249182fd7ff00b94\n  Size: 16 bytes (128 bits)\n\nStep 3: Decrypt with AES-256-GCM\n---------------------------------\nPseudocode:\n  dek = getCOIKey('Gamma')\n  iv = base64Decode(IV)\n  authTag = base64Decode(AuthTag)\n  encryptedData = base64Decode(EncryptedContent)\n  \n  decipher = AES_256_GCM_Decrypt(dek, iv)\n  decipher.setAuthTag(authTag)\n  plaintext = decipher.update(encryptedData) + decipher.final()\n\nNode.js Code:\n  const crypto = require('crypto');\n  const { getCOIKey } = require('./services/coi-key-registry');\n  \n  const dek = getCOIKey('Gamma');\n  const iv = Buffer.from('RIEA51oX70ZsKqZf', 'base64');\n  const authTag = Buffer.from('RqY+3HA095gkkYL9f/ALlA==', 'base64');\n  const encryptedData = '...'; // From encryptedContentBase64\n  \n  const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);\n  decipher.setAuthTag(authTag);\n  let plaintext = decipher.update(encryptedData, 'base64', 'utf8');\n  plaintext += decipher.final('utf8');\n  console.log(plaintext);\n\nPython Code:\n  from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n  import base64\n  \n  dek = get_coi_key('Gamma')  # 32 bytes\n  iv = base64.b64decode('RIEA51oX70ZsKqZf')\n  auth_tag = base64.b64decode('RqY+3HA095gkkYL9f/ALlA==')\n  encrypted_data = base64.b64decode(encrypted_content_base64)\n  \n  aesgcm = AESGCM(dek)\n  plaintext = aesgcm.decrypt(iv, encrypted_data + auth_tag, None)\n  print(plaintext.decode('utf-8'))\n\nStep 4: Verify Integrity\n-------------------------\nAfter decryption, verify the authentication tag matches.\nIf auth tag verification fails, the content has been tampered with.\n\nSecurity Notes:\n- Never expose the DEK in logs\n- DEK should only exist in memory during decryption\n- Verify payload hash matches ZTDF manifest\n- Check policy binding before releasing DEK\n",
+    "ztdfMetadata": {
+      "version": "1.0",
+      "objectId": "doc-generated-1762442084611-0129",
+      "owner": "550e8400-e29b-41d4-a716-446655440001",
+      "createdAt": "2025-11-06T15:14:44.971Z",
+      "displayMarking": "UNCLASSIFIED//Gamma//REL USA, GBR, AUS, CAN"
+    }
+  },
+  {
+    "resourceId": "doc-generated-1762442084612-0170",
+    "title": "Operational Plan - Central Europe 170",
+    "classification": "UNCLASSIFIED",
+    "releasabilityTo": [
+      "USA",
+      "GBR",
+      "CAN",
+      "FRA",
+      "DEU"
+    ],
+    "COI": [
+      "Alpha",
+      "Beta"
+    ],
+    "coiOperator": "ANY",
+    "encryptionDetails": {
+      "algorithm": "AES-256-GCM",
+      "keyDerivation": "COI-based community key",
+      "ivBase64": "f5ESvNeZJkc06kvj",
+      "authTagBase64": "sI7YTiOU3GKOlYGyrabbRA==",
+      "encryptedContentBase64": "WHZ8ctA2K8TOKVCn7JEpTcSXoeaA6mVr/yxFBb/VOLNLtJBbaieAY2mVDkd4RFG4NM/nKFuU5LKKN39bFZkTqGzPluZO91dGNXkbiN4910uoYweJLw7hjyG98xyP/gxxbGjy5gw6gDeeon+Tfku7cWPFoeSsEFe6NT2dJsGvw8G6dTyDfaurN54/Ido1L8p68Tc+TS9gG/ae/O083NOrZikFWVzPs13frQhGV9rmtxe8j7ZVDKTq8DqWn9z4CJo8rxlWxu7e0+OhP9JqoZT305RfcjKDcpGUB86z1iYY2hLixZDy4zzWCQJUM8d93/eFlcF8k929s8Ub/RAr/8nvAcmcD2JLdE5UewLnFsSkkXFdS0SXiCkjN/gR1RxgjnP8x0MsLMGamdU+0gtn8R64s8Lf+tc0T1lGoulNBf+oPnSEEPJBMNiWxtGmh+lnZiUkIlDoskTVPle4pqQDkb8ppBT9T7h3Wh7FaoRwofontRI3+TLm/P9Hlot5y5r0Qn1bIRZvVQV8BHrs3l3LmAeAGvCFoTc960bgJH9pPRmBeELArhHNelKD8bAtR8VJWPw=",
+      "encryptedContentSize": 431,
+      "coi": "Alpha"
+    },
+    "decryptionInstructions": "\nDECRYPTION INSTRUCTIONS\n=======================\n\nAlgorithm: AES-256-GCM\nKey Type: COI-based Community Key\n\nStep 1: Get the COI Community Key\n----------------------------------\nCOI: Alpha\n\nThe DEK (Data Encryption Key) is derived from the COI community key.\nIn the DIVE V3 system, COI keys are stored in the COI Key Registry.\n\nFor this COI (Alpha), retrieve the key using:\n- Service: coi-key-registry.ts\n- Function: getCOIKey('Alpha')\n- Key Size: 256 bits (32 bytes)\n\nStep 2: Extract Encryption Parameters\n--------------------------------------\nIV (Initialization Vector):\n  Base64: f5ESvNeZJkc06kvj\n  Hex: 7f9112bcd799264734ea4be3\n  Size: 12 bytes (96 bits)\n\nAuth Tag (GCM Authentication Tag):\n  Base64: sI7YTiOU3GKOlYGyrabbRA==\n  Hex: b08ed84e2394dc628e9581b2ada6db44\n  Size: 16 bytes (128 bits)\n\nStep 3: Decrypt with AES-256-GCM\n---------------------------------\nPseudocode:\n  dek = getCOIKey('Alpha')\n  iv = base64Decode(IV)\n  authTag = base64Decode(AuthTag)\n  encryptedData = base64Decode(EncryptedContent)\n  \n  decipher = AES_256_GCM_Decrypt(dek, iv)\n  decipher.setAuthTag(authTag)\n  plaintext = decipher.update(encryptedData) + decipher.final()\n\nNode.js Code:\n  const crypto = require('crypto');\n  const { getCOIKey } = require('./services/coi-key-registry');\n  \n  const dek = getCOIKey('Alpha');\n  const iv = Buffer.from('f5ESvNeZJkc06kvj', 'base64');\n  const authTag = Buffer.from('sI7YTiOU3GKOlYGyrabbRA==', 'base64');\n  const encryptedData = '...'; // From encryptedContentBase64\n  \n  const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);\n  decipher.setAuthTag(authTag);\n  let plaintext = decipher.update(encryptedData, 'base64', 'utf8');\n  plaintext += decipher.final('utf8');\n  console.log(plaintext);\n\nPython Code:\n  from cryptography.hazmat.primitives.ciphers.aead import AESGCM\n  import base64\n  \n  dek = get_coi_key('Alpha')  # 32 bytes\n  iv = base64.b64decode('f5ESvNeZJkc06kvj')\n  auth_tag = base64.b64decode('sI7YTiOU3GKOlYGyrabbRA==')\n  encrypted_data = base64.b64decode(encrypted_content_base64)\n  \n  aesgcm = AESGCM(dek)\n  plaintext = aesgcm.decrypt(iv, encrypted_data + auth_tag, None)\n  print(plaintext.decode('utf-8'))\n\nStep 4: Verify Integrity\n-------------------------\nAfter decryption, verify the authentication tag matches.\nIf auth tag verification fails, the content has been tampered with.\n\nSecurity Notes:\n- Never expose the DEK in logs\n- DEK should only exist in memory during decryption\n- Verify payload hash matches ZTDF manifest\n- Check policy binding before releasing DEK\n",
+    "ztdfMetadata": {
+      "version": "1.0",
+      "objectId": "doc-generated-1762442084612-0170",
+      "owner": "550e8400-e29b-41d4-a716-446655440001",
+      "createdAt": "2025-11-06T15:14:44.958Z",
+      "displayMarking": "UNCLASSIFIED//Alpha-Beta//REL USA, GBR, CAN, FRA, DEU"
+    }
+  }
+]

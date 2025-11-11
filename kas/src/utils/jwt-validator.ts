@@ -222,6 +222,8 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Multi-realm: Accept tokens from both dive-v3-pilot AND dive-v3-broker
         // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
         // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
+        // Custom Domain: Accept kas.js.usa.divedeeper.internal:8443 (KC_HOSTNAME) - Nov 6, 2025 fix
+        // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
         const validIssuers: [string, ...string[]] = [
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
@@ -229,12 +231,17 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
             'https://localhost:8443/realms/dive-v3-pilot',         // External HTTPS: dive-v3-pilot
             'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-pilot',   // Custom domain: dive-v3-pilot
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker
+            'https://dev-auth.dive25.com/realms/dive-v3-pilot',    // Cloudflare Tunnel: dive-v3-pilot
+            'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
         const validAudiences: [string, ...string[]] = [
-            'dive-v3-client',         // Legacy client
-            'dive-v3-client-broker',  // Multi-realm broker client
+            'dive-v3-client',         // Legacy client (broker realm)
+            'dive-v3-client-broker',  // Multi-realm broker client (old name - deprecated)
+            'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
         ];
 

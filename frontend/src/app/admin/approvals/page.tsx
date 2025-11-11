@@ -69,10 +69,10 @@ export default function ApprovalsPage() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
-        if (status === 'authenticated' && session?.accessToken) {
+        if (status === 'authenticated') {
             fetchPending();
         }
-    }, [status, session?.accessToken]);
+    }, [status]);
 
     // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
     useEffect(() => {

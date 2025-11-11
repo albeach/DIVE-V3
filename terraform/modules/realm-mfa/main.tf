@@ -29,6 +29,8 @@ resource "keycloak_authentication_flow" "classified_browser" {
 # ============================================
 # Top Level: Cookie vs Forms
 # ============================================
+# IMPORTANT: Cookie SSO is ALTERNATIVE but WebAuthn is REQUIRED for TOP_SECRET
+# This allows session management while still enforcing MFA on each authentication
 
 # Option 1: SSO Cookie (returning users, already authenticated)
 resource "keycloak_authentication_execution" "browser_cookie" {
@@ -36,6 +38,7 @@ resource "keycloak_authentication_execution" "browser_cookie" {
   parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
   authenticator     = "auth-cookie"
   requirement       = "ALTERNATIVE"
+  priority          = 10  # Execute cookie check first
 }
 
 # Option 2: Forms Subflow (new authentication required)
@@ -44,6 +47,7 @@ resource "keycloak_authentication_subflow" "browser_forms_subflow" {
   parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
   alias             = "Forms - ${var.realm_display_name}"
   requirement       = "ALTERNATIVE"
+  priority          = 20  # Forms subflow executes after cookie check
   
   depends_on = [keycloak_authentication_execution.browser_cookie]
 }
@@ -60,6 +64,7 @@ resource "keycloak_authentication_execution" "browser_forms" {
   parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   authenticator     = "auth-username-password-form"
   requirement       = "REQUIRED"
+  priority          = 10  # Password form FIRST
 }
 
 # Configure ACR and AMR for password authentication (AAL1 baseline)
@@ -82,6 +87,7 @@ resource "keycloak_authentication_subflow" "browser_conditional_webauthn" {
   parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   alias             = "Conditional WebAuthn AAL3 - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
+  priority          = 20  # WebAuthn check AFTER password
   
   depends_on = [keycloak_authentication_execution.browser_forms]
 }
@@ -138,6 +144,7 @@ resource "keycloak_authentication_subflow" "browser_conditional_otp" {
   parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   alias             = "Conditional OTP AAL2 - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
+  priority          = 30  # OTP check AFTER WebAuthn
   
   depends_on = [keycloak_authentication_subflow.browser_conditional_webauthn]
 }

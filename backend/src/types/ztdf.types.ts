@@ -20,6 +20,7 @@
  */
 export type ClassificationLevel =
     | 'UNCLASSIFIED'
+    | 'RESTRICTED'
     | 'CONFIDENTIAL'
     | 'SECRET'
     | 'TOP_SECRET';

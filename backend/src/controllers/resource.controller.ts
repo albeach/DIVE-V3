@@ -16,6 +16,7 @@ function isZTDFResource(resource: any): resource is IZTDFResource {
 /**
  * List all resources
  * Week 3.1: Enhanced with ZTDF support and STANAG 4774 display markings
+ * Week 3.2: Filter by user clearance to prevent information disclosure
  */
 export const listResourcesHandler = async (
     req: Request,
@@ -28,9 +29,46 @@ export const listResourcesHandler = async (
         logger.info('Listing resources', { requestId });
 
         const resources = await getAllResources();
+        
+        // Get user's clearance from JWT token (set by authenticateJWT middleware)
+        const token = (req as any).user;
+        const userClearance = token?.clearance || 'UNCLASSIFIED';
+        
+        // Clearance hierarchy for filtering
+        // CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+        // - UNCLASSIFIED users CANNOT access RESTRICTED content
+        // - RESTRICTED users CAN access UNCLASSIFIED content
+        const clearanceHierarchy: Record<string, number> = {
+            'UNCLASSIFIED': 0,
+            'RESTRICTED': 0.5,
+            'CONFIDENTIAL': 1,
+            'SECRET': 2,
+            'TOP_SECRET': 3
+        };
+        
+        const userClearanceLevel = clearanceHierarchy[userClearance] ?? 0;
+        
+        logger.debug('Filtering resources by clearance', {
+            requestId,
+            userClearance,
+            userClearanceLevel,
+            totalResources: resources.length
+        });
 
         // Return basic metadata with STANAG 4774 display markings
-        const resourceList = resources.map(r => {
+        const resourceList = resources
+            .filter(r => {
+                // Determine resource classification
+                const resourceClassification = isZTDFResource(r)
+                    ? r.ztdf.policy.securityLabel.classification
+                    : (r as any).classification || 'UNCLASSIFIED';
+                
+                const resourceLevel = clearanceHierarchy[resourceClassification] ?? 0;
+                
+                // Only show resources at or below user's clearance
+                return resourceLevel <= userClearanceLevel;
+            })
+            .map(r => {
             if (isZTDFResource(r)) {
                 // ZTDF-enhanced resource
                 return {

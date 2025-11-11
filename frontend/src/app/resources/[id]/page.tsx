@@ -109,24 +109,10 @@ export default function ResourceDetailPage() {
     }
 
     async function fetchResource() {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-      const accessToken = (session as any)?.accessToken;
-
-      if (!accessToken) {
-        setError({
-          error: 'Authentication Error',
-          message: 'No access token available',
-        });
-        setLoading(false);
-        return;
-      }
-
       try {
-        const response = await fetch(`${backendUrl}/api/resources/${resourceId}`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
+        // Call server-side API route (NO client-side tokens!)
+        const response = await fetch(`/api/resources/${resourceId}`, {
+          method: 'GET',
           cache: 'no-store',
         });
 
@@ -155,11 +141,10 @@ export default function ResourceDetailPage() {
     }
 
     async function fetchSuggestedResources() {
-      // Fetch resources that user might be able to access
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-      
+      // Fetch resources that user might be able to access (via API route)
       try {
-        const response = await fetch(`${backendUrl}/api/resources`, {
+        const response = await fetch('/api/resources', {
+          method: 'GET',
           cache: 'no-store',
         });
 
@@ -168,12 +153,14 @@ export default function ResourceDetailPage() {
           const allResources = data.resources || [];
           
           // Simple filtering: resources releasable to user's country
-          const userCountry = (session as any)?.user?.countryOfAffiliation;
-          const userClearance = (session as any)?.user?.clearance;
-          const userCOI = (session as any)?.user?.acpCOI || [];
+          const userCountry = session?.user?.countryOfAffiliation;
+          const userClearance = session?.user?.clearance;
+          const userCOI = session?.user?.acpCOI || [];
           
+          // CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
           const clearanceOrder: Record<string, number> = {
             'UNCLASSIFIED': 0,
+            'RESTRICTED': 0.5,
             'CONFIDENTIAL': 1,
             'SECRET': 2,
             'TOP_SECRET': 3,
@@ -494,14 +481,12 @@ export default function ResourceDetailPage() {
                           <button
                             onClick={async () => {
                               try {
-                                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-                                const accessToken = (session as any)?.accessToken;
-                                const ztdfResponse = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
-                                  headers: {
-                                    'Authorization': `Bearer ${accessToken}`,
-                                    'Content-Type': 'application/json'
-                                  }
+                                // Use server-side API route (NO client tokens!)
+                                const ztdfResponse = await fetch(`/api/resources/${resourceId}/ztdf`, {
+                                  method: 'GET',
+                                  cache: 'no-store',
                                 });
+                                
                                 if (ztdfResponse.ok) {
                                   const ztdfData = await ztdfResponse.json();
                                   const fetchedKaos = ztdfData.ztdfDetails?.payload?.keyAccessObjects || [];

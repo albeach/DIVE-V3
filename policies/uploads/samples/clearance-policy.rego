@@ -18,9 +18,14 @@ default allow := false
 # ============================================================================
 # Clearance Hierarchy
 # ============================================================================
+# CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+# - UNCLASSIFIED users CANNOT access RESTRICTED content
+# - RESTRICTED users CAN access UNCLASSIFIED content
+# - Both remain AAL1 (no MFA required)
 
 clearance_levels := {
     "UNCLASSIFIED": 0,
+    "RESTRICTED": 0.5,
     "CONFIDENTIAL": 1,
     "SECRET": 2,
     "TOP_SECRET": 3

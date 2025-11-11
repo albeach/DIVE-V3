@@ -8,6 +8,7 @@
 // Classification level type (duplicated to avoid cross-project imports)
 export type ClassificationLevel =
     | 'UNCLASSIFIED'
+    | 'RESTRICTED'
     | 'CONFIDENTIAL'
     | 'SECRET'
     | 'TOP_SECRET';

@@ -1,14 +1,16 @@
 /**
- * Seed ZTDF-Encrypted Documents (COI COHERENCE FIX)
+ * Seed ZTDF-Encrypted Documents (COI COHERENCE FIX + NEW COIs)
  * 
  * Enhanced version with:
  * - Configurable quantity (1 - 20,000 documents)
  * - Dry-run validation mode
  * - Progress tracking
- * - All 20 validated COI templates
+ * - 28 validated COI templates (includes Alpha, Beta, Gamma)
+ * - RESTRICTED clearance level
+ * - Templates with no COIs
  * 
  * Usage:
- *   npm run seed-database              # Seeds 7,000 docs (default)
+ *   npm run seed-database              # Seeds 11,000 docs (default)
  *   npm run seed-database 10000        # Seeds 10,000 docs
  *   npm run seed-database -- --dry-run # Tests with 10 docs
  * 
@@ -30,10 +32,10 @@ const DRY_RUN = process.argv.includes('--dry-run');
 // Get quantity from:
 // 1. Environment variable SEED_QUANTITY (for script usage)
 // 2. First numeric argument (for direct calls)
-// 3. Default to 7000
+// 3. Default to 11000
 const envQuantity = process.env.SEED_QUANTITY ? Number(process.env.SEED_QUANTITY) : null;
 const argQuantity = process.argv.find(arg => !isNaN(Number(arg)) && Number(arg) > 0);
-const requestedQuantity = envQuantity || (argQuantity ? Number(argQuantity) : 7000);
+const requestedQuantity = envQuantity || (argQuantity ? Number(argQuantity) : 11000);
 
 // Enforce limits
 const MAX_DOCS = 20000;
@@ -50,10 +52,10 @@ if (!DRY_RUN && requestedQuantity < MIN_DOCS) {
 }
 
 // Classification levels
-const CLASSIFICATIONS: ClassificationLevel[] = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+const CLASSIFICATIONS: ClassificationLevel[] = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 
 // ============================================
-// DETERMINISTIC COI TEMPLATES (20 templates)
+// DETERMINISTIC COI TEMPLATES (28 templates)
 // ============================================
 
 interface ICOITemplate {
@@ -247,6 +249,86 @@ const COI_TEMPLATES: ICOITemplate[] = [
         releasabilityTo: ['USA', 'FRA', 'GBR'],
         caveats: [],
         description: 'FRA-US + GBR-US (Multi-bilateral COI)'
+    },
+
+    // ============================================
+    // NEW COI TEMPLATES (Alpha, Beta, Gamma)
+    // ============================================
+
+    // 21. Alpha (No country affiliation)
+    {
+        coi: ['Alpha'],
+        coiOperator: 'ALL',
+        releasabilityTo: ['USA', 'GBR', 'CAN'],
+        caveats: [],
+        description: 'Alpha community (no country affiliation)'
+    },
+
+    // 22. Beta (No country affiliation)
+    {
+        coi: ['Beta'],
+        coiOperator: 'ALL',
+        releasabilityTo: ['USA', 'FRA', 'DEU'],
+        caveats: [],
+        description: 'Beta community (no country affiliation)'
+    },
+
+    // 23. Gamma (No country affiliation)
+    {
+        coi: ['Gamma'],
+        coiOperator: 'ALL',
+        releasabilityTo: ['USA', 'GBR', 'AUS', 'CAN'],
+        caveats: [],
+        description: 'Gamma community (no country affiliation)'
+    },
+
+    // 24. Alpha + Beta (Multi-COI - no country affiliation)
+    {
+        coi: ['Alpha', 'Beta'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'GBR', 'CAN', 'FRA', 'DEU'],
+        caveats: [],
+        description: 'Alpha + Beta (Multi-COI, no country affiliation)'
+    },
+
+    // 25. Gamma + FVEY (Mixed - no-affiliation + country-based)
+    {
+        coi: ['Gamma', 'FVEY'],
+        coiOperator: 'ANY',
+        releasabilityTo: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'],
+        caveats: [],
+        description: 'Gamma + FVEY (Mixed COI types)'
+    },
+
+    // ============================================
+    // NO COI TEMPLATES (Some files with empty COI)
+    // ============================================
+
+    // 26. No COI - USA only
+    {
+        coi: [],
+        coiOperator: 'ALL',
+        releasabilityTo: ['USA'],
+        caveats: [],
+        description: 'No COI - USA releasability'
+    },
+
+    // 27. No COI - FVEY countries
+    {
+        coi: [],
+        coiOperator: 'ALL',
+        releasabilityTo: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'],
+        caveats: [],
+        description: 'No COI - FVEY releasability'
+    },
+
+    // 28. No COI - NATO subset
+    {
+        coi: [],
+        coiOperator: 'ALL',
+        releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU', 'CAN'],
+        caveats: [],
+        description: 'No COI - NATO subset releasability'
     }
 ];
 

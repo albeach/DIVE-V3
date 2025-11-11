@@ -115,11 +115,17 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   valid_redirect_uris = [
     "${var.app_url}/*",
     "${var.app_url}/dashboard",
-    "${var.app_url}/api/auth/callback/keycloak"
+    "${var.app_url}/api/auth/callback/keycloak",
+    # Cloudflare Tunnel domains
+    "https://dev-app.dive25.com/*",
+    "https://dev-app.dive25.com/dashboard",
+    "https://dev-app.dive25.com/api/auth/callback/keycloak"
   ]
 
   web_origins = [
     var.app_url,
+    "https://dev-app.dive25.com",
+    "https://dev-api.dive25.com",
     "+"
   ]
 

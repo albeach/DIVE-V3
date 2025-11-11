@@ -278,7 +278,7 @@ export default function EvaluateTab() {
   };
 
   const countries = ['USA', 'FRA', 'CAN', 'GBR', 'DEU', 'AUS', 'NZL', 'ITA', 'POL'];
-  const clearanceLevels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+  const clearanceLevels = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
   const coiOptions = ['FVEY', 'NATO-COSMIC', 'CAN-US', 'US-ONLY'];
   const actions = ['read', 'write', 'delete', 'approve'];
   const aalLevels = ['AAL1', 'AAL2', 'AAL3'];

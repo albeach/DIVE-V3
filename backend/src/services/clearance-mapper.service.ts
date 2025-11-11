@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
  */
 export type DiveClearanceLevel =
     | 'UNCLASSIFIED'
+    | 'RESTRICTED'
     | 'CONFIDENTIAL'
     | 'SECRET'
     | 'TOP_SECRET';
@@ -71,7 +72,30 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
         description: 'Public or unclassified information'
     },
 
-    // Level 1: Confidential
+    // Level 0.5: Restricted (AAL1 like UNCLASSIFIED, but separate clearance level)
+    // CRITICAL: RESTRICTED is above UNCLASSIFIED in the hierarchy
+    // - UNCLASSIFIED users CANNOT access RESTRICTED content
+    // - RESTRICTED users CAN access UNCLASSIFIED content
+    // - Both remain AAL1 (no MFA required)
+    {
+        standardLevel: 'RESTRICTED',
+        nationalEquivalents: {
+            USA: ['RESTRICTED', 'FOUO', 'FOR OFFICIAL USE ONLY'],
+            FRA: ['DIFFUSION RESTREINTE'],
+            CAN: ['PROTECTED A', 'PROTECTED-A'],
+            GBR: ['OFFICIAL-SENSITIVE', 'OFFICIAL SENSITIVE'],
+            DEU: ['VS-NUR FÜR DEN DIENSTGEBRAUCH', 'VS-NUR FUR DEN DIENSTGEBRAUCH', 'VS-NFD'],
+            ITA: ['USO UFFICIALE', 'AD USO UFFICIALE'],
+            ESP: ['DIFUSIÓN LIMITADA', 'DIFUSION LIMITADA'],
+            POL: ['UŻYTEK SŁUŻBOWY', 'UZYTEK SLUZBOWY'],
+            NLD: ['DEPARTEMENTAAL VERTROUWELIJK'],
+            INDUSTRY: ['INTERNAL', 'INTERNAL USE ONLY']
+        },
+        mfaRequired: false,
+        description: 'Limited distribution, official use only (AAL1, but above UNCLASSIFIED)'
+    },
+
+    // Level 2: Confidential
     {
         standardLevel: 'CONFIDENTIAL',
         nationalEquivalents: {
@@ -85,11 +109,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             ],
             CAN: ['CONFIDENTIAL', 'PROTECTED B', 'PROTECTED-B'],
             GBR: ['CONFIDENTIAL'],
-            DEU: ['VS-NUR FÜR DEN DIENSTGEBRAUCH', 'VS-NUR FUR DEN DIENSTGEBRAUCH', 'VS-VERTRAULICH'],
+            DEU: ['VS-VERTRAULICH'],
             ITA: ['RISERVATO', 'RISERVATISSIMO'],
-            ESP: ['DIFUSIÓN LIMITADA', 'DIFUSION LIMITADA', 'CONFIDENCIAL'],
+            ESP: ['CONFIDENCIAL'],
             POL: ['ZASTRZEŻONE', 'ZASTRZEZIONE', 'POUFNE'],
-            NLD: ['DEPARTEMENTAAL VERTROUWELIJK', 'VERTROUWELIJK'],
+            NLD: ['VERTROUWELIJK'],
             INDUSTRY: ['CONFIDENTIAL', 'PROPRIETARY']
         },
         mfaRequired: true,
@@ -196,6 +220,7 @@ export function mapNationalClearance(
     // Fallback: Check if it's already a standard level
     const standardLevels: DiveClearanceLevel[] = [
         'UNCLASSIFIED',
+        'RESTRICTED',
         'CONFIDENTIAL',
         'SECRET',
         'TOP_SECRET'
@@ -364,6 +389,7 @@ export function validateClearanceMapping(): { valid: boolean; errors: string[] }
     // Check that all standard levels are present
     const standardLevels: DiveClearanceLevel[] = [
         'UNCLASSIFIED',
+        'RESTRICTED',
         'CONFIDENTIAL',
         'SECRET',
         'TOP_SECRET'

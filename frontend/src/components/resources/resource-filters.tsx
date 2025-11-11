@@ -36,11 +36,12 @@ interface ResourceFiltersProps {
     filteredCount: number;
 }
 
-const CLASSIFICATIONS = [
-    { value: 'UNCLASSIFIED', label: 'UNCLASS', color: 'bg-green-50 text-green-900 border-green-300', icon: '🟢' },
-    { value: 'CONFIDENTIAL', label: 'CONFID', color: 'bg-yellow-50 text-yellow-900 border-yellow-300', icon: '🟡' },
+const ALL_CLASSIFICATIONS = [
+    { value: 'UNCLASSIFIED', label: 'UNCLASSIFIED', color: 'bg-green-50 text-green-900 border-green-300', icon: '🟢' },
+    { value: 'RESTRICTED', label: 'RESTRICTED', color: 'bg-blue-50 text-blue-900 border-blue-300', icon: '🔵' },
+    { value: 'CONFIDENTIAL', label: 'CONFIDENTIAL', color: 'bg-yellow-50 text-yellow-900 border-yellow-300', icon: '🟡' },
     { value: 'SECRET', label: 'SECRET', color: 'bg-orange-50 text-orange-900 border-orange-300', icon: '🟠' },
-    { value: 'TOP_SECRET', label: 'TOP SEC', color: 'bg-red-50 text-red-900 border-red-300', icon: '🔴' }
+    { value: 'TOP_SECRET', label: 'TOP SECRET', color: 'bg-red-50 text-red-900 border-red-300', icon: '🔴' }
 ];
 
 const COUNTRIES = [
@@ -64,14 +65,18 @@ interface COI {
     color: string;
 }
 
+// CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+// - UNCLASSIFIED users can ONLY see UNCLASSIFIED
+// - RESTRICTED users can see UNCLASSIFIED and RESTRICTED
 const CLEARANCE_HIERARCHY: Record<string, string[]> = {
     'UNCLASSIFIED': ['UNCLASSIFIED'],
-    'CONFIDENTIAL': ['UNCLASSIFIED', 'CONFIDENTIAL'],
-    'SECRET': ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET'],
-    'TOP_SECRET': ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
+    'RESTRICTED': ['UNCLASSIFIED', 'RESTRICTED'],
+    'CONFIDENTIAL': ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL'],
+    'SECRET': ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET'],
+    'TOP_SECRET': ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
 };
 
-const CLASSIFICATION_VALUES = CLASSIFICATIONS.map(c => c.value);
+const CLASSIFICATION_VALUES = ALL_CLASSIFICATIONS.map(c => c.value);
 const COUNTRY_CODES = COUNTRIES.map(c => c.code);
 // COI_VALUES will be computed dynamically from fetched COIs
 
@@ -362,7 +367,14 @@ export default function ResourceFilters({
                                 </svg>
                             </Disclosure.Button>
                             <Disclosure.Panel className="px-4 pb-3 space-y-1.5">
-                                {CLASSIFICATIONS.map(classItem => {
+                                {ALL_CLASSIFICATIONS
+                                    .filter(classItem => {
+                                        // Only show classifications at or below user's clearance
+                                        const userClearance = userAttributes?.clearance || 'UNCLASSIFIED';
+                                        const accessibleLevels = CLEARANCE_HIERARCHY[userClearance] || ['UNCLASSIFIED'];
+                                        return accessibleLevels.includes(classItem.value);
+                                    })
+                                    .map(classItem => {
                                     const isSelected = filters.classifications.includes(classItem.value);
                                     return (
                                         <button

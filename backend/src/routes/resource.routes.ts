@@ -13,10 +13,11 @@ const router = Router();
 
 /**
  * GET /api/resources
- * List all resources (no fine-grained authz in Week 1)
- * Week 2: Returns basic metadata for all resources
+ * List all resources with JWT authentication
+ * NOTE: Returns all resources metadata - UI should hide resources user cannot access
+ * Individual resource access is enforced by GET /api/resources/:id (with OPA)
  */
-router.get('/', listResourcesHandler);
+router.get('/', authenticateJWT, listResourcesHandler);
 
 /**
  * GET /api/resources/:id

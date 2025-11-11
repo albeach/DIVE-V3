@@ -16,6 +16,7 @@
 
 resource "keycloak_user" "test_user_unclass" {
   realm_id = var.realm_id
+  # Short username for easy login - uniqueID stored as attribute
   username = "testuser-${var.country_code_lower}-unclass"
   enabled  = true
   
@@ -46,6 +47,7 @@ resource "keycloak_user" "test_user_unclass" {
 
 resource "keycloak_user" "test_user_confidential" {
   realm_id = var.realm_id
+  # Short username for easy login - uniqueID stored as attribute
   username = "testuser-${var.country_code_lower}-confidential"
   enabled  = true
   
@@ -81,6 +83,7 @@ resource "keycloak_user" "test_user_confidential" {
 
 resource "keycloak_user" "test_user_secret" {
   realm_id = var.realm_id
+  # Short username for easy login - uniqueID stored as attribute
   username = "testuser-${var.country_code_lower}-secret"
   enabled  = true
   
@@ -116,6 +119,7 @@ resource "keycloak_user" "test_user_secret" {
 
 resource "keycloak_user" "test_user_top_secret" {
   realm_id = var.realm_id
+  # Short username for easy login - uniqueID stored as attribute
   username = "testuser-${var.country_code_lower}-ts"
   enabled  = true
   

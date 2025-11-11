@@ -195,11 +195,20 @@ export class DecisionReplayService {
 
     /**
      * Compare clearance levels
+     * CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+     * - UNCLASSIFIED users CANNOT access RESTRICTED content
+     * - RESTRICTED users CAN access UNCLASSIFIED content
      */
     private static compareClearance(userClearance: string, resourceClassification: string): boolean {
-        const levels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-        const userLevel = levels.indexOf(userClearance);
-        const resourceLevel = levels.indexOf(resourceClassification);
+        const levels: Record<string, number> = {
+            'UNCLASSIFIED': 0,
+            'RESTRICTED': 0.5,
+            'CONFIDENTIAL': 1,
+            'SECRET': 2,
+            'TOP_SECRET': 3
+        };
+        const userLevel = levels[userClearance] ?? 0;
+        const resourceLevel = levels[resourceClassification] ?? 0;
         return userLevel >= resourceLevel;
     }
 
