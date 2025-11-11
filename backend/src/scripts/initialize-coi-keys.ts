@@ -186,6 +186,33 @@ const COI_DEFINITIONS: ICreateCOIKeyRequest[] = [
         color: '#EF4444', // Red
         icon: '⚡',
         mutuallyExclusiveWith: ['US-ONLY']
+    },
+    {
+        coiId: 'Alpha',
+        name: 'Alpha',
+        description: 'Alpha community - no specific country affiliation. Access granted based on COI membership only.',
+        memberCountries: [],
+        status: 'active',
+        color: '#9333EA', // Purple
+        icon: 'Α'
+    },
+    {
+        coiId: 'Beta',
+        name: 'Beta',
+        description: 'Beta community - no specific country affiliation. Access granted based on COI membership only.',
+        memberCountries: [],
+        status: 'active',
+        color: '#0EA5E9', // Sky blue
+        icon: 'Β'
+    },
+    {
+        coiId: 'Gamma',
+        name: 'Gamma',
+        description: 'Gamma community - no specific country affiliation. Access granted based on COI membership only.',
+        memberCountries: [],
+        status: 'active',
+        color: '#14B8A6', // Teal
+        icon: 'Γ'
     }
 ];
 

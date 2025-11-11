@@ -17,8 +17,12 @@ import SavedFilters from '@/components/resources/saved-filters';
 const VIEW_MODE_KEY = 'dive_resources_view_mode';
 
 // Clearance hierarchy for filtering
+// CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+// - UNCLASSIFIED users CANNOT access RESTRICTED content
+// - RESTRICTED users CAN access UNCLASSIFIED content
 const CLEARANCE_ORDER: Record<string, number> = {
   'UNCLASSIFIED': 0,
+  'RESTRICTED': 0.5,
   'CONFIDENTIAL': 1,
   'SECRET': 2,
   'TOP_SECRET': 3,
@@ -161,7 +165,7 @@ export default function ResourcesPage() {
     }
   }, [status, session, router]);
 
-  // Fetch resources
+  // Fetch resources - Modern 2025 pattern: No client-side token access
   useEffect(() => {
     if (status === 'loading') return;
     
@@ -170,31 +174,41 @@ export default function ResourcesPage() {
     }
 
     async function fetchResources() {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-      
       try {
-        const response = await fetch(`${backendUrl}/api/resources`, {
+        // Call our server-side API route (NO tokens in client!)
+        // Server validates session and handles token management
+        const response = await fetch('/api/resources', {
+          method: 'GET',
           cache: 'no-store',
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch resources');
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.message || `HTTP ${response.status}: Failed to fetch resources`);
         }
 
         const data = await response.json();
         const fetchedResources = data.resources || [];
+        
+        console.log('[Resources] Loaded resources:', {
+          count: fetchedResources.length,
+          timestamp: new Date().toISOString(),
+        });
+        
         setResources(fetchedResources);
         setFilteredResources(fetchedResources);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load resources');
-        console.error('Error fetching resources:', err);
+        const errorMessage = err instanceof Error ? err.message : 'Failed to load resources';
+        setError(errorMessage);
+        console.error('[Resources] Error fetching resources:', err);
       } finally {
         setLoading(false);
       }
     }
 
     fetchResources();
-  }, [session, status, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]); // Only fetch once when component mounts, not on every session change
 
   // Handle filter changes - wrapped in useCallback to prevent infinite loops
   const handleFilterChange = useCallback((newFilters: ResourceFiltersState) => {

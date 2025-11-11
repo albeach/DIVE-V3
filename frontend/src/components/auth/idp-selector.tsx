@@ -42,34 +42,18 @@ const getFlagForIdP = (alias: string): { emoji: string; code: string } => {
 const FlagIcon = ({ alias }: { alias: string }) => {
   const flag = getFlagForIdP(alias);
   
-  // If country code exists, use Twemoji CDN as fallback
-  if (flag.code) {
-    return (
-      <span className="inline-flex items-center justify-center">
-        {/* Try emoji first */}
-        <span className="emoji-flag" style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>
-          {flag.emoji}
-        </span>
-        {/* Fallback image (hidden by default, shows if emoji fails) */}
-        <img 
-          src={`https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${flag.code.toLowerCase()}-flag.svg`}
-          alt={`${flag.code} flag`}
-          className="hidden emoji-fallback w-6 h-6"
-          onError={(e) => {
-            // If emoji AND image fail, try generic Twemoji CDN path
-            const countryCode = flag.code.toLowerCase();
-            const codepoints = [...countryCode].map(c => 
-              (c.charCodeAt(0) + 0x1F1A5).toString(16)
-            ).join('-');
-            (e.target as HTMLImageElement).src = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoints}.svg`;
-          }}
-        />
-      </span>
-    );
-  }
-  
-  // Non-country icons (industry, default)
-  return <span style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>{flag.emoji}</span>;
+  // Always use emoji, no external CDN calls to avoid CORS
+  // Browser will render emoji natively or fall back to system font
+  return (
+    <span 
+      className="inline-flex items-center justify-center" 
+      style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', 'Twemoji Mozilla', sans-serif" }}
+      role="img"
+      aria-label={flag.code ? `${flag.code} flag` : 'icon'}
+    >
+      {flag.emoji}
+    </span>
+  );
 };
 
 export function IdpSelector() {
@@ -442,7 +426,7 @@ export function IdpSelector() {
                     ▸ CLEARANCE: COSMIC TOP SECRET
                   </p>
                   <p className="text-cyan-400 text-sm font-mono">
-                    ▸ AUTHORIZATION CODE: {eggCount.toString().padStart(4, '0')}-ALPHA-{Math.random().toString(36).substr(2, 6).toUpperCase()}
+                    ▸ AUTHORIZATION CODE: {eggCount.toString().padStart(4, '0')}-Alpha-{Math.random().toString(36).substr(2, 6).toUpperCase()}
                   </p>
                   
                   {eggCount > 1 && (

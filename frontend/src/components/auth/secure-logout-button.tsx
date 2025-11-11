@@ -104,78 +104,44 @@ export function SecureLogoutButton() {
   const getKeycloakLogoutUrl = async (): Promise<string | null> => {
     try {
       console.log('[DIVE] Building Keycloak logout URL...');
-      console.log('[DIVE] Full session object:', JSON.stringify(session, null, 2));
       console.log('[DIVE] Session state:', {
         hasSession: !!session,
         hasUser: !!session?.user,
         userName: session?.user?.name,
-        hasIdToken: !!session?.idToken,
-        hasAccessToken: !!session?.accessToken,
-        idTokenLength: session?.idToken?.length || 0,
-        idTokenPreview: session?.idToken?.substring(0, 50) + '...' || 'NO ID TOKEN'
       });
       
-      // Use the session's idToken to construct Keycloak logout URL
-      if (!session?.idToken) {
-        console.error("[DIVE] CRITICAL: No idToken found in session - cannot logout from Keycloak!");
-        console.error("[DIVE] This means Keycloak SSO session will persist!");
-        console.error("[DIVE] User will NOT be prompted for MFA on next login");
-        console.error("[DIVE] Session keys available:", Object.keys(session || {}));
-        console.error("[DIVE] Will do local logout only (Keycloak session will persist)");
-        
-        // Try to get idToken from account via API as fallback
-        console.log("[DIVE] Attempting fallback: fetching idToken from server...");
-        try {
-          const response = await fetch('/api/auth/session-tokens');
-          if (response.ok) {
-            const tokens = await response.json();
-            console.log("[DIVE] Fallback tokens received:", {
-              hasIdToken: !!tokens.idToken,
-              idTokenLength: tokens.idToken?.length || 0
-            });
-            
-            if (tokens.idToken) {
-              console.log("[DIVE] SUCCESS: Using fallback idToken for logout");
-              // Use fallback idToken
-              const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
-              const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";
-              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-              
-              // Build logout URL manually (without using URL searchParams to avoid double-encoding)
-              const logoutUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout?id_token_hint=${tokens.idToken}&post_logout_redirect_uri=${baseUrl}`;
-              
-              return logoutUrl;
-            }
-          }
-        } catch (fallbackError) {
-          console.error("[DIVE] Fallback idToken fetch failed:", fallbackError);
+      // Fetch idToken from server (tokens are server-side only now)
+      console.log("[DIVE] Fetching idToken from server (2025 security pattern)...");
+      try {
+        const response = await fetch('/api/auth/session-tokens');
+        if (!response.ok) {
+          throw new Error(`Failed to get session tokens: ${response.status}`);
         }
         
+        const tokens = await response.json();
+        console.log("[DIVE] Server tokens received:", {
+          hasIdToken: !!tokens.idToken,
+          idTokenLength: tokens.idToken?.length || 0
+        });
+        
+        if (!tokens.idToken) {
+          console.error("[DIVE] No idToken available - local logout only");
+          return null;
+        }
+        
+        console.log("[DIVE] SUCCESS: Using server-side idToken for logout");
+        const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
+        const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+        
+        // Build logout URL manually (without using URL searchParams to avoid double-encoding)
+        const logoutUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout?id_token_hint=${tokens.idToken}&post_logout_redirect_uri=${baseUrl}`;
+        
+        return logoutUrl;
+      } catch (fallbackError) {
+        console.error("[DIVE] Failed to fetch idToken from server:", fallbackError);
         return null;
       }
-      
-      const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
-      const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";  // Multi-realm: Use broker realm
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-      
-      console.log('[DIVE] Keycloak logout config:', {
-        keycloakUrl,
-        realm,
-        baseUrl,
-        idTokenPreview: session.idToken.substring(0, 20) + '...'
-      });
-      
-      // Build the Keycloak end_session_endpoint URL
-      // CRITICAL: Don't use URL searchParams - it double-encodes the redirect URI
-      // Keycloak expects EXACT match for post_logout_redirect_uri
-      const logoutUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout?id_token_hint=${session.idToken}&post_logout_redirect_uri=${baseUrl}`;
-      
-      const finalUrl = logoutUrl;
-      console.log('[DIVE] Keycloak logout URL constructed:', finalUrl.substring(0, 100) + '...');
-      console.log('[DIVE] This should clear Keycloak cookies: AUTH_SESSION_ID, KEYCLOAK_SESSION, etc.');
-      
-      return finalUrl;
-      
     } catch (error) {
       console.error("[DIVE] Error building Keycloak logout URL:", error);
       return null;

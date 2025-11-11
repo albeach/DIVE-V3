@@ -138,11 +138,15 @@ is_mfa_not_verified := msg if {
 # These are used by both 5663 and 240 policies
 
 # Clearance hierarchy
-clearance_levels := ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+# CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+# - UNCLASSIFIED users CANNOT access RESTRICTED content
+# - RESTRICTED users CAN access UNCLASSIFIED content
+# - Both remain AAL1 (no MFA required)
+clearance_levels := ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
 
 # Clearance check
 is_insufficient_clearance := msg if {
-	clearance_map := {"UNCLASSIFIED": 0, "CONFIDENTIAL": 1, "SECRET": 2, "TOP_SECRET": 3}
+	clearance_map := {"UNCLASSIFIED": 0, "RESTRICTED": 0.5, "CONFIDENTIAL": 1, "SECRET": 2, "TOP_SECRET": 3}
 	user_level := clearance_map[input.subject.clearance]
 	resource_level := clearance_map[input.resource.classification]
 	user_level < resource_level

@@ -10,7 +10,7 @@ import type { AdapterAccount } from "next-auth/adapters";
 export const users = pgTable("user", {
     id: text("id").notNull().primaryKey(),
     name: text("name"),
-    email: text("email").notNull(),
+    email: text("email"),  // Nullable: Remote IdPs may not provide email
     emailVerified: timestamp("emailVerified", { mode: "date" }),
     image: text("image"),
 });

@@ -29,10 +29,11 @@ interface SecurityLabelFormProps {
   onCaveatsChange: (value: string[]) => void;
 }
 
-const CLASSIFICATION_LEVELS = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+const CLASSIFICATION_LEVELS = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 
 const CLASSIFICATION_HIERARCHY: Record<string, number> = {
   'UNCLASSIFIED': 0,
+  'RESTRICTED': 0,
   'CONFIDENTIAL': 1,
   'SECRET': 2,
   'TOP_SECRET': 3
@@ -161,6 +162,7 @@ const CAVEAT_OPTIONS = [
 
 const classificationColors: Record<string, string> = {
   'UNCLASSIFIED': 'bg-green-50 text-green-900 border-green-300',
+  'RESTRICTED': 'bg-blue-50 text-blue-900 border-blue-300',
   'CONFIDENTIAL': 'bg-yellow-50 text-yellow-900 border-yellow-300',
   'SECRET': 'bg-orange-50 text-orange-900 border-orange-300',
   'TOP_SECRET': 'bg-red-50 text-red-900 border-red-300',
@@ -168,6 +170,7 @@ const classificationColors: Record<string, string> = {
 
 const classificationAccents: Record<string, string> = {
   'UNCLASSIFIED': 'from-green-500 to-green-600',
+  'RESTRICTED': 'from-blue-500 to-blue-600',
   'CONFIDENTIAL': 'from-yellow-500 to-yellow-600',
   'SECRET': 'from-orange-500 to-orange-600',
   'TOP_SECRET': 'from-red-500 to-red-600',

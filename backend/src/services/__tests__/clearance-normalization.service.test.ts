@@ -319,6 +319,10 @@ describe('ClearanceNormalizationService', () => {
             expect(getClearanceLevel(StandardClearance.UNCLASSIFIED)).toBe(0);
         });
 
+        it('should return 0.5 for RESTRICTED (separate level above UNCLASSIFIED)', () => {
+            expect(getClearanceLevel(StandardClearance.RESTRICTED)).toBe(0.5);
+        });
+
         it('should return 1 for CONFIDENTIAL', () => {
             expect(getClearanceLevel(StandardClearance.CONFIDENTIAL)).toBe(1);
         });
@@ -329,6 +333,12 @@ describe('ClearanceNormalizationService', () => {
 
         it('should return 3 for TOP_SECRET', () => {
             expect(getClearanceLevel(StandardClearance.TOP_SECRET)).toBe(3);
+        });
+
+        it('should confirm RESTRICTED > UNCLASSIFIED', () => {
+            const restrictedLevel = getClearanceLevel(StandardClearance.RESTRICTED);
+            const unclassifiedLevel = getClearanceLevel(StandardClearance.UNCLASSIFIED);
+            expect(restrictedLevel).toBeGreaterThan(unclassifiedLevel);
         });
     });
 
@@ -363,6 +373,47 @@ describe('ClearanceNormalizationService', () => {
                 StandardClearance.TOP_SECRET
             );
             expect(result).toBe(-1);
+        });
+
+        // CRITICAL: RESTRICTED clearance comparison tests
+        it('should return 1 when RESTRICTED > UNCLASSIFIED', () => {
+            const result = compareClearances(
+                StandardClearance.RESTRICTED,
+                StandardClearance.UNCLASSIFIED
+            );
+            expect(result).toBe(1);
+        });
+
+        it('should return -1 when UNCLASSIFIED < RESTRICTED', () => {
+            const result = compareClearances(
+                StandardClearance.UNCLASSIFIED,
+                StandardClearance.RESTRICTED
+            );
+            expect(result).toBe(-1);
+        });
+
+        it('should return 0 when RESTRICTED = RESTRICTED', () => {
+            const result = compareClearances(
+                StandardClearance.RESTRICTED,
+                StandardClearance.RESTRICTED
+            );
+            expect(result).toBe(0);
+        });
+
+        it('should return -1 when RESTRICTED < CONFIDENTIAL', () => {
+            const result = compareClearances(
+                StandardClearance.RESTRICTED,
+                StandardClearance.CONFIDENTIAL
+            );
+            expect(result).toBe(-1);
+        });
+
+        it('should return 1 when CONFIDENTIAL > RESTRICTED', () => {
+            const result = compareClearances(
+                StandardClearance.CONFIDENTIAL,
+                StandardClearance.RESTRICTED
+            );
+            expect(result).toBe(1);
         });
     });
 

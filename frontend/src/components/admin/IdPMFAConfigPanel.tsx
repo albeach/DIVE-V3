@@ -34,7 +34,7 @@ interface IdPMFAConfigPanelProps {
 }
 
 type OTPAlgorithm = 'HmacSHA1' | 'HmacSHA256' | 'HmacSHA512';
-type ClearanceLevel = 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
+type ClearanceLevel = 'UNCLASSIFIED' | 'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
 
 interface MFAConfig {
     required: boolean;
@@ -190,7 +190,7 @@ export default function IdPMFAConfigPanel({ idpAlias }: IdPMFAConfigPanelProps) 
                             Select Clearance Levels
                         </label>
                         <div className="grid grid-cols-2 gap-2">
-                            {(['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'] as ClearanceLevel[]).map((level) => (
+                            {(['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'] as ClearanceLevel[]).map((level) => (
                                 <button
                                     key={level}
                                     onClick={() => toggleClearanceLevel(level)}

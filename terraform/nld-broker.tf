@@ -37,7 +37,19 @@ resource "keycloak_oidc_identity_provider" "nld_realm_broker" {
   gui_order = "9"
 }
 
-# Attribute mappers for Netherlands broker (map all DIVE attributes)
+resource "keycloak_custom_identity_provider_mapper" "nld_broker_username" {
+  realm                    = keycloak_realm.dive_v3_broker.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.nld_realm_broker.alias
+  name                     = "nld-username-from-uniqueID"
+  identity_provider_mapper = "oidc-username-idp-mapper"
+
+  extra_config = {
+    "syncMode" = "FORCE"
+    "template" = "$${CLAIM.uniqueID}"  # Set username = uniqueID from token
+  }
+}
+
+# Also map uniqueID to user attribute (for OPA/backend usage)
 resource "keycloak_custom_identity_provider_mapper" "nld_broker_uniqueid" {
   realm                    = keycloak_realm.dive_v3_broker.id
   identity_provider_alias  = keycloak_oidc_identity_provider.nld_realm_broker.alias

@@ -75,6 +75,9 @@ coi_members := {
 	"PACOM": {"USA", "JPN", "KOR", "AUS", "NZL", "PHL"},
 	"CENTCOM": {"USA", "SAU", "ARE", "QAT", "KWT", "BHR", "JOR", "EGY"},
 	"SOCOM": {"USA", "GBR", "CAN", "AUS", "NZL"},
+	"Alpha": set(), # No country affiliation
+	"Beta": set(), # No country affiliation
+	"Gamma": set(), # No country affiliation
 }
 
 # Mutual exclusivity check (SET RULE - can produce multiple violations)
@@ -448,8 +451,13 @@ nato_to_dive_standard := {
 }
 
 # DIVE V3 clearance level mapping (for numeric comparison)
+# CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+# - UNCLASSIFIED users CANNOT access RESTRICTED content
+# - RESTRICTED users CAN access UNCLASSIFIED content
+# - Both remain AAL1 (no MFA required)
 dive_clearance_levels := {
 	"UNCLASSIFIED": 0,
+	"RESTRICTED": 0.5,
 	"CONFIDENTIAL": 1,
 	"SECRET": 2,
 	"TOP_SECRET": 3,
@@ -556,8 +564,13 @@ is_insufficient_clearance := msg if {
 
 # Clearance level mapping (higher number = higher clearance)
 # Used for backward compatibility (DIVE V3 standard levels)
+# CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+# - UNCLASSIFIED users CANNOT access RESTRICTED content
+# - RESTRICTED users CAN access UNCLASSIFIED content
+# - Both remain AAL1 (no MFA required)
 clearance_levels := {
 	"UNCLASSIFIED": 0,
+	"RESTRICTED": 0.5,
 	"CONFIDENTIAL": 1,
 	"SECRET": 2,
 	"TOP_SECRET": 3,
@@ -601,33 +614,31 @@ is_coi_violation := msg if {
 	# Get user COI (default to empty array if missing)
 	user_coi := object.get(input.subject, "acpCOI", [])
 
+	# CRITICAL FIX (Nov 6, 2025): COI should be OPTIONAL, not REQUIRED
+	# If user has NO COI tags, they can still access resources based on clearance + country
+	# COI is an additional filter, not a mandatory requirement
+	# Only deny if: (1) Resource has COI AND (2) User HAS COI tags AND (3) Tags don't match
+	count(user_coi) > 0 # User has at least one COI tag
+
 	# Get COI operator (default to ALL)
 	operator := object.get(input.resource, "coiOperator", "ALL")
 
-	# Check based on operator: ALL mode (country membership)
+	# Check based on operator: ALL mode (user must have ALL required COI tags)
 	operator == "ALL"
 
-	# Compute required countries from resource COIs
-	required_countries := {c |
-		some coi in input.resource.COI
-		some c in coi_members[coi]
-	}
+	# Required COI tags from resource
+	required_cois := {coi | some coi in input.resource.COI}
 
-	# Compute user's countries from their COIs
-	user_countries := {c |
-		some coi in user_coi
-		some c in coi_members[coi]
-	}
+	# User's COI tags
+	user_cois := {coi | some coi in user_coi}
 
-	# Check if user countries is a superset of required countries
-	missing_countries := required_countries - user_countries
-	count(missing_countries) > 0
+	# Check if user has all required COI tags
+	missing_cois := required_cois - user_cois
+	count(missing_cois) > 0
 
-	msg := sprintf("COI operator=ALL: user countries %v do not cover required countries %v (missing: %v, user COI: %v, resource COI: %v)", [
-		user_countries,
-		required_countries,
-		missing_countries,
+	msg := sprintf("COI operator=ALL: user COI %v missing required COI tags %v (resource requires: %v)", [
 		user_coi,
+		missing_cois,
 		input.resource.COI,
 	])
 } else := msg if {
@@ -636,6 +647,11 @@ is_coi_violation := msg if {
 
 	# Get user COI (default to empty array if missing)
 	user_coi := object.get(input.subject, "acpCOI", [])
+
+	# CRITICAL FIX (Nov 6, 2025): COI should be OPTIONAL, not REQUIRED
+	# If user has NO COI tags, they can still access (no COI restriction applies)
+	# Only deny if: (1) Resource has COI AND (2) User HAS COI tags AND (3) No intersection
+	count(user_coi) > 0 # User has at least one COI tag
 
 	# Get COI operator (default to ALL)
 	operator := object.get(input.resource, "coiOperator", "ALL")
@@ -747,9 +763,9 @@ is_authentication_strength_insufficient := msg if {
 	input.context.acr
 
 	# Check ACR (Authentication Context Class Reference)
-	acr := input.context.acr
-	acr_lower := lower(acr)
-	acr_str := sprintf("%v", [acr]) # Convert to string (handles numeric ACR)
+	# Convert to string first to handle both numeric and string ACR values
+	acr_str := sprintf("%v", [input.context.acr])
+	acr_lower := lower(acr_str)
 
 	# AAL2 indicators:
 	# - String descriptors: "silver", "gold", "aal2", "multi-factor"
@@ -770,7 +786,7 @@ is_authentication_strength_insufficient := msg if {
 
 	msg := sprintf("Classification %v requires AAL2 (MFA), but ACR is '%v' and only %v factor(s) provided", [
 		input.resource.classification,
-		acr,
+		acr_str,
 		count(amr_factors),
 	])
 }
@@ -788,14 +804,14 @@ is_mfa_not_verified := msg if {
 	# Only check if AMR is explicitly provided in context
 	input.context.amr
 
-	# Check AMR (Authentication Methods Reference)
-	amr := input.context.amr
-	count(amr) < 2
+	# Check AMR (Authentication Methods Reference) - use parse_amr for consistency
+	amr_factors := parse_amr(input.context.amr)
+	count(amr_factors) < 2
 
 	msg := sprintf("MFA required for %v: need 2+ factors, got %v: %v", [
 		input.resource.classification,
-		count(amr),
-		amr,
+		count(amr_factors),
+		amr_factors,
 	])
 }
 

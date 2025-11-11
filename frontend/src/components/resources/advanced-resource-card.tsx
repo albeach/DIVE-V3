@@ -49,6 +49,7 @@ interface AdvancedResourceCardProps {
 
 const classificationColors: Record<string, { bg: string; text: string; border: string }> = {
   'UNCLASSIFIED': { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300' },
+  'RESTRICTED': { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300' },
   'CONFIDENTIAL': { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-300' },
   'SECRET': { bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-300' },
   'TOP_SECRET': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' },
@@ -56,6 +57,7 @@ const classificationColors: Record<string, { bg: string; text: string; border: s
 
 const classificationEmojis: Record<string, string> = {
   'UNCLASSIFIED': '🟢',
+  'RESTRICTED': '🔵',
   'CONFIDENTIAL': '🟡',
   'SECRET': '🟠',
   'TOP_SECRET': '🔴',
@@ -83,9 +85,17 @@ function getAccessIndicator(
     return { status: 'possible', message: 'Unknown' };
   }
 
-  const clearanceOrder = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-  const userClearanceLevel = clearanceOrder.indexOf(userAttributes.clearance);
-  const docClearanceLevel = clearanceOrder.indexOf(resource.classification);
+  // CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
+  // Using numeric comparison instead of array indexOf
+  const clearanceOrder: Record<string, number> = {
+    'UNCLASSIFIED': 0,
+    'RESTRICTED': 0.5,
+    'CONFIDENTIAL': 1,
+    'SECRET': 2,
+    'TOP_SECRET': 3
+  };
+  const userClearanceLevel = clearanceOrder[userAttributes.clearance] ?? 0;
+  const docClearanceLevel = clearanceOrder[resource.classification] ?? 0;
 
   // Check clearance
   if (userClearanceLevel < docClearanceLevel) {

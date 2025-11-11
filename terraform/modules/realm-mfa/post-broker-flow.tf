@@ -8,9 +8,16 @@
 # Post Broker Login Flow
 # ├─ Review Profile [DISABLED]
 # ├─ Create User [REQUIRED]
-# └─ Conditional MFA Enforcement [CONDITIONAL]
-#    ├─ Condition: clearance != UNCLASSIFIED [REQUIRED]
-#    └─ Configure OTP [REQUIRED]
+# ├─ Auto Link [ALTERNATIVE]
+# ├─ Conditional AAL3 (TOP_SECRET → WebAuthn) [CONDITIONAL]
+# │   ├─ Condition: clearance == "TOP_SECRET" [REQUIRED]
+# │   └─ WebAuthn Form [REQUIRED]
+# └─ Conditional AAL2 (CONFIDENTIAL/SECRET → OTP) [CONDITIONAL]
+#     ├─ Condition: clearance in {CONFIDENTIAL, SECRET} [REQUIRED]
+#     └─ OTP Form [REQUIRED]
+#
+# UNCLASSIFIED users remain AAL1 (no MFA required)
+#
 
 resource "keycloak_authentication_flow" "post_broker_mfa" {
   realm_id    = var.realm_id
@@ -27,31 +34,96 @@ resource "keycloak_authentication_execution" "post_broker_review_profile" {
   requirement       = "DISABLED"  # Don't force profile review
 }
 
-# Step 2: Create User (REQUIRED - auto-create from IdP)
+# Step 2: Create User (ALTERNATIVE - auto-create from IdP)
 resource "keycloak_authentication_execution" "post_broker_create_user" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-create-user-if-unique"
-  requirement       = "REQUIRED"
+  requirement       = "ALTERNATIVE"  # ALTERNATIVE allows proper execution order
   
   depends_on = [
     keycloak_authentication_execution.post_broker_review_profile
   ]
 }
 
-# Step 3: Conditional OTP Enforcement (based on clearance)
-resource "keycloak_authentication_subflow" "post_broker_conditional_otp" {
+# Step 2.5: Automatically link user (bypasses confirmation screen)
+resource "keycloak_authentication_execution" "post_broker_auto_link" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
-  alias             = "Conditional OTP - Post Broker - ${var.realm_display_name}"
-  requirement       = "CONDITIONAL"
+  authenticator     = "idp-auto-link"
+  requirement       = "ALTERNATIVE"  # Alternative to create-user
   
   depends_on = [
     keycloak_authentication_execution.post_broker_create_user
   ]
 }
 
-# Condition: User attribute "clearance" != "UNCLASSIFIED"
+# ============================================
+# Step 3A: Conditional AAL3 (TOP_SECRET → WebAuthn)
+# ============================================
+# CRITICAL FIX (Nov 10, 2025):
+# Add WebAuthn enforcement for TOP_SECRET users after broker login
+# This ensures TOP_SECRET users get AAL3 (hardware key) authentication
+
+resource "keycloak_authentication_subflow" "post_broker_conditional_webauthn" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
+  alias             = "Conditional WebAuthn AAL3 - Post Broker - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
+  
+  depends_on = [
+    keycloak_authentication_execution.post_broker_auto_link  # Wait for user creation/linking
+  ]
+}
+
+# Condition: clearance == "TOP_SECRET"
+resource "keycloak_authentication_execution" "post_broker_condition_top_secret" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_webauthn.alias
+  authenticator     = "conditional-user-attribute"
+  requirement       = "REQUIRED"
+}
+
+resource "keycloak_authentication_execution_config" "post_broker_condition_top_secret_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.post_broker_condition_top_secret.id
+  alias        = "POST BROKER TOP SECRET Check - ${var.realm_display_name}"
+  config = {
+    attribute_name  = var.clearance_attribute_name
+    attribute_value = "^TOP_SECRET$"  # Exact match
+    negate          = "false"
+  }
+}
+
+# WebAuthn Authenticator (hardware-backed, AAL3)
+resource "keycloak_authentication_execution" "post_broker_webauthn_form" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_webauthn.alias
+  authenticator     = "webauthn-authenticator"
+  requirement       = "REQUIRED"
+  
+  depends_on = [
+    keycloak_authentication_execution.post_broker_condition_top_secret,
+    keycloak_authentication_execution_config.post_broker_condition_top_secret_config
+  ]
+}
+
+# ============================================
+# Step 3B: Conditional AAL2 (CONFIDENTIAL/SECRET → OTP)
+# ============================================
+
+resource "keycloak_authentication_subflow" "post_broker_conditional_otp" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
+  alias             = "Conditional OTP AAL2 - Post Broker - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
+  
+  depends_on = [
+    keycloak_authentication_subflow.post_broker_conditional_webauthn  # OTP after WebAuthn
+  ]
+}
+
+# Condition: clearance in (CONFIDENTIAL, SECRET)
 resource "keycloak_authentication_execution" "post_broker_condition_clearance" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_otp.alias
@@ -63,10 +135,10 @@ resource "keycloak_authentication_execution" "post_broker_condition_clearance" {
 resource "keycloak_authentication_execution_config" "post_broker_condition_config" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.post_broker_condition_clearance.id
-  alias        = "Post Broker Clearance Check - ${var.realm_display_name}"
+  alias        = "POST BROKER CONFIDENTIAL SECRET Check - ${var.realm_display_name}"
   config = {
     attribute_name  = var.clearance_attribute_name
-    attribute_value = var.clearance_attribute_value_regex
+    attribute_value = "^(CONFIDENTIAL|SECRET)$"  # Match both levels
     negate          = "false"
   }
 }

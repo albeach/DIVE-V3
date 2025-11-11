@@ -33,9 +33,22 @@ export async function POST(request: NextRequest) {
         // Decode JWT to get user info (without verification - already verified by backend)
         const payload = JSON.parse(Buffer.from(idToken.split('.')[1], 'base64').toString());
 
-        const email = payload.email || payload.preferred_username;
-        const name = payload.name || payload.preferred_username;
+        // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
+        let email = payload.email || payload.preferred_username;
         const uniqueID = payload.uniqueID || payload.sub;
+        
+        if (!email || email.trim() === '') {
+            // If uniqueID looks like email, use it
+            if (uniqueID && uniqueID.includes('@')) {
+                email = uniqueID;
+            } else {
+                // Generate synthetic email
+                email = `${uniqueID || payload.sub}@dive-broker.internal`;
+            }
+            console.log('[Custom Session] Generated email:', email);
+        }
+
+        const name = payload.name || payload.preferred_username;
 
         // Extract DIVE-specific attributes for future session retrieval
         // These will be populated by the auth.ts session callback

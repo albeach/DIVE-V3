@@ -34,9 +34,9 @@ variable "clearance_attribute_name" {
 }
 
 variable "clearance_attribute_value_regex" {
-  description = "Regex pattern for matching classified clearances (default: anything except UNCLASSIFIED)"
+  description = "Regex pattern for matching classified clearances requiring MFA (CONFIDENTIAL, SECRET, TOP_SECRET). UNCLASSIFIED and RESTRICTED both remain AAL1 (no MFA required)."
   type        = string
-  default     = "^(?!UNCLASSIFIED$).*"
+  default     = "^(CONFIDENTIAL|SECRET|TOP_SECRET)$"
 }
 
 variable "otp_policy" {

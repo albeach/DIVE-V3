@@ -65,6 +65,7 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
  * - Enhanced logging for full lifecycle tracking
  * - Better error handling for Keycloak session expiration
  * - Offline token support for long-lived refresh capability
+ * FIX (Nov 6, 2025): Use internal KEYCLOAK_URL for server-side calls
  */
 async function refreshAccessToken(account: any) {
     const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`;
@@ -164,6 +165,28 @@ async function refreshAccessToken(account: any) {
     }
 }
 
+// Determine cookie domain based on NEXTAUTH_URL
+// If using custom domain (divedeeper.internal or dive25.com), set cookie domain to allow subdomains
+const getAuthCookieDomain = (): string | undefined => {
+    const authUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL;
+    if (authUrl && authUrl.includes('divedeeper.internal')) {
+        return '.divedeeper.internal'; // Allow cookies across all subdomains
+    }
+    if (authUrl && authUrl.includes('dive25.com')) {
+        return '.dive25.com'; // Allow cookies across Cloudflare tunnel subdomains
+    }
+    return undefined; // Use default (exact domain match)
+};
+
+const AUTH_COOKIE_DOMAIN = getAuthCookieDomain();
+const AUTH_COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https://') || process.env.AUTH_URL?.startsWith('https://');
+
+console.log('[DIVE] NextAuth cookie configuration:', {
+    domain: AUTH_COOKIE_DOMAIN || 'default (exact match)',
+    secure: AUTH_COOKIE_SECURE,
+    authUrl: process.env.NEXTAUTH_URL || process.env.AUTH_URL,
+});
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: DrizzleAdapter(db, {
         usersTable: users,
@@ -205,15 +228,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Keycloak({
             clientId: process.env.KEYCLOAK_CLIENT_ID as string,
             clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
-            // CRITICAL: issuer must match KC_HOSTNAME (https://localhost:8443), not internal keycloak:8443
+            // CRITICAL: issuer must match KC_HOSTNAME for token validation
             issuer: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
             authorization: {
+                // Client-side: Use public URL for browser redirects
                 url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email offline_access",
                 }
             },
-            // token and userinfo use internal Docker network (keycloak:8443) for server-side calls
+            // Server-side: Use internal Docker network for token exchange
+            // FIX (Nov 6): Use internal keycloak:8443 for server-to-server calls
             token: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
             userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
             checks: ["pkce", "state"],  // Best practice: Enable security checks
@@ -222,6 +247,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ],
 
     callbacks: {
+        // FIX (Nov 7): Profile callback to handle remote IdPs without email
+        // and capture DIVE attributes from Keycloak tokens
+        async profile(profile, tokens) {
+            console.log('[NextAuth profile()] Raw profile from Keycloak:', {
+                sub: profile.sub,
+                email: profile.email,
+                preferred_username: profile.preferred_username,
+                name: profile.name,
+                uniqueID: profile.uniqueID,
+                clearance: profile.clearance,
+                countryOfAffiliation: profile.countryOfAffiliation,
+                acpCOI: profile.acpCOI,
+            });
+
+            // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
+            let email = profile.email;
+            if (!email || email.trim() === '') {
+                // Generate from uniqueID (if it looks like email) or username
+                const uniqueID = profile.uniqueID || profile.preferred_username || profile.sub;
+                if (uniqueID && uniqueID.includes('@')) {
+                    email = uniqueID;
+                } else {
+                    // Generate synthetic email: username@dive-broker.internal
+                    email = `${uniqueID || profile.sub}@dive-broker.internal`;
+                }
+                console.log('[NextAuth profile()] Generated email:', email, 'from uniqueID:', uniqueID);
+            }
+
+            // Return profile with all DIVE attributes
+            return {
+                id: profile.sub,
+                name: profile.name || profile.preferred_username || profile.sub,
+                email: email,
+                image: profile.picture,
+                uniqueID: profile.uniqueID || profile.preferred_username || profile.sub,
+                clearance: profile.clearance || 'UNCLASSIFIED',
+                countryOfAffiliation: profile.countryOfAffiliation || profile.country || 'UNKNOWN',
+                acpCOI: profile.acpCOI || profile.aciCOI || [],
+                roles: profile.realm_access?.roles || profile.roles || [],
+            };
+        },
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
@@ -428,11 +494,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                             });
                         }
 
-                        // Add Keycloak tokens to session
-                        session.idToken = account.id_token || undefined;
-                        session.accessToken = account.access_token || undefined;
-                        session.refreshToken = account.refresh_token || undefined;
-
+                        // SECURITY: DO NOT expose tokens to client session
+                        // Tokens should only be used server-side. Client should use
+                        // server-side API routes that handle token validation.
+                        // 
+                        // For internal server-side use only (e.g., API routes):
+                        // - Access token: Used to call Keycloak protected resources
+                        // - ID token: Contains user claims
+                        // - Refresh token: Used to get new access tokens
+                        //
+                        // The client only receives:
+                        // - User profile data (name, email, custom claims)
+                        // - No raw tokens
+                        
                         // Parse DIVE attributes from id_token if available
                         if (account.id_token) {
                             try {
@@ -579,7 +653,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                domain: AUTH_COOKIE_DOMAIN,
             },
         },
         callbackUrl: {
@@ -588,7 +663,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                domain: AUTH_COOKIE_DOMAIN,
             },
         },
         csrfToken: {
@@ -597,7 +673,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                domain: AUTH_COOKIE_DOMAIN,
             },
         },
         pkceCodeVerifier: {
@@ -606,7 +683,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                domain: AUTH_COOKIE_DOMAIN,
                 maxAge: 60 * 15, // 15 minutes
             },
         },
@@ -616,7 +694,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                domain: AUTH_COOKIE_DOMAIN,
                 maxAge: 60 * 15, // 15 minutes
             },
         },
@@ -626,7 +705,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 httpOnly: true,
                 sameSite: 'lax',
                 path: '/',
-                secure: process.env.NODE_ENV === 'production',
+                secure: AUTH_COOKIE_SECURE,
+                domain: AUTH_COOKIE_DOMAIN,
             },
         },
     },

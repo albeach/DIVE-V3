@@ -120,7 +120,7 @@ export default function AdvancedSearch({
       });
 
     // Search in classifications
-    const classifications = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+    const classifications = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
     classifications
       .filter(c => c.toLowerCase().includes(query))
       .forEach(c => {

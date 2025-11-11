@@ -343,60 +343,86 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
         // Keycloak 26 Fix: Also accept localhost:8080 (frontend container accessing Keycloak)
         // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
+        // Custom Domain: Accept kas.js.usa.divedeeper.internal:8443 (KC_HOSTNAME)
+        // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
         const validIssuers: [string, ...string[]] = [
             // Legacy pilot realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
             'http://localhost:8081/realms/dive-v3-pilot',          // External HTTP: dive-v3-pilot
             'https://localhost:8443/realms/dive-v3-pilot',         // External HTTPS: dive-v3-pilot
             'http://localhost:8080/realms/dive-v3-pilot',          // Frontend container: dive-v3-pilot
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-pilot',  // Custom domain: dive-v3-pilot
+            'https://dev-auth.dive25.com/realms/dive-v3-pilot',    // Cloudflare Tunnel: dive-v3-pilot
 
             // Main broker realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
             'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
             'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker ← CRITICAL
             'http://localhost:8080/realms/dive-v3-broker',         // Frontend container: dive-v3-broker
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker ← FIX
+            'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker
 
             // Individual IdP realms (for direct login to sub-realms)
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-usa`,      // Internal: dive-v3-usa
             'http://localhost:8081/realms/dive-v3-usa',            // External HTTP: dive-v3-usa
             'https://localhost:8443/realms/dive-v3-usa',           // External HTTPS: dive-v3-usa
             'http://localhost:8080/realms/dive-v3-usa',            // Frontend container: dive-v3-usa
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-usa',  // Custom domain: dive-v3-usa
+            'https://dev-auth.dive25.com/realms/dive-v3-usa',      // Cloudflare Tunnel: dive-v3-usa
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-fra`,      // Internal: dive-v3-fra
             'http://localhost:8081/realms/dive-v3-fra',            // External HTTP: dive-v3-fra
             'https://localhost:8443/realms/dive-v3-fra',           // External HTTPS: dive-v3-fra
             'http://localhost:8080/realms/dive-v3-fra',            // Frontend container: dive-v3-fra
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-fra',  // Custom domain: dive-v3-fra
+            'https://dev-auth.dive25.com/realms/dive-v3-fra',      // Cloudflare Tunnel: dive-v3-fra
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-can`,      // Internal: dive-v3-can
             'http://localhost:8081/realms/dive-v3-can',            // External HTTP: dive-v3-can
             'https://localhost:8443/realms/dive-v3-can',           // External HTTPS: dive-v3-can
             'http://localhost:8080/realms/dive-v3-can',            // Frontend container: dive-v3-can
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-can',  // Custom domain: dive-v3-can
+            'https://dev-auth.dive25.com/realms/dive-v3-can',      // Cloudflare Tunnel: dive-v3-can
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-industry`, // Internal: dive-v3-industry
             'http://localhost:8081/realms/dive-v3-industry',       // External HTTP: dive-v3-industry
             'https://localhost:8443/realms/dive-v3-industry',      // External HTTPS: dive-v3-industry
             'http://localhost:8080/realms/dive-v3-industry',       // Frontend container: dive-v3-industry
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-industry',  // Custom domain: dive-v3-industry
+            'https://dev-auth.dive25.com/realms/dive-v3-industry', // Cloudflare Tunnel: dive-v3-industry
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-gbr`,      // Internal: dive-v3-gbr
             'http://localhost:8081/realms/dive-v3-gbr',            // External HTTP: dive-v3-gbr
             'https://localhost:8443/realms/dive-v3-gbr',           // External HTTPS: dive-v3-gbr
             'http://localhost:8080/realms/dive-v3-gbr',            // Frontend container: dive-v3-gbr
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-gbr',  // Custom domain: dive-v3-gbr
+            'https://dev-auth.dive25.com/realms/dive-v3-gbr',      // Cloudflare Tunnel: dive-v3-gbr
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-deu`,      // Internal: dive-v3-deu
             'http://localhost:8081/realms/dive-v3-deu',            // External HTTP: dive-v3-deu
             'https://localhost:8443/realms/dive-v3-deu',           // External HTTPS: dive-v3-deu
             'http://localhost:8080/realms/dive-v3-deu',            // Frontend container: dive-v3-deu
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-deu',  // Custom domain: dive-v3-deu
+            'https://dev-auth.dive25.com/realms/dive-v3-deu',      // Cloudflare Tunnel: dive-v3-deu
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-nld`,      // Internal: dive-v3-nld
             'http://localhost:8081/realms/dive-v3-nld',            // External HTTP: dive-v3-nld
             'https://localhost:8443/realms/dive-v3-nld',           // External HTTPS: dive-v3-nld
             'http://localhost:8080/realms/dive-v3-nld',            // Frontend container: dive-v3-nld
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-nld',  // Custom domain: dive-v3-nld
+            'https://dev-auth.dive25.com/realms/dive-v3-nld',      // Cloudflare Tunnel: dive-v3-nld
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-pol`,      // Internal: dive-v3-pol
             'http://localhost:8081/realms/dive-v3-pol',            // External HTTP: dive-v3-pol
             'https://localhost:8443/realms/dive-v3-pol',           // External HTTPS: dive-v3-pol
             'http://localhost:8080/realms/dive-v3-pol',            // Frontend container: dive-v3-pol
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-pol',  // Custom domain: dive-v3-pol
+            'https://dev-auth.dive25.com/realms/dive-v3-pol',      // Cloudflare Tunnel: dive-v3-pol
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-ita`,      // Internal: dive-v3-ita
             'http://localhost:8081/realms/dive-v3-ita',            // External HTTP: dive-v3-ita
             'https://localhost:8443/realms/dive-v3-ita',           // External HTTPS: dive-v3-ita
             'http://localhost:8080/realms/dive-v3-ita',            // Frontend container: dive-v3-ita
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-ita',  // Custom domain: dive-v3-ita
+            'https://dev-auth.dive25.com/realms/dive-v3-ita',      // Cloudflare Tunnel: dive-v3-ita
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-esp`,      // Internal: dive-v3-esp
             'http://localhost:8081/realms/dive-v3-esp',            // External HTTP: dive-v3-esp
             'https://localhost:8443/realms/dive-v3-esp',           // External HTTPS: dive-v3-esp
             'http://localhost:8080/realms/dive-v3-esp',            // Frontend container: dive-v3-esp
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-esp',  // Custom domain: dive-v3-esp
+            'https://dev-auth.dive25.com/realms/dive-v3-esp',      // Cloudflare Tunnel: dive-v3-esp
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience

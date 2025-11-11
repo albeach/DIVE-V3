@@ -338,6 +338,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
 
     const classificationColors: Record<string, { bg: string; border: string; text: string; glow: string }> = {
         'UNCLASSIFIED': { bg: 'bg-green-100', border: 'border-green-400', text: 'text-green-900', glow: 'shadow-green-200' },
+        'RESTRICTED': { bg: 'bg-blue-100', border: 'border-blue-400', text: 'text-blue-900', glow: 'shadow-blue-200' },
         'CONFIDENTIAL': { bg: 'bg-yellow-100', border: 'border-yellow-400', text: 'text-yellow-900', glow: 'shadow-yellow-200' },
         'SECRET': { bg: 'bg-orange-100', border: 'border-orange-400', text: 'text-orange-900', glow: 'shadow-orange-200' },
         'TOP_SECRET': { bg: 'bg-red-100', border: 'border-red-400', text: 'text-red-900', glow: 'shadow-red-200' },

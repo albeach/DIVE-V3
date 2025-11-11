@@ -23,11 +23,12 @@ export function middleware(req: NextRequest) {
 
     const csp = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com", // Allow Cloudflare analytics
         `style-src 'self' 'unsafe-inline'`,
         "img-src 'self' data: https:",
         `font-src 'self'`,
-        `connect-src 'self' ${keycloakBaseUrl} ${apiUrl} https://localhost:8443 https://localhost:4000`,
+        // Allow Cloudflare tunnel domains and Cloudflare Access
+        `connect-src 'self' ${keycloakBaseUrl} ${apiUrl} https://localhost:8443 https://localhost:4000 https://dive25.cloudflareaccess.com https://*.dive25.com`,
         `frame-src 'self' ${keycloakBaseUrl}`,
     ].join("; ");
 
