@@ -48,15 +48,9 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) return;
-
-            // Fetch stats
+            // Fetch stats via server API
             const daysMap = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
-            const statsRes = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/logs/stats?days=${daysMap[dateRange]}`,
-                { headers: { 'Authorization': `Bearer ${token}` } }
-            );
+            const statsRes = await fetch(`/api/admin/logs/stats?days=${daysMap[dateRange]}`);
             
             const contentType = statsRes.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
@@ -64,12 +58,9 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
                 if (statsData.success) setStats(statsData.data);
             }
 
-            // Fetch health (optional endpoint, may not exist)
+            // Fetch health (optional endpoint, may not exist) via server API
             try {
-                const healthRes = await fetch(
-                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/health/detailed`,
-                    { headers: { 'Authorization': `Bearer ${token}` } }
-                );
+                const healthRes = await fetch(`/api/health/detailed`);
                 const healthContentType = healthRes.headers.get('content-type');
                 if (healthRes.ok && healthContentType && healthContentType.includes('application/json')) {
                     const healthData = await healthRes.json();

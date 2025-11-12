@@ -9,12 +9,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id: resourceId } = params;
+        const { id: resourceId } = await params;
 
         // Validate session server-side
         const validation = await validateSession();
@@ -67,4 +69,5 @@ export async function GET(
         );
     }
 }
+
 

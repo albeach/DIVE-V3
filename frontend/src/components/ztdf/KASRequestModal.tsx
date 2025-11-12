@@ -124,11 +124,8 @@ export default function KASRequestModal({
         // Start the KAS request flow
         const executeKASRequest = async () => {
             try {
-                const token = (session as any)?.accessToken;
-                if (!token) {
-                    throw new Error('Authentication required');
-                }
-
+                // No token needed - server route handles authentication
+                
                 // Step 1: Resource Access Request
                 setCurrentStep(1);
                 updateStep(0, 'IN_PROGRESS', 'Requesting access to encrypted resource...');
@@ -145,12 +142,10 @@ export default function KASRequestModal({
                 setCurrentStep(3);
                 updateStep(2, 'IN_PROGRESS', 'Contacting KAS at localhost:8080...');
 
-                // Make actual KAS request
-                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-                const response = await fetch(`${backendUrl}/api/resources/request-key`, {
+                // Make actual KAS request via server API route (secure!)
+                const response = await fetch(`/api/kas/request-key`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ resourceId, kaoId })

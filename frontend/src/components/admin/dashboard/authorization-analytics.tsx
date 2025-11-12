@@ -34,13 +34,8 @@ export default function AuthorizationAnalytics({ dateRange, refreshTrigger }: Pr
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) return;
-
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/analytics/authz-metrics`,
-                { headers: { 'Authorization': `Bearer ${token}` } }
-            );
+            // Use server API route (secure!)
+            const res = await fetch(`/api/admin/analytics/authz-metrics`);
             
             const contentType = res.headers.get('content-type');
             if (res.ok && contentType && contentType.includes('application/json')) {

@@ -791,3 +791,49 @@ body {
         animation: fadeInUp 0.4s ease-out forwards;
     }
 }
+
+/* ============================================ */
+/* Modern Dashboard 2025 - Additional Animations */
+/* ============================================ */
+
+/* Background scroll animation */
+@keyframes backgroundScroll {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 60px 60px;
+    }
+}
+
+/* Shadow expand on hover for cards */
+.shadow-3xl {
+    box-shadow: 0 35px 60px -15px rgba(0, 0, 0, 0.3);
+}
+
+/* Smooth all transitions */
+* {
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Bento grid responsive layout utilities */
+.bento-container {
+    display: grid;
+    gap: 1.5rem;
+    grid-auto-flow: dense;
+}
+
+/* Enhanced glassmorphism for modern cards */
+.glass-modern {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark-modern {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}

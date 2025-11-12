@@ -13,6 +13,8 @@ import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     try {
         console.log('[DIVE] Session tokens API called');

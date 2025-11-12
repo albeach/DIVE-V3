@@ -11,6 +11,8 @@ import { users, accounts, sessions } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
     try {
         const { accessToken, refreshToken, idToken, expiresIn } = await request.json();

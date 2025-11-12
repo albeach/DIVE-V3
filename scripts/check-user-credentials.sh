@@ -56,3 +56,4 @@ curl -k -s -X GET "https://dev-auth.dive25.com/admin/realms/$REALM/users/$USER_I
   }'
 
 
+

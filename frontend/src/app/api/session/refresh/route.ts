@@ -13,6 +13,8 @@ import { db } from '@/lib/db';
 import { accounts, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
     try {
         // Get current session

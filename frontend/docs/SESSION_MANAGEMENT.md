@@ -349,3 +349,4 @@ See `frontend/src/lib/session-validation.ts` for implementation details.
 See `frontend/src/hooks/use-session-heartbeat.ts` for heartbeat logic.
 See `frontend/src/components/auth/token-expiry-checker.tsx` for UI component.
 
+

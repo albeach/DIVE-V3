@@ -1,4 +1,7 @@
 /**
+
+// Mark this route as dynamic to prevent build-time execution
+export const dynamic = 'force-dynamic';
  * DIVE V3 SP Registry API - Regenerate Client Credentials
  * POST /api/admin/sp-registry/[spId]/credentials - Regenerate client secret
  */

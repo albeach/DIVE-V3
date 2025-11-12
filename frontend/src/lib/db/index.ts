@@ -4,7 +4,10 @@ import * as schema from "./schema";
 
 const connectionString = process.env.DATABASE_URL as string;
 
-console.log('[DIVE DB] Connecting to database:', connectionString.replace(/password@/, '***@'));
+// Only log if connectionString exists (avoid build-time errors)
+if (connectionString) {
+    console.log('[DIVE DB] Connecting to database:', connectionString.replace(/:[^:@]*@/, ':***@'));
+}
 
 const client = postgres(connectionString, {
     debug: process.env.NODE_ENV === 'development' ? (connection, query, params) => {

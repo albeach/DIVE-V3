@@ -2,7 +2,7 @@
  * Page Layout Component
  * 
  * Unified layout wrapper for all application pages
- * Includes: Navigation + Breadcrumbs + Main Content
+ * Includes: Navigation + Breadcrumbs + Main Content + Mobile Bottom Nav
  * 
  * Usage:
  * ```tsx
@@ -17,9 +17,11 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Navigation from '@/components/navigation';
 import Breadcrumbs, { BreadcrumbItem } from './breadcrumbs';
+import { MobileBottomNav } from '@/components/navigation/mobile-bottom-nav';
+import { MobileDrawer } from '@/components/navigation/mobile-drawer';
 
 interface PageLayoutProps {
     user?: {
@@ -43,9 +45,10 @@ export default function PageLayout({
     className = ''
 }: PageLayoutProps) {
     const maxWidthClass = maxWidth === 'full' ? '' : `max-w-${maxWidth} mx-auto`;
+    const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 pb-20 lg:pb-0">
             {/* Navigation Bar */}
             <Navigation user={user} />
 
@@ -58,9 +61,16 @@ export default function PageLayout({
             <main className={`${maxWidthClass} px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
                 {children}
             </main>
+
+            {/* Phase 2.2: Mobile Bottom Navigation Bar */}
+            <MobileBottomNav onMoreClick={() => setMobileDrawerOpen(true)} />
+
+            {/* Phase 2.2: Mobile Drawer for "More" menu */}
+            {mobileDrawerOpen && (
+                <MobileDrawer onClose={() => setMobileDrawerOpen(false)} user={user} />
+            )}
         </div>
     );
 }
-
 
 

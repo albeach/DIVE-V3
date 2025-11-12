@@ -1,4 +1,7 @@
 /**
+
+// Mark this route as dynamic to prevent build-time execution
+export const dynamic = 'force-dynamic';
  * DIVE V3 SP Registry API Routes
  * GET /api/admin/sp-registry - List all SPs
  * POST /api/admin/sp-registry - Create new SP
