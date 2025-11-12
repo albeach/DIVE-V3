@@ -260,9 +260,9 @@ verify_rollback() {
     wait_for_service "PostgreSQL" 30 \
         "docker-compose exec -T postgres pg_isready -U postgres" || return 1
     
-    # MongoDB
+    # MongoDB (service name is 'mongo' not 'mongodb')
     wait_for_service "MongoDB" 30 \
-        "docker-compose exec -T mongodb mongosh --eval 'db.adminCommand({ping: 1})' --quiet" || return 1
+        "docker-compose exec -T mongo mongosh --eval 'db.adminCommand({ping: 1})' --quiet 2>/dev/null" || return 1
     
     # Redis
     wait_for_service "Redis" 10 \
