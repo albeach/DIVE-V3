@@ -1,19 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="http://authzforce.github.io/xmlns/pdp/ext/3"
-           xmlns="http://authzforce.github.io/xmlns/pdp/ext/3"
-           elementFormDefault="qualified"
-           attributeFormDefault="unqualified">
-    
-    <xs:annotation>
-        <xs:documentation xml:lang="en">
-            AuthzForce PDP Extension Schema for DIVE V3
-            This file defines custom extensions for the Policy Decision Point.
-            For DIVE V3, we use minimal extensions (empty schema).
-        </xs:documentation>
-    </xs:annotation>
-    
-    <!-- Empty extension schema - no custom extensions needed for DIVE V3 -->
-    
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://authzforce.github.io/rest-api-model/xmlns/authzforce/ext" xmlns:tns="http://authzforce.github.io/rest-api-model/xmlns/authzforce/ext" elementFormDefault="qualified" attributeFormDefault="unqualified" version="4.0">
+	<xs:annotation>
+		<xs:documentation xml:lang="en">
+			Schemas of enabled AuthzForce extensions, such as attribute providers.
+		</xs:documentation>
+	</xs:annotation>
+	<!-- Extension for file-based PAP DAO root/ref policy providers -->
+	<xs:import namespace="http://authzforce.github.io/pap-dao-flat-file/xmlns/pdp-ext/4" />
 </xs:schema>
-
