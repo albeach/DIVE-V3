@@ -1,0 +1,429 @@
+name: Deploy to Dev Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+      skip_tests:
+        description: 'Skip smoke tests (NOT RECOMMENDED)'
+        required: false
+        type: boolean
+        default: false
+      force_database_backup:
+        description: 'Force database backup before deployment'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Deploy to dev-app.dive25.com
+    runs-on: [self-hosted, dive-v3-dev-server]
+    timeout-minutes: 30
+    
+    env:
+      BACKUP_DATABASES: ${{ inputs.force_database_backup || 'false' }}
+      SKIP_SMOKE_TESTS: ${{ inputs.skip_tests || 'false' }}
+    
+    steps:
+      #################################################################
+      # CHECKOUT & SETUP
+      #################################################################
+      
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Display Deployment Info
+        run: |
+          echo "🚀 DIVE V3 Deployment to dev-app.dive25.com"
+          echo "=========================================="
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo "Environment: ${{ inputs.environment || 'development' }}"
+          echo ""
+      
+      #################################################################
+      # PRE-DEPLOYMENT VALIDATION
+      #################################################################
+      
+      - name: Pre-Deployment - Check Disk Space
+        run: |
+          echo "Checking disk space..."
+          DISK_FREE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+          echo "Free space: ${DISK_FREE}GB"
+          
+          if [ "$DISK_FREE" -lt 10 ]; then
+            echo "❌ ERROR: Insufficient disk space (${DISK_FREE}GB < 10GB required)"
+            exit 1
+          fi
+          
+          echo "✅ Sufficient disk space: ${DISK_FREE}GB"
+      
+      - name: Pre-Deployment - Verify Docker
+        run: |
+          echo "Verifying Docker installation..."
+          docker --version
+          docker-compose --version
+          
+          echo "Current containers:"
+          docker ps -a
+          
+          echo "✅ Docker verified"
+      
+      - name: Pre-Deployment - Verify Files
+        run: |
+          echo "Verifying required files..."
+          
+          test -f docker-compose.yml && echo "✅ docker-compose.yml found" || (echo "❌ docker-compose.yml missing" && exit 1)
+          test -f scripts/deploy-dev.sh && echo "✅ deploy-dev.sh found" || (echo "❌ deploy-dev.sh missing" && exit 1)
+          test -f scripts/rollback.sh && echo "✅ rollback.sh found" || (echo "❌ rollback.sh missing" && exit 1)
+          test -f scripts/health-check.sh && echo "✅ health-check.sh found" || (echo "❌ health-check.sh missing" && exit 1)
+          
+          echo "✅ All required files present"
+      
+      #################################################################
+      # DEPLOY ENV FILES FROM GITHUB SECRETS
+      #################################################################
+      
+      - name: Deploy Backend .env
+        run: |
+          echo "Deploying backend/.env from GitHub Secrets..."
+          echo "${{ secrets.ENV_BACKEND }}" > backend/.env
+          
+          # Verify file was created
+          if [ -f backend/.env ]; then
+            echo "✅ backend/.env deployed ($(wc -l < backend/.env) lines)"
+          else
+            echo "❌ Failed to deploy backend/.env"
+            exit 1
+          fi
+      
+      - name: Deploy Frontend .env.local
+        run: |
+          echo "Deploying frontend/.env.local from GitHub Secrets..."
+          echo "${{ secrets.ENV_FRONTEND }}" > frontend/.env.local
+          
+          # Verify file was created
+          if [ -f frontend/.env.local ]; then
+            echo "✅ frontend/.env.local deployed ($(wc -l < frontend/.env.local) lines)"
+          else
+            echo "❌ Failed to deploy frontend/.env.local"
+            exit 1
+          fi
+      
+      - name: Deploy KAS .env (if available)
+        continue-on-error: true
+        run: |
+          if [ -n "${{ secrets.ENV_KAS }}" ]; then
+            echo "Deploying kas/.env from GitHub Secrets..."
+            echo "${{ secrets.ENV_KAS }}" > kas/.env
+            echo "✅ kas/.env deployed"
+          else
+            echo "ℹ️ ENV_KAS secret not set (KAS is optional)"
+          fi
+      
+      #################################################################
+      # RUN DEPLOYMENT SCRIPT
+      #################################################################
+      
+      - name: Execute Deployment
+        id: deploy
+        run: |
+          echo "Starting deployment..."
+          chmod +x scripts/deploy-dev.sh
+          bash scripts/deploy-dev.sh
+        env:
+          BACKUP_DATABASES: ${{ env.BACKUP_DATABASES }}
+          USE_LOCAL_BUILDS: false
+      
+      #################################################################
+      # POST-DEPLOYMENT HEALTH CHECKS
+      #################################################################
+      
+      - name: Post-Deployment - Health Checks
+        id: health_checks
+        if: success()
+        run: |
+          echo "Running comprehensive health checks..."
+          chmod +x scripts/health-check.sh
+          bash scripts/health-check.sh
+      
+      - name: Post-Deployment - Verify Endpoints
+        if: success()
+        run: |
+          echo "Verifying public endpoints..."
+          
+          # Wait for services to stabilize
+          sleep 10
+          
+          # Check Frontend (via Cloudflare tunnel)
+          echo "Checking Frontend: https://dev-app.dive25.com"
+          curl -sf -k https://dev-app.dive25.com -o /dev/null && echo "✅ Frontend accessible" || echo "⚠️ Frontend not accessible via tunnel (may take time to propagate)"
+          
+          # Check Backend (via Cloudflare tunnel)
+          echo "Checking Backend: https://dev-api.dive25.com/health"
+          curl -sf -k https://dev-api.dive25.com/health -o /dev/null && echo "✅ Backend accessible" || echo "⚠️ Backend not accessible via tunnel (may take time to propagate)"
+          
+          # Check Keycloak (via Cloudflare tunnel)
+          echo "Checking Keycloak: https://dev-auth.dive25.com/health"
+          curl -sf -k https://dev-auth.dive25.com/health -o /dev/null && echo "✅ Keycloak accessible" || echo "⚠️ Keycloak not accessible via tunnel (may take time to propagate)"
+      
+      #################################################################
+      # SMOKE TESTS (OPTIONAL)
+      #################################################################
+      
+      - name: Post-Deployment - Smoke Tests
+        if: success() && env.SKIP_SMOKE_TESTS != 'true'
+        continue-on-error: true
+        run: |
+          echo "Running smoke tests..."
+          
+          if [ -f scripts/smoke-test.sh ]; then
+            chmod +x scripts/smoke-test.sh
+            bash scripts/smoke-test.sh
+          else
+            echo "⚠️ smoke-test.sh not found, skipping"
+          fi
+      
+      #################################################################
+      # CLEANUP
+      #################################################################
+      
+      - name: Cleanup Old Docker Resources
+        if: success()
+        run: |
+          echo "Cleaning up old Docker resources..."
+          
+          # Remove old images (keep last 2 versions)
+          docker image prune -a --filter "until=168h" --force || true
+          
+          # Remove dangling volumes
+          docker volume prune --force || true
+          
+          # Clean up old logs (keep last 30 days)
+          find logs/deployments -name "deploy-*.log" -mtime +30 -delete 2>/dev/null || true
+          
+          # Clean up old rollback snapshots (keep last 10)
+          ls -t backups/deployments | tail -n +11 | xargs -I {} rm -rf backups/deployments/{} 2>/dev/null || true
+          
+          echo "✅ Cleanup complete"
+      
+      #################################################################
+      # DEPLOYMENT SUMMARY
+      #################################################################
+      
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "📊 Deployment Summary"
+          echo "===================="
+          echo "✅ Deployment to dev-app.dive25.com successful!"
+          echo ""
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          echo "🌐 Endpoints:"
+          echo "  Frontend:  https://dev-app.dive25.com"
+          echo "  Backend:   https://dev-api.dive25.com"
+          echo "  Keycloak:  https://dev-auth.dive25.com"
+          echo ""
+          echo "Services:"
+          docker-compose ps
+      
+      - name: Upload Deployment Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-logs-${{ github.sha }}
+          path: |
+            logs/deployments/deploy-*.log
+            logs/deployments/rollback-*.log
+          retention-days: 30
+          if-no-files-found: ignore
+  
+  #################################################################
+  # ROLLBACK ON FAILURE
+  #################################################################
+  
+  rollback:
+    name: Rollback on Failure
+    runs-on: [self-hosted, dive-v3-dev-server]
+    needs: deploy
+    if: failure()
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Find Latest Rollback Snapshot
+        id: find_snapshot
+        run: |
+          LATEST_SNAPSHOT=$(ls -t backups/deployments/rollback-* | head -1 || echo "")
+          
+          if [ -z "$LATEST_SNAPSHOT" ]; then
+            echo "❌ No rollback snapshot found"
+            echo "snapshot_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          echo "Found rollback snapshot: $LATEST_SNAPSHOT"
+          echo "snapshot_path=$LATEST_SNAPSHOT" >> $GITHUB_OUTPUT
+          echo "snapshot_found=true" >> $GITHUB_OUTPUT
+      
+      - name: Execute Rollback
+        if: steps.find_snapshot.outputs.snapshot_found == 'true'
+        run: |
+          echo "⚠️ Deployment failed - initiating rollback..."
+          chmod +x scripts/rollback.sh
+          bash scripts/rollback.sh ${{ steps.find_snapshot.outputs.snapshot_path }}
+        env:
+          RESTORE_DATABASES: false  # Don't restore databases by default (data loss risk)
+      
+      - name: Verify Rollback
+        if: steps.find_snapshot.outputs.snapshot_found == 'true'
+        run: |
+          echo "Verifying rollback..."
+          chmod +x scripts/health-check.sh
+          bash scripts/health-check.sh
+      
+      - name: Rollback Summary
+        if: steps.find_snapshot.outputs.snapshot_found == 'true'
+        run: |
+          echo "🔄 Rollback Summary"
+          echo "===================="
+          echo "❌ Deployment failed - system rolled back to previous state"
+          echo ""
+          echo "Failed commit: ${{ github.sha }}"
+          echo "Rollback snapshot: ${{ steps.find_snapshot.outputs.snapshot_path }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          echo "⚠️ Investigation Required:"
+          echo "  - Review deployment logs for failure reason"
+          echo "  - Check health check results"
+          echo "  - Verify .env files are correct"
+          echo "  - Test locally before next deployment"
+      
+      - name: No Rollback Available
+        if: steps.find_snapshot.outputs.snapshot_found != 'true'
+        run: |
+          echo "❌ CRITICAL: Deployment failed and no rollback snapshot found"
+          echo "Manual intervention required!"
+          echo ""
+          echo "Possible actions:"
+          echo "  1. SSH into server: ssh user@dev-app.dive25.com"
+          echo "  2. Check Docker status: docker ps -a"
+          echo "  3. Review logs: docker-compose logs"
+          echo "  4. Manual rollback: git checkout <previous-commit> && docker-compose up -d"
+          exit 1
+      
+      - name: Upload Rollback Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-logs-${{ github.sha }}
+          path: |
+            logs/deployments/rollback-*.log
+          retention-days: 30
+          if-no-files-found: ignore
+
+  #################################################################
+  # NOTIFICATION
+  #################################################################
+  
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [deploy, rollback]
+    if: always()
+    
+    steps:
+      - name: Set Deployment Status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=✅ Deployment to dev-app.dive25.com successful!" >> $GITHUB_OUTPUT
+            echo "color=28a745" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.rollback.result }}" == "success" ]; then
+            echo "status=rollback" >> $GITHUB_OUTPUT
+            echo "message=🔄 Deployment failed - rolled back to previous state" >> $GITHUB_OUTPUT
+            echo "color=ffc107" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "message=❌ Deployment failed and rollback failed" >> $GITHUB_OUTPUT
+            echo "color=dc3545" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Deployment Badge
+        run: |
+          echo "Deployment Status: ${{ steps.status.outputs.status }}"
+          echo "Message: ${{ steps.status.outputs.message }}"
+      
+      - name: Comment on Commit (if applicable)
+        if: github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.status.outputs.status }}';
+            const message = '${{ steps.status.outputs.message }}';
+            
+            let comment = `## ${message}\n\n`;
+            comment += `**Commit:** ${{ github.sha }}\n`;
+            comment += `**Branch:** ${{ github.ref_name }}\n`;
+            comment += `**Actor:** ${{ github.actor }}\n`;
+            comment += `**Timestamp:** ${new Date().toUTCString()}\n\n`;
+            
+            if (status === 'success') {
+              comment += `### 🌐 Endpoints\n`;
+              comment += `- **Frontend:** https://dev-app.dive25.com\n`;
+              comment += `- **Backend:** https://dev-api.dive25.com\n`;
+              comment += `- **Keycloak:** https://dev-auth.dive25.com\n\n`;
+            } else if (status === 'rollback') {
+              comment += `### ⚠️ Rollback Details\n`;
+              comment += `The deployment failed and the system was rolled back to the previous state.\n\n`;
+              comment += `**Action Required:** Review logs and fix issues before next deployment.\n\n`;
+            } else {
+              comment += `### 🚨 Critical Failure\n`;
+              comment += `Both deployment and rollback failed. Manual intervention required.\n\n`;
+            }
+            
+            comment += `[View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+            
+            github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: '${{ github.sha }}',
+              body: comment
+            });
+      
+      - name: Create GitHub Issue on Failure
+        if: steps.status.outputs.status != 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Deployment Failed: ${{ github.sha }}`,
+              body: `## Deployment Failure Report\n\n**Commit:** ${{ github.sha }}\n**Branch:** ${{ github.ref_name }}\n**Actor:** ${{ github.actor }}\n**Timestamp:** ${new Date().toUTCString()}\n\n**Status:** ${{ steps.status.outputs.status }}\n\n### Investigation Steps\n1. Review [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n2. Check deployment artifacts for detailed logs\n3. SSH into server and review Docker logs\n4. Verify .env files are correctly configured\n5. Test locally before next deployment attempt\n\n### Next Steps\n- [ ] Identify root cause\n- [ ] Fix issues\n- [ ] Test locally\n- [ ] Re-deploy\n\n**Auto-generated by GitHub Actions**`,
+              labels: ['deployment', 'bug', 'priority:high']
+            });
+            
+            console.log(`Created issue #${issue.data.number}`);
+
