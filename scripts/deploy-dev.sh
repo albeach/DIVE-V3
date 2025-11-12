@@ -310,7 +310,7 @@ health_checks() {
     
     # OPA
     wait_for_service "OPA" "$OPA_TIMEOUT" \
-        "curl -sf http://localhost:8181/health | grep -q ok" || return 1
+        "docker-compose exec -T opa wget --spider --quiet http://localhost:8181/health" || return 1
     
     # AuthzForce
     wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" \

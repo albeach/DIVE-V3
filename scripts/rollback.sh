@@ -270,7 +270,7 @@ verify_rollback() {
     
     # OPA
     wait_for_service "OPA" 10 \
-        "curl -sf http://localhost:8181/health | grep -q ok" || return 1
+        "docker-compose exec -T opa wget --spider --quiet http://localhost:8181/health" || return 1
     
     # Keycloak
     wait_for_service "Keycloak" 120 \
