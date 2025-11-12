@@ -343,3 +343,4 @@ userVerificationRequirement: 'required',  // ✅ Correct
 **This should work now. The `requireResidentKey` was the missing piece!**
 
 
+

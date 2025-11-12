@@ -71,3 +71,4 @@ docker logs dive-v3-backend 2>&1 | grep -E "AAL|ACR|testuser-usa-unclass" | tail
 
 
 
+

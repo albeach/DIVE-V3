@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
     try {
         // Validate session
@@ -80,4 +82,5 @@ function interpretAAL(acr: any, amr: any): string {
     
     return 'AAL1 (single factor)';
 }
+
 

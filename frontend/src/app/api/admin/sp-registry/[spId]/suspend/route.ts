@@ -1,4 +1,7 @@
 /**
+
+// Mark this route as dynamic to prevent build-time execution
+export const dynamic = 'force-dynamic';
  * DIVE V3 SP Registry API - Suspend SP
  * POST /api/admin/sp-registry/[spId]/suspend - Suspend/Reactivate SP
  */

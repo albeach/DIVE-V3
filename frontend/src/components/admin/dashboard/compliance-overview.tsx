@@ -41,16 +41,10 @@ export default function ComplianceOverview({ dateRange, refreshTrigger }: Props)
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) return;
-
+            // Use server API routes (secure!)
             const [slaRes, trendsRes] = await Promise.all([
-                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/analytics/sla-metrics`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/analytics/compliance-trends`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
+                fetch(`/api/admin/analytics/sla-metrics`),
+                fetch(`/api/admin/analytics/compliance-trends`)
             ]);
 
             const slaContentType = slaRes.headers.get('content-type');

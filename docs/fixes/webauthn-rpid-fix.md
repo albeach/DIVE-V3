@@ -202,3 +202,4 @@ After successful WebAuthn registration and authentication, the token should incl
 **Affected Realms**: All 11 realms (USA, FRA, CAN, DEU, GBR, ITA, ESP, POL, NLD, Industry, Broker)
 
 
+

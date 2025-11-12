@@ -37,13 +37,8 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) return;
-
-            const res = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/logs?limit=100`,
-                { headers: { 'Authorization': `Bearer ${token}` } }
-            );
+            // Use server API route (secure!)
+            const res = await fetch(`/api/admin/logs?limit=100`);
             
             const contentType = res.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {

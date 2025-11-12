@@ -84,34 +84,13 @@ export default function IdPGovernanceDashboard() {
             setLoading(true);
             setError(null);
 
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            const token = (session as any)?.accessToken;
-
-            if (!token) {
-                throw new Error('No access token available');
-            }
-
-            // Fetch all analytics data in parallel
+            // Use server API routes (secure! No client-side tokens!)
             const [risk, compliance, sla, authz, posture] = await Promise.all([
-                fetch(`${backendUrl}/api/admin/analytics/risk-distribution`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }).then(res => res.json()),
-                
-                fetch(`${backendUrl}/api/admin/analytics/compliance-trends`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }).then(res => res.json()),
-                
-                fetch(`${backendUrl}/api/admin/analytics/sla-metrics`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }).then(res => res.json()),
-                
-                fetch(`${backendUrl}/api/admin/analytics/authz-metrics`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }).then(res => res.json()),
-                
-                fetch(`${backendUrl}/api/admin/analytics/security-posture`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                }).then(res => res.json()),
+                fetch(`/api/admin/analytics/risk-distribution`).then(res => res.json()),
+                fetch(`/api/admin/analytics/compliance-trends`).then(res => res.json()),
+                fetch(`/api/admin/analytics/sla-metrics`).then(res => res.json()),
+                fetch(`/api/admin/analytics/authz-metrics`).then(res => res.json()),
+                fetch(`/api/admin/analytics/security-posture`).then(res => res.json()),
             ]);
 
             setRiskDistribution(risk);

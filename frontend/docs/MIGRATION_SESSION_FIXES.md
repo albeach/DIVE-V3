@@ -201,3 +201,4 @@ See:
 - `frontend/src/app/api/resources/route.ts` - Example API route
 - `frontend/docs/SESSION_MANAGEMENT.md` - Complete documentation
 
+

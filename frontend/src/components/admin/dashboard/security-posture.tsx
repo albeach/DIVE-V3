@@ -41,16 +41,10 @@ export default function SecurityPosture({ dateRange, refreshTrigger }: Props) {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) return;
-
+            // Use server API routes (secure!)
             const [postureRes, riskRes] = await Promise.all([
-                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/analytics/security-posture`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/analytics/risk-distribution`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
+                fetch(`/api/admin/analytics/security-posture`),
+                fetch(`/api/admin/analytics/risk-distribution`)
             ]);
 
             const postureContentType = postureRes.headers.get('content-type');

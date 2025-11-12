@@ -155,23 +155,9 @@ export default function AdminCertificatesPage() {
   }, [session, status, router]);
 
   async function fetchData() {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-    
     try {
-      // Get auth token from session
-      const token = (session as any)?.accessToken;
-      
-      if (!token) {
-        setError('No access token available. Please refresh the page.');
-        setLoading(false);
-        return;
-      }
-
-      // Fetch certificate health (dashboard data)
-      const healthRes = await fetch(`${backendUrl}/api/admin/certificates/health`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      // Fetch certificate health (dashboard data) via server API
+      const healthRes = await fetch(`/api/admin/certificates/health`, {
         cache: 'no-store',
       });
 
@@ -182,11 +168,8 @@ export default function AdminCertificatesPage() {
       
       const healthData = await healthRes.json();
       
-      // Fetch certificate list to get detailed info
-      const certsRes = await fetch(`${backendUrl}/api/admin/certificates`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      // Fetch certificate list to get detailed info via server API
+      const certsRes = await fetch(`/api/admin/certificates`, {
         cache: 'no-store',
       });
 
@@ -216,10 +199,7 @@ export default function AdminCertificatesPage() {
       setHealth(combinedHealth);
 
       // Fetch CRL
-      const crlRes = await fetch(`${backendUrl}/api/admin/certificates/revocation-list`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const crlRes = await fetch(`/api/admin/certificates/revocation-list`, {
         cache: 'no-store',
       });
 
@@ -242,20 +222,11 @@ export default function AdminCertificatesPage() {
   async function handleRotateCertificate() {
     setRotationLoading(true);
     setRotationMessage('');
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-
+    
     try {
-      const token = (session as any)?.accessToken;
-      
-      if (!token) {
-        setRotationMessage('❌ No access token available');
-        return;
-      }
-
-      const response = await fetch(`${backendUrl}/api/admin/certificates/rotate`, {
+      const response = await fetch(`/api/admin/certificates/rotate`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       });
@@ -283,20 +254,11 @@ export default function AdminCertificatesPage() {
 
   async function handleRevokeCertificate() {
     setRevokeLoading(true);
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-
+    
     try {
-      const token = (session as any)?.accessToken;
-      
-      if (!token) {
-        alert('❌ No access token available');
-        return;
-      }
-
-      const response = await fetch(`${backendUrl}/api/admin/certificates/revoke`, {
+      const response = await fetch(`/api/admin/certificates/revoke`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

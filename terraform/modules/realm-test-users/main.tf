@@ -38,6 +38,9 @@ resource "keycloak_user" "test_user_unclass" {
     acpCOI                = jsonencode([])  # No COI for unclassified
     dutyOrg               = var.duty_org
     orgUnit               = "OPERATIONS"
+    # AAL1 - Password only (sufficient for UNCLASSIFIED)
+    acr                   = "0"                      # AAL1
+    amr                   = jsonencode(["pwd"])      # Password only
   }
 }
 
@@ -74,6 +77,9 @@ resource "keycloak_user" "test_user_confidential" {
     acpCOI                = jsonencode(var.coi_confidential)  # Basic COI
     dutyOrg               = var.duty_org
     orgUnit               = "INTELLIGENCE"
+    # AAL2 - Password + OTP (required for CONFIDENTIAL)
+    acr                   = "1"                      # AAL2
+    amr                   = jsonencode(["pwd", "otp"])  # Password + OTP
   }
 }
 
@@ -110,6 +116,9 @@ resource "keycloak_user" "test_user_secret" {
     acpCOI                = jsonencode(var.coi_secret)  # Enhanced COI
     dutyOrg               = var.duty_org
     orgUnit               = "CYBER_DEFENSE"
+    # AAL2 - Password + OTP (required for SECRET)
+    acr                   = "1"                      # AAL2
+    amr                   = jsonencode(["pwd", "otp"])  # Password + OTP
   }
 }
 
@@ -146,6 +155,9 @@ resource "keycloak_user" "test_user_top_secret" {
     acpCOI                = jsonencode(var.coi_top_secret)  # Full COI access
     dutyOrg               = var.duty_org
     orgUnit               = "SPECIAL_OPERATIONS"
+    # AAL3 - Password + WebAuthn (required for TOP_SECRET)
+    acr                   = "2"                      # AAL3
+    amr                   = jsonencode(["pwd", "hwk"])  # Password + Hardware Key (WebAuthn)
   }
 }
 

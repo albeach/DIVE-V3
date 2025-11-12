@@ -15,6 +15,8 @@ import { db } from '@/lib/db';
 import { sessions, accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST() {
     try {
         console.log('[DIVE] Complete server-side logout initiated');

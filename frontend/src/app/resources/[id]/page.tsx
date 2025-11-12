@@ -169,7 +169,7 @@ export default function ResourceDetailPage() {
           const suggested = allResources
             .filter((r: IResource) => {
               // Check clearance
-              const userLevel = clearanceOrder[userClearance] || 0;
+              const userLevel = (userClearance ? clearanceOrder[userClearance] : null) || 0;
               const resourceLevel = clearanceOrder[r.classification] || 0;
               const clearanceOk = userLevel >= resourceLevel;
               
