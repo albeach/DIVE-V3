@@ -150,10 +150,11 @@ services:
     environment:
       - JAVA_OPTS=-Xms256m -Xmx512m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/authzforce-ce/"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/authzforce-ce/domains"]
+      interval: 15s
+      timeout: 10s
       retries: 5
+      start_period: 60s
     networks:
       - dive-network
     restart: unless-stopped
