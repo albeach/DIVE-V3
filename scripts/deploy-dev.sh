@@ -268,24 +268,38 @@ start_services() {
 wait_for_service() {
     local SERVICE=$1
     local TIMEOUT=$2
-    local HEALTH_CHECK=$3
+    local CONTAINER_NAME=$3
     
     log_info "Waiting for $SERVICE (timeout: ${TIMEOUT}s)..."
     
     local START_TIME=$(date +%s)
     while true; do
-        if eval "$HEALTH_CHECK" &> /dev/null; then
+        # Use Docker's built-in healthcheck status
+        local HEALTH_STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER_NAME" 2>/dev/null || echo "none")
+        
+        if [ "$HEALTH_STATUS" = "healthy" ]; then
             local END_TIME=$(date +%s)
             local DURATION=$((END_TIME - START_TIME))
             log_info "✓ $SERVICE healthy (${DURATION}s)"
             return 0
+        elif [ "$HEALTH_STATUS" = "none" ]; then
+            # Container has no healthcheck defined, just check if running
+            if docker ps --filter "name=$CONTAINER_NAME" --filter "status=running" --format '{{.Names}}' | grep -q "$CONTAINER_NAME"; then
+                local END_TIME=$(date +%s)
+                local DURATION=$((END_TIME - START_TIME))
+                log_info "✓ $SERVICE running (${DURATION}s) - no healthcheck defined"
+                return 0
+            fi
         fi
         
         local CURRENT_TIME=$(date +%s)
         local ELAPSED=$((CURRENT_TIME - START_TIME))
         
         if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-            log_error "$SERVICE failed to become healthy within ${TIMEOUT}s"
+            log_error "$SERVICE failed to become healthy within ${TIMEOUT}s (status: $HEALTH_STATUS)"
+            # Show container logs for debugging
+            log_error "Last 10 lines of $SERVICE logs:"
+            docker logs --tail 10 "$CONTAINER_NAME" 2>&1 | tee -a "$LOG_FILE"
             return 1
         fi
         
@@ -296,29 +310,16 @@ wait_for_service() {
 health_checks() {
     log "🏥 Running health checks..."
     
-    # PostgreSQL
-    wait_for_service "PostgreSQL" "$POSTGRES_TIMEOUT" \
-        "docker-compose exec -T postgres pg_isready -U postgres" || return 1
+    # Use Docker's built-in healthcheck status (best practice)
+    # Relies on healthcheck definitions in docker-compose.yml
+    # Container names match docker-compose.yml
     
-    # MongoDB (service name is 'mongo' not 'mongodb')
-    wait_for_service "MongoDB" "$MONGODB_TIMEOUT" \
-        "docker-compose exec -T mongo mongosh --eval 'db.adminCommand({ping: 1})' --quiet 2>/dev/null" || return 1
-    
-    # Redis
-    wait_for_service "Redis" "$REDIS_TIMEOUT" \
-        "docker-compose exec -T redis redis-cli ping | grep -q PONG" || return 1
-    
-    # OPA
-    wait_for_service "OPA" "$OPA_TIMEOUT" \
-        "docker-compose exec -T opa wget --spider --quiet http://localhost:8181/health" || return 1
-    
-    # AuthzForce
-    wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" \
-        "docker-compose exec -T authzforce wget --spider --quiet http://localhost:8080/authzforce-ce/" || return 1
-    
-    # Keycloak (check health endpoint + 11 realms)
-    wait_for_service "Keycloak" "$KEYCLOAK_TIMEOUT" \
-        "docker-compose exec -T keycloak curl -sf http://localhost:8080/health | grep -q UP" || return 1
+    wait_for_service "PostgreSQL" "$POSTGRES_TIMEOUT" "dive-v3-postgres" || return 1
+    wait_for_service "MongoDB" "$MONGODB_TIMEOUT" "dive-v3-mongo" || return 1
+    wait_for_service "Redis" "$REDIS_TIMEOUT" "dive-v3-redis" || return 1
+    wait_for_service "OPA" "$OPA_TIMEOUT" "dive-v3-opa" || return 1
+    wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" "dive-v3-authzforce" || return 1
+    wait_for_service "Keycloak" "$KEYCLOAK_TIMEOUT" "dive-v3-keycloak" || return 1
     
     # Verify all 11 Keycloak realms
     log_info "Verifying Keycloak realms..."
@@ -332,13 +333,8 @@ health_checks() {
         fi
     done
     
-    # Backend
-    wait_for_service "Backend" "$BACKEND_TIMEOUT" \
-        "docker-compose exec -T backend curl -sf http://localhost:4000/health" || return 1
-    
-    # Frontend
-    wait_for_service "Frontend" "$FRONTEND_TIMEOUT" \
-        "docker-compose exec -T frontend curl -sf http://localhost:3000/" || return 1
+    wait_for_service "Backend" "$BACKEND_TIMEOUT" "dive-v3-backend" || return 1
+    wait_for_service "Frontend" "$FRONTEND_TIMEOUT" "dive-v3-frontend" || return 1
     
     # KAS (optional)
     if docker-compose ps kas | grep -q Up; then
