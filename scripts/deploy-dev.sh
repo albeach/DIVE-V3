@@ -314,12 +314,15 @@ health_checks() {
     # Relies on healthcheck definitions in docker-compose.yml
     # Container names match docker-compose.yml
     
+    # Critical services (required for core functionality)
     wait_for_service "PostgreSQL" "$POSTGRES_TIMEOUT" "dive-v3-postgres" || return 1
     wait_for_service "MongoDB" "$MONGODB_TIMEOUT" "dive-v3-mongo" || return 1
     wait_for_service "Redis" "$REDIS_TIMEOUT" "dive-v3-redis" || return 1
     wait_for_service "OPA" "$OPA_TIMEOUT" "dive-v3-opa" || return 1
-    wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" "dive-v3-authzforce" || return 1
     wait_for_service "Keycloak" "$KEYCLOAK_TIMEOUT" "dive-v3-keycloak" || return 1
+    
+    # Optional services (nice-to-have, not critical)
+    wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" "dive-v3-authzforce" || log_warn "⚠️  AuthzForce not healthy (Policies Lab feature will be unavailable)"
     
     # Verify all 11 Keycloak realms
     log_info "Verifying Keycloak realms..."
