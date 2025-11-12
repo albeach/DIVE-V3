@@ -314,11 +314,11 @@ health_checks() {
     
     # AuthzForce
     wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" \
-        "curl -sf http://localhost:8282/authzforce-ce/" || return 1
+        "docker-compose exec -T authzforce wget --spider --quiet http://localhost:8080/authzforce-ce/" || return 1
     
     # Keycloak (check health endpoint + 11 realms)
     wait_for_service "Keycloak" "$KEYCLOAK_TIMEOUT" \
-        "curl -sf http://localhost:8081/health | grep -q UP" || return 1
+        "docker-compose exec -T keycloak curl -sf http://localhost:8080/health | grep -q UP" || return 1
     
     # Verify all 11 Keycloak realms
     log_info "Verifying Keycloak realms..."
@@ -334,11 +334,11 @@ health_checks() {
     
     # Backend
     wait_for_service "Backend" "$BACKEND_TIMEOUT" \
-        "curl -sf https://localhost:4000/health" || return 1
+        "docker-compose exec -T backend curl -sf http://localhost:4000/health" || return 1
     
     # Frontend
     wait_for_service "Frontend" "$FRONTEND_TIMEOUT" \
-        "curl -sf http://localhost:3000/" || return 1
+        "docker-compose exec -T frontend curl -sf http://localhost:3000/" || return 1
     
     # KAS (optional)
     if docker-compose ps kas | grep -q Up; then
