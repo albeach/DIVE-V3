@@ -25,7 +25,7 @@ ROLLBACK_SNAPSHOT="$BACKUP_DIR/rollback-$TIMESTAMP"
 
 # Service health check timeouts (seconds)
 POSTGRES_TIMEOUT=30
-MONGODB_TIMEOUT=30
+MONGODB_TIMEOUT=60  # Increased from 30s - MongoDB can be slow to initialize
 REDIS_TIMEOUT=10
 OPA_TIMEOUT=10
 AUTHZFORCE_TIMEOUT=30
@@ -302,7 +302,7 @@ health_checks() {
     
     # MongoDB
     wait_for_service "MongoDB" "$MONGODB_TIMEOUT" \
-        "docker-compose exec -T mongodb mongosh --eval 'db.adminCommand({ping: 1})' --quiet" || return 1
+        "docker-compose exec -T mongodb mongosh --eval 'db.adminCommand({ping: 1})' --quiet 2>/dev/null" || return 1
     
     # Redis
     wait_for_service "Redis" "$REDIS_TIMEOUT" \
