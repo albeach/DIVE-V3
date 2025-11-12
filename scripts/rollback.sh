@@ -369,7 +369,7 @@ trap 'log_error "Rollback interrupted"; exit 130' INT TERM
 # EXECUTE
 #################################################################
 
-# Create log directory if it doesn't exist
+# Create log directory if it doesn't exist (BEFORE any function calls that log)
 mkdir -p "$LOG_DIR"
 
 main "$@"
