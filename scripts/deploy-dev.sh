@@ -324,11 +324,11 @@ health_checks() {
     # Optional services (nice-to-have, not critical)
     wait_for_service "AuthzForce" "$AUTHZFORCE_TIMEOUT" "dive-v3-authzforce" || log_warn "⚠️  AuthzForce not healthy (Policies Lab feature will be unavailable)"
     
-    # Verify all 11 Keycloak realms
+    # Verify all 11 Keycloak realms (using HTTPS with mkcert certs)
     log_info "Verifying Keycloak realms..."
     REALMS=("dive-v3-broker" "dive-v3-usa" "dive-v3-fra" "dive-v3-can" "dive-v3-deu" "dive-v3-gbr" "dive-v3-ita" "dive-v3-esp" "dive-v3-pol" "dive-v3-nld" "dive-v3-industry")
     for realm in "${REALMS[@]}"; do
-        if curl -sf "https://localhost:8443/realms/$realm/.well-known/openid-configuration" &> /dev/null; then
+        if curl -sfk "https://localhost:8443/realms/$realm/.well-known/openid-configuration" &> /dev/null; then
             log_info "  ✓ Realm $realm accessible"
         else
             log_error "Realm $realm not accessible"
