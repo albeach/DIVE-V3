@@ -66,13 +66,13 @@ log_info() {
 #################################################################
 
 setup() {
-    log "🚀 Starting DIVE V3 Deployment to dev-app.dive25.com"
-    log "Timestamp: $TIMESTAMP"
-    
-    # Create required directories
+    # Create required directories FIRST (before any logging)
     mkdir -p "$BACKUP_DIR"
     mkdir -p "$LOG_DIR"
     mkdir -p "$ROLLBACK_SNAPSHOT"
+    
+    log "🚀 Starting DIVE V3 Deployment to dev-app.dive25.com"
+    log "Timestamp: $TIMESTAMP"
     
     # Change to project root
     cd "$PROJECT_ROOT"
