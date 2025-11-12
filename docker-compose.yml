@@ -40,17 +40,15 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: password
-      # Keycloak 26 Configuration for Cloudflare Zero Trust Tunnel
-      # Cloudflare handles TLS termination - Keycloak runs on HTTP internally
-      # Set KC_HOSTNAME for consistent token issuer (critical for federation)
+      # Keycloak 26 Configuration with HTTPS (Defense in Depth)
+      # Using mkcert certificates for internal HTTPS
+      # Cloudflare tunnel also provides TLS at edge (double encryption)
       KC_HOSTNAME: dev-auth.dive25.com
       KC_HOSTNAME_STRICT: false
       KC_HTTP_ENABLED: true
-      KC_HTTP_PORT: 8080
-      # HTTPS disabled - Cloudflare tunnel provides TLS
-      # KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
-      # KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
-      # KC_HTTPS_PORT: 8443
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: 8443
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
@@ -63,12 +61,12 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8081:8080"   # HTTP only - Cloudflare tunnel handles HTTPS
-      # - "8443:8443"   # HTTPS disabled - not needed with Cloudflare tunnel
+      - "8081:8080"   # HTTP (for internal Docker access)
+      - "8443:8443"   # HTTPS (with mkcert certs - defense in depth)
     networks:
       - dive-network
-    # volumes:
-    #   - ./keycloak/certs:/opt/keycloak/certs:ro  # Not needed - Cloudflare handles TLS
+    volumes:
+      - ./keycloak/certs:/opt/keycloak/certs:ro  # mkcert certificates
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/realms/master || exit 1"]
       interval: 30s
