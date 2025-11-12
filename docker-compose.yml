@@ -243,9 +243,9 @@ services:
       # Keycloak Issuer for JWT validation (must match token issuer)
       KEYCLOAK_ISSUER: https://dev-auth.dive25.com/realms/dive-v3-broker
       # NextAuth configuration - Updated for Cloudflare Tunnel
-      AUTH_URL: https://dev-app.dive25.com
-      AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
+      # NextAuth v5 uses NEXTAUTH_URL (official documentation)
       NEXTAUTH_URL: https://dev-app.dive25.com
+      AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
       # Client credentials
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L

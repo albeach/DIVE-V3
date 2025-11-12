@@ -166,25 +166,36 @@ async function refreshAccessToken(account: any) {
 }
 
 // Determine cookie domain based on NEXTAUTH_URL
+// NextAuth v5 officially uses NEXTAUTH_URL per documentation
 // If using custom domain (divedeeper.internal or dive25.com), set cookie domain to allow subdomains
 const getAuthCookieDomain = (): string | undefined => {
-    const authUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL;
-    if (authUrl && authUrl.includes('divedeeper.internal')) {
+    const authUrl = process.env.NEXTAUTH_URL;
+    
+    // DEVELOPMENT: Localhost or IP - use exact domain match
+    if (!authUrl || authUrl.includes('localhost') || authUrl.includes('127.0.0.1')) {
+        console.log('[DIVE] Cookie domain: localhost/IP detected - using exact match');
+        return undefined;  // Use exact domain match (no wildcard)
+    }
+    
+    // PRODUCTION: Custom domain - use wildcard for subdomains
+    if (authUrl.includes('divedeeper.internal')) {
         return '.divedeeper.internal'; // Allow cookies across all subdomains
     }
-    if (authUrl && authUrl.includes('dive25.com')) {
+    if (authUrl.includes('dive25.com')) {
         return '.dive25.com'; // Allow cookies across Cloudflare tunnel subdomains
     }
+    
     return undefined; // Use default (exact domain match)
 };
 
 const AUTH_COOKIE_DOMAIN = getAuthCookieDomain();
-const AUTH_COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https://') || process.env.AUTH_URL?.startsWith('https://');
+const AUTH_COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
 
-console.log('[DIVE] NextAuth cookie configuration:', {
+console.log('[DIVE] NextAuth v5 cookie configuration:', {
+    nextauthUrl: process.env.NEXTAUTH_URL,
     domain: AUTH_COOKIE_DOMAIN || 'default (exact match)',
     secure: AUTH_COOKIE_SECURE,
-    authUrl: process.env.NEXTAUTH_URL || process.env.AUTH_URL,
+    trustHost: true,
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -235,6 +246,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email offline_access",
+                    // Force re-authentication when switching users
+                    // This prevents "You are already authenticated as different user" error
+                    prompt: "login",
                 }
             },
             // Server-side: Use internal Docker network for token exchange
@@ -243,51 +257,51 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
             checks: ["pkce", "state"],  // Best practice: Enable security checks
             allowDangerousEmailAccountLinking: true,
+            // FIX (Nov 7): Profile callback to handle remote IdPs without email
+            // and capture DIVE attributes from Keycloak tokens
+            profile(profile) {
+                console.log('[NextAuth profile()] Raw profile from Keycloak:', {
+                    sub: profile.sub,
+                    email: profile.email,
+                    preferred_username: profile.preferred_username,
+                    name: profile.name,
+                    uniqueID: profile.uniqueID,
+                    clearance: profile.clearance,
+                    countryOfAffiliation: profile.countryOfAffiliation,
+                    acpCOI: profile.acpCOI,
+                });
+
+                // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
+                let email = profile.email;
+                if (!email || email.trim() === '') {
+                    // Generate from uniqueID (if it looks like email) or username
+                    const uniqueID = profile.uniqueID || profile.preferred_username || profile.sub;
+                    if (uniqueID && uniqueID.includes('@')) {
+                        email = uniqueID;
+                    } else {
+                        // Generate synthetic email: username@dive-broker.internal
+                        email = `${uniqueID || profile.sub}@dive-broker.internal`;
+                    }
+                    console.log('[NextAuth profile()] Generated email:', email, 'from uniqueID:', uniqueID);
+                }
+
+                // Return profile with all DIVE attributes
+                return {
+                    id: profile.sub,
+                    name: profile.name || profile.preferred_username || profile.sub,
+                    email: email,
+                    image: profile.picture,
+                    uniqueID: profile.uniqueID || profile.preferred_username || profile.sub,
+                    clearance: profile.clearance || 'UNCLASSIFIED',
+                    countryOfAffiliation: profile.countryOfAffiliation || profile.country || 'UNKNOWN',
+                    acpCOI: profile.acpCOI || profile.aciCOI || [],
+                    roles: profile.realm_access?.roles || profile.roles || [],
+                };
+            },
         }),
     ],
 
     callbacks: {
-        // FIX (Nov 7): Profile callback to handle remote IdPs without email
-        // and capture DIVE attributes from Keycloak tokens
-        async profile(profile, tokens) {
-            console.log('[NextAuth profile()] Raw profile from Keycloak:', {
-                sub: profile.sub,
-                email: profile.email,
-                preferred_username: profile.preferred_username,
-                name: profile.name,
-                uniqueID: profile.uniqueID,
-                clearance: profile.clearance,
-                countryOfAffiliation: profile.countryOfAffiliation,
-                acpCOI: profile.acpCOI,
-            });
-
-            // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
-            let email = profile.email;
-            if (!email || email.trim() === '') {
-                // Generate from uniqueID (if it looks like email) or username
-                const uniqueID = profile.uniqueID || profile.preferred_username || profile.sub;
-                if (uniqueID && uniqueID.includes('@')) {
-                    email = uniqueID;
-                } else {
-                    // Generate synthetic email: username@dive-broker.internal
-                    email = `${uniqueID || profile.sub}@dive-broker.internal`;
-                }
-                console.log('[NextAuth profile()] Generated email:', email, 'from uniqueID:', uniqueID);
-            }
-
-            // Return profile with all DIVE attributes
-            return {
-                id: profile.sub,
-                name: profile.name || profile.preferred_username || profile.sub,
-                email: email,
-                image: profile.picture,
-                uniqueID: profile.uniqueID || profile.preferred_username || profile.sub,
-                clearance: profile.clearance || 'UNCLASSIFIED',
-                countryOfAffiliation: profile.countryOfAffiliation || profile.country || 'UNKNOWN',
-                acpCOI: profile.acpCOI || profile.aciCOI || [],
-                roles: profile.realm_access?.roles || profile.roles || [],
-            };
-        },
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
             const isOnLogin = nextUrl.pathname === "/login";
@@ -639,13 +653,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return session;
         },
     },
-    pages: {
-        signIn: "/login",
-        error: "/",
-        signOut: "/", // Redirect to home after signout
-        verifyRequest: "/login", // Redirect for email verification
-        newUser: "/dashboard" // Redirect for new users
-    },
+    // REMOVED pages configuration to fix "UnknownAction" error
+    // NextAuth v5 with custom pages.signIn disables the /api/auth/signin endpoint
+    // Our LoginButton component uses /api/auth/signin/keycloak directly
+    // Therefore, we must let NextAuth handle signin pages internally
+    //
+    // pages: {
+    //     signIn: "/login",   // This causes UnknownAction when using /api/auth/signin
+    //     error: "/",
+    //     signOut: "/",
+    //     verifyRequest: "/login",
+    //     newUser: "/dashboard"
+    // },
     cookies: {
         sessionToken: {
             name: `authjs.session-token`,
