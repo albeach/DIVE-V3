@@ -139,6 +139,13 @@ jobs:
       # RUN DEPLOYMENT SCRIPT
       #################################################################
       
+      - name: Pre-Deployment - Clean Stale Containers
+        run: |
+          echo "Cleaning stale containers and volumes..."
+          docker-compose down --volumes || true
+          docker system prune -f || true
+          echo "✅ Cleanup complete"
+      
       - name: Execute Deployment
         id: deploy
         run: |
