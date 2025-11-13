@@ -13,7 +13,7 @@ process.env.KEYCLOAK_CLIENT_SECRET = 'test-secret';
 process.env.KEYCLOAK_ADMIN_USERNAME = 'admin';
 process.env.KEYCLOAK_ADMIN_PASSWORD = 'admin';
 process.env.OPA_URL = 'http://localhost:8181';
-process.env.KAS_URL = 'http://localhost:8080'; // Session expiration fix: KAS URL for tests
+process.env.KAS_URL = 'https://localhost:8080'; // Session expiration fix: KAS URL for tests
 
 // CRITICAL: Force resource service to use test database (not production dive-v3)
 process.env.MONGODB_URI = 'mongodb://localhost:27017/dive-v3-test';

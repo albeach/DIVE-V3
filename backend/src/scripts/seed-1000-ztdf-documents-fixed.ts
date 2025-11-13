@@ -18,7 +18,7 @@ import { validateCOICoherence } from '../services/coi-validation.service';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
-const KAS_URL = process.env.KAS_URL || 'http://kas:8080';
+const KAS_URL = process.env.KAS_URL || 'https://kas:8080';
 
 // Classification levels
 const CLASSIFICATIONS: ClassificationLevel[] = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];

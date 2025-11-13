@@ -601,7 +601,7 @@ export function migrateLegacyResourceToZTDF(resource: IResource): IZTDFObject {
     // ============================================
     const kao: IKeyAccessObject = {
         kaoId: `kao-${resource.resourceId}`,
-        kasUrl: process.env.KAS_URL || 'http://localhost:8080',
+        kasUrl: process.env.KAS_URL || 'https://localhost:8080',
         kasId: 'dive-v3-kas',
         wrappedKey: encryptionResult.dek, // TODO: Wrap with KAS public key
         wrappingAlgorithm: 'RSA-OAEP-256',

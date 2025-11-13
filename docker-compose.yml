@@ -8,6 +8,7 @@ volumes:
   postgres_data:
   mongo_data:
   redis_data:
+  authzforce_data:
 
 services:
   postgres:
@@ -141,7 +142,7 @@ services:
       - "8282:8080"
     volumes:
       - ./authzforce/conf:/opt/authzforce-ce-server/conf:ro
-      - ./authzforce/data:/opt/authzforce-ce-server/data
+      - authzforce_data:/opt/authzforce-ce-server/data
       - ./policies/uploads:/policies:ro
     environment:
       - JAVA_OPTS=-Xms256m -Xmx512m
@@ -286,9 +287,19 @@ services:
       context: ./kas
       dockerfile: Dockerfile
     container_name: dive-v3-kas
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     environment:
       NODE_ENV: development
       KAS_PORT: 8080
+      HTTPS_ENABLED: "true"  # Enable HTTPS for consistency with backend/frontend
+      CERT_PATH: /opt/app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: certificate.pem
       BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
       OPA_URL: http://opa:8181
@@ -310,6 +321,8 @@ services:
     networks:
       - dive-network
     volumes:
+      # CRITICAL: Mount SSL certificates for HTTPS server
+      - ./kas/certs:/opt/app/certs:ro
       - ./kas/src:/app/src
       - ./kas/logs:/app/logs
     command: npm run dev

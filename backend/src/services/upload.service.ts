@@ -200,7 +200,7 @@ function createMultipleKAOs(params: {
     selectedCOI: string;
 }): any[] {
     const kaos: any[] = [];
-    const kasBaseUrl = process.env.KAS_URL || 'http://localhost:8080';
+    const kasBaseUrl = process.env.KAS_URL || 'https://localhost:8080';
 
     // Strategy 1: COI-based KAOs
     if (params.coiTags && params.coiTags.length > 0) {
