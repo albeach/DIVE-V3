@@ -180,7 +180,7 @@ services:
       MONGODB_URL: mongodb://admin:password@mongo:27017
       MONGODB_DATABASE: dive-v3
       OPA_URL: http://opa:8181
-      KAS_URL: http://kas:8080
+      KAS_URL: https://kas:8080
       AUTHZFORCE_URL: http://authzforce:8080/authzforce-ce
       LOG_LEVEL: info
       # Redis for token blacklist (Gap #7)
@@ -307,7 +307,7 @@ services:
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
       # Multi-realm migration (Oct 21, 2025): KAS needs Keycloak config for JWT validation
-      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-broker-client  # Phase 2.1: Correct client name for national realms
       # Backend should be internal Docker network when fully containerized
