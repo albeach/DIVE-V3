@@ -198,6 +198,17 @@ jobs:
             -var="backend_url=https://dev-api.dive25.com"
           
           echo "✅ Terraform applied - 11 realms + 44 test users configured"
+          
+          echo ""
+          echo "Verifying all 11 realms are accessible..."
+          REALMS="broker usa fra can deu gbr ita esp pol nld industry"
+          for realm in $REALMS; do
+            if curl -sfk "https://localhost:8443/realms/dive-v3-$realm/.well-known/openid-configuration" >/dev/null 2>&1; then
+              echo "✅ dive-v3-$realm accessible"
+            else
+              echo "⚠️ dive-v3-$realm not accessible (may need more time)"
+            fi
+          done
       
       - name: Post-Deployment - Initialize COI Keys
         if: success()
