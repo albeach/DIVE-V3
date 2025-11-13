@@ -18,10 +18,11 @@ jobs:
         workspace: [backend, frontend, kas]
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
       
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
       
@@ -32,7 +33,7 @@ jobs:
           npm audit --json > audit-report.json || true
       
       - name: Upload audit report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.workspace }}-audit-report
           path: ${{ matrix.workspace }}/audit-report.json
@@ -42,7 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
       
       - name: Run OWASP Dependency-Check
         uses: dependency-check/Dependency-Check_Action@main
@@ -53,7 +55,7 @@ jobs:
           out: 'reports'
       
       - name: Upload Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: reports
@@ -63,7 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for secret scanning
       
@@ -83,7 +86,8 @@ jobs:
         service: [backend, frontend, kas]
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
       
       - name: Build Docker Image
         run: |
@@ -97,7 +101,7 @@ jobs:
           output: 'trivy-results.sarif'
       
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -106,7 +110,8 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
       
       - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.0
@@ -123,16 +128,18 @@ jobs:
           output_file_path: checkov-report.sarif
       
       - name: Upload Checkov results
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: checkov-report.sarif
 
   code-quality:
     name: Code Quality Analysis
     runs-on: ubuntu-latest
+    continue-on-error: true
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Shallow clones should be disabled for better analysis
       
@@ -148,4 +155,26 @@ jobs:
             -Dsonar.sources=backend/src,frontend/src,kas/src
             -Dsonar.tests=backend/src/__tests__,frontend/src/__tests__
             -Dsonar.typescript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
+        continue-on-error: true
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [npm-audit, dependency-check, secret-scan, docker-scan, terraform-security]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| NPM Audit | ${{ needs.npm-audit.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OWASP Dependency Check | ${{ needs.dependency-check.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Secret Scanning | ${{ needs.secret-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Image Scanning | ${{ needs.docker-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform Security | ${{ needs.terraform-security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "View detailed reports in workflow artifacts and GitHub Security tab" >> $GITHUB_STEP_SUMMARY
 

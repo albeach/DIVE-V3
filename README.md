@@ -1,5 +1,11 @@
 # DIVE V3 - Coalition ICAM Pilot
 
+[![CI - Fast PR Feedback](https://github.com/albeach/DIVE-V3/actions/workflows/ci-fast.yml/badge.svg)](https://github.com/albeach/DIVE-V3/actions/workflows/ci-fast.yml)
+[![CI - Comprehensive](https://github.com/albeach/DIVE-V3/actions/workflows/ci-comprehensive.yml/badge.svg)](https://github.com/albeach/DIVE-V3/actions/workflows/ci-comprehensive.yml)
+[![E2E Tests](https://github.com/albeach/DIVE-V3/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/albeach/DIVE-V3/actions/workflows/test-e2e.yml)
+[![Security Scanning](https://github.com/albeach/DIVE-V3/actions/workflows/security.yml/badge.svg)](https://github.com/albeach/DIVE-V3/actions/workflows/security.yml)
+[![Terraform CI](https://github.com/albeach/DIVE-V3/actions/workflows/terraform-ci.yml/badge.svg)](https://github.com/albeach/DIVE-V3/actions/workflows/terraform-ci.yml)
+
 > **USA/NATO Identity & Access Management Demonstration**
 > 
 > Federated Authentication • Policy-Driven Authorization • Secure Document Sharing
