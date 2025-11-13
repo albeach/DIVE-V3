@@ -242,7 +242,7 @@ jobs:
         run: |
           echo "Restarting backend and frontend to pick up Keycloak configuration..."
           docker-compose restart backend
-          docker-compose restart frontend
+          docker-compose restart nextjs
           sleep 10
           echo "✅ Services restarted"
       
