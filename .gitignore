@@ -59,7 +59,7 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts
+# next-env.d.ts  # Now tracked in git to avoid runtime permissions issues
 
 # IDE
 .vscode/
