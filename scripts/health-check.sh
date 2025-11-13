@@ -42,11 +42,11 @@ echo "========================================="
 # Service health checks
 echo ""
 echo "Service Health:"
-check "Keycloak HTTP" "curl -sf http://localhost:8081/health"
-check "Backend HTTP" "curl -sf http://localhost:4000/health"
-check "Frontend HTTP" "curl -sf http://localhost:3000"
+check "Keycloak HTTPS" "curl -sfk https://localhost:8443/health"
+check "Backend HTTPS" "curl -sfk https://localhost:4000/health"
+check "Frontend HTTPS" "curl -sfk https://localhost:3000"
 check "OPA HTTP" "curl -sf http://localhost:8181/health"
-check "KAS HTTP" "curl -sf http://localhost:8080/health"
+check "KAS HTTPS" "curl -sfk https://localhost:8080/health"
 
 # Database connectivity
 echo ""
