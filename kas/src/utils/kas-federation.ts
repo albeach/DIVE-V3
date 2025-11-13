@@ -214,7 +214,7 @@ export class KASRegistry {
             if (countries && countries.length > 0) {
                 matchesCountry = countries.some(country => 
                     entry.supportedCountries.includes(country)
-                ));
+                );
             }
 
             if (cois && cois.length > 0) {

@@ -63,7 +63,7 @@ export const securityHeaders = helmet({
                 "'self'",
                 process.env.KEYCLOAK_URL || "http://localhost:8081",
                 process.env.OPA_URL || "http://localhost:8181",
-                process.env.KAS_URL || "http://localhost:8080",
+                process.env.KAS_URL || "https://localhost:8080",
             ],
             
             // Frame sources (for iframes)

@@ -122,7 +122,7 @@ export async function requestKeyFromExternalKAS(
  * Check if KAS URL is external (not DIVE V3 KAS)
  */
 export function isExternalKAS(kasUrl: string): boolean {
-    const diveKasUrl = process.env.KAS_URL || 'http://kas:8080';
+    const diveKasUrl = process.env.KAS_URL || 'https://kas:8080';
     const diveKasHost = new URL(diveKasUrl).hostname;
     
     try {
