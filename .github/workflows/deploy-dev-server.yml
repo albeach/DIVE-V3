@@ -152,6 +152,14 @@ jobs:
           docker system prune -f || true
           echo "✅ Cleanup complete"
       
+      - name: Pre-Deployment - Fix Container Permissions
+        run: |
+          echo "Setting ownership for container users (UID 1001)..."
+          sudo chown -R 1001:1001 frontend/ || true
+          sudo chown -R 1001:1001 backend/logs backend/uploads backend/certs || true
+          sudo chown -R 1001:1001 policies/uploads || true
+          echo "✅ Permissions set for UID 1001 (container users)"
+      
       - name: Execute Deployment
         id: deploy
         run: |
