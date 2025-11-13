@@ -152,17 +152,6 @@ jobs:
           docker system prune -f || true
           echo "✅ Cleanup complete"
       
-      - name: Pre-Deployment - Apply Terraform Configuration
-        run: |
-          echo "Applying Terraform to configure Keycloak realms..."
-          cd terraform
-          terraform init -backend=false || true
-          terraform apply -auto-approve \
-            -var="keycloak_url=https://localhost:8443" \
-            -var="keycloak_admin_username=admin" \
-            -var="keycloak_admin_password=admin" || echo "⚠️ Terraform apply failed (Keycloak may not be running yet - will retry after deployment)"
-        continue-on-error: true
-      
       - name: Execute Deployment
         id: deploy
         run: |
@@ -176,6 +165,62 @@ jobs:
       #################################################################
       # POST-DEPLOYMENT HEALTH CHECKS
       #################################################################
+      
+      - name: Post-Deployment - Initialize PostgreSQL (NextAuth)
+        if: success()
+        run: |
+          echo "Creating NextAuth tables in dive_v3_app database..."
+          docker cp frontend/create-nextauth-tables.sql dive-v3-postgres:/tmp/create-tables.sql
+          docker-compose exec -T postgres psql -U postgres -d dive_v3_app -f /tmp/create-tables.sql || echo "⚠️ Tables may already exist"
+          echo "✅ NextAuth tables initialized"
+      
+      - name: Post-Deployment - Apply Terraform Configuration
+        if: success()
+        run: |
+          echo "Waiting 90s for Keycloak to fully initialize..."
+          sleep 90
+          
+          echo "Installing Terraform..."
+          cd /tmp
+          wget -q https://releases.hashicorp.com/terraform/1.13.4/terraform_1.13.4_linux_amd64.zip
+          sudo unzip -q -o terraform_1.13.4_linux_amd64.zip -d /usr/local/bin/
+          rm terraform_1.13.4_linux_amd64.zip
+          
+          echo "Applying Terraform to configure Keycloak realms..."
+          cd $GITHUB_WORKSPACE/terraform
+          terraform init -backend=false
+          terraform apply -auto-approve \
+            -var="keycloak_url=https://localhost:8443" \
+            -var="keycloak_admin_username=admin" \
+            -var="keycloak_admin_password=admin" \
+            -var="keycloak_public_url=https://dev-auth.dive25.com" \
+            -var="app_url=https://dev-app.dive25.com" \
+            -var="backend_url=https://dev-api.dive25.com"
+          
+          echo "✅ Terraform applied - 11 realms + 44 test users configured"
+      
+      - name: Post-Deployment - Initialize COI Keys
+        if: success()
+        run: |
+          echo "Initializing COI keys in MongoDB..."
+          docker-compose exec -T backend npx tsx src/scripts/initialize-coi-keys.ts || echo "⚠️ COI keys may already exist"
+          echo "✅ COI keys initialized"
+      
+      - name: Post-Deployment - Seed MongoDB  
+        if: success()
+        run: |
+          echo "Seeding MongoDB with resources..."
+          docker-compose exec -T -e SEED_QUANTITY=1000 backend npm run seed-database || echo "⚠️ Resources may already exist"
+          echo "✅ MongoDB seeded"
+      
+      - name: Post-Deployment - Restart Services
+        if: success()
+        run: |
+          echo "Restarting backend and frontend to pick up Keycloak configuration..."
+          docker-compose restart backend
+          docker-compose restart frontend
+          sleep 10
+          echo "✅ Services restarted"
       
       - name: Post-Deployment - Health Checks
         id: health_checks
