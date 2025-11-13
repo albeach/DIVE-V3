@@ -188,14 +188,19 @@ jobs:
           echo "Waiting 90s for Keycloak to fully initialize..."
           sleep 90
           
-          echo "Installing Terraform..."
+          echo "Installing Terraform (user-local, no sudo required)..."
+          mkdir -p ~/.local/bin
           cd /tmp
           wget -q https://releases.hashicorp.com/terraform/1.13.4/terraform_1.13.4_linux_amd64.zip
-          sudo unzip -q -o terraform_1.13.4_linux_amd64.zip -d /usr/local/bin/
+          unzip -q -o terraform_1.13.4_linux_amd64.zip
+          mv terraform ~/.local/bin/
           rm terraform_1.13.4_linux_amd64.zip
+          export PATH="$HOME/.local/bin:$PATH"
+          terraform version
           
           echo "Applying Terraform to configure Keycloak realms..."
           cd $GITHUB_WORKSPACE/terraform
+          export PATH="$HOME/.local/bin:$PATH"
           terraform init -backend=false
           terraform apply -auto-approve \
             -var="keycloak_url=https://localhost:8443" \
