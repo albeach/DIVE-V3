@@ -92,6 +92,12 @@ jobs:
           test -f scripts/rollback.sh && echo "✅ rollback.sh found" || (echo "❌ rollback.sh missing" && exit 1)
           test -f scripts/health-check.sh && echo "✅ health-check.sh found" || (echo "❌ health-check.sh missing" && exit 1)
           
+          echo ""
+          echo "Verifying Keycloak mkcert certificates..."
+          test -f keycloak/certs/certificate.pem && echo "✅ certificate.pem found ($(wc -c < keycloak/certs/certificate.pem) bytes)" || (echo "❌ certificate.pem missing" && exit 1)
+          test -f keycloak/certs/key.pem && echo "✅ key.pem found ($(wc -c < keycloak/certs/key.pem) bytes)" || (echo "❌ key.pem missing" && exit 1)
+          test -f keycloak/certs/rootCA.pem && echo "✅ rootCA.pem found" || (echo "❌ rootCA.pem missing" && exit 1)
+          
           echo "✅ All required files present"
       
       #################################################################
