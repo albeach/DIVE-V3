@@ -152,6 +152,17 @@ jobs:
           docker system prune -f || true
           echo "✅ Cleanup complete"
       
+      - name: Pre-Deployment - Apply Terraform Configuration
+        run: |
+          echo "Applying Terraform to configure Keycloak realms..."
+          cd terraform
+          terraform init -backend=false || true
+          terraform apply -auto-approve \
+            -var="keycloak_url=https://localhost:8443" \
+            -var="keycloak_admin_username=admin" \
+            -var="keycloak_admin_password=admin" || echo "⚠️ Terraform apply failed (Keycloak may not be running yet - will retry after deployment)"
+        continue-on-error: true
+      
       - name: Execute Deployment
         id: deploy
         run: |
