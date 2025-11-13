@@ -106,6 +106,12 @@ Thumbs.db
 secrets/
 .secrets/
 
+# EXCEPT mkcert development certificates (safe to commit)
+!keycloak/certs/*.pem
+!frontend/certs/*.pem
+!backend/certs/*.pem
+!kas/certs/*.pem
+
 # OPA bundles
 bundle.tar.gz
 policies/.bundle/
