@@ -161,7 +161,7 @@ services:
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-backend
     healthcheck:
-      test: ["CMD-SHELL", "curl -fk https://localhost:4000/health || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:4000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
