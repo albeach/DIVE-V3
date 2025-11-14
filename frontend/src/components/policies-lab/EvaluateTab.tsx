@@ -295,10 +295,11 @@ export default function EvaluateTab() {
     <div className="space-y-6">
       {/* Policy Selector */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="policy-selector" className="block text-sm font-medium text-gray-700 mb-2">
           Select Policy to Evaluate *
         </label>
         <select
+          id="policy-selector"
           value={selectedPolicyId}
           onChange={(e) => setSelectedPolicyId(e.target.value)}
           className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
@@ -390,6 +391,7 @@ export default function EvaluateTab() {
                     checked={acpCOI.includes(coi)}
                     onChange={() => toggleArrayItem(acpCOI, setAcpCOI, coi)}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    aria-label={`Subject COI: ${coi}`}
                   />
                   <span className="ml-2 text-sm text-gray-700">{coi}</span>
                 </label>
@@ -462,6 +464,7 @@ export default function EvaluateTab() {
                     checked={releasabilityTo.includes(c)}
                     onChange={() => toggleArrayItem(releasabilityTo, setReleasabilityTo, c)}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    aria-label={`Releasability: ${c}`}
                   />
                   <span className="ml-2 text-sm text-gray-700">{c}</span>
                 </label>
@@ -479,6 +482,7 @@ export default function EvaluateTab() {
                     checked={resourceCOI.includes(coi)}
                     onChange={() => toggleArrayItem(resourceCOI, setResourceCOI, coi)}
                     className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    aria-label={`Resource COI: ${coi}`}
                   />
                   <span className="ml-2 text-sm text-gray-700">{coi}</span>
                 </label>
@@ -513,6 +517,9 @@ export default function EvaluateTab() {
         <div className="space-y-4">
           <div className="p-4 border border-purple-200 rounded-lg bg-purple-50">
             <h3 className="text-lg font-semibold text-purple-900 mb-4">⚡ Action</h3>
+            <label htmlFor="action-select" className="block text-sm font-medium text-gray-700 mb-1">
+              Operation *
+            </label>
             <select
               id="action-select"
               value={action}
