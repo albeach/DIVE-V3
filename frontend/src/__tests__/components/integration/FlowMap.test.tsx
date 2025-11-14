@@ -45,10 +45,15 @@ describe("FlowMap", () => {
   it("displays interaction instructions", () => {
     render(<FlowMap />);
     
-    expect(screen.getByText(/Click/i)).toBeInTheDocument();
+    // Week 4 BEST PRACTICE: Multiple "Click" elements exist, use getAllByText
+    const clickInstructions = screen.getAllByText(/Click/i);
+    expect(clickInstructions.length).toBeGreaterThan(0);
+    
     expect(screen.getByText(/Drag/i)).toBeInTheDocument();
     expect(screen.getByText(/Scroll/i)).toBeInTheDocument();
-    expect(screen.getByText(/Double-click/i)).toBeInTheDocument();
+    
+    const doubleClickInstructions = screen.getAllByText(/Double-click/i);
+    expect(doubleClickInstructions.length).toBeGreaterThan(0);
   });
 
   it("shows federation flow description", () => {
