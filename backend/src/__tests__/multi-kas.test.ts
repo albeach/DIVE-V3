@@ -8,20 +8,16 @@ import { uploadFile } from '../services/upload.service';
 import { ClassificationLevel } from '../types/ztdf.types';
 import { MongoClient, Db } from 'mongodb';
 
-describe.skip('Multi-KAS Support', () => {
+describe('Multi-KAS Support', () => {
     let mongoClient: MongoClient;
     let db: Db;
 
-    // Test database configuration
-    const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
-    const DB_NAME = process.env.MONGODB_DATABASE || 'dive_v3_test';
-
     beforeAll(async () => {
-        // Set environment variables for services to use same test database
-        process.env.MONGODB_DATABASE = DB_NAME;
-        process.env.MONGODB_URL = MONGO_URI;
+        // BEST PRACTICE: Read MongoDB URL at runtime (set by globalSetup)
+        const MONGO_URI = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+        const DB_NAME = process.env.MONGODB_DATABASE || 'dive_v3_test';
 
-        // Connect to test database
+        // Connect to test database (MongoDB Memory Server)
         mongoClient = new MongoClient(MONGO_URI);
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);
@@ -136,7 +132,7 @@ describe.skip('Multi-KAS Support', () => {
     });
 
     describe('Multiple KAO Creation', () => {
-        test.skip('should create multiple KAOs for FVEY resource', async () => {
+        test('should create multiple KAOs for FVEY resource', async () => {
             const fileBuffer = Buffer.from('Test content for FVEY coalition');
             const metadata = {
                 classification: 'SECRET' as ClassificationLevel,
@@ -163,7 +159,7 @@ describe.skip('Multi-KAS Support', () => {
             expect(result.metadata.ztdf.kaoCount).toBeGreaterThan(1);
         });
 
-        test.skip('should create nation-specific KAOs for multi-nation resource', async () => {
+        test('should create nation-specific KAOs for multi-nation resource', async () => {
             const fileBuffer = Buffer.from('Coalition document');
             const metadata = {
                 classification: 'CONFIDENTIAL' as ClassificationLevel,

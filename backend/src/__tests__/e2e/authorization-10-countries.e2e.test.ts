@@ -17,24 +17,11 @@ import request from 'supertest';
 import app from '../../server';
 import { createE2EJWT } from '../helpers/mock-jwt-rs256';
 import { mockKeycloakJWKS, cleanupJWKSMock } from '../helpers/mock-jwks';
-import { MongoClient } from 'mongodb';
 
-// Check MongoDB availability
-let mongoAvailable = false;
-const testMongo = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017');
+// MongoDB is ALWAYS available via MongoDB Memory Server (globalSetup)
+// No need for conditional test suites anymore!
 
-testMongo.connect().then(() => {
-    mongoAvailable = true;
-}).catch(() => {
-    mongoAvailable = false;
-}).finally(() => {
-    testMongo.close();
-});
-
-// Conditional describe
-const describeIf = (condition: boolean) => condition ? describe : describe.skip;
-
-describeIf(mongoAvailable)('Authorization E2E Tests - 10 Countries (requires seeded database)', () => {
+describe('Authorization E2E Tests - 10 Countries (requires seeded database)', () => {
     // Mock Keycloak JWKS endpoint before all tests
     beforeAll(async () => {
         await mockKeycloakJWKS();

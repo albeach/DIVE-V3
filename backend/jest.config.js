@@ -27,7 +27,8 @@ module.exports = {
         'node_modules/(?!(@keycloak)/)'
     ],
     moduleNameMapper: {
-        '^@keycloak/keycloak-admin-client$': '<rootDir>/src/__mocks__/keycloak-admin-client.ts'
+        '^@keycloak/keycloak-admin-client$': '<rootDir>/src/__mocks__/keycloak-admin-client.ts',
+        '^ioredis$': '<rootDir>/src/__mocks__/ioredis.ts'
     },
     testTimeout: 15000,
     maxWorkers: 1, // Run tests sequentially to prevent MongoDB interference

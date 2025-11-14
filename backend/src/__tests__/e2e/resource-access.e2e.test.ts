@@ -12,32 +12,23 @@ import request from 'supertest';
 import app from '../../server';
 import { createE2EJWT } from '../helpers/mock-jwt-rs256';
 import { mockKeycloakJWKS, cleanupJWKSMock } from '../helpers/mock-jwks';
-import { MongoClient } from 'mongodb';
+import { mockOPAServer, cleanupOPAMock } from '../helpers/mock-opa-server';
 
-// Check MongoDB availability
-let mongoAvailable = false;
-const testMongo = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017');
-
-testMongo.connect().then(() => {
-    mongoAvailable = true;
-}).catch(() => {
-    mongoAvailable = false;
-}).finally(() => {
-    testMongo.close();
-});
-
-// Conditional describe
-const describeIf = (condition: boolean) => condition ? describe : describe.skip;
+// MongoDB is ALWAYS available via MongoDB Memory Server (globalSetup)
+// Test data is seeded automatically by globalSetup
+// OPA is mocked for E2E tests (intelligent ABAC logic)
 
 describe('Resource Access E2E Tests', () => {
-    // Mock Keycloak JWKS endpoint before all tests
+    // Setup mocks before all tests
     beforeAll(async () => {
-        await mockKeycloakJWKS();
+        await mockKeycloakJWKS();  // Mock Keycloak JWKS for JWT verification
+        mockOPAServer();            // Mock OPA for authorization decisions
     });
 
     // Cleanup mocks after all tests
     afterAll(() => {
         cleanupJWKSMock();
+        cleanupOPAMock();
     });
 
     // Generate RS256 JWTs for testing (matches production Keycloak format)
@@ -97,7 +88,7 @@ describe('Resource Access E2E Tests', () => {
         });
     });
 
-    describeIf(mongoAvailable)('Download Resources (requires seeded database)', () => {
+    describe('Download Resources (requires seeded database)', () => {
         it('should download UNCLASSIFIED resource successfully', async () => {
             const response = await request(app)
                 .get('/api/resources/test-unclassified-doc')
@@ -146,7 +137,7 @@ describe('Resource Access E2E Tests', () => {
         });
     });
 
-    describeIf(mongoAvailable)('Upload Resources with ZTDF Encryption (requires MongoDB)', () => {
+    describe('Upload Resources with ZTDF Encryption (requires MongoDB)', () => {
         it('should upload unencrypted UNCLASSIFIED resource', async () => {
             const resource = {
                 title: 'Test Document',
@@ -234,7 +225,7 @@ describe('Resource Access E2E Tests', () => {
         });
     });
 
-    describeIf(mongoAvailable)('Access Denied UI Response (requires seeded database)', () => {
+    describe('Access Denied UI Response (requires seeded database)', () => {
         it('should return structured error for frontend AccessDenied component', async () => {
             const response = await request(app)
                 .get('/api/resources/test-top-secret-restricted')
@@ -254,7 +245,7 @@ describe('Resource Access E2E Tests', () => {
         });
     });
 
-    describeIf(mongoAvailable)('Decision Logging on Resource Access (requires seeded database)', () => {
+    describe('Decision Logging on Resource Access (requires seeded database)', () => {
         it('should log authorization decision to MongoDB', async () => {
             const response = await request(app)
                 .get('/api/resources/test-secret-doc')

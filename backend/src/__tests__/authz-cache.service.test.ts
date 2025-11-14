@@ -132,7 +132,7 @@ describe('AuthzCacheService', () => {
     });
 
     describe('Cache Expiration', () => {
-        it.skip('should expire entries after TTL (TOP_SECRET - 15s)', async () => {
+        it('should expire entries after TTL (TOP_SECRET - 15s)', async () => {
             // Skipped: Timing-dependent test, behavior validated by node-cache library
             // Manual verification: Cache entries do expire based on TTL
             // This is validated in integration testing and production monitoring
