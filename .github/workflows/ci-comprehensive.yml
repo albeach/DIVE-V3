@@ -19,15 +19,12 @@ jobs:
         ports:
           - 27017:27017
         env:
-          MONGO_INITDB_ROOT_USERNAME: admin
-          MONGO_INITDB_ROOT_PASSWORD: password
           MONGO_INITDB_DATABASE: dive-v3-test
         options: >-
-          --health-cmd "mongosh -u admin -p password --authenticationDatabase admin --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --health-start-period 30s
     
     steps:
       - name: Checkout Code
@@ -60,21 +57,6 @@ jobs:
           ./scripts/generate-test-certs.sh
           echo "✅ Test certificates generated for policy-signature and three-tier-ca tests"
       
-      - name: Setup MongoDB Test User
-        run: |
-          # Wait for MongoDB to fully initialize with root user
-          sleep 5
-          # Create test database and user with full permissions
-          mongosh "mongodb://admin:password@localhost:27017/admin" --quiet --eval "
-            db = db.getSiblingDB('dive-v3-test');
-            db.createUser({
-              user: 'testuser',
-              pwd: 'testpass',
-              roles: [{ role: 'dbOwner', db: 'dive-v3-test' }]
-            });
-          " || echo "User may already exist"
-          echo "✅ MongoDB test user created"
-      
       - name: Start OPA Server
         run: |
           curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
@@ -96,10 +78,7 @@ jobs:
           echo "**Target:** <60s (after Day 1 optimizations)" >> $GITHUB_STEP_SUMMARY
         env:
           NODE_ENV: test
-          CI: true
-          MONGODB_URL: mongodb://localhost:27017
-          MONGODB_URI: mongodb://localhost:27017/dive-v3-test
-          MONGODB_DATABASE: dive-v3-test
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
