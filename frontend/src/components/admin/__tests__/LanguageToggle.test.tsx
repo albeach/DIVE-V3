@@ -87,15 +87,19 @@ describe('LanguageToggle', () => {
 
         render(<LanguageToggle idpAlias="fra-realm-broker" />);
         
-        // Simulate clicking the language toggle
+        // Week 4 BEST PRACTICE: Click toggle to open dropdown
         const toggle = screen.getByText('English').closest('button');
         if (toggle) {
             fireEvent.click(toggle);
-            
-            // Should set the per-IdP override flag
-            const overrideKey = 'dive-v3-locale-override-fra-realm-broker';
-            expect(localStorage.getItem(overrideKey)).toBe('true');
         }
+            
+        // Week 4 BEST PRACTICE: Now click a language option in the dropdown (not just toggle)
+        const frenchOption = screen.getByText('Français');
+        fireEvent.click(frenchOption);
+        
+        // Should set the per-IdP override flag
+        const overrideKey = 'dive-v3-locale-override-fra-realm-broker';
+        expect(localStorage.getItem(overrideKey)).toBe('true');
     });
 });
 
