@@ -29,7 +29,10 @@ describe("ZTDFViewer", () => {
     
     expect(screen.getByText(/Policy Metadata/i)).toBeInTheDocument();
     expect(screen.getByText(/Encryption Info/i)).toBeInTheDocument();
-    expect(screen.getByText(/Integrity Binding/i)).toBeInTheDocument();
+    
+    // Week 4 BEST PRACTICE: Multiple "Integrity Binding" elements, use getAllByText
+    const integrityElements = screen.getAllByText(/Integrity Binding/i);
+    expect(integrityElements.length).toBeGreaterThan(0);
   });
 
   it("expands and collapses accordion sections", () => {
