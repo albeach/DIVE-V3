@@ -79,7 +79,9 @@ jobs:
           echo "**Target:** <60s (after Day 1 optimizations)" >> $GITHUB_STEP_SUMMARY
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_URL: mongodb://localhost:27017
+          MONGODB_URI: mongodb://localhost:27017/dive-v3-test
+          MONGODB_DATABASE: dive-v3-test
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci

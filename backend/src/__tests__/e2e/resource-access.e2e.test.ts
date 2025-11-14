@@ -75,11 +75,13 @@ describe('Resource Access E2E Tests', () => {
             expect(Array.isArray(response.body.resources)).toBe(true);
         });
 
-        it('should return 401 without authentication (list endpoint requires auth)', async () => {
+        it('should require authentication for list endpoint (security by design)', async () => {
             const response = await request(app)
                 .get('/api/resources');
 
-            // List endpoint HAS authentication middleware (authenticateJWT)
+            // List endpoint REQUIRES authentication to filter by user's clearance
+            // Design: Handler uses req.user.clearance to filter resources
+            // Security: Don't expose classified resource metadata to unauthenticated users
             expect(response.status).toBe(401);
         });
     });
