@@ -10,7 +10,8 @@
 
 import request from 'supertest';
 import app from '../../server';
-import { createMockJWT } from '../helpers/mock-jwt';
+import { createE2EJWT } from '../helpers/mock-jwt-rs256';
+import { mockKeycloakJWKS, cleanupJWKSMock } from '../helpers/mock-jwks';
 import { MongoClient } from 'mongodb';
 
 // Check MongoDB availability
@@ -29,15 +30,25 @@ testMongo.connect().then(() => {
 const describeIf = (condition: boolean) => condition ? describe : describe.skip;
 
 describe('Resource Access E2E Tests', () => {
-    // Generate real JWTs for testing (not mock strings)
-    const authToken = createMockJWT({
+    // Mock Keycloak JWKS endpoint before all tests
+    beforeAll(async () => {
+        await mockKeycloakJWKS();
+    });
+
+    // Cleanup mocks after all tests
+    afterAll(() => {
+        cleanupJWKSMock();
+    });
+
+    // Generate RS256 JWTs for testing (matches production Keycloak format)
+    const authToken = createE2EJWT({
         uniqueID: 'testuser@dive.mil',
         clearance: 'SECRET',
         countryOfAffiliation: 'USA',
         acpCOI: ['NATO']
     });
     
-    const unauthToken = createMockJWT({
+    const unauthToken = createE2EJWT({
         uniqueID: 'unauthorized@dive.mil',
         clearance: 'UNCLASSIFIED',
         countryOfAffiliation: 'USA',

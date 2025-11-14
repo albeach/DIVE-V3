@@ -15,7 +15,8 @@
 
 import request from 'supertest';
 import app from '../../server';
-import { createMockJWT } from '../helpers/mock-jwt';
+import { createE2EJWT } from '../helpers/mock-jwt-rs256';
+import { mockKeycloakJWKS, cleanupJWKSMock } from '../helpers/mock-jwks';
 import { MongoClient } from 'mongodb';
 
 // Check MongoDB availability
@@ -34,6 +35,16 @@ testMongo.connect().then(() => {
 const describeIf = (condition: boolean) => condition ? describe : describe.skip;
 
 describeIf(mongoAvailable)('Authorization E2E Tests - 10 Countries (requires seeded database)', () => {
+    // Mock Keycloak JWKS endpoint before all tests
+    beforeAll(async () => {
+        await mockKeycloakJWKS();
+    });
+
+    // Cleanup mocks after all tests
+    afterAll(() => {
+        cleanupJWKSMock();
+    });
+
     describe('USA Authorization Scenarios', () => {
         it('should allow USA TOP_SECRET user to access SECRET resource', async () => {
             const token = await generateTestJWT({
@@ -450,9 +461,9 @@ describeIf(mongoAvailable)('Authorization E2E Tests - 10 Countries (requires see
     });
 });
 
-// Helper function to generate test JWT tokens - uses real JWT signing for integration tests
+// Helper function to generate test JWT tokens - uses RS256 signing for E2E tests
 async function generateTestJWT(claims: any): Promise<string> {
-    // Use the real JWT generation logic from mock-jwt helpers
-    return createMockJWT(claims);
+    // Use the RS256 JWT generation logic for production-like testing
+    return createE2EJWT(claims);
 }
 
