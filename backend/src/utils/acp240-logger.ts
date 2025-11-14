@@ -13,10 +13,8 @@
 
 import { logger } from './logger';
 import { MongoClient, Db } from 'mongodb';
+import { getMongoDBUrl, getMongoDBName } from './mongodb-config';
 
-// MongoDB connection configuration
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
 const LOGS_COLLECTION = 'audit_logs';
 
 // MongoDB client (singleton)
@@ -25,6 +23,7 @@ let db: Db | null = null;
 
 /**
  * Initialize MongoDB connection for audit logging
+ * BEST PRACTICE: Read MongoDB URL at runtime (after globalSetup configures it)
  */
 async function initMongoDB(): Promise<void> {
     if (mongoClient && db) {
@@ -32,6 +31,9 @@ async function initMongoDB(): Promise<void> {
     }
 
     try {
+        const MONGODB_URL = getMongoDBUrl(); // Read at runtime
+        const DB_NAME = getMongoDBName();
+        
         mongoClient = new MongoClient(MONGODB_URL);
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);

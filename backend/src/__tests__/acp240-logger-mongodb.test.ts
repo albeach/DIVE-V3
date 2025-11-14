@@ -10,7 +10,6 @@ import { MongoClient, Db } from 'mongodb';
 import { logACP240Event, logDecryptEvent, logAccessDeniedEvent, logEncryptEvent, closeAuditLogConnection } from '../utils/acp240-logger';
 import { IACP240AuditEvent } from '../utils/acp240-logger';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = 'dive-v3-test';
 const LOGS_COLLECTION = 'audit_logs';
 
@@ -19,6 +18,10 @@ describe('ACP-240 Logger MongoDB Integration', () => {
     let db: Db;
 
     beforeAll(async () => {
+        // BEST PRACTICE: Read env var at runtime (after globalSetup sets it)
+        // globalSetup starts MongoDB Memory Server and sets process.env.MONGODB_URL
+        const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+        
         // Connect to test database
         client = new MongoClient(MONGODB_URL);
         await client.connect();

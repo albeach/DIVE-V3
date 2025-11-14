@@ -7,7 +7,6 @@
 import { MongoClient, Db } from 'mongodb';
 import { auditLogService } from '../services/audit-log.service';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = 'dive-v3-test';
 const LOGS_COLLECTION = 'audit_logs';
 
@@ -16,6 +15,10 @@ describe('Audit Log Service', () => {
     let db: Db;
 
     beforeAll(async () => {
+        // BEST PRACTICE: Read env var at runtime (after globalSetup sets it)
+        // globalSetup starts MongoDB Memory Server and sets process.env.MONGODB_URL
+        const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+        
         client = new MongoClient(MONGODB_URL);
         await client.connect();
         db = client.db(DB_NAME);

@@ -3,8 +3,10 @@
  * 
  * Ensures all MongoDB connections and async operations are properly closed
  * after all tests complete, preventing "force exit" warnings.
+ * Also stops MongoDB Memory Server if running.
  */
 
+import { MongoMemoryServer } from 'mongodb-memory-server';
 import { closeAuditLogConnection } from '../utils/acp240-logger';
 import { closeCOIKeyConnection } from '../services/coi-key.service';
 
@@ -21,6 +23,18 @@ export default async function globalTeardown() {
         await closeCOIKeyConnection();
     } catch (error) {
         // Ignore errors if connection wasn't established
+    }
+
+    try {
+        // Stop MongoDB Memory Server if it exists
+        const mongoServer = (global as any).__MONGO_SERVER__ as MongoMemoryServer | undefined;
+        
+        if (mongoServer) {
+            await mongoServer.stop();
+            console.log('✅ MongoDB Memory Server stopped');
+        }
+    } catch (error) {
+        console.error('Error stopping MongoDB Memory Server:', error);
     }
 
     // Give async operations time to complete

@@ -1,10 +1,10 @@
+import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { IZTDFResource, IZTDFObject } from '../types/ztdf.types';
 import { validateZTDFIntegrity } from '../utils/ztdf.utils';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
+// MongoDB connection configured at runtime via getMongoDBUrl/getMongoDBName() helpers
 const COLLECTION_NAME = 'resources';
 
 // ============================================
@@ -48,6 +48,7 @@ async function getMongoClient(): Promise<MongoClient> {
     }
 
     try {
+        const MONGODB_URL = getMongoDBUrl(); // Read at runtime
         const client = new MongoClient(MONGODB_URL);
         await client.connect();
         cachedClient = client;
@@ -65,6 +66,7 @@ async function getDatabase(): Promise<Db> {
     }
 
     const client = await getMongoClient();
+    const DB_NAME = getMongoDBName(); // Read at runtime
     cachedDb = client.db(DB_NAME);
     return cachedDb;
 }
@@ -333,6 +335,7 @@ export async function getResourcesByQuery(
     }
 ): Promise<any[]> {
     const client = await getMongoClient();
+    const DB_NAME = getMongoDBName(); // Read at runtime
     const db = client.db(DB_NAME);
     const collection = db.collection(COLLECTION_NAME);
 
