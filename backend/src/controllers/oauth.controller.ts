@@ -123,6 +123,71 @@ router.get('/authorize', async (req: Request, res: Response) => {
       });
     }
 
+    // PKCE Downgrade Attack Protection: Require S256 method
+    if (code_challenge && code_challenge_method === 'plain') {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'PKCE challenge method "plain" is not allowed for security reasons. Use S256.'
+      });
+    }
+
+    // Redirect URI Security: Require HTTPS (except localhost for dev)
+    const parsedRedirectUri = new URL(redirect_uri as string);
+    if (parsedRedirectUri.protocol === 'http:' && parsedRedirectUri.hostname !== 'localhost') {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'Redirect URI must use HTTPS (except localhost for development)'
+      });
+    }
+
+    // State Parameter: Require for CSRF protection
+    if (!state) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'state parameter is required for CSRF protection'
+      });
+    }
+
+    // State Parameter: Validate sufficient randomness (min 32 characters)
+    if ((state as string).length < 32) {
+      return res.status(400).json({
+        error: 'invalid_request',
+        error_description: 'state parameter must be at least 32 characters for security'
+      });
+    }
+
+    // Scope Validation: Check format
+    if (scope && typeof scope === 'string') {
+      try {
+        const scopeParts = (scope as string).split(' ');
+        const validScopePattern = /^[a-z0-9_:]+$/i;
+        const invalidScopes = scopeParts.filter(s => s && !validScopePattern.test(s));
+        if (invalidScopes.length > 0) {
+          return res.status(400).json({
+            error: 'invalid_scope',
+            error_description: `Invalid scope format: ${invalidScopes.join(', ')}`
+          });
+        }
+      } catch (error) {
+        return res.status(400).json({
+          error: 'invalid_scope',
+          error_description: 'Malformed scope parameter'
+        });
+      }
+    }
+
+    // Input Validation: Reject excessively long parameters
+    const maxParamLength = 2048;
+    const params = { client_id, redirect_uri, scope, state, code_challenge, nonce };
+    for (const [key, value] of Object.entries(params)) {
+      if (value && typeof value === 'string' && value.length > maxParamLength) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          error_description: `Parameter ${key} exceeds maximum length of ${maxParamLength} characters`
+        });
+      }
+    }
+
     // In production, this would redirect to login page
     // For now, assume user is authenticated (req.user from authz middleware)
     const user = (req as any).user;
@@ -197,7 +262,7 @@ router.get('/authorize', async (req: Request, res: Response) => {
  */
 // @ts-ignore - All code paths send responses; TypeScript inference issue
 router.post('/token', async (req: Request, res: Response) => {
-  const {
+  let {
     grant_type,
     code,
     redirect_uri,
@@ -209,6 +274,20 @@ router.post('/token', async (req: Request, res: Response) => {
   } = req.body;
 
   const requestId = req.headers['x-request-id'] as string;
+
+  // HTTP Basic Authentication Support (RFC 6749 Section 2.3.1)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Basic ')) {
+    const base64Credentials = authHeader.slice(6);
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+    const [basicClientId, basicClientSecret] = credentials.split(':');
+    
+    // HTTP Basic takes precedence over body parameters
+    if (basicClientId) {
+      client_id = basicClientId;
+      client_secret = basicClientSecret;
+    }
+  }
 
   try {
     logger.debug('Token request received', {
@@ -288,6 +367,12 @@ router.post('/token', async (req: Request, res: Response) => {
       res.status(400).json({
         error: 'invalid_grant',
         error_description: error.message
+      });
+      return;
+    } else if (error instanceof Error && error.message.includes('invalid_scope')) {
+      res.status(400).json({
+        error: 'invalid_scope',
+        error_description: error.message.replace('invalid_scope: ', '')
       });
       return;
     } else {
@@ -419,8 +504,16 @@ async function handleClientCredentialsGrant(params: {
     throw new Error('invalid_client');
   }
 
+  // Validate scope format before parsing
+  if (scope) {
+    const validScopePattern = /^[a-z0-9_: ]+$/i;
+    if (!validScopePattern.test(scope)) {
+      throw new Error('invalid_scope: Scope contains invalid characters');
+    }
+  }
+
   // Validate requested scopes
-  const requestedScopes = scope?.split(' ') || ['resource:read'];
+  const requestedScopes = scope?.split(' ').filter(s => s.length > 0) || ['resource:read'];
   const validScopes = requestedScopes.filter(s => sp.allowedScopes.includes(s));
   
   if (validScopes.length === 0) {
