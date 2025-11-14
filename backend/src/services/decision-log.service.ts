@@ -17,10 +17,9 @@
 
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 
-// MongoDB configuration
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive_v3_resources';
+// MongoDB collection names
 const DECISIONS_COLLECTION = 'decisions';
 const KEY_RELEASES_COLLECTION = 'key_releases';  // Phase 4: KAS audit logs
 
@@ -121,6 +120,7 @@ class DecisionLogService {
 
     /**
      * Connect to MongoDB
+     * BEST PRACTICE: Read MongoDB URL at runtime (after globalSetup)
      */
     private async connect(): Promise<void> {
         if (this.client && this.db) {
@@ -128,6 +128,9 @@ class DecisionLogService {
         }
 
         try {
+            const MONGODB_URL = getMongoDBUrl(); // Read at runtime
+            const DB_NAME = getMongoDBName();
+            
             this.client = new MongoClient(MONGODB_URL);
             await this.client.connect();
             this.db = this.client.db(DB_NAME);

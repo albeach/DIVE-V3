@@ -19,10 +19,6 @@ describe('COI Validation Service', () => {
     let mongoClient: MongoClient;
     let db: Db;
 
-    // Test database configuration
-    const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
-    const DB_NAME = process.env.MONGODB_DATABASE || 'dive_v3_test';
-
     // Static COI membership map for testing (matches coi-validation.service.ts)
     const COI_MEMBERSHIP_STATIC: Record<string, string[]> = {
         'US-ONLY': ['USA'],
@@ -55,11 +51,11 @@ describe('COI Validation Service', () => {
     };
 
     beforeAll(async () => {
-        // Set environment variables for services to use same test database
-        process.env.MONGODB_DATABASE = DB_NAME;
-        process.env.MONGODB_URL = MONGO_URI;
+        // BEST PRACTICE: Read MongoDB URL at runtime (set by globalSetup)
+        const MONGO_URI = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+        const DB_NAME = process.env.MONGODB_DATABASE || 'dive_v3_test';
 
-        // Connect to test database
+        // Connect to test database (MongoDB Memory Server in tests)
         mongoClient = new MongoClient(MONGO_URI);
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);

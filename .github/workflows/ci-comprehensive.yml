@@ -13,18 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8  # Reduced from 10 (Day 1: authz.middleware 99% faster)
     
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        env:
-          MONGO_INITDB_DATABASE: dive-v3-test
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # NO MongoDB service needed - using MongoDB Memory Server (best practice)
+    # Benefits:
+    # - Consistent with local development
+    # - Faster test execution (in-memory)
+    # - No service startup time
+    # - Proper test isolation
     
     steps:
       - name: Checkout Code
@@ -50,12 +44,27 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
+      - name: Cache MongoDB Binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: ${{ runner.os }}-mongodb-binary-7.0.0
+          restore-keys: |
+            ${{ runner.os }}-mongodb-binary-
+      
       - name: Generate Test Certificates
         run: |
           cd backend
           chmod +x scripts/generate-test-certs.sh
           ./scripts/generate-test-certs.sh
           echo "✅ Test certificates generated for policy-signature and three-tier-ca tests"
+      
+      - name: Generate Test RSA Keys
+        run: |
+          cd backend
+          chmod +x scripts/generate-test-rsa-keys.sh
+          ./scripts/generate-test-rsa-keys.sh
+          echo "✅ Test RSA keys generated for E2E JWT testing"
       
       - name: Start OPA Server
         run: |
@@ -76,9 +85,13 @@ jobs:
           echo "## ⏱️ Backend Unit Test Duration" >> $GITHUB_STEP_SUMMARY
           echo "**Runtime:** ${DURATION}s" >> $GITHUB_STEP_SUMMARY
           echo "**Target:** <60s (after Day 1 optimizations)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**MongoDB:** Memory Server (in-memory, no external service)" >> $GITHUB_STEP_SUMMARY
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          # MongoDB Memory Server sets these in globalSetup
+          # No external MongoDB service needed (best practice)
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -92,7 +105,7 @@ jobs:
         run: cd backend && npm run test:integration
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -103,7 +116,7 @@ jobs:
         run: cd backend && npm run test:audit-logs
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
           OPA_URL: http://localhost:8181
       
       - name: COI Logic Lint (GAP FIX)
@@ -113,7 +126,7 @@ jobs:
         run: cd backend && npm run test:coverage
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -222,16 +235,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # NO MongoDB service needed - using MongoDB Memory Server (best practice)
     
     steps:
       - name: Checkout Code
@@ -246,6 +250,14 @@ jobs:
       
       - name: Install Dependencies
         run: cd backend && npm ci
+      
+      - name: Cache MongoDB Binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: ${{ runner.os }}-mongodb-binary-7.0.0
+          restore-keys: |
+            ${{ runner.os }}-mongodb-binary-
       
       - name: Start OPA Server
         run: |
@@ -262,7 +274,7 @@ jobs:
           npm test -- --testPathPattern=performance --testTimeout=30000 || echo "No performance tests found"
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
           OPA_URL: http://localhost:8181
       
       - name: Throughput Test (100 req/s target)

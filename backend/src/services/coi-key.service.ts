@@ -14,10 +14,9 @@
 
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { ICOIKey, ICreateCOIKeyRequest, IUpdateCOIKeyRequest, ICOIKeyListResponse } from '../types/coi-key.types';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_NAME = 'coi_keys';
 
 let cachedClient: MongoClient | null = null;
@@ -25,12 +24,16 @@ let cachedDb: Db | null = null;
 
 /**
  * Get MongoDB connection (with caching)
+ * BEST PRACTICE: Read MongoDB config at runtime
  */
 async function getMongoClient(): Promise<{ client: MongoClient; db: Db }> {
     if (cachedClient && cachedDb) {
         return { client: cachedClient, db: cachedDb };
     }
 
+    const MONGODB_URL = getMongoDBUrl(); // Read at runtime
+    const DB_NAME = getMongoDBName();
+    
     const client = new MongoClient(MONGODB_URL);
     await client.connect();
     const db = client.db(DB_NAME);

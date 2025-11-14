@@ -15,10 +15,16 @@ process.env.KEYCLOAK_ADMIN_PASSWORD = 'admin';
 process.env.OPA_URL = 'http://localhost:8181';
 process.env.KAS_URL = 'https://localhost:8080'; // Session expiration fix: KAS URL for tests
 
-// CRITICAL: Force resource service to use test database (not production dive-v3)
-process.env.MONGODB_URI = 'mongodb://localhost:27017/dive-v3-test';
-process.env.MONGODB_URL = 'mongodb://localhost:27017';
-process.env.MONGODB_DATABASE = 'dive-v3-test';
+// BEST PRACTICE: MongoDB connection configured by globalSetup
+// globalSetup starts MongoDB Memory Server and sets MONGODB_URL/MONGODB_URI
+// DON'T override here - let globalSetup be the single source of truth
+// This ensures consistent behavior across local and CI environments
+if (!process.env.MONGODB_URL && !process.env.MONGODB_URI) {
+    // Only set if not already set by globalSetup (MongoDB Memory Server)
+    process.env.MONGODB_URI = 'mongodb://localhost:27017/dive-v3-test';
+    process.env.MONGODB_URL = 'mongodb://localhost:27017';
+}
+process.env.MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
 // Suppress console logs during tests (optional)
 if (process.env.SILENT_TESTS === 'true') {

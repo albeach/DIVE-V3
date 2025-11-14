@@ -33,6 +33,7 @@ module.exports = {
     maxWorkers: 1, // Run tests sequentially to prevent MongoDB interference
     forceExit: true,
     detectOpenHandles: false,
+    globalSetup: '<rootDir>/src/__tests__/globalSetup.ts',
     globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
     // Phase 4 - Comprehensive Coverage Thresholds
     // Global thresholds: >95% for all metrics

@@ -7,12 +7,11 @@
 
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { IIdPTheme } from '../types/keycloak.types';
 import path from 'path';
 import fs from 'fs/promises';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_NAME = 'idp_themes';
 
 /**
@@ -23,6 +22,7 @@ let cachedDb: Db | null = null;
 
 /**
  * Get MongoDB client (with caching)
+ * BEST PRACTICE: Read URL at runtime
  */
 async function getMongoClient(): Promise<MongoClient> {
     if (cachedClient) {
@@ -35,8 +35,9 @@ async function getMongoClient(): Promise<MongoClient> {
     }
 
     try {
+        const MONGODB_URL = getMongoDBUrl(); // Read at runtime
         cachedClient = await MongoClient.connect(MONGODB_URL);
-        logger.debug('MongoDB connected for IdP themes', { url: MONGODB_URL });
+        logger.debug('MongoDB connected for IdP themes');
         return cachedClient;
     } catch (error) {
         logger.error('Failed to connect to MongoDB', {
@@ -48,6 +49,7 @@ async function getMongoClient(): Promise<MongoClient> {
 
 /**
  * Get MongoDB database
+ * BEST PRACTICE: Read DB name at runtime
  */
 async function getDb(): Promise<Db> {
     if (cachedDb) {
@@ -55,6 +57,7 @@ async function getDb(): Promise<Db> {
     }
 
     const client = await getMongoClient();
+    const DB_NAME = getMongoDBName(); // Read at runtime
     cachedDb = client.db(DB_NAME);
     return cachedDb;
 }

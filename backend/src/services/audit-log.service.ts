@@ -8,7 +8,9 @@
 import { logger } from '../utils/logger';
 import { MongoClient, Db, Collection } from 'mongodb';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+// BEST PRACTICE: Read MongoDB URL at connection time, not module load time
+// This allows globalSetup to configure MongoDB Memory Server before services connect
+const getMongoDBUrl = () => process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
 const LOGS_COLLECTION = 'audit_logs';
 
@@ -55,6 +57,7 @@ class AuditLogService {
 
     /**
      * Connect to MongoDB
+     * BEST PRACTICE: Read URL at connection time (not module load)
      */
     private async connect(): Promise<void> {
         if (this.client && this.db) {
@@ -62,11 +65,14 @@ class AuditLogService {
         }
 
         try {
-            this.client = new MongoClient(MONGODB_URL);
+            const mongoUrl = getMongoDBUrl(); // Read at runtime
+            this.client = new MongoClient(mongoUrl);
             await this.client.connect();
             this.db = this.client.db(DB_NAME);
 
-            logger.debug('Connected to MongoDB for audit log queries');
+            logger.debug('Connected to MongoDB for audit log queries', {
+                url: mongoUrl.replace(/\/\/.*@/, '//***@'), // Mask credentials in logs
+            });
         } catch (error) {
             logger.error('Failed to connect to MongoDB', {
                 error: error instanceof Error ? error.message : 'Unknown error'

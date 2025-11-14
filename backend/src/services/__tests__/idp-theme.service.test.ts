@@ -6,39 +6,35 @@
  */
 
 import { MongoClient, Db } from 'mongodb';
-import { MongoMemoryServer } from 'mongodb-memory-server';
-import { idpThemeService, initializeThemesCollection } from '../idp-theme.service';
+import { 
+    initializeThemesCollection,
+    idpThemeService
+} from '../idp-theme.service';
 import path from 'path';
 import fs from 'fs/promises';
 
 describe('IdP Theme Service', () => {
-    let mongoServer: MongoMemoryServer;
     let mongoClient: MongoClient;
     let db: Db;
 
     beforeAll(async () => {
-        // Start in-memory MongoDB
-        mongoServer = await MongoMemoryServer.create();
-        const uri = mongoServer.getUri();
+        // BEST PRACTICE: Use globally configured MongoDB Memory Server
+        // globalSetup has already started MongoDB Memory Server
+        const MONGO_URI = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+        const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3-test';
         
-        // Set environment variable BEFORE connecting
-        process.env.MONGODB_URL = uri;
-        process.env.MONGODB_DATABASE = 'dive-v3-test';
-        
-        mongoClient = await MongoClient.connect(uri);
-        db = mongoClient.db('dive-v3-test');
+        mongoClient = await MongoClient.connect(MONGO_URI);
+        db = mongoClient.db(DB_NAME);
 
         // Initialize collection
         await initializeThemesCollection();
     });
 
     afterAll(async () => {
+        // Close connection (globalTeardown will stop MongoDB Memory Server)
         try {
             if (mongoClient) {
                 await mongoClient.close();
-            }
-            if (mongoServer) {
-                await mongoServer.stop();
             }
         } catch (error) {
             console.error('Cleanup error:', error);

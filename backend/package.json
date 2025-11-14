@@ -9,7 +9,7 @@
         "build": "tsc",
         "start": "node dist/https-server.js",
         "test": "NODE_ENV=test jest --testTimeout=15000 --runInBand",
-        "test:unit": "NODE_ENV=test jest --testPathIgnorePatterns=integration --testTimeout=15000 --maxWorkers=50%",
+        "test:unit": "NODE_ENV=test jest --testPathIgnorePatterns=integration --testTimeout=15000 --maxWorkers=1",
         "test:integration": "NODE_ENV=test jest --testPathPattern=integration --testTimeout=15000 --runInBand",
         "test:audit-logs": "NODE_ENV=test jest --testPathPattern=audit-log --testTimeout=15000 --runInBand",
         "test:watch": "NODE_ENV=test jest --watch",
