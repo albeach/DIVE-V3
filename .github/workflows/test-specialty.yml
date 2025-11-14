@@ -281,16 +281,19 @@ jobs:
       
       - name: Start SimpleSAMLphp (Mock Spain IdP)
         run: |
+          # Using kristophjunge/test-saml-idp which is actively maintained
           docker run -d \
             --name simplesamlphp \
             -p 8088:8080 \
+            -p 8443:8443 \
             -e SIMPLESAMLPHP_SP_ENTITY_ID=dive-v3-spain \
             -e SIMPLESAMLPHP_SP_ASSERTION_CONSUMER_SERVICE=http://localhost:3000/api/auth/callback/spain \
-            vegardit/simplesamlphp:latest
+            kristophjunge/test-saml-idp:latest
           
           # Wait for SimpleSAMLphp to start
-          timeout 60 bash -c 'until curl -f http://localhost:8088/simplesaml; do sleep 5; done' || true
-          echo "SimpleSAMLphp started"
+          echo "Waiting for SimpleSAMLphp to start..."
+          timeout 60 bash -c 'until curl -f http://localhost:8088/simplesaml 2>/dev/null; do echo "Waiting..."; sleep 5; done' || echo "⚠️ SimpleSAMLphp may not be fully ready but continuing..."
+          echo "✅ SimpleSAMLphp started"
       
       - name: Validate SAML Metadata
         run: |
