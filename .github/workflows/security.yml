@@ -75,13 +75,16 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
           extra_args: --debug --only-verified
 
   docker-scan:
     name: Docker Image Scanning
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
     strategy:
       matrix:
         service: [backend, frontend, kas]
@@ -102,7 +105,7 @@ jobs:
           output: 'trivy-results.sarif'
       
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
 
