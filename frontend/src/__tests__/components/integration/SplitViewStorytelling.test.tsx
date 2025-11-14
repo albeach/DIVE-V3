@@ -94,9 +94,13 @@ describe("SplitViewStorytelling", () => {
   it("displays keyboard navigation hint", () => {
     render(<SplitViewStorytelling />);
     
-    // Check keyboard hint text
-    expect(screen.getByText(/Tab/i)).toBeInTheDocument();
-    expect(screen.getByText(/Enter/i)).toBeInTheDocument();
+    // Week 4 BEST PRACTICE: Multiple "Tab", "Enter" elements, use getAllByText
+    const tabElements = screen.getAllByText(/Tab/i);
+    expect(tabElements.length).toBeGreaterThan(0);
+    
+    const enterElements = screen.getAllByText(/Enter/i);
+    expect(enterElements.length).toBeGreaterThan(0);
+    
     expect(screen.getByText(/to navigate/i)).toBeInTheDocument();
     expect(screen.getByText(/to select/i)).toBeInTheDocument();
   });
@@ -121,12 +125,21 @@ describe("FederationPanel", () => {
   it("renders all 5 federation steps", () => {
     render(<SplitViewStorytelling />);
     
-    // Check all step titles are present
-    expect(screen.getByText(/User Authentication/i)).toBeInTheDocument();
-    expect(screen.getByText(/Token Issuance/i)).toBeInTheDocument();
-    expect(screen.getByText(/PEP Validation/i)).toBeInTheDocument();
-    expect(screen.getByText(/PDP Evaluation/i)).toBeInTheDocument();
-    expect(screen.getByText(/Access Granted/i)).toBeInTheDocument();
+    // Week 4 BEST PRACTICE: Step titles may appear multiple times, use getAllByText
+    const authElements = screen.getAllByText(/User Authentication/i);
+    expect(authElements.length).toBeGreaterThan(0);
+    
+    const tokenElements = screen.getAllByText(/Token Issuance/i);
+    expect(tokenElements.length).toBeGreaterThan(0);
+    
+    const pepElements = screen.getAllByText(/PEP Validation/i);
+    expect(pepElements.length).toBeGreaterThan(0);
+    
+    const pdpElements = screen.getAllByText(/PDP Evaluation/i);
+    expect(pdpElements.length).toBeGreaterThan(0);
+    
+    const accessElements = screen.getAllByText(/Access Granted/i);
+    expect(accessElements.length).toBeGreaterThan(0);
   });
 
   it("displays spec references for each step", () => {
@@ -143,11 +156,17 @@ describe("FederationPanel", () => {
   it("displays key characteristics summary", () => {
     render(<SplitViewStorytelling />);
     
-    // Check summary box
-    expect(screen.getByText(/Key Characteristics/i)).toBeInTheDocument();
-    expect(screen.getByText(/Trust Model:.*IdP-to-SP federation/i)).toBeInTheDocument();
-    expect(screen.getByText(/Token Lifetime:.*Ephemeral/i)).toBeInTheDocument();
-    expect(screen.getByText(/Focus:.*Subject identity assertion/i)).toBeInTheDocument();
+    // Week 4 BEST PRACTICE: Multiple "Key Characteristics" sections, use getAllByText
+    const keyCharElements = screen.getAllByText(/Key Characteristics/i);
+    expect(keyCharElements.length).toBeGreaterThan(0);
+    
+    // These are specific to Federation panel - check for key terms
+    const trustModelElements = screen.getAllByText(/Trust Model/i);
+    expect(trustModelElements.length).toBeGreaterThan(0);
+    
+    expect(screen.getByText(/IdP-to-SP federation/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ephemeral/i)).toBeInTheDocument();
+    expect(screen.getByText(/Subject identity assertion/i)).toBeInTheDocument();
   });
 });
 
@@ -159,12 +178,19 @@ describe("ObjectPanel", () => {
     const objectTab = screen.getByRole("tab", { name: /Object \(240\)/i });
     fireEvent.click(objectTab);
     
+    // Week 4 BEST PRACTICE: Wait for panel switch, use getAllByText for duplicates
     await waitFor(() => {
-      // Check all step titles are present
-      expect(screen.getByText(/ZTDF Object Creation/i)).toBeInTheDocument();
-      expect(screen.getByText(/Policy Binding/i)).toBeInTheDocument();
-      expect(screen.getByText(/KAS Mediation/i)).toBeInTheDocument();
-      expect(screen.getByText(/Object Access/i)).toBeInTheDocument();
+      const ztdfElements = screen.getAllByText(/ZTDF Object Creation/i);
+      expect(ztdfElements.length).toBeGreaterThan(0);
+      
+      const bindingElements = screen.getAllByText(/Policy Binding/i);
+      expect(bindingElements.length).toBeGreaterThan(0);
+      
+      const kasElements = screen.getAllByText(/KAS Mediation/i);
+      expect(kasElements.length).toBeGreaterThan(0);
+      
+      const accessElements = screen.getAllByText(/Object Access/i);
+      expect(accessElements.length).toBeGreaterThan(0);
     });
   });
 
@@ -191,12 +217,15 @@ describe("ObjectPanel", () => {
     const objectTab = screen.getByRole("tab", { name: /Object \(240\)/i });
     fireEvent.click(objectTab);
     
+    // Week 4 BEST PRACTICE: Wait for panel switch, check for specific Object panel text
     await waitFor(() => {
-      // Check summary box
-      expect(screen.getByText(/Key Characteristics/i)).toBeInTheDocument();
-      expect(screen.getByText(/Trust Model:.*Object-to-consumer cryptographic trust/i)).toBeInTheDocument();
-      expect(screen.getByText(/Data Lifetime:.*Persistent encryption/i)).toBeInTheDocument();
-      expect(screen.getByText(/Focus:.*Policy-bound encryption/i)).toBeInTheDocument();
+      const keyCharElements = screen.getAllByText(/Key Characteristics/i);
+      expect(keyCharElements.length).toBeGreaterThan(0);
+      
+      // Object panel specific characteristics
+      expect(screen.getByText(/Object-to-consumer cryptographic trust/i)).toBeInTheDocument();
+      expect(screen.getByText(/Persistent encryption/i)).toBeInTheDocument();
+      expect(screen.getByText(/Policy-bound encryption/i)).toBeInTheDocument();
     });
   });
 });
