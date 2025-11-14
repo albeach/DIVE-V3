@@ -15,6 +15,7 @@
  */
 
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { seedTestData } from './helpers/seed-test-data';
 
 export default async function globalSetup() {
     console.log('🔧 Global Setup: Starting MongoDB Memory Server...');
@@ -48,7 +49,12 @@ export default async function globalSetup() {
         console.log(`✅ MongoDB Memory Server started: ${uri}`);
         console.log(`   Database: dive-v3-test`);
         console.log(`   Environment: ${process.env.NODE_ENV}`);
-        console.log(`   Benefit: No external MongoDB required!`);
+        
+        // BEST PRACTICE: Seed test data as part of infrastructure
+        // This runs automatically every test run, ensuring consistent test data
+        await seedTestData(uri);
+        
+        console.log(`   Benefit: Complete test infrastructure ready!`);
     } catch (error) {
         console.error('❌ Failed to start MongoDB Memory Server:', error);
         console.error('   This may happen if:');

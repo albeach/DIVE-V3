@@ -213,7 +213,7 @@ describe('KeycloakConfigSyncService - Error Handling', () => {
 // ============================================
 
 describe('KeycloakConfigSyncService - Admin Token Caching', () => {
-    it.skip('should cache admin token and reuse it across realms', async () => {
+    it('should cache admin token and reuse it across realms', async () => {
         // Clear all caches first to start fresh
         KeycloakConfigSyncService.clearCaches();
         jest.clearAllMocks();
