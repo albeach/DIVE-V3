@@ -213,12 +213,16 @@ describe('KeycloakConfigSyncService - Error Handling', () => {
 // ============================================
 
 describe('KeycloakConfigSyncService - Admin Token Caching', () => {
-    it('should cache admin token and reuse it across realms', async () => {
-        // Clear all caches first to start fresh
+    // Isolated beforeEach for this describe block to ensure clean state
+    beforeEach(() => {
         KeycloakConfigSyncService.clearCaches();
         jest.clearAllMocks();
+    });
 
+    it('should cache admin token and reuse it across realms', async () => {
+        // Cache already cleared in beforeEach above
         const { logger } = require('../utils/logger');
+        jest.clearAllMocks();  // Clear mocks again after requiring logger
 
         // Mock admin token fetch (should only happen once if cached properly)
         mockedAxios.post.mockResolvedValueOnce({ data: mockAdminToken });
