@@ -12,6 +12,7 @@
 
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { logger } from '../utils/logger';
 import {
     blacklistToken,
@@ -243,10 +244,36 @@ import { customLoginHandler, customLoginMFAHandler } from './custom-login.contro
 import { initiateOTPSetup, verifyAndEnableOTP } from './otp-setup.controller';
 
 /**
+ * Rate Limit Store for Custom Login (for testing - can be reset)
+ */
+export const customLoginRateLimitStore = new MemoryStore();
+
+/**
+ * Rate Limiting for Custom Login (Brute-Force Protection)
+ * - Window: 15 minutes
+ * - Max attempts: 5 per IP (stricter than token endpoint)
+ * - Response: 429 Too Many Requests
+ */
+const customLoginRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 login attempts per windowMs
+    message: {
+        error: 'Too Many Requests',
+        message: 'Too many login attempts from this IP, please try again later'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: customLoginRateLimitStore // Use exported store (can be reset in tests)
+});
+
+/**
  * POST /api/auth/custom-login
  * Custom login page authentication
+ * 
+ * Security:
+ * - Rate limiting: 5 attempts/15min per IP (brute-force protection)
  */
-router.post('/custom-login', customLoginHandler);
+router.post('/custom-login', customLoginRateLimiter, customLoginHandler);
 
 /**
  * POST /api/auth/custom-login/mfa
