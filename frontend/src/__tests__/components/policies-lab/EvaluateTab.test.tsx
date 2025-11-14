@@ -32,7 +32,13 @@ const mockPolicies = [
 describe('EvaluateTab', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockClear();
+    // Week 4 BEST PRACTICE: Provide default fetch implementation
+    (global.fetch as jest.Mock).mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({ policies: [] }),
+      } as Response)
+    );
   });
 
   it('renders policy selector', async () => {
@@ -174,13 +180,15 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    await waitFor(() => {
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
-      fireEvent.change(select, { target: { value: 'policy-123' } });
-    });
+    // Week 4 BEST PRACTICE: Use specific label instead of ambiguous role
+    const policySelect = await screen.findByLabelText(/Select Policy to Evaluate/i);
+    fireEvent.change(policySelect, { target: { value: 'policy-123' } });
 
-    const evaluateButton = screen.getByText('Evaluate Policy') as HTMLButtonElement;
-    expect(evaluateButton).not.toBeDisabled();
+    // Wait for state update
+    await waitFor(() => {
+      const evaluateButton = screen.getByText('Evaluate Policy') as HTMLButtonElement;
+      expect(evaluateButton).not.toBeDisabled();
+    });
   });
 
   it('calls API when evaluate button clicked', async () => {
@@ -222,12 +230,11 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    await waitFor(() => {
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
-      fireEvent.change(select, { target: { value: 'policy-123' } });
-    });
+    // Week 4 BEST PRACTICE: Use specific label, wait for policies to load
+    const policySelect = await screen.findByLabelText(/Select Policy to Evaluate/i);
+    fireEvent.change(policySelect, { target: { value: 'policy-123' } });
 
-    const evaluateButton = screen.getByText('Evaluate Policy');
+    const evaluateButton = await screen.findByText('Evaluate Policy');
     fireEvent.click(evaluateButton);
 
     await waitFor(() => {
@@ -261,12 +268,11 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    await waitFor(() => {
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
-      fireEvent.change(select, { target: { value: 'policy-123' } });
-    });
+    // Week 4 BEST PRACTICE: Use specific label, wait for async load
+    const policySelect = await screen.findByLabelText(/Select Policy to Evaluate/i);
+    fireEvent.change(policySelect, { target: { value: 'policy-123' } });
 
-    const evaluateButton = screen.getByText('Evaluate Policy');
+    const evaluateButton = await screen.findByText('Evaluate Policy');
     fireEvent.click(evaluateButton);
 
     await waitFor(() => {
@@ -282,27 +288,32 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    const fveyCheckbox = screen.getByRole('checkbox', { name: 'FVEY' });
+    // Week 4 BEST PRACTICE: Use specific aria-label to distinguish subject vs resource COI
+    const fveyCheckbox = screen.getByRole('checkbox', { name: 'Subject COI: FVEY' });
     fireEvent.click(fveyCheckbox);
 
     expect(fveyCheckbox).toBeChecked();
   });
 
-  it('allows multiple country selection for releasability', () => {
+  it('allows multiple country selection for releasability', async () => {
     render(
       <SessionProvider session={mockSession}>
         <EvaluateTab />
       </SessionProvider>
     );
 
-    const usaCheckbox = screen.getByRole('checkbox', { name: 'USA' });
-    const gbrCheckbox = screen.getByRole('checkbox', { name: 'GBR' });
+    // Week 4 BEST PRACTICE: Use specific aria-labels
+    const usaCheckbox = screen.getByRole('checkbox', { name: 'Releasability: USA' });
+    const gbrCheckbox = screen.getByRole('checkbox', { name: 'Releasability: GBR' });
 
     fireEvent.click(usaCheckbox);
     fireEvent.click(gbrCheckbox);
 
-    expect(usaCheckbox).toBeChecked();
-    expect(gbrCheckbox).toBeChecked();
+    // Wait for React state updates
+    await waitFor(() => {
+      expect(usaCheckbox).toBeChecked();
+      expect(gbrCheckbox).toBeChecked();
+    });
   });
 
   it('updates action when dropdown changed', () => {
@@ -312,9 +323,8 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    const actionSelect = screen.getAllByRole('combobox').find(
-      select => select.getAttribute('value') === 'read'
-    ) as HTMLSelectElement;
+    // Week 4 BEST PRACTICE: Use specific label instead of getAllByRole workaround
+    const actionSelect = screen.getByLabelText(/Operation/i) as HTMLSelectElement;
 
     fireEvent.change(actionSelect, { target: { value: 'write' } });
 
@@ -335,12 +345,11 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    await waitFor(() => {
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
-      fireEvent.change(select, { target: { value: 'policy-123' } });
-    });
+    // Week 4 BEST PRACTICE: Use specific label, wait for async
+    const policySelect = await screen.findByLabelText(/Select Policy to Evaluate/i);
+    fireEvent.change(policySelect, { target: { value: 'policy-123' } });
 
-    const evaluateButton = screen.getByText('Evaluate Policy');
+    const evaluateButton = await screen.findByText('Evaluate Policy');
     fireEvent.click(evaluateButton);
 
     await waitFor(() => {
