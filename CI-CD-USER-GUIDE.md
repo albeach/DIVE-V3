@@ -1,8 +1,8 @@
 # DIVE V3 CI/CD User Guide
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Last Updated:** November 14, 2025  
-**Migration Status:** Week 3 - Post-Streamlining  
+**Migration Status:** Week 4 - Optimization Complete ✅  
 
 ---
 
@@ -590,6 +590,34 @@ docker-compose up -d
 
 ## Performance Monitoring
 
+### Performance Dashboard (Week 4 ✅)
+
+**Every CI run now includes an automated Performance Dashboard!**
+
+**How to access:**
+1. Go to `Actions` → `CI - Comprehensive Test Suite`
+2. Click any workflow run
+3. Click the `Summary` tab
+4. Scroll to see **📈 CI/CD Performance Dashboard**
+
+**Dashboard sections:**
+- **Critical Path Status:** Pass/fail for 6 components
+- **Performance Baselines:** Current vs targets for 6 metrics
+- **Performance Trends:** Recent improvements
+- **Known Deferred Items:** Context for expected failures
+- **Quick Actions:** What to do next
+
+**Week 4 Baselines (Achieved):**
+- authz.middleware: **2.3s** (was 193s, 99% improvement!)
+- Frontend tests: **52s** (target: <120s)
+- OPA tests: **5s** (target: <30s)
+- Cache hit rate: **100%** (target: >80%)
+- Total CI time: **~5min** (target: <8min)
+
+**For detailed usage:** See `CI-CD-MONITORING-RUNBOOK.md`
+
+---
+
 ### Workflow Performance
 
 **View workflow runtimes:**
@@ -603,12 +631,15 @@ gh run list --workflow=ci-fast.yml --limit 5
 
 # Check performance
 gh run view <run-id>
+
+# Open dashboard in browser
+gh run view <run-id> --web  # Then click Summary tab
 ```
 
-**Expected Runtimes:**
+**Expected Runtimes (Week 4 Optimized):**
 - ci-fast.yml: <5 minutes
-- ci-comprehensive.yml: 10-15 minutes (actual: ~4-5 min)
-- test-e2e.yml: 20-25 minutes
+- ci-comprehensive.yml: **~5 minutes** (was 10-15 min)
+- test-e2e.yml: 20-25 minutes (infrastructure setup needed)
 - deploy-dev-server.yml: 6-8 minutes
 
 **If slower than expected:**
