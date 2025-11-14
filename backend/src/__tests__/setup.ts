@@ -16,9 +16,8 @@ process.env.OPA_URL = 'http://localhost:8181';
 process.env.KAS_URL = 'https://localhost:8080'; // Session expiration fix: KAS URL for tests
 
 // CRITICAL: Force resource service to use test database (not production dive-v3)
-// Include auth credentials for local MongoDB running with --auth
-process.env.MONGODB_URI = 'mongodb://admin:password@localhost:27017/dive-v3-test';
-process.env.MONGODB_URL = 'mongodb://admin:password@localhost:27017';
+process.env.MONGODB_URI = 'mongodb://localhost:27017/dive-v3-test';
+process.env.MONGODB_URL = 'mongodb://localhost:27017';
 process.env.MONGODB_DATABASE = 'dive-v3-test';
 
 // Suppress console logs during tests (optional)
