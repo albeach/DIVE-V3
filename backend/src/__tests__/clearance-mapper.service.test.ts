@@ -160,8 +160,9 @@ describe('Clearance Mapper Service', () => {
 
         it('should map German VS-VERTRAULICH to CONFIDENTIAL', () => {
             expect(mapNationalClearance('VS-VERTRAULICH', 'DEU')).toBe('CONFIDENTIAL');
-            expect(mapNationalClearance('VS-NUR FÜR DEN DIENSTGEBRAUCH', 'DEU')).toBe('CONFIDENTIAL');
-            expect(mapNationalClearance('VS-NUR FUR DEN DIENSTGEBRAUCH', 'DEU')).toBe('CONFIDENTIAL');
+            // VS-NUR FÜR DEN DIENSTGEBRAUCH is RESTRICTED, not CONFIDENTIAL
+            expect(mapNationalClearance('VS-NUR FÜR DEN DIENSTGEBRAUCH', 'DEU')).toBe('RESTRICTED');
+            expect(mapNationalClearance('VS-NUR FUR DEN DIENSTGEBRAUCH', 'DEU')).toBe('RESTRICTED');
         });
 
         it('should map German GEHEIM to SECRET', () => {
@@ -212,8 +213,9 @@ describe('Clearance Mapper Service', () => {
         });
 
         it('should map Spanish CONFIDENCIAL to CONFIDENTIAL', () => {
-            expect(mapNationalClearance('DIFUSIÓN LIMITADA', 'ESP')).toBe('CONFIDENTIAL');
-            expect(mapNationalClearance('DIFUSION LIMITADA', 'ESP')).toBe('CONFIDENTIAL');
+            // DIFUSIÓN LIMITADA is RESTRICTED, not CONFIDENTIAL
+            expect(mapNationalClearance('DIFUSIÓN LIMITADA', 'ESP')).toBe('RESTRICTED');
+            expect(mapNationalClearance('DIFUSION LIMITADA', 'ESP')).toBe('RESTRICTED');
             expect(mapNationalClearance('CONFIDENCIAL', 'ESP')).toBe('CONFIDENTIAL');
         });
 
@@ -266,7 +268,8 @@ describe('Clearance Mapper Service', () => {
         });
 
         it('should map Dutch VERTROUWELIJK to CONFIDENTIAL', () => {
-            expect(mapNationalClearance('DEPARTEMENTAAL VERTROUWELIJK', 'NLD')).toBe('CONFIDENTIAL');
+            // DEPARTEMENTAAL VERTROUWELIJK is RESTRICTED, not CONFIDENTIAL
+            expect(mapNationalClearance('DEPARTEMENTAAL VERTROUWELIJK', 'NLD')).toBe('RESTRICTED');
             expect(mapNationalClearance('VERTROUWELIJK', 'NLD')).toBe('CONFIDENTIAL');
         });
 
