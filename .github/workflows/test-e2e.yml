@@ -56,6 +56,17 @@ jobs:
       - name: Install Frontend Dependencies
         run: cd frontend && npm ci --legacy-peer-deps
       
+      - name: Generate SSL Certificates for E2E
+        run: |
+          mkdir -p ${{ github.workspace }}/frontend/certs
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/frontend/certs/key.pem \
+            -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+            -days 365 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+          echo "✅ Generated self-signed SSL certificates for E2E testing"
+          ls -la ${{ github.workspace }}/frontend/certs/
+      
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
         id: playwright-cache
@@ -73,6 +84,7 @@ jobs:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+          CERT_PATH: ${{ github.workspace }}/frontend/certs
       
       - name: Upload Test Results
         if: always()
@@ -128,6 +140,16 @@ jobs:
       - name: Install Frontend Dependencies
         run: cd frontend && npm ci --legacy-peer-deps
       
+      - name: Generate SSL Certificates for E2E
+        run: |
+          mkdir -p ${{ github.workspace }}/frontend/certs
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/frontend/certs/key.pem \
+            -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+            -days 365 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+          echo "✅ Generated self-signed SSL certificates for E2E testing"
+      
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
         id: playwright-cache
@@ -154,6 +176,7 @@ jobs:
           NEXTAUTH_SECRET: test-secret-for-e2e
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           OPA_URL: http://localhost:8181
+          CERT_PATH: ${{ github.workspace }}/frontend/certs
       
       - name: Upload Test Results
         if: always()
@@ -209,6 +232,16 @@ jobs:
       - name: Install Frontend Dependencies
         run: cd frontend && npm ci --legacy-peer-deps
       
+      - name: Generate SSL Certificates for E2E
+        run: |
+          mkdir -p ${{ github.workspace }}/frontend/certs
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/frontend/certs/key.pem \
+            -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+            -days 365 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+          echo "✅ Generated self-signed SSL certificates for E2E testing"
+      
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
         id: playwright-cache
@@ -226,6 +259,7 @@ jobs:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+          CERT_PATH: ${{ github.workspace }}/frontend/certs
       
       - name: Upload Test Results
         if: always()
@@ -281,6 +315,16 @@ jobs:
       - name: Install Frontend Dependencies
         run: cd frontend && npm ci --legacy-peer-deps
       
+      - name: Generate SSL Certificates for E2E
+        run: |
+          mkdir -p ${{ github.workspace }}/frontend/certs
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/frontend/certs/key.pem \
+            -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+            -days 365 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+          echo "✅ Generated self-signed SSL certificates for E2E testing"
+      
       - name: Cache Playwright Browsers
         uses: actions/cache@v4
         id: playwright-cache
@@ -308,6 +352,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
+          CERT_PATH: ${{ github.workspace }}/frontend/certs
       
       - name: Upload Test Results
         if: always()

@@ -50,6 +50,13 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
+      - name: Generate Test Certificates
+        run: |
+          cd backend
+          chmod +x scripts/generate-test-certs.sh
+          ./scripts/generate-test-certs.sh
+          echo "✅ Test certificates generated for policy-signature and three-tier-ca tests"
+      
       - name: Start OPA Server
         run: |
           curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
