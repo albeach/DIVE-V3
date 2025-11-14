@@ -76,7 +76,7 @@ jobs:
         run: |
           echo "Verifying Docker installation..."
           docker --version
-          docker-compose --version
+          docker compose --version
           
           echo "Current containers:"
           docker ps -a
@@ -87,7 +87,7 @@ jobs:
         run: |
           echo "Verifying required files..."
           
-          test -f docker-compose.yml && echo "✅ docker-compose.yml found" || (echo "❌ docker-compose.yml missing" && exit 1)
+          test -f docker compose.yml && echo "✅ docker compose.yml found" || (echo "❌ docker compose.yml missing" && exit 1)
           test -f scripts/deploy-dev.sh && echo "✅ deploy-dev.sh found" || (echo "❌ deploy-dev.sh missing" && exit 1)
           test -f scripts/rollback.sh && echo "✅ rollback.sh found" || (echo "❌ rollback.sh missing" && exit 1)
           test -f scripts/health-check.sh && echo "✅ health-check.sh found" || (echo "❌ health-check.sh missing" && exit 1)
@@ -148,7 +148,7 @@ jobs:
       - name: Pre-Deployment - Clean Stale Containers
         run: |
           echo "Cleaning stale containers and volumes..."
-          docker-compose down --volumes || true
+          docker compose down --volumes || true
           docker system prune -f || true
           echo "✅ Cleanup complete"
       
@@ -179,7 +179,7 @@ jobs:
         run: |
           echo "Creating NextAuth tables in dive_v3_app database..."
           docker cp frontend/create-nextauth-tables.sql dive-v3-postgres:/tmp/create-tables.sql
-          docker-compose exec -T postgres psql -U postgres -d dive_v3_app -f /tmp/create-tables.sql || echo "⚠️ Tables may already exist"
+          docker compose exec -T postgres psql -U postgres -d dive_v3_app -f /tmp/create-tables.sql || echo "⚠️ Tables may already exist"
           echo "✅ NextAuth tables initialized"
       
       - name: Post-Deployment - Apply Terraform Configuration
@@ -227,22 +227,22 @@ jobs:
         if: success()
         run: |
           echo "Initializing COI keys in MongoDB..."
-          docker-compose exec -T backend npx tsx src/scripts/initialize-coi-keys.ts || echo "⚠️ COI keys may already exist"
+          docker compose exec -T backend npx tsx src/scripts/initialize-coi-keys.ts || echo "⚠️ COI keys may already exist"
           echo "✅ COI keys initialized"
       
       - name: Post-Deployment - Seed MongoDB  
         if: success()
         run: |
           echo "Seeding MongoDB with resources..."
-          docker-compose exec -T -e SEED_QUANTITY=1000 backend npm run seed-database || echo "⚠️ Resources may already exist"
+          docker compose exec -T -e SEED_QUANTITY=1000 backend npm run seed-database || echo "⚠️ Resources may already exist"
           echo "✅ MongoDB seeded"
       
       - name: Post-Deployment - Restart Services
         if: success()
         run: |
           echo "Restarting backend and frontend to pick up Keycloak configuration..."
-          docker-compose restart backend
-          docker-compose restart nextjs
+          docker compose restart backend
+          docker compose restart nextjs
           sleep 10
           echo "✅ Services restarted"
       
@@ -332,7 +332,7 @@ jobs:
           echo "  Keycloak:  https://dev-auth.dive25.com"
           echo ""
           echo "Services:"
-          docker-compose ps
+          docker compose ps
       
       - name: Upload Deployment Logs
         if: always()
@@ -417,8 +417,8 @@ jobs:
           echo "Possible actions:"
           echo "  1. SSH into server: ssh user@dev-app.dive25.com"
           echo "  2. Check Docker status: docker ps -a"
-          echo "  3. Review logs: docker-compose logs"
-          echo "  4. Manual rollback: git checkout <previous-commit> && docker-compose up -d"
+          echo "  3. Review logs: docker compose logs"
+          echo "  4. Manual rollback: git checkout <previous-commit> && docker compose up -d"
           exit 1
       
       - name: Upload Rollback Logs
