@@ -75,13 +75,12 @@ describe('Resource Access E2E Tests', () => {
             expect(Array.isArray(response.body.resources)).toBe(true);
         });
 
-        it('should return resources list even without authentication (no auth on list endpoint)', async () => {
+        it('should return 401 without authentication (list endpoint requires auth)', async () => {
             const response = await request(app)
                 .get('/api/resources');
 
-            // List endpoint currently has no authentication middleware
-            expect(response.status).toBe(200);
-            expect(response.body).toHaveProperty('resources');
+            // List endpoint HAS authentication middleware (authenticateJWT)
+            expect(response.status).toBe(401);
         });
     });
 
