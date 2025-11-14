@@ -14,8 +14,6 @@ interface UploadPolicyModalProps {
 type UploadState = 'idle' | 'uploading' | 'validating' | 'success' | 'error';
 
 export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: UploadPolicyModalProps) {
-  console.log('[UploadPolicyModal] RENDER - isOpen:', isOpen);
-  
   const { data: session } = useSession();
   const [state, setState] = useState<UploadState>('idle');
   const [file, setFile] = useState<File | null>(null);
@@ -26,17 +24,14 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
   const [uploadedPolicyId, setUploadedPolicyId] = useState('');
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    console.log('[UploadPolicyModal] onDrop called with files:', acceptedFiles);
     if (acceptedFiles.length > 0) {
       const selectedFile = acceptedFiles[0];
-      console.log('[UploadPolicyModal] File selected:', selectedFile.name, selectedFile.size, selectedFile.type);
       setFile(selectedFile);
       
       // Auto-fill name from filename
       if (!name) {
         const filename = selectedFile.name.replace(/\.(rego|xml)$/, '');
         setName(filename);
-        console.log('[UploadPolicyModal] Auto-filled name:', filename);
       }
     }
   }, [name]);
@@ -54,8 +49,6 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
     noClick: false,
     noKeyboard: false
   });
-  
-  console.log('[UploadPolicyModal] Dropzone state - isDragActive:', isDragActive, 'disabled:', state === 'uploading' || state === 'validating');
 
   const handleUpload = async () => {
     if (!file || !name) {
@@ -184,19 +177,18 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
                   <div className="space-y-6">
                     {/* File Input */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="policy-file-input" className="block text-sm font-medium text-gray-700 mb-2">
                         Policy File *
                       </label>
                       <div
                         {...getRootProps()}
-                        onClick={() => console.log('[UploadPolicyModal] Dropzone CLICKED')}
                         className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-md transition-colors cursor-pointer ${
                           isDragActive
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-300 hover:border-blue-400 bg-white'
                         }`}
                       >
-                        <input {...getInputProps()} onClick={() => console.log('[UploadPolicyModal] Input CLICKED')} />
+                        <input {...getInputProps()} id="policy-file-input" />
                         <div className="space-y-1 text-center w-full">
                           {file ? (
                             <div className="flex items-center justify-center space-x-2">
@@ -218,7 +210,6 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  console.log('[UploadPolicyModal] Remove file clicked');
                                   setFile(null);
                                 }}
                                 className="text-red-600 hover:text-red-800"

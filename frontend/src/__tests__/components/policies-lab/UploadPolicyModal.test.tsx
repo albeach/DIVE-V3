@@ -6,8 +6,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SessionProvider } from 'next-auth/react';
 import UploadPolicyModal from '@/components/policies-lab/UploadPolicyModal';
 
-// Mock fetch
-global.fetch = jest.fn();
+// Mock fetch - Week 4 BEST PRACTICE: Provide default implementation
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: async () => ({}),
+  } as Response)
+);
 
 const mockSession = {
   user: {
@@ -27,7 +32,13 @@ const defaultProps = {
 describe('UploadPolicyModal', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global.fetch as jest.Mock).mockClear();
+    // Week 4 BEST PRACTICE: Reset fetch mock to default implementation
+    (global.fetch as jest.Mock).mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({}),
+      } as Response)
+    );
   });
 
   it('renders modal when open', () => {
@@ -102,6 +113,7 @@ describe('UploadPolicyModal', () => {
     );
 
     const file = new File(['package dive.lab.test'], 'test-policy.rego', { type: 'text/plain' });
+    // Week 4 BEST PRACTICE: Component now has proper label association (htmlFor + id)
     const input = screen.getByLabelText(/Policy File/i) as HTMLInputElement;
 
     fireEvent.change(input, { target: { files: [file] } });
@@ -152,7 +164,10 @@ describe('UploadPolicyModal', () => {
     const nameInput = screen.getByLabelText(/Policy Name/i);
     fireEvent.change(nameInput, { target: { value: 'Test Policy' } });
 
-    const uploadButton = screen.getByText('Upload & Validate');
+    // Week 4 BEST PRACTICE: Wait for button to be enabled before clicking
+    const uploadButton = await screen.findByText('Upload & Validate');
+    expect(uploadButton).not.toBeDisabled();
+    
     fireEvent.click(uploadButton);
 
     await waitFor(() => {
@@ -184,7 +199,10 @@ describe('UploadPolicyModal', () => {
     const nameInput = screen.getByLabelText(/Policy Name/i);
     fireEvent.change(nameInput, { target: { value: 'Test Policy' } });
 
-    const uploadButton = screen.getByText('Upload & Validate');
+    // Week 4 BEST PRACTICE: Wait for button to be enabled
+    const uploadButton = await screen.findByText('Upload & Validate');
+    expect(uploadButton).not.toBeDisabled();
+    
     fireEvent.click(uploadButton);
 
     await waitFor(() => {
@@ -218,7 +236,10 @@ describe('UploadPolicyModal', () => {
     const nameInput = screen.getByLabelText(/Policy Name/i);
     fireEvent.change(nameInput, { target: { value: 'Test Policy' } });
 
-    const uploadButton = screen.getByText('Upload & Validate');
+    // Week 4 BEST PRACTICE: Wait for button to be enabled
+    const uploadButton = await screen.findByText('Upload & Validate');
+    expect(uploadButton).not.toBeDisabled();
+    
     fireEvent.click(uploadButton);
 
     await waitFor(() => {
