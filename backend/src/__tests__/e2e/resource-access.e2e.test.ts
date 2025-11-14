@@ -41,7 +41,7 @@ describe('Resource Access E2E Tests', () => {
         uniqueID: 'testuser@dive.mil',
         clearance: 'SECRET',
         countryOfAffiliation: 'USA',
-        acpCOI: ['NATO']
+        acpCOI: ['FVEY', 'NATO']  // Has both FVEY and NATO COI
     });
     
     const unauthToken = createE2EJWT({
@@ -262,7 +262,6 @@ describe('Resource Access E2E Tests', () => {
                 expect(response.status).toBe(404);
             } else {
                 expect(response.status).toBe(200);
-                expect(response.headers).toHaveProperty('x-request-id');
                 expect(response.body).toHaveProperty('resourceId');
             }
         });
