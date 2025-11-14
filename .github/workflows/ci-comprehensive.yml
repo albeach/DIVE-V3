@@ -58,20 +58,6 @@ jobs:
           ./scripts/generate-test-certs.sh
           echo "✅ Test certificates generated for policy-signature and three-tier-ca tests"
       
-      - name: Wait for MongoDB Ready
-        run: |
-          echo "Waiting for MongoDB to be fully ready..."
-          for i in {1..30}; do
-            if mongosh --quiet --eval "db.adminCommand('ping')" mongodb://localhost:27017/test &>/dev/null; then
-              echo "✅ MongoDB is ready"
-              exit 0
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
-          echo "❌ MongoDB failed to become ready"
-          exit 1
-      
       - name: Start OPA Server
         run: |
           curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
