@@ -444,6 +444,199 @@ test_deny_with_insufficient_clearance {
 
 ---
 
+## Best Practices (Week 4 ✅)
+
+### Dependency Injection for Testability
+
+**When to use:** Module-level services need mocking
+
+**Pattern:**
+```typescript
+// Define interface
+interface IJwtService {
+    verify: (...args: any[]) => any;
+    decode: (...args: any[]) => any;
+}
+
+// Default to real service
+let jwtService: IJwtService = jwt;
+
+// Export initializer
+export const initializeJwtService = (service?: IJwtService) => {
+    jwtService = service || jwt;
+};
+
+// Use in code
+const decoded = jwtService.decode(token, { complete: true });
+```
+
+**In tests:**
+```typescript
+const mockJwtService = {
+    verify: jest.fn(),
+    decode: jwt.decode  // Keep real implementation if needed
+};
+
+beforeEach(() => {
+    initializeJwtService(mockJwtService);
+    mockJwtService.verify.mockImplementation(defaultImpl);
+});
+```
+
+**Benefits:**
+- Testable without module mocking hacks
+- Production code unchanged
+- SOLID principles (Dependency Inversion)
+- Consistent pattern across codebase
+
+**Used in:** `authz.middleware.ts`, `oauth.controller.ts`
+
+---
+
+### Component Accessibility
+
+**All interactive components must be accessible (WCAG 2.1 AA)**
+
+**Pattern 1: Label Association**
+```tsx
+<label htmlFor="policy-selector">Select Policy *</label>
+<select id="policy-selector">
+  {/* options */}
+</select>
+```
+
+**Pattern 2: Unique aria-labels for duplicates**
+```tsx
+<input aria-label="Subject COI: FVEY" />
+<input aria-label="Resource COI: FVEY" />
+<input aria-label="Releasability: USA" />
+```
+
+**Pattern 3: data-testid for complex elements**
+```tsx
+<motion.div data-testid={`idp-card-${idp.alias}`}>
+  {/* content */}
+</motion.div>
+```
+
+**Benefits:**
+- Screen reader accessible
+- Testable with `getByLabelText()`
+- Better UX for all users
+- Production benefit (not just tests!)
+
+---
+
+### Async Test Patterns
+
+**Always use proper async patterns for React tests**
+
+**Pattern 1: Wait for element to appear**
+```typescript
+const element = await screen.findByText('Expected Text');
+```
+
+**Pattern 2: Wait for async data**
+```typescript
+await waitFor(() => {
+  expect(screen.getByText('Data Loaded')).toBeInTheDocument();
+});
+```
+
+**Pattern 3: Wait before interaction**
+```typescript
+const button = await screen.findByText('Submit');
+await waitFor(() => expect(button).not.toBeDisabled());
+fireEvent.click(button);
+```
+
+**Pattern 4: Handle duplicates**
+```typescript
+const elements = screen.getAllByText(/Click/i);
+expect(elements.length).toBeGreaterThan(0);
+```
+
+**Benefits:**
+- No race conditions
+- Respects React lifecycle
+- Reliable tests
+- No test flakiness
+
+---
+
+### Mock Configuration
+
+**Always reset mocks in `beforeEach` for test isolation**
+
+```typescript
+// Default implementation
+const defaultImpl = (token: string) => ({
+  sub: 'user-123',
+  clearance: 'SECRET'
+});
+
+// Create mock with default
+const mockService = {
+    method: jest.fn(defaultImpl)
+};
+
+// Reset in beforeEach
+beforeEach(() => {
+    jest.clearAllMocks();
+    mockService.method.mockImplementation(defaultImpl);
+    (global.fetch as jest.Mock).mockResolvedValue(defaultResponse);
+});
+
+// Override per test
+it('handles error', () => {
+    mockService.method.mockImplementation(() => {
+        throw new Error('Test error');
+    });
+    // test code
+});
+```
+
+**Benefits:**
+- Tests don't affect each other
+- Predictable behavior
+- Easy to debug
+- Maintainable
+
+---
+
+### What NOT to Do ❌
+
+**Don't use querySelector() in tests:**
+```typescript
+// ❌ Bad (workaround):
+const input = container.querySelector('input[type="file"]');
+
+// ✅ Good (fix component):
+<label htmlFor="file-input">File</label>
+<input id="file-input" />
+const input = screen.getByLabelText(/File/i);
+```
+
+**Don't skip tests to make them pass:**
+```typescript
+// ❌ Bad:
+it.skip('broken test', () => { /* ... */ });
+
+// ✅ Good:
+it('fixed test', () => { /* proper fix */ });
+```
+
+**Don't use `any` type:**
+```typescript
+// ❌ Bad:
+function process(data: any) { }
+
+// ✅ Good:
+function process(data: User | Resource) { }
+```
+
+---
+
 ## Deployment Process
 
 ### Development Environment
