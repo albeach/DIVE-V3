@@ -16,9 +16,12 @@ process.env.OPA_URL = 'http://localhost:8181';
 process.env.KAS_URL = 'https://localhost:8080'; // Session expiration fix: KAS URL for tests
 
 // CRITICAL: Force resource service to use test database (not production dive-v3)
-// Use auth credentials to match both local Docker (docker-compose.yml) and CI (ci-comprehensive.yml)
-process.env.MONGODB_URI = 'mongodb://admin:password@localhost:27017/dive-v3-test';
-process.env.MONGODB_URL = 'mongodb://admin:password@localhost:27017';
+// Use testuser (created in CI) for database-specific permissions
+// Falls back to admin:password for local Docker if testuser doesn't exist
+const mongoUser = process.env.CI ? 'testuser' : 'admin';
+const mongoPass = process.env.CI ? 'testpass' : 'password';
+process.env.MONGODB_URI = `mongodb://${mongoUser}:${mongoPass}@localhost:27017/dive-v3-test`;
+process.env.MONGODB_URL = `mongodb://${mongoUser}:${mongoPass}@localhost:27017`;
 process.env.MONGODB_DATABASE = 'dive-v3-test';
 
 // Suppress console logs during tests (optional)
