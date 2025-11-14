@@ -109,7 +109,7 @@ async function seedTestResources(db: Db): Promise<void> {
             resourceId: 'test-secret-nato',
             title: 'Test NATO Secret',
             classification: 'SECRET' as ClassificationLevel,
-            releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU', 'CAN'],
+            releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU', 'CAN', 'ESP', 'ITA', 'NLD', 'POL'],  // All NATO test countries
             COI: ['NATO'],
             content: 'NATO coalition document',
             encrypted: false,
