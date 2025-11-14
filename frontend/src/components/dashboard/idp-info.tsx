@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getCountryFlagComponent } from '@/components/ui/flags';
 
 interface User {
   uniqueID?: string | null;
@@ -18,23 +19,6 @@ interface IdPDetails {
   enabled: boolean;
   country?: string;
   administrator?: string;
-}
-
-// Map country codes to flag emojis
-function getCountryFlag(countryCode: string | null | undefined): string {
-  if (!countryCode) return '🌐';
-  
-  const alpha3ToAlpha2: Record<string, string> = {
-    'USA': 'US', 'FRA': 'FR', 'CAN': 'CA', 'GBR': 'GB', 'DEU': 'DE',
-    'ITA': 'IT', 'ESP': 'ES', 'POL': 'PL', 'NLD': 'NL', 'BEL': 'BE',
-    'NOR': 'NO', 'DNK': 'DK',
-  };
-  
-  const alpha2 = alpha3ToAlpha2[countryCode.toUpperCase()];
-  if (!alpha2) return '🌐';
-  
-  const codePoints = alpha2.split('').map(char => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
 }
 
 export function IdpInfo({ user }: IdpInfoProps) {
@@ -170,7 +154,10 @@ export function IdpInfo({ user }: IdpInfoProps) {
               <div className="space-y-3">
                 <div className="flex items-center space-x-2 animate-fade-in-up" style={{ animationDelay: '200ms' }}>
                   <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
-                    <span className="text-lg">{getCountryFlag(user.countryOfAffiliation)}</span>
+                    {(() => {
+                      const FlagComponent = getCountryFlagComponent(user.countryOfAffiliation);
+                      return <FlagComponent size={20} />;
+                    })()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{userIdP.displayName}</p>

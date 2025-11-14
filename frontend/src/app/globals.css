@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================ */
+/* ✅ SECURITY: System Font Stacks - No External Dependencies */
+/* Optimized for secure/air-gapped environments */
+/* ============================================ */
+
+@layer base {
+    :root {
+        /* Sans-serif font stack - excellent cross-platform support */
+        --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+        
+        /* Monospace font stack - for code/technical content */
+        --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    body {
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    code, pre, kbd, samp {
+        font-family: var(--font-mono);
+    }
+}
+
 /* Modern 2025 Animations & Effects */
 @layer utilities {
     .animate-fade-in {

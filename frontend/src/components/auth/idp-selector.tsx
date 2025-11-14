@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import { getFlagComponent } from "@/components/ui/flags";
 
 /**
  * IdP Selector Component - Dynamic with Enable/Disable Support
@@ -10,6 +11,9 @@ import { useEffect, useState, useRef } from "react";
  * When admin enables/disables IdPs, this list updates automatically.
  * 
  * 🥚 EASTER EGG: Super Admin access hidden behind secret triggers
+ * 
+ * ✅ SECURITY: All flags are self-contained SVG components
+ * No external CDN dependencies, emoji fonts, or third-party resources
  */
 
 interface IdPOption {
@@ -19,40 +23,14 @@ interface IdPOption {
   enabled: boolean;
 }
 
-// Flag mapping for known IdPs
-// Returns emoji flag OR Twemoji CDN fallback for better cross-platform rendering
-const getFlagForIdP = (alias: string): { emoji: string; code: string } => {
-  // Match specific patterns (order matters - check specific before generic)
-  if (alias.includes('germany') || alias.includes('deu')) return { emoji: '🇩🇪', code: 'DE' };
-  if (alias.includes('france') || alias.includes('fra')) return { emoji: '🇫🇷', code: 'FR' };
-  if (alias.includes('canada') || alias.includes('can')) return { emoji: '🇨🇦', code: 'CA' };
-  if (alias.includes('uk') || alias.includes('gbr')) return { emoji: '🇬🇧', code: 'GB' };
-  if (alias.includes('italy') || alias.includes('ita')) return { emoji: '🇮🇹', code: 'IT' };
-  if (alias.includes('spain') || alias.includes('esp')) return { emoji: '🇪🇸', code: 'ES' };
-  if (alias.includes('poland') || alias.includes('pol')) return { emoji: '🇵🇱', code: 'PL' };
-  if (alias.includes('netherlands') || alias.includes('nld')) return { emoji: '🇳🇱', code: 'NL' };
-  if (alias.includes('industry') || alias.includes('contractor')) return { emoji: '🏢', code: '' };
-  // Check for US last (since "industry" doesn't contain "us")
-  if (alias.includes('usa') || alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return { emoji: '🇺🇸', code: 'US' };
-  
-  return { emoji: '🌐', code: '' }; // Default globe icon
-};
-
-// Component to render flag with fallback
+// Component to render flag icon using local SVG components
 const FlagIcon = ({ alias }: { alias: string }) => {
-  const flag = getFlagForIdP(alias);
+  const FlagComponent = getFlagComponent(alias);
   
-  // Always use emoji, no external CDN calls to avoid CORS
-  // Browser will render emoji natively or fall back to system font
   return (
-    <span 
-      className="inline-flex items-center justify-center" 
-      style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', 'Twemoji Mozilla', sans-serif" }}
-      role="img"
-      aria-label={flag.code ? `${flag.code} flag` : 'icon'}
-    >
-      {flag.emoji}
-    </span>
+    <div className="inline-flex items-center justify-center">
+      <FlagComponent size={48} className="drop-shadow-md" />
+    </div>
   );
 };
 

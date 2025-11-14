@@ -1,6 +1,7 @@
 'use client';
 
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
+import { getCountryFlagComponent } from '@/components/ui/flags';
 
 interface User {
   uniqueID?: string | null;
@@ -13,35 +14,6 @@ interface User {
 
 interface ProfileBadgeProps {
   user: User;
-}
-
-// Convert ISO 3166-1 alpha-3 country code to flag emoji
-function getCountryFlag(countryCode: string | null | undefined): string {
-  if (!countryCode) return '🏳️';
-  
-  const alpha3ToAlpha2: Record<string, string> = {
-    'USA': 'US',
-    'FRA': 'FR',
-    'CAN': 'CA',
-    'GBR': 'GB',
-    'DEU': 'DE',
-    'ITA': 'IT',
-    'ESP': 'ES',
-    'POL': 'PL',
-    'NLD': 'NL',
-    'BEL': 'BE',
-    'NOR': 'NO',
-    'DNK': 'DK',
-  };
-  
-  const alpha2 = alpha3ToAlpha2[countryCode.toUpperCase()];
-  if (!alpha2) return '🏳️';
-  
-  // Convert alpha-2 to flag emoji using regional indicator symbols
-  const codePoints = alpha2
-    .split('')
-    .map(char => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
 }
 
 export function ProfileBadge({ user }: ProfileBadgeProps) {
@@ -91,12 +63,17 @@ export function ProfileBadge({ user }: ProfileBadgeProps) {
               </span>
             </span>
             
-            {/* Country Badge with Real Flag and Tooltip */}
+            {/* Country Badge with SVG Flag and Tooltip */}
             <span 
               className="group/country relative inline-flex items-center px-3 py-1 rounded-lg bg-green-50 border border-green-200 cursor-help"
               title="Your country of affiliation determines releasability permissions"
             >
-              <span className="text-lg mr-1.5">{getCountryFlag(user.countryOfAffiliation)}</span>
+              <span className="mr-1.5 flex items-center">
+                {(() => {
+                  const FlagComponent = getCountryFlagComponent(user.countryOfAffiliation);
+                  return <FlagComponent size={20} />;
+                })()}
+              </span>
               <span className="text-sm font-bold text-green-900">{user.countryOfAffiliation || 'Not Set'}</span>
               {/* Tooltip */}
               <span className="invisible group-hover/country:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-10">

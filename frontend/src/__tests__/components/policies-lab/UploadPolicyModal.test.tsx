@@ -32,13 +32,11 @@ const defaultProps = {
 describe('UploadPolicyModal', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Week 4 BEST PRACTICE: Reset fetch mock to default implementation
-    (global.fetch as jest.Mock).mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        json: async () => ({}),
-      } as Response)
-    );
+    // Week 4 BEST PRACTICE: Use mockResolvedValue (allows mockResolvedValueOnce to override)
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
   });
 
   it('renders modal when open', () => {

@@ -1,22 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { LogoutListener } from "@/components/providers/logout-listener";
 import { TokenExpiryChecker } from "@/components/auth/token-expiry-checker";
 import { SessionErrorBoundary } from "@/components/auth/session-error-boundary";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const robotoMono = Roboto_Mono({
-  variable: "--font-roboto-mono",
-  subsets: ["latin"],
-  display: "swap",
-});
+/**
+ * ✅ SECURITY: Using system fonts instead of Google Fonts CDN
+ * No external dependencies for secure/air-gapped environments
+ * System font stacks provide excellent cross-platform support
+ */
 
 export const metadata: Metadata = {
   // Primary Metadata
@@ -140,7 +133,7 @@ export default function RootLayout({
     <html lang="en">
       <body
         suppressHydrationWarning
-        className={`${inter.variable} ${robotoMono.variable} antialiased`}
+        className="antialiased"
       >
         <SessionErrorBoundary>
           <Providers>
