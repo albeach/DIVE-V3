@@ -23,7 +23,7 @@ jobs:
           MONGO_INITDB_ROOT_PASSWORD: password
           MONGO_INITDB_DATABASE: dive-v3-test
         options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-cmd "mongosh -u admin -p password --authenticationDatabase admin --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
