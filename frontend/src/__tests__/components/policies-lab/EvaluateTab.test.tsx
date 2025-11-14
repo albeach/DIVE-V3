@@ -32,13 +32,12 @@ const mockPolicies = [
 describe('EvaluateTab', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Week 4 BEST PRACTICE: Provide default fetch implementation
-    (global.fetch as jest.Mock).mockImplementation(() =>
-      Promise.resolve({
-        ok: true,
-        json: async () => ({ policies: [] }),
-      } as Response)
-    );
+    // Week 4 BEST PRACTICE: Use mockResolvedValue (default) not mockImplementation
+    // This allows mockResolvedValueOnce() in tests to work correctly
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ policies: [] }),
+    } as Response);
   });
 
   it('renders policy selector', async () => {
@@ -230,25 +229,40 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    // Week 4 BEST PRACTICE: Use specific label, wait for policies to load
-    const policySelect = await screen.findByLabelText(/Select Policy to Evaluate/i);
+    // Week 4 BEST PRACTICE: Wait for policies to be loaded first
+    await waitFor(() => {
+      expect(screen.getByText('Test Rego Policy (REGO) - dive.lab.test')).toBeInTheDocument();
+    });
+
+    // Now select the policy
+    const policySelect = screen.getByLabelText(/Select Policy to Evaluate/i);
     fireEvent.change(policySelect, { target: { value: 'policy-123' } });
 
-    const evaluateButton = await screen.findByText('Evaluate Policy');
+    // Wait for button to be enabled (React state update)
+    await waitFor(() => {
+      const evaluateButton = screen.getByText('Evaluate Policy') as HTMLButtonElement;
+      expect(evaluateButton).not.toBeDisabled();
+    });
+    
+    const evaluateButton = screen.getByText('Evaluate Policy');
     fireEvent.click(evaluateButton);
 
+    // Wait for fetch to be called (2nd time - first was for loading policies)
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/policies-lab/policy-123/evaluate',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json'
-          }),
-          body: expect.any(String)
-        })
-      );
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
+
+    // Verify it was called with correct endpoint
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/policies-lab/policy-123/evaluate',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json'
+        }),
+        body: expect.any(String)
+      })
+    );
   });
 
   it('displays error message on evaluation failure', async () => {
@@ -268,11 +282,22 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    // Week 4 BEST PRACTICE: Use specific label, wait for async load
-    const policySelect = await screen.findByLabelText(/Select Policy to Evaluate/i);
+    // Week 4 BEST PRACTICE: Wait for policies to be loaded in dropdown
+    await waitFor(() => {
+      expect(screen.getByText('Test Rego Policy (REGO) - dive.lab.test')).toBeInTheDocument();
+    });
+
+    // Now select the policy
+    const policySelect = screen.getByLabelText(/Select Policy to Evaluate/i);
     fireEvent.change(policySelect, { target: { value: 'policy-123' } });
 
-    const evaluateButton = await screen.findByText('Evaluate Policy');
+    // Wait for button to be enabled
+    await waitFor(() => {
+      const evaluateButton = screen.getByText('Evaluate Policy') as HTMLButtonElement;
+      expect(evaluateButton).not.toBeDisabled();
+    });
+    
+    const evaluateButton = screen.getByText('Evaluate Policy');
     fireEvent.click(evaluateButton);
 
     await waitFor(() => {
@@ -302,17 +327,22 @@ describe('EvaluateTab', () => {
       </SessionProvider>
     );
 
-    // Week 4 BEST PRACTICE: Use specific aria-labels
+    // Week 4 BEST PRACTICE: Default state has ['USA'] already checked
+    // Test should verify toggle behavior correctly
     const usaCheckbox = screen.getByRole('checkbox', { name: 'Releasability: USA' });
     const gbrCheckbox = screen.getByRole('checkbox', { name: 'Releasability: GBR' });
 
-    fireEvent.click(usaCheckbox);
+    // USA is already checked by default, GBR is not
+    expect(usaCheckbox).toBeChecked();
+    expect(gbrCheckbox).not.toBeChecked();
+
+    // Click to add GBR (USA remains checked)
     fireEvent.click(gbrCheckbox);
 
-    // Wait for React state updates
+    // Wait for React state update
     await waitFor(() => {
-      expect(usaCheckbox).toBeChecked();
-      expect(gbrCheckbox).toBeChecked();
+      expect(usaCheckbox).toBeChecked();  // Still checked
+      expect(gbrCheckbox).toBeChecked();  // Now checked
     });
   });
 
