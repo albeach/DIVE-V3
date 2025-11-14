@@ -10,8 +10,11 @@ import {
     initializeThemesCollection,
     idpThemeService
 } from '../idp-theme.service';
-import path from 'path';
 import fs from 'fs/promises';
+
+// Mock file system operations (unit tests should never touch real file system)
+jest.mock('fs/promises');
+const mockedFs = fs as jest.Mocked<typeof fs>;
 
 describe('IdP Theme Service', () => {
     let mongoClient: MongoClient;
@@ -41,6 +44,15 @@ describe('IdP Theme Service', () => {
         }
     });
 
+    beforeEach(() => {
+        // Mock all file system operations
+        mockedFs.mkdir = jest.fn().mockResolvedValue(undefined);
+        mockedFs.writeFile = jest.fn().mockResolvedValue(undefined);
+        mockedFs.access = jest.fn().mockResolvedValue(undefined);
+        mockedFs.rm = jest.fn().mockResolvedValue(undefined);
+        mockedFs.readdir = jest.fn().mockResolvedValue([]);
+    });
+
     afterEach(async () => {
         try {
             // Clear collection after each test if connection is still open
@@ -52,6 +64,9 @@ describe('IdP Theme Service', () => {
             // Ignore errors if connection closed
             console.log('AfterEach cleanup skipped (connection may be closed)');
         }
+        
+        // Clear mocks
+        jest.clearAllMocks();
     });
 
     describe('getTheme', () => {
@@ -248,16 +263,7 @@ describe('IdP Theme Service', () => {
     });
 
     describe('uploadThemeAsset', () => {
-        const uploadsDir = path.join(process.cwd(), 'uploads', 'idp-themes');
-
-        afterEach(async () => {
-            // Cleanup uploads
-            try {
-                await fs.rm(uploadsDir, { recursive: true, force: true });
-            } catch (error) {
-                // Ignore errors
-            }
-        });
+        // No afterEach cleanup needed - file system is mocked
 
         it('should upload background image successfully', async () => {
             const mockImage = Buffer.from('fake-image-data');
@@ -270,11 +276,13 @@ describe('IdP Theme Service', () => {
             );
 
             expect(url).toBe('/uploads/idp-themes/test-idp/background.jpg');
-
-            // Verify file exists
-            const filepath = path.join(uploadsDir, 'test-idp', 'background.jpg');
-            const exists = await fs.access(filepath).then(() => true).catch(() => false);
-            expect(exists).toBe(true);
+            
+            // Verify file system operations were called
+            expect(mockedFs.mkdir).toHaveBeenCalled();
+            expect(mockedFs.writeFile).toHaveBeenCalledWith(
+                expect.stringContaining('background.jpg'),
+                mockImage
+            );
         });
 
         it('should upload logo successfully', async () => {
@@ -288,11 +296,13 @@ describe('IdP Theme Service', () => {
             );
 
             expect(url).toBe('/uploads/idp-themes/test-idp/logo.png');
-
-            // Verify file exists
-            const filepath = path.join(uploadsDir, 'test-idp', 'logo.png');
-            const exists = await fs.access(filepath).then(() => true).catch(() => false);
-            expect(exists).toBe(true);
+            
+            // Verify file system operations were called
+            expect(mockedFs.mkdir).toHaveBeenCalled();
+            expect(mockedFs.writeFile).toHaveBeenCalledWith(
+                expect.stringContaining('logo.png'),
+                mockImage
+            );
         });
 
         it('should create directory if it does not exist', async () => {
@@ -305,9 +315,11 @@ describe('IdP Theme Service', () => {
                 'background'
             );
 
-            const dirPath = path.join(uploadsDir, 'new-idp');
-            const exists = await fs.access(dirPath).then(() => true).catch(() => false);
-            expect(exists).toBe(true);
+            // Verify mkdir was called to create directory
+            expect(mockedFs.mkdir).toHaveBeenCalledWith(
+                expect.stringContaining('new-idp'),
+                expect.objectContaining({ recursive: true })
+            );
         });
     });
 
@@ -373,18 +385,13 @@ describe('IdP Theme Service', () => {
 
     describe('deleteThemeAssets', () => {
         it('should delete asset directory successfully', async () => {
-            const uploadsDir = path.join(process.cwd(), 'uploads', 'idp-themes', 'test-idp');
-            
-            // Create directory and files
-            await fs.mkdir(uploadsDir, { recursive: true });
-            await fs.writeFile(path.join(uploadsDir, 'background.jpg'), 'test');
-            await fs.writeFile(path.join(uploadsDir, 'logo.png'), 'test');
-
             await idpThemeService.deleteThemeAssets('test-idp');
 
-            // Verify directory deleted
-            const exists = await fs.access(uploadsDir).then(() => true).catch(() => false);
-            expect(exists).toBe(false);
+            // Verify rm was called to delete directory
+            expect(mockedFs.rm).toHaveBeenCalledWith(
+                expect.stringContaining('test-idp'),
+                expect.objectContaining({ recursive: true, force: true })
+            );
         });
 
         it('should not throw if directory does not exist', async () => {

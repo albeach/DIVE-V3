@@ -18,6 +18,7 @@ import app from '../../server';
 import { createE2EJWT } from '../helpers/mock-jwt-rs256';
 import { mockKeycloakJWKS, cleanupJWKSMock } from '../helpers/mock-jwks';
 import { mockOPAServer, cleanupOPAMock } from '../helpers/mock-opa-server';
+import { seedTestData } from '../helpers/seed-test-data';
 
 // MongoDB is ALWAYS available via MongoDB Memory Server (globalSetup)
 // No need for conditional test suites anymore!
@@ -25,6 +26,10 @@ import { mockOPAServer, cleanupOPAMock } from '../helpers/mock-opa-server';
 describe('Authorization E2E Tests - 10 Countries (requires seeded database)', () => {
     // Mock Keycloak JWKS endpoint and OPA server before all tests
     beforeAll(async () => {
+        // Re-seed test data to ensure it's available (idempotent)
+        const mongoUrl = process.env.MONGODB_URL || process.env.MONGODB_URI!;
+        await seedTestData(mongoUrl);
+        
         await mockKeycloakJWKS();
         mockOPAServer();            // Mock OPA for authorization decisions
     });
