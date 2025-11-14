@@ -23,8 +23,8 @@ describe('Multi-KAS Support', () => {
         db = mongoClient.db(DB_NAME);
 
         // Seed required COI keys for tests
+        // BEST PRACTICE: Don't delete global test data - just upsert what we need
         const coiKeysCollection = db.collection('coi_keys');
-        await coiKeysCollection.deleteMany({}); // Clear existing test data
 
         const coiKeys = [
             {
@@ -121,13 +121,20 @@ describe('Multi-KAS Support', () => {
             }
         ];
 
-        // Insert COI keys to MongoDB
-        await coiKeysCollection.insertMany(coiKeys);
+        // Upsert COI keys to MongoDB (idempotent - won't conflict with global seed)
+        const operations = coiKeys.map(coi => ({
+            updateOne: {
+                filter: { coiId: coi.coiId },
+                update: { $set: coi },
+                upsert: true
+            }
+        }));
+        await coiKeysCollection.bulkWrite(operations);
     });
 
     afterAll(async () => {
-        // Clean up test data  
-        await db.collection('coi_keys').deleteMany({ coiId: { $in: ['US-ONLY', 'CAN-US', 'GBR-US', 'FVEY', 'NATO', 'NATO-COSMIC'] } });
+        // BEST PRACTICE: Let globalTeardown handle cleanup
+        // Don't delete COI keys here as async operations may still need them
         await mongoClient.close();
     });
 
