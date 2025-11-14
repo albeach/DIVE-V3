@@ -173,7 +173,9 @@ describe('PolicyListTab', () => {
     fireEvent.click(viewButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Policy ID:/i)).toBeInTheDocument();
+      // Use getAllByText since "Policy ID:" appears multiple times in the DOM
+      const policyIdTexts = screen.getAllByText(/Policy ID:/i);
+      expect(policyIdTexts.length).toBeGreaterThan(0);
       expect(screen.getByText(/Use this policy ID in the/i)).toBeInTheDocument();
     });
   });

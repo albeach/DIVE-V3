@@ -77,7 +77,8 @@ describe('ResultsComparator', () => {
     render(<ResultsComparator result={mockOPAResult} />);
 
     expect(screen.getByText(/Clearance Policy/i)).toBeInTheDocument();
-    expect(screen.getByText('(REGO)')).toBeInTheDocument();
+    // Policy type is rendered inline with policy name, check for it in the text content
+    expect(screen.getByText(/\(REGO\)/i)).toBeInTheDocument();
   });
 
   it('displays OPA decision badge correctly', () => {
