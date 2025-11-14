@@ -68,7 +68,7 @@ jobs:
         run: cd frontend && npx playwright install --with-deps chromium
       
       - name: Run Authentication E2E Tests
-        run: cd frontend && npx playwright test --grep "@authentication"
+        run: cd frontend && npx playwright test src/__tests__/e2e/mfa-complete-flow.spec.ts src/__tests__/e2e/mfa-conditional.spec.ts src/__tests__/e2e/external-idp-federation-flow.spec.ts
         env:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e
@@ -148,7 +148,7 @@ jobs:
           curl -f http://localhost:8181/health || (cat opa.log && exit 1)
       
       - name: Run Authorization E2E Tests
-        run: cd frontend && npx playwright test --grep "@authorization"
+        run: cd frontend && npx playwright test src/__tests__/e2e/identity-drawer.spec.ts
         env:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e
@@ -221,7 +221,7 @@ jobs:
         run: cd frontend && npx playwright install --with-deps chromium
       
       - name: Run Classification Equivalency E2E Tests
-        run: cd frontend && npx playwright test --grep "@classification"
+        run: cd frontend && npx playwright test src/__tests__/e2e/classification-equivalency.spec.ts src/__tests__/e2e/integration-federation-vs-object.spec.ts
         env:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e
@@ -301,7 +301,7 @@ jobs:
           curl -f http://localhost:8181/health || (cat opa.log && exit 1)
       
       - name: Run Resource Management E2E Tests
-        run: cd frontend && npx playwright test --grep "@resources"
+        run: cd frontend && npx playwright test src/__tests__/e2e/policies-lab.spec.ts src/__tests__/e2e/nato-expansion.spec.ts src/__tests__/e2e/idp-management-revamp.spec.ts tests/e2e/sp-registry.spec.ts
         env:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e
