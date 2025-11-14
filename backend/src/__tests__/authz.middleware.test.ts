@@ -7,9 +7,9 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import axios from 'axios';
-import { authzMiddleware, authenticateJWT, clearAuthzCaches } from '../middleware/authz.middleware';
+import { authzMiddleware, authenticateJWT, clearAuthzCaches, initializeJwtService } from '../middleware/authz.middleware';
 import { getResourceById } from '../services/resource.service';
 import { createMockJWT, createUSUserJWT, createExpiredJWT } from './helpers/mock-jwt';
 import { mockOPAAllow, mockOPADeny, mockOPADenyInsufficientClearance, mockOPAAllowWithKASObligation } from './helpers/mock-opa';
@@ -19,6 +19,56 @@ import { TEST_RESOURCES } from './helpers/test-fixtures';
 jest.mock('axios');
 jest.mock('../services/resource.service');
 jest.mock('jwk-to-pem');
+
+// Mock token blacklist service (Week 4: This was the missing mock causing 401 errors!)
+jest.mock('../services/token-blacklist.service', () => ({
+    isTokenBlacklisted: jest.fn().mockResolvedValue(false),
+    areUserTokensRevoked: jest.fn().mockResolvedValue(false)
+}));
+
+// Week 4 BEST PRACTICE: Dependency Injection (not module mocking)
+// Store default mock implementation for resetting between tests
+const defaultJwtVerifyImpl = (token: any, _key: any, options: any, callback: any) => {
+    // Validate token like real jwt.verify would
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+            return callback(new Error('invalid token'), null);
+        }
+
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+
+        // Validate issuer if specified (FAL2 requirement)
+        if (options?.issuer) {
+            const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
+            if (!validIssuers.includes(payload.iss)) {
+                return callback(new Error('jwt issuer invalid'), null);
+            }
+        }
+
+        // Validate audience if specified (FAL2 requirement)
+        if (options?.audience) {
+            const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+            const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
+            const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
+            if (!hasValidAudience) {
+                return callback(new Error('jwt audience invalid'), null);
+            }
+        }
+
+        // Return the decoded payload
+        callback(null, payload);
+    } catch (error) {
+        callback(error, null);
+    }
+};
+
+// Create mock JWT service that will be injected into middleware
+const mockJwtService = {
+    verify: jest.fn(defaultJwtVerifyImpl),
+    decode: jwt.decode,  // Use real decode
+    sign: jwt.sign       // Use real sign
+};
 
 // Mock logger module
 jest.mock('../utils/logger', () => ({
@@ -49,6 +99,9 @@ jest.mock('../utils/acp240-logger', () => ({
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 const mockedGetResourceById = getResourceById as jest.MockedFunction<typeof getResourceById>;
 
+// Initialize JWT service with mocks IMMEDIATELY (not in beforeAll)
+initializeJwtService(mockJwtService as any);
+
 // Import jwk-to-pem after mocking
 import jwkToPem from 'jwk-to-pem';
 
@@ -63,6 +116,9 @@ describe('Authorization Middleware (PEP)', () => {
 
         // Reset mocks
         jest.clearAllMocks();
+        
+        // Week 4: Reset JWT mock to default implementation (for test isolation)
+        mockJwtService.verify.mockImplementation(defaultJwtVerifyImpl);
 
         // Setup request mock
         req = {
@@ -100,63 +156,8 @@ describe('Authorization Middleware (PEP)', () => {
         // Mock jwk-to-pem to return a fake public key
         (jwkToPem as jest.MockedFunction<typeof jwkToPem>).mockReturnValue('-----BEGIN PUBLIC KEY-----\nMOCK_PUBLIC_KEY\n-----END PUBLIC KEY-----');
 
-        // Mock jwt.decode to return proper token structure
-        jest.spyOn(jwt, 'decode').mockReturnValue({
-            header: {
-                kid: 'test-key-id',
-                alg: 'RS256',
-                typ: 'JWT'
-            },
-            payload: {
-                sub: 'testuser-us',
-                uniqueID: 'testuser-us',
-                clearance: 'SECRET',
-                countryOfAffiliation: 'USA',
-                acpCOI: ['FVEY']
-            },
-            signature: 'mock-signature'
-        } as any);
-
-        // Mock jwt.verify - decode actual token and validate audience
-        jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
-            try {
-                // Manually decode JWT by parsing base64 payload (jwt.decode is also mocked)
-                const parts = token.split('.');
-                if (parts.length !== 3) {
-                    callback(new Error('invalid token'), null);
-                    return;
-                }
-
-                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-
-                // Validate issuer if specified (FAL2 requirement)
-                // Session expiration fix (Oct 21): Handle array issuers for multi-realm support
-                if (options?.issuer) {
-                    const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
-                    if (!validIssuers.includes(payload.iss)) {
-                        callback(new Error('jwt issuer invalid'), null);
-                        return;
-                    }
-                }
-
-                // Validate audience if specified (FAL2 requirement)
-                // Session expiration fix (Oct 21): Handle array audiences for multi-realm support
-                if (options?.audience) {
-                    const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                    const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-                    const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
-                    if (!hasValidAudience) {
-                        callback(new Error('jwt audience invalid'), null);
-                        return;
-                    }
-                }
-
-                // Return the decoded payload (has aud, acr, amr, auth_time)
-                callback(null, payload);
-            } catch (error) {
-                callback(new Error('invalid token'), null);
-            }
-        }) as any);
+        // Week 4: mockJwtService is already configured with proper implementation (no need to reconfigure here)
+        // The dependency injection pattern provides the mock at module level
 
         // Mock OPA responses - default to allow
         mockedAxios.post.mockResolvedValue({
@@ -176,7 +177,7 @@ describe('Authorization Middleware (PEP)', () => {
             req.headers!.authorization = `Bearer ${token}`;
 
             // Mock JWT verification
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
                     sub: 'testuser-us',
                     uniqueID: 'testuser-us',
@@ -221,7 +222,7 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createExpiredJWT();
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(new Error('jwt expired'), null);
             });
 
@@ -238,7 +239,7 @@ describe('Authorization Middleware (PEP)', () => {
         it('should reject JWT with invalid signature', async () => {
             req.headers!.authorization = 'Bearer invalid.jwt.signature';
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(new Error('invalid signature'), null);
             });
 
@@ -254,7 +255,7 @@ describe('Authorization Middleware (PEP)', () => {
             });
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(new Error('jwt issuer invalid'), null);
             });
 
@@ -268,7 +269,7 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT({ acpCOI: ['FVEY', 'NATO-COSMIC'] });
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
                     sub: 'testuser-us',
                     uniqueID: 'testuser-us',
@@ -289,7 +290,7 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
 
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
                     sub: 'testuser-us',
                     uniqueID: 'testuser-us',
@@ -339,47 +340,8 @@ describe('Authorization Middleware (PEP)', () => {
             // Reset next mock
             next = jest.fn();
 
-            // Reset JWT mocks for authz tests - decode actual token and validate audience/issuer
-            // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
-            jest.spyOn(jwt, 'verify').mockImplementation(((token: any, _key: any, options: any, callback: any) => {
-                try {
-                    // Manually decode JWT by parsing base64 payload
-                    const parts = token.split('.');
-                    if (parts.length !== 3) {
-                        callback(new Error('invalid token'), null);
-                        return;
-                    }
-
-                    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-
-                    // Validate issuer if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid issuers
-                    if (options?.issuer) {
-                        const validIssuers = Array.isArray(options.issuer) ? options.issuer : [options.issuer];
-                        if (!validIssuers.includes(payload.iss)) {
-                            callback(new Error('jwt issuer invalid'), null);
-                            return;
-                        }
-                    }
-
-                    // Validate audience if specified (FAL2 requirement)
-                    // Multi-realm support: Handle array of valid audiences
-                    if (options?.audience) {
-                        const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-                        const validAudiences = Array.isArray(options.audience) ? options.audience : [options.audience];
-                        const hasValidAudience = tokenAud.some((aud: string) => validAudiences.includes(aud));
-                        if (!hasValidAudience) {
-                            callback(new Error('jwt audience invalid'), null);
-                            return;
-                        }
-                    }
-
-                    // Return the decoded payload
-                    callback(null, payload);
-                } catch (error) {
-                    callback(new Error('invalid token'), null);
-                }
-            }) as any);
+            // Week 4: mockJwtService configuration is done at module level via dependency injection
+            // No need to reconfigure here - keeps tests clean and follows best practice
 
             // Clear call history on service mocks (will be set per test)
             mockedGetResourceById.mockClear();
@@ -788,7 +750,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             // Decode actual token and validate audience/issuer
             // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
-            jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
+            mockJwtService.verify.mockImplementation((token: any, _key: any, options: any, callback: any) => {
                 try {
                     // Manually decode JWT by parsing base64 payload
                     const parts = token.split('.');
@@ -829,7 +791,7 @@ describe('Authorization Middleware (PEP)', () => {
         });
 
         it('should handle missing clearance attribute', async () => {
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
                     sub: 'testuser-us',
                     uniqueID: 'testuser-us',
@@ -854,7 +816,7 @@ describe('Authorization Middleware (PEP)', () => {
         });
 
         it('should handle missing countryOfAffiliation attribute', async () => {
-            jest.spyOn(jwt, 'verify').mockImplementation((_token, _key, _options, callback: any) => {
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
                     sub: 'testuser-us',
                     uniqueID: 'testuser-us',
@@ -936,7 +898,7 @@ describe('Authorization Middleware (PEP)', () => {
 
             // Decode actual token and validate audience/issuer
             // Session expiration fix (Oct 21): Handle array audiences AND issuers for multi-realm
-            jest.spyOn(jwt, 'verify').mockImplementation((token: any, _key: any, options: any, callback: any) => {
+            mockJwtService.verify.mockImplementation((token: any, _key: any, options: any, callback: any) => {
                 try {
                     // Manually decode JWT by parsing base64 payload
                     const parts = token.split('.');
