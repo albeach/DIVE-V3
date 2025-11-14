@@ -57,7 +57,8 @@ describe('UploadPolicyModal', () => {
       </SessionProvider>
     );
 
-    expect(screen.getByText(/Upload a file/i)).toBeInTheDocument();
+    // Check for the actual dropzone text that's rendered
+    expect(screen.getByText(/Click here or drag and drop/i)).toBeInTheDocument();
     expect(screen.getByText(/\.rego or \.xml up to 256KB/i)).toBeInTheDocument();
   });
 
