@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import axios from 'axios';
 import NodeCache from 'node-cache';
 import jwkToPem from 'jwk-to-pem';
@@ -14,6 +14,30 @@ import { IRequestWithSP } from '../types/sp-federation.types';
 // ============================================
 // Week 2: Integrate OPA for ABAC authorization
 // Pattern: Validate JWT → Extract attributes → Fetch resource → Call OPA → Enforce decision
+
+// ============================================
+// Week 4: Dependency Injection for Testability
+// ============================================
+// BEST PRACTICE: Allow jwt service injection for testing
+// Pattern from Week 3 OAuth controller refactor
+interface IJwtService {
+    verify: (...args: any[]) => any;
+    decode: (...args: any[]) => any;
+    sign: (...args: any[]) => any;
+}
+
+// Module-level jwt service (can be replaced for testing)
+let jwtService: IJwtService = jwt;
+
+/**
+ * Initialize JWT service (for testing)
+ * Allows tests to inject mock JWT verification
+ * @param service - Custom JWT service implementation
+ * @internal
+ */
+export const initializeJwtService = (service?: IJwtService): void => {
+    jwtService = service || jwt;
+};
 
 // Decision cache (60s TTL)
 const decisionCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
@@ -153,7 +177,7 @@ interface IOPADecision {
  */
 const getRealmFromToken = (token: string): string => {
     try {
-        const decoded = jwt.decode(token, { complete: true });
+        const decoded = jwtService.decode(token, { complete: true });
         if (!decoded || !decoded.payload) {
             return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
         }
@@ -292,7 +316,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 const verifyToken = async (token: string): Promise<IKeycloakToken> => {
     try {
         // First decode the header to get the kid
-        const decoded = jwt.decode(token, { complete: true });
+        const decoded = jwtService.decode(token, { complete: true });
         if (!decoded || !decoded.header) {
             throw new Error('Invalid token format');
         }
@@ -308,7 +332,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
             // Verify HS256 token with shared secret (test only)
             return new Promise((resolve, reject) => {
-                jwt.verify(
+                jwtService.verify(
                     token,
                     jwtSecret,
                     {
@@ -444,7 +468,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
         // Verify the token with the public key
         return new Promise((resolve, reject) => {
-            jwt.verify(
+            jwtService.verify(
                 token,
                 publicKey,
                 {
@@ -455,7 +479,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
                 (err: any, decoded: any) => {
                     if (err) {
                         // Enhanced error logging: show actual issuer received
-                        logger.error('JWT verification failed in jwt.verify', {
+                        logger.error('JWT verification failed in jwtService.verify', {
                             error: err.message,
                             actualIssuer: actualIssuer,
                             expectedIssuers: validIssuers.slice(0, 5), // Log first 5 to avoid huge logs
