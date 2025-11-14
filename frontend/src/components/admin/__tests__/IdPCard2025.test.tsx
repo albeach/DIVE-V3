@@ -98,8 +98,9 @@ describe('IdPCard2025', () => {
     it('should apply selected styles when selected prop is true', () => {
         render(<IdPCard2025 idp={mockIdP} selected={true} />);
 
-        const card = screen.getByText('USA DoD Login').closest('div');
-        expect(card?.className).toContain('ring-2');
+        // Week 4 BEST PRACTICE: Use data-testid for specific element selection
+        const card = screen.getByTestId('idp-card-usa-realm-broker');
+        expect(card.className).toContain('ring-2');
     });
 
     it('should render protocol badge correctly', () => {

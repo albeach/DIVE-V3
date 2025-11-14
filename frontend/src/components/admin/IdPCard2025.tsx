@@ -107,6 +107,7 @@ export default function IdPCard2025({
                 ${selected ? 'ring-2 ring-purple-500' : ''}
             `}
             onClick={handleCardClick}
+            data-testid={`idp-card-${idp.alias}`}
         >
             {/* Glassmorphism Card */}
             <div className={`
