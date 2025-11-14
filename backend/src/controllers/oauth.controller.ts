@@ -15,8 +15,22 @@ import fs from 'fs';
 import path from 'path';
 
 const router = Router();
-const spService = new SPManagementService();
-const authCodeService = new AuthorizationCodeService();
+
+// Dependency injection - allow test overrides (BEST PRACTICE)
+let spService: SPManagementService;
+let authCodeService: AuthorizationCodeService;
+
+// Initialize services (can be overridden in tests)
+export function initializeServices(
+  spServiceInstance?: SPManagementService,
+  authCodeServiceInstance?: AuthorizationCodeService
+) {
+  spService = spServiceInstance || new SPManagementService();
+  authCodeService = authCodeServiceInstance || new AuthorizationCodeService();
+}
+
+// Initialize with default instances
+initializeServices();
 
 /**
  * Get JWT signing keys

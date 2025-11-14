@@ -7,13 +7,22 @@ import request from 'supertest';
 import app from '../server';
 import { SPManagementService } from '../services/sp-management.service';
 import { AuthorizationCodeService } from '../services/authorization-code.service';
+import { initializeServices } from '../controllers/oauth.controller';
 import { generateCodeVerifier, generateCodeChallenge } from '../utils/oauth.utils';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
-// Mock services
+// Mock services (BEST PRACTICE - following authz.middleware.test.ts pattern)
 jest.mock('../services/sp-management.service');
 jest.mock('../services/authorization-code.service');
+
+// Get mocked service classes
+const MockedSPManagementService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
+const MockedAuthorizationCodeService = AuthorizationCodeService as jest.MockedClass<typeof AuthorizationCodeService>;
+
+// Create mock instances that will be injected
+const mockSPServiceInstance = new MockedSPManagementService();
+const mockAuthCodeServiceInstance = new MockedAuthorizationCodeService();
 
 describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
   const mockSP = {
@@ -28,8 +37,27 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
     requirePKCE: true,
     allowedScopes: ['resource:read', 'resource:search'],
     allowedGrantTypes: ['authorization_code', 'client_credentials', 'refresh_token'],
-    status: 'ACTIVE' as const
+    status: 'ACTIVE' as const,
+    // Additional required fields for IExternalSP
+    technicalContact: { name: 'Test Admin', email: 'admin@test.mil' },
+    tokenEndpointAuthMethod: 'client_secret_basic' as const,
+    attributeRequirements: { clearance: true, country: true },
+    rateLimit: { requestsPerMinute: 60, burstSize: 10 },
+    federationAgreements: [{
+      agreementId: 'TEST-001',
+      countries: ['USA'],
+      classifications: ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET'],
+      validUntil: new Date('2026-12-31')
+    }],
+    createdAt: new Date('2025-01-01'),
+    updatedAt: new Date('2025-01-01'),
+    approvedBy: 'admin-user'
   };
+
+  beforeAll(() => {
+    // Initialize controller with mocked service instances (DEPENDENCY INJECTION)
+    initializeServices(mockSPServiceInstance, mockAuthCodeServiceInstance);
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -38,13 +66,11 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
   describe('OWASP OAuth 2.0 Security Checklist', () => {
     describe('1. Authorization Code Injection', () => {
       it('should reject authorization code from different client', async () => {
-        const mockAuthCodeService = AuthorizationCodeService as jest.MockedClass<typeof AuthorizationCodeService>;
-        mockAuthCodeService.prototype.validateAndConsumeCode = jest.fn().mockRejectedValue(
+        // Configure mocked instance methods (cast to jest.fn)
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
+        (mockAuthCodeServiceInstance.validateAndConsumeCode as jest.Mock).mockRejectedValue(
           new Error('invalid_grant: Authorization code was issued to another client')
         );
-
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -63,13 +89,11 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should validate redirect URI matches original request', async () => {
-        const mockAuthCodeService = AuthorizationCodeService as jest.MockedClass<typeof AuthorizationCodeService>;
-        mockAuthCodeService.prototype.validateAndConsumeCode = jest.fn().mockRejectedValue(
+        // Configure singleton mock methods
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
+        (mockAuthCodeServiceInstance.validateAndConsumeCode as jest.Mock).mockRejectedValue(
           new Error('invalid_grant: Redirect URI mismatch')
         );
-
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -90,8 +114,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('2. PKCE Downgrade Attack', () => {
       it('should require PKCE for clients that mandate it', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -112,8 +135,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should reject plain challenge method for clients requiring PKCE', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -136,8 +158,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
         const wrongVerifier = generateCodeVerifier();
         const challenge = generateCodeChallenge(correctVerifier);
 
-        const mockAuthCodeService = AuthorizationCodeService as jest.MockedClass<typeof AuthorizationCodeService>;
-        mockAuthCodeService.prototype.validateAndConsumeCode = jest.fn().mockResolvedValue({
+        (mockAuthCodeServiceInstance.validateAndConsumeCode as jest.Mock).mockResolvedValue({
           clientId: mockSP.clientId,
           userId: 'test-user',
           scope: 'resource:read',
@@ -147,8 +168,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
           expiresAt: new Date(Date.now() + 60000)
         });
 
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -171,13 +191,11 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('3. Token Replay Attacks', () => {
       it('should reject reused authorization codes', async () => {
-        const mockAuthCodeService = AuthorizationCodeService as jest.MockedClass<typeof AuthorizationCodeService>;
-        mockAuthCodeService.prototype.validateAndConsumeCode = jest.fn().mockRejectedValue(
+        (mockAuthCodeServiceInstance.validateAndConsumeCode as jest.Mock).mockRejectedValue(
           new Error('invalid_grant: Authorization code already used')
         );
 
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -198,8 +216,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should include jti (JWT ID) in tokens', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const tokenResponse = await request(app)
           .post('/oauth/token')
@@ -219,8 +236,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should enforce token expiration', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const tokenResponse = await request(app)
           .post('/oauth/token')
@@ -243,8 +259,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('4. Open Redirect Vulnerabilities', () => {
       it('should reject non-registered redirect URIs', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -263,8 +278,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should require exact redirect URI match (no wildcards)', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -288,8 +302,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
           redirectUris: ['http://test-sp.example.com/callback'] // HTTP
         };
 
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(httpSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(httpSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -324,8 +337,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should reject incorrect client secret', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -344,8 +356,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should support HTTP Basic authentication', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -360,8 +371,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should use constant-time comparison for secrets', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const start = Date.now();
         await request(app)
@@ -383,8 +393,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('6. Scope Validation', () => {
       it('should reject unauthorized scopes', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -404,8 +413,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should validate scope format', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .post('/oauth/token')
@@ -421,8 +429,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should enforce scope in token introspection', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         // Get token with limited scope
         const tokenResponse = await request(app)
@@ -452,8 +459,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('7. State Parameter (CSRF Protection)', () => {
       it('should require state parameter for authorization requests', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -473,8 +479,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should validate state is sufficiently random', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const response = await request(app)
           .get('/oauth/authorize')
@@ -526,8 +531,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should use secure token generation', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const tokenResponse = await request(app)
           .post('/oauth/token')
@@ -552,8 +556,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('9. Refresh Token Security', () => {
       it('should implement refresh token rotation', async () => {
-        const mockAuthCodeService = AuthorizationCodeService as jest.MockedClass<typeof AuthorizationCodeService>;
-        mockAuthCodeService.prototype.validateAndConsumeCode = jest.fn().mockResolvedValue({
+        (mockAuthCodeServiceInstance.validateAndConsumeCode as jest.Mock).mockResolvedValue({
           clientId: mockSP.clientId,
           userId: 'test-user',
           scope: 'resource:read offline_access',
@@ -561,8 +564,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
           expiresAt: new Date(Date.now() + 60000)
         });
 
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         // Get initial tokens
         const initialResponse = await request(app)
@@ -613,8 +615,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
     describe('10. JWT Security', () => {
       it('should use RS256 algorithm (not HS256)', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const tokenResponse = await request(app)
           .post('/oauth/token')
@@ -654,8 +655,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
       });
 
       it('should include standard JWT claims', async () => {
-        const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-        mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+        (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
 
         const tokenResponse = await request(app)
           .post('/oauth/token')
@@ -685,8 +685,7 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
 
   describe('Rate Limiting Security', () => {
     beforeEach(() => {
-      const mockSPService = SPManagementService as jest.MockedClass<typeof SPManagementService>;
-      mockSPService.prototype.getByClientId = jest.fn().mockResolvedValue(mockSP);
+      (mockSPServiceInstance.getByClientId as jest.Mock).mockResolvedValue(mockSP);
     });
 
     it('should enforce rate limits on token endpoint', async () => {
