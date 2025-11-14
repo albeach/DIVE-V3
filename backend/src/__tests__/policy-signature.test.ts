@@ -214,7 +214,7 @@ describe('Policy Signature Verification - Production Grade (Three-Tier PKI)', ()
             expect(result.valid).toBe(true);
             expect(result.signatureType).toBe('x509');
             expect(result.certificateInfo).toBeDefined();
-            expect(result.certificateInfo?.subject).toContain('DIVE-V3 Policy Signer');
+            expect(result.certificateInfo?.subject).toMatch(/DIVE.?V3.*Policy Signer/);
         });
 
         test('should detect tampered policy with X.509 signature', () => {
@@ -509,9 +509,9 @@ ${Buffer.from(publicKey).toString('base64').match(/.{1,64}/g)?.join('\n')}
             expect(hierarchy.intermediate).toBeDefined();
             expect(hierarchy.signing).toBeDefined();
 
-            // Verify certificate subjects
-            expect(hierarchy.root.subject).toContain('DIVE-V3 Root CA');
-            expect(hierarchy.intermediate.subject).toContain('DIVE-V3 Intermediate CA');
+            // Verify certificate subjects (allowing for space or hyphen in DIVE V3/DIVE-V3)
+            expect(hierarchy.root.subject).toMatch(/DIVE.?V3.*Root CA/);
+            expect(hierarchy.intermediate.subject).toMatch(/DIVE.?V3.*Intermediate CA/);
             expect(hierarchy.signing.subject).toContain('Policy Signer');
         });
 
@@ -530,7 +530,7 @@ ${Buffer.from(publicKey).toString('base64').match(/.{1,64}/g)?.join('\n')}
             expect(validation.errors).toHaveLength(0);
         });
 
-        test.skip('should cache certificates for performance', async () => {
+        test('should cache certificates for performance', async () => {
             await certificateManager.initialize();
             certificateManager.clearCache(); // Start fresh
 
