@@ -59,8 +59,15 @@ describe('OAuth 2.0 Security Tests (OWASP Compliance)', () => {
     initializeServices(mockSPServiceInstance, mockAuthCodeServiceInstance);
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    
+    // Reset rate limit stores between tests for proper isolation
+    const { tokenRateLimitStore } = await import('../controllers/oauth.controller');
+    const { customLoginRateLimitStore } = await import('../controllers/auth.controller');
+    
+    await tokenRateLimitStore.resetAll();
+    await customLoginRateLimitStore.resetAll();
   });
 
   describe('OWASP OAuth 2.0 Security Checklist', () => {

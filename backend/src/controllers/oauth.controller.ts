@@ -3,9 +3,10 @@
  * Phase 1: OAuth endpoints for external Service Providers
  */
 
-import { Request, Response, Router } from 'express';
+import { Request, Response, Router, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { logger } from '../utils/logger';
 import { SPManagementService } from '../services/sp-management.service';
 import { AuthorizationCodeService } from '../services/authorization-code.service';
@@ -31,6 +32,63 @@ export function initializeServices(
 
 // Initialize with default instances
 initializeServices();
+
+/**
+ * Rate Limit Store (for testing - can be reset)
+ */
+export const tokenRateLimitStore = new MemoryStore();
+
+/**
+ * OAuth 2.0 Rate Limiting (OWASP Compliance)
+ * 
+ * Prevents brute-force attacks on token endpoint
+ * - Window: 15 minutes
+ * - Max requests: 50 per IP (configurable via env)
+ * - Response: 429 Too Many Requests
+ * 
+ * Note: Lower limit (50) for security and testability
+ * Production can override via OAUTH_RATE_LIMIT env var
+ */
+const tokenRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.OAUTH_RATE_LIMIT ? parseInt(process.env.OAUTH_RATE_LIMIT, 10) : 50,
+  message: {
+    error: 'too_many_requests',
+    error_description: 'Too many token requests from this IP, please try again later'
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  store: tokenRateLimitStore // Use exported store (can be reset in tests)
+});
+
+/**
+ * Input Validation Middleware (OWASP Compliance)
+ * 
+ * Validates request parameters don't exceed safe lengths
+ * Prevents DoS attacks via excessively large payloads
+ */
+const validateInputLengths = (req: Request, res: Response, next: NextFunction): void => {
+  const MAX_PARAM_LENGTH = 2048; // 2KB max per parameter
+  
+  // Check all body parameters
+  for (const [key, value] of Object.entries(req.body || {})) {
+    if (typeof value === 'string' && value.length > MAX_PARAM_LENGTH) {
+      logger.warn('Rejected request with excessively long parameter', {
+        parameter: key,
+        length: value.length,
+        maxLength: MAX_PARAM_LENGTH
+      });
+      
+      res.status(400).json({
+        error: 'invalid_request',
+        error_description: `Parameter '${key}' exceeds maximum length of ${MAX_PARAM_LENGTH} characters`
+      });
+      return;
+    }
+  }
+  
+  next();
+};
 
 /**
  * Get JWT signing keys
@@ -259,9 +317,13 @@ router.get('/authorize', async (req: Request, res: Response) => {
  * - authorization_code grant (with PKCE)
  * - client_credentials grant
  * - refresh_token grant
+ * 
+ * Security:
+ * - Rate limiting: 100 req/15min per IP
+ * - Input validation: Max 2048 chars per parameter
  */
 // @ts-ignore - All code paths send responses; TypeScript inference issue
-router.post('/token', async (req: Request, res: Response) => {
+router.post('/token', tokenRateLimiter, validateInputLengths, async (req: Request, res: Response) => {
   let {
     grant_type,
     code,
