@@ -87,7 +87,7 @@ jobs:
         run: |
           echo "Verifying required files..."
           
-          test -f docker compose.yml && echo "✅ docker compose.yml found" || (echo "❌ docker compose.yml missing" && exit 1)
+          test -f "docker-compose.yml" && echo "✅ docker-compose.yml found" || (echo "❌ docker-compose.yml missing" && exit 1)
           test -f scripts/deploy-dev.sh && echo "✅ deploy-dev.sh found" || (echo "❌ deploy-dev.sh missing" && exit 1)
           test -f scripts/rollback.sh && echo "✅ rollback.sh found" || (echo "❌ rollback.sh missing" && exit 1)
           test -f scripts/health-check.sh && echo "✅ health-check.sh found" || (echo "❌ health-check.sh missing" && exit 1)
