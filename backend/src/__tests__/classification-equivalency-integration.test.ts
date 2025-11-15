@@ -12,25 +12,25 @@
 import request from 'supertest';
 import app from '../server';
 import { MongoClient } from 'mongodb';
-import jwt from 'jsonwebtoken';
-import { logger } from '../utils/logger';
+import { createE2EJWT } from './helpers/mock-jwt-rs256';
+import { mockKeycloakJWKS, cleanupJWKSMock } from './helpers/mock-jwks';
+import { mockOPAServer, cleanupOPAMock } from './helpers/mock-opa-server';
 
 describe('Classification Equivalency Integration Tests (ACP-240 Section 4.3)', () => {
     let mongoClient: MongoClient;
     let db: any;
     let accessToken: string;
 
-    // Test configuration
-    const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
-    const DB_NAME = process.env.MONGODB_DATABASE || process.env.MONGO_DB_NAME || 'dive_v3_test';
-    const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+    // Test configuration - Use MongoDB Memory Server
+    const MONGO_URI = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+    const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
     beforeAll(async () => {
-        // Set environment variables for services to use same test database
-        process.env.MONGODB_DATABASE = DB_NAME;
-        process.env.MONGODB_URL = MONGO_URI;
-
-        // Connect to test database
+        // Mock Keycloak JWKS and OPA
+        await mockKeycloakJWKS();
+        mockOPAServer();
+        
+        // Connect to MongoDB Memory Server
         mongoClient = new MongoClient(MONGO_URI);
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);
@@ -59,30 +59,21 @@ describe('Classification Equivalency Integration Tests (ACP-240 Section 4.3)', (
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
-            logger.info('Seeded NATO COI key for tests with complete schema');
+            console.log('Seeded NATO COI key for tests with complete schema');
         } catch (error) {
-            logger.error('Failed to seed NATO COI key', { error });
+            console.error('Failed to seed NATO COI key', error);
             throw error; // Fail fast if seed fails
         }
 
         // Generate test JWT token (German user with GEHEIM clearance + AAL2 MFA)
-        const germanUserPayload = {
-            sub: 'hans.mueller@bundeswehr.org',
+        accessToken = createE2EJWT({
             uniqueID: 'hans.mueller@bundeswehr.org',
             clearance: 'SECRET',                    // Normalized DIVE V3 clearance
             clearanceOriginal: 'GEHEIM',            // Original German clearance
             clearanceCountry: 'DEU',                // Clearance issuing country
             countryOfAffiliation: 'DEU',
-            acpCOI: ['NATO'],
-            acr: 'urn:mace:incommon:iap:silver',    // AAL2 authentication context
-            amr: ['mfa', 'pwd'],                    // Multi-factor authentication
-            aud: 'dive-v3-client',
-            iss: 'https://keycloak.dive-v3.local',
-            iat: Math.floor(Date.now() / 1000),
-            exp: Math.floor(Date.now() / 1000) + 3600
-        };
-
-        accessToken = jwt.sign(germanUserPayload, JWT_SECRET, { algorithm: 'HS256' });
+            acpCOI: ['NATO']
+        });
     });
 
     afterAll(async () => {
@@ -90,6 +81,10 @@ describe('Classification Equivalency Integration Tests (ACP-240 Section 4.3)', (
         await db.collection('resources').deleteMany({ resourceId: /^test-classification-equiv-/ });
         await db.collection('coi_keys').deleteMany({ coiId: 'NATO' });  // Correct field name
         await mongoClient.close();
+        
+        // Clean up mocks
+        cleanupJWKSMock();
+        cleanupOPAMock();
     });
 
     describe('Test 1: Store Original Classification in ZTDF (German GEHEIM)', () => {
