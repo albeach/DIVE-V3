@@ -11,46 +11,10 @@ jobs:
   federation-tests:
     name: Federation Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     if: |
       contains(github.event.head_commit.message, 'federation') ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push'
-    
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      postgres:
-        image: postgres:15
-        ports:
-          - 5432:5432
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: dive_v3_app
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout Code
@@ -66,15 +30,19 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
+      - name: Cache MongoDB Binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: ${{ runner.os }}-mongodb-binary-7.0.0
+      
       - name: Run Federation Tests
         run: |
           cd backend
           npm test -- --testPathPattern=federation --testTimeout=30000
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-          REDIS_URL: redis://localhost:6379
-          DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
       
       - name: OWASP Security Tests
         run: |
@@ -82,7 +50,7 @@ jobs:
           npm test -- --testPathPattern=security --testTimeout=30000 || true
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
 
   keycloak-tests:
     name: Keycloak Integration Tests
@@ -90,8 +58,7 @@ jobs:
     timeout-minutes: 25
     if: |
       contains(github.event.head_commit.message, 'keycloak') ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push'
+      github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout Code

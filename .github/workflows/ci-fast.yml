@@ -9,10 +9,6 @@ on:
       - 'policies/**'
       - 'terraform/**'
       - '.github/workflows/ci-fast.yml'
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'scripts/**'
 
 jobs:
   backend-essentials:
