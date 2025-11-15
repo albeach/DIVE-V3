@@ -112,6 +112,9 @@ jobs:
   terraform-security:
     name: Terraform Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
     
     steps:
       - name: Checkout Code
@@ -132,7 +135,7 @@ jobs:
           output_file_path: checkov-report.sarif
       
       - name: Upload Checkov results
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: checkov-report.sarif
 
