@@ -10,9 +10,37 @@ import { generateCodeVerifier, generateCodeChallenge } from '../utils/oauth.util
 import { clearResourceServiceCache } from '../services/resource.service';
 import { clearAuthzCaches } from '../middleware/authz.middleware';
 
-// Mock services
+// BEST PRACTICE 2025: Mock only external dependencies, use real JWT signing
 jest.mock('../services/sp-management.service');
 jest.mock('../services/authorization-code.service');
+
+// Provide test RSA keys to OAuth controller
+jest.mock('../utils/oauth.utils', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const crypto = require('crypto');
+  
+  const testPrivateKey = fs.readFileSync(path.join(__dirname, 'keys/test-private-key.pem'), 'utf8');
+  const testPublicKey = fs.readFileSync(path.join(__dirname, 'keys/test-public-key.pem'), 'utf8');
+  
+  return {
+    getSigningKeys: () => ({
+      privateKey: testPrivateKey,
+      publicKey: testPublicKey
+    }),
+    generateCodeVerifier: () => {
+      return crypto.randomBytes(32).toString('base64url');
+    },
+    generateCodeChallenge: (verifier: string) => {
+      return crypto.createHash('sha256').update(verifier).digest('base64url');
+    },
+    validateClient: (_clientId: string, clientSecret: string | undefined, sp: any) => {
+      if (!sp || sp.status !== 'ACTIVE') return null;
+      if (sp.clientType === 'confidential' && sp.clientSecret !== clientSecret) return null;
+      return sp;
+    }
+  };
+});
 
 describe('OAuth 2.0 Integration Tests', () => {
   const mockSP = {
