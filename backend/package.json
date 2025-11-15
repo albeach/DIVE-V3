@@ -13,7 +13,7 @@
         "test:integration": "NODE_ENV=test jest --testPathPattern=integration --testTimeout=15000 --runInBand",
         "test:audit-logs": "NODE_ENV=test jest --testPathPattern=audit-log --testTimeout=15000 --runInBand",
         "test:watch": "NODE_ENV=test jest --watch",
-        "test:coverage": "NODE_ENV=test jest --coverage --testTimeout=15000 --maxWorkers=50%",
+        "test:coverage": "NODE_ENV=test jest --coverage --testTimeout=15000 --runInBand",
         "test:ci": "jest --coverage --testTimeout=15000 --runInBand --ci",
         "lint": "eslint src/**/*.ts",
         "lint:coi": "tsx src/scripts/coi-logic-lint.ts",
