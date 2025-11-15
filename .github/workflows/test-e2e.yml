@@ -51,13 +51,13 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
+          KC_HEALTH_ENABLED: true
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
           --health-retries 5
           --health-start-period 90s
-          --entrypoint "/opt/keycloak/bin/kc.sh start-dev"
     
     steps:
       - name: Checkout Code
@@ -270,13 +270,13 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
+          KC_HEALTH_ENABLED: true
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
           --health-retries 5
           --health-start-period 90s
-          --entrypoint "/opt/keycloak/bin/kc.sh start-dev"
     
     steps:
       - name: Checkout Code
@@ -439,13 +439,13 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
+          KC_HEALTH_ENABLED: true
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
           --health-retries 5
           --health-start-period 90s
-          --entrypoint "/opt/keycloak/bin/kc.sh start-dev"
     
     steps:
       - name: Checkout Code
@@ -590,13 +590,13 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
+          KC_HEALTH_ENABLED: true
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
           --health-retries 5
           --health-start-period 90s
-          --entrypoint "/opt/keycloak/bin/kc.sh start-dev"
     
     steps:
       - name: Checkout Code
