@@ -15,6 +15,45 @@ import { clearAuthzCaches } from '../middleware/authz.middleware';
 jest.mock('../services/scim.service');
 jest.mock('../services/sp-management.service');
 
+// Mock SP auth middleware for SCIM tests
+jest.mock('../middleware/sp-auth.middleware', () => ({
+    requireSPAuth: (req: any, res: any, next: any) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.status(401).json({
+                schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                status: "401",
+                detail: "Authentication required"
+            });
+            return;
+        }
+        req.sp = {
+            clientId: 'sp-gbr-scim',
+            scopes: ['scim:read', 'scim:write'],
+            sp: {
+                spId: 'SP-SCIM-001',
+                name: 'Test SCIM Provider',
+                country: 'GBR',
+                clientId: 'sp-gbr-scim',
+                status: 'ACTIVE'
+            }
+        };
+        next();
+    },
+    requireSPScope: (scope: string) => (req: any, res: any, next: any) => {
+        const spContext = req.sp;
+        if (!spContext || !spContext.scopes.includes(scope)) {
+            res.status(403).json({
+                schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+                status: "403",
+                detail: "Insufficient scope"
+            });
+            return;
+        }
+        next();
+    }
+}));
+
 describe('SCIM 2.0 Integration Tests', () => {
   const mockSP = {
     spId: 'SP-SCIM-001',
@@ -78,8 +117,8 @@ describe('SCIM 2.0 Integration Tests', () => {
       expect(response.body).toMatchObject({
         schemas: ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
         patch: { supported: true },
-        bulk: { supported: false },
-        filter: { supported: true, maxResults: 200 },
+        bulk: { supported: true },
+        filter: { supported: true, maxResults: 1000 },
         changePassword: { supported: false },
         sort: { supported: true },
         etag: { supported: false },
