@@ -10,7 +10,16 @@ import { ISCIMUser, ISCIMListResponse, ISCIMError } from '../types/sp-federation
 import { authenticateJWT } from '../middleware/authz.middleware';
 
 const router = Router();
-const scimService = new SCIMService();
+
+// Dependency injection for testing (BEST PRACTICE)
+let scimService: SCIMService;
+
+export function initializeSCIMServices(scimServiceInstance?: SCIMService) {
+  scimService = scimServiceInstance || new SCIMService();
+}
+
+// Initialize with default instance
+initializeSCIMServices();
 
 /**
  * SCIM middleware to validate SP has SCIM access
@@ -177,6 +186,22 @@ router.post('/Users', scimAuthMiddleware, async (req: Request, res: Response) =>
         status: "400",
         scimType: "invalidValue",
         detail: `Invalid clearance level. Must be one of: ${validClearances.join(', ')}`
+      } as ISCIMError);
+    return;
+    }
+
+    // Validate ISO 3166-1 alpha-3 country code
+    const validCountryCodes = [
+      'USA', 'GBR', 'CAN', 'FRA', 'DEU', 'ITA', 'ESP', 'NLD', 'POL', 'BEL',
+      'DNK', 'NOR', 'PRT', 'TUR', 'GRC', 'CZE', 'HUN', 'ROU', 'BGR', 'HRV',
+      'SVK', 'SVN', 'EST', 'LVA', 'LTU', 'LUX', 'ALB', 'MNE', 'MKD', 'FIN', 'SWE'
+    ];
+    if (!validCountryCodes.includes(diveExtension.countryOfAffiliation)) {
+      return res.status(400).json({
+        schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+        status: "400",
+        scimType: "invalidValue",
+        detail: `Invalid country code: ${diveExtension.countryOfAffiliation}. Must be ISO 3166-1 alpha-3 (e.g., USA, GBR, FRA)`
       } as ISCIMError);
     return;
     }
