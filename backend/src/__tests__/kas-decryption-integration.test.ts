@@ -12,7 +12,9 @@
 import { MongoClient } from 'mongodb';
 import crypto from 'crypto';
 
-const MONGODB_URL = 'mongodb://localhost:27017';
+// Use MongoDB Memory Server
+const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
 describe('KAS Decryption Integration Tests', () => {
     let mongoClient: MongoClient;
@@ -21,8 +23,8 @@ describe('KAS Decryption Integration Tests', () => {
     beforeAll(async () => {
         mongoClient = new MongoClient(MONGODB_URL);
         await mongoClient.connect();
-        db = mongoClient.db('dive-v3');
-    });
+        db = mongoClient.db(DB_NAME);
+    }, 30000);
 
     afterAll(async () => {
         await mongoClient.close();
