@@ -35,10 +35,18 @@ describe('ACP-240 Logger MongoDB Integration', () => {
     });
 
     beforeEach(async () => {
-        // Clear collection before each test and WAIT for completion
-        await db.collection(LOGS_COLLECTION).deleteMany({});
-        // Add delay to ensure deletion completes before test starts
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // BEST PRACTICE: Clear collection and VERIFY it's empty
+        const collection = db.collection(LOGS_COLLECTION);
+        await collection.deleteMany({});
+        
+        // Verify collection is empty before proceeding
+        const count = await collection.countDocuments();
+        if (count > 0) {
+            // Force clear if delete didn't work
+            await collection.drop().catch(() => {});
+            // Recreate collection
+            await db.createCollection(LOGS_COLLECTION).catch(() => {});
+        }
     });
 
     describe('logACP240Event', () => {
