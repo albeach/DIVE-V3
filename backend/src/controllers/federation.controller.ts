@@ -62,6 +62,34 @@ router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (r
       searchParams: { classification, country, keywords, coi }
     });
 
+    // Validate SP has at least one active federation agreement
+    const activeAgreements = spContext.sp.federationAgreements.filter(
+      agreement => agreement.validUntil > new Date()
+    );
+
+    if (activeAgreements.length === 0) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'No active federation agreement found',
+        details: 'All federation agreements have expired or none exist'
+      });
+      return;
+    }
+
+    // Validate at least one agreement covers SP's country
+    const countryCovered = activeAgreements.some(agreement => 
+      agreement.countries.includes(spContext.sp.country)
+    );
+
+    if (!countryCovered) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: `Country ${spContext.sp.country} not covered by federation agreement`,
+        details: 'Your country is not included in any active federation agreement'
+      });
+      return;
+    }
+
     // Build search query based on SP's allowed access
     const query: any = {
       // Always filter by releasability to include SP's country
@@ -70,7 +98,7 @@ router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (r
 
     // Filter by classification if requested and allowed
     if (classification) {
-      const allowedClassifications = spContext.sp.federationAgreements
+      const allowedClassifications = activeAgreements
         .flatMap(agreement => agreement.classifications);
       
       if (!allowedClassifications.includes(classification as string)) {
