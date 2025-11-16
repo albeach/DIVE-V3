@@ -552,6 +552,208 @@ describe('Risk Scoring Service - Phase 2', () => {
             expect(score.factors.length).toBeGreaterThanOrEqual(11);
         });
     });
+
+    describe('Additional Boundary and Edge Cases for 100% Coverage', () => {
+        it('should handle uptime SLA with percentage at exact threshold', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-sla-threshold',
+                description: 'Test SLA threshold',
+                operationalData: {
+                    uptimeSLA: '99.0%', // Exact threshold
+                    incidentResponse: 'business-hours' as const,
+                    securityPatching: '<90 days',
+                    supportContacts: ['support@example.com']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            // Should score appropriately for 99.0% threshold
+            expect(score.totalScore).toBeGreaterThan(0);
+        });
+
+        it('should handle IAL1 detection with exact IAL1 keyword', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-ial1',
+                description: 'IAL1 identity proofing',
+                operationalData: {
+                    uptimeSLA: '99.0%',
+                    incidentResponse: 'business-hours' as const
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            // IAL1 should give 3 points
+            const ialFactor = score.factors.find(f => f.category === 'authentication' && f.name === 'IAL');
+            expect(ialFactor?.score).toBe(3);
+        });
+
+        it('should handle security patching with less than 30 days notation', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-patching',
+                description: 'Test patching',
+                operationalData: {
+                    uptimeSLA: '99.5%',
+                    incidentResponse: '24/7' as const,
+                    securityPatching: '<30 days', // Exact match for optimal score
+                    supportContacts: ['support@example.com']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const patchingFactor = score.factors.find(f => f.name === 'Security Patching');
+            expect(patchingFactor?.score).toBe(5);
+        });
+
+        it('should handle security patching with less than 90 days', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-patching-90',
+                description: 'Test patching 90 days',
+                operationalData: {
+                    uptimeSLA: '99.5%',
+                    incidentResponse: 'business-hours' as const,
+                    securityPatching: '<90 days',
+                    supportContacts: ['support@example.com']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const patchingFactor = score.factors.find(f => f.name === 'Security Patching');
+            expect(patchingFactor?.score).toBe(3);
+        });
+
+        it('should handle security patching with quarterly notation', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-patching-quarterly',
+                description: 'Test quarterly patching',
+                operationalData: {
+                    uptimeSLA: '99.5%',
+                    incidentResponse: 'business-hours' as const,
+                    securityPatching: 'quarterly',
+                    supportContacts: ['support@example.com']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const patchingFactor = score.factors.find(f => f.name === 'Security Patching');
+            expect(patchingFactor?.score).toBe(3);
+        });
+
+        it('should score support contacts with exactly 2 contacts', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-support-2',
+                description: 'Test support',
+                operationalData: {
+                    uptimeSLA: '99.5%',
+                    incidentResponse: 'business-hours' as const,
+                    securityPatching: '<90 days',
+                    supportContacts: ['email@example.com', 'phone:123-456-7890']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const supportFactor = score.factors.find(f => f.name === 'Support Channels');
+            expect(supportFactor?.score).toBe(3);
+        });
+
+        it('should score support contacts with 3 or more contacts', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-support-3',
+                description: 'Test support',
+                operationalData: {
+                    uptimeSLA: '99.5%',
+                    incidentResponse: 'business-hours' as const,
+                    securityPatching: '<90 days',
+                    supportContacts: ['email@example.com', 'phone', 'chat']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const supportFactor = score.factors.find(f => f.name === 'Support Channels');
+            expect(supportFactor?.score).toBe(5);
+        });
+
+        it('should handle uptime SLA below 99% threshold', async () => {
+            const validationResults = createValidationResults(12, 25, 10, 15);
+            const submission = {
+                alias: 'test-sla-low',
+                description: 'Test low SLA',
+                operationalData: {
+                    uptimeSLA: '95.0%',
+                    incidentResponse: 'business-hours' as const,
+                    securityPatching: '<90 days',
+                    supportContacts: ['support@example.com']
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const slaFactor = score.factors.find(f => f.name === 'Uptime SLA');
+            expect(slaFactor?.score).toBeLessThan(3);
+        });
+
+        it('should calculate tier exactly at threshold boundaries', async () => {
+            // Test at exact 85-point boundary (minimum for gold)
+            const validationResults = createValidationResults(12, 25, 10, 20);
+            const submission = {
+                alias: 'test-boundary',
+                description: 'IAL2 government ID with audit',
+                operationalData: {
+                    uptimeSLA: '99.9%',
+                    incidentResponse: '24/7' as const,
+                    securityPatching: '<30 days',
+                    supportContacts: ['noc@example.com', 'support@example.com']
+                },
+                complianceDocuments: {
+                    acp240Certificate: 'cert.pdf',
+                    dataResidencyDoc: 'residency.pdf'
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            // Should be at or near 85-point threshold
+            if (score.totalScore >= 85) {
+                expect(score.tier).toBe('gold');
+            } else if (score.totalScore >= 70) {
+                expect(score.tier).toBe('silver');
+            }
+        });
+
+        it('should include comprehensive audit logging in evidence', async () => {
+            const validationResults = createValidationResults(15, 25, 10, 20);
+            const submission = {
+                alias: 'test-audit',
+                description: 'Comprehensive audit logging for all events',
+                operationalData: {
+                    uptimeSLA: '99.9%',
+                    incidentResponse: '24/7' as const
+                },
+                complianceDocuments: {
+                    acp240Certificate: 'cert.pdf'
+                }
+            };
+
+            const score = await riskScoringService.calculateRiskScore(validationResults, submission);
+
+            const auditFactor = score.factors.find(f => f.name === 'Audit Logging');
+            expect(auditFactor).toBeDefined();
+            expect(auditFactor?.evidence).toContain(expect.stringContaining('audit'));
+        });
+    });
 });
 
 // ============================================

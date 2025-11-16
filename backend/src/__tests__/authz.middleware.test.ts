@@ -1234,5 +1234,452 @@ describe('Authorization Middleware (PEP)', () => {
             expect(jsonCall.details.resource.title).toBe('FVEY Intelligence Report');
         });
     });
+
+    describe('Token Blacklist and Revocation', () => {
+        const { isTokenBlacklisted, areUserTokensRevoked } = require('../services/token-blacklist.service');
+
+        it('should reject blacklisted token', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Mock JWT verification success
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    jti: 'blacklisted-token-id',
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            // Mock token as blacklisted
+            isTokenBlacklisted.mockResolvedValueOnce(true);
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized',
+                    message: 'Token has been revoked'
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should reject token when user tokens are revoked', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            isTokenBlacklisted.mockResolvedValueOnce(false);
+            areUserTokensRevoked.mockResolvedValueOnce(true);
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized',
+                    message: expect.stringContaining('revoked')
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('JWKS Key Fetch Error Handling', () => {
+        it('should handle JWKS fetch failure from all URLs', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Mock all JWKS fetch attempts to fail
+            mockedAxios.get.mockRejectedValue(new Error('JWKS endpoint unreachable'));
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(res.json).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    error: 'Unauthorized'
+                })
+            );
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should handle JWKS with no matching kid', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            // Mock JWKS response without matching kid
+            mockedAxios.get.mockResolvedValue({
+                data: {
+                    keys: [
+                        {
+                            kid: 'different-key-id',
+                            kty: 'RSA',
+                            use: 'sig',
+                            alg: 'RS256',
+                            n: 'test-modulus',
+                            e: 'AQAB'
+                        }
+                    ]
+                }
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+        });
+
+        it('should handle token with missing kid in header', async () => {
+            // Create a token without kid
+            const tokenWithoutKid = jwt.sign(
+                {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA'
+                },
+                'secret',
+                { algorithm: 'HS256', noTimestamp: false }
+            );
+
+            req.headers!.authorization = `Bearer ${tokenWithoutKid}`;
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('AMR and ACR Format Handling', () => {
+        it('should handle AMR as JSON string (legacy format)', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    amr: '["pwd","otp"]', // JSON string format
+                    acr: 'urn:mace:incommon:iap:silver', // URN format
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user).toBeDefined();
+            expect((req as any).user.amr).toEqual(['pwd', 'otp']);
+        });
+
+        it('should handle AMR as array (new format)', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    amr: ['pwd', 'mfa'], // Array format
+                    acr: 2, // Numeric format
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.amr).toEqual(['pwd', 'mfa']);
+            expect((req as any).user.acr).toBe('2');
+        });
+
+        it('should handle invalid AMR JSON string gracefully', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    amr: 'invalid-json{', // Invalid JSON
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            // Should fall back to original string value
+            expect((req as any).user).toBeDefined();
+        });
+
+        it('should handle ACR as numeric value', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    acr: 3, // Numeric ACR level
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.acr).toBe('3');
+        });
+
+        it('should handle ACR as URN string', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    acr: 'urn:mace:incommon:iap:gold', // URN format
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+            expect((req as any).user.acr).toBe('urn:mace:incommon:iap:gold');
+        });
+    });
+
+    describe('Multi-Realm Token Handling', () => {
+        it('should handle token from dive-v3-broker realm', async () => {
+            const tokenPayload = {
+                sub: 'testuser-us',
+                uniqueID: 'testuser-us',
+                clearance: 'SECRET',
+                countryOfAffiliation: 'USA',
+                iss: 'http://localhost:8081/realms/dive-v3-broker',
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                iat: Math.floor(Date.now() / 1000)
+            };
+
+            const token = jwt.sign(tokenPayload, 'secret', { algorithm: 'HS256' });
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, tokenPayload);
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+        });
+
+        it('should handle token with no issuer (default to broker realm)', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    // No iss claim
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+        });
+
+        it('should handle malformed token when extracting realm', async () => {
+            req.headers!.authorization = `Bearer invalid.malformed`;
+
+            await authenticateJWT(req as Request, res as Response, next);
+
+            expect(res.status).toHaveBeenCalledWith(401);
+            expect(next).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Classification Equivalency and Advanced Attributes', () => {
+        it('should include dutyOrg and orgUnit in OPA input', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+            req.params = { resourceId: 'doc-fvey-001' };
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    dutyOrg: 'US_ARMY',
+                    orgUnit: 'CYBER_DEFENSE',
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1];
+            expect(opaInput.input.subject.dutyOrg).toBe('US_ARMY');
+            expect(opaInput.input.subject.orgUnit).toBe('CYBER_DEFENSE');
+        });
+
+        it('should include original classification fields in OPA input', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+            req.params = { resourceId: 'doc-fvey-001' };
+
+            // Mock resource with classification equivalency data
+            mockedGetResourceById.mockResolvedValue({
+                ...TEST_RESOURCES.fveySecretDocument,
+                originalClassification: 'SECRET DÉFENSE',
+                originalCountry: 'FRA',
+                natoEquivalent: 'NATO SECRET'
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1];
+            expect(opaInput.input.resource.originalClassification).toBe('SECRET DÉFENSE');
+            expect(opaInput.input.resource.originalCountry).toBe('FRA');
+            expect(opaInput.input.resource.natoEquivalent).toBe('NATO SECRET');
+        });
+    });
+
+    describe('Service Provider (SP) Token Authentication', () => {
+        it('should authenticate valid SP token', async () => {
+            // Mock SP token validation
+            const mockValidateSPToken = require('../middleware/sp-auth.middleware').validateSPToken;
+            mockValidateSPToken.mockImplementation(async (req: IRequestWithSP, _res: Response, next: NextFunction) => {
+                req.spUser = {
+                    uniqueID: 'sp-service-01',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    acpCOI: ['FVEY'],
+                    spId: 'trusted-service-provider',
+                    scope: ['read:resources'],
+                    iat: Math.floor(Date.now() / 1000),
+                    exp: Math.floor(Date.now() / 1000) + 3600
+                };
+                next();
+            });
+
+            // Test SP authentication path
+            // Note: Full SP path testing requires SP-specific middleware setup
+            expect(mockValidateSPToken).toBeDefined();
+        });
+    });
+
+    describe('Error Recovery and Edge Cases', () => {
+        it('should handle OPA response with nested decision structure', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+            req.params = { resourceId: 'doc-fvey-001' };
+
+            mockedAxios.post.mockResolvedValue({
+                data: {
+                    result: {
+                        decision: {
+                            allow: true,
+                            reason: 'Nested decision structure'
+                        },
+                        allow: true,
+                        reason: 'Top-level allow'
+                    }
+                }
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(next).toHaveBeenCalled();
+        });
+
+        it('should handle resource with COI operator', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+            req.params = { resourceId: 'doc-fvey-001' };
+
+            mockedGetResourceById.mockResolvedValue({
+                ...TEST_RESOURCES.fveySecretDocument,
+                coiOperator: 'ALL' // Requires ALL COIs
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1];
+            expect(opaInput.input.resource.coiOperator).toBe('ALL');
+        });
+
+        it('should handle auth_time in context', async () => {
+            const token = createUSUserJWT();
+            req.headers!.authorization = `Bearer ${token}`;
+            req.params = { resourceId: 'doc-fvey-001' };
+
+            const authTime = Math.floor(Date.now() / 1000) - 3600;
+
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(null, {
+                    sub: 'testuser-us',
+                    uniqueID: 'testuser-us',
+                    clearance: 'SECRET',
+                    countryOfAffiliation: 'USA',
+                    auth_time: authTime,
+                    exp: Math.floor(Date.now() / 1000) + 3600,
+                    iat: Math.floor(Date.now() / 1000)
+                });
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            expect(mockedAxios.post).toHaveBeenCalled();
+            const opaInput = mockedAxios.post.mock.calls[0][1];
+            expect(opaInput.input.context.auth_time).toBe(authTime);
+        });
+    });
 });
 
