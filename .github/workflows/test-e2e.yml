@@ -73,7 +73,6 @@ jobs:
           echo "🚀 Starting Keycloak 26.4.2..."
           docker run -d \
             --name keycloak \
-            --network ${{ job.services.mongodb.network }} \
             -p 8081:8080 \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=warn \
@@ -81,10 +80,11 @@ jobs:
             -e KEYCLOAK_ADMIN_PASSWORD=admin \
             -e KC_HEALTH_ENABLED=true \
             -e KC_HTTP_RELATIVE_PATH=/ \
+            -e KC_HOSTNAME_STRICT=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev
           
-          echo "✅ Keycloak container started"
+          echo "✅ Keycloak container started (mapped port 8081:8080)"
       
       - name: Configure Keycloak for E2E Tests
         run: |
@@ -303,7 +303,6 @@ jobs:
           echo "🚀 Starting Keycloak 26.4.2..."
           docker run -d \
             --name keycloak \
-            --network ${{ job.services.mongodb.network }} \
             -p 8081:8080 \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=warn \
@@ -311,10 +310,11 @@ jobs:
             -e KEYCLOAK_ADMIN_PASSWORD=admin \
             -e KC_HEALTH_ENABLED=true \
             -e KC_HTTP_RELATIVE_PATH=/ \
+            -e KC_HOSTNAME_STRICT=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev
           
-          echo "✅ Keycloak container started"
+          echo "✅ Keycloak container started (mapped port 8081:8080)"
       
       - name: Configure Keycloak for E2E Tests
         run: |
