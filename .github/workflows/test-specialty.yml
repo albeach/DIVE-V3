@@ -82,10 +82,13 @@ jobs:
       - name: Start Keycloak 26.4.2
         run: |
           echo "🚀 Starting Keycloak 26.4.2..."
+          
+          # Get the service network ID
+          SERVICE_NETWORK=$(docker inspect ${{ job.container.id }} --format='{{range $net,$v := .NetworkSettings.Networks}}{{$net}}{{end}}' || docker network ls -q -f name=github_network)
+          
           docker run -d \
             --name keycloak \
-            --network ${{ job.services.postgres.network }} \
-            -p 8080:8080 \
+            --network "$SERVICE_NETWORK" \
             -e KC_DB=postgres \
             -e KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak \
             -e KC_DB_USERNAME=keycloak \
@@ -94,17 +97,23 @@ jobs:
             -e KEYCLOAK_ADMIN_PASSWORD=admin \
             -e KC_HEALTH_ENABLED=true \
             -e KC_HTTP_RELATIVE_PATH=/ \
+            -e KC_HOSTNAME_STRICT=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev
           
-          echo "✅ Keycloak container started"
+          # Get Keycloak container IP for health checks
+          KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
+          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP"
       
       - name: Wait for Keycloak to be Ready
         run: |
           echo "⏳ Waiting for Keycloak to be ready..."
+          echo "Using Keycloak IP: $KEYCLOAK_IP"
+          
           for i in {1..60}; do
-            if curl -f http://localhost:8080/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready"
+            if curl -f http://$KEYCLOAK_IP:8080/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready at $KEYCLOAK_IP:8080"
               break
             fi
             if [ $i -eq 60 ]; then
@@ -113,6 +122,8 @@ jobs:
               docker logs keycloak
               echo "Checking container status..."
               docker ps -a
+              echo "Checking network connectivity..."
+              docker exec keycloak curl -v http://localhost:8080/health/ready || true
               exit 1
             fi
             echo "Waiting for Keycloak... ($i/60)"
@@ -133,7 +144,7 @@ jobs:
         run: |
           cd terraform
           terraform init -backend=false
-          TF_VAR_keycloak_url="http://localhost:8080" \
+          TF_VAR_keycloak_url="http://$KEYCLOAK_IP:8080" \
           TF_VAR_keycloak_admin_username="admin" \
           TF_VAR_keycloak_admin_password="admin" \
           terraform apply -auto-approve
@@ -141,9 +152,10 @@ jobs:
       - name: Validate Realms Created
         run: |
           echo "⏳ Validating Keycloak realms..."
+          KEYCLOAK_URL="http://$KEYCLOAK_IP:8080"
           
           # Check that dive-v3-broker realm exists
-          if curl -f http://localhost:8080/realms/dive-v3-broker/.well-known/openid-configuration 2>/dev/null; then
+          if curl -f "$KEYCLOAK_URL/realms/dive-v3-broker/.well-known/openid-configuration" 2>/dev/null; then
             echo "✅ dive-v3-broker realm exists"
           else
             echo "❌ dive-v3-broker realm not found"
@@ -151,14 +163,14 @@ jobs:
           fi
           
           # Check USA realm
-          if curl -f http://localhost:8080/realms/dive-v3-usa/.well-known/openid-configuration 2>/dev/null; then
+          if curl -f "$KEYCLOAK_URL/realms/dive-v3-usa/.well-known/openid-configuration" 2>/dev/null; then
             echo "✅ dive-v3-usa realm exists"
           else
             echo "⚠️ dive-v3-usa realm not found (may be expected)"
           fi
           
           # Check France realm
-          if curl -f http://localhost:8080/realms/dive-v3-fra/.well-known/openid-configuration 2>/dev/null; then
+          if curl -f "$KEYCLOAK_URL/realms/dive-v3-fra/.well-known/openid-configuration" 2>/dev/null; then
             echo "✅ dive-v3-fra realm exists"
           else
             echo "⚠️ dive-v3-fra realm not found (may be expected)"
@@ -173,7 +185,7 @@ jobs:
           npm test -- --testPathPattern=keycloak --testTimeout=30000 || echo "⚠️ Some Keycloak tests failed (non-blocking)"
         env:
           NODE_ENV: test
-          KEYCLOAK_URL: http://localhost:8080
+          KEYCLOAK_URL: http://${{ env.KEYCLOAK_IP }}:8080
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
 
