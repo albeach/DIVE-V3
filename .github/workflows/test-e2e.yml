@@ -461,23 +461,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0.0
-        ports:
-          - 8081:8080
-        env:
-          KC_DB: dev-mem
-          KC_LOG_LEVEL: warn
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: "true"
-          KC_HTTP_RELATIVE_PATH: /
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 120s
+      # NOTE: Keycloak service removed - using manual docker run in steps instead
+      # Service containers don't support custom commands (start-dev required for KC 26.4.2)
     
     steps:
       - name: Checkout Code
@@ -502,12 +487,40 @@ jobs:
             -days 365 \
             -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
           echo "✅ Generated self-signed SSL certificates for E2E testing"
+      - name: Start Keycloak 26.4.2
+        run: |
+          echo "🚀 Starting Keycloak 26.4.2..."
+          docker run -d \
+            --name keycloak \
+            -p 8081:8080 \
+            -e KC_DB=dev-mem \
+            -e KC_LOG_LEVEL=warn \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -e KC_HTTP_RELATIVE_PATH=/ \
+            -e KC_HOSTNAME_STRICT=false \
+            quay.io/keycloak/keycloak:26.4.2 \
+            start-dev
+          
+          echo "✅ Keycloak container started (mapped port 8081:8080)"
+      
       
       - name: Configure Keycloak for E2E Tests
         run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8081/health/ready 2>/dev/null; then break; fi
-            sleep 2
+          echo "⏳ Waiting for Keycloak to be ready..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8081/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "❌ Keycloak failed to start after 5 minutes"
+              docker logs keycloak
+              docker ps -a
+              exit 1
+            fi
+            sleep 5
           done
           
           export KEYCLOAK_URL=http://localhost:8081
@@ -522,6 +535,8 @@ jobs:
             curl -s -X POST "$KEYCLOAK_URL/admin/realms/dive-v3-broker/users" -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
               -d "{\"username\":\"$name\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"$pass\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":[\"FVEY\"]}}" || true
           done
+          
+          echo "✅ Keycloak configured for E2E tests"
       
       - name: Initialize PostgreSQL Database Schema
         run: cd frontend && npx drizzle-kit push:pg || true
@@ -613,23 +628,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0.0
-        ports:
-          - 8081:8080
-        env:
-          KC_DB: dev-mem
-          KC_LOG_LEVEL: warn
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: "true"
-          KC_HTTP_RELATIVE_PATH: /
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 120s
+      # NOTE: Keycloak service removed - using manual docker run in steps instead
+      # Service containers don't support custom commands (start-dev required for KC 26.4.2)
     
     steps:
       - name: Checkout Code
@@ -653,13 +653,41 @@ jobs:
             -out ${{ github.workspace }}/frontend/certs/certificate.pem \
             -days 365 \
             -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+      - name: Start Keycloak 26.4.2
+        run: |
+          echo "🚀 Starting Keycloak 26.4.2..."
+          docker run -d \
+            --name keycloak \
+            -p 8081:8080 \
+            -e KC_DB=dev-mem \
+            -e KC_LOG_LEVEL=warn \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -e KC_HTTP_RELATIVE_PATH=/ \
+            -e KC_HOSTNAME_STRICT=false \
+            quay.io/keycloak/keycloak:26.4.2 \
+            start-dev
+          
+          echo "✅ Keycloak container started (mapped port 8081:8080)"
+      
           echo "✅ Generated self-signed SSL certificates for E2E testing"
       
       - name: Configure Keycloak for E2E Tests
         run: |
-          for i in {1..30}; do
-            if curl -f http://localhost:8081/health/ready 2>/dev/null; then break; fi
-            sleep 2
+          echo "⏳ Waiting for Keycloak to be ready..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8081/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "❌ Keycloak failed to start after 5 minutes"
+              docker logs keycloak
+              docker ps -a
+              exit 1
+            fi
+            sleep 5
           done
           
           export KEYCLOAK_URL=http://localhost:8081
@@ -674,6 +702,8 @@ jobs:
             curl -s -X POST "$KEYCLOAK_URL/admin/realms/dive-v3-broker/users" -H "Authorization: Bearer $ACCESS_TOKEN" -H "Content-Type: application/json" \
               -d "{\"username\":\"$name\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"$pass\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":[\"FVEY\"]}}" || true
           done
+          
+          echo "✅ Keycloak configured for E2E tests"
       
       - name: Initialize PostgreSQL Database Schema
         run: cd frontend && npx drizzle-kit push:pg || true
