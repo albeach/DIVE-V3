@@ -11,7 +11,7 @@ jobs:
   backend-tests:
     name: Backend - Full Test Suite
     runs-on: ubuntu-latest
-    timeout-minutes: 8  # Reduced from 10 (Day 1: authz.middleware 99% faster)
+    timeout-minutes: 15  # Increased to accommodate 1,643+ comprehensive tests (~8m unit + 2m integration + 2m coverage)
     
     # NO MongoDB service needed - using MongoDB Memory Server (best practice)
     # Benefits:
