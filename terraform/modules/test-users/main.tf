@@ -17,24 +17,24 @@ terraform {
 # UNCLASSIFIED User - No MFA Required
 # ============================================
 resource "keycloak_user" "testuser_unclass" {
-  realm_id   = var.realm_id
-  username   = "testuser-unclass"
-  enabled    = true
-  
-  email      = "testuser-unclass@dive-v3.pilot"
+  realm_id = var.realm_id
+  username = "testuser-unclass"
+  enabled  = true
+
+  email          = "testuser-unclass@dive-v3.pilot"
   email_verified = true
-  first_name = "Unclass"
-  last_name  = "User"
-  
+  first_name     = "Unclass"
+  last_name      = "User"
+
   initial_password {
     value     = var.unclass_password
     temporary = false
   }
-  
+
   attributes = {
-    clearance              = "UNCLASSIFIED"
-    countryOfAffiliation   = "USA"
-    uniqueID               = "testuser-unclass"
+    clearance            = "UNCLASSIFIED"
+    countryOfAffiliation = "USA"
+    uniqueID             = "testuser-unclass"
   }
 }
 
@@ -42,29 +42,29 @@ resource "keycloak_user" "testuser_unclass" {
 # SECRET User - MFA Required, OTP Pre-configured
 # ============================================
 resource "keycloak_user" "testuser_secret" {
-  realm_id   = var.realm_id
-  username   = "testuser-secret"
-  enabled    = true
-  
-  email      = "testuser-secret@dive-v3.pilot"
+  realm_id = var.realm_id
+  username = "testuser-secret"
+  enabled  = true
+
+  email          = "testuser-secret@dive-v3.pilot"
   email_verified = true
-  first_name = "Secret"
-  last_name  = "User"
-  
+  first_name     = "Secret"
+  last_name      = "User"
+
   initial_password {
     value     = var.secret_password
     temporary = false
   }
-  
+
   attributes = {
-    clearance              = "SECRET"
-    countryOfAffiliation   = "USA"
-    uniqueID               = "testuser-secret"
+    clearance            = "SECRET"
+    countryOfAffiliation = "USA"
+    uniqueID             = "testuser-secret"
     # Pre-configured OTP secret for E2E tests
     # Secret: ONSWG4TFOQFA====
     # This allows the test to generate valid codes
   }
-  
+
   # Note: OTP configuration must be done via Keycloak Admin API
   # after user creation, as Terraform doesn't support OTP credentials directly
 }
@@ -73,24 +73,24 @@ resource "keycloak_user" "testuser_secret" {
 # CONFIDENTIAL User - MFA Required, No OTP Yet
 # ============================================
 resource "keycloak_user" "testuser_confidential" {
-  realm_id   = var.realm_id
-  username   = "testuser-confidential"
-  enabled    = true
-  
-  email      = "testuser-confidential@dive-v3.pilot"
+  realm_id = var.realm_id
+  username = "testuser-confidential"
+  enabled  = true
+
+  email          = "testuser-confidential@dive-v3.pilot"
   email_verified = true
-  first_name = "Confidential"
-  last_name  = "User"
-  
+  first_name     = "Confidential"
+  last_name      = "User"
+
   initial_password {
     value     = var.confidential_password
     temporary = false
   }
-  
+
   attributes = {
-    clearance              = "CONFIDENTIAL"
-    countryOfAffiliation   = "USA"
-    uniqueID               = "testuser-confidential"
+    clearance            = "CONFIDENTIAL"
+    countryOfAffiliation = "USA"
+    uniqueID             = "testuser-confidential"
   }
 }
 

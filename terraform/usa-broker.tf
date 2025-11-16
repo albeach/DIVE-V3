@@ -29,13 +29,13 @@ resource "keycloak_oidc_identity_provider" "usa_realm_broker" {
   trust_email = true
   sync_mode   = "FORCE" # Always sync from U.S. realm
 
-  first_broker_login_flow_alias = "first broker login"  # Use default auto-create flow
-  link_only                     = false # Auto-create users
-  
+  first_broker_login_flow_alias = "first broker login" # Use default auto-create flow
+  link_only                     = false                # Auto-create users
+
   # CRITICAL: Enable backchannel logout to cascade logout to national realm
   # Without this, logging out from broker only logs out of broker session
   # The national realm SSO session persists → auto-login without password!
-  backchannel_supported = true  # Enable OIDC backchannel logout
+  backchannel_supported = true # Enable OIDC backchannel logout
   logout_url            = "${local.realm_urls.usa}${local.oidc_logout_path}"
 
   gui_order = "1"

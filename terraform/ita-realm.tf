@@ -43,16 +43,16 @@ resource "keycloak_realm" "dive_v3_ita" {
   # WebAuthn Policy (AAL3 Hardware-Backed Authentication) - v2.0.0
   # AUTOMATED via Terraform - No manual configuration needed!
   web_authn_policy {
-    relying_party_entity_name            = "DIVE V3 Coalition Platform"
-    relying_party_id                     = "dive25.com"  # Registrable domain suffix for dev-auth.dive25.com
-    signature_algorithms                 = ["ES256", "RS256"]
-    attestation_conveyance_preference    = "none"
-    authenticator_attachment             = "cross-platform"
-    require_resident_key                 = "No"
-    user_verification_requirement        = "preferred"  # Changed from 'required' to 'preferred' for better compatibility
-    create_timeout                       = 300
-    avoid_same_authenticator_register    = false
-    acceptable_aaguids                   = []
+    relying_party_entity_name         = "DIVE V3 Coalition Platform"
+    relying_party_id                  = "dive25.com" # Registrable domain suffix for dev-auth.dive25.com
+    signature_algorithms              = ["ES256", "RS256"]
+    attestation_conveyance_preference = "none"
+    authenticator_attachment          = "cross-platform"
+    require_resident_key              = "No"
+    user_verification_requirement     = "preferred" # Changed from 'required' to 'preferred' for better compatibility
+    create_timeout                    = 300
+    avoid_same_authenticator_register = false
+    acceptable_aaguids                = []
   }
 
   security_defenses {
@@ -251,7 +251,7 @@ resource "keycloak_generic_protocol_mapper" "ita_amr_mapper" {
   config = {
     "user.session.note"    = "AUTH_METHODS_REF"
     "claim.name"           = "amr"
-    "jsonType.label" = "JSON" # Fixed: Use String for scalar values
+    "jsonType.label"       = "JSON" # Fixed: Use String for scalar values
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"

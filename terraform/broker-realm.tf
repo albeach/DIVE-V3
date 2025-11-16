@@ -32,8 +32,8 @@ resource "keycloak_realm" "dive_v3_broker" {
   # Maps authentication methods to ACR levels for step-up authentication
   attributes = {
     "acr.loa.map" = jsonencode({
-      otp = "1"  # OTP authentication = AAL2
-      pwd = "0"  # Password only = AAL1
+      otp = "1" # OTP authentication = AAL2
+      pwd = "0" # Password only = AAL1
     })
   }
 
@@ -62,16 +62,16 @@ resource "keycloak_realm" "dive_v3_broker" {
   # WebAuthn Policy (AAL3 Hardware-Backed Authentication) - v2.0.0
   # AUTOMATED: No manual configuration needed!
   web_authn_policy {
-    relying_party_entity_name            = "DIVE V3 Coalition Platform - Broker"
-    relying_party_id                     = "dive25.com"  # Registrable domain suffix for dev-auth.dive25.com
-    signature_algorithms                 = ["ES256", "RS256"]
-    attestation_conveyance_preference    = "none"
-    authenticator_attachment             = "cross-platform"
-    require_resident_key                 = "No"
-    user_verification_requirement        = "preferred"  # Changed from 'required' to 'preferred' for better compatibility
-    create_timeout                       = 300
-    avoid_same_authenticator_register    = false
-    acceptable_aaguids                   = []
+    relying_party_entity_name         = "DIVE V3 Coalition Platform - Broker"
+    relying_party_id                  = "dive25.com" # Registrable domain suffix for dev-auth.dive25.com
+    signature_algorithms              = ["ES256", "RS256"]
+    attestation_conveyance_preference = "none"
+    authenticator_attachment          = "cross-platform"
+    require_resident_key              = "No"
+    user_verification_requirement     = "preferred" # Changed from 'required' to 'preferred' for better compatibility
+    create_timeout                    = 300
+    avoid_same_authenticator_register = false
+    acceptable_aaguids                = []
   }
 
   # Brute-force detection (balanced for MFA setup attempts)
@@ -155,8 +155,8 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
-    "acr",    # Keycloak 26: ACR/AMR support via built-in oidc-acr-mapper
-    "basic",  # Keycloak 26: auth_time and sub claims
+    "acr",   # Keycloak 26: ACR/AMR support via built-in oidc-acr-mapper
+    "basic", # Keycloak 26: auth_time and sub claims
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
   # Note: offline_access added to default scopes for admin-dive user login
@@ -408,7 +408,7 @@ resource "keycloak_generic_protocol_mapper" "broker_acr_session" {
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
   }
-  
+
   depends_on = [keycloak_generic_protocol_mapper.broker_acr_attribute]
 }
 
@@ -457,7 +457,7 @@ resource "keycloak_generic_protocol_mapper" "broker_amr_session" {
     "access.token.claim"   = "true"
     "userinfo.token.claim" = "false"
   }
-  
+
   depends_on = [keycloak_generic_protocol_mapper.broker_amr_attribute]
 }
 

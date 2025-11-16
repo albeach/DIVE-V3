@@ -46,7 +46,7 @@ variable "name_id_policy_format" {
   description = "SAML NameID format (keycloak/keycloak v5.x accepts: Transient, Persistent, Email, Kerberos, X.509 Subject Name, Unspecified, Windows Domain Qualified Name)"
   type        = string
   default     = "Transient"
-  
+
   validation {
     condition = contains([
       "Transient",

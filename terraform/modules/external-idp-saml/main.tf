@@ -19,29 +19,29 @@ resource "keycloak_saml_identity_provider" "external_idp" {
   enabled      = var.enabled
 
   # SAML Configuration
-  entity_id                      = var.idp_entity_id
-  single_sign_on_service_url     = var.idp_sso_url
-  single_logout_service_url      = var.idp_slo_url != "" ? var.idp_slo_url : null
-  signing_certificate            = var.idp_certificate
-  name_id_policy_format          = var.name_id_policy_format
-  principal_type                 = "ATTRIBUTE"  # Required for Transient NameID format
-  principal_attribute            = "uid"        # Use uid attribute as principal
-  signature_algorithm            = var.signature_algorithm
-  want_assertions_signed         = var.want_assertions_signed
-  want_assertions_encrypted      = var.want_assertions_encrypted
-  force_authn                    = var.force_authn
-  post_binding_response          = true
-  post_binding_authn_request     = true
-  post_binding_logout            = true
-  validate_signature             = true
-  backchannel_supported          = false
+  entity_id                  = var.idp_entity_id
+  single_sign_on_service_url = var.idp_sso_url
+  single_logout_service_url  = var.idp_slo_url != "" ? var.idp_slo_url : null
+  signing_certificate        = var.idp_certificate
+  name_id_policy_format      = var.name_id_policy_format
+  principal_type             = "ATTRIBUTE" # Required for Transient NameID format
+  principal_attribute        = "uid"       # Use uid attribute as principal
+  signature_algorithm        = var.signature_algorithm
+  want_assertions_signed     = var.want_assertions_signed
+  want_assertions_encrypted  = var.want_assertions_encrypted
+  force_authn                = var.force_authn
+  post_binding_response      = true
+  post_binding_authn_request = true
+  post_binding_logout        = true
+  validate_signature         = true
+  backchannel_supported      = false
 
   # User Management
-  trust_email                    = var.trust_email
-  store_token                    = var.store_token
-  link_only                      = var.link_only
-  first_broker_login_flow_alias  = var.first_broker_login_flow_alias
-  post_broker_login_flow_alias   = var.post_broker_login_flow_alias != "" ? var.post_broker_login_flow_alias : null
+  trust_email                   = var.trust_email
+  store_token                   = var.store_token
+  link_only                     = var.link_only
+  first_broker_login_flow_alias = var.first_broker_login_flow_alias
+  post_broker_login_flow_alias  = var.post_broker_login_flow_alias != "" ? var.post_broker_login_flow_alias : null
 
   # Additional Configuration
   gui_order = 1
@@ -54,7 +54,7 @@ resource "keycloak_attribute_importer_identity_provider_mapper" "unique_id" {
   identity_provider_alias = keycloak_saml_identity_provider.external_idp.alias
 
   attribute_friendly_name = "uid"
-  user_attribute         = "uniqueID"
+  user_attribute          = "uniqueID"
 
   extra_config = {
     syncMode = "INHERIT"
@@ -68,7 +68,7 @@ resource "keycloak_attribute_importer_identity_provider_mapper" "email" {
   identity_provider_alias = keycloak_saml_identity_provider.external_idp.alias
 
   attribute_friendly_name = "mail"
-  user_attribute         = "email"
+  user_attribute          = "email"
 
   extra_config = {
     syncMode = "INHERIT"

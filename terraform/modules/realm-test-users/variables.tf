@@ -31,7 +31,7 @@ variable "email_domain" {
 variable "default_password" {
   description = "Default password for all test users (must meet password policy: upper+lower+digit+special+12chars)"
   type        = string
-  default     = "Password123!"  # Meets policy: uppercase, lowercase, digit, special char, 12+ chars
+  default     = "Password123!" # Meets policy: uppercase, lowercase, digit, special char, 12+ chars
   sensitive   = true
 }
 
@@ -62,18 +62,18 @@ variable "clearance_mappings" {
 variable "coi_confidential" {
   description = "COI tags for CONFIDENTIAL users"
   type        = list(string)
-  default     = []  # Basic access, no special COI
+  default     = [] # Basic access, no special COI
 }
 
 variable "coi_secret" {
   description = "COI tags for SECRET users"
   type        = list(string)
-  default     = ["NATO-COSMIC"]  # NATO classified access
+  default     = ["NATO-COSMIC"] # NATO classified access
 }
 
 variable "coi_top_secret" {
   description = "COI tags for TOP_SECRET users"
   type        = list(string)
-  default     = ["NATO-COSMIC", "FVEY"]  # Full coalition access
+  default     = ["NATO-COSMIC", "FVEY"] # Full coalition access
 }
 

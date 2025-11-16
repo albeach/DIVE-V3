@@ -39,19 +39,19 @@ variable "acr_loa_mappings" {
   }))
   default = {
     aal1 = {
-      acr_value = "urn:mace:incommon:iap:silver"  # NIST AAL1
+      acr_value = "urn:mace:incommon:iap:silver" # NIST AAL1
       loa_level = 1
-      max_age   = 300  # 5 minutes for basic auth
+      max_age   = 300 # 5 minutes for basic auth
     }
     aal2 = {
-      acr_value = "urn:mace:incommon:iap:gold"  # NIST AAL2 (OTP/SMS)
+      acr_value = "urn:mace:incommon:iap:gold" # NIST AAL2 (OTP/SMS)
       loa_level = 2
-      max_age   = 0  # Always require MFA on explicit request
+      max_age   = 0 # Always require MFA on explicit request
     }
     aal3 = {
-      acr_value = "urn:mace:incommon:iap:platinum"  # NIST AAL3 (WebAuthn/hardware)
+      acr_value = "urn:mace:incommon:iap:platinum" # NIST AAL3 (WebAuthn/hardware)
       loa_level = 3
-      max_age   = 0  # Always require hardware key on explicit request
+      max_age   = 0 # Always require hardware key on explicit request
     }
   }
 }

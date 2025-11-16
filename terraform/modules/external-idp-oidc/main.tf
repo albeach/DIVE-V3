@@ -221,34 +221,34 @@ resource "keycloak_oidc_identity_provider" "external_idp" {
   jwks_url          = var.discovery_url != "" ? null : var.jwks_url
   logout_url        = var.discovery_url != "" ? null : var.logout_url
   issuer            = var.discovery_url != "" ? null : var.issuer
-  
+
   # Discovery endpoint (if provided, overrides manual endpoints)
   discovery_url = var.discovery_url != "" ? var.discovery_url : null
 
   # OAuth2/OIDC Configuration
-  client_id                  = var.client_id
-  client_secret              = var.client_secret
-  client_auth_method         = var.client_auth_method
-  validate_signature         = var.validate_signature
-  use_jwks_url              = var.use_jwks_url
-  pkce_enabled              = var.pkce_enabled
-  pkce_method               = var.pkce_method
-  default_scopes            = var.default_scopes
-  prompt                    = var.prompt != "" ? var.prompt : null
+  client_id                               = var.client_id
+  client_secret                           = var.client_secret
+  client_auth_method                      = var.client_auth_method
+  validate_signature                      = var.validate_signature
+  use_jwks_url                            = var.use_jwks_url
+  pkce_enabled                            = var.pkce_enabled
+  pkce_method                             = var.pkce_method
+  default_scopes                          = var.default_scopes
+  prompt                                  = var.prompt != "" ? var.prompt : null
   accepts_prompt_none_forward_from_client = var.accepts_prompt_none_forward_from_client
-  disable_user_info         = var.disable_user_info
-  hide_on_login_page        = var.hide_on_login_page
+  disable_user_info                       = var.disable_user_info
+  hide_on_login_page                      = var.hide_on_login_page
 
   # User Management
-  trust_email                    = var.trust_email
-  store_token                    = var.store_token
-  link_only                      = var.link_only
-  first_broker_login_flow_alias  = var.first_broker_login_flow_alias
-  post_broker_login_flow_alias   = var.post_broker_login_flow_alias != "" ? var.post_broker_login_flow_alias : null
+  trust_email                   = var.trust_email
+  store_token                   = var.store_token
+  link_only                     = var.link_only
+  first_broker_login_flow_alias = var.first_broker_login_flow_alias
+  post_broker_login_flow_alias  = var.post_broker_login_flow_alias != "" ? var.post_broker_login_flow_alias : null
 
   # Additional Configuration
   gui_order = 1
-  
+
   # Advanced settings
   extra_config = {
     "clientAssertionSigningAlg" = "RS256"
@@ -257,9 +257,9 @@ resource "keycloak_oidc_identity_provider" "external_idp" {
 
 # Claim Mapper: uniqueID
 resource "keycloak_custom_identity_provider_mapper" "unique_id" {
-  realm                   = var.realm_id
-  name                    = "${var.idp_alias}-uniqueID-mapper"
-  identity_provider_alias = keycloak_oidc_identity_provider.external_idp.alias
+  realm                    = var.realm_id
+  name                     = "${var.idp_alias}-uniqueID-mapper"
+  identity_provider_alias  = keycloak_oidc_identity_provider.external_idp.alias
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
@@ -271,9 +271,9 @@ resource "keycloak_custom_identity_provider_mapper" "unique_id" {
 
 # Claim Mapper: Email (with fallback to preferred_username)
 resource "keycloak_custom_identity_provider_mapper" "email" {
-  realm                   = var.realm_id
-  name                    = "${var.idp_alias}-email-mapper"
-  identity_provider_alias = keycloak_oidc_identity_provider.external_idp.alias
+  realm                    = var.realm_id
+  name                     = "${var.idp_alias}-email-mapper"
+  identity_provider_alias  = keycloak_oidc_identity_provider.external_idp.alias
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
@@ -301,9 +301,9 @@ resource "keycloak_hardcoded_attribute_identity_provider_mapper" "country" {
 resource "keycloak_custom_identity_provider_mapper" "custom_claims" {
   for_each = var.claim_mappings
 
-  realm                   = var.realm_id
-  name                    = "${var.idp_alias}-${each.key}-mapper"
-  identity_provider_alias = keycloak_oidc_identity_provider.external_idp.alias
+  realm                    = var.realm_id
+  name                     = "${var.idp_alias}-${each.key}-mapper"
+  identity_provider_alias  = keycloak_oidc_identity_provider.external_idp.alias
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {

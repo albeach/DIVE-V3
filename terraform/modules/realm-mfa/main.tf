@@ -38,7 +38,7 @@ resource "keycloak_authentication_execution" "browser_cookie" {
   parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
   authenticator     = "auth-cookie"
   requirement       = "ALTERNATIVE"
-  priority          = 10  # Execute cookie check first
+  priority          = 10 # Execute cookie check first
 }
 
 # Option 2: Forms Subflow (new authentication required)
@@ -47,8 +47,8 @@ resource "keycloak_authentication_subflow" "browser_forms_subflow" {
   parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
   alias             = "Forms - ${var.realm_display_name}"
   requirement       = "ALTERNATIVE"
-  priority          = 20  # Forms subflow executes after cookie check
-  
+  priority          = 20 # Forms subflow executes after cookie check
+
   depends_on = [keycloak_authentication_execution.browser_cookie]
 }
 
@@ -64,7 +64,7 @@ resource "keycloak_authentication_execution" "browser_forms" {
   parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   authenticator     = "auth-username-password-form"
   requirement       = "REQUIRED"
-  priority          = 10  # Password form FIRST
+  priority          = 10 # Password form FIRST
 }
 
 # Configure ACR and AMR for password authentication (AAL1 baseline)
@@ -73,8 +73,8 @@ resource "keycloak_authentication_execution_config" "browser_password_acr" {
   execution_id = keycloak_authentication_execution.browser_forms.id
   alias        = "Password ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "0"      # AAL1 for password-only
-    reference = "pwd"    # AMR reference (RFC-8176 compliant)
+    acr_level = "0"   # AAL1 for password-only
+    reference = "pwd" # AMR reference (RFC-8176 compliant)
   }
 }
 
@@ -87,8 +87,8 @@ resource "keycloak_authentication_subflow" "browser_conditional_webauthn" {
   parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   alias             = "Conditional WebAuthn AAL3 - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
-  priority          = 20  # WebAuthn check AFTER password
-  
+  priority          = 20 # WebAuthn check AFTER password
+
   depends_on = [keycloak_authentication_execution.browser_forms]
 }
 
@@ -106,7 +106,7 @@ resource "keycloak_authentication_execution_config" "browser_condition_top_secre
   alias        = "TOP SECRET Check - ${var.realm_display_name}"
   config = {
     attribute_name  = var.clearance_attribute_name
-    attribute_value = "^TOP_SECRET$"  # Exact match
+    attribute_value = "^TOP_SECRET$" # Exact match
     negate          = "false"
   }
 }
@@ -117,7 +117,7 @@ resource "keycloak_authentication_execution" "browser_webauthn_form" {
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
   authenticator     = "webauthn-authenticator"
   requirement       = "REQUIRED"
-  
+
   depends_on = [
     keycloak_authentication_execution.browser_condition_top_secret,
     keycloak_authentication_execution_config.browser_condition_top_secret_config
@@ -130,8 +130,8 @@ resource "keycloak_authentication_execution_config" "browser_webauthn_acr" {
   execution_id = keycloak_authentication_execution.browser_webauthn_form.id
   alias        = "WebAuthn ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "2"      # AAL3 for hardware key
-    reference = "hwk"    # AMR reference (RFC-8176: hardware key)
+    acr_level = "2"   # AAL3 for hardware key
+    reference = "hwk" # AMR reference (RFC-8176: hardware key)
   }
 }
 
@@ -144,8 +144,8 @@ resource "keycloak_authentication_subflow" "browser_conditional_otp" {
   parent_flow_alias = keycloak_authentication_subflow.browser_forms_subflow.alias
   alias             = "Conditional OTP AAL2 - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
-  priority          = 30  # OTP check AFTER WebAuthn
-  
+  priority          = 30 # OTP check AFTER WebAuthn
+
   depends_on = [keycloak_authentication_subflow.browser_conditional_webauthn]
 }
 
@@ -163,7 +163,7 @@ resource "keycloak_authentication_execution_config" "browser_condition_config" {
   alias        = "CONFIDENTIAL SECRET Check - ${var.realm_display_name}"
   config = {
     attribute_name  = var.clearance_attribute_name
-    attribute_value = "^(CONFIDENTIAL|SECRET)$"  # Regex for both levels
+    attribute_value = "^(CONFIDENTIAL|SECRET)$" # Regex for both levels
     negate          = "false"
   }
 }
@@ -174,7 +174,7 @@ resource "keycloak_authentication_execution" "browser_otp_form" {
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
   authenticator     = "auth-otp-form"
   requirement       = "REQUIRED"
-  
+
   depends_on = [
     keycloak_authentication_execution.browser_condition_user_attribute,
     keycloak_authentication_execution_config.browser_condition_config
@@ -187,8 +187,8 @@ resource "keycloak_authentication_execution_config" "browser_otp_acr" {
   execution_id = keycloak_authentication_execution.browser_otp_form.id
   alias        = "OTP ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "1"      # AAL2 when OTP succeeds
-    reference = "otp"    # AMR reference (RFC-8176 compliant)
+    acr_level = "1"   # AAL2 when OTP succeeds
+    reference = "otp" # AMR reference (RFC-8176 compliant)
   }
 }
 
