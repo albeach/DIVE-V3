@@ -101,8 +101,8 @@ echo "4️⃣ Generating Certificate Revocation Lists..."
 
 # Root CRL
 openssl ca -gencrl \
-  -keyfile "$ROOT_DIR/root-ca.key" \
-  -cert "$ROOT_DIR/root-ca.pem" \
+  -keyfile "$CA_DIR/root.key" \
+  -cert "$CA_DIR/root.crt" \
   -out "$CRL_DIR/root-crl.pem" \
   -config <(cat <<EOF
 [ ca ]

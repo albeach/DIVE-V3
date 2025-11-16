@@ -55,9 +55,31 @@ jobs:
       - name: Generate Test Certificates
         run: |
           cd backend
+          # Ensure script has correct permissions
           chmod +x scripts/generate-test-certs.sh
-          ./scripts/generate-test-certs.sh
-          echo "✅ Test certificates generated for policy-signature and three-tier-ca tests"
+          
+          # Run with error handling
+          if ! ./scripts/generate-test-certs.sh; then
+            echo "❌ Certificate generation failed"
+            exit 1
+          fi
+          
+          # Verify certificates were created
+          if [ ! -f "certs/signing/policy-signer.pem" ]; then
+            echo "❌ Policy signing certificate not found"
+            ls -la certs/ 2>&1 || echo "No certs directory"
+            exit 1
+          fi
+          
+          if [ ! -f "certs/ca/root.crt" ]; then
+            echo "❌ Root CA certificate not found"
+            ls -la certs/ca/ 2>&1 || echo "No certs/ca directory"
+            exit 1
+          fi
+          
+          echo "✅ Test certificates generated and verified"
+          echo "📋 Certificate summary:"
+          ls -lh certs/ca/ certs/signing/ certs/crl/
       
       - name: Generate Test RSA Keys
         run: |
