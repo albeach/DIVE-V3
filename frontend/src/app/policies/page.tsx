@@ -2,25 +2,10 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/page-layout";
 import Link from "next/link";
-
-interface IPolicyMetadata {
-  policyId: string;
-  name: string;
-  description: string;
-  version: string;
-  package: string;
-  ruleCount: number;
-  testCount: number;
-  lastModified: string;
-  status: 'active' | 'draft' | 'deprecated';
-}
-
-interface IPolicyStats {
-  totalPolicies: number;
-  activeRules: number;
-  totalTests: number;
-  lastUpdated: string;
-}
+import PolicyExplorer from "@/components/policies/PolicyExplorer";
+import PolicyEditorPanel from "@/components/policies/PolicyEditorPanel";
+import { PolicyComparison } from "@/components/policies/PolicyComparison";
+import type { IPolicyMetadata, IPolicyStats } from "@/types/policy.types";
 
 async function getPolicies(): Promise<{ policies: IPolicyMetadata[], stats: IPolicyStats }> {
   // Server component: Use Docker network name for internal communication
@@ -50,12 +35,6 @@ async function getPolicies(): Promise<{ policies: IPolicyMetadata[], stats: IPol
   }
 }
 
-const statusColors: Record<string, string> = {
-  'active': 'bg-green-100 text-green-800 border-green-300',
-  'draft': 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  'deprecated': 'bg-gray-100 text-gray-800 border-gray-300',
-};
-
 export default async function PoliciesPage() {
   const session = await auth();
 
@@ -74,168 +53,82 @@ export default async function PoliciesPage() {
     >
       <div className="mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          📜 Authorization Policies
+          📜 Authorization Policy Suite
         </h2>
-        <p className="text-gray-600">
-          View OPA (Open Policy Agent) Rego policies that govern access control decisions.
-          Explore policy logic, test decisions interactively, and understand authorization rules.
+        <p className="text-gray-600 max-w-4xl">
+          Explore the production OPA (Open Policy Agent) policies that power DIVE’s coalition ABAC engine.
+          Filter live metadata, jump into detailed rule explainers, or craft a new Rego draft with the in-browser editor.
         </p>
-        <div className="mt-3 flex items-center gap-2 text-sm">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 font-semibold">
-            🛡️ ACP-240 Compliant
+            🛡️ ACP-240 + STANAG 4774/5636
           </span>
-          <span className="text-gray-600">
-            Attribute-Based Access Control | Fail-Secure Pattern | ZTDF Integrity Checks
+          <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800 font-semibold">
+            🔁 Fail-Secure Pattern
           </span>
+          <Link
+            href="/policies/lab"
+            className="inline-flex items-center px-3 py-1 rounded-md bg-gray-900 text-white text-xs font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Launch Policies Lab →
+          </Link>
         </div>
       </div>
 
       {/* Policy Statistics */}
-      <div className="grid grid-cols-3 gap-6 mb-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-blue-500 text-white">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-            </div>
-            <div className="ml-5">
-              <dl>
-                <dt className="text-sm font-medium text-gray-500">Total Policies</dt>
-                <dd className="text-2xl font-bold text-gray-900">{stats.totalPolicies}</dd>
-              </dl>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+        <div className="bg-white shadow rounded-lg p-6 border border-blue-100">
+          <p className="text-sm text-gray-500 mb-1">Total Policies</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.totalPolicies}</p>
+          <p className="text-xs text-gray-400 mt-2">System-managed authorization packages</p>
         </div>
-
-        <div className="bg-white shadow rounded-lg p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-green-500 text-white">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-            <div className="ml-5">
-              <dl>
-                <dt className="text-sm font-medium text-gray-500">Active Rules</dt>
-                <dd className="text-2xl font-bold text-gray-900">{stats.activeRules}</dd>
-              </dl>
-            </div>
-          </div>
+        <div className="bg-white shadow rounded-lg p-6 border border-green-100">
+          <p className="text-sm text-gray-500 mb-1">Active Rules</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.activeRules}</p>
+          <p className="text-xs text-gray-400 mt-2">Fail-secure rule checks across the suite</p>
         </div>
-
-        <div className="bg-white shadow rounded-lg p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="flex items-center justify-center h-12 w-12 rounded-md bg-purple-500 text-white">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-            </div>
-            <div className="ml-5">
-              <dl>
-                <dt className="text-sm font-medium text-gray-500">Test Cases</dt>
-                <dd className="text-2xl font-bold text-gray-900">{stats.totalTests}</dd>
-              </dl>
-            </div>
-          </div>
+        <div className="bg-white shadow rounded-lg p-6 border border-purple-100">
+          <p className="text-sm text-gray-500 mb-1">Test Cases</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.totalTests}</p>
+          <p className="text-xs text-gray-400 mt-2">OPA unit tests validating decisions</p>
+        </div>
+        <div className="bg-white shadow rounded-lg p-6 border border-amber-100">
+          <p className="text-sm text-gray-500 mb-1">Last Sync</p>
+          <p className="text-3xl font-bold text-gray-900">
+            {new Date(stats.lastUpdated).toLocaleDateString()}
+          </p>
+          <p className="text-xs text-gray-400 mt-2">OPA bundle refreshed</p>
         </div>
       </div>
 
-      {/* Policy List */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-md">
-        <ul className="divide-y divide-gray-200">
-          {policies.length === 0 ? (
-            <li className="px-6 py-8 text-center text-gray-500">
-              No policies available
-            </li>
-          ) : (
-            policies.map((policy) => (
-              <li key={policy.policyId}>
-                <Link
-                  href={`/policies/${policy.policyId}`}
-                  className="block hover:bg-gray-50 transition-colors"
-                >
-                  <div className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {policy.name}
-                          </h3>
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
-                              statusColors[policy.status] || 'bg-gray-100 text-gray-800 border-gray-300'
-                            }`}
-                          >
-                            {policy.status.toUpperCase()}
-                          </span>
-                          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                            v{policy.version}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-3">
-                          {policy.description}
-                        </p>
-                        <div className="flex items-center gap-6 text-sm text-gray-600">
-                          <div>
-                            <span className="font-medium">Package:</span>{' '}
-                            <span className="font-mono text-xs">{policy.package}</span>
-                          </div>
-                          <div>
-                            <span className="font-medium">Rules:</span>{' '}
-                            <span className="font-semibold text-gray-900">{policy.ruleCount}</span>
-                          </div>
-                          <div>
-                            <span className="font-medium">Tests:</span>{' '}
-                            <span className="font-semibold text-gray-900">{policy.testCount}</span>
-                          </div>
-                          <div>
-                            <span className="font-medium">Modified:</span>{' '}
-                            <span className="text-xs">{new Date(policy.lastModified).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="ml-4 flex-shrink-0">
-                        <svg
-                          className="h-5 w-5 text-gray-400"
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            ))
-          )}
-        </ul>
+      <PolicyExplorer policies={policies} />
+
+      <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white shadow rounded-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Policy Standards Lens</h3>
+            <span className="text-xs text-gray-500">5663 vs 240 vs Unified</span>
+          </div>
+          <PolicyComparison />
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-blue-900 mb-2">Why Rego?</h3>
+          <p className="text-sm text-blue-900 mb-4">
+            Rego lets us encode ACP-240 rules as readable, testable logic. Each violation function mirrors a real coalition guardrail:
+            authentication, clearance, releasability, COI, embargo, and ZTDF integrity. Keep logs lean—decisions capture uniqueID,
+            resourceId, decision, and rationale for 90-day audit trails.
+          </p>
+          <ul className="text-sm text-blue-900 space-y-2">
+            <li>• Default deny with explicit violation checks</li>
+            <li>• Structured JSON output with obligations for KAS</li>
+            <li>• 41+ automated tests via `opa test`</li>
+            <li>• Ready for Labs: push drafts directly from the editor</li>
+          </ul>
+        </div>
       </div>
 
-      {/* Help Text */}
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-sm font-semibold text-blue-900 mb-2">
-          ℹ️ About Authorization Policies
-        </h3>
-        <p className="text-sm text-blue-800">
-          These policies are written in <strong>Rego</strong> (Open Policy Agent language) and implement the 
-          <strong> ACP-240 Data-Centric Security</strong> framework. Each policy evaluates subject attributes 
-          (clearance, country, COI), resource requirements (classification, releasability), and context 
-          (time, device compliance) to make authorization decisions. Click on a policy to view its source code 
-          and test decisions interactively.
-        </p>
+      <div className="mt-10">
+        <PolicyEditorPanel />
       </div>
     </PageLayout>
   );

@@ -138,13 +138,44 @@ IdPs (10 Nations + Industry) → Keycloak Broker → Next.js + NextAuth
 | Frontend Component Tests | 152/183 | 83.1% | ✅ PASS |
 | **TOTAL** | **1,615+/1,707** | **96.6%** | **✅ PRODUCTION READY** |
 
+### Running Tests
+
+**Backend & OPA Tests:**
 ```bash
-# Run tests
 cd backend && npm test
-cd frontend && npm test
 opa test policies/ -v
 ./scripts/smoke-test.sh
 ```
+
+**Frontend Component Tests:**
+```bash
+cd frontend && npm test
+```
+
+**E2E Tests (Playwright):**
+```bash
+# Prerequisites: docker-compose services must be running
+docker-compose up -d
+
+# Run all E2E tests
+cd frontend && npm run test:e2e
+
+# Run specific test suite
+npm run test:e2e -- src/__tests__/e2e/identity-drawer.spec.ts
+
+# Run with UI (interactive mode)
+npm run test:e2e:ui
+
+# View test report
+npm run test:e2e:report
+```
+
+**E2E Test Configuration:**
+- **Local:** Uses docker-compose services (HTTPS at `localhost:3000`)
+- **CI:** Uses HTTP server with self-signed certificates
+- **Certificate Strategy:** Hybrid approach - local uses mkcert certificates from docker-compose, CI generates certificates per job
+
+For more details, see `frontend/playwright.config.ts`
 
 ## 🔐 Security Features
 
