@@ -111,8 +111,8 @@ jobs:
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           # Increased from 30 to 60 iterations (5 minutes total)
           for i in {1..60}; do
-            if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready on HTTPS"
+            if docker exec keycloak curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready on HTTPS (management port 9000)"
               break
             fi
             if [ $i -eq 60 ]; then
@@ -361,8 +361,8 @@ jobs:
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           # Increased from 30 to 60 iterations (5 minutes total)
           for i in {1..60}; do
-            if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready on HTTPS"
+            if docker exec keycloak curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready on HTTPS (management port 9000)"
               break
             fi
             if [ $i -eq 60 ]; then
