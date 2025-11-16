@@ -10,18 +10,18 @@
 
 module "usa_mfa" {
   source = "../modules/realm-mfa"
-  
+
   realm_id           = keycloak_realm.dive_v3_usa.id
   realm_name         = "dive-v3-usa"
   realm_display_name = "United States"
-  
+
   # Clearance-based MFA configuration
-  clearance_attribute_name       = "clearance"
-  clearance_attribute_value_regex = "^(?!UNCLASSIFIED$).*"  # Not used anymore (split into specific conditions)
-  
+  clearance_attribute_name        = "clearance"
+  clearance_attribute_value_regex = "^(?!UNCLASSIFIED$).*" # Not used anymore (split into specific conditions)
+
   # Direct Grant DEPRECATED in v2.0.0
   enable_direct_grant_mfa = false
-  
+
   # Use custom flow (not standard browser flow)
   use_standard_browser_flow = false
 }
@@ -32,14 +32,14 @@ module "usa_mfa" {
 
 module "usa_test_users" {
   source = "../modules/realm-test-users"
-  
+
   realm_id           = keycloak_realm.dive_v3_usa.id
   realm_name         = "dive-v3-usa"
   country_code       = "USA"
   country_code_lower = "usa"
   email_domain       = "example.mil"
   duty_org           = "US_ARMY"
-  
+
   # Country-specific clearance mapping (USA uses standard names)
   clearance_mappings = {
     "UNCLASSIFIED" = "UNCLASSIFIED"
@@ -47,9 +47,9 @@ module "usa_test_users" {
     "SECRET"       = "SECRET"
     "TOP_SECRET"   = "TOP SECRET"
   }
-  
+
   # COI tags by clearance level
-  coi_confidential = []  # Basic access, no special COI
+  coi_confidential = [] # Basic access, no special COI
   coi_secret       = ["NATO-COSMIC"]
   coi_top_secret   = ["NATO-COSMIC", "FVEY", "CAN-US"]
 }

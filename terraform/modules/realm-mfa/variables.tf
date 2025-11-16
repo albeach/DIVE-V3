@@ -42,25 +42,25 @@ variable "clearance_attribute_value_regex" {
 variable "otp_policy" {
   description = "OTP policy configuration (note: applied at realm level, not in module)"
   type = object({
-    digits         = number
-    period         = number
-    algorithm      = string
-    type           = string
-    look_ahead     = number
+    digits     = number
+    period     = number
+    algorithm  = string
+    type       = string
+    look_ahead = number
   })
   default = {
-    digits         = 6
-    period         = 30
-    algorithm      = "HmacSHA256"
-    type           = "totp"
-    look_ahead     = 1
+    digits     = 6
+    period     = 30
+    algorithm  = "HmacSHA256"
+    type       = "totp"
+    look_ahead = 1
   }
 }
 
 variable "enable_direct_grant_mfa" {
   description = "⚠️ DEPRECATED: Enable MFA for Direct Grant (ROPC) flow. Default is FALSE (disabled). Use browser-based flows only. See docs/NATIVE-KEYCLOAK-REFACTORING.md"
   type        = bool
-  default     = false  # CHANGED in v2.0.0: Direct Grant is DEPRECATED
+  default     = false # CHANGED in v2.0.0: Direct Grant is DEPRECATED
 }
 
 variable "use_standard_browser_flow" {

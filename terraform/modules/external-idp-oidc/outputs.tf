@@ -38,12 +38,12 @@ output "claim_mappers" {
 output "idp_config_summary" {
   description = "Summary of IdP configuration"
   value = {
-    alias         = keycloak_oidc_identity_provider.external_idp.alias
-    display_name  = keycloak_oidc_identity_provider.external_idp.display_name
-    client_id     = keycloak_oidc_identity_provider.external_idp.client_id
-    country_code  = var.country_code
-    enabled       = keycloak_oidc_identity_provider.external_idp.enabled
-    pkce_enabled  = keycloak_oidc_identity_provider.external_idp.pkce_enabled
+    alias        = keycloak_oidc_identity_provider.external_idp.alias
+    display_name = keycloak_oidc_identity_provider.external_idp.display_name
+    client_id    = keycloak_oidc_identity_provider.external_idp.client_id
+    country_code = var.country_code
+    enabled      = keycloak_oidc_identity_provider.external_idp.enabled
+    pkce_enabled = keycloak_oidc_identity_provider.external_idp.pkce_enabled
   }
 }
 

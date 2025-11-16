@@ -30,11 +30,11 @@ provider "keycloak" {
 locals {
   # Admin API base (for Terraform provider connection)
   keycloak_admin_base = var.keycloak_url
-  
+
   # Public-facing base (for client redirect URIs and browser access)
   # This should be the custom hostname when configured, localhost otherwise
   keycloak_public_base = var.keycloak_public_url
-  
+
   # Construct realm URLs dynamically using PUBLIC URL for client-facing endpoints
   # These URLs are used in:
   # - IdP broker authorization/token/logout URLs
@@ -53,13 +53,13 @@ locals {
     industry = "${local.keycloak_public_base}/realms/dive-v3-industry"
     broker   = "${local.keycloak_public_base}/realms/dive-v3-broker"
   }
-  
+
   # Common OIDC endpoint paths
-  oidc_auth_path      = "/protocol/openid-connect/auth"
-  oidc_token_path     = "/protocol/openid-connect/token"
-  oidc_certs_path     = "/protocol/openid-connect/certs"
-  oidc_userinfo_path  = "/protocol/openid-connect/userinfo"
-  oidc_logout_path    = "/protocol/openid-connect/logout"
+  oidc_auth_path     = "/protocol/openid-connect/auth"
+  oidc_token_path    = "/protocol/openid-connect/token"
+  oidc_certs_path    = "/protocol/openid-connect/certs"
+  oidc_userinfo_path = "/protocol/openid-connect/userinfo"
+  oidc_logout_path   = "/protocol/openid-connect/logout"
 }
 
 # ============================================

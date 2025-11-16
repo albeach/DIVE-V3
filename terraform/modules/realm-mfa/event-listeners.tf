@@ -26,7 +26,7 @@ resource "keycloak_realm_events" "mfa_events" {
 
   # Enable user events for LOGIN tracking
   events_enabled = true
-  
+
   # Store events for 7 days (604800 seconds)
   # Sufficient for audit trail without overwhelming storage
   events_expiration = 604800
@@ -46,7 +46,7 @@ resource "keycloak_realm_events" "mfa_events" {
   # Enable admin events for audit trail
   # Tracks all administrative actions in Keycloak Admin Console
   admin_events_enabled = true
-  
+
   # Include request/response details in admin events
   # Useful for forensics and compliance audits
   admin_events_details_enabled = true

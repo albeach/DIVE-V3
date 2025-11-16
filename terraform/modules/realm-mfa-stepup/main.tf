@@ -41,7 +41,7 @@ resource "keycloak_authentication_execution" "stepup_password_form" {
   authenticator     = "auth-username-password-form"
   requirement       = "REQUIRED"
   priority          = 20
-  
+
   depends_on = [keycloak_authentication_execution.stepup_cookie]
 }
 
@@ -57,7 +57,7 @@ resource "keycloak_authentication_subflow" "stepup_aal3_webauthn" {
   alias             = "Conditional AAL3 - TOP_SECRET - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
   priority          = 30
-  
+
   depends_on = [keycloak_authentication_execution.stepup_password_form]
 }
 
@@ -86,7 +86,7 @@ resource "keycloak_authentication_execution" "stepup_aal3_webauthn_form" {
   authenticator     = "webauthn-authenticator"
   requirement       = "REQUIRED"
   priority          = 20
-  
+
   depends_on = [
     keycloak_authentication_execution.stepup_aal3_condition,
     keycloak_authentication_execution_config.stepup_aal3_condition_config
@@ -105,7 +105,7 @@ resource "keycloak_authentication_subflow" "stepup_aal2_otp" {
   alias             = "Conditional AAL2 - SECRET CONFIDENTIAL - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
   priority          = 40
-  
+
   depends_on = [keycloak_authentication_execution.stepup_password_form]
 }
 
@@ -134,7 +134,7 @@ resource "keycloak_authentication_execution" "stepup_aal2_otp_form" {
   authenticator     = "auth-otp-form"
   requirement       = "REQUIRED"
   priority          = 20
-  
+
   depends_on = [
     keycloak_authentication_execution.stepup_aal2_condition,
     keycloak_authentication_execution_config.stepup_aal2_condition_config

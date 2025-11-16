@@ -4,7 +4,7 @@
 
 output "mapper_count" {
   description = "Number of mappers created"
-  value       = 7  # uniqueID, clearance, clearanceOriginal, country, coi, dutyOrg, orgUnit
+  value       = 7 # uniqueID, clearance, clearanceOriginal, country, coi, dutyOrg, orgUnit
 }
 
 output "idp_alias" {

@@ -8,22 +8,22 @@
 resource "keycloak_realm" "dive_v3_broker" {
   realm   = "dive-v3-broker"
   enabled = true
-  
+
   display_name      = "DIVE V3 - Federation Hub"
   display_name_html = "<b>DIVE V3</b> - Coalition Identity Broker"
-  
+
   # Federation hub settings (no direct users)
   registration_allowed           = false
   registration_email_as_username = false
   remember_me                    = false
   reset_password_allowed         = false
   edit_username_allowed          = false
-  
+
   # Token lifetimes (conservative for federation)
-  access_token_lifespan        = "10m"   # Short for federated tokens
-  sso_session_idle_timeout     = "15m"   # Align with strictest realm (U.S.)
-  sso_session_max_lifespan     = "4h"    # Conservative
-  
+  access_token_lifespan    = "10m" # Short for federated tokens
+  sso_session_idle_timeout = "15m" # Align with strictest realm (U.S.)
+  sso_session_max_lifespan = "4h"  # Conservative
+
   # Brute-force detection (still needed for broker attempts)
   security_defenses {
     brute_force_detection {
@@ -39,7 +39,7 @@ resource "keycloak_realm" "dive_v3_broker" {
       strict_transport_security = "max-age=31536000; includeSubDomains; preload"
     }
   }
-  
+
   ssl_required = "external"
 }
 
@@ -49,26 +49,26 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   client_id = "dive-v3-client-broker"
   name      = "DIVE V3 Application (Broker)"
   enabled   = true
-  
+
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
   direct_access_grants_enabled = false
   service_accounts_enabled     = false
-  
+
   root_url = var.app_url
   base_url = var.app_url
-  
+
   valid_redirect_uris = [
     "${var.app_url}/*",
     "${var.app_url}/api/auth/callback/keycloak"
   ]
-  
+
   web_origins = [
     var.app_url,
     "+"
   ]
-  
+
   # Logout configuration
   frontchannel_logout_enabled     = true
   frontchannel_logout_url         = "${var.app_url}/api/auth/logout-callback"
@@ -95,17 +95,17 @@ resource "keycloak_openid_client_default_scopes" "broker_client_scopes" {
     "email",
     "roles",
     "web-origins",
-    "basic",  # Keycloak 26: includes auth_time and sub mappers (NIST SP 800-63B requirement)
+    "basic", # Keycloak 26: includes auth_time and sub mappers (NIST SP 800-63B requirement)
     keycloak_openid_client_scope.broker_dive_attributes.name
   ]
 }
 
 # Protocol mappers for broker client (to include all DIVE attributes)
 resource "keycloak_generic_protocol_mapper" "broker_uniqueid" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "uniqueID"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "uniqueID"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -119,10 +119,10 @@ resource "keycloak_generic_protocol_mapper" "broker_uniqueid" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_clearance" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "clearance"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "clearance"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -136,10 +136,10 @@ resource "keycloak_generic_protocol_mapper" "broker_clearance" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_country" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "countryOfAffiliation"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "countryOfAffiliation"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -153,10 +153,10 @@ resource "keycloak_generic_protocol_mapper" "broker_country" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_coi" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "acpCOI"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "acpCOI"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -170,10 +170,10 @@ resource "keycloak_generic_protocol_mapper" "broker_coi" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_dutyorg" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "dutyOrg"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "dutyOrg"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -187,10 +187,10 @@ resource "keycloak_generic_protocol_mapper" "broker_dutyorg" {
 }
 
 resource "keycloak_generic_protocol_mapper" "broker_orgunit" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "orgUnit"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "orgUnit"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usermodel-attribute-mapper"
 
   config = {
@@ -207,14 +207,14 @@ resource "keycloak_generic_protocol_mapper" "broker_orgunit" {
 # ACR (Authentication Context Class Reference) is set by Keycloak during authentication flow
 # Session note "AUTH_CONTEXT_CLASS_REF" contains: 0 (AAL1), 1 (AAL2), 2 (AAL3)
 resource "keycloak_generic_protocol_mapper" "broker_acr" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "acr-from-session"
-  protocol   = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # Changed from usermodel-attribute-mapper
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "acr-from-session"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper" # Changed from usermodel-attribute-mapper
 
   config = {
-    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF"  # Keycloak's internal ACR storage
+    "user.session.note"    = "AUTH_CONTEXT_CLASS_REF" # Keycloak's internal ACR storage
     "claim.name"           = "acr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
@@ -226,14 +226,14 @@ resource "keycloak_generic_protocol_mapper" "broker_acr" {
 # Keycloak 26 Fix: Use session note mapper for AMR
 # AMR (Authentication Methods Reference) contains array of auth factors: ["pwd"], ["pwd","otp"], ["webauthn"]
 resource "keycloak_generic_protocol_mapper" "broker_amr" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "amr-from-session"
-  protocol   = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"  # Changed from usermodel-attribute-mapper
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "amr-from-session"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper" # Changed from usermodel-attribute-mapper
 
   config = {
-    "user.session.note"    = "AUTH_METHODS_REF"  # Keycloak's internal AMR storage
+    "user.session.note"    = "AUTH_METHODS_REF" # Keycloak's internal AMR storage
     "claim.name"           = "amr"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
@@ -244,10 +244,10 @@ resource "keycloak_generic_protocol_mapper" "broker_amr" {
 
 # Auth time mapper - Keycloak tracks this automatically in user session
 resource "keycloak_generic_protocol_mapper" "broker_auth_time" {
-  realm_id   = keycloak_realm.dive_v3_broker.id
-  client_id  = keycloak_openid_client.dive_v3_app_broker.id
-  name       = "auth-time"
-  protocol   = "openid-connect"
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "auth-time"
+  protocol        = "openid-connect"
   protocol_mapper = "oidc-usersessionmodel-note-mapper"
 
   config = {

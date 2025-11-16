@@ -38,32 +38,32 @@ variable "app_url" {
 # ============================================
 
 resource "keycloak_openid_client" "direct_grant_client" {
-  realm_id  = var.realm_id
-  client_id = var.client_id
-  name      = "DIVE V3 Direct Grant Client"
+  realm_id    = var.realm_id
+  client_id   = var.client_id
+  name        = "DIVE V3 Direct Grant Client"
   description = "Backend API client for Direct Grant authentication (custom login pages)"
-  enabled   = true
-  
+  enabled     = true
+
   # CONFIDENTIAL client (requires client_secret)
   access_type = "CONFIDENTIAL"
-  
+
   # Enable Direct Access Grants (Resource Owner Password Credentials)
   direct_access_grants_enabled = true
-  
+
   # Disable other flows
-  standard_flow_enabled    = false  # No Authorization Code flow
-  implicit_flow_enabled    = false  # No Implicit flow
-  service_accounts_enabled = false  # No client credentials flow
-  
+  standard_flow_enabled    = false # No Authorization Code flow
+  implicit_flow_enabled    = false # No Implicit flow
+  service_accounts_enabled = false # No client credentials flow
+
   # No redirects needed for Direct Grant
   valid_redirect_uris = []
   web_origins         = []
-  
+
   # Client authentication settings
   client_authenticator_type = "client-secret"
-  
+
   # Access token settings
-  access_token_lifespan = "900"  # 15 minutes (same as realm default)
+  access_token_lifespan = "900" # 15 minutes (same as realm default)
 }
 
 # ============================================

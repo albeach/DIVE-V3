@@ -27,7 +27,7 @@ resource "keycloak_custom_identity_provider_mapper" "unique_id" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-uniqueID-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = var.unique_id_claim
@@ -46,7 +46,7 @@ resource "keycloak_custom_identity_provider_mapper" "clearance" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-clearance-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearance"
@@ -66,7 +66,7 @@ resource "keycloak_custom_identity_provider_mapper" "clearance_original" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-clearanceOriginal-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "clearanceOriginal"
@@ -85,7 +85,7 @@ resource "keycloak_custom_identity_provider_mapper" "country" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-country-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "countryOfAffiliation"
@@ -104,9 +104,9 @@ resource "keycloak_custom_identity_provider_mapper" "coi" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-coi-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
-    "syncMode"       = "IMPORT"  # Only set on first login, preserve user changes
+    "syncMode"       = "IMPORT" # Only set on first login, preserve user changes
     "claim"          = "acpCOI"
     "user.attribute" = "acpCOI"
   }
@@ -123,7 +123,7 @@ resource "keycloak_custom_identity_provider_mapper" "dutyorg" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-dutyOrg-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "dutyOrg"
@@ -142,7 +142,7 @@ resource "keycloak_custom_identity_provider_mapper" "orgunit" {
   identity_provider_alias  = var.idp_alias
   name                     = "${var.idp_prefix}-orgUnit-mapper"
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-  
+
   extra_config = {
     "syncMode"       = "FORCE"
     "claim"          = "orgUnit"

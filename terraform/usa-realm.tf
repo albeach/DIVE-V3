@@ -57,16 +57,16 @@ resource "keycloak_realm" "dive_v3_usa" {
   # WebAuthn Policy (AAL3 Hardware-Backed Authentication) - v2.0.0
   # AUTOMATED via Terraform - No manual configuration needed!
   web_authn_policy {
-    relying_party_entity_name            = "DIVE V3 Coalition Platform"
-    relying_party_id                     = "dive25.com"  # Registrable domain suffix for dev-auth.dive25.com
-    signature_algorithms                 = ["ES256", "RS256"]
-    attestation_conveyance_preference    = "none"
-    authenticator_attachment             = "cross-platform"
-    require_resident_key                 = "No"
-    user_verification_requirement        = "preferred"  # Changed from 'required' to 'preferred' for better compatibility
-    create_timeout                       = 300
-    avoid_same_authenticator_register    = false
-    acceptable_aaguids                   = []
+    relying_party_entity_name         = "DIVE V3 Coalition Platform"
+    relying_party_id                  = "dive25.com" # Registrable domain suffix for dev-auth.dive25.com
+    signature_algorithms              = ["ES256", "RS256"]
+    attestation_conveyance_preference = "none"
+    authenticator_attachment          = "cross-platform"
+    require_resident_key              = "No"
+    user_verification_requirement     = "preferred" # Changed from 'required' to 'preferred' for better compatibility
+    create_timeout                    = 300
+    avoid_same_authenticator_register = false
+    acceptable_aaguids                = []
   }
 
   security_defenses {
@@ -295,8 +295,8 @@ resource "keycloak_user" "usa_test_user_secret" {
     dutyOrg              = "US_ARMY"
     orgUnit              = "CYBER_DEFENSE"
     # FIX (Nov 7): Set ACR/AMR as user attributes
-    acr                  = "1"                      # AAL2
-    amr                  = "[\"pwd\",\"otp\"]"      # Password + OTP
+    acr = "1"                 # AAL2
+    amr = "[\"pwd\",\"otp\"]" # Password + OTP
   }
 
   # Phase 3 Post-Hardening: Force MFA enrollment for SECRET clearance users
@@ -338,8 +338,8 @@ resource "keycloak_user" "usa_alice_general" {
     dutyOrg              = "US_ARMY"
     orgUnit              = "INTELLIGENCE"
     # FIX (Nov 7): Set ACR/AMR as user attributes
-    acr                  = "2"                      # AAL3
-    amr                  = "[\"pwd\",\"hwk\"]"      # Password + Hardware Key
+    acr = "2"                 # AAL3
+    amr = "[\"pwd\",\"hwk\"]" # Password + Hardware Key
   }
 
   initial_password {

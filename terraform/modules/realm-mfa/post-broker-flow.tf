@@ -31,7 +31,7 @@ resource "keycloak_authentication_execution" "post_broker_review_profile" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-review-profile"
-  requirement       = "DISABLED"  # Don't force profile review
+  requirement       = "DISABLED" # Don't force profile review
 }
 
 # Step 2: Create User (ALTERNATIVE - auto-create from IdP)
@@ -39,8 +39,8 @@ resource "keycloak_authentication_execution" "post_broker_create_user" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-create-user-if-unique"
-  requirement       = "ALTERNATIVE"  # ALTERNATIVE allows proper execution order
-  
+  requirement       = "ALTERNATIVE" # ALTERNATIVE allows proper execution order
+
   depends_on = [
     keycloak_authentication_execution.post_broker_review_profile
   ]
@@ -51,8 +51,8 @@ resource "keycloak_authentication_execution" "post_broker_auto_link" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-auto-link"
-  requirement       = "ALTERNATIVE"  # Alternative to create-user
-  
+  requirement       = "ALTERNATIVE" # Alternative to create-user
+
   depends_on = [
     keycloak_authentication_execution.post_broker_create_user
   ]
@@ -70,9 +70,9 @@ resource "keycloak_authentication_subflow" "post_broker_conditional_webauthn" {
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   alias             = "Conditional WebAuthn AAL3 - Post Broker - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
-  
+
   depends_on = [
-    keycloak_authentication_execution.post_broker_auto_link  # Wait for user creation/linking
+    keycloak_authentication_execution.post_broker_auto_link # Wait for user creation/linking
   ]
 }
 
@@ -90,7 +90,7 @@ resource "keycloak_authentication_execution_config" "post_broker_condition_top_s
   alias        = "POST BROKER TOP SECRET Check - ${var.realm_display_name}"
   config = {
     attribute_name  = var.clearance_attribute_name
-    attribute_value = "^TOP_SECRET$"  # Exact match
+    attribute_value = "^TOP_SECRET$" # Exact match
     negate          = "false"
   }
 }
@@ -101,7 +101,7 @@ resource "keycloak_authentication_execution" "post_broker_webauthn_form" {
   parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_webauthn.alias
   authenticator     = "webauthn-authenticator"
   requirement       = "REQUIRED"
-  
+
   depends_on = [
     keycloak_authentication_execution.post_broker_condition_top_secret,
     keycloak_authentication_execution_config.post_broker_condition_top_secret_config
@@ -117,9 +117,9 @@ resource "keycloak_authentication_subflow" "post_broker_conditional_otp" {
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   alias             = "Conditional OTP AAL2 - Post Broker - ${var.realm_display_name}"
   requirement       = "CONDITIONAL"
-  
+
   depends_on = [
-    keycloak_authentication_subflow.post_broker_conditional_webauthn  # OTP after WebAuthn
+    keycloak_authentication_subflow.post_broker_conditional_webauthn # OTP after WebAuthn
   ]
 }
 
@@ -138,7 +138,7 @@ resource "keycloak_authentication_execution_config" "post_broker_condition_confi
   alias        = "POST BROKER CONFIDENTIAL SECRET Check - ${var.realm_display_name}"
   config = {
     attribute_name  = var.clearance_attribute_name
-    attribute_value = "^(CONFIDENTIAL|SECRET)$"  # Match both levels
+    attribute_value = "^(CONFIDENTIAL|SECRET)$" # Match both levels
     negate          = "false"
   }
 }
@@ -149,7 +149,7 @@ resource "keycloak_authentication_execution" "post_broker_otp_form" {
   parent_flow_alias = keycloak_authentication_subflow.post_broker_conditional_otp.alias
   authenticator     = "auth-otp-form"
   requirement       = "REQUIRED"
-  
+
   depends_on = [
     keycloak_authentication_execution.post_broker_condition_clearance,
     keycloak_authentication_execution_config.post_broker_condition_config
@@ -162,7 +162,7 @@ resource "keycloak_authentication_execution" "post_broker_update_attributes" {
   parent_flow_alias = keycloak_authentication_flow.post_broker_mfa.alias
   authenticator     = "idp-confirm-link"
   requirement       = "DISABLED"
-  
+
   depends_on = [
     keycloak_authentication_subflow.post_broker_conditional_otp
   ]

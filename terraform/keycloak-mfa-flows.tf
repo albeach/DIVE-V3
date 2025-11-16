@@ -19,7 +19,7 @@ module "broker_mfa" {
   realm_display_name = "DIVE V3 Broker"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # CRITICAL FIX: Broker realm ALSO needs standard flow to avoid conditional-user-attribute bug
+  use_standard_browser_flow = true  # CRITICAL FIX: Broker realm ALSO needs standard flow to avoid conditional-user-attribute bug
 }
 
 # ============================================
@@ -38,19 +38,19 @@ module "usa_mfa_stepup" {
   # ACR/LoA Mappings (NIST AAL levels)
   acr_loa_mappings = {
     aal1 = {
-      acr_value = "urn:mace:incommon:iap:silver"      # AAL1: Password
+      acr_value = "urn:mace:incommon:iap:silver" # AAL1: Password
       loa_level = 1
-      max_age   = 300  # 5 minutes for basic auth
+      max_age   = 300 # 5 minutes for basic auth
     }
     aal2 = {
-      acr_value = "urn:mace:incommon:iap:gold"        # AAL2: Password + OTP
+      acr_value = "urn:mace:incommon:iap:gold" # AAL2: Password + OTP
       loa_level = 2
-      max_age   = 0    # Always re-authenticate when explicitly requested
+      max_age   = 0 # Always re-authenticate when explicitly requested
     }
     aal3 = {
-      acr_value = "urn:mace:incommon:iap:platinum"    # AAL3: Password + WebAuthn
+      acr_value = "urn:mace:incommon:iap:platinum" # AAL3: Password + WebAuthn
       loa_level = 3
-      max_age   = 0    # Always re-authenticate with hardware key
+      max_age   = 0 # Always re-authenticate with hardware key
     }
   }
 }
@@ -66,8 +66,8 @@ module "fra_mfa" {
   realm_name         = "dive-v3-fra"
   realm_display_name = "France"
 
-  enable_direct_grant_mfa = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -81,8 +81,8 @@ module "can_mfa" {
   realm_name         = "dive-v3-can"
   realm_display_name = "Canada"
 
-  enable_direct_grant_mfa = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -97,7 +97,7 @@ module "industry_mfa" {
   realm_display_name = "Industry"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -112,7 +112,7 @@ module "deu_mfa" {
   realm_display_name = "Germany"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -127,7 +127,7 @@ module "gbr_mfa" {
   realm_display_name = "United Kingdom"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -142,7 +142,7 @@ module "ita_mfa" {
   realm_display_name = "Italy"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -157,7 +157,7 @@ module "esp_mfa" {
   realm_display_name = "Spain"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -172,7 +172,7 @@ module "pol_mfa" {
   realm_display_name = "Poland"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================
@@ -187,7 +187,7 @@ module "nld_mfa" {
   realm_display_name = "Netherlands"
 
   enable_direct_grant_mfa   = false # DISABLED v2.0.0 - Custom SPI removed, use browser-based flows only
-  use_standard_browser_flow = true # PERMANENT FIX: Use standard browser for federation
+  use_standard_browser_flow = true  # PERMANENT FIX: Use standard browser for federation
 }
 
 # ============================================

@@ -42,7 +42,7 @@ resource "keycloak_authentication_execution" "direct_grant_password" {
   parent_flow_alias = keycloak_authentication_flow.direct_grant_mfa[0].alias
   authenticator     = "direct-grant-validate-password"
   requirement       = "REQUIRED"
-  
+
   depends_on = [
     keycloak_authentication_execution.direct_grant_username
   ]
@@ -57,7 +57,7 @@ resource "keycloak_authentication_execution_config" "direct_grant_password_acr_c
   execution_id = keycloak_authentication_execution.direct_grant_password[0].id
   alias        = "Direct Grant Password ACR - ${var.realm_display_name}"
   config = {
-    acr_level = "0"  # AAL1 for password-only
+    acr_level = "0" # AAL1 for password-only
   }
 }
 
@@ -67,8 +67,8 @@ resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.direct_grant_mfa[0].alias
   alias             = "Conditional OTP - Direct Grant - ${var.realm_display_name}"
-  requirement       = "CONDITIONAL"  # Only enforce if condition (clearance) is met
-  
+  requirement       = "CONDITIONAL" # Only enforce if condition (clearance) is met
+
   depends_on = [
     keycloak_authentication_execution.direct_grant_password
   ]
@@ -82,7 +82,7 @@ resource "keycloak_authentication_execution" "direct_grant_condition_user_attrib
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.direct_grant_otp_conditional[0].alias
   authenticator     = "conditional-user-attribute"
-  requirement       = "REQUIRED"  # Enforce clearance-based MFA
+  requirement       = "REQUIRED" # Enforce clearance-based MFA
 }
 
 # Configuration for conditional-user-attribute
@@ -105,9 +105,9 @@ resource "keycloak_authentication_execution" "direct_grant_otp" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.direct_grant_otp_conditional[0].alias
-  authenticator     = "direct-grant-otp-setup"  # Custom SPI (dive-keycloak-spi.jar)
+  authenticator     = "direct-grant-otp-setup" # Custom SPI (dive-keycloak-spi.jar)
   requirement       = "REQUIRED"
-  
+
   depends_on = [
     keycloak_authentication_execution.direct_grant_condition_user_attribute,
     keycloak_authentication_execution_config.direct_grant_condition_config
@@ -122,7 +122,7 @@ resource "keycloak_authentication_execution_config" "direct_grant_otp_acr_config
   execution_id = keycloak_authentication_execution.direct_grant_otp[0].id
   alias        = "Direct Grant OTP ACR - ${var.realm_display_name}"
   config = {
-    acr_level = "1"  # Set ACR to "1" (AAL2) when OTP succeeds in Direct Grant
+    acr_level = "1" # Set ACR to "1" (AAL2) when OTP succeeds in Direct Grant
   }
 }
 
