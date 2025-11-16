@@ -43,7 +43,7 @@ jobs:
           --health-retries 5
       
       keycloak:
-        image: quay.io/keycloak/keycloak:26.0
+        image: quay.io/keycloak/keycloak:26.0.0
         ports:
           - 8081:8080
         env:
@@ -51,13 +51,14 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: true
+          KC_HEALTH_ENABLED: "true"
+          KC_HTTP_RELATIVE_PATH: /
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 5
-          --health-start-period 90s
+          --health-retries 10
+          --health-start-period 120s
     
     steps:
       - name: Checkout Code
@@ -87,13 +88,19 @@ jobs:
       - name: Configure Keycloak for E2E Tests
         run: |
           echo "⏳ Waiting for Keycloak to be ready..."
-          for i in {1..30}; do
+          # Increased from 30 to 60 iterations (5 minutes total)
+          for i in {1..60}; do
             if curl -f http://localhost:8081/health/ready 2>/dev/null; then
               echo "✅ Keycloak is ready"
               break
             fi
-            echo "Waiting for Keycloak... ($i/30)"
-            sleep 2
+            if [ $i -eq 60 ]; then
+              echo "❌ Keycloak failed to start after 5 minutes"
+              docker ps -a
+              exit 1
+            fi
+            echo "Waiting for Keycloak... ($i/60)"
+            sleep 5
           done
           
           # Configure realm and test users via Keycloak Admin REST API
@@ -262,7 +269,7 @@ jobs:
           --health-retries 5
       
       keycloak:
-        image: quay.io/keycloak/keycloak:26.0
+        image: quay.io/keycloak/keycloak:26.0.0
         ports:
           - 8081:8080
         env:
@@ -270,13 +277,14 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: true
+          KC_HEALTH_ENABLED: "true"
+          KC_HTTP_RELATIVE_PATH: /
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 5
-          --health-start-period 90s
+          --health-retries 10
+          --health-start-period 120s
     
     steps:
       - name: Checkout Code
@@ -304,11 +312,20 @@ jobs:
       
       - name: Configure Keycloak for E2E Tests
         run: |
-          for i in {1..30}; do
+          echo "⏳ Waiting for Keycloak to be ready..."
+          # Increased from 30 to 60 iterations (5 minutes total)
+          for i in {1..60}; do
             if curl -f http://localhost:8081/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready"
               break
             fi
-            sleep 2
+            if [ $i -eq 60 ]; then
+              echo "❌ Keycloak failed to start after 5 minutes"
+              docker ps -a
+              exit 1
+            fi
+            echo "Waiting for Keycloak... ($i/60)"
+            sleep 5
           done
           
           export KEYCLOAK_URL=http://localhost:8081
@@ -431,7 +448,7 @@ jobs:
           --health-retries 5
       
       keycloak:
-        image: quay.io/keycloak/keycloak:26.0
+        image: quay.io/keycloak/keycloak:26.0.0
         ports:
           - 8081:8080
         env:
@@ -439,13 +456,14 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: true
+          KC_HEALTH_ENABLED: "true"
+          KC_HTTP_RELATIVE_PATH: /
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 5
-          --health-start-period 90s
+          --health-retries 10
+          --health-start-period 120s
     
     steps:
       - name: Checkout Code
@@ -582,7 +600,7 @@ jobs:
           --health-retries 5
       
       keycloak:
-        image: quay.io/keycloak/keycloak:26.0
+        image: quay.io/keycloak/keycloak:26.0.0
         ports:
           - 8081:8080
         env:
@@ -590,13 +608,14 @@ jobs:
           KC_LOG_LEVEL: warn
           KEYCLOAK_ADMIN: admin
           KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: true
+          KC_HEALTH_ENABLED: "true"
+          KC_HTTP_RELATIVE_PATH: /
         options: >-
           --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
           --health-interval 30s
           --health-timeout 10s
-          --health-retries 5
-          --health-start-period 90s
+          --health-retries 10
+          --health-start-period 120s
     
     steps:
       - name: Checkout Code
