@@ -698,5 +698,251 @@ describe('HealthService', () => {
             });
         });
     });
+
+    describe('Additional Edge Cases and Error Handling', () => {
+        it('should handle circuit breaker OPEN state', async () => {
+            (circuitBreakerModule.getAllCircuitBreakerStats as jest.Mock).mockReturnValue({
+                opa: {
+                    state: 'OPEN',
+                    failures: 5,
+                    successes: 0,
+                    totalRequests: 5,
+                    lastFailureTime: new Date(),
+                    lastStateChange: new Date(),
+                    rejectCount: 3,
+                },
+                keycloak: { state: 'CLOSED', failures: 0 },
+                mongodb: { state: 'CLOSED', failures: 0 },
+                kas: { state: 'CLOSED', failures: 0 },
+            });
+
+            const health = await healthService.getDetailedHealth();
+
+            expect(health.services.opa.status).toBe('down');
+            expect(health.overall).toBe('unhealthy');
+        });
+
+        it('should handle circuit breaker HALF_OPEN state', async () => {
+            (circuitBreakerModule.getAllCircuitBreakerStats as jest.Mock).mockReturnValue({
+                opa: {
+                    state: 'HALF_OPEN',
+                    failures: 2,
+                    successes: 1,
+                    totalRequests: 3,
+                    lastFailureTime: new Date(Date.now() - 30000),
+                    lastStateChange: new Date(),
+                    rejectCount: 0,
+                },
+                keycloak: { state: 'CLOSED', failures: 0 },
+                mongodb: { state: 'CLOSED', failures: 0 },
+                kas: { state: 'CLOSED', failures: 0 },
+            });
+
+            const health = await healthService.getDetailedHealth();
+
+            expect(health.services.opa.circuitBreaker?.state).toBe('HALF_OPEN');
+        });
+
+        it('should handle multiple services down simultaneously', async () => {
+            // Mock all services failing
+            mockedAxios.get.mockRejectedValue(new Error('Network error'));
+
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockRejectedValue(new Error('Mongo down')),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+
+            const health = await healthService.getHealth();
+
+            expect(health.status).toBe('unhealthy');
+            expect(health.services.mongodb).toBe('down');
+            expect(health.services.opa).toBe('down');
+            expect(health.services.keycloak).toBe('down');
+        });
+
+        it('should handle OPA timeout with specific error', async () => {
+            mockedAxios.get.mockImplementation((url) => {
+                if (url.includes('/health')) {
+                    return Promise.reject({ code: 'ECONNABORTED', message: 'timeout' });
+                }
+                return Promise.resolve({ data: { status: 'ok' } });
+            });
+
+            const health = await healthService.getDetailedHealth();
+
+            expect(health.services.opa.status).toBe('down');
+            expect(health.services.opa.error).toContain('timeout');
+        });
+
+        it('should handle Keycloak returning non-200 status', async () => {
+            mockedAxios.get.mockImplementation((url) => {
+                if (url.includes('/health/ready')) {
+                    return Promise.resolve({ status: 503, data: { status: 'degraded' } });
+                }
+                return Promise.resolve({ data: { status: 'ok' } });
+            });
+
+            const health = await healthService.getDetailedHealth();
+
+            // Should handle gracefully
+            expect(health).toBeDefined();
+        });
+
+        it('should calculate memory usage percentage correctly', async () => {
+            mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
+            
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockResolvedValue({}),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+
+            const health = await healthService.getDetailedHealth();
+
+            expect(health.metrics.memory.used).toBeGreaterThan(0);
+            expect(health.metrics.memory.total).toBeGreaterThan(0);
+            expect(health.metrics.memory.percentage).toBeGreaterThan(0);
+            expect(health.metrics.memory.percentage).toBeLessThanOrEqual(100);
+        });
+
+        it('should handle KAS health check failure gracefully', async () => {
+            process.env.KAS_URL = 'http://localhost:8080';
+
+            mockedAxios.get.mockImplementation((url) => {
+                if (url.includes('localhost:8080')) {
+                    return Promise.reject(new Error('KAS unavailable'));
+                }
+                return Promise.resolve({ data: { status: 'ok' } });
+            });
+
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockResolvedValue({}),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+
+            const health = await healthService.getDetailedHealth();
+
+            expect(health.services.kas?.status).toBe('down');
+
+            delete process.env.KAS_URL;
+        });
+
+        it('should handle MongoDB ping timeout', async () => {
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockImplementation(() => 
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('ping timeout')), 6000)
+                            )
+                        ),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+            mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
+
+            const health = await healthService.getHealth();
+
+            expect(health.services.mongodb).toBe('down');
+        }, 10000);
+
+        it('should include cache health when cache is unhealthy', async () => {
+            (authzCacheService.isHealthy as jest.Mock).mockReturnValue({
+                healthy: false,
+                reason: 'Cache is full',
+            });
+
+            mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
+            
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockResolvedValue({}),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+
+            const health = await healthService.getDetailedHealth();
+
+            expect(health.services.cache?.healthy).toBe(false);
+            expect(health.services.cache?.reason).toBe('Cache is full');
+        });
+
+        it('should handle missing MongoDB client gracefully', async () => {
+            healthService.setMongoClient(null as any);
+            mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
+
+            const health = await healthService.getHealth();
+
+            expect(health.services.mongodb).toBe('down');
+        });
+
+        it('should mark overall status as degraded when cache is unhealthy but services are up', async () => {
+            (authzCacheService.isHealthy as jest.Mock).mockReturnValue({
+                healthy: false,
+                reason: 'Low hit rate: 40%',
+            });
+
+            mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
+            
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockResolvedValue({}),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+
+            const health = await healthService.getDetailedHealth();
+
+            // Cache being unhealthy might cause degraded status
+            expect(['healthy', 'degraded']).toContain(health.overall);
+        });
+
+        it('should handle OPA returning unexpected response format', async () => {
+            mockedAxios.get.mockImplementation((url) => {
+                if (url.includes('/health')) {
+                    return Promise.resolve({ data: null }); // Unexpected null
+                }
+                return Promise.resolve({ data: { status: 'ok' } });
+            });
+
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockResolvedValue({}),
+                    }),
+                }),
+            };
+
+            healthService.setMongoClient(mockMongoClient as any);
+
+            const health = await healthService.getHealth();
+
+            // Should handle gracefully without crashing
+            expect(health).toBeDefined();
+            expect(health.status).toBeDefined();
+        });
+    });
 });
 

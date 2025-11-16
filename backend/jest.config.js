@@ -32,8 +32,8 @@ module.exports = {
     },
     testTimeout: 15000,
     maxWorkers: 1, // Run tests sequentially to prevent MongoDB interference
-    forceExit: true,
-    detectOpenHandles: false,
+    forceExit: false, // Best practice: Let Jest exit naturally after cleanup
+    detectOpenHandles: false, // Enable temporarily for debugging: npm test -- --detectOpenHandles
     globalSetup: '<rootDir>/src/__tests__/globalSetup.ts',
     globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
     // Phase 4 - Comprehensive Coverage Thresholds

@@ -11,9 +11,12 @@ import { closeAuditLogConnection } from '../utils/acp240-logger';
 import { closeCOIKeyConnection } from '../services/coi-key.service';
 
 export default async function globalTeardown() {
+    console.log('🔧 Starting global teardown...');
+
     try {
         // Close ACP-240 logger MongoDB connection
         await closeAuditLogConnection();
+        console.log('  ✓ ACP-240 logger connection closed');
     } catch (error) {
         // Ignore errors if connection wasn't established
     }
@@ -21,6 +24,7 @@ export default async function globalTeardown() {
     try {
         // Close COI Key Service MongoDB connection
         await closeCOIKeyConnection();
+        console.log('  ✓ COI Key Service connection closed');
     } catch (error) {
         // Ignore errors if connection wasn't established
     }
@@ -30,19 +34,32 @@ export default async function globalTeardown() {
         const mongoServer = (global as any).__MONGO_SERVER__ as MongoMemoryServer | undefined;
         
         if (mongoServer) {
-            await mongoServer.stop();
-            console.log('✅ MongoDB Memory Server stopped');
+            await mongoServer.stop({ doCleanup: true, force: true });
+            console.log('  ✓ MongoDB Memory Server stopped');
         }
     } catch (error) {
-        console.error('Error stopping MongoDB Memory Server:', error);
+        console.error('  ⚠️ Error stopping MongoDB Memory Server:', error);
     }
 
-    // Give async operations time to complete
-    // Note: MongoDB driver may keep some internal connections briefly open
-    // This is a known limitation - the "force exit" warning is acceptable
-    const delay = process.env.CI ? 2000 : 500;
+    try {
+        // Force garbage collection if available (helps clean up dangling references)
+        if (global.gc) {
+            global.gc();
+            console.log('  ✓ Garbage collection triggered');
+        }
+    } catch (error) {
+        // GC not available, ignore
+    }
+
+    // Give MongoDB driver time to clean up internal connections
+    // MongoDB NodeJS driver uses connection pooling which takes time to fully close
+    // Best practice: Allow sufficient time for graceful shutdown
+    const delay = process.env.CI ? 1000 : 500;
     await new Promise(resolve => setTimeout(resolve, delay));
 
     console.log('✅ Global teardown complete - all connections closed');
+    
+    // Clear the global mongo server reference
+    delete (global as any).__MONGO_SERVER__;
 }
 
