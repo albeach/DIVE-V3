@@ -66,6 +66,7 @@ services:
     ports:
       - "8081:8080"   # HTTP (for internal Docker access)
       - "8443:8443"   # HTTPS (with mkcert certs - defense in depth)
+      - "9000:9000"   # HTTPS Management (health checks, metrics)
     networks:
       - dive-network
     volumes:
