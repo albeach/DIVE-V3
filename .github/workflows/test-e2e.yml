@@ -91,6 +91,7 @@ jobs:
           docker run -d \
             --name keycloak \
             -p 8443:8443 \
+            -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=info \
@@ -104,14 +105,14 @@ jobs:
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
           
-          echo "✅ Keycloak container started on HTTPS port 8443"
+          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
       
       - name: Configure Keycloak for E2E Tests
         run: |
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           # Increased from 30 to 60 iterations (5 minutes total)
           for i in {1..60}; do
-            if docker exec keycloak curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+            if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
               echo "✅ Keycloak is ready on HTTPS (management port 9000)"
               break
             fi
@@ -341,6 +342,7 @@ jobs:
           docker run -d \
             --name keycloak \
             -p 8443:8443 \
+            -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=info \
@@ -354,14 +356,14 @@ jobs:
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
           
-          echo "✅ Keycloak container started on HTTPS port 8443"
+          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
       
       - name: Configure Keycloak for E2E Tests
         run: |
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           # Increased from 30 to 60 iterations (5 minutes total)
           for i in {1..60}; do
-            if docker exec keycloak curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+            if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
               echo "✅ Keycloak is ready on HTTPS (management port 9000)"
               break
             fi
@@ -546,6 +548,7 @@ jobs:
           docker run -d \
             --name keycloak \
             -p 8443:8443 \
+            -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=info \
@@ -559,7 +562,7 @@ jobs:
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
           
-          echo "✅ Keycloak container started on HTTPS port 8443"
+          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
       
       
       - name: Configure Keycloak for E2E Tests
@@ -735,6 +738,7 @@ jobs:
           docker run -d \
             --name keycloak \
             -p 8443:8443 \
+            -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
             -e KC_DB=dev-mem \
             -e KC_LOG_LEVEL=info \
@@ -748,7 +752,7 @@ jobs:
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
           
-          echo "✅ Keycloak container started on HTTPS port 8443"
+          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
       
           echo "✅ Generated self-signed SSL certificates for E2E testing"
       

@@ -110,6 +110,7 @@ jobs:
           docker run -d \
             --name keycloak \
             --network "$SERVICE_NETWORK" \
+            -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
             -e KC_DB=postgres \
             -e KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak \
@@ -136,7 +137,7 @@ jobs:
           echo "Using Keycloak IP: $KEYCLOAK_IP"
           
           for i in {1..60}; do
-            if docker exec keycloak curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+            if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
               echo "✅ Keycloak is ready at $KEYCLOAK_IP:8443 (HTTPS) with management on :9000"
               break
             fi
