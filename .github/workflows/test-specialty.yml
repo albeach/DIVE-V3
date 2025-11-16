@@ -74,30 +74,30 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-      
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0.0
-        env:
-          KC_DB: postgres
-          KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-          KC_DB_USERNAME: keycloak
-          KC_DB_PASSWORD: password
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: "true"
-          KC_HTTP_RELATIVE_PATH: /
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 120s
-        ports:
-          - 8080:8080
     
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+      
+      - name: Start Keycloak 26.4.2
+        run: |
+          echo "🚀 Starting Keycloak 26.4.2..."
+          docker run -d \
+            --name keycloak \
+            --network ${{ job.services.postgres.network }} \
+            -p 8080:8080 \
+            -e KC_DB=postgres \
+            -e KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak \
+            -e KC_DB_USERNAME=keycloak \
+            -e KC_DB_PASSWORD=password \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -e KC_HTTP_RELATIVE_PATH=/ \
+            quay.io/keycloak/keycloak:26.4.2 \
+            start-dev
+          
+          echo "✅ Keycloak container started"
       
       - name: Wait for Keycloak to be Ready
         run: |
@@ -109,7 +109,9 @@ jobs:
             fi
             if [ $i -eq 60 ]; then
               echo "❌ Keycloak failed to start after 5 minutes"
-              echo "Checking service status..."
+              echo "Checking container logs..."
+              docker logs keycloak
+              echo "Checking container status..."
               docker ps -a
               exit 1
             fi
