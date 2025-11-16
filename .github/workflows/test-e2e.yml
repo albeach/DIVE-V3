@@ -42,23 +42,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0.0
-        ports:
-          - 8081:8080
-        env:
-          KC_DB: dev-mem
-          KC_LOG_LEVEL: warn
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: "true"
-          KC_HTTP_RELATIVE_PATH: /
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 120s
     
     steps:
       - name: Checkout Code
@@ -85,6 +68,24 @@ jobs:
           echo "✅ Generated self-signed SSL certificates for E2E testing"
           ls -la ${{ github.workspace }}/frontend/certs/
       
+      - name: Start Keycloak 26.4.2
+        run: |
+          echo "🚀 Starting Keycloak 26.4.2..."
+          docker run -d \
+            --name keycloak \
+            --network ${{ job.services.mongodb.network }} \
+            -p 8081:8080 \
+            -e KC_DB=dev-mem \
+            -e KC_LOG_LEVEL=warn \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -e KC_HTTP_RELATIVE_PATH=/ \
+            quay.io/keycloak/keycloak:26.4.2 \
+            start-dev
+          
+          echo "✅ Keycloak container started"
+      
       - name: Configure Keycloak for E2E Tests
         run: |
           echo "⏳ Waiting for Keycloak to be ready..."
@@ -96,6 +97,9 @@ jobs:
             fi
             if [ $i -eq 60 ]; then
               echo "❌ Keycloak failed to start after 5 minutes"
+              echo "Checking container logs..."
+              docker logs keycloak
+              echo "Checking container status..."
               docker ps -a
               exit 1
             fi
@@ -268,23 +272,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
       
-      keycloak:
-        image: quay.io/keycloak/keycloak:26.0.0
-        ports:
-          - 8081:8080
-        env:
-          KC_DB: dev-mem
-          KC_LOG_LEVEL: warn
-          KEYCLOAK_ADMIN: admin
-          KEYCLOAK_ADMIN_PASSWORD: admin
-          KC_HEALTH_ENABLED: "true"
-          KC_HTTP_RELATIVE_PATH: /
-        options: >-
-          --health-cmd "curl -f http://localhost:8080/health/ready || exit 1"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 10
-          --health-start-period 120s
     
     steps:
       - name: Checkout Code
@@ -309,6 +296,25 @@ jobs:
             -days 365 \
             -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
           echo "✅ Generated self-signed SSL certificates for E2E testing"
+          ls -la ${{ github.workspace }}/frontend/certs/
+      
+      - name: Start Keycloak 26.4.2
+        run: |
+          echo "🚀 Starting Keycloak 26.4.2..."
+          docker run -d \
+            --name keycloak \
+            --network ${{ job.services.mongodb.network }} \
+            -p 8081:8080 \
+            -e KC_DB=dev-mem \
+            -e KC_LOG_LEVEL=warn \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_HEALTH_ENABLED=true \
+            -e KC_HTTP_RELATIVE_PATH=/ \
+            quay.io/keycloak/keycloak:26.4.2 \
+            start-dev
+          
+          echo "✅ Keycloak container started"
       
       - name: Configure Keycloak for E2E Tests
         run: |
@@ -318,6 +324,14 @@ jobs:
             if curl -f http://localhost:8081/health/ready 2>/dev/null; then
               echo "✅ Keycloak is ready"
               break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "❌ Keycloak failed to start after 5 minutes"
+              echo "Checking container logs..."
+              docker logs keycloak
+              echo "Checking container status..."
+              docker ps -a
+              exit 1
             fi
             if [ $i -eq 60 ]; then
               echo "❌ Keycloak failed to start after 5 minutes"
