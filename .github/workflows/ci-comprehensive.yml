@@ -21,7 +21,19 @@ jobs:
   backend-unit-tests:
     name: Backend - Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # Unit tests with 1,643+ tests need time
+    timeout-minutes: 10  # Reduced with real MongoDB service
+    
+    # Use real MongoDB service instead of MongoDB Memory Server (10x faster in CI)
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -74,9 +86,10 @@ jobs:
           DURATION=$((END_TIME - START_TIME))
           echo "## ⏱️ Backend Unit Test Duration" >> $GITHUB_STEP_SUMMARY
           echo "**Runtime:** ${DURATION}s" >> $GITHUB_STEP_SUMMARY
+          echo "**MongoDB:** Real service (GitHub Actions service container)" >> $GITHUB_STEP_SUMMARY
         env:
           NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -90,6 +103,17 @@ jobs:
     name: Backend - Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -129,7 +153,7 @@ jobs:
         run: cd backend && npm run test:integration
         env:
           NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -140,13 +164,24 @@ jobs:
         run: cd backend && npm run test:audit-logs
         env:
           NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
 
   backend-coverage:
     name: Backend - Coverage Report
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
       - name: Checkout Code
@@ -195,7 +230,7 @@ jobs:
         run: cd backend && npm run test:coverage
         env:
           NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
