@@ -573,8 +573,8 @@ jobs:
         run: |
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           for i in {1..60}; do
-            if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready on HTTPS"
+            if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready on HTTPS (management port 9000)"
               break
             fi
             if [ $i -eq 60 ]; then
@@ -765,8 +765,8 @@ jobs:
         run: |
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           for i in {1..60}; do
-            if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready on HTTPS"
+            if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready on HTTPS (management port 9000)"
               break
             fi
             if [ $i -eq 60 ]; then
