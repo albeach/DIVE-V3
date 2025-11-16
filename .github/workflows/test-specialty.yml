@@ -136,8 +136,8 @@ jobs:
           echo "Using Keycloak IP: $KEYCLOAK_IP"
           
           for i in {1..60}; do
-            if docker exec keycloak curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready at $KEYCLOAK_IP:8443 (HTTPS)"
+            if docker exec keycloak curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready at $KEYCLOAK_IP:8443 (HTTPS) with management on :9000"
               break
             fi
             if [ $i -eq 60 ]; then
