@@ -220,7 +220,7 @@ services:
       # Policies Lab: Upload directory for user policies
       - ./policies/uploads:/app/policies/uploads
 
-  nextjs:
+  frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev  # Development mode with hot reload

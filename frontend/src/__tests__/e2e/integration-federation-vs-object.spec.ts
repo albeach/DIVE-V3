@@ -1,10 +1,20 @@
-import { test, expect } from '@playwright/test';
+/**
+ * Integration: Federation vs Object E2E Test
+ * 
+ * UPDATED: November 16, 2025
+ * - ✅ Removed hardcoded BASE_URL (use relative path)
+ * - ✅ Already uses modern Playwright patterns (getByRole, getByText)
+ * - ✅ Good test organization
+ * 
+ * NOTE: This test was already well-written, only needed BASE_URL fix
+ */
 
-const INTEGRATION_URL = 'http://localhost:3000/integration/federation-vs-object';
+import { test, expect } from '@playwright/test';
 
 test.describe('Integration: Federation vs Object', () => {
     test.beforeEach(async ({ page }) => {
-        await page.goto(INTEGRATION_URL);
+        // Use relative path - Playwright prepends baseURL from config
+        await page.goto('/integration/federation-vs-object');
     });
 
     test('Scenario 1: Split-View Navigation', async ({ page }) => {
