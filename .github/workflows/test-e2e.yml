@@ -211,13 +211,16 @@ jobs:
       - name: Start Next.js Development Server
         run: |
           cd frontend
-          # Start Next.js in background (HTTP mode for CI simplicity)
-          nohup npm run dev:http > nextjs.log 2>&1 &
+          # Set certificate path for custom HTTPS server
+          export CERT_PATH="${{ github.workspace }}/frontend/certs"
+          
+          # Start Next.js in background (HTTPS mode to match production)
+          nohup npm run dev > nextjs.log 2>&1 &
           
           # Wait for server to be ready
           echo "⏳ Waiting for Next.js to be ready..."
           for i in {1..60}; do
-            if curl -f http://localhost:3000 2>/dev/null; then
+            if curl -k -f https://localhost:3000 2>/dev/null; then
               echo "✅ Next.js is ready"
               break
             fi
@@ -226,10 +229,10 @@ jobs:
           done
           
           # Verify server is responding
-          curl -f http://localhost:3000 || (cat nextjs.log && exit 1)
+          curl -k -f https://localhost:3000 || (cat nextjs.log && exit 1)
         env:
           NODE_ENV: development
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-authentication-flows-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -242,7 +245,7 @@ jobs:
         run: cd frontend && npx playwright test src/__tests__/e2e/mfa-complete-flow.spec.ts src/__tests__/e2e/mfa-conditional.spec.ts src/__tests__/e2e/external-idp-federation-flow.spec.ts
         env:
           NODE_ENV: test
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-authentication-flows-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -250,7 +253,7 @@ jobs:
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-          BASE_URL: http://localhost:3000
+          BASE_URL: https://localhost:3000
           BACKEND_API_URL: http://localhost:4000
       
       - name: Upload Test Results
@@ -413,20 +416,21 @@ jobs:
       - name: Start Next.js Development Server
         run: |
           cd frontend
-          nohup npm run dev:http > nextjs.log 2>&1 &
+          export CERT_PATH="${{ github.workspace }}/frontend/certs"
+          nohup npm run dev > nextjs.log 2>&1 &
           
           for i in {1..60}; do
-            if curl -f http://localhost:3000 2>/dev/null; then
+            if curl -k -f https://localhost:3000 2>/dev/null; then
               echo "✅ Next.js is ready"
               break
             fi
             sleep 2
           done
           
-          curl -f http://localhost:3000 || (cat nextjs.log && exit 1)
+          curl -k -f https://localhost:3000 || (cat nextjs.log && exit 1)
         env:
           NODE_ENV: development
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-authorization-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -447,7 +451,7 @@ jobs:
         run: cd frontend && npx playwright test src/__tests__/e2e/identity-drawer.spec.ts
         env:
           NODE_ENV: test
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-authorization-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -456,7 +460,7 @@ jobs:
           KEYCLOAK_CLIENT_SECRET: test-client-secret
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
-          BASE_URL: http://localhost:3000
+          BASE_URL: https://localhost:3000
       
       - name: Upload Test Results
         if: always()
@@ -617,15 +621,16 @@ jobs:
       - name: Start Next.js Development Server
         run: |
           cd frontend
-          nohup npm run dev:http > nextjs.log 2>&1 &
+          export CERT_PATH="${{ github.workspace }}/frontend/certs"
+          nohup npm run dev > nextjs.log 2>&1 &
           for i in {1..60}; do
-            if curl -f http://localhost:3000 2>/dev/null; then echo "✅ Next.js is ready"; break; fi
+            if curl -k -f https://localhost:3000 2>/dev/null; then echo "✅ Next.js is ready"; break; fi
             sleep 2
           done
-          curl -f http://localhost:3000 || (cat nextjs.log && exit 1)
+          curl -k -f https://localhost:3000 || (cat nextjs.log && exit 1)
         env:
           NODE_ENV: development
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-classification-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -638,7 +643,7 @@ jobs:
         run: cd frontend && npx playwright test src/__tests__/e2e/classification-equivalency.spec.ts src/__tests__/e2e/integration-federation-vs-object.spec.ts
         env:
           NODE_ENV: test
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-classification-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -646,7 +651,7 @@ jobs:
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-          BASE_URL: http://localhost:3000
+          BASE_URL: https://localhost:3000
       
       - name: Upload Test Results
         if: always()
@@ -808,15 +813,16 @@ jobs:
       - name: Start Next.js Development Server
         run: |
           cd frontend
-          nohup npm run dev:http > nextjs.log 2>&1 &
+          export CERT_PATH="${{ github.workspace }}/frontend/certs"
+          nohup npm run dev > nextjs.log 2>&1 &
           for i in {1..60}; do
-            if curl -f http://localhost:3000 2>/dev/null; then echo "✅ Next.js is ready"; break; fi
+            if curl -k -f https://localhost:3000 2>/dev/null; then echo "✅ Next.js is ready"; break; fi
             sleep 2
           done
-          curl -f http://localhost:3000 || (cat nextjs.log && exit 1)
+          curl -k -f https://localhost:3000 || (cat nextjs.log && exit 1)
         env:
           NODE_ENV: development
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-resource-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -837,7 +843,7 @@ jobs:
         run: cd frontend && npx playwright test src/__tests__/e2e/policies-lab.spec.ts src/__tests__/e2e/nato-expansion.spec.ts src/__tests__/e2e/idp-management-revamp.spec.ts tests/e2e/sp-registry.spec.ts
         env:
           NODE_ENV: test
-          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: https://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-e2e-resource-2025
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
@@ -846,7 +852,7 @@ jobs:
           KEYCLOAK_CLIENT_SECRET: test-client-secret
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
-          BASE_URL: http://localhost:3000
+          BASE_URL: https://localhost:3000
       
       - name: Upload Test Results
         if: always()

@@ -9,6 +9,8 @@ volumes:
   mongo_data:
   redis_data:
   authzforce_data:
+  frontend_node_modules:  # Named volume for persistent node_modules
+  frontend_next:          # Named volume for persistent .next build cache
 
 services:
   postgres:
@@ -278,9 +280,10 @@ services:
       # Mount SSL certificates for HTTPS server (both locations)
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./frontend/certs:/opt/app/certs:ro
-      # Exclude node_modules and .next from host (use container's versions)
-      - /app/node_modules
-      - /app/.next
+      # CRITICAL: Use named volumes for persistence across Docker restarts
+      # This prevents node_modules from being wiped on restart
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
 
   kas:
     build:

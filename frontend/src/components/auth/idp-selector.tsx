@@ -113,8 +113,10 @@ export function IdpSelector() {
     // Option 3: Custom Keycloak Theme - Use NextAuth signIn with kc_idp_hint
     // This ensures state cookie is properly set before redirecting to Keycloak
     const { signIn } = await import('next-auth/react');
+    // Pass kc_idp_hint in the redirect URL to skip broker realm IdP selection page
     await signIn('keycloak', {
       callbackUrl: '/dashboard',
+      redirect: true,
     }, {
       kc_idp_hint: idp.alias,  // Trigger federation to specific national realm
     });

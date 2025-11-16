@@ -10,10 +10,16 @@ RUN npm install
 # This allows hot reload during development
 
 # Create .next directory and set permissions
+# Note: node_modules and .next are now persisted via named volumes
 RUN mkdir -p .next && \
     addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \
     chown -R nextjs:nodejs /app
+
+# CRITICAL FIX: Named volume ownership
+# After npm install, ensure nextjs user owns node_modules
+# This fixes permission issues when using named volumes
+RUN chown -R nextjs:nodejs /app/node_modules
 
 USER nextjs
 
