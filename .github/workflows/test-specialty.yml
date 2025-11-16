@@ -79,41 +79,60 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
       
-      - name: Start Keycloak 26.4.2
+      - name: Generate Keycloak SSL Certificates
         run: |
-          echo "🚀 Starting Keycloak 26.4.2..."
+          mkdir -p ${{ github.workspace }}/keycloak-certs
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/keycloak-certs/key.pem \
+            -out ${{ github.workspace }}/keycloak-certs/cert.pem \
+            -days 1 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=keycloak" \
+            -addext "subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1"
+          echo "✅ Generated SSL certificates for Keycloak"
+          ls -la ${{ github.workspace }}/keycloak-certs/
+      
+      - name: Start Keycloak 26.4.2 with HTTPS
+        run: |
+          echo "🚀 Starting Keycloak 26.4.2 with HTTPS..."
           
           # Get the service network ID
-          SERVICE_NETWORK=$(docker inspect ${{ job.container.id }} --format='{{range $net,$v := .NetworkSettings.Networks}}{{$net}}{{end}}' || docker network ls -q -f name=github_network)
+          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_)
+          if [ -z "$SERVICE_NETWORK" ]; then
+            SERVICE_NETWORK=$(docker network ls -q | head -1)
+          fi
+          echo "Using network: $SERVICE_NETWORK"
           
           docker run -d \
             --name keycloak \
             --network "$SERVICE_NETWORK" \
+            -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
             -e KC_DB=postgres \
             -e KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak \
             -e KC_DB_USERNAME=keycloak \
             -e KC_DB_PASSWORD=password \
-            -e KEYCLOAK_ADMIN=admin \
-            -e KEYCLOAK_ADMIN_PASSWORD=admin \
+            -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+            -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
             -e KC_HEALTH_ENABLED=true \
-            -e KC_HTTP_RELATIVE_PATH=/ \
+            -e KC_HTTPS_CERTIFICATE_FILE=/opt/keycloak/certs/cert.pem \
+            -e KC_HTTPS_CERTIFICATE_KEY_FILE=/opt/keycloak/certs/key.pem \
             -e KC_HOSTNAME_STRICT=false \
+            -e KC_HTTP_ENABLED=false \
             quay.io/keycloak/keycloak:26.4.2 \
-            start-dev
+            start-dev --https-port=8443
           
           # Get Keycloak container IP for health checks
           KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
           echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
-          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP"
+          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP on HTTPS port 8443"
       
       - name: Wait for Keycloak to be Ready
         run: |
-          echo "⏳ Waiting for Keycloak to be ready..."
+          echo "⏳ Waiting for Keycloak HTTPS to be ready..."
           echo "Using Keycloak IP: $KEYCLOAK_IP"
           
           for i in {1..60}; do
-            if curl -f http://$KEYCLOAK_IP:8080/health/ready 2>/dev/null; then
-              echo "✅ Keycloak is ready at $KEYCLOAK_IP:8080"
+            if docker exec keycloak curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
+              echo "✅ Keycloak is ready at $KEYCLOAK_IP:8443 (HTTPS)"
               break
             fi
             if [ $i -eq 60 ]; then
@@ -123,7 +142,7 @@ jobs:
               echo "Checking container status..."
               docker ps -a
               echo "Checking network connectivity..."
-              docker exec keycloak curl -v http://localhost:8080/health/ready || true
+              docker exec keycloak curl -k -v https://localhost:8443/health/ready || true
               exit 1
             fi
             echo "Waiting for Keycloak... ($i/60)"
@@ -144,18 +163,19 @@ jobs:
         run: |
           cd terraform
           terraform init -backend=false
-          TF_VAR_keycloak_url="http://$KEYCLOAK_IP:8080" \
+          TF_VAR_keycloak_url="https://$KEYCLOAK_IP:8443" \
           TF_VAR_keycloak_admin_username="admin" \
           TF_VAR_keycloak_admin_password="admin" \
+          TF_VAR_keycloak_insecure_skip_verify="true" \
           terraform apply -auto-approve
       
       - name: Validate Realms Created
         run: |
           echo "⏳ Validating Keycloak realms..."
-          KEYCLOAK_URL="http://$KEYCLOAK_IP:8080"
+          KEYCLOAK_URL="https://$KEYCLOAK_IP:8443"
           
           # Check that dive-v3-broker realm exists
-          if curl -f "$KEYCLOAK_URL/realms/dive-v3-broker/.well-known/openid-configuration" 2>/dev/null; then
+          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-broker/.well-known/openid-configuration" 2>/dev/null; then
             echo "✅ dive-v3-broker realm exists"
           else
             echo "❌ dive-v3-broker realm not found"
@@ -163,14 +183,14 @@ jobs:
           fi
           
           # Check USA realm
-          if curl -f "$KEYCLOAK_URL/realms/dive-v3-usa/.well-known/openid-configuration" 2>/dev/null; then
+          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-usa/.well-known/openid-configuration" 2>/dev/null; then
             echo "✅ dive-v3-usa realm exists"
           else
             echo "⚠️ dive-v3-usa realm not found (may be expected)"
           fi
           
           # Check France realm
-          if curl -f "$KEYCLOAK_URL/realms/dive-v3-fra/.well-known/openid-configuration" 2>/dev/null; then
+          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-fra/.well-known/openid-configuration" 2>/dev/null; then
             echo "✅ dive-v3-fra realm exists"
           else
             echo "⚠️ dive-v3-fra realm not found (may be expected)"
@@ -185,9 +205,10 @@ jobs:
           npm test -- --testPathPattern=keycloak --testTimeout=30000 || echo "⚠️ Some Keycloak tests failed (non-blocking)"
         env:
           NODE_ENV: test
-          KEYCLOAK_URL: http://${{ env.KEYCLOAK_IP }}:8080
+          KEYCLOAK_URL: https://${{ env.KEYCLOAK_IP }}:8443
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
 
   policies-lab-tests:
     name: Policies Lab Tests
