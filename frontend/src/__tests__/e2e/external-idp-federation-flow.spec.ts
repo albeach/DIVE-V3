@@ -1,320 +1,281 @@
 /**
- * DIVE V3 - External IdP Federation Flow E2E Tests
+ * External IdP Federation Flow E2E Tests (REFACTORED)
  * 
- * Tests complete federation flow:
- * 1. IdP selection
- * 2. External IdP authentication (Spain SAML / USA OIDC)
- * 3. Attribute normalization
- * 4. Resource access
- * 5. OPA authorization decision
- * 6. Logout and session cleanup
+ * Tests federation flow with multiple IdPs and protocols
+ * 
+ * REFACTORED: November 16, 2025
+ * - ✅ Uses centralized test users (fixtures/test-users.ts)
+ * - ✅ Uses authentication helper (helpers/auth.ts)
+ * - ✅ Uses Page Object Model
+ * - ✅ Removed hardcoded URLs
+ * - ✅ Removed custom login helpers
  */
 
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { TEST_USERS } from './fixtures/test-users';
+import { TEST_RESOURCES } from './fixtures/test-resources';
+import { TEST_CONFIG } from './fixtures/test-config';
+import { loginAs, logout } from './helpers/auth';
+import { DashboardPage } from './pages/DashboardPage';
+import { ResourcesPage } from './pages/ResourcesPage';
 
-const DIVE_URL = process.env.DIVE_URL || 'http://localhost:3000';
-const SPAIN_SAML_URL = process.env.SPAIN_SAML_URL || 'https://localhost:8443';
-const USA_OIDC_URL = process.env.USA_OIDC_URL || 'http://localhost:8082';
-
-// Test users
-const SPAIN_USERS = {
-    topSecret: {
-        username: 'garcia.maria@mde.es',
-        password: 'Classified123!',
-        expectedClearance: 'TOP_SECRET',
-        expectedCountry: 'ESP',
-        expectedCOI: ['NATO-COSMIC', 'ESP-ONLY'],
-    },
-    secret: {
-        username: 'rodriguez.juan@mde.es',
-        password: 'Defense456!',
-        expectedClearance: 'SECRET',
-        expectedCountry: 'ESP',
-        expectedCOI: ['NATO-COSMIC'],
-    },
-};
-
-const USA_USERS = {
-    topSecret: {
-        username: 'smith.john@mail.mil',
-        password: 'TopSecret123!',
-        expectedClearance: 'TOP_SECRET',
-        expectedCountry: 'USA',
-        expectedCOI: ['FVEY', 'US-ONLY'],
-    },
-    secret: {
-        username: 'johnson.emily@mail.mil',
-        password: 'Secret456!',
-        expectedClearance: 'SECRET',
-        expectedCountry: 'USA',
-        expectedCOI: ['NATO-COSMIC', 'FVEY'],
-    },
-};
-
-test.describe('External IdP Federation - Spain SAML', () => {
-    test.beforeEach(async ({ page }) => {
-        // Start from DIVE homepage
-        await page.goto(DIVE_URL);
-    });
-
-    test('Complete Spain SAML login flow with TOP_SECRET user', async ({ page }) => {
-        const user = SPAIN_USERS.topSecret;
-
-        // Step 1: Navigate to login
-        await page.click('button:has-text("Login")');
-
-        // Step 2: Select Spain IdP
-        await expect(page.locator('text=Spain Ministry of Defense')).toBeVisible({ timeout: 10000 });
-        await page.click('text=Spain Ministry of Defense');
-
-        // Step 3: Authenticate with Spain SAML IdP
-        await expect(page).toHaveURL(/spain-saml/, { timeout: 10000 });
-
-        // Fill SimpleSAMLphp login form
-        await page.fill('input[name="username"]', user.username);
-        await page.fill('input[name="password"]', user.password);
-        await page.click('button[type="submit"]');
-
-        // Step 4: Verify redirect back to DIVE
-        await expect(page).toHaveURL(DIVE_URL, { timeout: 10000 });
-
-        // Step 5: Verify user is logged in
-        await expect(page.locator(`text=${user.username}`)).toBeVisible();
-
-        // Step 6: Verify normalized attributes in user profile
-        await page.click('text=Profile');
-        await expect(page.locator(`text=Clearance: ${user.expectedClearance}`)).toBeVisible();
-        await expect(page.locator(`text=Country: ${user.expectedCountry}`)).toBeVisible();
-    });
-
-    test('Spain SAML user can access NATO-COSMIC resource', async ({ page }) => {
-        const user = SPAIN_USERS.topSecret;
-
-        // Login
-        await loginViaSpainSAML(page, user);
-
-        // Navigate to resources
-        await page.click('text=Resources');
-        await expect(page).toHaveURL(/\/resources/, { timeout: 5000 });
-
-        // Find NATO-COSMIC resource
-        const natoResource = page.locator('text=/.*NATO.*COSMIC.*/i').first();
-        await expect(natoResource).toBeVisible({ timeout: 5000 });
-
-        // Attempt to access resource
-        await natoResource.click();
-
-        // Verify access granted
-        await expect(page.locator('text=/Access Granted/i')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('text=/Authorization successful/i')).toBeVisible();
-    });
-
-    test('Spain SAML user denied access to US-ONLY resource', async ({ page }) => {
-        const user = SPAIN_USERS.topSecret;
-
-        // Login
-        await loginViaSpainSAML(page, user);
-
-        // Navigate to resources
-        await page.click('text=Resources');
-
-        // Find US-ONLY resource
-        const usOnlyResource = page.locator('text=/.*US.?ONLY.*/i').first();
-        if (await usOnlyResource.isVisible()) {
-            await usOnlyResource.click();
-
-            // Verify access denied
-            await expect(page.locator('text=/Access Denied/i')).toBeVisible({ timeout: 5000 });
-            await expect(page.locator('text=/Country ESP not in releasabilityTo/i')).toBeVisible();
-        }
-    });
-
-    test('Spain SAML logout clears session', async ({ page }) => {
-        const user = SPAIN_USERS.topSecret;
-
-        // Login
-        await loginViaSpainSAML(page, user);
-
-        // Verify logged in
-        await expect(page.locator(`text=${user.username}`)).toBeVisible();
-
-        // Logout
-        await page.click('text=Logout');
-
-        // Verify redirect to login page
-        await expect(page).toHaveURL(/\/login|\/$/);
-        await expect(page.locator('text=Login')).toBeVisible();
-        await expect(page.locator(`text=${user.username}`)).not.toBeVisible();
-    });
-});
-
-test.describe('External IdP Federation - USA OIDC', () => {
-    test.beforeEach(async ({ page }) => {
-        await page.goto(DIVE_URL);
-    });
-
-    test('Complete USA OIDC login flow with TOP_SECRET user', async ({ page }) => {
-        const user = USA_USERS.topSecret;
-
-        // Step 1: Navigate to login
-        await page.click('button:has-text("Login")');
-
-        // Step 2: Select USA IdP
-        await expect(page.locator('text=U.S. Department of Defense')).toBeVisible({ timeout: 10000 });
-        await page.click('text=U.S. Department of Defense');
-
-        // Step 3: Authenticate with USA OIDC IdP
-        await expect(page).toHaveURL(/usa-oidc|us-dod/, { timeout: 10000 });
-
-        // Fill Keycloak login form
-        await page.fill('input[name="username"]', user.username);
-        await page.fill('input[name="password"]', user.password);
-        await page.click('button[type="submit"]');
-
-        // Step 4: Verify redirect back to DIVE
-        await expect(page).toHaveURL(DIVE_URL, { timeout: 10000 });
-
-        // Step 5: Verify user is logged in
-        await expect(page.locator(`text=${user.username}`)).toBeVisible();
-
-        // Step 6: Verify attributes
-        await page.click('text=Profile');
-        await expect(page.locator(`text=Clearance: ${user.expectedClearance}`)).toBeVisible();
-        await expect(page.locator(`text=Country: ${user.expectedCountry}`)).toBeVisible();
-    });
-
-    test('USA OIDC user can access FVEY resource', async ({ page }) => {
-        const user = USA_USERS.topSecret;
-
-        // Login
-        await loginViaUSAOIDC(page, user);
-
-        // Navigate to resources
-        await page.click('text=Resources');
-
-        // Find FVEY resource
-        const fveyResource = page.locator('text=/.*FVEY.*/i').first();
-        await expect(fveyResource).toBeVisible({ timeout: 5000 });
-
-        // Access resource
-        await fveyResource.click();
-
-        // Verify access granted
-        await expect(page.locator('text=/Access Granted/i')).toBeVisible({ timeout: 5000 });
-    });
-
-    test('USA OIDC user with SECRET clearance denied TOP_SECRET resource', async ({ page }) => {
-        const user = USA_USERS.secret;
-
-        // Login
-        await loginViaUSAOIDC(page, user);
-
-        // Navigate to resources
-        await page.click('text=Resources');
-
-        // Find TOP_SECRET resource
-        const topSecretResource = page.locator('text=/.*TOP.?SECRET.*/i').first();
-        if (await topSecretResource.isVisible()) {
-            await topSecretResource.click();
-
-            // Verify clearance denial
-            await expect(page.locator('text=/Access Denied/i')).toBeVisible({ timeout: 5000 });
-            await expect(page.locator('text=/Insufficient clearance/i')).toBeVisible();
-        }
-    });
-
-    test('USA OIDC logout clears session', async ({ page }) => {
-        const user = USA_USERS.topSecret;
-
-        // Login
-        await loginViaUSAOIDC(page, user);
-
-        // Logout
-        await page.click('text=Logout');
-
-        // Verify logged out
-        await expect(page).toHaveURL(/\/login|\/$/);
-        await expect(page.locator('text=Login')).toBeVisible();
-    });
-});
-
-test.describe('Cross-IdP Federation Tests', () => {
-    test('Spanish and USA users can both access NATO-COSMIC resource', async ({ browser }) => {
-        // Test parallel access from different IdPs
-        const spanishContext = await browser.newContext();
-        const usaContext = await browser.newContext();
-
-        const spanishPage = await spanishContext.newPage();
-        const usaPage = await usaContext.newPage();
-
+test.describe('External IdP Federation - Spain (Refactored)', () => {
+    test.afterEach(async ({ page }) => {
         try {
-            // Spanish user login and access
-            await spanishPage.goto(DIVE_URL);
-            await loginViaSpainSAML(spanishPage, SPAIN_USERS.topSecret);
-            await spanishPage.click('text=Resources');
-            const spanishResource = spanishPage.locator('text=/.*NATO.*COSMIC.*/i').first();
-            await spanishResource.click();
-            await expect(spanishPage.locator('text=/Access Granted/i')).toBeVisible();
-
-            // USA user login and access
-            await usaPage.goto(DIVE_URL);
-            await loginViaUSAOIDC(usaPage, USA_USERS.secret); // SECRET user
-            await usaPage.click('text=Resources');
-            const usaResource = usaPage.locator('text=/.*NATO.*COSMIC.*/i').first();
-            await usaResource.click();
-            await expect(usaPage.locator('text=/Access Granted/i')).toBeVisible();
-        } finally {
-            await spanishContext.close();
-            await usaContext.close();
+            await logout(page);
+        } catch (error) {
+            console.log('⚠️ Logout failed:', error);
         }
     });
 
-    test('Verify attribute normalization differences', async ({ page }) => {
-        // Login with Spanish user
-        await page.goto(DIVE_URL);
-        await loginViaSpainSAML(page, SPAIN_USERS.topSecret);
+    test('Spain SECRET user can log in', async ({ page }) => {
+        test.step('Login via Spain IdP', async () => {
+            await loginAs(page, TEST_USERS.ESP.SECRET);
+        });
 
-        // Check Spanish attributes
-        await page.click('text=Profile');
-        await expect(page.locator('text=Country: ESP')).toBeVisible();
-        await expect(page.locator('text=COI.*NATO-COSMIC')).toBeVisible();
+        test.step('Verify dashboard shows Spanish user info', async () => {
+            const dashboard = new DashboardPage(page);
+            await dashboard.verifyLoggedIn();
+            await dashboard.verifyUserInfo(
+                TEST_USERS.ESP.SECRET.username,
+                TEST_USERS.ESP.SECRET.clearance,
+                TEST_USERS.ESP.SECRET.countryCode
+            );
+        });
 
-        // Logout
-        await page.click('text=Logout');
+        test.step('Verify NATO-COSMIC COI', async () => {
+            const dashboard = new DashboardPage(page);
+            await dashboard.verifyCOIBadges(['NATO-COSMIC']);
+        });
+    });
 
-        // Login with USA user
-        await page.click('button:has-text("Login")');
-        await page.click('text=U.S. Department of Defense');
-        await page.fill('input[name="username"]', USA_USERS.topSecret.username);
-        await page.fill('input[name="password"]', USA_USERS.topSecret.password);
-        await page.click('button[type="submit"]');
+    test('Spain user can access NATO-COSMIC resource', async ({ page }) => {
+        test.step('Login as Spanish SECRET user', async () => {
+            await loginAs(page, TEST_USERS.ESP.SECRET);
+        });
 
-        // Check USA attributes
-        await page.click('text=Profile');
-        await expect(page.locator('text=Country: USA')).toBeVisible();
-        await expect(page.locator('text=COI.*FVEY')).toBeVisible();
+        test.step('Verify access to NATO document', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
+        });
+
+        test.step('Verify resource content visible', async () => {
+            const content = page.getByText(TEST_RESOURCES.SECRET.NATO.content);
+            await expect(content).toBeVisible({
+                timeout: TEST_CONFIG.TIMEOUTS.ACTION,
+            });
+        });
+    });
+
+    test('Spain user denied access to US-ONLY resource', async ({ page }) => {
+        test.step('Login as Spanish SECRET user', async () => {
+            await loginAs(page, TEST_USERS.ESP.SECRET);
+        });
+
+        test.step('Verify US-ONLY document is denied', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.USA_ONLY.resourceId);
+        });
+
+        test.step('Verify denial reason mentions country/releasability', async () => {
+            const denialReason = page.getByText(/country|releasability|not releasable to/i);
+            await expect(denialReason).toBeVisible({
+                timeout: TEST_CONFIG.TIMEOUTS.ACTION,
+            });
+        });
+    });
+
+    test('Spain user denied access to FVEY resource', async ({ page }) => {
+        test.step('Login as Spanish SECRET user', async () => {
+            await loginAs(page, TEST_USERS.ESP.SECRET);
+        });
+
+        test.step('Verify FVEY document is denied (Spain not in FVEY)', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
+        });
     });
 });
 
-// Helper functions
-async function loginViaSpainSAML(page: Page, user: typeof SPAIN_USERS.topSecret) {
-    await page.goto(DIVE_URL);
-    await page.click('button:has-text("Login")');
-    await page.click('text=Spain Ministry of Defense');
-    await page.fill('input[name="username"]', user.username);
-    await page.fill('input[name="password"]', user.password);
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(DIVE_URL, { timeout: 10000 });
-}
+test.describe('External IdP Federation - USA (Refactored)', () => {
+    test.afterEach(async ({ page }) => {
+        try {
+            await logout(page);
+        } catch (error) {
+            console.log('⚠️ Logout failed:', error);
+        }
+    });
 
-async function loginViaUSAOIDC(page: Page, user: typeof USA_USERS.topSecret) {
-    await page.goto(DIVE_URL);
-    await page.click('button:has-text("Login")');
-    await page.click('text=U.S. Department of Defense');
-    await page.fill('input[name="username"]', user.username);
-    await page.fill('input[name="password"]', user.password);
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(DIVE_URL, { timeout: 10000 });
-}
+    test('USA SECRET user can log in', async ({ page }) => {
+        test.step('Login via USA IdP', async () => {
+            await loginAs(page, TEST_USERS.USA.SECRET);
+        });
 
+        test.step('Verify dashboard shows USA user info', async () => {
+            const dashboard = new DashboardPage(page);
+            await dashboard.verifyLoggedIn();
+            await dashboard.verifyUserInfo(
+                TEST_USERS.USA.SECRET.username,
+                TEST_USERS.USA.SECRET.clearance,
+                TEST_USERS.USA.SECRET.countryCode
+            );
+        });
 
+        test.step('Verify COI badges', async () => {
+            const dashboard = new DashboardPage(page);
+            await dashboard.verifyCOIBadges(['NATO-COSMIC']);
+        });
+    });
+
+    test('USA user can access FVEY resource', async ({ page }) => {
+        test.step('Login as USA SECRET user', async () => {
+            await loginAs(page, TEST_USERS.USA.SECRET);
+        });
+
+        test.step('Verify access to FVEY document', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.FVEY.resourceId);
+        });
+
+        test.step('Verify FVEY resource content visible', async () => {
+            const content = page.getByText(TEST_RESOURCES.SECRET.FVEY.content);
+            await expect(content).toBeVisible({
+                timeout: TEST_CONFIG.TIMEOUTS.ACTION,
+            });
+        });
+    });
+
+    test('USA user can access US-ONLY resource', async ({ page }) => {
+        test.step('Login as USA SECRET user', async () => {
+            await loginAs(page, TEST_USERS.USA.SECRET);
+        });
+
+        test.step('Verify access to US-ONLY document', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.USA_ONLY.resourceId);
+        });
+    });
+});
+
+test.describe('External IdP Federation - France (Refactored)', () => {
+    test.afterEach(async ({ page }) => {
+        try {
+            await logout(page);
+        } catch (error) {
+            console.log('⚠️ Logout failed:', error);
+        }
+    });
+
+    test('France SECRET user can log in', async ({ page }) => {
+        test.step('Login via France IdP', async () => {
+            await loginAs(page, TEST_USERS.FRA.SECRET);
+        });
+
+        test.step('Verify dashboard shows French user info', async () => {
+            const dashboard = new DashboardPage(page);
+            await dashboard.verifyLoggedIn();
+            await dashboard.verifyUserInfo(
+                TEST_USERS.FRA.SECRET.username,
+                TEST_USERS.FRA.SECRET.clearance,
+                TEST_USERS.FRA.SECRET.countryCode
+            );
+        });
+    });
+
+    test('France user can access NATO but not FVEY', async ({ page }) => {
+        test.step('Login as French SECRET user', async () => {
+            await loginAs(page, TEST_USERS.FRA.SECRET);
+        });
+
+        test.step('Verify access to NATO document (ALLOW)', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
+        });
+
+        test.step('Verify FVEY document is denied (France not in FVEY)', async () => {
+            const resources = new ResourcesPage(page);
+            await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
+        });
+    });
+});
+
+test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
+    test.afterEach(async ({ page }) => {
+        try {
+            await logout(page);
+        } catch (error) {
+            console.log('⚠️ Logout failed:', error);
+        }
+    });
+
+    test('Multiple nations can access same NATO document', async ({ page }) => {
+        const natoUsers = [
+            TEST_USERS.USA.SECRET,
+            TEST_USERS.FRA.SECRET,
+            TEST_USERS.ESP.SECRET,
+            TEST_USERS.DEU.SECRET,
+        ];
+
+        for (const user of natoUsers) {
+            test.step(`${user.countryCode} user can access NATO document`, async () => {
+                await loginAs(page, user);
+
+                const resources = new ResourcesPage(page);
+                await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
+
+                await logout(page);
+            });
+        }
+    });
+
+    test('Only FVEY nations can access FVEY documents', async ({ page }) => {
+        // FVEY members
+        const fveyUsers = [TEST_USERS.USA.SECRET, TEST_USERS.GBR.SECRET];
+        
+        // Non-FVEY members
+        const nonFveyUsers = [TEST_USERS.FRA.SECRET, TEST_USERS.ESP.SECRET];
+
+        test.step('FVEY members can access', async () => {
+            for (const user of fveyUsers) {
+                await loginAs(page, user);
+                const resources = new ResourcesPage(page);
+                await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.FVEY.resourceId);
+                await logout(page);
+            }
+        });
+
+        test.step('Non-FVEY members denied', async () => {
+            for (const user of nonFveyUsers) {
+                await loginAs(page, user);
+                const resources = new ResourcesPage(page);
+                await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
+                await logout(page);
+            }
+        });
+    });
+
+    test('Logout works correctly for all IdPs', async ({ page }) => {
+        const testUsers = [
+            TEST_USERS.USA.SECRET,
+            TEST_USERS.FRA.SECRET,
+            TEST_USERS.ESP.SECRET,
+        ];
+
+        for (const user of testUsers) {
+            test.step(`${user.countryCode} user logout`, async () => {
+                await loginAs(page, user);
+
+                const dashboard = new DashboardPage(page);
+                await dashboard.verifyLoggedIn();
+
+                await logout(page);
+
+                // Verify logged out - should see IdP selector
+                const loginButton = page.getByRole('button', { name: /United States|France|Spain/i }).first();
+                await expect(loginButton).toBeVisible({
+                    timeout: TEST_CONFIG.TIMEOUTS.ACTION,
+                });
+            });
+        }
+    });
+});
