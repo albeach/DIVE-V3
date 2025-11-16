@@ -99,8 +99,9 @@ export const URLS = {
   
   /**
    * Keycloak base URL (for MFA flow detection)
+   * Updated for Keycloak 26.x HTTPS requirement
    */
-  KEYCLOAK_BASE: process.env.KEYCLOAK_URL || 'http://localhost:8081',
+  KEYCLOAK_BASE: process.env.KEYCLOAK_URL || 'https://localhost:8443',
 } as const;
 
 /**
