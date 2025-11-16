@@ -88,6 +88,11 @@ jobs:
             -days 1 \
             -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=keycloak" \
             -addext "subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1"
+          
+          # Make certificates readable by Keycloak container (runs as uid 1000)
+          chmod 644 ${{ github.workspace }}/keycloak-certs/cert.pem
+          chmod 644 ${{ github.workspace }}/keycloak-certs/key.pem
+          
           echo "✅ Generated SSL certificates for Keycloak"
           ls -la ${{ github.workspace }}/keycloak-certs/
       
