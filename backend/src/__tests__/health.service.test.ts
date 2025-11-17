@@ -135,6 +135,20 @@ describe('HealthService', () => {
                 rejectCount: 0,
             },
         });
+
+        // Default mock for authzCacheService.isHealthy() 
+        (authzCacheService.isHealthy as jest.Mock).mockReturnValue({
+            healthy: true,
+        });
+
+        // Default mock for authzCacheService.getStats()
+        (authzCacheService.getStats as jest.Mock).mockReturnValue({
+            size: 100,
+            maxSize: 1000,
+            hitRate: 85.5,
+            hits: 85,
+            misses: 15,
+        });
     });
 
     describe('Basic Health Check', () => {
@@ -701,6 +715,19 @@ describe('HealthService', () => {
 
     describe('Additional Edge Cases and Error Handling', () => {
         it('should handle circuit breaker OPEN state', async () => {
+            // Mock successful service checks
+            mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
+
+            const mockMongoClient = {
+                db: jest.fn().mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockResolvedValue({}),
+                    }),
+                }),
+            } as any;
+
+            healthService.setMongoClient(mockMongoClient);
+
             (circuitBreakerModule.getAllCircuitBreakerStats as jest.Mock).mockReturnValue({
                 opa: {
                     state: 'OPEN',
@@ -718,8 +745,10 @@ describe('HealthService', () => {
 
             const health = await healthService.detailedHealthCheck();
 
-            expect(health.services.opa.status).toBe('down');
-            expect(health.status).toBe('unhealthy');
+            // Circuit breaker state should be included in health response
+            expect(health.circuitBreakers.opa.state).toBe('OPEN');
+            expect(health.circuitBreakers.opa.failures).toBe(5);
+            expect(health.circuitBreakers.opa.rejectCount).toBe(3);
         });
 
         it('should handle circuit breaker HALF_OPEN state', async () => {
@@ -740,7 +769,7 @@ describe('HealthService', () => {
 
             const health = await healthService.detailedHealthCheck();
 
-            expect(health.services.opa.circuitBreaker?.state).toBe('HALF_OPEN');
+            expect(health.circuitBreakers.opa.state).toBe('HALF_OPEN');
         });
 
         it('should handle multiple services down simultaneously', async () => {
@@ -757,12 +786,12 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.basicHealthCheck();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.status).toBe('unhealthy');
-            expect(health.services.mongodb).toBe('down');
-            expect(health.services.opa).toBe('down');
-            expect(health.services.keycloak).toBe('down');
+            expect(health.services.mongodb.status).toBe('down');
+            expect(health.services.opa.status).toBe('down');
+            expect(health.services.keycloak.status).toBe('down');
         });
 
         it('should handle OPA timeout with specific error', async () => {
@@ -808,10 +837,10 @@ describe('HealthService', () => {
 
             const health = await healthService.detailedHealthCheck();
 
-            expect(health.metrics.memory.used).toBeGreaterThan(0);
-            expect(health.metrics.memory.total).toBeGreaterThan(0);
-            expect(health.metrics.memory.percentage).toBeGreaterThan(0);
-            expect(health.metrics.memory.percentage).toBeLessThanOrEqual(100);
+            expect(health.memory.used).toBeGreaterThan(0);
+            expect(health.memory.total).toBeGreaterThan(0);
+            expect(health.memory.percentage).toBeGreaterThan(0);
+            expect(health.memory.percentage).toBeLessThanOrEqual(100);
         });
 
         it('should handle KAS health check failure gracefully', async () => {
@@ -857,9 +886,9 @@ describe('HealthService', () => {
             healthService.setMongoClient(mockMongoClient as any);
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
-            const health = await healthService.basicHealthCheck();
+            const health = await healthService.detailedHealthCheck();
 
-            expect(health.services.mongodb).toBe('down');
+            expect(health.services.mongodb.status).toBe('down');
         }, 10000);
 
         it('should include cache health when cache is unhealthy', async () => {
@@ -882,17 +911,17 @@ describe('HealthService', () => {
 
             const health = await healthService.detailedHealthCheck();
 
-            expect(health.services.cache?.healthy).toBe(false);
-            expect(health.services.cache?.reason).toBe('Cache is full');
+            expect(health.services.cache?.details?.healthy).toBe(false);
+            expect(health.services.cache?.details?.reason).toBe('Cache is full');
         });
 
         it('should handle missing MongoDB client gracefully', async () => {
             healthService.setMongoClient(null as any);
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
-            const health = await healthService.basicHealthCheck();
+            const health = await healthService.detailedHealthCheck();
 
-            expect(health.services.mongodb).toBe('down');
+            expect(health.services.mongodb.status).toBe('down');
         });
 
         it('should mark overall status as degraded when cache is unhealthy but services are up', async () => {

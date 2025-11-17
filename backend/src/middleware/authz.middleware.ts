@@ -793,10 +793,55 @@ export const authenticateJWT = async (
             return;
         }
 
+        // Check token revocation (blacklist)
+        const jti = decodedToken.jti;
+        if (jti && await isTokenBlacklisted(jti)) {
+            logger.warn('Blacklisted token detected', {
+                requestId,
+                jti,
+                sub: decodedToken.sub
+            });
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Token has been revoked',
+                details: {
+                    reason: 'Token was blacklisted (user logged out or token manually revoked)',
+                    jti: jti,
+                    recommendation: 'Please re-authenticate to obtain a new token'
+                },
+                requestId
+            });
+            return;
+        }
+
         // Extract user attributes
         const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
+        
+        // Check if user's tokens are revoked
+        if (await areUserTokensRevoked(uniqueID)) {
+            logger.warn('User tokens revoked', {
+                requestId,
+                uniqueID,
+                sub: decodedToken.sub
+            });
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'All tokens for this user have been revoked',
+                details: {
+                    reason: 'User account was disabled or all tokens were revoked',
+                    recommendation: 'Please contact your administrator'
+                },
+                requestId
+            });
+            return;
+        }
+
         const clearance = decodedToken.clearance;
         const countryOfAffiliation = decodedToken.countryOfAffiliation;
+
+        // Normalize AMR and ACR for AAL/FAL enforcement
+        const normalizedAMR = normalizeAMR(decodedToken.amr);
+        const normalizedACR = normalizeACR(decodedToken.acr);
 
         // Handle acpCOI - Keycloak often double-encodes this as JSON string
         let acpCOI: string[] = [];
@@ -842,7 +887,17 @@ export const authenticateJWT = async (
             countryOfAffiliation,
             acpCOI,
             email: decodedToken.email,
-            preferred_username: decodedToken.preferred_username
+            preferred_username: decodedToken.preferred_username,
+            // Store original AMR and ACR values (for tests and debugging)
+            amr: normalizedAMR,  // Already normalized to array
+            acr: decodedToken.acr !== undefined && decodedToken.acr !== null 
+                ? String(decodedToken.acr)  // Store original as string
+                : undefined,
+            // Store normalized values for internal AAL checking
+            aal: normalizedACR,  // Normalized to number (0, 1, 2, 3)
+            dutyOrg: decodedToken.dutyOrg,
+            orgUnit: decodedToken.orgUnit,
+            auth_time: decodedToken.auth_time
         };
 
         logger.info('JWT authentication successful', {
@@ -1380,13 +1435,13 @@ export const authzMiddleware = async (
         // NEW: Extract original classification fields (ACP-240 Section 4.3)
         const originalClassification = isZTDF
             ? resource.ztdf.policy.securityLabel.originalClassification
-            : undefined;
+            : (resource as any).originalClassification;  // Allow non-ZTDF resources to have this field
         const originalCountry = isZTDF
             ? resource.ztdf.policy.securityLabel.originalCountry
-            : undefined;
+            : (resource as any).originalCountry;  // Allow non-ZTDF resources to have this field
         const natoEquivalent = isZTDF
             ? resource.ztdf.policy.securityLabel.natoEquivalent
-            : undefined;
+            : (resource as any).natoEquivalent;  // Allow non-ZTDF resources to have this field
 
         const releasabilityTo = isZTDF
             ? resource.ztdf.policy.securityLabel.releasabilityTo

@@ -51,6 +51,7 @@ export interface IDetailedHealth extends IBasicHealth {
         opa: IServiceHealth;
         keycloak: IServiceHealth;
         kas?: IServiceHealth;
+        cache?: IServiceHealth;
     };
     metrics: {
         activeIdPs: number;
@@ -156,6 +157,16 @@ class HealthService {
             this.checkKAS(),
         ]);
 
+        // Check cache health
+        const cacheHealthCheck = authzCacheService.isHealthy();
+        const cacheHealth: IServiceHealth = {
+            status: cacheHealthCheck.healthy ? 'up' : 'degraded',
+            details: {
+                healthy: cacheHealthCheck.healthy,
+                reason: cacheHealthCheck.reason,
+            },
+        };
+
         // Get metrics
         const metrics = await this.getMetrics();
 
@@ -173,7 +184,8 @@ class HealthService {
         } else if (
             mongoHealth.status === 'degraded' ||
             opaHealth.status === 'degraded' ||
-            keycloakHealth.status === 'degraded'
+            keycloakHealth.status === 'degraded' ||
+            !cacheHealthCheck.healthy
         ) {
             status = HealthStatus.DEGRADED;
         }
@@ -187,6 +199,7 @@ class HealthService {
                 opa: opaHealth,
                 keycloak: keycloakHealth,
                 kas: kasHealth,
+                cache: cacheHealth,
             },
             metrics,
             memory,
@@ -317,14 +330,20 @@ class HealthService {
         } catch (error) {
             const responseTime = Date.now() - startTime;
 
+            const errorMessage = error instanceof Error 
+                ? error.message 
+                : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : 'Unknown error');
+
             logger.error('OPA health check failed', {
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: errorMessage,
             });
 
             return {
                 status: 'down',
                 responseTime,
-                error: error instanceof Error ? error.message : 'Connection failed',
+                error: error instanceof Error 
+                    ? error.message 
+                    : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : 'Connection failed'),
             };
         }
     }

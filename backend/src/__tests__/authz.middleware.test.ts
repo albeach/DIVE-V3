@@ -26,6 +26,11 @@ jest.mock('../services/token-blacklist.service', () => ({
     areUserTokensRevoked: jest.fn().mockResolvedValue(false)
 }));
 
+// Mock SP auth middleware
+jest.mock('../middleware/sp-auth.middleware', () => ({
+    validateSPToken: jest.fn().mockResolvedValue(null)
+}));
+
 // Week 4 BEST PRACTICE: Dependency Injection (not module mocking)
 // Store default mock implementation for resetting between tests
 const defaultJwtVerifyImpl = (token: any, _key: any, options: any, callback: any) => {
@@ -1306,8 +1311,10 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
 
-            // Mock all JWKS fetch attempts to fail
-            mockedAxios.get.mockRejectedValue(new Error('JWKS endpoint unreachable'));
+            // Mock JWT verification to fail due to JWKS fetch error
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(new Error('unable to get local issuer certificate'), null);
+            });
 
             await authenticateJWT(req as Request, res as Response, next);
 
@@ -1324,20 +1331,9 @@ describe('Authorization Middleware (PEP)', () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
 
-            // Mock JWKS response without matching kid
-            mockedAxios.get.mockResolvedValue({
-                data: {
-                    keys: [
-                        {
-                            kid: 'different-key-id',
-                            kty: 'RSA',
-                            use: 'sig',
-                            alg: 'RS256',
-                            n: 'test-modulus',
-                            e: 'AQAB'
-                        }
-                    ]
-                }
+            // Mock JWT verification to fail due to no matching key
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(new Error('Unable to find matching key'), null);
             });
 
             await authenticateJWT(req as Request, res as Response, next);
@@ -1544,7 +1540,11 @@ describe('Authorization Middleware (PEP)', () => {
         it('should include dutyOrg and orgUnit in OPA input', async () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
-            req.params = { resourceId: 'doc-fvey-001' };
+            req.headers!['x-request-id'] = 'test-dutyorg-123';
+            req.params = { id: 'doc-fvey-001' };
+
+            // Mock resource
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument as any);
 
             mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
@@ -1554,9 +1554,16 @@ describe('Authorization Middleware (PEP)', () => {
                     countryOfAffiliation: 'USA',
                     dutyOrg: 'US_ARMY',
                     orgUnit: 'CYBER_DEFENSE',
+                    acr: 2,  // AAL2 for classified access
+                    amr: ['pwd', 'mfa'],
                     exp: Math.floor(Date.now() / 1000) + 3600,
                     iat: Math.floor(Date.now() / 1000)
                 });
+            });
+
+            // Mock OPA allow response
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
@@ -1570,15 +1577,34 @@ describe('Authorization Middleware (PEP)', () => {
         it('should include original classification fields in OPA input', async () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
-            req.params = { resourceId: 'doc-fvey-001' };
+            req.headers!['x-request-id'] = 'test-class-123';
+            req.params = { id: 'doc-fra-001' };
 
-            // Mock resource with classification equivalency data
-            mockedGetResourceById.mockResolvedValue({
+            // Create a French resource with original classification fields
+            const frenchResource = {
                 ...TEST_RESOURCES.fveySecretDocument,
-                originalClassification: 'SECRET DÉFENSE',
-                originalCountry: 'FRA',
-                natoEquivalent: 'NATO SECRET'
-            } as any);
+                resourceId: 'doc-fra-001',
+                ztdf: {
+                    ...TEST_RESOURCES.fveySecretDocument.ztdf,
+                    policy: {
+                        ...TEST_RESOURCES.fveySecretDocument.ztdf.policy,
+                        securityLabel: {
+                            ...TEST_RESOURCES.fveySecretDocument.ztdf.policy.securityLabel,
+                            originalClassification: 'SECRET DÉFENSE',
+                            originalCountry: 'FRA',
+                            natoEquivalent: 'NATO SECRET'
+                        }
+                    }
+                }
+            };
+            
+            // Mock resource with classification equivalency data
+            mockedGetResourceById.mockResolvedValue(frenchResource as any);
+
+            // Mock OPA allow response
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
+            });
 
             await authzMiddleware(req as Request, res as Response, next);
 
@@ -1592,25 +1618,60 @@ describe('Authorization Middleware (PEP)', () => {
 
     describe('Service Provider (SP) Token Authentication', () => {
         it('should authenticate valid SP token', async () => {
-            // Mock SP token validation
-            const mockValidateSPToken = require('../middleware/sp-auth.middleware').validateSPToken;
-            mockValidateSPToken.mockImplementation(async (req: any, _res: Response, next: NextFunction) => {
-                req.spUser = {
-                    uniqueID: 'sp-service-01',
-                    clearance: 'SECRET',
-                    countryOfAffiliation: 'USA',
-                    acpCOI: ['FVEY'],
-                    spId: 'trusted-service-provider',
-                    scope: ['read:resources'],
-                    iat: Math.floor(Date.now() / 1000),
-                    exp: Math.floor(Date.now() / 1000) + 3600
-                };
-                next();
+            const spToken = 'sp-token-12345';
+            req.headers!.authorization = `Bearer ${spToken}`;
+            req.headers!['x-request-id'] = 'test-sp-123';
+            req.params = { id: 'doc-fvey-001' };
+
+            // Mock resource
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument as any);
+
+            // Make user token verification fail (so it tries SP token)
+            mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
+                callback(new Error('Not a user token'), null);
             });
 
-            // Test SP authentication path
-            // Note: Full SP path testing requires SP-specific middleware setup
-            expect(mockValidateSPToken).toBeDefined();
+            // Mock SP token validation to return valid SP context
+            const mockValidateSPToken = require('../middleware/sp-auth.middleware').validateSPToken;
+            mockValidateSPToken.mockResolvedValueOnce({
+                clientId: 'trusted-service-provider',
+                scopes: ['resource:read'],
+                sub: 'sp-service-01',
+                sp: {
+                    country: 'USA',
+                    clearance: 'SECRET',
+                    acpCOI: ['FVEY'],
+                    federationAgreements: [
+                        {
+                            partner: 'USA',
+                            classifications: ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
+                            validUntil: new Date(Date.now() + 86400000) // Tomorrow
+                        }
+                    ]
+                }
+            });
+
+            // Mock OPA to allow
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
+            });
+
+            await authzMiddleware(req as Request, res as Response, next);
+
+            // Verify SP token was validated
+            expect(mockValidateSPToken).toHaveBeenCalledWith(spToken);
+            
+            // SP tokens bypass OPA and use direct authorization checks for performance
+            // Verify OPA was NOT called (SP uses direct checks)
+            expect(mockedAxios.post).not.toHaveBeenCalled();
+            
+            // Verify request proceeded (SP authorization passed)
+            expect(next).toHaveBeenCalled();
+            
+            // Verify SP context was attached to request
+            expect((req as any).authzDecision).toBeDefined();
+            expect((req as any).authzDecision.allow).toBe(true);
+            expect((req as any).authzDecision.spAccess).toBe(true);
         });
     });
 
@@ -1641,7 +1702,7 @@ describe('Authorization Middleware (PEP)', () => {
         it('should handle resource with COI operator', async () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
-            req.params = { resourceId: 'doc-fvey-001' };
+            req.params = { id: 'doc-fvey-001' };
 
             mockedGetResourceById.mockResolvedValue({
                 ...TEST_RESOURCES.fveySecretDocument,
@@ -1658,9 +1719,13 @@ describe('Authorization Middleware (PEP)', () => {
         it('should handle auth_time in context', async () => {
             const token = createUSUserJWT();
             req.headers!.authorization = `Bearer ${token}`;
-            req.params = { resourceId: 'doc-fvey-001' };
+            req.headers!['x-request-id'] = 'test-authtime-123';
+            req.params = { id: 'doc-fvey-001' };
 
             const authTime = Math.floor(Date.now() / 1000) - 3600;
+
+            // Mock resource
+            mockedGetResourceById.mockResolvedValue(TEST_RESOURCES.fveySecretDocument as any);
 
             mockJwtService.verify.mockImplementation((_token, _key, _options, callback: any) => {
                 callback(null, {
@@ -1669,9 +1734,16 @@ describe('Authorization Middleware (PEP)', () => {
                     clearance: 'SECRET',
                     countryOfAffiliation: 'USA',
                     auth_time: authTime,
+                    acr: 2,  // AAL2 for classified access
+                    amr: ['pwd', 'mfa'],
                     exp: Math.floor(Date.now() / 1000) + 3600,
                     iat: Math.floor(Date.now() / 1000)
                 });
+            });
+
+            // Mock OPA allow response
+            mockedAxios.post.mockResolvedValue({
+                data: mockOPAAllow()
             });
 
             await authzMiddleware(req as Request, res as Response, next);
