@@ -716,10 +716,10 @@ describe('HealthService', () => {
                 kas: { state: 'CLOSED', failures: 0 },
             });
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.services.opa.status).toBe('down');
-            expect(health.overall).toBe('unhealthy');
+            expect(health.status).toBe('unhealthy');
         });
 
         it('should handle circuit breaker HALF_OPEN state', async () => {
@@ -738,7 +738,7 @@ describe('HealthService', () => {
                 kas: { state: 'CLOSED', failures: 0 },
             });
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.services.opa.circuitBreaker?.state).toBe('HALF_OPEN');
         });
@@ -757,7 +757,7 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.getHealth();
+            const health = await healthService.basicHealthCheck();
 
             expect(health.status).toBe('unhealthy');
             expect(health.services.mongodb).toBe('down');
@@ -773,7 +773,7 @@ describe('HealthService', () => {
                 return Promise.resolve({ data: { status: 'ok' } });
             });
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.services.opa.status).toBe('down');
             expect(health.services.opa.error).toContain('timeout');
@@ -787,7 +787,7 @@ describe('HealthService', () => {
                 return Promise.resolve({ data: { status: 'ok' } });
             });
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             // Should handle gracefully
             expect(health).toBeDefined();
@@ -806,7 +806,7 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.metrics.memory.used).toBeGreaterThan(0);
             expect(health.metrics.memory.total).toBeGreaterThan(0);
@@ -834,7 +834,7 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.services.kas?.status).toBe('down');
 
@@ -857,7 +857,7 @@ describe('HealthService', () => {
             healthService.setMongoClient(mockMongoClient as any);
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
-            const health = await healthService.getHealth();
+            const health = await healthService.basicHealthCheck();
 
             expect(health.services.mongodb).toBe('down');
         }, 10000);
@@ -880,7 +880,7 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             expect(health.services.cache?.healthy).toBe(false);
             expect(health.services.cache?.reason).toBe('Cache is full');
@@ -890,7 +890,7 @@ describe('HealthService', () => {
             healthService.setMongoClient(null as any);
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
-            const health = await healthService.getHealth();
+            const health = await healthService.basicHealthCheck();
 
             expect(health.services.mongodb).toBe('down');
         });
@@ -913,10 +913,10 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.getDetailedHealth();
+            const health = await healthService.detailedHealthCheck();
 
             // Cache being unhealthy might cause degraded status
-            expect(['healthy', 'degraded']).toContain(health.overall);
+            expect(['healthy', 'degraded']).toContain(health.status);
         });
 
         it('should handle OPA returning unexpected response format', async () => {
@@ -937,7 +937,7 @@ describe('HealthService', () => {
 
             healthService.setMongoClient(mockMongoClient as any);
 
-            const health = await healthService.getHealth();
+            const health = await healthService.basicHealthCheck();
 
             // Should handle gracefully without crashing
             expect(health).toBeDefined();
