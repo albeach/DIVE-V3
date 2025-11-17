@@ -31,7 +31,7 @@ resource "keycloak_realm" "dive_v3_usa" {
 
   # Token lifetimes (AAL2 - NIST SP 800-63B)
   access_token_lifespan    = "15m" # 15 minutes (AAL2)
-  sso_session_idle_timeout = "15m" # AAL2 requirement
+  sso_session_idle_timeout = "2h"  # Extended from 15m to 2h to align with NextAuth session
   sso_session_max_lifespan = "8h"  # AAL2 max: 12h
   access_code_lifespan     = "1m"
 

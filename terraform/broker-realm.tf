@@ -42,9 +42,9 @@ resource "keycloak_realm" "dive_v3_broker" {
   # Allow reasonable session for admin work (not enforcing 1s like national realms)
   access_token_lifespan = "15m" # Access token (aligns with NextAuth session)
 
-  # Broker realm sessions: Allow normal sessions for super admin
+  # Broker realm sessions: Extended to align with NextAuth database sessions
   # MFA is still enforced via authentication flow, but sessions can persist
-  sso_session_idle_timeout = "30m" # SSO idle: 30 minutes
+  sso_session_idle_timeout = "2h"  # SSO idle: 2 hours (aligned with NextAuth)
   sso_session_max_lifespan = "8h"  # Max session: 8 hours
 
   offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
