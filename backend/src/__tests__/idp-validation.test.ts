@@ -441,7 +441,6 @@ describe('IdP Validation Service', () => {
       });
 
       it('should score latency correctly', async () => {
-        const startTime = Date.now();
         (axios.get as jest.Mock) = jest.fn().mockImplementation(async () => {
           await new Promise(resolve => setTimeout(resolve, 100));
           return { status: 200, data: {} };
@@ -504,7 +503,7 @@ describe('IdP Validation Service', () => {
       const result = await idpValidationService.validateTLS('https://weak-cipher.com');
 
       expect(result.pass).toBe(true);
-      expect(result.warnings).toContain(expect.stringContaining('Weak cipher'));
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('Weak cipher')]));
     });
 
     it('should warn about weak cipher (RC4)', async () => {
@@ -528,7 +527,7 @@ describe('IdP Validation Service', () => {
 
       const result = await idpValidationService.validateTLS('https://rc4-server.com');
 
-      expect(result.warnings).toContain(expect.stringContaining('Weak cipher'));
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('Weak cipher')]));
     });
 
     it('should warn about weak cipher (DES)', async () => {
@@ -552,7 +551,7 @@ describe('IdP Validation Service', () => {
 
       const result = await idpValidationService.validateTLS('https://des-server.com');
 
-      expect(result.warnings).toContain(expect.stringContaining('Weak cipher'));
+      expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining('Weak cipher')]));
     });
 
     it('should handle certificate with no expiry date', async () => {
@@ -599,8 +598,8 @@ describe('IdP Validation Service', () => {
 
       const result = await idpValidationService.validateTLS('https://no-cert.com');
 
-      expect(result.pass).toBe(true); // Still passes due to allowSelfSigned
-      expect(result.certificateValid).toBe(true); // allowSelfSigned makes it valid
+      expect(result.pass).toBe(true); // Still passes in non-strict mode
+      expect(result.certificateValid).toBe(false); // Empty certificate is not valid
     });
 
     it('should fail invalid certificate in strict mode', async () => {
@@ -749,8 +748,8 @@ describe('IdP Validation Service', () => {
       const result = await idpValidationService.validateOIDCAlgorithms('https://example.com/jwks');
 
       expect(result.pass).toBe(true);
-      expect(result.recommendations).toContain(
-        expect.stringContaining('Consider using recommended algorithms')
+      expect(result.recommendations).toEqual(
+        expect.arrayContaining([expect.stringContaining('Consider using recommended algorithms')])
       );
     });
 

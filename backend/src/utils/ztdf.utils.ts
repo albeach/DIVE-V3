@@ -285,6 +285,7 @@ export function createSecurityLabel(params: {
     classification: ClassificationLevel;
     originalClassification?: string;  // NEW: e.g., "GEHEIM", "SECRET DÉFENSE"
     originalCountry?: string;          // NEW: ISO 3166-1 alpha-3 (e.g., "DEU", "FRA")
+    natoEquivalent?: string;           // NEW: NATO standard equivalent (ACP-240 Section 4.3)
     releasabilityTo: string[];
     COI?: string[];
     caveats?: string[];
@@ -295,6 +296,7 @@ export function createSecurityLabel(params: {
         classification: params.classification,
         originalClassification: params.originalClassification,  // NEW: ACP-240 Section 4.3
         originalCountry: params.originalCountry,                // NEW: ACP-240 Section 4.3
+        natoEquivalent: params.natoEquivalent,                  // NEW: ACP-240 Section 4.3
         releasabilityTo: params.releasabilityTo,
         COI: params.COI,
         caveats: params.caveats,

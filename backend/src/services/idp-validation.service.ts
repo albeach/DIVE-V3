@@ -539,6 +539,9 @@ class IdPValidationService {
   }
 }
 
-// Export singleton instance
+// Export class for testing with custom configs
+export { IdPValidationService };
+
+// Export singleton instance for production use
 export const idpValidationService = new IdPValidationService();
 
