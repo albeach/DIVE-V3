@@ -1562,7 +1562,7 @@ describe('Authorization Middleware (PEP)', () => {
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(mockedAxios.post).toHaveBeenCalled();
-            const opaInput = mockedAxios.post.mock.calls[0][1];
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
             expect(opaInput.input.subject.dutyOrg).toBe('US_ARMY');
             expect(opaInput.input.subject.orgUnit).toBe('CYBER_DEFENSE');
         });
@@ -1578,12 +1578,12 @@ describe('Authorization Middleware (PEP)', () => {
                 originalClassification: 'SECRET DÉFENSE',
                 originalCountry: 'FRA',
                 natoEquivalent: 'NATO SECRET'
-            });
+            } as any);
 
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(mockedAxios.post).toHaveBeenCalled();
-            const opaInput = mockedAxios.post.mock.calls[0][1];
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
             expect(opaInput.input.resource.originalClassification).toBe('SECRET DÉFENSE');
             expect(opaInput.input.resource.originalCountry).toBe('FRA');
             expect(opaInput.input.resource.natoEquivalent).toBe('NATO SECRET');
@@ -1594,7 +1594,7 @@ describe('Authorization Middleware (PEP)', () => {
         it('should authenticate valid SP token', async () => {
             // Mock SP token validation
             const mockValidateSPToken = require('../middleware/sp-auth.middleware').validateSPToken;
-            mockValidateSPToken.mockImplementation(async (req: IRequestWithSP, _res: Response, next: NextFunction) => {
+            mockValidateSPToken.mockImplementation(async (req: any, _res: Response, next: NextFunction) => {
                 req.spUser = {
                     uniqueID: 'sp-service-01',
                     clearance: 'SECRET',
@@ -1646,12 +1646,12 @@ describe('Authorization Middleware (PEP)', () => {
             mockedGetResourceById.mockResolvedValue({
                 ...TEST_RESOURCES.fveySecretDocument,
                 coiOperator: 'ALL' // Requires ALL COIs
-            });
+            } as any);
 
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(mockedAxios.post).toHaveBeenCalled();
-            const opaInput = mockedAxios.post.mock.calls[0][1];
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
             expect(opaInput.input.resource.coiOperator).toBe('ALL');
         });
 
@@ -1677,7 +1677,7 @@ describe('Authorization Middleware (PEP)', () => {
             await authzMiddleware(req as Request, res as Response, next);
 
             expect(mockedAxios.post).toHaveBeenCalled();
-            const opaInput = mockedAxios.post.mock.calls[0][1];
+            const opaInput = mockedAxios.post.mock.calls[0][1] as any;
             expect(opaInput.input.context.auth_time).toBe(authTime);
         });
     });
