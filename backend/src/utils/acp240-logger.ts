@@ -15,11 +15,16 @@ import { logger } from './logger';
 import { MongoClient, Db } from 'mongodb';
 import { getMongoDBUrl, getMongoDBName } from './mongodb-config';
 
-const LOGS_COLLECTION = 'audit_logs';
-
 // MongoDB client (singleton)
 let mongoClient: MongoClient | null = null;
 let db: Db | null = null;
+
+/**
+ * Get collection name (allows test override for parallel test isolation)
+ */
+function getLogsCollection(): string {
+    return process.env.ACP240_LOGS_COLLECTION || 'audit_logs';
+}
 
 /**
  * Initialize MongoDB connection for audit logging
@@ -58,7 +63,7 @@ async function writeToMongoDB(event: IACP240AuditEvent): Promise<void> {
             return;
         }
 
-        const collection = db.collection(LOGS_COLLECTION);
+        const collection = db.collection(getLogsCollection());
 
         // Insert the event with all fields
         await collection.insertOne({
