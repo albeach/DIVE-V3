@@ -6,9 +6,7 @@ describe('PolicyEditorPanel helpers', () => {
     expect(issues).toEqual(
       expect.arrayContaining([
         'Missing package declaration',
-        'Allow rule not defined',
-        'reason output is not defined',
-        'obligations output is not defined',
+        'No allow rule defined',
       ]),
     );
   });
