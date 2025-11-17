@@ -21,7 +21,7 @@ jobs:
   backend-unit-tests:
     name: Backend - Unit Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Reduced with real MongoDB service
+    timeout-minutes: 15  # Realistic for 1,643+ comprehensive tests
     
     # Use real MongoDB service instead of MongoDB Memory Server (10x faster in CI)
     services:
@@ -102,7 +102,7 @@ jobs:
   backend-integration-tests:
     name: Backend - Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10  # Increased for integration test suite
     
     services:
       mongodb:
@@ -170,7 +170,7 @@ jobs:
   backend-coverage:
     name: Backend - Coverage Report
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15  # Coverage generation with 1,643+ tests needs time
     
     services:
       mongodb:
