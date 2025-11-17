@@ -4,11 +4,14 @@
  * Tests querying, filtering, and statistics for audit logs in MongoDB
  */
 
+// CRITICAL: Set collection name BEFORE importing service (prevents parallel test interference)
+const LOGS_COLLECTION = 'audit_logs_service_test';
+process.env.AUDIT_LOGS_COLLECTION = LOGS_COLLECTION;
+
 import { MongoClient, Db } from 'mongodb';
 import { auditLogService } from '../services/audit-log.service';
 
 const DB_NAME = 'dive-v3-test';
-const LOGS_COLLECTION = 'audit_logs';
 
 describe('Audit Log Service', () => {
     let client: MongoClient;
@@ -25,15 +28,20 @@ describe('Audit Log Service', () => {
     });
 
     afterAll(async () => {
-        // Close service connection first, then test client
-        await auditLogService.close();
+        // Close service connection (but only after all tests complete)
+        try {
+            await auditLogService.close();
+        } catch (error) {
+            // Ignore close errors
+        }
         if (client) {
             await client.close();
         }
     });
 
     beforeEach(async () => {
-        // Clear and seed test data - WAIT for completion
+        // Clear and seed test data for this test file's collection
+        // (unique collection name prevents interference from other test files)
         const collection = db.collection(LOGS_COLLECTION);
         await collection.deleteMany({});
         // Ensure deletion completes before seeding

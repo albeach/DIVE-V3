@@ -12,7 +12,13 @@ import { MongoClient, Db, Collection } from 'mongodb';
 // This allows globalSetup to configure MongoDB Memory Server before services connect
 const getMongoDBUrl = () => process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
-const LOGS_COLLECTION = 'audit_logs';
+
+/**
+ * Get collection name (allows test override for parallel test isolation)
+ */
+function getLogsCollection(): string {
+    return process.env.AUDIT_LOGS_COLLECTION || 'audit_logs';
+}
 
 interface IAuditLogQuery {
     eventType?: string;
@@ -89,7 +95,7 @@ class AuditLogService {
         if (!this.db) {
             throw new Error('Database not initialized');
         }
-        return this.db.collection(LOGS_COLLECTION);
+        return this.db.collection(getLogsCollection());
     }
 
     /**

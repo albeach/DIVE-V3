@@ -4,6 +4,9 @@
  * Tests for log querying and statistics
  */
 
+// Set unique collection name to prevent parallel test interference
+process.env.AUDIT_LOGS_COLLECTION = 'audit_logs_basic_test';
+
 import { auditLogService } from '../services/audit-log.service';
 
 describe('Audit Log Service', () => {

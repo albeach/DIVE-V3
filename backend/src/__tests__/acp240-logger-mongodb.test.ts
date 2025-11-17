@@ -6,12 +6,15 @@
  * - Logs written to MongoDB (audit_logs collection)
  */
 
+// CRITICAL: Set collection name BEFORE importing logger (prevents parallel test interference)
+const LOGS_COLLECTION = 'audit_logs_logger_test';
+process.env.ACP240_LOGS_COLLECTION = LOGS_COLLECTION;
+
 import { MongoClient, Db } from 'mongodb';
 import { logACP240Event, logDecryptEvent, logAccessDeniedEvent, logEncryptEvent, closeAuditLogConnection } from '../utils/acp240-logger';
 import { IACP240AuditEvent } from '../utils/acp240-logger';
 
 const DB_NAME = 'dive-v3-test';
-const LOGS_COLLECTION = 'audit_logs';
 
 describe('ACP-240 Logger MongoDB Integration', () => {
     let client: MongoClient;
