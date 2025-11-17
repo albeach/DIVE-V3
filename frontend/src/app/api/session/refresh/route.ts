@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
         expiresAt: account.expires_at ? new Date(account.expires_at * 1000).toISOString() : null,
         timeUntilExpiry,
         isExpired,
-        needsRefresh: timeUntilExpiry < 180, // Less than 3 minutes
+        needsRefresh: timeUntilExpiry < 480, // Less than 8 minutes (aligned with proactive refresh)
         serverTime, // Server time for clock skew detection
         userId: session.user.id,
         provider: account.provider,

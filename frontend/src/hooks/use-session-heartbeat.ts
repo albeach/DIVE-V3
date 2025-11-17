@@ -127,6 +127,31 @@ export function useSessionHeartbeat() {
                 return null;
             }
 
+            // Session recovery: If server shows authenticated but tokens are invalid,
+            // attempt to refresh the session
+            if (data.authenticated === true && !data.isExpired && data.needsRefresh) {
+                console.log('[Heartbeat] Server indicates session needs refresh - triggering manual refresh');
+                try {
+                    const refreshResponse = await fetch('/api/session/refresh', {
+                        method: 'POST',
+                        cache: 'no-store',
+                    });
+
+                    if (refreshResponse.ok) {
+                        const refreshData = await refreshResponse.json();
+                        console.log('[Heartbeat] Session refresh successful:', refreshData.message);
+
+                        // Update health with new expiry time
+                        health.expiresAt = new Date(refreshData.expiresAt).getTime();
+                        health.needsRefresh = false;
+                    } else {
+                        console.warn('[Heartbeat] Session refresh failed:', refreshResponse.status);
+                    }
+                } catch (refreshError) {
+                    console.error('[Heartbeat] Session refresh error:', refreshError);
+                }
+            }
+
             setSessionHealth(health);
             setIsLoading(false);
             setError(null);
