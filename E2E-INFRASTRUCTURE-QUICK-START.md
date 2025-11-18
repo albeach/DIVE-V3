@@ -181,3 +181,4 @@ PWDEBUG=console npm run test:e2e -- my-test.spec.ts
 **Ready to refactor existing tests?**  
 Start with: `identity-drawer.spec.ts` (simplest) or `integration-federation-vs-object.spec.ts` (already working)
 
+

@@ -34,6 +34,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --noauth  # Disable authentication for CI testing
 
     steps:
       - name: Checkout Code
@@ -118,6 +119,7 @@ jobs:
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_AUTH_DISABLED: true
           OPA_URL: http://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -142,6 +144,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --noauth  # Disable authentication for CI testing
     
     steps:
       - name: Checkout Code
@@ -212,8 +215,8 @@ jobs:
   backend-coverage:
     name: Backend - Coverage Report
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # Coverage generation with 1,643+ tests needs time
-    
+    timeout-minutes: 20  # Coverage generation needs time
+
     services:
       mongodb:
         image: mongo:7.0
@@ -224,7 +227,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+          --noauth  # Disable authentication for CI testing
+
+      opa:
+        image: openpolicyagent/opa:0.68.0
+        ports:
+          - 8181:8181
+        command: run --server --addr=:8181 --log-level=error
+        options: >-
+          --health-cmd "curl -f http://localhost:8181/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -284,15 +299,7 @@ jobs:
           fi
 
           echo "✅ Test RSA keys generated and verified"
-      
-      - name: Start OPA Server
-        run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
-          chmod +x opa
-          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
-          sleep 5
-          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
-      
+
       - name: COI Logic Lint
         run: cd backend && npm run lint:coi
       
@@ -407,40 +414,45 @@ jobs:
   performance-tests:
     name: Performance Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    
-    # NO MongoDB service needed - using MongoDB Memory Server (best practice)
-    
+    timeout-minutes: 10
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --noauth  # Disable authentication for CI testing
+
+      opa:
+        image: openpolicyagent/opa:0.68.0
+        ports:
+          - 8181:8181
+        command: run --server --addr=:8181 --log-level=error
+        options: >-
+          --health-cmd "curl -f http://localhost:8181/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 3
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install Dependencies
         run: cd backend && npm ci
-      
-      - name: Cache MongoDB Binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/mongodb-binaries
-          key: ${{ runner.os }}-mongodb-binary-7.0.0
-          restore-keys: |
-            ${{ runner.os }}-mongodb-binary-
-      
-      - name: Start OPA Server
-        run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
-          chmod +x opa
-          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
-          sleep 5
-          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
-      
+
       - name: Authorization Latency Tests
         run: |
           cd backend
@@ -448,7 +460,8 @@ jobs:
           npm test -- --testPathPattern=performance --testTimeout=30000 || echo "No performance tests found"
         env:
           NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_AUTH_DISABLED: true
           OPA_URL: http://localhost:8181
       
       - name: Throughput Test (100 req/s target)

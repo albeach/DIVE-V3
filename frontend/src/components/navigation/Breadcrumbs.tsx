@@ -170,3 +170,4 @@ export function CompactBreadcrumbs({ items, className = '' }: BreadcrumbsProps) 
   );
 }
 
+

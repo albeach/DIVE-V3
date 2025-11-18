@@ -7,15 +7,29 @@ set -e
 
 echo "🔐 Generating test certificates for DIVE V3 backend tests..."
 
+# Check if openssl is available
+if ! command -v openssl &> /dev/null; then
+    echo "❌ ERROR: openssl is not installed or not in PATH"
+    echo "Please install openssl to generate certificates"
+    exit 1
+fi
+
 # Create directories
 CERT_DIR="$(cd "$(dirname "$0")/.." && pwd)/certs"
 CA_DIR="$CERT_DIR/ca"
 SIGNING_DIR="$CERT_DIR/signing"
 CRL_DIR="$CERT_DIR/crl"
 
+echo "📁 Creating certificate directories..."
 mkdir -p "$CA_DIR"
 mkdir -p "$SIGNING_DIR"
 mkdir -p "$CRL_DIR"
+
+# Verify directories were created
+if [ ! -d "$CA_DIR" ] || [ ! -d "$SIGNING_DIR" ] || [ ! -d "$CRL_DIR" ]; then
+    echo "❌ ERROR: Failed to create certificate directories"
+    exit 1
+fi
 
 echo "📁 Certificate directories created"
 
@@ -223,26 +237,58 @@ EOF
 
 echo "✅ README documentation created"
 
+# Verify all files were created
+echo "🔍 Verifying generated files..."
+
+errors=0
+
+# Check Root CA files
+if [ ! -f "$CA_DIR/root.key" ]; then echo "❌ Missing: $CA_DIR/root.key"; errors=$((errors+1)); fi
+if [ ! -f "$CA_DIR/root.crt" ]; then echo "❌ Missing: $CA_DIR/root.crt"; errors=$((errors+1)); fi
+
+# Check Intermediate CA files
+if [ ! -f "$CA_DIR/intermediate.key" ]; then echo "❌ Missing: $CA_DIR/intermediate.key"; errors=$((errors+1)); fi
+if [ ! -f "$CA_DIR/intermediate.crt" ]; then echo "❌ Missing: $CA_DIR/intermediate.crt"; errors=$((errors+1)); fi
+
+# Check Policy Signer files
+if [ ! -f "$SIGNING_DIR/policy-signer.key" ]; then echo "❌ Missing: $SIGNING_DIR/policy-signer.key"; errors=$((errors+1)); fi
+if [ ! -f "$SIGNING_DIR/policy-signer.crt" ]; then echo "❌ Missing: $SIGNING_DIR/policy-signer.crt"; errors=$((errors+1)); fi
+if [ ! -f "$SIGNING_DIR/policy-signer.pem" ]; then echo "❌ Missing: $SIGNING_DIR/policy-signer.pem"; errors=$((errors+1)); fi
+
+# Check Certificate Chain
+if [ ! -f "$CA_DIR/chain.pem" ]; then echo "❌ Missing: $CA_DIR/chain.pem"; errors=$((errors+1)); fi
+
+# Check CRLs
+if [ ! -f "$CRL_DIR/root-crl.pem" ]; then echo "❌ Missing: $CRL_DIR/root-crl.pem"; errors=$((errors+1)); fi
+if [ ! -f "$CRL_DIR/intermediate-crl.pem" ]; then echo "❌ Missing: $CRL_DIR/intermediate-crl.pem"; errors=$((errors+1)); fi
+
+if [ $errors -gt 0 ]; then
+    echo ""
+    echo "❌ ERROR: $errors files are missing!"
+    echo "Certificate generation failed."
+    exit 1
+fi
+
 # Summary
 echo ""
 echo "✅ Test certificates generated successfully!"
 echo ""
 echo "📋 Generated Files:"
 echo "   Root CA:"
-echo "     - $CA_DIR/root.key"
-echo "     - $CA_DIR/root.crt"
+echo "     - $CA_DIR/root.key ($(stat -c%s "$CA_DIR/root.key" 2>/dev/null || echo "size unknown") bytes)"
+echo "     - $CA_DIR/root.crt ($(stat -c%s "$CA_DIR/root.crt" 2>/dev/null || echo "size unknown") bytes)"
 echo "   Intermediate CA:"
-echo "     - $CA_DIR/intermediate.key"
-echo "     - $CA_DIR/intermediate.crt"
+echo "     - $CA_DIR/intermediate.key ($(stat -c%s "$CA_DIR/intermediate.key" 2>/dev/null || echo "size unknown") bytes)"
+echo "     - $CA_DIR/intermediate.crt ($(stat -c%s "$CA_DIR/intermediate.crt" 2>/dev/null || echo "size unknown") bytes)"
 echo "   Policy Signer:"
-echo "     - $SIGNING_DIR/policy-signer.key"
-echo "     - $SIGNING_DIR/policy-signer.crt"
-echo "     - $SIGNING_DIR/policy-signer.pem"
+echo "     - $SIGNING_DIR/policy-signer.key ($(stat -c%s "$SIGNING_DIR/policy-signer.key" 2>/dev/null || echo "size unknown") bytes)"
+echo "     - $SIGNING_DIR/policy-signer.crt ($(stat -c%s "$SIGNING_DIR/policy-signer.crt" 2>/dev/null || echo "size unknown") bytes)"
+echo "     - $SIGNING_DIR/policy-signer.pem ($(stat -c%s "$SIGNING_DIR/policy-signer.pem" 2>/dev/null || echo "size unknown") bytes)"
 echo "   Certificate Chain:"
-echo "     - $CA_DIR/chain.pem"
+echo "     - $CA_DIR/chain.pem ($(stat -c%s "$CA_DIR/chain.pem" 2>/dev/null || echo "size unknown") bytes)"
 echo "   CRLs:"
-echo "     - $CRL_DIR/root-crl.pem"
-echo "     - $CRL_DIR/intermediate-crl.pem"
+echo "     - $CRL_DIR/root-crl.pem ($(stat -c%s "$CRL_DIR/root-crl.pem" 2>/dev/null || echo "size unknown") bytes)"
+echo "     - $CRL_DIR/intermediate-crl.pem ($(stat -c%s "$CRL_DIR/intermediate-crl.pem" 2>/dev/null || echo "size unknown") bytes)"
 echo ""
 echo "🧪 Ready for testing!"
 

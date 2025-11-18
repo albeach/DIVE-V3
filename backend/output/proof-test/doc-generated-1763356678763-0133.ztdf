@@ -1,0 +1,1 @@
+{"error":"Unauthorized","message":"Invalid or expired JWT token","details":{"reason":"Token header missing kid"},"requestId":"req-1763361960969-3j7mrh"}

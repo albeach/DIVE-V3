@@ -4,6 +4,7 @@ import { getResourceById, getAllResources } from '../services/resource.service';
 import { NotFoundError } from '../middleware/error.middleware';
 import { IZTDFResource } from '../types/ztdf.types';
 import { validateZTDFIntegrity, decryptContent } from '../utils/ztdf.utils';
+import { convertToOpenTDFFormat } from '../services/ztdf-export.service';
 import axios from 'axios';
 
 /**
@@ -160,6 +161,9 @@ export const getResourceHandler = async (
                 // ZTDF object (full for classification equivalency tests)
                 ztdf: resource.ztdf,
 
+                // Include policy evaluation details for frontend replay
+                policyEvaluation: (req as any).policyEvaluation,
+
                 metadata: {
                     createdAt: resource.createdAt,
                     updatedAt: resource.updatedAt
@@ -199,6 +203,10 @@ export const getResourceHandler = async (
                 encrypted: legacyResource.encrypted || false,
                 creationDate: legacyResource.creationDate,
                 content: legacyResource.content,
+
+                // Include policy evaluation details for frontend replay
+                policyEvaluation: (req as any).policyEvaluation,
+
                 metadata: {
                     createdAt: legacyResource.createdAt,
                     updatedAt: legacyResource.updatedAt
@@ -721,6 +729,99 @@ export const requestKeyHandler = async (
             requestId,
             resourceId,
             error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        next(error);
+    }
+};
+
+/**
+ * Download ZTDF file in OpenTDF-compliant format
+ * Week 4: Export ZTDF as ZIP archive (0.manifest.json + 0.payload)
+ * 
+ * This endpoint converts DIVE V3 internal ZTDF format to OpenTDF spec 4.3.0
+ * format for interoperability with OpenTDF CLI and SDK tools.
+ * 
+ * @route GET /api/resources/:id/download
+ * @returns ZIP file (.ztdf) compatible with OpenTDF tools
+ */
+export const downloadZTDFHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+    const { id } = req.params;
+
+    try {
+        logger.info('ZTDF download requested', {
+            requestId,
+            resourceId: id,
+            userAgent: req.headers['user-agent']
+        });
+
+        // 1. Fetch resource from MongoDB
+        const resource = await getResourceById(id);
+
+        if (!resource) {
+            throw new NotFoundError(`Resource ${id} not found`);
+        }
+
+        // 2. Verify resource is ZTDF-enhanced
+        if (!isZTDFResource(resource)) {
+            logger.warn('Attempted to download non-ZTDF resource', {
+                requestId,
+                resourceId: id
+            });
+
+            res.status(400).json({
+                error: 'Bad Request',
+                message: 'This resource is not in ZTDF format. Only ZTDF-enhanced resources can be downloaded.'
+            });
+            return;
+        }
+
+        // 3. Convert to OpenTDF format (ZIP archive)
+        const exportResult = await convertToOpenTDFFormat(resource.ztdf, {
+            includeAssertionSignatures: true,
+            validateIntegrity: true,
+            compressionLevel: 0, // STORE (no compression) per OpenTDF spec
+            includeLegacyFields: false
+        });
+
+        logger.info('ZTDF export successful', {
+            requestId,
+            resourceId: id,
+            exportedAt: exportResult.metadata.exportedAt,
+            zipSize: exportResult.fileSize,
+            manifestSize: exportResult.metadata.manifestSize,
+            payloadSize: exportResult.metadata.payloadSize,
+            zipHash: exportResult.zipHash
+        });
+
+        // 4. Set response headers for file download
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${exportResult.filename}"`);
+        res.setHeader('Content-Length', exportResult.fileSize.toString());
+        res.setHeader('X-ZTDF-Spec-Version', exportResult.metadata.tdfSpecVersion);
+        res.setHeader('X-ZTDF-Hash', exportResult.zipHash);
+        res.setHeader('X-Export-Timestamp', exportResult.metadata.exportedAt);
+
+        // 5. Send ZIP buffer
+        res.send(exportResult.zipBuffer);
+
+        logger.info('ZTDF file sent to client', {
+            requestId,
+            resourceId: id,
+            filename: exportResult.filename,
+            bytesSent: exportResult.fileSize
+        });
+
+    } catch (error) {
+        logger.error('ZTDF download failed', {
+            requestId,
+            resourceId: id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined
         });
         next(error);
     }
