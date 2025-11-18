@@ -26,24 +26,73 @@ if (!process.env.MONGODB_URL && !process.env.MONGODB_URI) {
 }
 process.env.MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
-// Suppress console logs during tests (optional)
-if (process.env.SILENT_TESTS === 'true') {
-    global.console = {
-        ...console,
-        log: jest.fn(),
-        debug: jest.fn(),
+// Mock Winston logger to prevent EPIPE errors during test shutdown
+// This is the primary cause of Jest hanging - Winston tries to write to closed streams
+jest.mock('winston', () => {
+    const mockLogger = {
         info: jest.fn(),
         warn: jest.fn(),
         error: jest.fn(),
+        debug: jest.fn(),
+        log: jest.fn(),
+        add: jest.fn(),
+        remove: jest.fn(),
+        clear: jest.fn(),
+        close: jest.fn(),
     };
-}
+
+    return {
+        createLogger: jest.fn(() => mockLogger),
+        transports: {
+            Console: jest.fn(),
+            File: jest.fn(),
+        },
+        format: {
+            combine: jest.fn(),
+            timestamp: jest.fn(),
+            json: jest.fn(),
+            printf: jest.fn(),
+            errors: jest.fn(),
+            colorize: jest.fn(),
+        },
+    };
+});
+
+// Also mock the logger utility specifically
+jest.mock('../utils/logger', () => ({
+    logger: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        log: jest.fn(),
+    },
+}));
 
 // Global test timeout
 jest.setTimeout(10000);
 
 // Clean up after all tests
 afterAll(async () => {
-    // Allow time for async operations to complete
+    // Force cleanup of any remaining async operations
+    // This prevents Jest from hanging due to unhandled promises/timers
+
+    // Clear all jest mocks and timers FIRST
+    jest.clearAllMocks();
+    jest.clearAllTimers();
+
+    // Clear any cached modules that might hold connections
+    jest.resetModules();
+
+    // Allow time for async operations to complete gracefully
     await new Promise(resolve => setTimeout(resolve, 500));
-});
+
+    // Force garbage collection if available (helps clean up dangling references)
+    if (global.gc) {
+        global.gc();
+    }
+
+    // Final cleanup delay
+    await new Promise(resolve => setTimeout(resolve, 200));
+}, 15000); // Reduced timeout since we have better cleanup
 
