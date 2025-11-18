@@ -162,6 +162,7 @@ beforeEach(async () => {
 }, 10000);
 
 describe('Real Services Integration Tests', () => {
+    let realOpaAvailable = false;
 
     describe('OPA Service Connectivity', () => {
         it('should verify OPA is accessible and responding', async () => {
@@ -216,7 +217,7 @@ reason := "Clearance check failed" if { not allow }
 
         let policyId: string;
 
-        it.skip('should upload and validate a Rego policy (real validation)', async () => {
+        (realOpaAvailable ? it : it.skip)('should upload and validate a Rego policy (real validation)', async () => {
             // Requires OPA CLI (opa fmt, opa check) - not HTTP endpoints
             const response = await request(app)
                 .post('/api/policies-lab/upload')
@@ -240,7 +241,7 @@ reason := "Clearance check failed" if { not allow }
             policyId = response.body.policyId;
         }, REAL_SERVICES_TIMEOUT);
 
-        it.skip('should retrieve the uploaded policy from MongoDB', async () => {
+        (realOpaAvailable ? it : it.skip)('should retrieve the uploaded policy from MongoDB', async () => {
             // Depends on upload which requires OPA CLI
             // First upload
             const uploadResponse = await request(app)
@@ -267,7 +268,7 @@ reason := "Clearance check failed" if { not allow }
             expect(response.body.policySource).toContain('dive.lab.real_integration_test');
         }, REAL_SERVICES_TIMEOUT);
 
-        it.skip('should evaluate policy with ALLOW decision using real OPA', async () => {
+        (realOpaAvailable ? it : it.skip)('should evaluate policy with ALLOW decision using real OPA', async () => {
             // Requires OPA CLI for policy upload
             // Upload policy
             const uploadResponse = await request(app)
@@ -322,7 +323,7 @@ reason := "Clearance check failed" if { not allow }
             expect(Array.isArray(response.body.obligations)).toBe(true);
         }, REAL_SERVICES_TIMEOUT);
 
-        it.skip('should evaluate policy with DENY decision using real OPA', async () => {
+        (realOpaAvailable ? it : it.skip)('should evaluate policy with DENY decision using real OPA', async () => {
             // Requires OPA CLI for policy upload
             // Upload policy
             const uploadResponse = await request(app)
@@ -373,7 +374,7 @@ reason := "Clearance check failed" if { not allow }
             expect(response.body.evaluation_details.latency_ms).toBeGreaterThan(0);
         }, REAL_SERVICES_TIMEOUT);
 
-        it.skip('should verify policy is actually loaded in OPA', async () => {
+        (realOpaAvailable ? it : it.skip)('should verify policy is actually loaded in OPA', async () => {
             // Requires OPA CLI for policy upload
             // Upload policy
             const uploadResponse = await request(app)
@@ -491,7 +492,7 @@ allow if {
     });
 
     describe('Performance Benchmarks with Real OPA', () => {
-        it.skip('should meet p95 latency target (<200ms)', async () => {
+        (realOpaAvailable ? it : it.skip)('should meet p95 latency target (<200ms)', async () => {
             // Requires OPA CLI for policy upload
             const policy = `
 package dive.lab.performance_test
@@ -563,13 +564,16 @@ allow if {
             } catch {
                 authzforceAvailable = false;
             }
+
+            try {
+                await axios.get(`${OPA_URL}/health`, { timeout: 3000 });
+                realOpaAvailable = true;
+            } catch {
+                realOpaAvailable = false;
+            }
         });
 
-        it.skip('should upload and evaluate XACML policy with real AuthzForce', async () => {
-            if (!authzforceAvailable) {
-                console.log('⚠️  Skipping XACML test - AuthzForce not available');
-                return;
-            }
+        (authzforceAvailable ? it : it.skip)('should upload and evaluate XACML policy with real AuthzForce', async () => {
 
             const xacmlPolicy = `<?xml version="1.0" encoding="UTF-8"?>
 <PolicySet xmlns="urn:oasis:names:tc:xacml:3.0:core:schema:wd-17"
