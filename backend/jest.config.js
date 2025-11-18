@@ -32,7 +32,7 @@ module.exports = {
     },
     testTimeout: 15000,
     maxWorkers: 1, // Run tests sequentially to prevent MongoDB interference
-    forceExit: false, // Best practice: Let Jest exit naturally after cleanup
+    forceExit: true, // Always force exit to prevent hanging after Winston mocking
     detectOpenHandles: false, // Enable temporarily for debugging: npm test -- --detectOpenHandles
     globalSetup: '<rootDir>/src/__tests__/globalSetup.ts',
     globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
