@@ -9,6 +9,7 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { closeAuditLogConnection } from '../utils/acp240-logger';
 import { closeCOIKeyConnection } from '../services/coi-key.service';
+import { closeRedisConnection } from '../services/token-blacklist.service';
 
 export default async function globalTeardown() {
     console.log('🔧 Starting global teardown...');
@@ -25,6 +26,14 @@ export default async function globalTeardown() {
         // Close COI Key Service MongoDB connection
         await closeCOIKeyConnection();
         console.log('  ✓ COI Key Service connection closed');
+    } catch (error) {
+        // Ignore errors if connection wasn't established
+    }
+
+    try {
+        // Close Redis connection from token blacklist service
+        await closeRedisConnection();
+        console.log('  ✓ Redis connection closed');
     } catch (error) {
         // Ignore errors if connection wasn't established
     }
