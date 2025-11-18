@@ -88,8 +88,17 @@ jobs:
       - name: Start Keycloak 26.4.2 with HTTPS
         run: |
           echo "🚀 Starting Keycloak 26.4.2 with HTTPS..."
+
+          # Get the service network ID
+          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_)
+          if [ -z "$SERVICE_NETWORK" ]; then
+            SERVICE_NETWORK=$(docker network ls -q | head -1)
+          fi
+          echo "Using network: $SERVICE_NETWORK"
+
           docker run -d \
             --name keycloak \
+            --network "$SERVICE_NETWORK" \
             -p 8443:8443 \
             -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
@@ -104,12 +113,16 @@ jobs:
             -e KC_HTTP_ENABLED=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
-          
-          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
+
+          # Get Keycloak container IP for health checks
+          KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
+          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP on HTTPS port 8443"
       
       - name: Configure Keycloak for E2E Tests
         run: |
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
+          echo "Using Keycloak IP: $KEYCLOAK_IP"
           # Increased from 30 to 60 iterations (5 minutes total)
           for i in {1..60}; do
             if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
@@ -122,6 +135,8 @@ jobs:
               docker logs keycloak
               echo "Checking container status..."
               docker ps -a
+              echo "Checking network connectivity..."
+              docker exec keycloak curl -k -v https://localhost:8443/health/ready || true
               exit 1
             fi
             echo "Waiting for Keycloak... ($i/60)"
@@ -239,6 +254,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
       
       - name: Run Authentication E2E Tests
@@ -252,6 +268,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           BASE_URL: https://localhost:3000
           BACKEND_API_URL: http://localhost:4000
@@ -342,8 +359,17 @@ jobs:
       - name: Start Keycloak 26.4.2 with HTTPS
         run: |
           echo "🚀 Starting Keycloak 26.4.2 with HTTPS..."
+
+          # Get the service network ID
+          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_)
+          if [ -z "$SERVICE_NETWORK" ]; then
+            SERVICE_NETWORK=$(docker network ls -q | head -1)
+          fi
+          echo "Using network: $SERVICE_NETWORK"
+
           docker run -d \
             --name keycloak \
+            --network "$SERVICE_NETWORK" \
             -p 8443:8443 \
             -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
@@ -358,12 +384,16 @@ jobs:
             -e KC_HTTP_ENABLED=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
-          
-          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
+
+          # Get Keycloak container IP for health checks
+          KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
+          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP on HTTPS port 8443"
       
       - name: Configure Keycloak for E2E Tests
         run: |
           echo "⏳ Waiting for Keycloak HTTPS to be ready..."
+          echo "Using Keycloak IP: $KEYCLOAK_IP"
           # Increased from 30 to 60 iterations (5 minutes total)
           for i in {1..60}; do
             if curl -k -f https://localhost:9000/health/ready 2>/dev/null; then
@@ -376,6 +406,8 @@ jobs:
               docker logs keycloak
               echo "Checking container status..."
               docker ps -a
+              echo "Checking network connectivity..."
+              docker exec keycloak curl -k -v https://localhost:8443/health/ready || true
               exit 1
             fi
             echo "Waiting for Keycloak... ($i/60)"
@@ -437,6 +469,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
       
       - name: Start OPA Server
@@ -458,6 +491,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           BASE_URL: https://localhost:3000
@@ -549,8 +583,17 @@ jobs:
       - name: Start Keycloak 26.4.2 with HTTPS
         run: |
           echo "🚀 Starting Keycloak 26.4.2 with HTTPS..."
+
+          # Get the service network ID
+          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_)
+          if [ -z "$SERVICE_NETWORK" ]; then
+            SERVICE_NETWORK=$(docker network ls -q | head -1)
+          fi
+          echo "Using network: $SERVICE_NETWORK"
+
           docker run -d \
             --name keycloak \
+            --network "$SERVICE_NETWORK" \
             -p 8443:8443 \
             -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
@@ -565,8 +608,11 @@ jobs:
             -e KC_HTTP_ENABLED=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
-          
-          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
+
+          # Get Keycloak container IP for health checks
+          KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
+          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP on HTTPS port 8443"
       
       
       - name: Configure Keycloak for E2E Tests
@@ -637,6 +683,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
       
       - name: Run Classification Equivalency E2E Tests
@@ -650,6 +697,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           BASE_URL: https://localhost:3000
       
@@ -740,8 +788,17 @@ jobs:
       - name: Start Keycloak 26.4.2 with HTTPS
         run: |
           echo "🚀 Starting Keycloak 26.4.2 with HTTPS..."
+
+          # Get the service network ID
+          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_)
+          if [ -z "$SERVICE_NETWORK" ]; then
+            SERVICE_NETWORK=$(docker network ls -q | head -1)
+          fi
+          echo "Using network: $SERVICE_NETWORK"
+
           docker run -d \
             --name keycloak \
+            --network "$SERVICE_NETWORK" \
             -p 8443:8443 \
             -p 9000:9000 \
             -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
@@ -756,8 +813,11 @@ jobs:
             -e KC_HTTP_ENABLED=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
-          
-          echo "✅ Keycloak container started on HTTPS port 8443 with management on 9000"
+
+          # Get Keycloak container IP for health checks
+          KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
+          echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
+          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP on HTTPS port 8443"
       
           echo "✅ Generated self-signed SSL certificates for E2E testing"
       
@@ -829,6 +889,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
       
       - name: Start OPA Server
@@ -850,6 +911,7 @@ jobs:
           KEYCLOAK_REALM: dive-v3-broker
           KEYCLOAK_CLIENT_ID: dive-v3-client-broker
           KEYCLOAK_CLIENT_SECRET: test-client-secret
+          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
           BASE_URL: https://localhost:3000
