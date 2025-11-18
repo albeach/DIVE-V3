@@ -22,7 +22,7 @@ jobs:
     name: Backend - Unit Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Realistic for 1,643+ comprehensive tests
-    
+
     # Use real MongoDB service instead of MongoDB Memory Server (10x faster in CI)
     services:
       mongodb:
@@ -34,21 +34,21 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install Dependencies
         run: cd backend && npm ci
-      
+
       - name: Cache MongoDB Binary
         uses: actions/cache@v4
         with:
@@ -56,18 +56,46 @@ jobs:
           key: ${{ runner.os }}-mongodb-binary-7.0.0
           restore-keys: |
             ${{ runner.os }}-mongodb-binary-
-      
+
       - name: Generate Test Certificates
         run: |
           cd backend
           chmod +x scripts/generate-test-certs.sh
-          ./scripts/generate-test-certs.sh
+
+          # Run with error handling
+          if ! ./scripts/generate-test-certs.sh; then
+            echo "❌ Certificate generation failed"
+            exit 1
+          fi
+
+          # Verify certificates were created
+          if [ ! -f "certs/signing/policy-signer.pem" ]; then
+            echo "❌ Policy signer certificate not found"
+            ls -la certs/ 2>/dev/null || echo "No certs directory"
+            exit 1
+          fi
+
+          echo "✅ Test certificates generated and verified"
       
       - name: Generate Test RSA Keys
         run: |
           cd backend
           chmod +x scripts/generate-test-rsa-keys.sh
-          ./scripts/generate-test-rsa-keys.sh
+
+          # Run with error handling
+          if ! ./scripts/generate-test-rsa-keys.sh; then
+            echo "❌ RSA key generation failed"
+            exit 1
+          fi
+
+          # Verify keys were created
+          if [ ! -f "src/__tests__/keys/test-private-key.pem" ] || [ ! -f "src/__tests__/keys/test-public-key.pem" ]; then
+            echo "❌ Test RSA keys not found"
+            ls -la src/__tests__/keys/ 2>/dev/null || echo "No keys directory"
+            exit 1
+          fi
+
+          echo "✅ Test RSA keys generated and verified"
       
       - name: Start OPA Server
         run: |
@@ -139,7 +167,21 @@ jobs:
         run: |
           cd backend
           chmod +x scripts/generate-test-certs.sh
-          ./scripts/generate-test-certs.sh
+
+          # Run with error handling
+          if ! ./scripts/generate-test-certs.sh; then
+            echo "❌ Certificate generation failed"
+            exit 1
+          fi
+
+          # Verify certificates were created
+          if [ ! -f "certs/signing/policy-signer.pem" ]; then
+            echo "❌ Policy signer certificate not found"
+            ls -la certs/ 2>/dev/null || echo "No certs directory"
+            exit 1
+          fi
+
+          echo "✅ Test certificates generated and verified"
       
       - name: Start OPA Server
         run: |
@@ -207,13 +249,41 @@ jobs:
         run: |
           cd backend
           chmod +x scripts/generate-test-certs.sh
-          ./scripts/generate-test-certs.sh
+
+          # Run with error handling
+          if ! ./scripts/generate-test-certs.sh; then
+            echo "❌ Certificate generation failed"
+            exit 1
+          fi
+
+          # Verify certificates were created
+          if [ ! -f "certs/signing/policy-signer.pem" ]; then
+            echo "❌ Policy signer certificate not found"
+            ls -la certs/ 2>/dev/null || echo "No certs directory"
+            exit 1
+          fi
+
+          echo "✅ Test certificates generated and verified"
       
       - name: Generate Test RSA Keys
         run: |
           cd backend
           chmod +x scripts/generate-test-rsa-keys.sh
-          ./scripts/generate-test-rsa-keys.sh
+
+          # Run with error handling
+          if ! ./scripts/generate-test-rsa-keys.sh; then
+            echo "❌ RSA key generation failed"
+            exit 1
+          fi
+
+          # Verify keys were created
+          if [ ! -f "src/__tests__/keys/test-private-key.pem" ] || [ ! -f "src/__tests__/keys/test-public-key.pem" ]; then
+            echo "❌ Test RSA keys not found"
+            ls -la src/__tests__/keys/ 2>/dev/null || echo "No keys directory"
+            exit 1
+          fi
+
+          echo "✅ Test RSA keys generated and verified"
       
       - name: Start OPA Server
         run: |
