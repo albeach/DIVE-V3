@@ -98,13 +98,28 @@ jobs:
 
           echo "✅ Test RSA keys generated and verified"
       
+      - name: Generate Test Certificates for CI
+        run: |
+          mkdir -p ${{ github.workspace }}/certs
+
+          # Generate self-signed certificate for CI testing
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/certs/key.pem \
+            -out ${{ github.workspace }}/certs/certificate.pem \
+            -days 1 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
+
+          echo "✅ Generated test certificates for CI"
+          ls -la ${{ github.workspace }}/certs/
+
       - name: Start OPA Server
         run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
           chmod +x opa
-          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
           sleep 5
-          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+          curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
       
       - name: Run Unit Tests
         run: |
@@ -120,7 +135,7 @@ jobs:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           MONGODB_AUTH_DISABLED: true
-          OPA_URL: http://localhost:8181
+          OPA_URL: https://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
@@ -186,20 +201,35 @@ jobs:
 
           echo "✅ Test certificates generated and verified"
       
+      - name: Generate Test Certificates for CI
+        run: |
+          mkdir -p ${{ github.workspace }}/certs
+
+          # Generate self-signed certificate for CI testing
+          openssl req -x509 -newkey rsa:4096 -nodes \
+            -keyout ${{ github.workspace }}/certs/key.pem \
+            -out ${{ github.workspace }}/certs/certificate.pem \
+            -days 1 \
+            -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
+
+          echo "✅ Generated test certificates for CI"
+          ls -la ${{ github.workspace }}/certs/
+
       - name: Start OPA Server
         run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
           chmod +x opa
-          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
           sleep 5
-          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+          curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
       
       - name: Run Integration Tests
         run: cd backend && npm run test:integration
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-          OPA_URL: http://localhost:8181
+          OPA_URL: https://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
@@ -210,7 +240,7 @@ jobs:
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-          OPA_URL: http://localhost:8181
+          OPA_URL: https://localhost:8181
 
   backend-coverage:
     name: Backend - Coverage Report
@@ -230,10 +260,9 @@ jobs:
           --noauth  # Disable authentication for CI testing
 
       opa:
-        image: openpolicyagent/opa:0.68.0
+        image: openpolicyagent/opa:latest
         ports:
           - 8181:8181
-        command: run --server --addr=:8181 --log-level=error
         options: >-
           --health-cmd "curl -f http://localhost:8181/health || exit 1"
           --health-interval 10s
@@ -308,7 +337,7 @@ jobs:
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
-          OPA_URL: http://localhost:8181
+          OPA_URL: https://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
@@ -390,7 +419,7 @@ jobs:
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
         with:
-          version: 0.68.0
+          version: latest
       
       - name: Run All Policy Tests
         run: |
@@ -429,10 +458,9 @@ jobs:
           --noauth  # Disable authentication for CI testing
 
       opa:
-        image: openpolicyagent/opa:0.68.0
+        image: openpolicyagent/opa:latest
         ports:
           - 8181:8181
-        command: run --server --addr=:8181 --log-level=error
         options: >-
           --health-cmd "curl -f http://localhost:8181/health || exit 1"
           --health-interval 10s
@@ -462,7 +490,7 @@ jobs:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           MONGODB_AUTH_DISABLED: true
-          OPA_URL: http://localhost:8181
+          OPA_URL: https://localhost:8181
       
       - name: Throughput Test (100 req/s target)
         run: |
