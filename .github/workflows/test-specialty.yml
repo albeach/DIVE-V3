@@ -251,11 +251,14 @@ jobs:
       - name: Install Dependencies
         run: cd backend && npm ci
       
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: 0.68.0
+
       - name: Start OPA Server
         run: |
-          curl -L -o opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
-          chmod +x opa
-          nohup ./opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
+          nohup opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
           sleep 5
           curl -f http://localhost:8181/health || (cat opa.log && exit 1)
       
