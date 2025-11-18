@@ -287,3 +287,4 @@ export function MobileSearchModal({ isOpen, onClose, user }: {
   );
 }
 
+

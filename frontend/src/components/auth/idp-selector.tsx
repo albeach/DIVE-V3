@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
-import { getFlagComponent } from "@/components/ui/flags";
 
 /**
  * IdP Selector Component - Dynamic with Enable/Disable Support
@@ -11,9 +10,6 @@ import { getFlagComponent } from "@/components/ui/flags";
  * When admin enables/disables IdPs, this list updates automatically.
  * 
  * 🥚 EASTER EGG: Super Admin access hidden behind secret triggers
- * 
- * ✅ SECURITY: All flags are self-contained SVG components
- * No external CDN dependencies, emoji fonts, or third-party resources
  */
 
 interface IdPOption {
@@ -23,15 +19,57 @@ interface IdPOption {
   enabled: boolean;
 }
 
-// Component to render flag icon using local SVG components
-const FlagIcon = ({ alias }: { alias: string }) => {
-  const FlagComponent = getFlagComponent(alias);
+// Flag mapping for known IdPs
+// Returns emoji flag OR Twemoji CDN fallback for better cross-platform rendering
+const getFlagForIdP = (alias: string): { emoji: string; code: string } => {
+  // Match specific patterns (order matters - check specific before generic)
+  if (alias.includes('germany') || alias.includes('deu')) return { emoji: '🇩🇪', code: 'DE' };
+  if (alias.includes('france') || alias.includes('fra')) return { emoji: '🇫🇷', code: 'FR' };
+  if (alias.includes('canada') || alias.includes('can')) return { emoji: '🇨🇦', code: 'CA' };
+  if (alias.includes('uk') || alias.includes('gbr')) return { emoji: '🇬🇧', code: 'GB' };
+  if (alias.includes('italy') || alias.includes('ita')) return { emoji: '🇮🇹', code: 'IT' };
+  if (alias.includes('spain') || alias.includes('esp')) return { emoji: '🇪🇸', code: 'ES' };
+  if (alias.includes('poland') || alias.includes('pol')) return { emoji: '🇵🇱', code: 'PL' };
+  if (alias.includes('netherlands') || alias.includes('nld')) return { emoji: '🇳🇱', code: 'NL' };
+  if (alias.includes('industry') || alias.includes('contractor')) return { emoji: '🏢', code: '' };
+  // Check for US last (since "industry" doesn't contain "us")
+  if (alias.includes('usa') || alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return { emoji: '🇺🇸', code: 'US' };
   
-  return (
-    <div className="inline-flex items-center justify-center">
-      <FlagComponent size={48} className="drop-shadow-md" />
-    </div>
-  );
+  return { emoji: '🌐', code: '' }; // Default globe icon
+};
+
+// Component to render flag with fallback
+const FlagIcon = ({ alias }: { alias: string }) => {
+  const flag = getFlagForIdP(alias);
+  
+  // If country code exists, use Twemoji CDN as fallback
+  if (flag.code) {
+    return (
+      <span className="inline-flex items-center justify-center">
+        {/* Try emoji first */}
+        <span className="emoji-flag" style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>
+          {flag.emoji}
+        </span>
+        {/* Fallback image (hidden by default, shows if emoji fails) */}
+        <img 
+          src={`https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${flag.code.toLowerCase()}-flag.svg`}
+          alt={`${flag.code} flag`}
+          className="hidden emoji-fallback w-6 h-6"
+          onError={(e) => {
+            // If emoji AND image fail, try generic Twemoji CDN path
+            const countryCode = flag.code.toLowerCase();
+            const codepoints = [...countryCode].map(c => 
+              (c.charCodeAt(0) + 0x1F1A5).toString(16)
+            ).join('-');
+            (e.target as HTMLImageElement).src = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoints}.svg`;
+          }}
+        />
+      </span>
+    );
+  }
+  
+  // Non-country icons (industry, default)
+  return <span style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>{flag.emoji}</span>;
 };
 
 export function IdpSelector() {
@@ -113,10 +151,8 @@ export function IdpSelector() {
     // Option 3: Custom Keycloak Theme - Use NextAuth signIn with kc_idp_hint
     // This ensures state cookie is properly set before redirecting to Keycloak
     const { signIn } = await import('next-auth/react');
-    // Pass kc_idp_hint in the redirect URL to skip broker realm IdP selection page
     await signIn('keycloak', {
       callbackUrl: '/dashboard',
-      redirect: true,
     }, {
       kc_idp_hint: idp.alias,  // Trigger federation to specific national realm
     });
@@ -406,7 +442,7 @@ export function IdpSelector() {
                     ▸ CLEARANCE: COSMIC TOP SECRET
                   </p>
                   <p className="text-cyan-400 text-sm font-mono">
-                    ▸ AUTHORIZATION CODE: {eggCount.toString().padStart(4, '0')}-Alpha-{Math.random().toString(36).substr(2, 6).toUpperCase()}
+                    ▸ AUTHORIZATION CODE: {eggCount.toString().padStart(4, '0')}-ALPHA-{Math.random().toString(36).substr(2, 6).toUpperCase()}
                   </p>
                   
                   {eggCount > 1 && (

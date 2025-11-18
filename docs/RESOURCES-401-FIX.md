@@ -154,3 +154,4 @@ docker compose logs backend --tail=20
 
 
 
+

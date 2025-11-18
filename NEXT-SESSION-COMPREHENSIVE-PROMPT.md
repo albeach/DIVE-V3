@@ -1,4 +1,4 @@
-# DIVE V3 - Next Session Prompt
+<!-- # DIVE V3 - Next Session Prompt
 
 **Copy this entire prompt to start your next session**
 
@@ -469,3 +469,4 @@ Next priority: Fix E2E test execution issues
 
 Good luck! 🚀
 
+ -->

@@ -743,6 +743,76 @@ const logDecision = (
 };
 
 /**
+ * Translate OPA violation messages into user-friendly guidance
+ * Provides actionable feedback without revealing authorization logic details
+ */
+const getUserFriendlyDenialMessage = (
+    opaReason: string,
+    resourceInfo: {
+        classification: string;
+        releasabilityTo: string[];
+        COI: string[];
+        title?: string;
+    },
+    userInfo: {
+        clearance: string;
+        countryOfAffiliation: string;
+        acpCOI: string[];
+    }
+): { message: string; guidance: string } => {
+    // Parse the OPA reason to determine the type of violation
+    if (opaReason.includes('No COI intersection')) {
+        return {
+            message: 'Access requires Community of Interest membership',
+            guidance: `This resource requires membership in specific communities: ${resourceInfo.COI.join(', ')}. Contact your security administrator to request the appropriate COI affiliations.`
+        };
+    }
+
+    if (opaReason.includes('Country') && opaReason.includes('not in releasabilityTo')) {
+        return {
+            message: 'Access restricted by releasability policy',
+            guidance: `This resource is only releasable to: ${resourceInfo.releasabilityTo.join(', ')}. Your country (${userInfo.countryOfAffiliation}) is not authorized for this content.`
+        };
+    }
+
+    if (opaReason.includes('Insufficient clearance')) {
+        return {
+            message: 'Insufficient security clearance',
+            guidance: `This resource requires ${resourceInfo.classification} clearance. Your current clearance (${userInfo.clearance}) is insufficient. Contact your security officer for clearance upgrade.`
+        };
+    }
+
+    if (opaReason.includes('Insufficient AAL') || opaReason.includes('AAL2 claimed but')) {
+        const requiredAAL = resourceInfo.classification === 'UNCLASSIFIED' ? 'AAL1' :
+                           resourceInfo.classification === 'TOP_SECRET' ? 'AAL3' : 'AAL2';
+        return {
+            message: 'Multi-factor authentication required',
+            guidance: `This ${resourceInfo.classification} resource requires ${requiredAAL} authentication. Please enroll in multi-factor authentication through your account settings.`
+        };
+    }
+
+    if (opaReason.includes('Token expired')) {
+        return {
+            message: 'Authentication session expired',
+            guidance: 'Your authentication session has expired. Please log in again to continue.'
+        };
+    }
+
+    if (opaReason.includes('not in trusted federation')) {
+        return {
+            message: 'Identity provider not recognized',
+            guidance: 'Your identity provider is not part of the trusted federation. Please use an authorized identity provider to access this system.'
+        };
+    }
+
+    // Fallback for unrecognized violations
+    return {
+        message: 'Access denied',
+        guidance: 'You do not have sufficient permissions to access this resource. Contact your security administrator for assistance.'
+    };
+};
+
+/**
  * JWT Authentication middleware (Week 3.2)
  * Verifies JWT token and attaches user info to request
  * Does NOT call OPA - use for endpoints that need auth but handle authz separately
@@ -1328,10 +1398,28 @@ export const authzMiddleware = async (
                     ? (resource.ztdf.policy.securityLabel.COI || [])
                     : ((resource as any).COI || []);
 
+                // Get user-friendly error message
+                const userFriendly = getUserFriendlyDenialMessage(
+                    cachedDecision.result.reason,
+                    {
+                        classification,
+                        releasabilityTo,
+                        COI,
+                        title: resource.title
+                    },
+                    {
+                        clearance,
+                        countryOfAffiliation,
+                        acpCOI
+                    }
+                );
+
                 res.status(403).json({
                     error: 'Forbidden',
-                    message: 'Access denied',
-                    reason: cachedDecision.result.reason,
+                    message: userFriendly.message,
+                    guidance: userFriendly.guidance,
+                    // Keep technical details for debugging
+                    technical_reason: cachedDecision.result.reason,
                     details: {
                         ...(cachedDecision.result.evaluation_details || {}),
                         subject: {
@@ -1623,10 +1711,28 @@ export const authzMiddleware = async (
                 latencyMs: Date.now() - startTime
             });
 
+            // Get user-friendly error message
+            const userFriendly = getUserFriendlyDenialMessage(
+                opaDecision.result.reason,
+                {
+                    classification,
+                    releasabilityTo,
+                    COI,
+                    title: resource.title
+                },
+                {
+                    clearance,
+                    countryOfAffiliation,
+                    acpCOI
+                }
+            );
+
             res.status(403).json({
                 error: 'Forbidden',
-                message: 'Access denied',
-                reason: opaDecision.result.reason,
+                message: userFriendly.message,
+                guidance: userFriendly.guidance,
+                // Keep technical details for debugging (available to admin users or logs)
+                technical_reason: opaDecision.result.reason,
                 details: {
                     ...(opaDecision.result.evaluation_details || {}),
                     subject: {
@@ -1662,6 +1768,30 @@ export const authzMiddleware = async (
             // For now, store obligations in request for handler to process
             (req as any).authzObligations = opaDecision.result.obligations;
         }
+
+        // ============================================
+        // Step 11: Store policy evaluation for frontend replay
+        // ============================================
+
+        // Store policy evaluation details for frontend PolicyDecisionReplay component
+        (req as any).policyEvaluation = {
+            decision: "ALLOW",
+            reason: opaDecision.result.reason,
+            evaluation_details: opaDecision.result.evaluation_details,
+            subject: {
+                uniqueID,
+                clearance,
+                country: countryOfAffiliation,
+                coi: acpCOI
+            },
+            resource: {
+                resourceId: resource.resourceId,
+                title: resource.title,
+                classification,
+                releasabilityTo,
+                coi: COI
+            }
+        };
 
         // Access granted - continue to resource handler
         logger.info('Access granted', {
