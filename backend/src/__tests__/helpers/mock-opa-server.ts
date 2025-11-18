@@ -43,14 +43,17 @@ export function mockOPAServer(): void {
     
     const mockHandler = (_uri: string, requestBody: any) => {
         const input = requestBody.input;
-        
+
         // Intelligent decision logic (matches real OPA policy)
-        const decision = evaluateABAC(input);
-        
-        // Return in nested format (result.decision) as OPA does
-        return { 
+        const abacResult = evaluateABAC(input);
+
+        // Return in OPA format that policy-execution.service.ts expects
+        // The service looks for result.allow, not result.decision
+        return {
             result: {
-                decision: decision
+                allow: abacResult.allow,
+                reason: abacResult.reason,
+                evaluation_details: abacResult.evaluation_details
             }
         };
     };
@@ -64,8 +67,25 @@ export function mockOPAServer(): void {
         .persist()
         .post('/v1/data/dive/authorization/decision')
         .reply(200, mockHandler);
-    
-    console.log(`✅ Mocked OPA server: ${OPA_URL} (both endpoints)`);
+
+    // Mock policy-specific evaluation endpoints (used by policies lab tests)
+    nock(opaUrl.origin)
+        .persist()
+        .post(/\/v1\/data\/dive\/lab\/.*/)
+        .reply(200, mockHandler);
+
+    // Mock policy listing/verification endpoints
+    nock(opaUrl.origin)
+        .persist()
+        .get('/v1/policies')
+        .reply(200, { result: [] });
+
+    nock(opaUrl.origin)
+        .persist()
+        .get(/\/v1\/policies\/.*/)
+        .reply(200, { result: { id: 'mock-policy', raw: 'package test\n\nallow := true' } });
+
+    console.log(`✅ Mocked OPA server: ${OPA_URL} (all endpoints)`);
 }
 
 /**
