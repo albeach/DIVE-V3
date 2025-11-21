@@ -72,6 +72,8 @@ const nextConfig: NextConfig = {
             bodySizeLimit: "2mb",
         },
     },
+    // Optimize production builds
+    productionBrowserSourceMaps: false, // Disable source maps in production to prevent console errors
     // Docker deployment: Development mode for hot reload and runtime env vars
     // output: 'standalone',  // Use for production builds only
 };

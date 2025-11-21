@@ -41,3 +41,5 @@ echo ""
 echo "[SUCCESS] Cleared all user sessions in dive-v3-broker realm"
 echo "[INFO] Users will need to log in again to get new tokens with updated AMR/ACR mappers"
 
+
+

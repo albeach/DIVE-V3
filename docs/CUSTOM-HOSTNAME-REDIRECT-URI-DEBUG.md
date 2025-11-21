@@ -318,3 +318,5 @@ This single variable cannot serve both purposes correctly. The fix requires:
 
 **This is NOT a DNS issue, NOT an environment variable issue, NOT a frontend issue. This is a Terraform configuration architecture issue.**
 
+
+

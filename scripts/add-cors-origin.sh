@@ -147,3 +147,5 @@ echo "  3. Add comma-separated origins"
 echo "  4. Run: docker compose restart backend"
 echo ""
 
+
+

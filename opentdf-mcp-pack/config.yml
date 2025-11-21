@@ -1,0 +1,63 @@
+# Default configuration for the OpenTDF corpus builder
+crawl:
+  docs_base: "https://opentdf.io"
+  # If sitemap is missing or incomplete, the crawler will traverse from these seeds
+  doc_seeds:
+    - "/introduction"
+    - "/getting-started"
+    - "/architecture"
+    - "/category/components-and-services"
+    - "/sdks/overview"
+    - "/sdks/tdf"
+    - "/OpenAPI-clients"
+    - "/spec"
+    - "/spec/concepts"
+    - "/spec/protocol"
+    - "/spec/schema/opentdf"
+    - "/appendix/matrix"
+    - "/release-notes"
+  allow_path_prefixes:
+    - "/"
+  disallow_path_globs:
+    - "*/blog/*"
+    - "*/tags/*"
+    - "*/assets/*"
+    - "*/static/*"
+
+github:
+  org: "opentdf"
+  include_repos: []     # empty means: include all public repos in org
+  exclude_repos:
+    - ".github"
+  # File include/exclude rules (applied after size check)
+  include_exts: [".md", ".mdx", ".txt", ".go", ".ts", ".tsx", ".java", ".proto", ".yml", ".yaml", ".json"]
+  exclude_path_globs:
+    - "node_modules/**"
+    - "**/.git/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/*.min.*"
+    - "**/vendor/**"
+    - "**/*.lock"
+    - "**/*.sum"
+  max_file_bytes: 800000   # ~0.8 MB per file hard cap
+  releases:
+    include_from: ["platform", "web-sdk", "java-sdk", "otdfctl", "spec"]
+
+chunking:
+  target_chars: 6000         # ~1500 tokens rough
+  hard_max_chars: 9000
+  min_chars: 1500
+  code_target_chars: 5000
+  split_on_headings: true
+  split_code_on_functions: false
+
+politeness:
+  robots_txt: true
+  delay_seconds: 0.5
+  concurrency: 4
+
+output:
+  add_hash: true
+  add_token_estimates: true
+  use_tiktoken: false

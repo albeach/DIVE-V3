@@ -186,3 +186,5 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  Token ready for partner testing!${NC}"
 echo -e "${GREEN}════════════════════════════════════════${NC}"
 
+
+

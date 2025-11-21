@@ -200,3 +200,5 @@ The `fix-keycloak-db-init.sh` script:
 3. User tests authentication (should work without database errors!)
 4. User can then investigate JWT/OPA issues (separate from database issues)
 
+
+

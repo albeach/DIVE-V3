@@ -158,3 +158,5 @@ echo -e "${YELLOW}Current CORS allowlist:${NC}"
 echo "$NEW_CORS_LIST" | tr ',' '\n' | sed 's/^/  - /'
 echo ""
 
+
+

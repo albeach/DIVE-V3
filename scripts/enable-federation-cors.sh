@@ -207,3 +207,5 @@ echo -e "${CYAN}To check backend logs:${NC}"
 echo "  ${BLUE}docker compose logs backend -f | grep CORS${NC}"
 echo ""
 
+
+
