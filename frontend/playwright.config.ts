@@ -29,17 +29,15 @@ export default defineConfig({
     ],
 
     use: {
-        // Use localhost for CI E2E tests, Cloudflare tunnel URL for local development
-        baseURL: process.env.CI
-            ? (process.env.BASE_URL || 'https://localhost:3000')
-            : (process.env.BASE_URL || 'https://dev-app.dive25.com'),
+        // Use Cloudflare Zero Trust tunnel URLs (running on remote computer)
+        baseURL: process.env.BASE_URL || 'https://dev-app.dive25.com',
         trace: 'on-first-retry', // Collect trace on first retry
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
         actionTimeout: 15000,
         navigationTimeout: 30000,
-        // Accept self-signed certificates from mkcert in docker-compose
-        ignoreHTTPSErrors: true,
+        // Cloudflare provides valid certificates
+        ignoreHTTPSErrors: false,
     },
 
     projects: [
