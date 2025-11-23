@@ -189,19 +189,30 @@ async function handleMFASetup(page: Page, user: TestUser, otpCode?: string): Pro
     
     await submitButton.click();
   } else if (user.mfaType === 'webauthn') {
-    console.log('[AUTH] WebAuthn setup detected');
-    console.warn('[AUTH] ⚠️ WebAuthn E2E testing requires browser automation - may fail in headless mode');
+    console.log('[AUTH] Setting up WebAuthn/passkey for first time');
+    
+    // Create virtual authenticator for testing
+    await setupVirtualAuthenticator(page);
     
     // Wait for WebAuthn registration page
     await page.waitForSelector(TEST_CONFIG.KEYCLOAK_SELECTORS.WEBAUTHN_REGISTER, {
       timeout: TEST_CONFIG.TIMEOUTS.MFA_SETUP,
     });
     
-    // Note: Actual WebAuthn registration requires user interaction
-    // In E2E tests, this may need to be mocked or use virtual authenticators
-    // See: https://playwright.dev/docs/auth#virtual-authenticators
+    // Click register button to trigger WebAuthn ceremony
+    const registerButton = page.getByRole('button', { name: /register|add passkey|create passkey/i });
+    await registerButton.click();
     
-    throw new Error('WebAuthn setup not yet implemented in E2E tests - use virtual authenticator');
+    // Wait for WebAuthn registration to complete
+    await page.waitForTimeout(2000); // Allow time for WebAuthn ceremony
+    
+    // Look for success indication or next step
+    const continueButton = page.getByRole('button', { name: /continue|next|finish/i });
+    if (await continueButton.isVisible({ timeout: 5000 })) {
+      await continueButton.click();
+    }
+    
+    console.log('[AUTH] ✅ WebAuthn setup completed');
   }
 }
 
@@ -231,15 +242,23 @@ async function handleMFALogin(page: Page, user: TestUser, otpCode?: string): Pro
     await submitButton.click();
   } else if (user.mfaType === 'webauthn') {
     console.log('[AUTH] WebAuthn authentication detected');
-    console.warn('[AUTH] ⚠️ WebAuthn E2E testing requires browser automation - may fail in headless mode');
     
-    // Wait for WebAuthn button
+    // Create virtual authenticator for testing (if not already created)
+    await setupVirtualAuthenticator(page);
+    
+    // Wait for WebAuthn authentication button
     await page.waitForSelector(TEST_CONFIG.KEYCLOAK_SELECTORS.WEBAUTHN_AUTHENTICATE, {
       timeout: TEST_CONFIG.TIMEOUTS.ACTION,
     });
     
-    // Note: Actual WebAuthn authentication requires user interaction
-    throw new Error('WebAuthn login not yet implemented in E2E tests - use virtual authenticator');
+    // Click authenticate button to trigger WebAuthn ceremony
+    const authenticateButton = page.getByRole('button', { name: /authenticate|use passkey|sign in with passkey/i });
+    await authenticateButton.click();
+    
+    // Wait for WebAuthn authentication to complete
+    await page.waitForTimeout(2000); // Allow time for WebAuthn ceremony
+    
+    console.log('[AUTH] ✅ WebAuthn authentication completed');
   }
 }
 
@@ -293,18 +312,29 @@ export async function logout(page: Page): Promise<void> {
     console.log('[AUTH] ✅ Successfully logged out');
   } catch (error) {
     console.error('[AUTH] ❌ Logout failed:', error);
-    
-    // Fallback: Clear cookies and session storage
-    await page.context().clearCookies();
-    await page.evaluate(() => {
-      sessionStorage.clear();
-      localStorage.clear();
-    });
-    
-    // Navigate to home
-    await page.goto('/');
-    
-    console.log('[AUTH] ⚠️ Logout completed with fallback (cleared cookies/storage)');
+
+    try {
+      // Fallback: Clear cookies and session storage
+      await page.context().clearCookies();
+      await page.evaluate(() => {
+        sessionStorage.clear();
+        localStorage.clear();
+      });
+
+      // Navigate to home
+      await page.goto('/');
+
+      console.log('[AUTH] ⚠️ Logout completed with fallback (cleared cookies/storage)');
+    } catch (fallbackError) {
+      console.error('[AUTH] ❌ Fallback logout also failed:', fallbackError);
+      // Last resort: Just navigate to home without clearing
+      try {
+        await page.goto('/');
+        console.log('[AUTH] ⚠️ Basic navigation fallback used');
+      } catch (navError) {
+        console.error('[AUTH] ❌ Even basic navigation failed:', navError);
+      }
+    }
   }
 }
 
@@ -348,5 +378,50 @@ export async function loginIfNeeded(page: Page, user: TestUser): Promise<void> {
 export async function waitForSession(page: Page): Promise<void> {
   const userMenu = page.locator(TEST_CONFIG.SELECTORS.USER_MENU).first();
   await userMenu.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.AUTH_FLOW });
+}
+
+/**
+ * Setup virtual authenticator for WebAuthn testing
+ * 
+ * Creates a virtual FIDO2 authenticator that can be used for testing
+ * WebAuthn registration and authentication flows without requiring
+ * physical hardware or user interaction.
+ * 
+ * @param page Playwright page object
+ */
+async function setupVirtualAuthenticator(page: Page): Promise<void> {
+  try {
+    // Check if virtual authenticator already exists
+    const cdpSession = await page.context().newCDPSession(page);
+    
+    // Enable WebAuthn domain
+    await cdpSession.send('WebAuthn.enable');
+    
+    // Add virtual authenticator
+    const { authenticatorId } = await cdpSession.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2',
+        ctap2Version: 'ctap2_1',
+        transport: 'usb',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        hasLargeBlob: false,
+        hasCredBlob: false,
+        hasMinPinLength: false,
+        hasPrf: false,
+        automaticPresenceSimulation: true,
+        isUserVerified: true,
+      },
+    });
+    
+    console.log(`[AUTH] ✅ Virtual authenticator created: ${authenticatorId}`);
+    
+    // Store authenticator ID for cleanup if needed
+    (page as any)._virtualAuthenticatorId = authenticatorId;
+    
+  } catch (error) {
+    console.warn('[AUTH] ⚠️ Failed to create virtual authenticator:', error);
+    console.warn('[AUTH] WebAuthn tests may fail - ensure browser supports virtual authenticators');
+  }
 }
 

@@ -88,18 +88,19 @@ export const TIMEOUTS = {
 export const URLS = {
   /**
    * Base URL (from Playwright config or env var)
-   * Defaults to localhost:3000 for local development
+   * HTTP for local development (no certificates needed), HTTPS for CI/tunnel
    */
-  BASE: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000',
-  
+  BASE: process.env.NEXT_PUBLIC_BASE_URL || (TEST_ENV.IS_CI ? 'https://dev-app.dive25.com' : 'http://localhost:3000'),
+
   /**
    * Backend API base URL
+   * HTTP for local development, HTTPS for CI/tunnel
    */
-  API_BASE: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000',
-  
+  API_BASE: process.env.NEXT_PUBLIC_API_BASE_URL || (TEST_ENV.IS_CI ? 'https://dev-api.dive25.com' : 'http://localhost:4000'),
+
   /**
    * Keycloak base URL (for MFA flow detection)
-   * Updated for Keycloak 26.x HTTPS requirement
+   * Always HTTPS for Keycloak (mkcert certificates in Docker)
    */
   KEYCLOAK_BASE: process.env.KEYCLOAK_URL || 'https://localhost:8443',
 } as const;
@@ -207,10 +208,12 @@ export const KEYCLOAK_SELECTORS = {
   OTP_SUBMIT: '#kc-otp-settings-form button[type="submit"]',
   
   /**
-   * WebAuthn
+   * WebAuthn/Passkey
    */
-  WEBAUTHN_REGISTER: '#kc-register-button',
-  WEBAUTHN_AUTHENTICATE: '#kc-authenticate-button',
+  WEBAUTHN_REGISTER: '#kc-register-button, .webauthn-register, button[name="register"]',
+  WEBAUTHN_AUTHENTICATE: '#kc-authenticate-button, .webauthn-authenticate, button[name="authenticate"]',
+  WEBAUTHN_SETUP: '.kc-webauthn-setup, .webauthn-setup',
+  WEBAUTHN_SUCCESS: '.kc-webauthn-success, .webauthn-success',
   
   /**
    * Error messages
