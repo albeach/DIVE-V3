@@ -52,7 +52,7 @@ class KeycloakAdminService {
             });
 
             // CRITICAL: Ensure we're authenticating against MASTER realm
-            // Admin users exist in master realm, not dive-v3-pilot
+            // Admin users exist in master realm, not dive-v3-broker
             this.client.setConfig({
                 realmName: 'master'
             });
@@ -67,7 +67,7 @@ class KeycloakAdminService {
 
             // NOW switch to working realm for IdP management
             this.client.setConfig({
-                realmName: process.env.KEYCLOAK_REALM || 'dive-v3-pilot'
+                realmName: process.env.KEYCLOAK_REALM || 'dive-v3-broker'
             });
             logger.debug('Keycloak Admin Client authenticated', {
                 baseUrl: process.env.KEYCLOAK_URL,
@@ -90,6 +90,10 @@ class KeycloakAdminService {
      */
     async listIdentityProviders(): Promise<IIdPListResponse> {
         await this.ensureAuthenticated();
+
+        // Switch to the broker realm where IdPs are configured
+        const originalRealm = this.client.realmName;
+        this.client.setConfig({ realmName: process.env.KEYCLOAK_REALM || 'dive-v3-broker' });
 
         try {
             const idps = await this.client.identityProviders.find();
@@ -119,11 +123,17 @@ class KeycloakAdminService {
                 total: idps.length
             };
         } catch (error) {
+            // Switch back to original realm
+            this.client.setConfig({ realmName: originalRealm });
+
             logger.error('Failed to list identity providers', {
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
             throw new Error('Failed to retrieve identity providers');
         }
+
+        // Switch back to original realm
+        this.client.setConfig({ realmName: originalRealm });
     }
 
     /**
@@ -340,7 +350,7 @@ class KeycloakAdminService {
             const mapperType = protocol === 'oidc' ? 'oidc-user-attribute-idp-mapper' : 'saml-user-attribute-idp-mapper';
             const claimKey = protocol === 'oidc' ? 'claim' : 'attribute.name';
 
-            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const mapperUrl = `${baseUrl}/admin/realms/${realm}/identity-provider/instances/${idpAlias}/mappers`;
 
@@ -759,7 +769,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -801,7 +811,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -845,7 +855,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -886,7 +896,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
 
             // Get all users (then get their sessions)
             const users = await this.client.users.find({ max: 1000, realm });
@@ -940,7 +950,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -967,7 +977,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
 
             // Find user by username
             const users = await this.client.users.find({ username, exact: true, realm });
@@ -1005,7 +1015,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const sessions = await this.getActiveSessions(realm);
 
             const stats = {
@@ -1061,7 +1071,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -1093,7 +1103,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 

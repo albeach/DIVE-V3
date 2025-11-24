@@ -272,3 +272,4 @@ The deployment is correct - the issue is purely DNS resolution on client machine
 - `scripts/deploy-ubuntu.sh` - Shows DNS instructions at end
 - `docker-compose.hostname.yml` - Generated hostname configuration
 
+

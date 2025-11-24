@@ -33,7 +33,7 @@ try {
  */
 function getJWKSUrl(): { baseUrl: string; path: string } {
     const keycloakUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
-    const realm = process.env.KEYCLOAK_REALM || 'dive-v3-pilot';
+    const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
     const jwksPath = `/realms/${realm}/protocol/openid-connect/certs`;
 
     return {

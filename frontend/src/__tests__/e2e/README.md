@@ -55,6 +55,9 @@ frontend/src/__tests__/e2e/
 ### Run Pilot Test
 
 ```bash
+# Start services first (required)
+docker-compose up -d
+
 # Run the pilot test (demonstrates new patterns)
 npm run test:e2e -- pilot-modern-test.spec.ts
 
@@ -63,6 +66,9 @@ npm run test:e2e -- pilot-modern-test.spec.ts --headed
 
 # Run in debug mode (Playwright Inspector)
 npm run test:e2e -- pilot-modern-test.spec.ts --debug
+
+# Run tests specifically in localhost mode
+npm run test:e2e:localhost -- pilot-modern-test.spec.ts
 ```
 
 ### Write Your First Test
@@ -467,6 +473,48 @@ FEATURES.MFA_TESTS: false  // Disable MFA tests if not configured
 // TEST_CONFIG automatically adjusts for CI
 TEST_ENV.IS_CI  // true in CI, false locally
 ```
+
+### Issue: Playwright tests can't run on localhost (HTTPS/certificate issues)
+
+**Root Cause:** Playwright configuration was set up for Cloudflare tunnel mode by default, not localhost HTTPS development.
+
+**Solutions:**
+
+1. **Use localhost mode explicitly:**
+   ```bash
+   # Run tests in localhost mode
+   npm run test:e2e:localhost -- pilot-modern-test.spec.ts
+
+   # Or set environment variable
+   BASE_URL=https://localhost:3000 npm run test:e2e -- pilot-modern-test.spec.ts
+   ```
+
+2. **Ensure services are running:**
+   ```bash
+   # Start all services with HTTPS certificates
+   docker-compose up -d
+
+   # Verify frontend is accessible
+   curl -k https://localhost:3000
+   ```
+
+3. **Certificate issues:**
+   - Tests use `ignoreHTTPSErrors: true` to accept mkcert certificates
+   - Additional browser args handle certificate validation
+   - If issues persist, check mkcert installation and trust
+
+4. **Environment detection:**
+   ```typescript
+   // Playwright config now detects:
+   process.env.CI ? 'Cloudflare tunnel' : 'localhost HTTPS'
+   // Override with: BASE_URL=https://localhost:3000
+   ```
+
+### Issue: Browser context errors during logout
+
+**Root Cause:** Browser context becomes invalid during test cleanup.
+
+**Solution:** Tests now have improved error handling with fallback logout methods that gracefully handle context issues.
 
 ### Issue: Resource not found
 

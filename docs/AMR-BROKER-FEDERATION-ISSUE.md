@@ -168,3 +168,4 @@ Keycloak applies mappers in order. If both mappers add the same claim:
 - Keycloak Docs: [Authentication Flows - AMR](https://www.keycloak.org/docs/latest/server_admin/index.html#_authentication-flows)
 - RFC 8176: [Authentication Method Reference Values](https://www.rfc-editor.org/rfc/rfc8176.html)
 
+

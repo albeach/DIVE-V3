@@ -167,16 +167,16 @@ async function refreshAccessToken(account: any) {
 
 // Determine cookie domain based on NEXTAUTH_URL
 // NextAuth v5 officially uses NEXTAUTH_URL per documentation
-// If using custom domain (divedeeper.internal or dive25.com), set cookie domain to allow subdomains
+// CRITICAL FIX: Handle both localhost development and Cloudflare tunnel domains
 const getAuthCookieDomain = (): string | undefined => {
     const authUrl = process.env.NEXTAUTH_URL;
-    
+
     // DEVELOPMENT: Localhost or IP - use exact domain match
-    if (!authUrl || authUrl.includes('localhost') || authUrl.includes('127.0.0.1')) {
+    if (!authUrl || authUrl.includes('localhost') || authUrl.includes('127.0.0.1') || authUrl.includes('3000')) {
         console.log('[DIVE] Cookie domain: localhost/IP detected - using exact match');
         return undefined;  // Use exact domain match (no wildcard)
     }
-    
+
     // PRODUCTION: Custom domain - use wildcard for subdomains
     if (authUrl.includes('divedeeper.internal')) {
         return '.divedeeper.internal'; // Allow cookies across all subdomains
@@ -184,20 +184,24 @@ const getAuthCookieDomain = (): string | undefined => {
     if (authUrl.includes('dive25.com')) {
         return '.dive25.com'; // Allow cookies across Cloudflare tunnel subdomains
     }
-    
+
     return undefined; // Use default (exact domain match)
 };
 
 const AUTH_COOKIE_DOMAIN = getAuthCookieDomain();
 const AUTH_COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
 
-// Cloudflare tunnel session persistence improvements
+// Environment detection for proper cookie configuration
+const isLocalhost = process.env.NEXTAUTH_URL?.includes('localhost') || process.env.NEXTAUTH_URL?.includes('3000') || false;
 const isCloudflareTunnel = process.env.NEXTAUTH_URL?.includes('dive25.com') ?? false;
 
 console.log('[DIVE] NextAuth v5 cookie configuration:', {
     nextauthUrl: process.env.NEXTAUTH_URL,
     domain: AUTH_COOKIE_DOMAIN || 'default (exact match)',
     secure: AUTH_COOKIE_SECURE,
+    isLocalhost,
+    isCloudflareTunnel,
+    sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
     trustHost: true,
 });
 
@@ -672,7 +676,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.session-token`,
             options: {
                 httpOnly: true,
-                sameSite: isCloudflareTunnel ? 'none' : 'lax', // Allow cross-site for Cloudflare tunnel
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 domain: AUTH_COOKIE_DOMAIN,
@@ -682,7 +686,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.callback-url`,
             options: {
                 httpOnly: true,
-                sameSite: isCloudflareTunnel ? 'none' : 'lax', // Allow cross-site for Cloudflare tunnel
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 domain: AUTH_COOKIE_DOMAIN,
@@ -692,7 +696,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.csrf-token`,
             options: {
                 httpOnly: true,
-                sameSite: isCloudflareTunnel ? 'none' : 'lax', // Allow cross-site for Cloudflare tunnel
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 domain: AUTH_COOKIE_DOMAIN,
@@ -702,7 +706,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.pkce.code_verifier`,
             options: {
                 httpOnly: true,
-                sameSite: isCloudflareTunnel ? 'none' : 'lax', // Allow cross-site for Cloudflare tunnel
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 domain: AUTH_COOKIE_DOMAIN,
@@ -713,7 +717,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.state`,
             options: {
                 httpOnly: true,
-                sameSite: isCloudflareTunnel ? 'none' : 'lax', // Allow cross-site for Cloudflare tunnel
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 domain: AUTH_COOKIE_DOMAIN,
@@ -724,7 +728,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.nonce`,
             options: {
                 httpOnly: true,
-                sameSite: isCloudflareTunnel ? 'none' : 'lax', // Allow cross-site for Cloudflare tunnel
+                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 domain: AUTH_COOKIE_DOMAIN,

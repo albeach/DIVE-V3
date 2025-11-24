@@ -9334,10 +9334,10 @@ ls -la backend/certs/
 
 ## [2025-10-21] - 🌍 MULTI-REALM MIGRATION COMPLETE - Frontend/Backend Integration
 
-**Achievement**: Completed migration from single-realm (dive-v3-pilot) to multi-realm federation architecture (dive-v3-broker), enabling true cross-realm authentication and nation sovereignty while maintaining 100% ACP-240 Section 2 compliance.
+**Achievement**: Completed migration from single-realm (dive-v3-broker) to multi-realm federation architecture (dive-v3-broker), enabling true cross-realm authentication and nation sovereignty while maintaining 100% ACP-240 Section 2 compliance.
 
 **Migration Scope**: Frontend authentication, backend JWT validation, KAS token verification  
-**Backward Compatibility**: ✅ YES - dive-v3-pilot tokens still accepted  
+**Backward Compatibility**: ✅ YES - dive-v3-broker tokens still accepted  
 **PII Minimization**: ✅ NEW - Ocean pseudonyms replace real names (ACP-240 Section 6.2)  
 **Database Sessions**: ✅ KEPT - Email-based account linking enabled  
 **Production Ready**: ✅ YES - Dual-issuer support fully operational
@@ -9388,7 +9388,7 @@ ls -la backend/certs/
 ### 🔐 Backend Changes
 
 **JWT Validation** (`backend/src/middleware/authz.middleware.ts`):
-- ✅ Dual-issuer support: dive-v3-pilot AND dive-v3-broker
+- ✅ Dual-issuer support: dive-v3-broker AND dive-v3-broker
 - ✅ Dual-audience support: dive-v3-client AND dive-v3-client-broker
 - ✅ Dynamic JWKS URL based on token issuer (realm detection)
 - ✅ Backward compatible: Existing pilot realm tokens still work
@@ -9397,7 +9397,7 @@ ls -la backend/certs/
 ```typescript
 // Multi-realm: Accept tokens from both realms
 const validIssuers = [
-    `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Legacy
+    `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Legacy
     `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Multi-realm
 ];
 
@@ -9435,7 +9435,7 @@ const validAudiences = [
 - Updated `verifyToken()` with dual-issuer/audience arrays
 
 **Testing**:
-- ✅ KAS validates tokens from both dive-v3-pilot and dive-v3-broker
+- ✅ KAS validates tokens from both dive-v3-broker and dive-v3-broker
 - ✅ Attribute extraction works with federated tokens
 - ✅ Policy re-evaluation includes dutyOrg and orgUnit attributes
 
@@ -9475,7 +9475,7 @@ const validAudiences = [
 - Both realms accessible: http://localhost:8081/realms/{realm} ✅
 
 **Backward Compatibility**:
-- Legacy dive-v3-pilot tokens: ✅ Still work
+- Legacy dive-v3-broker tokens: ✅ Still work
 - Legacy dive-v3-client audience: ✅ Still accepted
 - Rollback procedure: Change KEYCLOAK_REALM env var ✅
 - No database migrations required ✅
@@ -9557,7 +9557,7 @@ const validAudiences = [
 
 ### ✅ Success Criteria - ALL MET
 
-- [x] Backend accepts tokens from both dive-v3-pilot AND dive-v3-broker
+- [x] Backend accepts tokens from both dive-v3-broker AND dive-v3-broker
 - [x] KAS accepts tokens from both realms
 - [x] Frontend displays ocean pseudonyms instead of real names
 - [x] Database sessions kept (NOT switched to JWT)
@@ -9698,7 +9698,7 @@ const validAudiences = [
 - ✅ **Independent policies**: U.S. 15m vs France 30m vs Industry 60m timeout
 - ✅ **User isolation**: Separate databases per realm
 - ✅ **Scalability**: Add new nations in ~2 hours
-- ✅ **Backward compatible**: dive-v3-pilot preserved
+- ✅ **Backward compatible**: dive-v3-broker preserved
 
 **Cross-Realm Auth Flow**:
 ```
@@ -10596,7 +10596,7 @@ export WEBHOOK_URL="https://hooks.slack.com/services/xxx/yyy/zzz"
 #### 🔴 CRITICAL GAPS (Block Production)
 
 **Gap #1: Single Realm Architecture**
-- **Current**: All 4 IdPs in one `dive-v3-pilot` realm
+- **Current**: All 4 IdPs in one `dive-v3-broker` realm
 - **Required**: Multi-realm design (realm per nation for sovereignty)
 - **Impact**: No isolation, no nation-specific policies
 - **Effort**: 12-16 hours (Week 2)
@@ -10832,7 +10832,7 @@ Client Protocol Mappers → JWT Access Token → Backend/KAS Consumption
 - **Impact**: Incomplete identity assertions limit policy granularity
 
 **Gap 3: No Multi-Realm Architecture**
-- **Current**: Single realm (`dive-v3-pilot`)
+- **Current**: Single realm (`dive-v3-broker`)
 - **Required**: Realm-per-nation for sovereignty and isolation
 - **Impact**: Cannot model real coalition environments
 
@@ -13644,7 +13644,7 @@ RECORD_VALIDATION_METRICS=true
 
 ## Week 1 Acceptance Criteria - ✅ ALL MET
 
-- [x] Keycloak realm 'dive-v3-pilot' configured
+- [x] Keycloak realm 'dive-v3-broker' configured
 - [x] 3 test users (SECRET, CONFIDENTIAL, UNCLASSIFIED clearances)
 - [x] Next.js IdP selection page (4 options)
 - [x] Authentication flow functional

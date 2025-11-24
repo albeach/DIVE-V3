@@ -1,3 +1,13 @@
 {
-  "mcpServers": {}
+  "mcpServers": {
+    "keycloak-docs": {
+      "command": "node",
+      "args": [
+        "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/keycloak-docs-mcp/dist/server.js"
+      ],
+      "env": {
+        "KEYCLOAK_DOCS_JSONL": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/keycloak-docs-mcp/data/keycloak_docs_plus_api_26.4.2.jsonl"
+      }
+    }
+  }
 }

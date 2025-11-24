@@ -81,7 +81,7 @@ NEXTAUTH_SECRET=your-generated-secret-minimum-32-chars
 NEXT_PUBLIC_KEYCLOAK_URL=https://keycloak.your-domain.mil
 KEYCLOAK_CLIENT_ID=dive-v3-client
 KEYCLOAK_CLIENT_SECRET=your-keycloak-client-secret
-KEYCLOAK_ISSUER=https://keycloak.your-domain.mil/realms/dive-v3-pilot
+KEYCLOAK_ISSUER=https://keycloak.your-domain.mil/realms/dive-v3-broker
 
 # Backend API
 NEXT_PUBLIC_BACKEND_URL=https://api.your-domain.mil

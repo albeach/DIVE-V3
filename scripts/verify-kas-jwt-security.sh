@@ -50,7 +50,7 @@ const token = jwt.sign({
     acpCOI: ['FVEY'],
     exp: Math.floor(Date.now() / 1000) + 3600,
     iat: Math.floor(Date.now() / 1000),
-    iss: 'http://localhost:8081/realms/dive-v3-pilot',
+    iss: 'http://localhost:8081/realms/dive-v3-broker',
     aud: 'dive-v3-client'
 }, 'wrong-secret', { algorithm: 'HS256', keyid: 'fake-kid' });
 console.log(token);
@@ -119,7 +119,7 @@ const token = jwt.sign({
     countryOfAffiliation: 'USA',
     exp: Math.floor(Date.now() / 1000) - 3600,  // Expired 1 hour ago
     iat: Math.floor(Date.now() / 1000) - 7200,
-    iss: 'http://localhost:8081/realms/dive-v3-pilot',
+    iss: 'http://localhost:8081/realms/dive-v3-broker',
     aud: 'dive-v3-client'
 }, 'secret', { algorithm: 'HS256', keyid: 'test-kid' });
 console.log(token);

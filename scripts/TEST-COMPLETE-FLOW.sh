@@ -52,7 +52,7 @@ echo ""
 
 # Test 5: Check backend dual-issuer code
 echo "5. Checking backend code..."
-if grep -q "validIssuers.*dive-v3-pilot.*dive-v3-broker" /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/backend/src/middleware/authz.middleware.ts; then
+if grep -q "validIssuers.*dive-v3-broker.*dive-v3-broker" /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/backend/src/middleware/authz.middleware.ts; then
     echo -e "${GREEN}✅ Backend has dual-issuer support${NC}"
 else
     echo -e "${RED}❌ Backend missing dual-issuer code${NC}"

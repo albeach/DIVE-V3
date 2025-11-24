@@ -268,7 +268,7 @@ expect(latency_ms).toBeGreaterThan(0);          // Stable!
 **4. Integration Test CI Workflow (2-4 hours)**
 - Create separate CI job for full stack
 - Add Keycloak + PostgreSQL services
-- Import dive-v3-pilot realm
+- Import dive-v3-broker realm
 - Configure test data seeding
 - Run integration tests
 

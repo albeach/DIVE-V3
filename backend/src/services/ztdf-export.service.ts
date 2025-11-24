@@ -483,7 +483,7 @@ function buildAssertionSignature(
     // For pilot, use simple HMAC signature
     // Production should use proper private key signing
     const signature = crypto
-        .createHmac('sha256', 'dive-v3-pilot-secret')
+        .createHmac('sha256', 'dive-v3-broker-secret')
         .update(`${header}.${payload}`)
         .digest('base64');
 
@@ -533,7 +533,7 @@ function buildAssertionSignatureSimple(hash: string): string {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64');
     const payload = Buffer.from(JSON.stringify({ assertionHash: hash })).toString('base64');
     const signature = crypto
-        .createHmac('sha256', 'dive-v3-pilot-secret')
+        .createHmac('sha256', 'dive-v3-broker-secret')
         .update(`${header}.${payload}`)
         .digest('base64');
 

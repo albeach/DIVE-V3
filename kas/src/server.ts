@@ -438,7 +438,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 });
             } else {
                 // Fallback: Generate deterministic DEK (for backward compatibility)
-                const salt = 'dive-v3-pilot-dek-salt';
+                const salt = 'dive-v3-broker-dek-salt';
                 const dekHash = crypto.createHash('sha256').update(keyRequest.resourceId + salt).digest();
                 dek = dekHash.toString('base64');
                 kasLogger.warn('No wrappedKey provided, using deterministic DEK (legacy mode)', {

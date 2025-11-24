@@ -1458,7 +1458,7 @@ A: Yes:
 
 - **DIVE V3 API Documentation**: `https://api.dive-v3.mil/docs`
 - **Federation Metadata**: `https://api.dive-v3.mil/.well-known/federation-metadata`
-- **OIDC Configuration**: `https://keycloak.dive-v3.mil/realms/dive-v3-pilot/.well-known/openid-configuration`
+- **OIDC Configuration**: `https://keycloak.dive-v3.mil/realms/dive-v3-broker/.well-known/openid-configuration`
 - **SP Onboarding Guide**: `docs/sp-onboarding-guide.md`
 - **Test Environment**: `https://test.dive-v3.mil` (credentials provided upon request)
 

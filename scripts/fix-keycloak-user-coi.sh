@@ -12,7 +12,7 @@ echo "=== Fixing Keycloak User COI Attributes ==="
 echo ""
 
 KEYCLOAK_URL="http://localhost:8081"
-REALM="dive-v3-pilot"
+REALM="dive-v3-broker"
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 

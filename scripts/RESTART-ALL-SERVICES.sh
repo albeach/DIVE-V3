@@ -54,10 +54,10 @@ else
     exit 1
 fi
 
-if curl -s http://localhost:8081/realms/dive-v3-pilot/.well-known/openid-configuration > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ dive-v3-pilot realm exists (backward compatibility)${NC}"
+if curl -s http://localhost:8081/realms/dive-v3-broker/.well-known/openid-configuration > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ dive-v3-broker realm exists (backward compatibility)${NC}"
 else
-    echo -e "${YELLOW}⚠️  dive-v3-pilot realm NOT found (legacy realm missing)${NC}"
+    echo -e "${YELLOW}⚠️  dive-v3-broker realm NOT found (legacy realm missing)${NC}"
 fi
 echo ""
 

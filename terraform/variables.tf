@@ -26,7 +26,7 @@ variable "keycloak_admin_password" {
 variable "realm_name" {
   description = "The name of the Keycloak realm for DIVE V3"
   type        = string
-  default     = "dive-v3-pilot"
+  default     = "dive-v3-broker"
 }
 
 variable "client_id" {

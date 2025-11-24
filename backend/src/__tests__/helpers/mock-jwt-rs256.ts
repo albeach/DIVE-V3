@@ -36,8 +36,8 @@ export const TEST_KEY_ID = 'test-key-1';
  * Default Keycloak issuer for tests
  */
 const DEFAULT_ISSUER = process.env.KEYCLOAK_URL 
-    ? `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM || 'dive-v3-pilot'}`
-    : 'http://localhost:8081/realms/dive-v3-pilot';
+    ? `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM || 'dive-v3-broker'}`
+    : 'http://localhost:8081/realms/dive-v3-broker';
 
 /**
  * Create an RS256 JWT token for E2E testing

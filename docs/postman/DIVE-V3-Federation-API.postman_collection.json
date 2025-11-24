@@ -1,7 +1,7 @@
 {
     "info": {
         "name": "DIVE V3 - Federation & ZTDF APIs",
-        "description": "Complete API collection for testing DIVE V3 encryption, KAS, and federation capabilities.\n\n## Quick Start\n1. Set environment variables (see Variables tab)\n2. Run 'Auth: Get Access Token' to authenticate\n3. Try 'Resources: Search Local' to see available documents\n4. Test KAS with 'KAS: Request Decryption Key'\n5. Explore federation endpoints\n\n## Authentication\nAll requests use Bearer token authentication. The access token is automatically stored in the `{{accessToken}}` variable after successful authentication.\n\n## Environment Variables\nRequired:\n- `baseUrl`: https://api.dive-v3.mil (or your instance)\n- `keycloakUrl`: https://keycloak.dive-v3.mil\n- `kasUrl`: https://kas.dive-v3.mil:8080\n- `realm`: dive-v3-pilot\n- `clientId`: dive-v3-client\n- `username`: testuser-us\n- `password`: (your password)\n\nOptional:\n- `externalSpUrl`: https://api.partner.mil (for federation testing)",
+        "description": "Complete API collection for testing DIVE V3 encryption, KAS, and federation capabilities.\n\n## Quick Start\n1. Set environment variables (see Variables tab)\n2. Run 'Auth: Get Access Token' to authenticate\n3. Try 'Resources: Search Local' to see available documents\n4. Test KAS with 'KAS: Request Decryption Key'\n5. Explore federation endpoints\n\n## Authentication\nAll requests use Bearer token authentication. The access token is automatically stored in the `{{accessToken}}` variable after successful authentication.\n\n## Environment Variables\nRequired:\n- `baseUrl`: https://api.dive-v3.mil (or your instance)\n- `keycloakUrl`: https://keycloak.dive-v3.mil\n- `kasUrl`: https://kas.dive-v3.mil:8080\n- `realm`: dive-v3-broker\n- `clientId`: dive-v3-client\n- `username`: testuser-us\n- `password`: (your password)\n\nOptional:\n- `externalSpUrl`: https://api.partner.mil (for federation testing)",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "version": "2.0.0"
     },
@@ -33,7 +33,7 @@
         },
         {
             "key": "realm",
-            "value": "dive-v3-pilot",
+            "value": "dive-v3-broker",
             "type": "string"
         },
         {
