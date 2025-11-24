@@ -34,7 +34,7 @@ Added the Cloudflare tunnel domain (`https://dev-auth.dive25.com/realms/*`) to t
 ### 1. Backend (`backend/src/middleware/authz.middleware.ts`)
 
 Added `https://dev-auth.dive25.com/realms/*` for ALL 12 realms:
-- `dive-v3-pilot`
+- `dive-v3-broker`
 - `dive-v3-broker` (main broker realm)
 - `dive-v3-usa`, `dive-v3-fra`, `dive-v3-can`, `dive-v3-industry`
 - `dive-v3-gbr`, `dive-v3-deu`, `dive-v3-nld`, `dive-v3-pol`, `dive-v3-ita`, `dive-v3-esp`
@@ -42,7 +42,7 @@ Added `https://dev-auth.dive25.com/realms/*` for ALL 12 realms:
 ### 2. KAS (`kas/src/utils/jwt-validator.ts`)
 
 Added `https://dev-auth.dive25.com/realms/*` for:
-- `dive-v3-pilot`
+- `dive-v3-broker`
 - `dive-v3-broker`
 
 ### Code Change
@@ -64,15 +64,15 @@ const validIssuers: [string, ...string[]] = [
 **KAS:**
 ```typescript
 const validIssuers: [string, ...string[]] = [
-    `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
+    `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Internal: dive-v3-broker
     `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
-    'http://localhost:8081/realms/dive-v3-pilot',          // External HTTP: dive-v3-pilot
+    'http://localhost:8081/realms/dive-v3-broker',          // External HTTP: dive-v3-broker
     'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
-    'https://localhost:8443/realms/dive-v3-pilot',         // External HTTPS: dive-v3-pilot
+    'https://localhost:8443/realms/dive-v3-broker',         // External HTTPS: dive-v3-broker
     'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker
-    'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-pilot',   // Custom domain: dive-v3-pilot
+    'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',   // Custom domain: dive-v3-broker
     'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker
-    'https://dev-auth.dive25.com/realms/dive-v3-pilot',    // Cloudflare Tunnel: dive-v3-pilot ⬅️ ADDED
+    'https://dev-auth.dive25.com/realms/dive-v3-broker',    // Cloudflare Tunnel: dive-v3-broker ⬅️ ADDED
     'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker ⬅️ ADDED
 ];
 ```

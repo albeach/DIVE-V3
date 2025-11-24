@@ -7,7 +7,7 @@ global:
   scrape_interval: 15s       # Scrape targets every 15 seconds
   evaluation_interval: 15s   # Evaluate rules every 15 seconds
   external_labels:
-    cluster: 'dive-v3-pilot'
+    cluster: 'dive-v3-broker'
     environment: 'development'
 
 # Alertmanager configuration

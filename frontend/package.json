@@ -14,6 +14,7 @@
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
         "test:e2e": "playwright test",
+  "test:e2e:localhost": "BASE_URL=http://localhost:3000 playwright test",
         "test:e2e:ui": "playwright test --ui",
         "test:e2e:report": "playwright show-report",
         "test:e2e:debug": "playwright test --debug"

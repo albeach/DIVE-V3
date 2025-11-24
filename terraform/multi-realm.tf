@@ -19,11 +19,11 @@
 #   terraform apply -var="enable_multi_realm=true"
 #
 # Migration Path:
-# 1. Create multi-realm alongside existing dive-v3-pilot (no impact)
+# 1. Create multi-realm alongside existing dive-v3-broker (no impact)
 # 2. Test cross-realm authentication
 # 3. Update application to use dive-v3-broker realm
-# 4. Migrate users from dive-v3-pilot to national realms
-# 5. Deprecate dive-v3-pilot
+# 4. Migrate users from dive-v3-broker to national realms
+# 5. Deprecate dive-v3-broker
 
 # ============================================
 # Multi-Realm Feature Flag
@@ -32,7 +32,7 @@
 variable "enable_multi_realm" {
   description = "Enable multi-realm architecture (dive-v3-usa, dive-v3-fra, dive-v3-can, dive-v3-industry, dive-v3-broker)"
   type        = bool
-  default     = false # Default: use single realm (dive-v3-pilot)
+  default     = false # Default: use single realm (dive-v3-broker)
 }
 
 # ============================================
@@ -105,7 +105,7 @@ variable "enable_multi_realm" {
 # - Nation sovereignty (each realm has independent policies)
 # - User isolation (separate databases per realm)
 # - Scalability (add new nations without disrupting existing)
-# - Backward compatible (dive-v3-pilot still works)
+# - Backward compatible (dive-v3-broker still works)
 
 # ============================================
 # Multi-Realm Outputs
@@ -142,5 +142,5 @@ output "multi_realm_enabled" {
 # 3. Test cross-realm auth: Login via broker → select USA IdP → authenticate
 # 4. Update application: KEYCLOAK_REALM=dive-v3-broker (in .env.local)
 # 5. Migrate users: Run user migration script
-# 6. Deprecate old realm: Remove dive-v3-pilot after verification
+# 6. Deprecate old realm: Remove dive-v3-broker after verification
 

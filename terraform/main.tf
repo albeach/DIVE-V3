@@ -104,8 +104,8 @@ locals {
 # ============================================
 # LEGACY CONFIGURATION (DEPRECATED)
 # ============================================
-# The old single-realm configuration (dive-v3-pilot) has been disabled:
-#   - main.tf.disabled-legacy   (Contains old dive-v3-pilot realm with 40+ resources)
+# The old single-realm configuration (dive-v3-broker) has been disabled:
+#   - main.tf.disabled-legacy   (Contains old dive-v3-broker realm with 40+ resources)
 #
 # DO NOT re-enable the legacy configuration - it conflicts with multi-realm architecture.
 # For historical reference only.

@@ -185,3 +185,4 @@ echo "Test complete!"
 3. Partner tests all scenarios (success, denial, errors)
 4. Review audit logs: `docker logs dive-v3-kas | grep "KEY_RELEASED\|KEY_DENIED"`
 
+

@@ -7,7 +7,7 @@
 process.env.NODE_ENV = 'test';
 process.env.SKIP_INTEGRATION_TESTS = 'true';
 process.env.KEYCLOAK_URL = 'http://localhost:8081';
-process.env.KEYCLOAK_REALM = 'dive-v3-pilot';
+process.env.KEYCLOAK_REALM = 'dive-v3-broker';
 process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-client';
 process.env.KEYCLOAK_CLIENT_SECRET = 'test-secret';
 process.env.KEYCLOAK_ADMIN_USERNAME = 'admin';

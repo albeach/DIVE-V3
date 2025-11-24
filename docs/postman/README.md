@@ -18,7 +18,7 @@ Click **Variables** tab in collection and update:
 baseUrl: https://localhost:4000 (or your DIVE V3 backend URL)
 keycloakUrl: https://localhost:8443 (or your Keycloak URL)
 kasUrl: http://localhost:8080 (or your KAS URL)
-realm: dive-v3-pilot
+realm: dive-v3-broker
 clientId: dive-v3-client
 username: testuser-us (or your test user)
 password: your_password

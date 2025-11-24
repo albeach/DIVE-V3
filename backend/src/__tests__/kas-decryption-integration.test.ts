@@ -79,7 +79,7 @@ describe('KAS Decryption Integration Tests', () => {
             console.log('Uploaded resource wrappedKey:', wrappedKey);
 
             // 2. Verify it's NOT deterministic (it's random)
-            const salt = 'dive-v3-pilot-dek-salt';
+            const salt = 'dive-v3-broker-dek-salt';
             const deterministicDek = crypto.createHash('sha256')
                 .update(resourceId + salt)
                 .digest()

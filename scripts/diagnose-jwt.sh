@@ -8,7 +8,7 @@ curl -sf http://localhost:8081/health/ready > /dev/null && echo "✅ Keycloak re
 
 echo ""
 echo "2. Check JWKS endpoint (signature keys only):"
-curl -s http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/certs | jq -r '.keys[] | select(.use=="sig") | {kid, alg}'
+curl -s http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs | jq -r '.keys[] | select(.use=="sig") | {kid, alg}'
 
 echo ""
 echo "3. Check PostgreSQL is running:"
@@ -33,7 +33,7 @@ echo "7. Test direct Keycloak token request:"
 CLIENT_SECRET=$(cd terraform && terraform output -raw client_secret 2>/dev/null)
 if [ -n "$CLIENT_SECRET" ]; then
   echo "Getting token from Keycloak..."
-  TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/token" \
+  TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "grant_type=password" \
     -d "client_id=dive-v3-client" \

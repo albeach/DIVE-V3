@@ -291,7 +291,7 @@ When implementing DIVE V3:
 ### Week 1 Focus (Current)
 Priority tasks for immediate implementation:
 1. ✅ Initialize project structure (frontend, backend, policies, terraform)
-2. ✅ Deploy Keycloak with dive-v3-pilot realm (adapt from keycloak-react-main)
+2. ✅ Deploy Keycloak with dive-v3-broker realm (adapt from keycloak-react-main)
 3. ✅ Configure U.S. IdP (OIDC) with protocol mappers
 4. ✅ Deploy Next.js with IdP selection page
 5. ✅ Deploy MongoDB and seed sample resources
@@ -350,7 +350,7 @@ docker-compose down -v && ./scripts/dev-start.sh
 8. ❌ Don't skip clock skew tolerance - use ±5 minutes for embargo checks
 
 ### Keycloak Specific
-- **Realm**: `dive-v3-pilot`
+- **Realm**: `dive-v3-broker`
 - **Client ID**: `dive-v3-client`
 - **IdP Aliases**: `us-idp`, `france-idp`, `canada-idp`, `industry-idp`
 - **Protocol Mappers**: Map IdP claims → `uniqueID`, `clearance`, `countryOfAffiliation`, `acpCOI`

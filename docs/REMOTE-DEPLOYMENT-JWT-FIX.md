@@ -267,3 +267,4 @@ For production deployments:
 - JWT Verification Logic: `backend/src/middleware/authz.middleware.ts` lines 292-452
 - OPA Integration: `backend/src/middleware/authz.middleware.ts` lines 623-669
 
+

@@ -604,7 +604,7 @@ services:
 
 **Steps:**
 1. Add Keycloak + PostgreSQL services
-2. Import dive-v3-pilot realm
+2. Import dive-v3-broker realm
 3. Configure test IdPs
 4. Run integration tests only
 5. Separate from unit tests (different concerns)
@@ -807,7 +807,7 @@ jobs:
           # Wait for Keycloak
           sleep 30
           
-          # Import dive-v3-pilot realm
+          # Import dive-v3-broker realm
           # (Use Keycloak Admin API or kcadm.sh)
           echo "Importing test realm..."
       
@@ -824,7 +824,7 @@ jobs:
         env:
           NODE_ENV: test
           KEYCLOAK_URL: http://localhost:8081
-          KEYCLOAK_REALM: dive-v3-pilot
+          KEYCLOAK_REALM: dive-v3-broker
           OPA_URL: http://localhost:8181
           MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
 ```
@@ -1152,7 +1152,7 @@ cd backend
 **Implementation:**
 1. Create `.github/workflows/test-integration-full-stack.yml`
 2. Add Keycloak + PostgreSQL services
-3. Import dive-v3-pilot realm (terraform apply or kcadm.sh)
+3. Import dive-v3-broker realm (terraform apply or kcadm.sh)
 4. Start real OPA with policies loaded
 5. Run `npm run test:integration`
 6. Separate from unit test CI (different concerns)

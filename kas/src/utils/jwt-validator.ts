@@ -83,7 +83,7 @@ const getRealmFromToken = (token: string): string => {
  * 
  * Multi-Realm Migration (Oct 21, 2025):
  * - Dynamically determines JWKS URL based on token issuer
- * - Supports both dive-v3-pilot and dive-v3-broker realms
+ * - Supports both dive-v3-broker and dive-v3-broker realms
  * - Caches keys per kid (realm-independent caching)
  */
 const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<string> => {
@@ -189,8 +189,8 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
  * SECURITY FIX: This replaces jwt.decode() with proper signature verification
  * 
  * Multi-Realm Migration (Oct 21, 2025):
- * - Supports both dive-v3-pilot (legacy single-realm) AND dive-v3-broker (multi-realm federation)
- * - Backward compatible: Existing tokens from dive-v3-pilot still work
+ * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
+ * - Backward compatible: Existing tokens from dive-v3-broker still work
  * - Forward compatible: New tokens from dive-v3-broker federation accepted
  * - Dual audience support: dive-v3-client AND dive-v3-client-broker
  * 
@@ -219,21 +219,21 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Get the signing key from JWKS (pass token for realm detection)
         const publicKey = await getSigningKey(decoded.header, token);
 
-        // Multi-realm: Accept tokens from both dive-v3-pilot AND dive-v3-broker
+        // Multi-realm: Accept tokens from both dive-v3-broker AND dive-v3-broker
         // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
         // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
         // Custom Domain: Accept kas.js.usa.divedeeper.internal:8443 (KC_HOSTNAME) - Nov 6, 2025 fix
         // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
         const validIssuers: [string, ...string[]] = [
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-pilot`,    // Internal: dive-v3-pilot
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Internal: dive-v3-broker
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
-            'http://localhost:8081/realms/dive-v3-pilot',          // External HTTP: dive-v3-pilot
+            'http://localhost:8081/realms/dive-v3-broker',          // External HTTP: dive-v3-broker
             'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
-            'https://localhost:8443/realms/dive-v3-pilot',         // External HTTPS: dive-v3-pilot
+            'https://localhost:8443/realms/dive-v3-broker',         // External HTTPS: dive-v3-broker
             'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker
-            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-pilot',   // Custom domain: dive-v3-pilot
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',   // Custom domain: dive-v3-broker
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker
-            'https://dev-auth.dive25.com/realms/dive-v3-pilot',    // Cloudflare Tunnel: dive-v3-pilot
+            'https://dev-auth.dive25.com/realms/dive-v3-broker',    // Cloudflare Tunnel: dive-v3-broker
             'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker
         ];
 

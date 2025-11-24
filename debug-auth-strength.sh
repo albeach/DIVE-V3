@@ -14,7 +14,7 @@ echo ""
 
 # First, let's check what this document's properties are
 echo "1. Fetching document metadata from MongoDB..."
-docker compose exec -T mongodb mongosh dive-v3-pilot --quiet --eval "
+docker compose exec -T mongodb mongosh dive-v3-broker --quiet --eval "
   db.resources.findOne({resourceId: '$RESOURCE_ID'}, {
     resourceId: 1,
     classification: 1,

@@ -13,7 +13,7 @@ fi
 
 echo "1. Get tokens from Keycloak directly:"
 echo "=================================="
-TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/token" \
+TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=password" \
   -d "client_id=dive-v3-client" \
@@ -49,13 +49,13 @@ echo ""
 echo "3. Check JWKS endpoint:"
 echo "=================================="
 echo "Available signing keys in JWKS:"
-curl -s http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/certs | jq '.keys[] | {kid, alg, use, kty}'
+curl -s http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs | jq '.keys[] | {kid, alg, use, kty}'
 
 echo ""
 echo "4. Verify key IDs match:"
 echo "=================================="
 ACCESS_KID=$(echo "$ACCESS_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq -r '.kid')
-JWKS_KIDS=$(curl -s http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/certs | jq -r '.keys[].kid')
+JWKS_KIDS=$(curl -s http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs | jq -r '.keys[].kid')
 
 echo "Access token kid: $ACCESS_KID"
 echo "Available JWKS kids:"

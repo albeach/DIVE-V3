@@ -22,7 +22,7 @@ FAILED=0
 
 # Get a test JWT token (using Keycloak)
 echo "📝 Step 1: Getting authentication token..."
-TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/token" \
+TOKEN_RESPONSE=$(curl -s -X POST "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "client_id=dive-v3-client" \
   -d "client_secret=your-client-secret-here" \

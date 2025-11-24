@@ -12,7 +12,7 @@ import { auth0Service } from '../services/auth0.service';
 process.env.AUTH0_DOMAIN = 'test-tenant.auth0.com';
 process.env.AUTH0_MCP_ENABLED = 'true';
 process.env.KEYCLOAK_URL = 'http://localhost:8080';
-process.env.KEYCLOAK_REALM = 'dive-v3-pilot';
+process.env.KEYCLOAK_REALM = 'dive-v3-broker';
 process.env.FRONTEND_URL = 'http://localhost:3000';
 
 describe('Auth0 MCP Integration - Service Functions', () => {
@@ -62,7 +62,7 @@ describe('Auth0 MCP Integration - Service Functions', () => {
             const urls = auth0Service.generateAuth0CallbackUrls('test-idp');
 
             expect(urls.length).toBe(2);
-            expect(urls[0]).toContain('http://localhost:8080/auth/realms/dive-v3-pilot/broker/test-idp/endpoint');
+            expect(urls[0]).toContain('http://localhost:8080/auth/realms/dive-v3-broker/broker/test-idp/endpoint');
             expect(urls[1]).toContain('http://localhost:3000/api/auth/callback');
         });
 

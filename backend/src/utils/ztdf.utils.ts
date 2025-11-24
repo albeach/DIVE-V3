@@ -458,7 +458,7 @@ export function encryptContent(
     }
     // Priority 2: Deterministic DEK for backwards compatibility
     else if (resourceId) {
-        const salt = 'dive-v3-pilot-dek-salt';
+        const salt = 'dive-v3-broker-dek-salt';
         const dekHash = crypto.createHash('sha256').update(resourceId + salt).digest();
         dek = dekHash;
 

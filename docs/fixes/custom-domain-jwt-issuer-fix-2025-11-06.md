@@ -41,7 +41,7 @@ All DIVE services now accept JWT tokens with these issuers:
 - **`https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker`** ← NEW
 
 ### Pilot Realm (Legacy)
-- Similar pattern for `dive-v3-pilot`
+- Similar pattern for `dive-v3-broker`
 
 ### Individual IdP Realms
 - Similar pattern for `dive-v3-usa`, `dive-v3-fra`, `dive-v3-can`, etc.

@@ -13,7 +13,7 @@ import crypto from 'crypto';
  * This function is duplicated here for testing purposes
  */
 function generateDeterministicDEK(resourceId: string): string {
-    const salt = 'dive-v3-pilot-dek-salt';
+    const salt = 'dive-v3-broker-dek-salt';
     const dekHash = crypto.createHash('sha256').update(resourceId + salt).digest();
     return dekHash.toString('base64');
 }
@@ -81,7 +81,7 @@ describe('Deterministic DEK Generation', () => {
         it('should match expected hash for known input', () => {
             // Test vector to ensure algorithm hasn't changed
             const resourceId = 'doc-ztdf-0001';
-            const salt = 'dive-v3-pilot-dek-salt';
+            const salt = 'dive-v3-broker-dek-salt';
             
             const expectedHash = crypto.createHash('sha256')
                 .update(resourceId + salt)

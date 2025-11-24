@@ -159,7 +159,7 @@ This assumption is **incorrect** - the server doesn't have a test mode for JWT v
 ```
 JWT verification failed in jwtService.verify
 error: invalid algorithm
-actualIssuer: http://localhost:8081/realms/dive-v3-pilot
+actualIssuer: http://localhost:8081/realms/dive-v3-broker
 expectedIssuers: [valid issuer array]
 ```
 

@@ -45,8 +45,8 @@ services:
       KC_DB_PASSWORD: password
       # Keycloak 26 Configuration with HTTPS (Defense in Depth)
       # Using mkcert certificates for internal HTTPS
-      # Cloudflare tunnel also provides TLS at edge (double encryption)
-      KC_HOSTNAME: dev-auth.dive25.com
+      # For localhost development, use localhost hostname
+      KC_HOSTNAME: localhost
       KC_HOSTNAME_STRICT: false
       KC_HTTP_ENABLED: true
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
@@ -236,12 +236,12 @@ services:
       start_period: 30s
     environment:
       NODE_ENV: development
-      # CLOUDFLARE TUNNEL CONFIGURATION: Browser uses Cloudflare domains
-      # Browser (NEXT_PUBLIC_*): Uses Cloudflare tunnel domains
+      # LOCALHOST DEVELOPMENT CONFIGURATION: Direct access without Cloudflare tunnel
+      # Browser (NEXT_PUBLIC_*): Uses localhost domains for direct access
       # Server-side: Uses Docker service names (internal network)
-      NEXT_PUBLIC_API_URL: https://dev-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://dev-api.dive25.com
-      NEXT_PUBLIC_BASE_URL: https://dev-app.dive25.com
+      NEXT_PUBLIC_API_URL: https://localhost:4000
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4000
+      NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # Server-side backend URL (Docker internal network)
       # Uses HTTPS with self-signed certs (NODE_TLS_REJECT_UNAUTHORIZED=0)
       BACKEND_URL: https://backend:4000
@@ -251,14 +251,14 @@ services:
       KEYCLOAK_BASE_URL: https://keycloak:8443
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
-      # Public Keycloak URLs (for browser-side using Cloudflare tunnel)
-      NEXT_PUBLIC_KEYCLOAK_URL: https://dev-auth.dive25.com
+      # Public Keycloak URLs (for browser-side using localhost)
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       # Keycloak Issuer for JWT validation (must match token issuer)
-      KEYCLOAK_ISSUER: https://dev-auth.dive25.com/realms/dive-v3-broker
-      # NextAuth configuration - Updated for Cloudflare Tunnel
+      KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
+      # NextAuth configuration - CRITICAL FIX: Use localhost for direct development access
       # NextAuth v5 uses NEXTAUTH_URL (official documentation)
-      NEXTAUTH_URL: https://dev-app.dive25.com
+      NEXTAUTH_URL: https://localhost:3000
       AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
       # Client credentials
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker

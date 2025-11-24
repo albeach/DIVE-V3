@@ -4,7 +4,7 @@
 set -e
 
 KEYCLOAK_URL="http://localhost:8081"
-REALM="dive-v3-pilot"
+REALM="dive-v3-broker"
 
 # Get admin token
 ADMIN_TOKEN=$(curl -s -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \

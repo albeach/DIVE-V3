@@ -200,7 +200,7 @@ GET    /scim/v2/ServiceProviderConfig       # Server capabilities
   "acr": "1",
   "amr": ["pwd", "otp"],
   "auth_time": 1730736600,
-  "iss": "https://keycloak.dive-v3.mil/realms/dive-v3-pilot",
+  "iss": "https://keycloak.dive-v3.mil/realms/dive-v3-broker",
   "aud": "dive-v3-client",
   "exp": 1730737500,
   "iat": 1730736600,

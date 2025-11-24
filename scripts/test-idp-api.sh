@@ -8,7 +8,7 @@ echo ""
 # Step 1: Get admin token from Keycloak
 echo "1️⃣  Getting admin token from Keycloak..."
 KEYCLOAK_TOKEN=$(curl -s -X POST \
-  "http://localhost:8081/realms/dive-v3-pilot/protocol/openid-connect/token" \
+  "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/token" \
   -d "client_id=dive-v3-client" \
   -d "username=john.doe@mil" \
   -d "password=Password123!" \

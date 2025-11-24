@@ -618,14 +618,14 @@ resource "keycloak_saml_client" "france_saml_client" {
 
   # Redirect URIs - must match broker callback
   valid_redirect_uris = [
-    "http://localhost:8081/realms/dive-v3-pilot/broker/france-idp/endpoint",
-    "http://keycloak:8080/realms/dive-v3-pilot/broker/france-idp/endpoint"
+    "http://localhost:8081/realms/dive-v3-broker/broker/france-idp/endpoint",
+    "http://keycloak:8080/realms/dive-v3-broker/broker/france-idp/endpoint"
   ]
 
   base_url = "http://localhost:3000"
 
   # Master SAML Processing URL (critical for broker)
-  master_saml_processing_url = "http://localhost:8081/realms/dive-v3-pilot/broker/france-idp/endpoint"
+  master_saml_processing_url = "http://localhost:8081/realms/dive-v3-broker/broker/france-idp/endpoint"
 }
 
 # SAML user PROPERTY mappers for France client (email, firstName, lastName from user profile)
@@ -937,7 +937,7 @@ resource "keycloak_openid_client" "canada_oidc_client" {
   direct_access_grants_enabled = false
 
   valid_redirect_uris = [
-    "http://localhost:8081/realms/dive-v3-pilot/broker/canada-idp/endpoint"
+    "http://localhost:8081/realms/dive-v3-broker/broker/canada-idp/endpoint"
   ]
 
   root_url = "http://localhost:3000"
@@ -1176,7 +1176,7 @@ resource "keycloak_openid_client" "industry_oidc_client" {
   direct_access_grants_enabled = false
 
   valid_redirect_uris = [
-    "http://localhost:8081/realms/dive-v3-pilot/broker/industry-idp/endpoint"
+    "http://localhost:8081/realms/dive-v3-broker/broker/industry-idp/endpoint"
   ]
 
   root_url = "http://localhost:3000"
