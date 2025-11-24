@@ -45,7 +45,7 @@ jobs:
       #################################################################
       
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
       
@@ -363,7 +363,7 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       
       - name: Find Latest Rollback Snapshot
         id: find_snapshot
