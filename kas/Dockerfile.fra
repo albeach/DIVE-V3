@@ -1,0 +1,36 @@
+# FRA KAS Dockerfile
+FROM node:20-alpine
+
+# Install dependencies
+RUN apk add --no-cache curl openssl
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY src/fra-kas-server.ts ./src/
+COPY tsconfig.json ./
+
+# Build TypeScript
+RUN npm run build || npx tsc src/fra-kas-server.ts --outDir dist --esModuleInterop --resolveJsonModule
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# Environment variables for FRA instance
+ENV KAS_PORT=8080
+ENV INSTANCE_REALM=FRA
+ENV NODE_ENV=production
+
+# Run the server
+CMD ["node", "dist/fra-kas-server.js"]
