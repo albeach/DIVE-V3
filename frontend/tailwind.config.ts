@@ -11,6 +11,18 @@ const config: Config = {
             colors: {
                 background: "var(--background)",
                 foreground: "var(--foreground)",
+                // Instance theme colors (dynamically set via CSS variables)
+                instance: {
+                    primary: "var(--instance-primary)",
+                    secondary: "var(--instance-secondary)",
+                    accent: "var(--instance-accent)",
+                    text: "var(--instance-text)",
+                },
+            },
+            // Instance gradients
+            backgroundImage: {
+                'instance-banner': 'var(--instance-banner-bg)',
+                'instance-hero': 'var(--instance-hero-bg)',
             },
             animation: {
                 'fade-in': 'fadeIn 0.3s ease-in-out',

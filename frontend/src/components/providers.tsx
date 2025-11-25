@@ -6,6 +6,7 @@ import { useState } from "react";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
+import { InstanceThemeProvider } from "@/components/ui/theme-provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // Create QueryClient instance (only once per component lifecycle)
@@ -21,21 +22,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }));
 
   return (
-    <StandardsLensProvider>
-      <LocaleProvider>
-        <QueryClientProvider client={queryClient}>
-          <SessionProvider 
-            refetchInterval={30}
-            refetchOnWindowFocus={true}
-            refetchWhenOffline={false}
-          >
-            <IdentityDrawerProvider>
-              {children}
-            </IdentityDrawerProvider>
-          </SessionProvider>
-        </QueryClientProvider>
-      </LocaleProvider>
-    </StandardsLensProvider>
+    <InstanceThemeProvider>
+      <StandardsLensProvider>
+        <LocaleProvider>
+          <QueryClientProvider client={queryClient}>
+            <SessionProvider 
+              refetchInterval={30}
+              refetchOnWindowFocus={true}
+              refetchWhenOffline={false}
+            >
+              <IdentityDrawerProvider>
+                {children}
+              </IdentityDrawerProvider>
+            </SessionProvider>
+          </QueryClientProvider>
+        </LocaleProvider>
+      </StandardsLensProvider>
+    </InstanceThemeProvider>
   );
 }
 
