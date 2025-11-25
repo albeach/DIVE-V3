@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { IdpSelector } from "@/components/auth/idp-selector";
 import { Globe2, Target, Shield, MapPin, Users, Lock } from "lucide-react";
+import { InstanceHeroBadge, IdpSectionHeader } from "@/components/ui/instance-hero-badge";
 
 export default async function Home() {
   const session = await auth();
@@ -158,6 +159,11 @@ export default async function Home() {
 
                 {/* Content */}
                 <div className="flex-1 text-center md:text-left animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+                  {/* Instance Badge with Flag */}
+                  <div className="mb-4">
+                    <InstanceHeroBadge size="lg" className="justify-center md:justify-start" />
+                  </div>
+                  
                   <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 tracking-tight">
                     DIVE V3
                   </h1>
@@ -167,7 +173,7 @@ export default async function Home() {
                     </p>
                   </div>
                   <p className="text-white/90 text-sm md:text-base leading-relaxed mb-4">
-                    USA/NATO Coalition Identity & Access Management
+                    Coalition Identity & Access Management Platform
                   </p>
                   
                   {/* Feature badges */}
@@ -190,14 +196,7 @@ export default async function Home() {
             <div className="p-8 md:p-12">
               {/* Identity Provider Selection */}
               <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
-                <div className="text-center mb-8">
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                    Select Your Identity Provider
-                  </h2>
-                  <p className="text-gray-600">
-                    Choose your organization to securely authenticate
-                  </p>
-                </div>
+                <IdpSectionHeader />
                 
                 <IdpSelector />
               </div>
