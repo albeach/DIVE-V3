@@ -123,6 +123,7 @@ usage() {
     echo ""
     echo -e "${GREEN}Options:${NC}"
     echo "  --new              Create new instance from scratch"
+    echo "  --federate         Auto-federate with all existing instances"
     echo "  --terraform-only   Only apply Terraform configuration"
     echo "  --docker-only      Only start/restart Docker services"
     echo "  --tunnel-only      Only setup Cloudflare tunnel"
@@ -132,10 +133,11 @@ usage() {
     echo "  --help             Show this help message"
     echo ""
     echo -e "${GREEN}Examples:${NC}"
-    echo "  $0 USA                    # Deploy/update USA instance"
-    echo "  $0 FRA --new              # Create new FRA instance"
-    echo "  $0 DEU --terraform-only   # Only apply Terraform for DEU"
-    echo "  $0 ESP --dry-run          # Validate ESP config"
+    echo "  $0 USA                       # Deploy/update USA instance"
+    echo "  $0 FRA --new                 # Create new FRA instance"
+    echo "  $0 ITA --new --federate      # Deploy ITA + federate with all"
+    echo "  $0 DEU --terraform-only      # Only apply Terraform for DEU"
+    echo "  $0 ESP --dry-run             # Validate ESP config"
     echo ""
     echo -e "${GREEN}Test Users (Password: DiveDemo2025!):${NC}"
     echo "  testuser-{code}-1  →  UNCLASSIFIED"
@@ -765,11 +767,81 @@ start_docker_services() {
     log_success "Docker services started for $instance"
 }
 
+# Get list of running instances
+get_running_instances() {
+    local running=()
+    
+    for code in USA FRA DEU GBR CAN ITA ESP NLD POL; do
+        local code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+        local keycloak_url="https://${code_lower}-idp.dive25.com"
+        
+        if curl -sf "${keycloak_url}/health/ready" --insecure >/dev/null 2>&1; then
+            running+=("$code")
+        fi
+    done
+    
+    echo "${running[@]}"
+}
+
+# Federate with all existing instances
+federate_with_all() {
+    local new_instance=$1
+    local new_lower=$(echo "$new_instance" | tr '[:upper:]' '[:lower:]')
+    
+    log_info "Discovering existing instances..."
+    
+    local running_instances=($(get_running_instances))
+    
+    # Remove self from list
+    local partners=()
+    for inst in "${running_instances[@]}"; do
+        if [[ "$inst" != "$new_instance" ]]; then
+            partners+=("$inst")
+        fi
+    done
+    
+    if [[ ${#partners[@]} -eq 0 ]]; then
+        log_warning "No other instances found to federate with"
+        return 0
+    fi
+    
+    log_info "Found ${#partners[@]} instance(s) to federate with: ${partners[*]}"
+    echo ""
+    
+    local success_count=0
+    local fail_count=0
+    
+    for partner in "${partners[@]}"; do
+        log_info "Federating ${new_instance} ↔ ${partner}..."
+        
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_info "[DRY RUN] Would federate ${new_instance} ↔ ${partner}"
+            ((success_count++))
+        else
+            if "$SCRIPT_DIR/add-federation-partner.sh" "$new_instance" "$partner" 2>/dev/null; then
+                log_success "Federated ${new_instance} ↔ ${partner}"
+                ((success_count++))
+            else
+                log_warning "Failed to federate ${new_instance} ↔ ${partner}"
+                ((fail_count++))
+            fi
+        fi
+    done
+    
+    echo ""
+    log_success "Federation complete: ${success_count} succeeded, ${fail_count} failed"
+}
+
 # Deploy a new instance from scratch
 deploy_new_instance() {
     local instance=$1
     
-    TOTAL_STEPS=6
+    # Adjust step count based on federation
+    if [[ "$FEDERATE" == "true" ]]; then
+        TOTAL_STEPS=7
+    else
+        TOTAL_STEPS=6
+    fi
     
     # Step 1: Generate all config files
     progress "Generating configuration files"
@@ -816,6 +888,12 @@ deploy_new_instance() {
     progress "Restarting services with credentials"
     start_docker_services "$instance"
     
+    # Step 7: Federate with existing instances (if requested)
+    if [[ "$FEDERATE" == "true" ]]; then
+        progress "Federating with existing instances"
+        federate_with_all "$instance"
+    fi
+    
     log_success "Instance $instance deployed successfully!"
 }
 
@@ -850,6 +928,7 @@ TUNNEL_ONLY=false
 DESTROY=false
 FORCE=false
 DRY_RUN=false
+FEDERATE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -879,6 +958,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --federate)
+            FEDERATE=true
             shift
             ;;
         --help|-h)
