@@ -1,0 +1,94 @@
+{
+  "$schema": "./federation-registry.schema.json",
+  "version": "1.0.0",
+  "description": "DIVE V3 Federation Registry - Single Source of Truth for all instance configurations",
+  "lastUpdated": "2025-11-25T19:30:00Z",
+  
+  "instances": {
+    "usa": {
+      "code": "USA",
+      "name": "United States",
+      "domain": "dive25.com",
+      "urls": {
+        "app": "https://usa-app.dive25.com",
+        "api": "https://usa-api.dive25.com",
+        "idp": "https://usa-idp.dive25.com"
+      },
+      "keycloak": {
+        "localPort": 8443,
+        "adminUsername": "admin"
+      },
+      "enabled": true,
+      "notes": "Primary instance - hosted locally on macOS"
+    },
+    
+    "fra": {
+      "code": "FRA",
+      "name": "France",
+      "domain": "dive25.com",
+      "urls": {
+        "app": "https://fra-app.dive25.com",
+        "api": "https://fra-api.dive25.com",
+        "idp": "https://fra-idp.dive25.com"
+      },
+      "keycloak": {
+        "localPort": 8444,
+        "adminUsername": "admin"
+      },
+      "enabled": true,
+      "notes": "Secondary instance - hosted locally on macOS"
+    },
+    
+    "deu": {
+      "code": "DEU",
+      "name": "Germany",
+      "domain": "prosecurity.biz",
+      "urls": {
+        "app": "https://deu-app.prosecurity.biz",
+        "api": "https://deu-api.prosecurity.biz",
+        "idp": "https://deu-idp.prosecurity.biz"
+      },
+      "keycloak": {
+        "remoteHost": "192.168.42.120",
+        "adminUsername": "admin"
+      },
+      "enabled": true,
+      "notes": "Remote instance - hosted on Ubuntu server via Cloudflare Tunnel"
+    }
+  },
+  
+  "federation": {
+    "description": "Defines which instances can federate with each other",
+    "matrix": {
+      "usa": ["fra", "deu"],
+      "fra": ["usa", "deu"],
+      "deu": ["usa", "fra"]
+    },
+    "defaultEnabled": true
+  },
+  
+  "defaults": {
+    "realm": "dive-v3-broker",
+    "clientId": "dive-v3-client-broker",
+    "createTestUsers": true,
+    "adminPassword": "DivePilot2025!"
+  },
+  
+  "cloudflare": {
+    "tunnels": {
+      "usa": {
+        "id": "f8e6c558-847b-4952-b8b2-27f98a85e36c",
+        "name": "dive-v3-tunnel"
+      },
+      "fra": {
+        "id": "e07574bd-6f32-478b-8f71-42fc3d4073f7",
+        "name": "dive-v3-fra"
+      },
+      "deu": {
+        "id": "2112e264-61e3-463f-9d13-b55273bde204",
+        "name": "dive-v3-deu-prosecurity"
+      }
+    }
+  }
+}
+
