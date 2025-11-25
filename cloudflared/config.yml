@@ -38,5 +38,11 @@ ingress:
     originRequest:
       connectTimeout: 30s
   
+  # Status Page - Public status dashboard
+  - hostname: status.dive25.com
+    service: http://dive-v3-status-page:80
+    originRequest:
+      connectTimeout: 10s
+  
   # Catch-all rule (required)
   - service: http_status:404
