@@ -5,7 +5,7 @@
 # Regenerate with: ./scripts/generate-instance.sh DEU
 # =============================================================================
 
-tunnel: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+tunnel: 2856308e-2467-495d-b735-6f588140c387
 credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
