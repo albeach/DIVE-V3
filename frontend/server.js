@@ -45,7 +45,7 @@ app.prepare().then(() => {
       if (process.env.DEBUG_HTTP) {
         console.log(`[HTTP/${req.httpVersion}] ${req.method} ${req.url}`);
       }
-      
+
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
     } catch (err) {

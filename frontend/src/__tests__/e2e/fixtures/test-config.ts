@@ -32,47 +32,47 @@ export const TIMEOUTS = {
    * Default action timeout (button click, fill, etc.)
    */
   ACTION: TEST_ENV.IS_CI ? 10000 : 5000,
-  
+
   /**
    * Navigation timeout (page.goto, waitForURL)
    */
   NAVIGATION: TEST_ENV.IS_CI ? 30000 : 15000,
-  
+
   /**
    * Network request timeout (API calls)
    */
   NETWORK: TEST_ENV.IS_CI ? 20000 : 10000,
-  
+
   /**
    * Authentication flow timeout (Keycloak redirect)
    */
   AUTH_FLOW: TEST_ENV.IS_CI ? 40000 : 20000,
-  
+
   /**
    * MFA setup timeout (OTP/WebAuthn setup)
    */
   MFA_SETUP: TEST_ENV.IS_CI ? 60000 : 30000,
-  
+
   /**
    * Resource loading timeout (large documents)
    */
   RESOURCE_LOAD: TEST_ENV.IS_CI ? 20000 : 10000,
-  
+
   /**
    * Debounce wait (after user input)
    */
   DEBOUNCE: 500,
-  
+
   /**
    * Short wait (UI animations)
    */
   SHORT: 1000,
-  
+
   /**
    * Medium wait (complex interactions)
    */
   MEDIUM: 3000,
-  
+
   /**
    * Long wait (heavy operations)
    */
@@ -115,7 +115,7 @@ export const RETRY = {
    * Local: 0 retries (fail fast for development)
    */
   COUNT: TEST_ENV.IS_CI ? 2 : 0,
-  
+
   /**
    * Number of retries for flaky selectors
    */
@@ -130,12 +130,12 @@ export const ARTIFACTS = {
    * Take screenshots on failure
    */
   SCREENSHOT_ON_FAILURE: true,
-  
+
   /**
    * Take screenshots on all steps (debug mode)
    */
   SCREENSHOT_ALL_STEPS: TEST_ENV.IS_DEBUG,
-  
+
   /**
    * Record video of test execution
    * 'on': Always record
@@ -143,7 +143,7 @@ export const ARTIFACTS = {
    * 'off': Never record
    */
   VIDEO_MODE: TEST_ENV.IS_CI ? 'retain-on-failure' : 'off',
-  
+
   /**
    * Enable Playwright trace
    * 'on': Always trace
@@ -162,22 +162,22 @@ export const SELECTORS = {
   // Auth
   USER_MENU: '[data-testid="user-menu"]',
   LOGOUT_BUTTON: '[data-testid="logout-button"]',
-  
+
   // Resources
   RESOURCE_CARD: '[data-testid="resource-card"]',
   RESOURCE_SEARCH: '[data-testid="resource-search"]',
   RESOURCE_FILTER: '[data-testid="resource-filter"]',
-  
+
   // Identity
   IDENTITY_DRAWER: '[data-testid="identity-drawer"]',
   USER_CLEARANCE: '[data-testid="user-clearance"]',
   USER_COUNTRY: '[data-testid="user-country"]',
   USER_COI: '[data-testid="user-coi"]',
-  
+
   // Admin
   IDP_CARD: '[data-testid="idp-card"]',
   IDP_LIST: '[data-testid="idp-list"]',
-  
+
   // Authorization
   AUTH_DECISION: '[data-testid="auth-decision"]',
   AUTH_REASON: '[data-testid="auth-reason"]',
@@ -198,7 +198,7 @@ export const KEYCLOAK_SELECTORS = {
   USERNAME_INPUT: '#username',
   PASSWORD_INPUT: '#password',
   LOGIN_BUTTON: '#kc-login',
-  
+
   /**
    * OTP setup
    */
@@ -206,7 +206,7 @@ export const KEYCLOAK_SELECTORS = {
   OTP_QR_CODE: '.kc-totp-qrcode',
   OTP_INPUT: '#totp',
   OTP_SUBMIT: '#kc-otp-settings-form button[type="submit"]',
-  
+
   /**
    * WebAuthn/Passkey
    */
@@ -214,7 +214,7 @@ export const KEYCLOAK_SELECTORS = {
   WEBAUTHN_AUTHENTICATE: '#kc-authenticate-button, .webauthn-authenticate, button[name="authenticate"]',
   WEBAUTHN_SETUP: '.kc-webauthn-setup, .webauthn-setup',
   WEBAUTHN_SUCCESS: '.kc-webauthn-success, .webauthn-success',
-  
+
   /**
    * Error messages
    */
@@ -233,31 +233,31 @@ export const FEATURES = {
    * Requires Keycloak OTP/WebAuthn configuration
    */
   MFA_TESTS: process.env.ENABLE_MFA_TESTS !== 'false',
-  
+
   /**
    * Policies Lab tests enabled
    * Requires /policies/lab route
    */
   POLICIES_LAB_TESTS: true,
-  
+
   /**
    * KAS (Key Access Service) tests enabled
    * Stretch goal - may not be implemented
    */
   KAS_TESTS: process.env.ENABLE_KAS_TESTS === 'true',
-  
+
   /**
    * Admin features tests enabled
    * Requires admin credentials
    */
   ADMIN_TESTS: true,
-  
+
   /**
    * NATO expansion tests enabled (6 additional nations)
    * Requires DEU, GBR, ITA, ESP, POL, NLD IdPs
    */
   NATO_EXPANSION_TESTS: true,
-  
+
   /**
    * Classification equivalency tests enabled
    * Requires French clearance mapping
@@ -273,26 +273,26 @@ export const API_ENDPOINTS = {
   RESOURCES_LIST: '/api/resources',
   RESOURCE_BY_ID: (id: string) => `/api/resources/${id}`,
   RESOURCE_REQUEST_KEY: '/api/resources/request-key',
-  
+
   // Policies
   POLICIES_LIST: '/api/policies',
   POLICY_BY_ID: (id: string) => `/api/policies/${id}`,
-  
+
   // Policies Lab
   POLICIES_LAB_UPLOAD: '/api/policies-lab',
   POLICIES_LAB_EVALUATE: '/api/policies-lab/evaluate',
   POLICIES_LAB_DELETE: (id: string) => `/api/policies-lab/${id}`,
-  
+
   // Admin
   ADMIN_IDPS: '/api/admin/idps',
   ADMIN_IDP_BY_ALIAS: (alias: string) => `/api/admin/idps/${alias}`,
   ADMIN_LOGS: '/api/admin/logs',
   ADMIN_ANALYTICS: '/api/admin/analytics',
-  
+
   // Health
   HEALTH: '/api/health',
   HEALTH_READY: '/api/health/ready',
-  
+
   // Public
   PUBLIC_IDPS: '/api/public/idps/public',
 } as const;
@@ -305,12 +305,12 @@ export const TEST_DATA_PATHS = {
    * Sample Rego policy file
    */
   SAMPLE_REGO_POLICY: 'test-data/sample-policy.rego',
-  
+
   /**
    * Sample XACML policy file
    */
   SAMPLE_XACML_POLICY: 'test-data/sample-policy.xml',
-  
+
   /**
    * Sample document for upload
    */

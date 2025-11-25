@@ -90,7 +90,7 @@ const auditLog: AuditEntry[] = [];
 function generateKey(resourceId: string): KeyRecord {
   const keyId = `FRA-${uuidv4()}`;
   const key = crypto.randomBytes(32).toString('base64'); // AES-256 key
-  
+
   const record: KeyRecord = {
     keyId,
     resourceId,
@@ -102,7 +102,7 @@ function generateKey(resourceId: string): KeyRecord {
     accessCount: 0,
     policyVersion: '1.0'
   };
-  
+
   keyStore.set(resourceId, record);
   return record;
 }
@@ -114,9 +114,9 @@ async function verifyToken(authHeader: string | undefined): Promise<any> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new Error('No valid authorization header');
   }
-  
+
   const token = authHeader.substring(7);
-  
+
   try {
     // In production, verify with Keycloak JWKS
     const secret = process.env.JWT_SECRET || 'fra-kas-secret';
@@ -137,7 +137,7 @@ async function reEvaluateWithOPA(
   correlationId: string
 ): Promise<{ allow: boolean; reason: string }> {
   const opaUrl = process.env.OPA_URL || 'http://localhost:8182';
-  
+
   try {
     // Fetch resource metadata
     const resourceResponse = await axios.get(
@@ -149,9 +149,9 @@ async function reEvaluateWithOPA(
         }
       }
     );
-    
+
     const resource = resourceResponse.data;
-    
+
     // Build OPA input
     const opaInput = {
       input: {
@@ -178,13 +178,13 @@ async function reEvaluateWithOPA(
         }
       }
     };
-    
+
     // Call OPA
     const opaResponse = await axios.post(
       `${opaUrl}/v1/data/dive/authorization/decision`,
       opaInput
     );
-    
+
     return {
       allow: opaResponse.data.result?.allow || false,
       reason: opaResponse.data.result?.reason || 'Policy evaluation failed'
@@ -205,37 +205,37 @@ async function reEvaluateWithOPA(
 app.post('/keys/request', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { resourceId, action = 'decrypt' } = req.body;
-  
+
   console.log(`[${correlationId}] Key request for resource ${resourceId}`);
-  
+
   try {
     // Verify authentication
     const subject = await verifyToken(req.headers.authorization);
-    
+
     // Re-evaluate with OPA (GAP-005: independent evaluation)
     const opaResult = await reEvaluateWithOPA(subject, resourceId, action, correlationId);
-    
+
     // KAS makes independent decision
     let kasAllow = opaResult.allow;
     let divergence = false;
-    
+
     // Additional KAS-specific checks
     if (kasAllow) {
       // Check if resource is from this realm
       const keyRecord = keyStore.get(resourceId);
-      if (keyRecord && keyRecord.realm !== INSTANCE_REALM && 
-          !subject.countryOfAffiliation?.includes(keyRecord.realm)) {
+      if (keyRecord && keyRecord.realm !== INSTANCE_REALM &&
+        !subject.countryOfAffiliation?.includes(keyRecord.realm)) {
         kasAllow = false;
         divergence = true;
       }
-      
+
       // Check key access frequency (anti-abuse)
       if (keyRecord && keyRecord.accessCount > 100) {
         kasAllow = false;
         divergence = true;
       }
     }
-    
+
     // Log audit entry (GAP-005: divergence detection)
     const auditEntry: AuditEntry = {
       timestamp: new Date(),
@@ -249,16 +249,16 @@ app.post('/keys/request', async (req: Request, res: Response) => {
       reason: opaResult.reason,
       policyVersion: '1.0'
     };
-    
+
     auditLog.push(auditEntry);
-    
+
     if (divergence) {
       console.warn(`[${correlationId}] DIVERGENCE DETECTED: OPA=${opaResult.allow}, KAS=${kasAllow}`);
-      
+
       // Report divergence for investigation
       await reportDivergence(auditEntry);
     }
-    
+
     if (!kasAllow) {
       return res.status(403).json({
         correlationId,
@@ -268,18 +268,18 @@ app.post('/keys/request', async (req: Request, res: Response) => {
         divergence
       });
     }
-    
+
     // Get or generate key
     let keyRecord = keyStore.get(resourceId);
     if (!keyRecord) {
       keyRecord = generateKey(resourceId);
       console.log(`[${correlationId}] Generated new key for ${resourceId}`);
     }
-    
+
     // Update access tracking
     keyRecord.lastAccessed = new Date();
     keyRecord.accessCount++;
-    
+
     // Return key with metadata
     res.json({
       correlationId,
@@ -294,10 +294,10 @@ app.post('/keys/request', async (req: Request, res: Response) => {
         expiresIn: 3600 // 1 hour
       }
     });
-    
+
   } catch (error: any) {
     console.error(`[${correlationId}] Key request error:`, error);
-    
+
     const auditEntry: AuditEntry = {
       timestamp: new Date(),
       correlationId,
@@ -310,9 +310,9 @@ app.post('/keys/request', async (req: Request, res: Response) => {
       reason: error.message,
       policyVersion: '1.0'
     };
-    
+
     auditLog.push(auditEntry);
-    
+
     res.status(500).json({
       correlationId,
       error: 'Key request failed',
@@ -329,23 +329,23 @@ app.post('/keys/request', async (req: Request, res: Response) => {
 app.post('/keys/rotate', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { resourceId } = req.body;
-  
+
   try {
     // Verify admin authentication
     const subject = await verifyToken(req.headers.authorization);
-    
+
     if (!subject.roles?.includes('admin')) {
       return res.status(403).json({
         correlationId,
         error: 'Admin access required'
       });
     }
-    
+
     const oldKey = keyStore.get(resourceId);
     const newKey = generateKey(resourceId);
-    
+
     console.log(`[${correlationId}] Key rotated for ${resourceId}`);
-    
+
     res.json({
       correlationId,
       resourceId,
@@ -354,7 +354,7 @@ app.post('/keys/rotate', async (req: Request, res: Response) => {
       rotatedAt: new Date(),
       kasAuthority: INSTANCE_REALM
     });
-    
+
   } catch (error: any) {
     console.error(`[${correlationId}] Key rotation error:`, error);
     res.status(500).json({
@@ -372,19 +372,19 @@ app.post('/keys/rotate', async (req: Request, res: Response) => {
 app.get('/keys/audit', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { resourceId, limit = 100 } = req.query;
-  
+
   try {
     let entries = auditLog;
-    
+
     if (resourceId) {
       entries = entries.filter(e => e.resourceId === resourceId);
     }
-    
+
     // Get divergence statistics
     const divergenceCount = entries.filter(e => e.divergence).length;
     const totalCount = entries.length;
     const divergenceRate = totalCount > 0 ? (divergenceCount / totalCount * 100).toFixed(2) : 0;
-    
+
     res.json({
       correlationId,
       kasAuthority: INSTANCE_REALM,
@@ -397,7 +397,7 @@ app.get('/keys/audit', async (req: Request, res: Response) => {
       },
       entries: entries.slice(-parseInt(limit as string))
     });
-    
+
   } catch (error: any) {
     console.error(`[${correlationId}] Audit retrieval error:`, error);
     res.status(500).json({
@@ -414,7 +414,7 @@ app.get('/keys/audit', async (req: Request, res: Response) => {
  */
 app.get('/health', (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
-  
+
   res.json({
     correlationId,
     status: 'healthy',
@@ -432,16 +432,16 @@ app.get('/health', (req: Request, res: Response) => {
  */
 app.get('/metrics', (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
-  
+
   // Calculate metrics
   const grantCount = auditLog.filter(e => e.operation === 'key_grant').length;
   const denyCount = auditLog.filter(e => e.operation === 'key_deny').length;
   const divergenceCount = auditLog.filter(e => e.divergence).length;
-  
-  const avgAccessPerKey = keyStore.size > 0 
+
+  const avgAccessPerKey = keyStore.size > 0
     ? Array.from(keyStore.values()).reduce((sum, k) => sum + k.accessCount, 0) / keyStore.size
     : 0;
-  
+
   res.json({
     correlationId,
     kasAuthority: INSTANCE_REALM,
@@ -454,7 +454,7 @@ app.get('/metrics', (req: Request, res: Response) => {
         grants: grantCount,
         denials: denyCount,
         divergences: divergenceCount,
-        divergenceRate: auditLog.length > 0 
+        divergenceRate: auditLog.length > 0
           ? `${(divergenceCount / auditLog.length * 100).toFixed(2)}%`
           : '0%'
       },
@@ -482,7 +482,7 @@ async function reportDivergence(entry: AuditEntry): Promise<void> {
       kasDecision: entry.kasDecision,
       realm: INSTANCE_REALM
     });
-    
+
     // Could also send to SIEM, create incident ticket, etc.
     if (process.env.ALERT_WEBHOOK) {
       await axios.post(process.env.ALERT_WEBHOOK, {
