@@ -19,7 +19,7 @@ import rego.v1
 
 default allow := false
 
-decision_reason := "Authorization check not evaluated"
+default decision_reason := "Authorization check not evaluated"
 
 # ============================================
 # Main Authorization Rule

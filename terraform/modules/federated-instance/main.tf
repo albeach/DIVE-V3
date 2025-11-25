@@ -81,7 +81,7 @@ resource "keycloak_openid_client" "broker_client" {
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
-  direct_access_grants_enabled = true
+  direct_access_grants_enabled = true  # Required for custom login & OTP flows (see below)
   service_accounts_enabled     = true
 
   # URLs - include both localhost (dev) and Cloudflare (prod)
@@ -170,6 +170,117 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acp_coi" {
 resource "keycloak_openid_user_attribute_protocol_mapper" "organization" {
   realm_id  = keycloak_realm.broker.id
   client_id = keycloak_openid_client.broker_client.id
+  name      = "organization"
+
+  user_attribute       = "organization"
+  claim_name          = "organization"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# ============================================================================
+# INCOMING FEDERATION CLIENTS
+# ============================================================================
+# Create clients for partner instances to federate TO this instance
+# When USA wants to federate to FRA, FRA needs a client called "dive-v3-usa-federation"
+
+resource "keycloak_openid_client" "incoming_federation" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = "dive-v3-${lower(each.value.instance_code)}-federation"
+  name      = "Federation Client - ${each.value.instance_name}"
+  enabled   = each.value.enabled
+
+  # Client settings for federation
+  access_type                  = "CONFIDENTIAL"
+  standard_flow_enabled        = true
+  implicit_flow_enabled        = false
+  direct_access_grants_enabled = false
+  service_accounts_enabled     = false
+
+  # URLs - redirect back to the partner's Keycloak
+  valid_redirect_uris = [
+    "${each.value.idp_url}/realms/dive-v3-broker/broker/${lower(var.instance_code)}-federation/endpoint",
+    "${each.value.idp_url}/realms/dive-v3-broker/broker/${lower(var.instance_code)}-federation/endpoint/*",
+  ]
+  web_origins = [
+    each.value.idp_url,
+  ]
+
+  # Token settings
+  access_token_lifespan = "300"  # 5 minutes for federation tokens
+}
+
+# Protocol mappers for incoming federation clients
+resource "keycloak_openid_user_attribute_protocol_mapper" "federation_clearance" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
+  name      = "clearance"
+
+  user_attribute       = "clearance"
+  claim_name          = "clearance"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "federation_country" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
+  name      = "countryOfAffiliation"
+
+  user_attribute       = "countryOfAffiliation"
+  claim_name          = "countryOfAffiliation"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "federation_unique_id" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
+  name      = "uniqueID"
+
+  user_attribute       = "uniqueID"
+  claim_name          = "uniqueID"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
+  name      = "acpCOI"
+
+  user_attribute       = "acpCOI"
+  claim_name          = "acpCOI"
+  claim_value_type    = "String"
+  multivalued         = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "federation_organization" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
   name      = "organization"
 
   user_attribute       = "organization"

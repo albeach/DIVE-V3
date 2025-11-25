@@ -18,7 +18,7 @@ services:
     container_name: dive-v3-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: postgres
     ports:
       - "5433:5432"
@@ -42,7 +42,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: password
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-password}
       # Keycloak 26 Configuration with HTTPS (Defense in Depth)
       # Using mkcert certificates for internal HTTPS
       # For localhost development, use localhost hostname
@@ -56,7 +56,7 @@ services:
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       # Gap #6: Enable JavaScript providers for script-based protocol mappers
       KC_FEATURES: scripts
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
@@ -83,7 +83,7 @@ services:
     container_name: dive-v3-mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-password}
       MONGO_INITDB_DATABASE: dive-v3
     ports:
       - "27017:27017"
@@ -165,7 +165,8 @@ services:
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-backend
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:4000/health || exit 1"]
+      # Zero Trust: HTTPS with mkcert CA validation
+      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem -q -O- https://localhost:4000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -229,11 +230,13 @@ services:
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-frontend
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:3000/ || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      # Zero Trust: HTTPS with mkcert CA validation
+      # Uses the rootCA.pem from mkcert to validate the self-signed certificate
+      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem --spider -q https://localhost:3000/ 2>/dev/null || curl --cacert /app/certs/rootCA.pem -s -f https://localhost:3000/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s  # Next.js needs time to compile on first run
     environment:
       NODE_ENV: development
       # DUAL-MODE CONFIGURATION: Supports both localhost AND Cloudflare tunnel access
@@ -292,7 +295,8 @@ services:
       dockerfile: Dockerfile
     container_name: dive-v3-kas
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
+      # Zero Trust: HTTPS with mkcert CA validation
+      test: ["CMD-SHELL", "wget --ca-certificate=/opt/app/certs/rootCA.pem -q -O- https://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -349,11 +353,15 @@ services:
       - keycloak
       - kas
     healthcheck:
-      test: ["CMD", "cloudflared", "tunnel", "info"]
+      # Zero Trust: Verify tunnel has active connections to Cloudflare edge
+      # We check if cloudflared process has established connections (not just running)
+      # Note: localhost:9126/metrics is container-local only (loopback), acceptable per Zero Trust
+      # since it never traverses network interfaces
+      test: ["CMD-SHELL", "pgrep cloudflared && wget -q -O- http://127.0.0.1:9126/metrics 2>/dev/null | grep -q 'cloudflared_tunnel_active_streams' || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
     # Expose metrics for monitoring (optional - access at localhost:9126)
     ports:
       - "9126:9126"

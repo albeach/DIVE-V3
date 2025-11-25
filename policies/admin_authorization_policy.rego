@@ -14,9 +14,9 @@ import rego.v1
 # Reference: Week 3.3 requirements
 
 # Default deny
-allow := false
+default allow := false
 
-evaluation_details := {}
+default evaluation_details := {}
 
 # ============================================
 # Allowed Admin Operations

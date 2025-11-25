@@ -1,5 +1,16 @@
 # Variables for Federated Instance Deployment
 # These are set per-workspace via .tfvars files
+#
+# SECRETS MANAGEMENT:
+#   Option 1 (Recommended): Set via environment variable
+#     export TF_VAR_keycloak_admin_password="your-secure-password"
+#     terraform apply
+#
+#   Option 2: Set in .tfvars file (gitignored)
+#     keycloak_admin_password = "your-secure-password"
+#
+#   Option 3: Pass via command line (not recommended - visible in history)
+#     terraform apply -var="keycloak_admin_password=your-secure-password"
 
 # Keycloak Connection (different per instance)
 variable "keycloak_url" {
@@ -14,10 +25,11 @@ variable "keycloak_admin_username" {
 }
 
 variable "keycloak_admin_password" {
-  description = "Keycloak admin password"
+  description = "Keycloak admin password. Set via TF_VAR_keycloak_admin_password environment variable."
   type        = string
   sensitive   = true
-  default     = "admin"
+  # NO DEFAULT - forces explicit setting for security
+  # If you see "variable not set" error, set TF_VAR_keycloak_admin_password or use .tfvars
 }
 
 # Public URLs (Cloudflare tunnel URLs)

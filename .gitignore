@@ -179,3 +179,8 @@ test-opa-decision.json
 actions-runner/
 .env.cloudflare
 cloudflared/tunnel-credentials.json
+
+# Secrets - NEVER COMMIT
+.env.secrets
+.env.secrets.*
+!.env.secrets.example

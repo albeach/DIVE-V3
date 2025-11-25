@@ -77,7 +77,12 @@ function extractPolicyStepsFromDetails(details: any): Array<{
   reason: string;
   attributes: string[];
 }> {
-  const steps = [];
+  const steps: Array<{
+    rule: string;
+    result: "PASS" | "FAIL";
+    reason: string;
+    attributes: string[];
+  }> = [];
 
   // Check if we have the new evaluation_details format from OPA
   if (details.checks) {
@@ -670,19 +675,19 @@ export default function ResourceDetailPage() {
                       <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-4">
                         <div className="bg-white rounded-lg p-2 sm:p-3 border border-blue-200">
                           <dt className="text-xs font-medium text-gray-500 mb-1">ZTDF Version</dt>
-                          <dd className="text-base sm:text-lg font-bold text-gray-900">{resource.ztdf?.manifest?.version || 'N/A'}</dd>
+                          <dd className="text-base sm:text-lg font-bold text-gray-900">{resource.ztdf?.version || 'N/A'}</dd>
                         </div>
                         <div className="bg-white rounded-lg p-2 sm:p-3 border border-blue-200">
                           <dt className="text-xs font-medium text-gray-500 mb-1">Encryption</dt>
-                          <dd className="text-xs sm:text-sm font-semibold text-gray-900">{resource.ztdf?.payload?.encryptionAlgorithm || 'N/A'}</dd>
+                          <dd className="text-xs sm:text-sm font-semibold text-gray-900">{resource.ztdf?.encryptionAlgorithm || 'N/A'}</dd>
                         </div>
                         <div className="bg-white rounded-lg p-2 sm:p-3 border border-blue-200">
                           <dt className="text-xs font-medium text-gray-500 mb-1">Key Access Objects</dt>
-                          <dd className="text-base sm:text-lg font-bold text-gray-900">{resource.ztdf?.payload?.keyAccessObjects?.length || 0}</dd>
+                          <dd className="text-base sm:text-lg font-bold text-gray-900">{resource.ztdf?.kaoCount || 0}</dd>
                         </div>
                         <div className="bg-white rounded-lg p-2 sm:p-3 border border-blue-200">
                           <dt className="text-xs font-medium text-gray-500 mb-1">Content Type</dt>
-                          <dd className="text-xs sm:text-sm font-semibold text-gray-900">{resource.ztdf?.manifest?.contentType || 'N/A'}</dd>
+                          <dd className="text-xs sm:text-sm font-semibold text-gray-900">{resource.ztdf?.contentType || 'N/A'}</dd>
                         </div>
                       </div>
 

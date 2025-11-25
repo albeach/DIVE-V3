@@ -368,8 +368,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (isOnHome || isOnLogin || isOnCustomLogin) {
                     return true;
                 }
-                // Redirect to /login (not /auth/signin)
-                return Response.redirect(new URL("/login", nextUrl));
+                // Redirect to landing page (/) for IdP selection
+                // This provides a better UX than showing an intermediate login page
+                return Response.redirect(new URL("/", nextUrl));
             }
 
             return true;

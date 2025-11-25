@@ -4,11 +4,14 @@
 tunnel: f8e6c558-847b-4952-b8b2-27f98a85e36c
 credentials-file: /etc/cloudflared/tunnel-credentials.json
 
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
+protocol: http2
+
 # Metrics for monitoring
 metrics: 0.0.0.0:9126
 
 ingress:
-  # USA Frontend (Next.js) - connects via Docker network
+  # USA Frontend (Next.js dev server with HTTPS)
   - hostname: usa-app.dive25.com
     service: https://frontend:3000
     originRequest:
@@ -37,4 +40,3 @@ ingress:
   
   # Catch-all rule (required)
   - service: http_status:404
-

@@ -73,15 +73,15 @@ export async function GET(
         headers.set('Content-Type', 'application/zip');
         headers.set(
             'Content-Disposition',
-            backendResponse.headers.get('content-disposition') || `attachment; filename="${id}.ztdf"`
+            backendResponse.headers.get('content-disposition') || `attachment; filename="${resourceId}.ztdf"`
         );
         headers.set('Content-Length', zipBuffer.byteLength.toString());
-        
+
         // Forward ZTDF metadata headers
         const ztdfSpecVersion = backendResponse.headers.get('x-ztdf-spec-version');
         const ztdfHash = backendResponse.headers.get('x-ztdf-hash');
         const exportTimestamp = backendResponse.headers.get('x-export-timestamp');
-        
+
         if (ztdfSpecVersion) headers.set('X-ZTDF-Spec-Version', ztdfSpecVersion);
         if (ztdfHash) headers.set('X-ZTDF-Hash', ztdfHash);
         if (exportTimestamp) headers.set('X-Export-Timestamp', exportTimestamp);
@@ -95,8 +95,8 @@ export async function GET(
     } catch (error) {
         console.error('ZTDF download proxy error:', error);
         return NextResponse.json(
-            { 
-                error: 'Internal Server Error', 
+            {
+                error: 'Internal Server Error',
                 message: 'Failed to download ZTDF file',
                 details: error instanceof Error ? error.message : String(error)
             },
