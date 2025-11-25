@@ -46,8 +46,12 @@ warm_up_instance() {
     while [ $attempt -le $MAX_RETRIES ]; do
         echo -e "  Attempt $attempt/$MAX_RETRIES: Hitting $url..."
         
-        # Try to fetch the page
-        http_code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time $TIMEOUT "$url" 2>/dev/null || echo "000")
+        # Try to fetch the page (with cache-busting headers)
+        cache_buster="?_=$(date +%s)"
+        http_code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time $TIMEOUT \
+            -H "Cache-Control: no-cache, no-store" \
+            -H "Pragma: no-cache" \
+            "${url}${cache_buster}" 2>/dev/null || echo "000")
         
         if [ "$http_code" = "200" ]; then
             echo -e "  ${GREEN}✓${NC} ${name} is ready! (HTTP $http_code)"
@@ -75,14 +79,20 @@ warm_up_instance() {
 
 # Function to verify all instances are healthy
 verify_all_healthy() {
-    echo -e "\n${BLUE}━━━ Final Verification ━━━${NC}\n"
+    echo -e "\n${BLUE}━━━ Final Verification (with cache bypass) ━━━${NC}\n"
     
     local all_healthy=true
     
     for instance in "${INSTANCES[@]}"; do
         IFS='|' read -r name url <<< "$instance"
         
-        http_code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+        # Use cache-busting to ensure fresh response
+        cache_buster="?verify=$(date +%s%N)"
+        http_code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 15 \
+            -H "Cache-Control: no-cache, no-store, must-revalidate" \
+            -H "Pragma: no-cache" \
+            -H "Expires: 0" \
+            "${url}${cache_buster}" 2>/dev/null || echo "000")
         
         if [ "$http_code" = "200" ]; then
             echo -e "${GREEN}✓${NC} ${name}: Ready (HTTP $http_code)"
@@ -118,6 +128,11 @@ done
 
 # Wait for all warm-ups to complete
 wait
+
+# Wait for Cloudflare cache to expire (502 errors are cached for ~30s)
+echo -e "\n${BLUE}▸${NC} Waiting 35s for Cloudflare cache to clear..."
+echo -e "  (Cloudflare caches 502 errors for ~30 seconds)"
+sleep 35
 
 # Final verification
 verify_all_healthy
