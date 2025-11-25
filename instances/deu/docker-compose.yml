@@ -202,6 +202,7 @@ services:
       CORS_ALLOWED_ORIGINS: https://deu-app.dive25.com,https://deu-api.dive25.com
       # SSL
       SSL_CERT_PATH: /app/certs
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
     ports:
       - "4002:4000"
     volumes:

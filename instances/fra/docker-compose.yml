@@ -202,6 +202,7 @@ services:
       CORS_ALLOWED_ORIGINS: https://fra-app.dive25.com,https://fra-api.dive25.com
       # SSL
       SSL_CERT_PATH: /app/certs
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
     ports:
       - "4001:4000"
     volumes:
