@@ -12,7 +12,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-[#001a1f] via-[#003844] to-[#005a6b]">
+    <div className="min-h-screen relative overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
       {/* Digital Grid Background */}
       <div className="absolute inset-0 opacity-20">
         <div className="absolute inset-0" style={{
@@ -87,7 +87,7 @@ export default async function Home() {
           {/* Main content card with glassmorphism */}
           <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 overflow-hidden animate-fade-in-up">
             {/* Header section with logo */}
-            <div className="relative bg-gradient-to-br from-[#001a1f] via-[#003844] to-[#005a6b] px-8 py-8 overflow-hidden">
+            <div className="relative px-8 py-8 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
               {/* Digital Grid Pattern */}
               <div className="absolute inset-0 opacity-30" style={{
                 backgroundImage: `
