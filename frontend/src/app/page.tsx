@@ -2,7 +2,13 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { IdpSelector } from "@/components/auth/idp-selector";
 import { Globe2, Target, Shield, MapPin, Users, Lock } from "lucide-react";
-import { InstanceHeroBadge, IdpSectionHeader } from "@/components/ui/instance-hero-badge";
+import { 
+  InstanceHeroBadge, 
+  IdpSectionHeader, 
+  CoalitionPartnersFooter,
+  LocalizedFeatureBadges,
+  LocalizedPilotCapabilities 
+} from "@/components/ui/instance-hero-badge";
 
 export default async function Home() {
   const session = await auth();
@@ -87,8 +93,8 @@ export default async function Home() {
         <div className="max-w-6xl w-full">
           {/* Main content card with glassmorphism */}
           <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 overflow-hidden animate-fade-in-up">
-            {/* Header section with logo */}
-            <div className="relative px-8 py-8 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
+            {/* Header section with logo - Compact version */}
+            <div className="relative px-6 py-5 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
               {/* Digital Grid Pattern */}
               <div className="absolute inset-0 opacity-30" style={{
                 backgroundImage: `
@@ -141,8 +147,8 @@ export default async function Home() {
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#79d85a] to-transparent animate-shimmer"></div>
               <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#79d85a] to-transparent animate-shimmer" style={{ animationDelay: '1s' }}></div>
               
-              {/* Flexbox Layout: Logo Left, Content Right */}
-              <div className="relative flex flex-col md:flex-row items-center gap-6 md:gap-8">
+              {/* Flexbox Layout: Logo Left, Content Right - Compact */}
+              <div className="relative flex flex-col md:flex-row items-center gap-4 md:gap-6">
                 {/* Logo */}
                 <div className="flex-shrink-0 animate-scale-in">
                   <div className="relative inline-block">
@@ -157,37 +163,27 @@ export default async function Home() {
                   </div>
                 </div>
 
-                {/* Content */}
+                {/* Content - Compact */}
                 <div className="flex-1 text-center md:text-left animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                   {/* Instance Badge with Flag */}
-                  <div className="mb-4">
+                  <div className="mb-2">
                     <InstanceHeroBadge size="lg" className="justify-center md:justify-start" />
                   </div>
                   
-                  <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 tracking-tight">
+                  <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-1 tracking-tight">
                     DIVE V3
                   </h1>
-                  <div className="inline-block px-4 py-2 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 mb-3">
-                    <p className="text-base md:text-lg text-white font-semibold">
+                  <div className="inline-block px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 mb-2">
+                    <p className="text-sm md:text-base text-white font-semibold">
                       Digital Interoperability Verification Experiment
                     </p>
                   </div>
-                  <p className="text-white/90 text-sm md:text-base leading-relaxed mb-4">
+                  <p className="text-white/90 text-xs md:text-sm leading-relaxed mb-2">
                     Coalition Identity & Access Management Platform
                   </p>
                   
-                  {/* Feature badges */}
-                  <div className="flex flex-wrap justify-center md:justify-start gap-2">
-                    <span className="px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-xs md:text-sm text-white border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
-                      🔐 Federated Authentication
-                    </span>
-                    <span className="px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-xs md:text-sm text-white border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
-                      🛡️ Policy-Driven Authorization
-                    </span>
-                    <span className="px-3 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-xs md:text-sm text-white border border-white/20 hover:bg-white/20 transition-all duration-300 hover:scale-105">
-                      📄 Secure Document Sharing
-                    </span>
-                  </div>
+                  {/* Localized Feature badges */}
+                  <LocalizedFeatureBadges />
                 </div>
               </div>
             </div>
@@ -203,12 +199,7 @@ export default async function Home() {
 
               {/* Features grid - Compact version with animated icons */}
               <div className="border-t border-gray-200 pt-8 mt-8 animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
-                <div className="text-center mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                    Pilot Capabilities
-                  </h3>
-                  <div className="inline-block w-20 h-0.5 bg-gradient-to-r from-[#009ab3] to-[#79d85a] rounded-full"></div>
-                </div>
+                <LocalizedPilotCapabilities />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {[
                     { Icon: Globe2, title: "Multi-IdP Federation", desc: "Seamless authentication across USA/NATO partners", color: "from-blue-500/5 to-cyan-500/5", accent: "#009ab3", iconColor: "text-[#009ab3]" },
@@ -277,28 +268,13 @@ export default async function Home() {
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="text-center mt-12 pt-8 border-t border-gray-100 animate-fade-in-up" style={{ animationDelay: '1.5s' }}>
-                <div className="flex items-center justify-center gap-3 text-sm text-gray-500">
-                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-[#009ab3] to-[#79d85a] text-white rounded-full font-semibold">
-                    <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                    LIVE
-                  </span>
-                  <span>•</span>
-                  <span>DIVE V3 Coalition Pilot</span>
-                  <span>•</span>
-                  <span>October 2025</span>
-                </div>
+              {/* Footer with Coalition Partners */}
+              <div className="mt-12 pt-8 border-t border-gray-100 animate-fade-in-up" style={{ animationDelay: '1.5s' }}>
+                <CoalitionPartnersFooter />
               </div>
             </div>
           </div>
-
-          {/* Bottom accent */}
-          <div className="mt-4 text-center">
-            <p className="text-white/60 text-xs">
-              Powered by Keycloak • Open Policy Agent • Next.js
-            </p>
-          </div>
+        </div>
         </div>
       </div>
     </div>
