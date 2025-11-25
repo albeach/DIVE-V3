@@ -51,3 +51,14 @@ output "issuer" {
   value       = "${var.idp_url}/realms/${var.realm_name}"
 }
 
+output "incoming_federation_clients" {
+  description = "Client IDs and secrets for incoming federation (partners use these to federate TO this instance)"
+  value = {
+    for k, v in keycloak_openid_client.incoming_federation : k => {
+      client_id     = v.client_id
+      client_secret = v.client_secret
+    }
+  }
+  sensitive = true
+}
+

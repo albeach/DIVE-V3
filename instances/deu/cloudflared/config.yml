@@ -8,13 +8,15 @@
 tunnel: 2856308e-2467-495d-b735-6f588140c387
 credentials-file: /etc/cloudflared/credentials.json
 
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
+protocol: http2
+
 ingress:
-  # Frontend
+  # Frontend (Next.js dev server with HTTPS)
   - hostname: deu-app.dive25.com
     service: https://frontend-deu:3000
     originRequest:
       noTLSVerify: true
-      http2Origin: true
 
   # Backend API
   - hostname: deu-api.dive25.com

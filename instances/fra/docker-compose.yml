@@ -290,7 +290,10 @@ services:
       - dive-fra-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "cloudflared", "tunnel", "info"]
+      # Zero Trust: Verify tunnel has active connections to Cloudflare edge
+      # localhost:9126/metrics is container-local loopback only - acceptable per Zero Trust
+      test: ["CMD-SHELL", "pgrep cloudflared && wget -q -O- http://127.0.0.1:9126/metrics 2>/dev/null | grep -q 'cloudflared_tunnel_active_streams' || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
