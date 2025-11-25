@@ -1,23 +1,114 @@
-/* Germany Custom Colors - Black, Red, Yellow */
+/**
+ * Germany Keycloak Theme
+ * Auto-generated from instance.json
+ * 
+ * Primary: #000000
+ * Secondary: #DD0000
+ * Accent: #FFCC00
+ */
 
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #000000;
+    --instance-secondary: #DD0000;
+    --instance-accent: #FFCC00;
+    --instance-primary-rgb: 0, 0, 0;
+    --instance-secondary-rgb: 221, 0, 0;
+}
+
+/* Background gradient */
 .dive-background {
-    background: linear-gradient(135deg, #000000 0%, #DD0000 50%, #FFCE00 100%);
+    background: linear-gradient(135deg, #000000 0%, #DD0000 50%, #FFCC00 100%);
 }
 
+/* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #000000 0%, #DD0000 100%);
+    background: linear-gradient(135deg, #000000 0%, #DD0000 50%, #FFCC00 100%);
+    transition: all 0.3s ease;
 }
 
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
 .dive-header h1 {
+    color: #000000;
+}
+
+.dive-header .logo {
+    border-color: #000000;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: #000000;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: #000000;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: #000000;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #000000;
+}
+
+.dive-link:hover {
     color: #DD0000;
 }
 
-.dive-input:focus {
-    border-color: #DD0000;
-    box-shadow: 0 0 0 3px rgba(221, 0, 0, 0.1);
+/* Accent elements */
+.dive-accent {
+    color: #FFCC00;
 }
 
-.dive-social-link:hover {
-    border-color: #DD0000;
+.dive-accent-bg {
+    background-color: #FFCC00;
 }
 
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(0, 0, 0, 0.1);
+    border: 1px solid #000000;
+    color: #000000;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #000000;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #000000;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #000000 0%, #DD0000 50%, #FFCC00 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #000000;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #000000;
+}
+
+.dive-footer a:hover {
+    color: #DD0000;
+}

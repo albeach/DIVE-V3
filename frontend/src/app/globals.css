@@ -14,6 +14,33 @@
         
         /* Monospace font stack - for code/technical content */
         --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+        /* ============================================ */
+        /* Instance Theme CSS Variables */
+        /* These are dynamically injected by ThemeProvider */
+        /* Default values below for USA instance */
+        /* ============================================ */
+        
+        /* Primary instance colors */
+        --instance-primary: #1a365d;
+        --instance-secondary: #2b6cb0;
+        --instance-accent: #3182ce;
+        --instance-text: #ffffff;
+        
+        /* RGB versions for alpha compositing */
+        --instance-primary-rgb: 26, 54, 93;
+        --instance-secondary-rgb: 43, 108, 176;
+        --instance-accent-rgb: 49, 130, 206;
+        
+        /* Gradient backgrounds */
+        --instance-banner-bg: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+        --instance-hero-bg: linear-gradient(135deg, rgba(26, 54, 93, 0.95) 0%, rgba(43, 108, 176, 0.9) 100%);
+        
+        /* Semantic colors derived from instance colors */
+        --instance-button-bg: var(--instance-primary);
+        --instance-button-hover: var(--instance-secondary);
+        --instance-link: var(--instance-accent);
+        --instance-border: var(--instance-primary);
     }
 
     body {
