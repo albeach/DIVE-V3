@@ -79,25 +79,37 @@ warm_up_instance() {
 
 # Function to verify all instances are healthy
 verify_all_healthy() {
-    echo -e "\n${BLUE}━━━ Final Verification (with cache bypass) ━━━${NC}\n"
+    echo -e "\n${BLUE}━━━ Final Verification ━━━${NC}\n"
     
     local all_healthy=true
+    local retry_count=3
     
     for instance in "${INSTANCES[@]}"; do
         IFS='|' read -r name url <<< "$instance"
+        local success=false
         
-        # Use cache-busting to ensure fresh response
-        cache_buster="?verify=$(date +%s%N)"
-        http_code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 15 \
-            -H "Cache-Control: no-cache, no-store, must-revalidate" \
-            -H "Pragma: no-cache" \
-            -H "Expires: 0" \
-            "${url}${cache_buster}" 2>/dev/null || echo "000")
+        for attempt in $(seq 1 $retry_count); do
+            # Use unique cache-busting query string
+            cache_buster="?verify_$(date +%s%N)_${RANDOM}"
+            http_code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 15 \
+                -H "Cache-Control: no-cache, no-store, must-revalidate" \
+                -H "Pragma: no-cache" \
+                -H "Expires: 0" \
+                "${url}${cache_buster}" 2>/dev/null || echo "000")
+            
+            if [ "$http_code" = "200" ]; then
+                echo -e "${GREEN}✓${NC} ${name}: Ready (HTTP $http_code)"
+                success=true
+                break
+            else
+                if [ $attempt -lt $retry_count ]; then
+                    sleep 2
+                fi
+            fi
+        done
         
-        if [ "$http_code" = "200" ]; then
-            echo -e "${GREEN}✓${NC} ${name}: Ready (HTTP $http_code)"
-        else
-            echo -e "${RED}✗${NC} ${name}: Not ready (HTTP $http_code)"
+        if [ "$success" = false ]; then
+            echo -e "${RED}✗${NC} ${name}: Not ready (HTTP $http_code after $retry_count attempts)"
             all_healthy=false
         fi
     done
