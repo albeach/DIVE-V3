@@ -171,7 +171,7 @@ echo ""
 
 # Step counter
 STEP=0
-TOTAL_STEPS=7
+TOTAL_STEPS=9
 
 # ============================================================================
 # Step 1: Generate Certificates
@@ -440,13 +440,18 @@ services:
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-${COUNTRY_CODE}:8443
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # NextAuth.js Database Adapter - CRITICAL for session persistence
+      DATABASE_URL: postgresql://keycloak:keycloak@postgres-${COUNTRY_CODE}:5432/dive_v3_app
     ports:
       - "${FRONTEND_PORT}:3000"
     volumes:
       - ./frontend:/app
       - ./keycloak/certs:/opt/app/certs:ro
     depends_on:
-      - backend-${COUNTRY_CODE}
+      postgres-${COUNTRY_CODE}:
+        condition: service_healthy
+      backend-${COUNTRY_CODE}:
+        condition: service_started
     networks:
       - dive-${COUNTRY_CODE}-network
     healthcheck:
@@ -547,6 +552,77 @@ sleep 30
 echo -e "${GREEN}✓ Docker services started${NC}"
 
 # ============================================================================
+# Step 5b: Initialize NextAuth Database Schema
+# ============================================================================
+echo -e "${CYAN}[${STEP}/${TOTAL_STEPS}] Initializing NextAuth database schema...${NC}"
+
+POSTGRES_CONTAINER="dive-v3-postgres-${COUNTRY_CODE}"
+
+# Wait for PostgreSQL to be ready
+echo "  Waiting for PostgreSQL to be ready..."
+for i in {1..30}; do
+  if docker exec "$POSTGRES_CONTAINER" pg_isready -U keycloak > /dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
+# Create the NextAuth app database (separate from Keycloak's database)
+echo "  Creating NextAuth application database..."
+docker exec "$POSTGRES_CONTAINER" psql -U keycloak -c "CREATE DATABASE dive_v3_app;" 2>/dev/null || echo "    (database may already exist)"
+
+# Create NextAuth schema tables
+echo "  Creating NextAuth schema tables..."
+docker exec "$POSTGRES_CONTAINER" psql -U keycloak -d dive_v3_app << 'ENDSQL' 2>/dev/null
+-- NextAuth.js Drizzle Adapter Schema
+-- Required for session persistence and account linking
+
+CREATE TABLE IF NOT EXISTS "user" (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT,
+    email TEXT,
+    "emailVerified" TIMESTAMP,
+    image TEXT
+);
+
+CREATE TABLE IF NOT EXISTS account (
+    "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    "providerAccountId" TEXT NOT NULL,
+    refresh_token TEXT,
+    access_token TEXT,
+    expires_at INTEGER,
+    token_type TEXT,
+    scope TEXT,
+    id_token TEXT,
+    session_state TEXT,
+    PRIMARY KEY (provider, "providerAccountId")
+);
+
+CREATE TABLE IF NOT EXISTS session (
+    "sessionToken" TEXT PRIMARY KEY NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    expires TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "verificationToken" (
+    identifier TEXT NOT NULL,
+    token TEXT NOT NULL,
+    expires TIMESTAMP NOT NULL,
+    PRIMARY KEY (identifier, token)
+);
+ENDSQL
+
+# Verify tables were created
+TABLE_COUNT=$(docker exec "$POSTGRES_CONTAINER" psql -U keycloak -d dive_v3_app -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null | tr -d ' ')
+if [[ "$TABLE_COUNT" -ge 4 ]]; then
+  echo -e "${GREEN}✓ NextAuth database schema initialized (${TABLE_COUNT} tables)${NC}"
+else
+  echo -e "${YELLOW}⚠ NextAuth schema may be incomplete (${TABLE_COUNT} tables found)${NC}"
+fi
+
+# ============================================================================
 # Step 6: Sync Keycloak Realm (Non-primary only)
 # ============================================================================
 ((STEP++))
@@ -595,6 +671,92 @@ if [[ "$SKIP_TUNNEL" == "false" && -f "$TUNNEL_CONFIG" ]]; then
   fi
 else
   echo -e "${YELLOW}[${STEP}/${TOTAL_STEPS}] Skipping tunnel start${NC}"
+fi
+
+# ============================================================================
+# Step 8: Synchronize Federation Client Secrets
+# ============================================================================
+((STEP++))
+if [[ "$SKIP_SYNC" == "false" && "$IS_PRIMARY" == "false" ]]; then
+  echo -e "${CYAN}[${STEP}/${TOTAL_STEPS}] Synchronizing federation client secrets...${NC}"
+  
+  # Get admin token for this instance
+  LOCAL_TOKEN=$(curl -sk -X POST "https://localhost:${KEYCLOAK_HTTPS_PORT}/realms/master/protocol/openid-connect/token" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "username=admin" \
+    -d "password=admin" \
+    -d "grant_type=password" \
+    -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+  
+  if [[ -n "$LOCAL_TOKEN" && "$LOCAL_TOKEN" != "null" ]]; then
+    echo "  ✓ Got local admin token"
+    
+    # Create incoming federation clients for other instances to connect to this one
+    for PARTNER in usa fra deu gbr; do
+      if [[ "$PARTNER" != "$COUNTRY_CODE" ]]; then
+        PARTNER_UPPER=$(echo "$PARTNER" | tr '[:lower:]' '[:upper:]')
+        CLIENT_ID="dive-v3-${PARTNER}-federation"
+        
+        # Check if client already exists
+        CLIENT_EXISTS=$(curl -sk "https://localhost:${KEYCLOAK_HTTPS_PORT}/admin/realms/dive-v3-broker/clients?clientId=${CLIENT_ID}" \
+          -H "Authorization: Bearer $LOCAL_TOKEN" 2>/dev/null | grep -c "\"id\"")
+        
+        if [[ "$CLIENT_EXISTS" -eq 0 ]]; then
+          echo "  Creating federation client for ${PARTNER_UPPER}..."
+          
+          # Determine partner's IdP URL
+          case "$PARTNER" in
+            usa) PARTNER_IDP="https://usa-idp.dive25.com" ;;
+            fra) PARTNER_IDP="https://fra-idp.dive25.com" ;;
+            deu) PARTNER_IDP="https://deu-idp.prosecurity.biz" ;;
+            gbr) PARTNER_IDP="https://gbr-idp.dive25.com" ;;
+          esac
+          
+          CLIENT_JSON="{
+            \"clientId\": \"${CLIENT_ID}\",
+            \"name\": \"Federation Client - ${PARTNER_UPPER}\",
+            \"enabled\": true,
+            \"protocol\": \"openid-connect\",
+            \"publicClient\": false,
+            \"standardFlowEnabled\": true,
+            \"implicitFlowEnabled\": false,
+            \"directAccessGrantsEnabled\": false,
+            \"serviceAccountsEnabled\": false,
+            \"redirectUris\": [
+              \"${PARTNER_IDP}/realms/dive-v3-broker/broker/${COUNTRY_CODE}-federation/endpoint\",
+              \"${PARTNER_IDP}/realms/dive-v3-broker/broker/${COUNTRY_CODE}-federation/endpoint/*\"
+            ],
+            \"webOrigins\": [\"${PARTNER_IDP}\"],
+            \"attributes\": {
+              \"access.token.lifespan\": \"300\"
+            }
+          }"
+          
+          HTTP_CODE=$(curl -sk -w "%{http_code}" -o /dev/null -X POST \
+            "https://localhost:${KEYCLOAK_HTTPS_PORT}/admin/realms/dive-v3-broker/clients" \
+            -H "Authorization: Bearer $LOCAL_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$CLIENT_JSON" 2>/dev/null)
+          
+          if [[ "$HTTP_CODE" == "201" ]]; then
+            echo -e "    ${GREEN}✓ Created ${CLIENT_ID}${NC}"
+          else
+            echo -e "    ${YELLOW}⚠ Failed to create ${CLIENT_ID} (HTTP ${HTTP_CODE})${NC}"
+          fi
+        else
+          echo "  ✓ Federation client for ${PARTNER_UPPER} already exists"
+        fi
+      fi
+    done
+    
+    echo -e "${GREEN}✓ Federation clients configured${NC}"
+    echo -e "${YELLOW}⚠ Note: You must manually sync client secrets with partner instances${NC}"
+    echo "  Run: ./scripts/sync-federation-secrets.sh ${COUNTRY_CODE}"
+  else
+    echo -e "${YELLOW}⚠ Could not get admin token, skipping federation setup${NC}"
+  fi
+else
+  echo -e "${YELLOW}[${STEP}/${TOTAL_STEPS}] Skipping federation client setup (primary instance)${NC}"
 fi
 
 # ============================================================================
