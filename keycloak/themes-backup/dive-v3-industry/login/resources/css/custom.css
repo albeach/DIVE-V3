@@ -1,0 +1,23 @@
+/* Industry Custom Colors - Professional Blue/Purple */
+
+.dive-background {
+    background: linear-gradient(135deg, #1E3A8A 0%, #7C3AED 100%);
+}
+
+.dive-button-primary {
+    background: linear-gradient(135deg, #1E3A8A 0%, #7C3AED 100%);
+}
+
+.dive-header h1 {
+    color: #1E3A8A;
+}
+
+.dive-input:focus {
+    border-color: #7C3AED;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.dive-social-link:hover {
+    border-color: #7C3AED;
+}
+

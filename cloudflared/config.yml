@@ -1,0 +1,40 @@
+# Cloudflare Tunnel Configuration for DIVE V3
+# This runs inside a Docker container and connects to services via Docker network
+
+tunnel: f8e6c558-847b-4952-b8b2-27f98a85e36c
+credentials-file: /etc/cloudflared/tunnel-credentials.json
+
+# Metrics for monitoring
+metrics: 0.0.0.0:9126
+
+ingress:
+  # USA Frontend (Next.js) - connects via Docker network
+  - hostname: usa-app.dive25.com
+    service: https://frontend:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+  
+  # USA Backend API - connects via Docker network
+  - hostname: usa-api.dive25.com
+    service: https://backend:4000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+  
+  # USA Keycloak IdP - connects via Docker network
+  - hostname: usa-idp.dive25.com
+    service: https://keycloak:8443
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+  
+  # USA KAS - connects via Docker network
+  - hostname: usa-kas.dive25.com
+    service: http://kas:8080
+    originRequest:
+      connectTimeout: 30s
+  
+  # Catch-all rule (required)
+  - service: http_status:404
+

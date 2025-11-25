@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+import { getFlagComponent } from "../ui/flags";
 
 /**
  * IdP Selector Component - Dynamic with Enable/Disable Support
@@ -10,6 +11,9 @@ import { useEffect, useState, useRef } from "react";
  * When admin enables/disables IdPs, this list updates automatically.
  * 
  * 🥚 EASTER EGG: Super Admin access hidden behind secret triggers
+ * 
+ * ✅ SECURITY: Uses local SVG flags only - no external CDN dependencies
+ * This ensures CSP compliance and works in air-gapped environments
  */
 
 interface IdPOption {
@@ -19,57 +23,54 @@ interface IdPOption {
   enabled: boolean;
 }
 
-// Flag mapping for known IdPs
-// Returns emoji flag OR Twemoji CDN fallback for better cross-platform rendering
-const getFlagForIdP = (alias: string): { emoji: string; code: string } => {
-  // Match specific patterns (order matters - check specific before generic)
-  if (alias.includes('germany') || alias.includes('deu')) return { emoji: '🇩🇪', code: 'DE' };
-  if (alias.includes('france') || alias.includes('fra')) return { emoji: '🇫🇷', code: 'FR' };
-  if (alias.includes('canada') || alias.includes('can')) return { emoji: '🇨🇦', code: 'CA' };
-  if (alias.includes('uk') || alias.includes('gbr')) return { emoji: '🇬🇧', code: 'GB' };
-  if (alias.includes('italy') || alias.includes('ita')) return { emoji: '🇮🇹', code: 'IT' };
-  if (alias.includes('spain') || alias.includes('esp')) return { emoji: '🇪🇸', code: 'ES' };
-  if (alias.includes('poland') || alias.includes('pol')) return { emoji: '🇵🇱', code: 'PL' };
-  if (alias.includes('netherlands') || alias.includes('nld')) return { emoji: '🇳🇱', code: 'NL' };
-  if (alias.includes('industry') || alias.includes('contractor')) return { emoji: '🏢', code: '' };
-  // Check for US last (since "industry" doesn't contain "us")
-  if (alias.includes('usa') || alias.includes('us-') || alias.includes('dod') || alias.includes('-us')) return { emoji: '🇺🇸', code: 'US' };
-  
-  return { emoji: '🌐', code: '' }; // Default globe icon
+/**
+ * FlagIcon Component - Uses local SVG flags for CSP compliance
+ * 
+ * BEST PRACTICE: No external image loading, no CDN fallbacks
+ * All flags are self-contained SVG components from flags.tsx
+ */
+const FlagIcon = ({ alias, size = 48 }: { alias: string; size?: number }) => {
+  const FlagComponent = getFlagComponent(alias);
+  return <FlagComponent size={size} className="inline-block" />;
 };
 
-// Component to render flag with fallback
-const FlagIcon = ({ alias }: { alias: string }) => {
-  const flag = getFlagForIdP(alias);
+/**
+ * StatusIndicator - Subtle stoplight-style status dot
+ * 
+ * Classic traffic light metaphor:
+ * - Green: Active/Online
+ * - Yellow: Degraded/Warning  
+ * - Red: Offline/Error
+ */
+const StatusIndicator = ({ status = 'active' }: { status?: 'active' | 'warning' | 'offline' }) => {
+  const colors = {
+    active: {
+      bg: 'bg-emerald-500',
+      glow: 'shadow-emerald-500/50',
+      ring: 'ring-emerald-400/30',
+    },
+    warning: {
+      bg: 'bg-amber-500',
+      glow: 'shadow-amber-500/50',
+      ring: 'ring-amber-400/30',
+    },
+    offline: {
+      bg: 'bg-red-500',
+      glow: 'shadow-red-500/50',
+      ring: 'ring-red-400/30',
+    },
+  };
+
+  const c = colors[status];
   
-  // If country code exists, use Twemoji CDN as fallback
-  if (flag.code) {
-    return (
-      <span className="inline-flex items-center justify-center">
-        {/* Try emoji first */}
-        <span className="emoji-flag" style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>
-          {flag.emoji}
-        </span>
-        {/* Fallback image (hidden by default, shows if emoji fails) */}
-        <img 
-          src={`https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/svg/${flag.code.toLowerCase()}-flag.svg`}
-          alt={`${flag.code} flag`}
-          className="hidden emoji-fallback w-6 h-6"
-          onError={(e) => {
-            // If emoji AND image fail, try generic Twemoji CDN path
-            const countryCode = flag.code.toLowerCase();
-            const codepoints = [...countryCode].map(c => 
-              (c.charCodeAt(0) + 0x1F1A5).toString(16)
-            ).join('-');
-            (e.target as HTMLImageElement).src = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codepoints}.svg`;
-          }}
-        />
-      </span>
-    );
-  }
-  
-  // Non-country icons (industry, default)
-  return <span style={{ fontFamily: "'Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji', sans-serif" }}>{flag.emoji}</span>;
+  return (
+    <span className="relative flex h-3 w-3" title={status.charAt(0).toUpperCase() + status.slice(1)}>
+      {/* Outer pulse ring */}
+      <span className={`absolute inline-flex h-full w-full rounded-full ${c.bg} opacity-40 animate-ping`} />
+      {/* Inner solid dot with glow */}
+      <span className={`relative inline-flex h-3 w-3 rounded-full ${c.bg} shadow-lg ${c.glow} ring-2 ${c.ring}`} />
+    </span>
+  );
 };
 
 export function IdpSelector() {
@@ -101,7 +102,10 @@ export function IdpSelector() {
   const fetchEnabledIdPs = async () => {
     try {
       // Fetch public list of enabled IdPs from backend
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
+      // Use NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL (both should be set in docker-compose)
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 
+                        process.env.NEXT_PUBLIC_API_URL || 
+                        'https://localhost:4000';
       console.log('[IdP Selector] Fetching from:', `${backendUrl}/api/idps/public`);
       
       // Create abort controller for timeout
@@ -135,12 +139,15 @@ export function IdpSelector() {
       setError(errorMessage);
       
       // Fallback to hardcoded IdPs if fetch fails
+      // NOTE: No "Industry Partners" IdP - contractors authenticate via their nation's IdP
+      // with userType: contractor attribute. OPA policies handle authorization.
       console.warn('[IdP Selector] Using fallback IdPs');
       setIdps([
-        { alias: 'usa-realm-broker', displayName: 'United States (DoD)', protocol: 'oidc', enabled: true },
-        { alias: 'can-realm-broker', displayName: 'Canada (Forces canadiennes)', protocol: 'oidc', enabled: true },
-        { alias: 'fra-realm-broker', displayName: 'France (Ministère des Armées)', protocol: 'oidc', enabled: true },
-        { alias: 'industry-realm-broker', displayName: 'Industry Partners', protocol: 'oidc', enabled: true },
+        { alias: 'usa-realm-broker', displayName: 'United States', protocol: 'oidc', enabled: true },
+        { alias: 'can-realm-broker', displayName: 'Canada', protocol: 'oidc', enabled: true },
+        { alias: 'fra-realm-broker', displayName: 'France', protocol: 'oidc', enabled: true },
+        { alias: 'gbr-realm-broker', displayName: 'United Kingdom', protocol: 'oidc', enabled: true },
+        { alias: 'deu-realm-broker', displayName: 'Germany', protocol: 'oidc', enabled: true },
       ]);
     } finally {
       setLoading(false);
@@ -297,31 +304,34 @@ export function IdpSelector() {
 
   return (
     <>
-      {/* Federated Identity Providers */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {idps.map((idp) => (
+      {/* Federated Identity Providers - Compact View */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        {idps
+          // Filter out "Industry Partners" - contractors authenticate via their nation's IdP
+          // A Lockheed engineer uses USA IdP, a Thales employee uses France IdP, etc.
+          // Contractor status is an ATTRIBUTE (userType: contractor), not a separate IdP
+          .filter(idp => !idp.alias.toLowerCase().includes('industry'))
+          .map((idp) => (
           <button
             key={idp.alias}
             onClick={() => handleIdpClick(idp)}
-            className="group p-6 border-2 border-gray-200 rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left bg-gradient-to-br from-white to-gray-50"
+            className="group p-3 border-2 border-gray-200 rounded-xl hover:border-[#79d85a] hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 text-left bg-gradient-to-br from-white to-gray-50"
           >
-            <div className="flex items-center space-x-4">
-              <div className="text-5xl group-hover:scale-110 transition-transform duration-300">
-                <FlagIcon alias={idp.alias} />
+            <div className="flex items-center gap-3">
+              {/* Flag */}
+              <div className="flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
+                <FlagIcon alias={idp.alias} size={44} />
               </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
-                  {idp.displayName}
-                </h3>
-                <p className="text-xs text-gray-500 mt-1 font-medium">
-                  {idp.protocol.toUpperCase()} • {idp.alias}
-                </p>
-              </div>
-              <div className="flex-shrink-0">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-[#009ab3] to-[#79d85a] text-white text-xs font-bold rounded-full shadow-md">
-                  <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                  Active
-                </span>
+              
+              {/* Country Name + Status */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-semibold text-gray-900 group-hover:text-[#009ab3] transition-colors truncate">
+                    {/* Extract just the country name, remove parenthetical */}
+                    {idp.displayName.split('(')[0].trim()}
+                  </h3>
+                  <StatusIndicator status={idp.enabled ? 'active' : 'offline'} />
+                </div>
               </div>
             </div>
           </button>
@@ -497,8 +507,9 @@ export function IdpSelector() {
         </div>
       )}
 
-      <div className="mt-6 text-center text-sm text-gray-500">
-        <p>Showing {idps.length} federated identity provider{idps.length !== 1 ? 's' : ''}</p>
+      {/* Footer - show filtered count (excluding Industry IdP) */}
+      <div className="mt-4 text-center text-xs text-gray-400">
+        <p>{idps.filter(idp => !idp.alias.toLowerCase().includes('industry')).length} coalition partners</p>
       </div>
     </>
   );

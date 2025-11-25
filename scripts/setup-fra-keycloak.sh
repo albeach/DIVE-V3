@@ -490,3 +490,6 @@ cat > /tmp/fra-keycloak-config.json <<EOF
 EOF
 
 log_success "Configuration saved to /tmp/fra-keycloak-config.json"
+
+
+

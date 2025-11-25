@@ -344,3 +344,6 @@ else
     echo -e "${YELLOW}⚠️  Some services need attention${NC}"
     exit 1
 fi
+
+
+

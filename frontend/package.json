@@ -14,7 +14,7 @@
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
         "test:e2e": "playwright test",
-  "test:e2e:localhost": "BASE_URL=http://localhost:3000 playwright test",
+        "test:e2e:localhost": "BASE_URL=http://localhost:3000 playwright test",
         "test:e2e:ui": "playwright test --ui",
         "test:e2e:report": "playwright show-report",
         "test:e2e:debug": "playwright test --debug"
@@ -50,6 +50,7 @@
         "react-is": "^19.1.1",
         "reactflow": "^11.11.4",
         "recharts": "^3.2.1",
+        "spdy": "^4.0.2",
         "zod": "^4.1.12"
     },
     "devDependencies": {

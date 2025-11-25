@@ -443,3 +443,6 @@ else
   echo -e "${YELLOW}Note: Some failures may be expected without full system integration${NC}"
   exit 1
 fi
+
+
+

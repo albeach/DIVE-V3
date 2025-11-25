@@ -1,0 +1,915 @@
+/**
+ * DIVE V3 Custom Keycloak Theme
+ * 
+ * Glassmorphism design with split layout
+ * Based on custom Next.js login page
+ * 
+ * Author: DIVE V3 Team
+ * Date: October 31, 2025
+ */
+
+/* ============================================
+   CSS Reset & Base Styles
+   ============================================ */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.dive-body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ============================================
+   Background
+   ============================================ */
+
+.dive-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.dive-background-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    filter: blur(8px);
+}
+
+.dive-background-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.4));
+    opacity: 0.8;
+}
+
+/* ============================================
+   Main Container & Layout
+   ============================================ */
+
+.dive-container {
+    position: relative;
+    z-index: 10;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+}
+
+.dive-layout {
+    width: 100%;
+    max-width: 1400px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+    align-items: center;
+}
+
+@media (min-width: 1024px) {
+    .dive-layout {
+        grid-template-columns: 1fr 1fr;
+        gap: 4rem;
+    }
+}
+
+/* ============================================
+   Form Column (Left Side)
+   ============================================ */
+
+.dive-form-column {
+    width: 100%;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.dive-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-radius: 1.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    padding: 2.5rem 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+@media (min-width: 768px) {
+    .dive-card {
+        padding: 3rem 2.5rem;
+    }
+}
+
+/* ============================================
+   Logo
+   ============================================ */
+
+.dive-logo-container {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.dive-logo {
+    max-height: 96px;
+    max-width: 280px;
+    height: auto;
+    width: auto;
+    margin: 0 auto;
+    display: block;
+    object-fit: contain;
+}
+
+/* ============================================
+   Header & Title
+   ============================================ */
+
+.dive-header {
+    margin-bottom: 2rem;
+}
+
+.dive-header h1 {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: #667eea;
+    margin-bottom: 0.5rem;
+}
+
+.dive-realm-name {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-bottom: 1.5rem;
+}
+
+/* ============================================
+   Alert Messages
+   ============================================ */
+
+.dive-alert {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.dive-alert-success {
+    background-color: #d1fae5;
+    border: 1px solid #6ee7b7;
+    color: #065f46;
+}
+
+.dive-alert-warning {
+    background-color: #fef3c7;
+    border: 1px solid #fbbf24;
+    color: #92400e;
+}
+
+.dive-alert-error {
+    background-color: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #991b1b;
+}
+
+.dive-alert-info {
+    background-color: #dbeafe;
+    border: 1px solid #93c5fd;
+    color: #1e40af;
+}
+
+.dive-alert-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+}
+
+.dive-alert-text {
+    font-size: 0.875rem;
+    font-weight: 600;
+    flex: 1;
+}
+
+/* ============================================
+   Form Styles
+   ============================================ */
+
+.dive-form-content {
+    margin-top: 0;
+}
+
+.dive-form-group {
+    margin-bottom: 1.25rem;
+}
+
+.dive-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.dive-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    color: #111827;
+    background-color: #ffffff;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.dive-input:focus {
+    border-color: #667eea;
+    ring: 2px;
+    ring-color: rgba(102, 126, 234, 0.2);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.dive-input:disabled {
+    background-color: #f9fafb;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.dive-input::placeholder {
+    color: #9ca3af;
+}
+
+/* Password Field with Toggle */
+.dive-password-wrapper {
+    position: relative;
+}
+
+.dive-password-input {
+    padding-right: 3rem;
+}
+
+.dive-password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9ca3af;
+    transition: color 0.2s ease;
+    padding: 0.25rem;
+}
+
+.dive-password-toggle:hover {
+    color: #4b5563;
+}
+
+.dive-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.dive-hidden {
+    display: none;
+}
+
+/* ============================================
+   Form Options (Remember Me, Forgot Password)
+   ============================================ */
+
+.dive-form-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+}
+
+.dive-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dive-checkbox input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+}
+
+.dive-checkbox label {
+    color: #4b5563;
+    cursor: pointer;
+    margin: 0;
+}
+
+.dive-forgot-password a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.dive-forgot-password a:hover {
+    color: #5568d3;
+    text-decoration: underline;
+}
+
+/* ============================================
+   Buttons
+   ============================================ */
+
+.dive-form-buttons {
+    margin-top: 1.5rem;
+}
+
+.dive-button-primary {
+    width: 100%;
+    padding: 0.875rem 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.3);
+}
+
+.dive-button-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(102, 126, 234, 0.4);
+}
+
+.dive-button-primary:active {
+    transform: translateY(0);
+}
+
+.dive-button-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ============================================
+   Social Providers (IdP Brokers)
+   ============================================ */
+
+.dive-social-providers {
+    margin-top: 2rem;
+}
+
+.dive-divider {
+    border: 0;
+    height: 1px;
+    background: #e5e7eb;
+    margin: 1.5rem 0;
+}
+
+.dive-social-title {
+    font-size: 0.875rem;
+    color: #6b7280;
+    text-align: center;
+    margin-bottom: 1rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dive-social-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dive-social-item {
+    width: 100%;
+}
+
+.dive-social-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.875rem 1.5rem;
+    background-color: #ffffff;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.75rem;
+    color: #374151;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dive-social-link:hover {
+    border-color: #667eea;
+    background-color: #f9fafb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dive-social-link:active {
+    transform: translateY(0);
+}
+
+.dive-social-text {
+    font-size: 0.9375rem;
+}
+
+/* ============================================
+   Registration Link
+   ============================================ */
+
+.dive-registration {
+    margin-top: 1.5rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.dive-registration a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+
+.dive-registration a:hover {
+    color: #5568d3;
+    text-decoration: underline;
+}
+
+/* ============================================
+   Description Column (Right Side)
+   ============================================ */
+
+.dive-description-column {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .dive-description-column {
+        display: block;
+        color: #ffffff;
+    }
+}
+
+.dive-description-content {
+    max-width: 540px;
+}
+
+.dive-description-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+.dive-description-subtitle {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    opacity: 0.95;
+}
+
+.dive-description-text {
+    font-size: 1.125rem;
+    line-height: 1.7;
+    opacity: 0.9;
+    margin-bottom: 2rem;
+}
+
+/* ============================================
+   Features List
+   ============================================ */
+
+.dive-features {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dive-feature {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dive-feature-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+}
+
+.dive-feature-text {
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+/* ============================================
+   Error Messages
+   ============================================ */
+
+.dive-error {
+    display: block;
+    color: #dc2626;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    font-weight: 500;
+}
+
+/* ============================================
+   Responsive Adjustments
+   ============================================ */
+
+@media (max-width: 768px) {
+    .dive-container {
+        padding: 1rem 0.5rem;
+    }
+
+    .dive-card {
+        padding: 2rem 1.5rem;
+    }
+
+    .dive-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .dive-description-title {
+        font-size: 2rem;
+    }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+    20%, 40%, 60%, 80% { transform: translateX(10px); }
+}
+
+.dive-animate-shake {
+    animation: shake 0.5s ease-in-out;
+}
+
+/* ============================================
+   Accessibility
+   ============================================ */
+
+.dive-input:focus,
+.dive-button-primary:focus,
+.dive-social-link:focus,
+.dive-password-toggle:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ============================================
+   WebAuthn / Passkey Modern Styles (2025)
+   ============================================ */
+
+.dive-webauthn-info-card {
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border: 2px solid #667eea30;
+    border-radius: 1rem;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.dive-webauthn-icon-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 10px 25px -5px rgba(102, 126, 234, 0.4);
+}
+
+.dive-webauthn-icon {
+    width: 2rem;
+    height: 2rem;
+    color: #ffffff;
+}
+
+.dive-webauthn-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 0.75rem;
+}
+
+.dive-webauthn-description {
+    font-size: 0.9375rem;
+    color: #6b7280;
+    line-height: 1.6;
+}
+
+.dive-label-icon {
+    width: 1rem;
+    height: 1rem;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+    color: #667eea;
+}
+
+.dive-input-modern {
+    font-size: 1.0625rem;
+    padding: 1rem 1.25rem;
+    border: 2px solid #e5e7eb;
+    transition: all 0.3s ease;
+}
+
+.dive-input-modern:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+    transform: translateY(-1px);
+}
+
+.dive-input-hint {
+    font-size: 0.8125rem;
+    color: #9ca3af;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+.dive-button-hero {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 1.125rem 2rem;
+    font-size: 1.0625rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.dive-button-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.dive-button-hero:hover::before {
+    left: 100%;
+}
+
+.dive-button-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.dive-button-icon-small {
+    width: 1.125rem;
+    height: 1.125rem;
+}
+
+/* Modern Alert Styles */
+.dive-alert-modern {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+    border: 2px solid;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dive-alert-info {
+    background-color: #dbeafe;
+    border-color: #60a5fa;
+    color: #1e40af;
+}
+
+.dive-alert-error-modern {
+    background: linear-gradient(135deg, #fee2e220 0%, #fca5a520 100%);
+    border-color: #f87171;
+    color: #991b1b;
+}
+
+.dive-alert-icon-wrapper {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
+.dive-alert-icon-modern {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.dive-alert-icon-modern.spin {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.dive-alert-content-modern {
+    flex: 1;
+}
+
+.dive-alert-title-modern {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.dive-alert-message-modern {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    white-space: pre-line;
+    margin-top: 0.5rem;
+}
+
+.dive-alert-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.dive-button-secondary-modern {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    background-color: #ffffff;
+    border: 2px solid #667eea;
+    border-radius: 0.625rem;
+    color: #667eea;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dive-button-secondary-modern:hover {
+    background-color: #667eea;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.dive-link-modern {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9375rem;
+    transition: color 0.2s ease;
+}
+
+.dive-link-modern:hover {
+    color: #5568d3;
+    text-decoration: underline;
+}
+
+/* Help Section */
+.dive-help-section {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.dive-help-details {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+
+.dive-help-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.dive-help-summary::-webkit-details-marker {
+    display: none;
+}
+
+.dive-help-summary:hover {
+    color: #667eea;
+}
+
+.dive-help-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+}
+
+.dive-help-content {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+    color: #6b7280;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.dive-help-content h4 {
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.75rem;
+}
+
+.dive-help-content ul {
+    margin-left: 1.25rem;
+    margin-top: 0.5rem;
+}
+
+.dive-help-content li {
+    margin-bottom: 0.5rem;
+}
+
+.dive-help-content strong {
+    color: #374151;
+    font-weight: 600;
+}
+
+/* OTP Input Enhancement */
+#otp {
+    font-size: 1.5rem;
+    letter-spacing: 0.5rem;
+    text-align: center;
+    font-weight: 600;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+

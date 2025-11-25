@@ -96,6 +96,7 @@ Thumbs.db
 *.temp
 *.tmp
 /tmp/
+temp-ref/
 .cache/
 
 # Secrets and keys (CRITICAL - Never commit)
@@ -165,7 +166,16 @@ terraform/tfplan*
 /notes/
 /docs/notes/
 
+# Root doc/test archive
+docs/archive/
+
+# One-off scripts and test payloads
+test-download-simple.js
+test-opa-decision.json
+
 *.bak
 *.bak2
 # GitHub Actions Runner (installed on home server, not local)
 actions-runner/
+.env.cloudflare
+cloudflared/tunnel-credentials.json

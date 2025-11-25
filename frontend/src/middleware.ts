@@ -23,8 +23,9 @@ export function middleware(req: NextRequest) {
     const response = NextResponse.next();
 
     // Content Security Policy - Secure by default
+    // Read from environment variables (no hardcoded URLs)
     const keycloakBaseUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:4000';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
     
     // Optional: External analytics/monitoring (only in dev environments)
     const allowExternalAnalytics = process.env.NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS === 'true';
@@ -42,17 +43,33 @@ export function middleware(req: NextRequest) {
         scriptSrc.push('https://static.cloudflareinsights.com');
     }
 
-    const connectSrc = [
-        "'self'",
-        keycloakBaseUrl,
-        apiUrl,
-        'https://localhost:8443',
-        'https://localhost:4000',
-    ];
+    // Build connect-src from environment variables only
+    // Support both HTTP and HTTPS versions for local development
+    const connectSrc = ["'self'"];
+    
+    // Add Keycloak URL (both HTTP and HTTPS versions for local dev)
+    if (keycloakBaseUrl) {
+        connectSrc.push(keycloakBaseUrl);
+        if (keycloakBaseUrl.startsWith('https://')) {
+            connectSrc.push(keycloakBaseUrl.replace('https://', 'http://'));
+        } else if (keycloakBaseUrl.startsWith('http://')) {
+            connectSrc.push(keycloakBaseUrl.replace('http://', 'https://'));
+        }
+    }
+    
+    // Add API URL (both HTTP and HTTPS versions for local dev)
+    if (apiUrl) {
+        connectSrc.push(apiUrl);
+        if (apiUrl.startsWith('https://')) {
+            connectSrc.push(apiUrl.replace('https://', 'http://'));
+        } else if (apiUrl.startsWith('http://')) {
+            connectSrc.push(apiUrl.replace('http://', 'https://'));
+        }
+    }
 
     // Add optional external domains if configured
     if (externalDomains) {
-        connectSrc.push(...externalDomains.split(',').map(d => d.trim()));
+        connectSrc.push(...externalDomains.split(',').map(d => d.trim()).filter(Boolean));
     }
 
     const csp = [
