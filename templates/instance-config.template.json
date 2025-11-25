@@ -1,0 +1,36 @@
+{
+  "instance_code": "${INSTANCE_CODE}",
+  "instance_name": "${INSTANCE_NAME}",
+  "locale": "${LOCALE}",
+  "hostnames": {
+    "app": "${INSTANCE_CODE_LOWER}-app.dive25.com",
+    "api": "${INSTANCE_CODE_LOWER}-api.dive25.com",
+    "idp": "${INSTANCE_CODE_LOWER}-idp.dive25.com",
+    "kas": "${INSTANCE_CODE_LOWER}-kas.dive25.com"
+  },
+  "ports": {
+    "frontend": ${PORT_FRONTEND},
+    "backend": ${PORT_BACKEND},
+    "keycloak_http": ${PORT_KC_HTTP},
+    "keycloak_https": ${PORT_KC_HTTPS},
+    "mongodb": ${PORT_MONGODB},
+    "redis": ${PORT_REDIS},
+    "opa": ${PORT_OPA},
+    "kas": ${PORT_KAS},
+    "postgres": ${PORT_POSTGRES},
+    "cloudflared_metrics": ${PORT_CLOUDFLARED}
+  },
+  "theme": {
+    "primary_color": "${THEME_PRIMARY}",
+    "secondary_color": "${THEME_SECONDARY}",
+    "accent_color": "${THEME_ACCENT}",
+    "background_image": "${THEME_BACKGROUND}",
+    "keycloak_theme": "dive-v3-${INSTANCE_CODE_LOWER}"
+  },
+  "federation_partners": ${FEDERATION_PARTNERS},
+  "cloudflare": {
+    "tunnel_id": "${CLOUDFLARE_TUNNEL_ID}",
+    "tunnel_name": "${CLOUDFLARE_TUNNEL_NAME}"
+  }
+}
+
