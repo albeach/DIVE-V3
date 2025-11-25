@@ -59,3 +59,22 @@ variable "create_example_sp" {
   default     = false
 }
 
+# Cloudflare Tunnel URLs (ISO 3166-1 alpha-3 country code prefix)
+variable "cloudflare_app_url" {
+  description = "The Cloudflare tunnel URL for the frontend (e.g., https://usa-app.dive25.com)"
+  type        = string
+  default     = "https://usa-app.dive25.com"
+}
+
+variable "cloudflare_api_url" {
+  description = "The Cloudflare tunnel URL for the backend API (e.g., https://usa-api.dive25.com)"
+  type        = string
+  default     = "https://usa-api.dive25.com"
+}
+
+variable "cloudflare_idp_url" {
+  description = "The Cloudflare tunnel URL for Keycloak IdP (e.g., https://usa-idp.dive25.com)"
+  type        = string
+  default     = "https://usa-idp.dive25.com"
+}
+

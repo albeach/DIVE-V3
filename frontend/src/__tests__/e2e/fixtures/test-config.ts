@@ -96,7 +96,7 @@ export const URLS = {
    * Backend API base URL
    * HTTP for local development, HTTPS for CI/tunnel
    */
-  API_BASE: process.env.NEXT_PUBLIC_API_BASE_URL || (TEST_ENV.IS_CI ? 'https://dev-api.dive25.com' : 'http://localhost:4000'),
+  API_BASE: process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || (TEST_ENV.IS_CI ? 'https://dev-api.dive25.com' : 'http://localhost:4000'),
 
   /**
    * Keycloak base URL (for MFA flow detection)

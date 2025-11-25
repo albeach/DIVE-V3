@@ -1,431 +1,287 @@
-version: '3.8'
-
-# ============================================
-# DIVE V3 - France (FRA) Instance Stack
-# ============================================
-# This compose file deploys the complete FRA instance with:
-# - Isolated network (dive-fra-network)
-# - Dedicated service containers
-# - FRA-specific configuration
-# - Gap mitigations implemented
+# =============================================================================
+# DIVE V3 - FRA Instance (France)
+# CRITICAL: Uses isolated volumes for build isolation
+# =============================================================================
 
 services:
-  # ============================================
-  # Keycloak (FRA IdP)
-  # ============================================
-  keycloak-fra:
-    image: quay.io/keycloak/keycloak:26.0
-    container_name: dive-v3-keycloak-fra
-    hostname: keycloak-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.10
-    ports:
-      - "8543:8443"  # FRA uses different port to avoid conflict
-      - "8180:8080"
-    environment:
-      # Basic Configuration
-      KC_HOSTNAME: fra-idp.dive25.com
-      KC_HOSTNAME_STRICT: 'true'
-      KC_PROXY: edge
-      KC_HTTP_ENABLED: 'true'
-      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
-      
-      # Database
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-fra:5432/keycloak_fra
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
-      
-      # Admin credentials
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      
-      # Realm configuration
-      KC_REALM_NAME: dive-v3-broker-fra
-      
-      # GAP-002: Attribute normalization
-      KC_SPI_THEME_DEFAULT: dive-v3-fra
-      KC_SPI_LOCALE_DEFAULT: fr
-      
-      # GAP-001: Trust anchor lifecycle
-      KC_SPI_TRUSTSTORE_FILE: /opt/keycloak/certs/fra-truststore.jks
-      KC_SPI_TRUSTSTORE_PASSWORD: changeit
-      
-      # Logging
-      KC_LOG_LEVEL: INFO
-      KC_LOG_CONSOLE_OUTPUT: json
-      QUARKUS_LOG_CONSOLE_JSON: 'true'
-      
-    volumes:
-      - ./keycloak/certs:/opt/keycloak/certs:ro
-      - ./keycloak/themes/dive-v3-fra:/opt/keycloak/themes/dive-v3-fra:ro
-      - ./terraform/imports/fra-realm.json:/opt/keycloak/data/import/fra-realm.json:ro
-      - keycloak_fra_data:/opt/keycloak/data
-    command:
-      - start
-      - --import-realm
-      - --optimized
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-    depends_on:
-      postgres-fra:
-        condition: service_healthy
-
-  # ============================================
-  # PostgreSQL (FRA Keycloak Database)
-  # ============================================
+  # PostgreSQL for FRA Keycloak
   postgres-fra:
     image: postgres:15-alpine
     container_name: dive-v3-postgres-fra
-    hostname: postgres-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.11
     environment:
-      POSTGRES_DB: keycloak_fra
+      POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloak
-      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5434:5432"
     volumes:
       - postgres_fra_data:/var/lib/postgresql/data
+    networks:
+      - dive-fra-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak_fra"]
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ============================================
-  # MongoDB (FRA Resource Store)
-  # ============================================
-  # GAP-010: MongoDB isolation per realm
+  # Keycloak FRA Instance
+  keycloak-fra:
+    image: quay.io/keycloak/keycloak:latest
+    platform: linux/amd64
+    container_name: dive-v3-keycloak-fra
+    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-fra:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: fra-idp.dive25.com
+      KC_HOSTNAME_STRICT: false
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: true
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: 8443
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: true
+      KC_HEALTH_ENABLED: true
+      KC_FEATURES: scripts
+    ports:
+      - "8444:8443"
+      - "8082:8080"
+    volumes:
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      postgres-fra:
+        condition: service_healthy
+    networks:
+      - dive-fra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MongoDB FRA Instance
   mongodb-fra:
     image: mongo:7
     container_name: dive-v3-mongodb-fra
-    hostname: mongodb-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.12
-    ports:
-      - "27018:27017"  # Different port for FRA
     environment:
       MONGO_INITDB_DATABASE: dive-v3-fra
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin
+    ports:
+      - "27018:27017"
     volumes:
       - mongodb_fra_data:/data/db
-      - ./scripts/mongo-init-fra.js:/docker-entrypoint-initdb.d/init.js:ro
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # ============================================
-  # Backend API (FRA)
-  # ============================================
-  backend-fra:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: dive-v3-backend-fra:latest
-    container_name: dive-v3-backend-fra
-    hostname: backend-fra
-    restart: unless-stopped
     networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.13
-    ports:
-      - "4001:4000"  # Different external port
-    environment:
-      # Instance identification
-      INSTANCE_ID: fra
-      INSTANCE_REALM: dive-v3-broker-fra
-      ORIGIN_REALM: FRA
-      
-      # Keycloak configuration
-      KEYCLOAK_URL: http://keycloak-fra:8080
-      KEYCLOAK_REALM: dive-v3-broker-fra
-      KEYCLOAK_CLIENT_ID: dive-v3-client-fra
-      KEYCLOAK_CLIENT_SECRET: ${FRA_CLIENT_SECRET:-fra-secret}
-      KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      
-      # MongoDB
-      MONGODB_URL: mongodb://admin:admin@mongodb-fra:27017
-      MONGODB_DATABASE: dive-v3-fra
-      
-      # OPA
-      OPA_URL: http://opa-fra:8181
-      
-      # KAS
-      KAS_URL: http://kas-fra:8080
-      KAS_NAMESPACE: FRA
-      
-      # Federation endpoints
-      USA_FEDERATION_ENDPOINT: https://dev-api.dive25.com/federation
-      USA_FEDERATION_CLIENT_ID: ${USA_FRA_CLIENT_ID:-}
-      USA_FEDERATION_CLIENT_SECRET: ${USA_FRA_CLIENT_SECRET:-}
-      
-      # GAP-003: Resource namespacing
-      RESOURCE_PREFIX: FRA-
-      
-      # GAP-004: Correlation IDs
-      ENABLE_CORRELATION_ID: 'true'
-      
-      # Logging
-      LOG_LEVEL: debug
-      LOG_FORMAT: json
-      
-      # TLS
-      TLS_CERT: /app/certs/certificate.pem
-      TLS_KEY: /app/certs/key.pem
-      NODE_TLS_REJECT_UNAUTHORIZED: '0'
-    volumes:
-      - ./backend/certs:/app/certs:ro
-      - ./backend/src:/app/src:ro
-    depends_on:
-      - keycloak-fra
-      - mongodb-fra
-      - opa-fra
+      - dive-fra-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # ============================================
-  # OPA (FRA Policy Decision Point)
-  # ============================================
-  opa-fra:
-    image: openpolicyagent/opa:latest-envoy
-    container_name: dive-v3-opa-fra
-    hostname: opa-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.14
-    ports:
-      - "8182:8181"  # Different external port
-    command:
-      - run
-      - --server
-      - --log-level=info
-      - --log-format=json
-      - --set=decision_logs.console=true
-      - --set=status.console=true
-      - --set=bundles.dive.resource=/policies
-      - /policies
-    volumes:
-      - ./policies:/policies:ro
-    environment:
-      # GAP-002: French clearance normalization
-      OPA_CLEARANCE_MAP: |
-        {
-          "CONFIDENTIEL_DEFENSE": "CONFIDENTIAL",
-          "SECRET_DEFENSE": "SECRET",
-          "TRES_SECRET_DEFENSE": "TOP_SECRET",
-          "NON_PROTEGE": "UNCLASSIFIED"
-        }
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # ============================================
-  # KAS (FRA Key Access Service)
-  # ============================================
-  kas-fra:
-    build:
-      context: ./kas
-      dockerfile: Dockerfile
-    image: dive-v3-kas-fra:latest
-    container_name: dive-v3-kas-fra
-    hostname: kas-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.15
-    ports:
-      - "8081:8080"  # Different external port
-    environment:
-      # Instance identification
-      INSTANCE_ID: fra
-      KAS_NAMESPACE: FRA
-      ORIGIN_REALM: FRA
-      
-      # GAP-005: Multi-KAS authority
-      KAS_AUTHORITY: origin  # Origin realm is authoritative
-      
-      # Keycloak
-      KEYCLOAK_URL: http://keycloak-fra:8080
-      KEYCLOAK_REALM: dive-v3-broker-fra
-      
-      # OPA
-      OPA_URL: http://opa-fra:8181
-      
-      # Federation
-      USA_KAS_ENDPOINT: https://dev-kas.dive25.com
-      ENABLE_CROSS_KAS: 'true'
-      
-      # Security
-      JWT_VALIDATION: strict
-      ENABLE_MTLS: 'false'  # Will be enabled in production
-      
-      # Logging
-      LOG_LEVEL: debug
-      LOG_FORMAT: json
-      LOG_MISMATCHES: 'true'  # GAP-005: Log divergent decisions
-    volumes:
-      - ./kas/keys/fra:/app/keys:ro
-      - kas_fra_cache:/app/cache
-    depends_on:
-      - keycloak-fra
-      - opa-fra
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # ============================================
-  # Frontend (FRA Next.js)
-  # ============================================
-  frontend-fra:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_INSTANCE_ID: fra
-        NEXT_PUBLIC_INSTANCE_NAME: "France Instance"
-    image: dive-v3-frontend-fra:latest
-    container_name: dive-v3-frontend-fra
-    hostname: frontend-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.16
-    ports:
-      - "3001:3000"  # Different external port
-    environment:
-      # Instance identification
-      INSTANCE_ID: fra
-      INSTANCE_NAME: "France Instance"
-      
-      # URLs
-      NEXT_PUBLIC_BASE_URL: https://fra-app.dive25.com
-      NEXT_PUBLIC_API_URL: https://fra-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://fra-api.dive25.com
-      
-      # Keycloak
-      KEYCLOAK_URL: https://fra-idp.dive25.com
-      KEYCLOAK_REALM: dive-v3-broker-fra
-      KEYCLOAK_CLIENT_ID: dive-v3-client-fra
-      KEYCLOAK_CLIENT_SECRET: ${FRA_CLIENT_SECRET:-fra-secret}
-      
-      # NextAuth
-      AUTH_URL: https://fra-app.dive25.com
-      AUTH_SECRET: ${FRA_AUTH_SECRET:-}
-      NEXTAUTH_URL: https://fra-app.dive25.com
-      
-      # Database (NextAuth sessions)
-      DATABASE_URL: postgresql://nextauth:nextauth@postgres-app-fra:5432/nextauth_fra
-      
-      # Localization
-      DEFAULT_LOCALE: fr
-      SUPPORTED_LOCALES: fr,en
-      
-      # TLS
-      NODE_TLS_REJECT_UNAUTHORIZED: '0'
-    volumes:
-      - ./frontend/public:/app/public:ro
-      - ./frontend/.next/static:/app/.next/static:ro
-    depends_on:
-      - backend-fra
-      - postgres-app-fra
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # ============================================
-  # PostgreSQL (FRA App Database)
-  # ============================================
-  postgres-app-fra:
-    image: postgres:15-alpine
-    container_name: dive-v3-postgres-app-fra
-    hostname: postgres-app-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.17
-    environment:
-      POSTGRES_DB: nextauth_fra
-      POSTGRES_USER: nextauth
-      POSTGRES_PASSWORD: nextauth
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - postgres_app_fra_data:/var/lib/postgresql/data
-      - ./frontend/create-nextauth-tables.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nextauth -d nextauth_fra"]
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ============================================
-  # Redis (FRA Cache & Session Store)
-  # ============================================
+  # Redis FRA Instance
   redis-fra:
-    image: redis:7-alpine
+    image: redis:alpine
     container_name: dive-v3-redis-fra
-    hostname: redis-fra
-    restart: unless-stopped
-    networks:
-      dive-fra-network:
-        ipv4_address: 172.19.0.18
     ports:
-      - "6380:6379"  # Different external port
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - "6380:6379"
+    networks:
+      - dive-fra-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 3s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # OPA FRA Instance
+  opa-fra:
+    image: openpolicyagent/opa:latest
+    platform: linux/amd64
+    container_name: dive-v3-opa-fra
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "/policies"
+    ports:
+      - "8182:8181"
+    volumes:
+      - ./policies:/policies:ro
+    networks:
+      - dive-fra-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
       retries: 3
 
-# ============================================
-# Networks
-# ============================================
+  # KAS FRA Instance
+  kas-fra:
+    image: node:20-alpine
+    container_name: dive-v3-kas-fra
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      NODE_ENV: development
+      PORT: 8080
+      OPA_URL: http://opa-fra:8181
+      KEYCLOAK_URL: https://keycloak-fra:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      BACKEND_URL: http://backend-fra:4000
+      JWT_SECRET: fra-kas-secret-change-in-production
+    ports:
+      - "8083:8080"
+    volumes:
+      - ./kas:/app
+    depends_on:
+      - opa-fra
+      - mongodb-fra
+    networks:
+      - dive-fra-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend FRA Instance
+  backend-fra:
+    image: node:20-alpine
+    container_name: dive-v3-backend-fra
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      INSTANCE_REALM: FRA
+      MONGODB_URI: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
+      MONGODB_URL: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
+      REDIS_HOST: redis-fra
+      REDIS_PORT: 6379
+      REDIS_URL: redis://redis-fra:6379
+      JWT_SECRET: fra-backend-secret-change-in-production
+      OPA_URL: http://opa-fra:8181
+      KEYCLOAK_URL: https://keycloak-fra:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KAS_URL: http://kas-fra:8080
+      FEDERATION_ALLOWED_ORIGINS: https://fra-app.dive25.com,https://localhost:3001
+      NEXT_PUBLIC_BASE_URL: https://fra-app.dive25.com
+    ports:
+      - "4001:4000"
+    volumes:
+      - ./backend:/app
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./backend/certs:/app/certs:ro
+    depends_on:
+      mongodb-fra:
+        condition: service_healthy
+      redis-fra:
+        condition: service_healthy
+      opa-fra:
+        condition: service_healthy
+      keycloak-fra:
+        condition: service_healthy
+      kas-fra:
+        condition: service_healthy
+    networks:
+      - dive-fra-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend FRA Instance
+  frontend-fra:
+    image: node:20-alpine
+    container_name: dive-v3-frontend-fra
+    working_dir: /app
+    command: sh -c "npm install && node server.js"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      # CRITICAL: FRA-specific URLs - DO NOT cross-contaminate
+      NEXT_PUBLIC_API_URL: https://fra-api.dive25.com
+      NEXT_PUBLIC_BACKEND_URL: https://fra-api.dive25.com
+      NEXT_PUBLIC_KEYCLOAK_URL: https://fra-idp.dive25.com
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      NEXT_PUBLIC_APP_NAME: "DIVE V3 - France"
+      NEXT_PUBLIC_INSTANCE: FRA
+      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3001,https://localhost:4001,https://localhost:8444,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com"
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_URL: https://keycloak-fra:8443
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      NEXTAUTH_URL: https://fra-app.dive25.com
+      NEXTAUTH_SECRET: fra-frontend-secret-change-in-production
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./frontend:/app
+      - ./certs:/opt/app/certs:ro
+      - ./frontend/.env.fra:/app/.env.local:ro
+      # CRITICAL: Instance-specific volumes for build isolation
+      - frontend_fra_node_modules:/app/node_modules
+      - frontend_fra_next:/app/.next
+    depends_on:
+      - backend-fra
+      - keycloak-fra
+    networks:
+      - dive-fra-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cloudflare Tunnel FRA
+  cloudflared-fra:
+    image: cloudflare/cloudflared:latest
+    container_name: dive-v3-tunnel-fra
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config-fra.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/fra-tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+    networks:
+      - dive-fra-network
+    depends_on:
+      - frontend-fra
+      - backend-fra
+      - keycloak-fra
+      - kas-fra
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    ports:
+      - "9127:9127"
+
+volumes:
+  postgres_fra_data:
+  mongodb_fra_data:
+  # CRITICAL: Instance-specific frontend volumes for build isolation
+  frontend_fra_node_modules:
+  frontend_fra_next:
+
 networks:
   dive-fra-network:
-    name: dive-fra-network
     driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.19.0.0/16
-          gateway: 172.19.0.1
-
-# ============================================
-# Volumes
-# ============================================
-volumes:
-  keycloak_fra_data:
-    name: dive-v3-keycloak-fra-data
-  postgres_fra_data:
-    name: dive-v3-postgres-fra-data
-  postgres_app_fra_data:
-    name: dive-v3-postgres-app-fra-data
-  mongodb_fra_data:
-    name: dive-v3-mongodb-fra-data
-  kas_fra_cache:
-    name: dive-v3-kas-fra-cache

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Simple Keycloak for testing
+  keycloak-simple:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak-fra-demo
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    
+  # Simple MongoDB
+  mongodb-simple:
+    image: mongo:7
+    container_name: mongodb-fra-demo
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-fra
+    ports:
+      - "27017:27017"
+
+  # Simple OPA
+  opa-simple:
+    image: openpolicyagent/opa:latest
+    container_name: opa-fra-demo
+    command:
+      - "run"
+      - "--server"
+      - "--addr=:8181"
+    ports:
+      - "8181:8181"
+
+
+

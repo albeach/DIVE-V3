@@ -1,0 +1,23 @@
+/* USA Custom Colors - Red, White, Blue */
+
+.dive-background {
+    background: linear-gradient(135deg, #B22234 0%, #3C3B6E 100%);
+}
+
+.dive-button-primary {
+    background: linear-gradient(135deg, #B22234 0%, #3C3B6E 100%);
+}
+
+.dive-header h1 {
+    color: #3C3B6E;
+}
+
+.dive-input:focus {
+    border-color: #B22234;
+    box-shadow: 0 0 0 3px rgba(178, 34, 52, 0.1);
+}
+
+.dive-social-link:hover {
+    border-color: #B22234;
+}
+

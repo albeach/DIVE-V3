@@ -1,0 +1,40 @@
+# Cloudflare Tunnel Configuration for DIVE V3 - FRA Instance
+# This runs inside a Docker container and connects to FRA services via Docker network
+
+tunnel: e07574bd-6f32-478b-8f71-42fc3d4073f7
+credentials-file: /etc/cloudflared/tunnel-credentials.json
+
+# Metrics for monitoring
+metrics: 0.0.0.0:9127
+
+ingress:
+  # FRA Frontend (Next.js) - connects via Docker network
+  - hostname: fra-app.dive25.com
+    service: https://frontend-fra:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+  
+  # FRA Backend API - connects via Docker network
+  - hostname: fra-api.dive25.com
+    service: https://backend-fra:4000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+  
+  # FRA Keycloak IdP - connects via Docker network
+  - hostname: fra-idp.dive25.com
+    service: https://keycloak-fra:8443
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+  
+  # FRA KAS - connects via Docker network
+  - hostname: fra-kas.dive25.com
+    service: http://kas-fra:8080
+    originRequest:
+      connectTimeout: 30s
+  
+  # Catch-all rule (required)
+  - service: http_status:404
+

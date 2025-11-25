@@ -34,3 +34,6 @@ ENV NODE_ENV=production
 
 # Run the server
 CMD ["node", "dist/fra-kas-server.js"]
+
+
+
