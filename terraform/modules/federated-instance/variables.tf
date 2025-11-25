@@ -70,3 +70,12 @@ variable "login_theme" {
   default     = "dive-v3"
 }
 
+# ============================================
+# MFA / Authentication Flow Configuration
+# ============================================
+variable "browser_flow_override_id" {
+  description = "ID of the authentication flow to use for the broker client (for clearance-based MFA). If null, uses realm default."
+  type        = string
+  default     = null
+}
+
