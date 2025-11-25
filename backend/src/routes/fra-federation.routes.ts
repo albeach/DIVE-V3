@@ -33,35 +33,35 @@ router.use(ensureCorrelationId);
 router.get('/resources', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { releasableTo, excludeOrigin, classification, limit = 100 } = req.query;
-  
+
   try {
     console.log(`[${correlationId}] Fetching federation resources`);
-    
+
     // Get eligible resources
     let resources = await federationService.getFederationResources();
-    
+
     // Apply filters
     if (releasableTo) {
-      resources = resources.filter(r => 
+      resources = resources.filter(r =>
         r.releasabilityTo.includes(releasableTo as string)
       );
     }
-    
+
     if (excludeOrigin) {
-      resources = resources.filter(r => 
+      resources = resources.filter(r =>
         r.originRealm !== excludeOrigin
       );
     }
-    
+
     if (classification) {
-      resources = resources.filter(r => 
+      resources = resources.filter(r =>
         r.classification === classification
       );
     }
-    
+
     // Apply limit
     resources = resources.slice(0, parseInt(limit as string));
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),
@@ -87,10 +87,10 @@ router.post('/resources', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const originRealm = req.headers['x-origin-realm'] as string;
   const { resources } = req.body;
-  
+
   try {
     console.log(`[${correlationId}] Receiving ${resources?.length || 0} resources from ${originRealm}`);
-    
+
     if (!resources || !Array.isArray(resources)) {
       return res.status(400).json({
         correlationId,
@@ -98,10 +98,10 @@ router.post('/resources', async (req: Request, res: Response) => {
         message: 'Resources array required'
       });
     }
-    
+
     // Import resources
     const result = await (federationService as any).importResources(resources, originRealm || 'USA');
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),
@@ -131,10 +131,10 @@ router.post('/resources', async (req: Request, res: Response) => {
 router.post('/sync', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { targetRealm = 'USA' } = req.body;
-  
+
   try {
     console.log(`[${correlationId}] Triggering sync with ${targetRealm}`);
-    
+
     if (targetRealm !== 'USA') {
       return res.status(400).json({
         correlationId,
@@ -142,9 +142,9 @@ router.post('/sync', async (req: Request, res: Response) => {
         message: 'Only USA sync is currently supported'
       });
     }
-    
+
     const result = await federationService.syncWithUSA();
-    
+
     res.json({
       correlationId,
       ...result
@@ -166,10 +166,10 @@ router.post('/sync', async (req: Request, res: Response) => {
 router.get('/sync/history', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { limit = 10 } = req.query;
-  
+
   try {
     const history = await federationService.getSyncHistory(parseInt(limit as string));
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),
@@ -192,10 +192,10 @@ router.get('/sync/history', async (req: Request, res: Response) => {
  */
 router.get('/conflicts', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
-  
+
   try {
     const report = await federationService.getConflictReport();
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),
@@ -219,10 +219,10 @@ router.post('/decisions', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const originRealm = req.headers['x-origin-realm'] as string;
   const { decisions } = req.body;
-  
+
   try {
     console.log(`[${correlationId}] Receiving ${decisions?.length || 0} decisions from ${originRealm}`);
-    
+
     if (!decisions || !Array.isArray(decisions)) {
       return res.status(400).json({
         correlationId,
@@ -230,7 +230,7 @@ router.post('/decisions', async (req: Request, res: Response) => {
         message: 'Decisions array required'
       });
     }
-    
+
     // Store decisions in audit log
     // In production, this would be stored in MongoDB
     const stored = decisions.map(d => ({
@@ -239,7 +239,7 @@ router.post('/decisions', async (req: Request, res: Response) => {
       receivedAt: new Date(),
       correlationId
     }));
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),
@@ -264,10 +264,10 @@ router.post('/decisions', async (req: Request, res: Response) => {
  */
 router.get('/status', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
-  
+
   try {
     const recentSync = (await federationService.getSyncHistory(1))[0];
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),
@@ -305,12 +305,12 @@ router.get('/status', async (req: Request, res: Response) => {
  */
 router.post('/scheduler/start', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
-  
+
   try {
     console.log(`[${correlationId}] Starting federation sync scheduler`);
-    
+
     federationService.startSyncScheduler();
-    
+
     res.json({
       correlationId,
       timestamp: new Date(),

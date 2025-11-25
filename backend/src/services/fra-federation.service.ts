@@ -55,8 +55,8 @@ export class FRAFederationService {
   private readonly INSTANCE_REALM = 'FRA';
   private readonly USA_FEDERATION_ENDPOINT = process.env.USA_FEDERATION_ENDPOINT || 'https://dev-api.dive25.com/federation';
   private readonly SYNC_INTERVAL = parseInt(process.env.FEDERATION_SYNC_INTERVAL || '300') * 1000; // 5 minutes default
-  
-  constructor(private mongoUrl: string = 'mongodb://localhost:27018/dive-v3-fra') {}
+
+  constructor(private mongoUrl: string = 'mongodb://localhost:27018/dive-v3-fra') { }
 
   /**
    * Initialize database connection
@@ -67,7 +67,7 @@ export class FRAFederationService {
     this.db = client.db('dive-v3-fra');
     this.resourcesCollection = this.db.collection<FederationResource>('resources');
     this.syncLogCollection = this.db.collection<SyncResult>('federation_sync');
-    
+
     // Create indexes for performance
     await this.resourcesCollection.createIndex({ originRealm: 1, lastModified: -1 });
     await this.resourcesCollection.createIndex({ 'syncStatus.USA.synced': 1 });
@@ -96,9 +96,9 @@ export class FRAFederationService {
   async syncWithUSA(): Promise<SyncResult> {
     const startTime = Date.now();
     const correlationId = `sync-fra-usa-${uuidv4()}`;
-    
+
     console.log(`[${correlationId}] Starting federation sync with USA`);
-    
+
     const result: SyncResult = {
       correlationId,
       timestamp: new Date(),
@@ -132,12 +132,12 @@ export class FRAFederationService {
       await this.updateSyncStatus(fraResources, 'USA');
 
       result.duration = Date.now() - startTime;
-      
+
       // Log sync result
       await this.syncLogCollection.insertOne(result);
-      
+
       console.log(`[${correlationId}] Sync complete: ${result.resourcesSynced} synced, ${result.resourcesUpdated} updated, ${result.resourcesConflicted} conflicts`);
-      
+
       return result;
     } catch (error) {
       console.error(`[${correlationId}] Sync error:`, error);
@@ -151,7 +151,7 @@ export class FRAFederationService {
    */
   private async pushResources(resources: FederationResource[], correlationId: string): Promise<any> {
     const token = await this.generateFederationToken();
-    
+
     try {
       const response = await axios.post(
         `${this.USA_FEDERATION_ENDPOINT}/resources`,
@@ -177,7 +177,7 @@ export class FRAFederationService {
           }
         }
       );
-      
+
       return response.data;
     } catch (error: any) {
       console.error(`Failed to push resources: ${error.message}`);
@@ -190,7 +190,7 @@ export class FRAFederationService {
    */
   private async pullResources(correlationId: string): Promise<FederationResource[]> {
     const token = await this.generateFederationToken();
-    
+
     try {
       const response = await axios.get(
         `${this.USA_FEDERATION_ENDPOINT}/resources`,
@@ -206,7 +206,7 @@ export class FRAFederationService {
           }
         }
       );
-      
+
       return response.data.resources || [];
     } catch (error: any) {
       console.error(`Failed to pull resources: ${error.message}`);
@@ -246,7 +246,7 @@ export class FRAFederationService {
       } else {
         // Existing resource - check for conflicts
         const conflictResolution = await this.resolveConflict(existing, resource);
-        
+
         if (conflictResolution.resolution === 'remote_wins') {
           await this.resourcesCollection.updateOne(
             { resourceId: resource.resourceId },
@@ -300,7 +300,7 @@ export class FRAFederationService {
     if (remote.version === local.version) {
       const remoteTime = new Date(remote.lastModified).getTime();
       const localTime = new Date(local.lastModified).getTime();
-      
+
       if (remoteTime > localTime) {
         return {
           resourceId: local.resourceId,
@@ -371,7 +371,7 @@ export class FRAFederationService {
    */
   startSyncScheduler(): void {
     console.log(`Starting federation sync scheduler (interval: ${this.SYNC_INTERVAL / 1000}s)`);
-    
+
     setInterval(async () => {
       try {
         await this.syncWithUSA();
@@ -401,7 +401,7 @@ export class FRAFederationService {
   async getConflictReport(): Promise<any> {
     const recentSyncs = await this.getSyncHistory(100);
     const allConflicts = recentSyncs.flatMap(s => s.conflicts);
-    
+
     return {
       totalConflicts: allConflicts.length,
       byResolution: {

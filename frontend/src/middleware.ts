@@ -26,7 +26,7 @@ export function middleware(req: NextRequest) {
     // Read from environment variables (no hardcoded URLs)
     const keycloakBaseUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-    
+
     // Optional: External analytics/monitoring (only in dev environments)
     const allowExternalAnalytics = process.env.NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS === 'true';
     const externalDomains = process.env.NEXT_PUBLIC_EXTERNAL_DOMAINS || '';
@@ -37,7 +37,7 @@ export function middleware(req: NextRequest) {
         "'unsafe-inline'",
         "'unsafe-eval'", // Required for Next.js dev mode and some dynamic features
     ];
-    
+
     // Only add external analytics in non-production or when explicitly enabled
     if (allowExternalAnalytics) {
         scriptSrc.push('https://static.cloudflareinsights.com');
@@ -46,7 +46,7 @@ export function middleware(req: NextRequest) {
     // Build connect-src from environment variables only
     // Support both HTTP and HTTPS versions for local development
     const connectSrc = ["'self'"];
-    
+
     // Add Keycloak URL (both HTTP and HTTPS versions for local dev)
     if (keycloakBaseUrl) {
         connectSrc.push(keycloakBaseUrl);
@@ -56,7 +56,7 @@ export function middleware(req: NextRequest) {
             connectSrc.push(keycloakBaseUrl.replace('http://', 'https://'));
         }
     }
-    
+
     // Add API URL (both HTTP and HTTPS versions for local dev)
     if (apiUrl) {
         connectSrc.push(apiUrl);

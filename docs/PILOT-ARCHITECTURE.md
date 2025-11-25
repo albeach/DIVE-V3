@@ -344,3 +344,52 @@ terraform/
 5. **Network Isolation** - Docker networks prevent cross-instance access
 6. **Certificate Management** - mkcert for local development certificates
 
+
+---
+
+## Test Suite Results
+
+**Last Run**: November 25, 2025
+
+### Test Summary
+
+| Category | Passed | Failed | Skipped |
+|----------|--------|--------|---------|
+| Service Health | 9 | 0 | 0 |
+| Keycloak Config | 12 | 0 | 0 |
+| Backend API | 9 | 0 | 0 |
+| Federation | 6 | 0 | 0 |
+| Authentication | 6 | 0 | 2 |
+| External Access | 6 | 0 | 0 |
+| **TOTAL** | **46** | **0** | **2** |
+
+### Running Tests
+
+```bash
+# Run comprehensive test suite
+./scripts/tests/test-pilot-comprehensive.sh
+
+# Quick status check
+./scripts/dive status
+```
+
+### Test User Credentials
+
+| Instance | Username | Password | Clearance |
+|----------|----------|----------|-----------|
+| USA | testuser-usa-1 | DiveDemo2025! | UNCLASSIFIED |
+| USA | testuser-usa-2 | DiveDemo2025! | CONFIDENTIAL |
+| USA | testuser-usa-3 | DiveDemo2025! | SECRET |
+| USA | testuser-usa-4 | DiveDemo2025! | TOP_SECRET |
+| FRA | testuser-fra-1 | DiveDemo2025! | UNCLASSIFIED |
+| FRA | testuser-fra-2 | DiveDemo2025! | CONFIDENTIAL |
+| FRA | testuser-fra-3 | DiveDemo2025! | SECRET |
+| FRA | testuser-fra-4 | DiveDemo2025! | TOP_SECRET |
+| DEU | testuser-deu-1 | DiveDemo2025! | UNCLASSIFIED |
+| DEU | testuser-deu-2 | DiveDemo2025! | CONFIDENTIAL |
+| DEU | testuser-deu-3 | DiveDemo2025! | SECRET |
+| DEU | testuser-deu-4 | DiveDemo2025! | TOP_SECRET |
+
+---
+
+*Last Updated: November 25, 2025*
