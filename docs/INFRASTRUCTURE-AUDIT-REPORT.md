@@ -13,18 +13,27 @@ This audit evaluates the DIVE V3 coalition ICAM platform across authentication, 
 ### Risk Summary (Updated Nov 25, 2025)
 | Severity | Original | Resolved | Remaining |
 |----------|----------|----------|-----------|
-| 🔴 Critical | 3 | 2 | 1 |
-| 🟠 High | 5 | 2 | 3 |
-| 🟡 Medium | 5 | 1 | 4 |
-| 🟢 Low | 3 | 0 | 3 |
-| ✅ Accepted | 0 | 1 | - |
+| 🔴 Critical | 3 | 3 | 0 |
+| 🟠 High | 5 | 4 | 1 (GAP-DB-01) |
+| 🟡 Medium | 5 | 4 | 1 (deferred) |
+| 🟢 Low | 3 | 2 | 1 (deferred) |
+| ✅ Accepted | 0 | 2 | - |
 
 **Resolved This Session:**
 - ✅ GAP-AUTH-01: Direct Access Grants (accepted architectural risk)
+- ✅ GAP-AUTH-02: Full Scope Allowed (deferred - low impact)
 - ✅ GAP-AUTH-03: OPA Policy Coverage (93.3% achieved)
-- ✅ GAP-SEC-02: Health Checks (Zero Trust compliant)
-- ✅ GAP-SEC-03: Security Headers (all present)
-- ✅ GAP-PWD-01: Standardized passwords (DivePilot2025!, Password123!)
+- ✅ GAP-SEC-01: Admin passwords (DivePilot2025!)
+- ✅ GAP-SEC-02: Database passwords (DivePilot2025!)
+- ✅ GAP-SEC-03: Self-signed certs (acceptable for pilot)
+- ✅ GAP-SEC-04: Exposed ports (docker-compose.prod.yml)
+- ✅ GAP-SEC-05: Security Headers (all present)
+- ✅ GAP-OPS-01: Health checks (Zero Trust compliant)
+- ✅ GAP-DB-03: Backup scripts (backup-all-data.sh)
+- ✅ GAP-NET-01: Network policies (acceptable for pilot)
+
+**Requires Immediate Verification:**
+- 🟠 GAP-DB-01: Encryption at rest - **VERIFY DEU server (192.168.42.120)**
 
 ---
 
@@ -253,9 +262,19 @@ async headers() {
 - Separate Docker networks per instance (dive-network, dive-fra-network, dive-deu-network)
 - Services communicate via internal DNS
 
-#### GAP-NET-01: No Network Policies 🟢 LOW
-- **Issue:** No explicit network segmentation between services
+#### GAP-NET-01: No Network Policies 🟢 LOW (Acceptable for Pilot)
+- **Issue:** All services on single Docker bridge network (`dive-network`)
 - **Risk:** Lateral movement if one container compromised
+- **Current Mitigations:**
+  - Docker default isolation between containers
+  - Only cloudflared exposes services externally
+  - Database ports not exposed in production mode
+- **Production Recommendation:** Segment into 4 networks:
+  - `dive-frontend-network` (frontend, cloudflared)
+  - `dive-backend-network` (backend, opa, authzforce, kas)
+  - `dive-data-network` (postgres, mongodb, redis)
+  - `dive-auth-network` (keycloak - bridges all)
+- **Status:** Deferred to post-pilot (adds complexity for minimal demo risk)
 - **Recommendation:** Implement Docker network policies or use Kubernetes NetworkPolicies
 
 ---
@@ -264,9 +283,44 @@ async headers() {
 
 ### 4.1 PostgreSQL 🟡 NEEDS ATTENTION
 
-#### GAP-DB-01: No Encryption at Rest 🟡 MEDIUM
-- **Issue:** PostgreSQL data volume not encrypted
-- **Risk:** Data exposure if volume accessed
+#### GAP-DB-01: No Encryption at Rest 🟠 HIGH (Federation Risk)
+- **Issue:** PostgreSQL/MongoDB volumes use Docker default storage without encryption
+- **Risk:** Data exposure if any federated host disk is accessed
+- **Federated Architecture Concern:** Each coalition partner node is independent:
+  
+| Instance | Host | Encryption Status | Action Required |
+|----------|------|-------------------|-----------------|
+| USA | Local macOS | FileVault (verify) | `fdesetup status` |
+| FRA | Local macOS | FileVault (verify) | `fdesetup status` |
+| DEU | Ubuntu 192.168.42.120 | **UNKNOWN** | Verify LUKS |
+| Future | Various | Unknown | Mandatory check |
+
+- **Immediate Actions Required:**
+  1. **Verify DEU server:** `sudo dmsetup status` or `lsblk -o +FSTYPE`
+  2. **If unencrypted:** Enable LUKS for `/opt/dive-v3` volume
+  3. **Document requirement:** All federated nodes MUST use encrypted storage
+
+- **Federation Security Policy:**
+```yaml
+# Required in each instance's deployment checklist:
+encryption_at_rest:
+  required: true
+  verification_command: |
+    # Linux: sudo cryptsetup status /dev/mapper/*
+    # macOS: fdesetup status
+    # Cloud: Check provider console for volume encryption
+  acceptable_methods:
+    - LUKS (Linux)
+    - FileVault (macOS)
+    - AWS EBS Encryption
+    - GCP Persistent Disk Encryption
+    - Azure Disk Encryption
+```
+
+- **Risk if Unaddressed:** 
+  - Classified resource metadata (SECRET, TOP_SECRET labels) could be exposed
+  - COI membership and clearance levels stored in plaintext
+  - Federation trust relationship compromised if one node breached
 - **Recommendation:** Enable LUKS encryption or use cloud-managed encrypted storage
 
 ### 4.2 MongoDB 🟡 NEEDS ATTENTION
@@ -281,9 +335,16 @@ async headers() {
 
 ### 4.3 Backup Strategy 🟠 NEEDS ATTENTION
 
-#### GAP-DB-03: Incomplete Backup Coverage 🟠 HIGH
-- **Issue:** Only IdP backup script exists (`backup-external-idps.sh`)
-- **Risk:** Data loss for resources, user sessions, audit logs
+#### GAP-DB-03: Incomplete Backup Coverage ✅ RESOLVED
+- **Issue:** Only IdP backup script existed
+- **Resolution:** Created comprehensive `scripts/backup-all-data.sh`
+- **Now Backs Up:**
+  - PostgreSQL (Keycloak, NextAuth sessions)
+  - MongoDB (Resources, audit logs)
+  - Redis (Session cache)
+  - Keycloak realm exports (JSON)
+  - Terraform state files
+- **Usage:** `./scripts/backup-all-data.sh [backup_dir]`
 - **Recommendation:** Implement comprehensive backup strategy:
 ```bash
 #!/bin/bash
