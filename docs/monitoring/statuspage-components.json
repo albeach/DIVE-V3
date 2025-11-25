@@ -1,0 +1,95 @@
+{
+  "page": {
+    "name": "DIVE V3 Coalition ICAM",
+    "domain": "status.dive25.com",
+    "allow_page_subscribers": true,
+    "allow_incident_subscribers": true
+  },
+  "component_groups": [
+    {
+      "name": "United States (USA)",
+      "components": ["usa-app", "usa-idp", "usa-api"]
+    },
+    {
+      "name": "France (FRA)",
+      "components": ["fra-app", "fra-idp", "fra-api"]
+    },
+    {
+      "name": "Germany (DEU)",
+      "components": ["deu-app", "deu-idp", "deu-api"]
+    }
+  ],
+  "components": [
+    {
+      "id": "usa-api",
+      "name": "Backend API",
+      "description": "USA Backend API",
+      "group": "USA",
+      "showcase": true
+    }
+,
+    {
+      "id": "usa-app",
+      "name": "Frontend Application",
+      "description": "USA Frontend Application",
+      "group": "USA",
+      "showcase": true
+    }
+,
+    {
+      "id": "fra-app",
+      "name": "Frontend Application",
+      "description": "FRA Frontend Application",
+      "group": "FRA",
+      "showcase": true
+    }
+,
+    {
+      "id": "fra-api",
+      "name": "Backend API",
+      "description": "FRA Backend API",
+      "group": "FRA",
+      "showcase": true
+    }
+,
+    {
+      "id": "deu-api",
+      "name": "Backend API",
+      "description": "DEU Backend API",
+      "group": "DEU",
+      "showcase": true
+    }
+,
+    {
+      "id": "deu-app",
+      "name": "Frontend Application",
+      "description": "DEU Frontend Application",
+      "group": "DEU",
+      "showcase": true
+    }
+,
+    {
+      "id": "fra-idp",
+      "name": "Identity Provider (Keycloak)",
+      "description": "FRA Identity Provider (Keycloak)",
+      "group": "FRA",
+      "showcase": true
+    }
+,
+    {
+      "id": "usa-idp",
+      "name": "Identity Provider (Keycloak)",
+      "description": "USA Identity Provider (Keycloak)",
+      "group": "USA",
+      "showcase": true
+    }
+,
+    {
+      "id": "deu-idp",
+      "name": "Identity Provider (Keycloak)",
+      "description": "DEU Identity Provider (Keycloak)",
+      "group": "DEU",
+      "showcase": true
+    }
+  ]
+}
