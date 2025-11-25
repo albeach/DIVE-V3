@@ -290,15 +290,53 @@ async headers() {
   
 | Instance | Host | Encryption Status | Action Required |
 |----------|------|-------------------|-----------------|
-| USA | Local macOS | FileVault (verify) | `fdesetup status` |
-| FRA | Local macOS | FileVault (verify) | `fdesetup status` |
-| DEU | Ubuntu 192.168.42.120 | **UNKNOWN** | Verify LUKS |
+| USA | Local macOS | ✅ FileVault ON | None |
+| FRA | Local macOS | ✅ FileVault ON | None |
+| DEU | Ubuntu 192.168.42.120 | ❌ **NOT ENCRYPTED** | **Enable LUKS** |
 | Future | Various | Unknown | Mandatory check |
 
+**DEU Server Verification (Nov 25, 2025):**
+```
+nvme0n1              476.9G disk 
+├─nvme0n1p1 vfat         1G part /boot/efi
+└─nvme0n1p2 ext4     475.9G part /   ← NO ENCRYPTION
+```
+
 - **Immediate Actions Required:**
-  1. **Verify DEU server:** `sudo dmsetup status` or `lsblk -o +FSTYPE`
-  2. **If unencrypted:** Enable LUKS for `/opt/dive-v3` volume
+  1. ~~**Verify DEU server:** `sudo dmsetup status` or `lsblk -o +FSTYPE`~~ ✅ VERIFIED - NOT ENCRYPTED
+  2. **CRITICAL:** Enable encryption for DEU server - see remediation below
   3. **Document requirement:** All federated nodes MUST use encrypted storage
+
+### DEU Server Remediation Options:
+
+**Option A: Encrypt /opt/dive-v3 with LUKS (Recommended - No Reinstall)**
+```bash
+# On DEU server (192.168.42.120):
+# 1. Backup data first
+./scripts/backup-all-data.sh
+
+# 2. Create encrypted container file
+sudo dd if=/dev/zero of=/opt/dive-v3-encrypted.img bs=1G count=50
+sudo cryptsetup luksFormat /opt/dive-v3-encrypted.img
+sudo cryptsetup open /opt/dive-v3-encrypted.img dive-v3-data
+sudo mkfs.ext4 /dev/mapper/dive-v3-data
+
+# 3. Move data to encrypted volume
+sudo mount /dev/mapper/dive-v3-data /mnt
+sudo rsync -av /opt/dive-v3/ /mnt/
+sudo umount /opt/dive-v3
+sudo mount /dev/mapper/dive-v3-data /opt/dive-v3
+
+# 4. Add to /etc/crypttab for auto-unlock (requires key file or manual password)
+```
+
+**Option B: Full Disk Encryption (Requires Reinstall)**
+- Reinstall Ubuntu with LUKS full disk encryption enabled during install
+- More secure but requires downtime
+
+**Option C: Accept Risk for Pilot (Document)**
+- If this is a demo/pilot environment with no real classified data
+- Document accepted risk and remediate before production
 
 - **Federation Security Policy:**
 ```yaml
