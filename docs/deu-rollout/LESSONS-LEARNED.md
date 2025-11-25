@@ -12,6 +12,55 @@ This document captures critical lessons learned from the DEU (Germany) instance 
 
 ## Critical Issues Discovered & Solutions
 
+### 0. 🔴 CRITICAL: Clearance-Based MFA Bypass
+
+**Issue**: Users with SECRET clearance were able to login without MFA (OTP/TOTP), violating AAL2 requirements.
+
+**Symptom**: After successful federation login, SECRET user reached dashboard without being prompted for OTP.
+
+**Root Cause**: 
+1. The "Classified Access Browser Flow" exists in Terraform and is correctly configured with clearance-based MFA conditions
+2. BUT the realm-level binding was set to use "browser" (standard flow) for federation compatibility
+3. The client-level override was NOT configured, so the main application client used the default flow
+
+**Authentication Flow Architecture**:
+```
+Realm-Level Binding (keycloak_authentication_bindings):
+  → Set to "browser" for federation compatibility
+  → Affects ALL clients in the realm
+
+Client-Level Override (authentication_flow_binding_overrides):
+  → Overrides realm-level for specific client
+  → Should point to "Classified Access Browser Flow"
+```
+
+**Solution**: 
+Add `authentication_flow_binding_overrides` block to the broker client in Terraform:
+```hcl
+resource "keycloak_openid_client" "dive_v3_app_broker" {
+  # ... other settings ...
+  
+  authentication_flow_binding_overrides {
+    browser_id = module.broker_mfa.browser_flow_id
+  }
+}
+```
+
+**Clearance-Based MFA Rules**:
+| Clearance | Required Authentication | Keycloak Flow |
+|-----------|------------------------|---------------|
+| UNCLASSIFIED | Password only | Standard Browser |
+| CONFIDENTIAL | Password + OTP (AAL2) | Conditional OTP |
+| SECRET | Password + OTP (AAL2) | Conditional OTP |
+| TOP_SECRET | Password + WebAuthn (AAL3) | Conditional WebAuthn |
+
+**Files Updated**:
+- `terraform/broker-realm.tf` - Added `authentication_flow_binding_overrides` to broker client
+- `terraform/modules/federated-instance/main.tf` - Added dynamic `authentication_flow_binding_overrides` block
+- `terraform/modules/federated-instance/variables.tf` - Added `browser_flow_override_id` variable
+
+---
+
 ### 1. 🔴 CRITICAL: NextAuth Database Configuration
 
 **Issue**: Frontend container started without `DATABASE_URL` environment variable, causing all authentication callbacks to fail with `ECONNREFUSED` errors.

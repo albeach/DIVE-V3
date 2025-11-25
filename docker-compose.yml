@@ -18,7 +18,7 @@ services:
     container_name: dive-v3-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
       POSTGRES_DB: postgres
     ports:
       - "5433:5432"
@@ -42,7 +42,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
       # Keycloak 26 Configuration with HTTPS (Defense in Depth)
       # Using mkcert certificates for internal HTTPS
       # For localhost development, use localhost hostname
@@ -55,8 +55,8 @@ services:
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       # Gap #6: Enable JavaScript providers for script-based protocol mappers
       KC_FEATURES: scripts
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
@@ -180,6 +180,9 @@ services:
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
+      # Admin credentials for Keycloak Admin API (IdP listing, user management)
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs
       MONGODB_URL: mongodb://admin:password@mongo:27017
       MONGODB_DATABASE: dive-v3

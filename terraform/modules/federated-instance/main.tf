@@ -103,6 +103,21 @@ resource "keycloak_openid_client" "broker_client" {
 
   # Login settings
   login_theme = var.login_theme
+
+  # ============================================
+  # SECURITY: Clearance-Based MFA Enforcement
+  # ============================================
+  # Override the realm-level browser flow with the Classified Access Browser Flow
+  # This enforces:
+  #   - AAL2 (OTP/TOTP) for CONFIDENTIAL and SECRET clearance users
+  #   - AAL3 (WebAuthn) for TOP_SECRET clearance users
+  # LESSON LEARNED (2025-11-25): Without this, SECRET users bypass MFA!
+  dynamic "authentication_flow_binding_overrides" {
+    for_each = var.browser_flow_override_id != null ? [1] : []
+    content {
+      browser_id = var.browser_flow_override_id
+    }
+  }
 }
 
 # ============================================================================

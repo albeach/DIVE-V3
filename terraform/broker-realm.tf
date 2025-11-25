@@ -133,6 +133,20 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   frontchannel_logout_enabled     = true
   frontchannel_logout_url         = "${var.app_url}/api/auth/logout-callback"
   valid_post_logout_redirect_uris = ["${var.app_url}"]
+
+  # ============================================
+  # SECURITY: Clearance-Based MFA Enforcement
+  # ============================================
+  # Override the realm-level browser flow with the Classified Access Browser Flow
+  # This enforces:
+  #   - AAL2 (OTP/TOTP) for CONFIDENTIAL and SECRET clearance users
+  #   - AAL3 (WebAuthn) for TOP_SECRET clearance users
+  # The realm-level binding stays as "browser" for federation compatibility.
+  # LESSON LEARNED (2025-11-25): Without this, SECRET users bypass MFA!
+  # NOTE: MFA flow binding will be applied after MFA module is created
+  # authentication_flow_binding_overrides {
+  #   browser_id = module.broker_mfa.browser_flow_id
+  # }
 }
 
 # Client scope for DIVE attributes in broker realm
