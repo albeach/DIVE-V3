@@ -42,6 +42,8 @@ interface InstanceThemeContextValue {
   instanceName: string;
   locale: string;
   theme: InstanceTheme;
+  strings: LocalizedStrings;
+  coalitionPartners: string[];
   isLoading: boolean;
 }
 
@@ -173,11 +175,101 @@ const INSTANCE_LOCALES: Record<string, string> = {
   POL: 'pl',
 };
 
+// Localized strings per instance
+export interface LocalizedStrings {
+  welcome: string;
+  selectIdp: string;
+  pilotCapabilities: string;
+  poweredBy: string;
+  coalitionPilot: string;
+  federatedAuth: string;
+  policyAuth: string;
+  secureDoc: string;
+}
+
+const INSTANCE_STRINGS: Record<string, LocalizedStrings> = {
+  USA: {
+    welcome: 'Welcome to United States',
+    selectIdp: 'Select your Identity Provider to access the United States DIVE V3 platform',
+    pilotCapabilities: 'Pilot Capabilities',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'DIVE V3 Coalition Pilot',
+    federatedAuth: 'Federated Authentication',
+    policyAuth: 'Policy-Driven Authorization',
+    secureDoc: 'Secure Document Sharing',
+  },
+  FRA: {
+    welcome: 'Bienvenue en France',
+    selectIdp: 'Sélectionnez votre fournisseur d\'identité pour accéder à la plateforme DIVE V3 France',
+    pilotCapabilities: 'Capacités du Pilote',
+    poweredBy: 'Propulsé par Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'Pilote Coalition DIVE V3',
+    federatedAuth: 'Authentification Fédérée',
+    policyAuth: 'Autorisation par Politiques',
+    secureDoc: 'Partage Sécurisé de Documents',
+  },
+  DEU: {
+    welcome: 'Willkommen in Deutschland',
+    selectIdp: 'Wählen Sie Ihren Identity Provider um auf die DIVE V3 Deutschland Plattform zuzugreifen',
+    pilotCapabilities: 'Pilotfähigkeiten',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'DIVE V3 Koalitionspilot',
+    federatedAuth: 'Föderierte Authentifizierung',
+    policyAuth: 'Richtlinienbasierte Autorisierung',
+    secureDoc: 'Sicherer Dokumentenaustausch',
+  },
+  GBR: {
+    welcome: 'Welcome to United Kingdom',
+    selectIdp: 'Select your Identity Provider to access the United Kingdom DIVE V3 platform',
+    pilotCapabilities: 'Pilot Capabilities',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'DIVE V3 Coalition Pilot',
+    federatedAuth: 'Federated Authentication',
+    policyAuth: 'Policy-Driven Authorisation',
+    secureDoc: 'Secure Document Sharing',
+  },
+  CAN: {
+    welcome: 'Bienvenue au Canada / Welcome to Canada',
+    selectIdp: 'Sélectionnez votre fournisseur / Select your Identity Provider',
+    pilotCapabilities: 'Pilot Capabilities',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'DIVE V3 Coalition Pilot',
+    federatedAuth: 'Federated Authentication',
+    policyAuth: 'Policy-Driven Authorization',
+    secureDoc: 'Secure Document Sharing',
+  },
+  ITA: {
+    welcome: 'Benvenuti in Italia',
+    selectIdp: 'Seleziona il tuo Identity Provider per accedere alla piattaforma DIVE V3 Italia',
+    pilotCapabilities: 'Funzionalità Pilota',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'Pilota Coalizione DIVE V3',
+    federatedAuth: 'Autenticazione Federata',
+    policyAuth: 'Autorizzazione basata su Policy',
+    secureDoc: 'Condivisione Documenti Sicura',
+  },
+};
+
+// Coalition partners for footer (which countries each instance shows)
+const COALITION_PARTNERS: Record<string, string[]> = {
+  USA: ['CAN', 'GBR', 'FRA', 'DEU', 'ITA', 'ESP', 'NLD', 'POL'],
+  FRA: ['DEU', 'GBR', 'ITA', 'ESP', 'USA'],
+  DEU: ['FRA', 'GBR', 'ITA', 'USA', 'NLD', 'POL'],
+  GBR: ['USA', 'CAN', 'FRA', 'DEU'],
+  CAN: ['USA', 'GBR', 'FRA'],
+  ITA: ['FRA', 'DEU', 'ESP', 'USA'],
+};
+
+const DEFAULT_STRINGS: LocalizedStrings = INSTANCE_STRINGS.USA;
+const DEFAULT_PARTNERS: string[] = COALITION_PARTNERS.USA;
+
 const InstanceThemeContext = createContext<InstanceThemeContextValue>({
   instanceCode: 'USA',
   instanceName: 'United States',
   locale: 'en',
   theme: DEFAULT_THEME,
+  strings: DEFAULT_STRINGS,
+  coalitionPartners: DEFAULT_PARTNERS,
   isLoading: true,
 });
 
@@ -195,6 +287,8 @@ export function InstanceThemeProvider({ children }: InstanceThemeProviderProps) 
   const [instanceName, setInstanceName] = useState('United States');
   const [locale, setLocale] = useState('en');
   const [theme, setTheme] = useState<InstanceTheme>(DEFAULT_THEME);
+  const [strings, setStrings] = useState<LocalizedStrings>(DEFAULT_STRINGS);
+  const [coalitionPartners, setCoalitionPartners] = useState<string[]>(DEFAULT_PARTNERS);
 
   useEffect(() => {
     // Get instance code from environment variable
@@ -205,6 +299,10 @@ export function InstanceThemeProvider({ children }: InstanceThemeProviderProps) 
     setInstanceCode(code);
     setInstanceName(name);
     setLocale(loc);
+
+    // Get localized strings and coalition partners
+    setStrings(INSTANCE_STRINGS[code] || DEFAULT_STRINGS);
+    setCoalitionPartners(COALITION_PARTNERS[code] || DEFAULT_PARTNERS);
 
     // Get theme from predefined themes or use defaults
     const instanceTheme = INSTANCE_THEMES[code] || DEFAULT_THEME;
@@ -228,14 +326,53 @@ export function InstanceThemeProvider({ children }: InstanceThemeProviderProps) 
     // Inject CSS variables into :root
     injectCSSVariables(instanceTheme.css_variables);
 
+    // Update document title dynamically
+    if (typeof document !== 'undefined') {
+      document.title = `DIVE V3 - ${name}`;
+    }
+
+    // Update favicon dynamically
+    updateFavicon(code);
+
     setIsLoading(false);
   }, []);
 
   return (
-    <InstanceThemeContext.Provider value={{ instanceCode, instanceName, locale, theme, isLoading }}>
+    <InstanceThemeContext.Provider value={{ instanceCode, instanceName, locale, theme, strings, coalitionPartners, isLoading }}>
       {children}
     </InstanceThemeContext.Provider>
   );
+}
+
+/**
+ * Updates the favicon based on instance code
+ */
+function updateFavicon(code: string) {
+  if (typeof document === 'undefined') return;
+
+  // Map instance codes to flag emoji or flag icon paths
+  const faviconSvgs: Record<string, string> = {
+    USA: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#1a365d"/><text x="16" y="22" text-anchor="middle" font-size="18">🇺🇸</text></svg>`,
+    FRA: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#002395"/><text x="16" y="22" text-anchor="middle" font-size="18">🇫🇷</text></svg>`,
+    DEU: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#000000"/><text x="16" y="22" text-anchor="middle" font-size="18">🇩🇪</text></svg>`,
+    GBR: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#012169"/><text x="16" y="22" text-anchor="middle" font-size="18">🇬🇧</text></svg>`,
+    CAN: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#FF0000"/><text x="16" y="22" text-anchor="middle" font-size="18">🇨🇦</text></svg>`,
+    ITA: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="4" fill="#009246"/><text x="16" y="22" text-anchor="middle" font-size="18">🇮🇹</text></svg>`,
+  };
+
+  const svg = faviconSvgs[code] || faviconSvgs.USA;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+
+  // Find or create favicon link
+  let link = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  link.type = 'image/svg+xml';
+  link.href = url;
 }
 
 /**
@@ -294,5 +431,5 @@ export function getInstanceName(code: string): string {
 }
 
 // Export the themes for use in other components
-export { INSTANCE_THEMES, INSTANCE_NAMES, INSTANCE_LOCALES };
+export { INSTANCE_THEMES, INSTANCE_NAMES, INSTANCE_LOCALES, INSTANCE_STRINGS, COALITION_PARTNERS };
 
