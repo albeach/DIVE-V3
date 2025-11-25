@@ -122,74 +122,58 @@ cmd_restart() {
 }
 
 cmd_status() {
+    set +e  # Disable exit on error for health checks
+    
     echo ""
-    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║                    DIVE V3 Instance Status                     ║${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║              DIVE V3 - Instance Health Dashboard              ║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     
-    for code in usa fra deu; do
-        local name=$(get_instance_config "$code" name 2>/dev/null) || continue
-        local frontend=$(get_instance_config "$code" frontend)
-        local backend=$(get_instance_config "$code" backend)
-        local keycloak=$(get_instance_config "$code" keycloak)
+    # Quick status table
+    echo "INST   FRONTEND   BACKEND    KEYCLOAK   IdPs   EXTERNAL URL"
+    echo "────   ────────   ───────    ────────   ────   ─────────────────────────"
+    
+    for inst in "USA|3000|4000|8443|usa" "FRA|3001|4001|8444|fra" "DEU|3002|4002|8445|deu"; do
+        IFS='|' read -r name fp bp kp code <<< "$inst"
         
-        echo -e "${YELLOW}━━━ ${name^^} ($code) ━━━${NC}"
+        # Check services
+        fe=$(curl -sk "https://localhost:$fp" -o /dev/null -w "%{http_code}" --max-time 3 2>/dev/null)
+        be=$(curl -sk "https://localhost:$bp/health" -o /dev/null -w "%{http_code}" --max-time 2 2>/dev/null)
+        kc=$(curl -sk "https://localhost:$kp/realms/dive-v3-broker" -o /dev/null -w "%{http_code}" --max-time 2 2>/dev/null)
+        idps=$(curl -sk "https://localhost:$bp/api/idps/public" --max-time 2 2>/dev/null | grep -o '"total":[0-9]*' | cut -d: -f2)
         
-        # Check containers
-        local containers=$(docker ps --filter "name=dive-.*-$code\|dive-v3-$code\|dive-usa" --format "{{.Names}}: {{.Status}}" 2>/dev/null | grep -i "$code\|usa" | head -5)
+        [[ -z "$fe" ]] && fe="---"
+        [[ -z "$be" ]] && be="---"
+        [[ -z "$kc" ]] && kc="---"
+        [[ -z "$idps" ]] && idps="?"
         
-        if [[ -n "$containers" ]]; then
-            echo "$containers" | while read line; do
-                if [[ "$line" == *"healthy"* ]]; then
-                    echo -e "  ${GREEN}●${NC} $line"
-                elif [[ "$line" == *"unhealthy"* ]]; then
-                    echo -e "  ${RED}●${NC} $line"
-                else
-                    echo -e "  ${YELLOW}●${NC} $line"
-                fi
-            done
-        else
-            echo -e "  ${RED}●${NC} No containers running"
-        fi
+        # Color code status
+        [[ "$fe" == "200" ]] && fe_out="${GREEN}✓ 200${NC}" || fe_out="${RED}✗ $fe${NC}"
+        [[ "$be" == "200" ]] && be_out="${GREEN}✓ 200${NC}" || be_out="${RED}✗ $be${NC}"
+        [[ "$kc" == "200" ]] && kc_out="${GREEN}✓ 200${NC}" || kc_out="${RED}✗ $kc${NC}"
         
-        # Quick health check
-        echo -n "  Frontend (localhost:$frontend): "
-        if curl -sf --max-time 2 "https://localhost:$frontend" -k >/dev/null 2>&1; then
-            echo -e "${GREEN}UP${NC}"
-        else
-            echo -e "${RED}DOWN${NC}"
-        fi
-        
-        echo -n "  Backend  (localhost:$backend): "
-        if curl -sf --max-time 2 "https://localhost:$backend/health" -k >/dev/null 2>&1; then
-            echo -e "${GREEN}UP${NC}"
-        else
-            echo -e "${RED}DOWN${NC}"
-        fi
-        
-        echo -n "  Keycloak (localhost:$keycloak): "
-        if curl -sf --max-time 2 "https://localhost:$keycloak/realms/master" -k >/dev/null 2>&1; then
-            echo -e "${GREEN}UP${NC}"
-        else
-            echo -e "${RED}DOWN${NC}"
-        fi
-        
-        echo ""
+        echo -e "$name     $fe_out     $be_out     $kc_out     $idps      https://${code}-app.dive25.com"
     done
     
+    set -e  # Re-enable
+    
+    echo ""
     echo -e "${CYAN}━━━ Cloudflare Tunnels ━━━${NC}"
     cloudflared tunnel list 2>/dev/null | grep -E "dive-v3-(tunnel|fra|deu)" | while read line; do
-        if [[ "$line" == *"CONNECTIONS"* ]] || [[ -z "$line" ]]; then
-            continue
-        fi
         local conns=$(echo "$line" | awk '{print $NF}')
-        if [[ -n "$conns" && "$conns" != "CONNECTIONS" ]]; then
-            echo -e "  ${GREEN}●${NC} $line"
+        if [[ -n "$conns" && "$conns" =~ ^[0-9] ]]; then
+            echo -e "  ${GREEN}●${NC} $(echo "$line" | awk '{print $2}'): Active ($conns)"
         else
-            echo -e "  ${YELLOW}○${NC} $line (no connections)"
+            echo -e "  ${YELLOW}○${NC} $(echo "$line" | awk '{print $2}'): No connections"
         fi
     done
+    
+    echo ""
+    echo -e "${CYAN}━━━ Quick Commands ━━━${NC}"
+    echo "  ./scripts/dive up [usa|fra|deu|all]    Start instance(s)"
+    echo "  ./scripts/dive down [usa|fra|deu|all]  Stop instance(s)"
+    echo "  ./scripts/dive logs <instance>         View logs"
     echo ""
 }
 
