@@ -217,7 +217,7 @@ services:
     networks:
       - dive-deu-network
     healthcheck:
-      test: ["CMD-SHELL", "NODE_TLS_REJECT_UNAUTHORIZED=0 node -e \"fetch(https://localhost:4000/health\).then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
+      test: ["CMD-SHELL", "NODE_TLS_REJECT_UNAUTHORIZED=0 node -e \"fetch('https://localhost:4000/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))\""]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -240,6 +240,7 @@ services:
       # URLs
       NEXT_PUBLIC_API_URL: https://deu-api.dive25.com
       NEXT_PUBLIC_BACKEND_URL: https://deu-api.dive25.com
+      BACKEND_URL: https://backend-deu:4000
       NEXT_PUBLIC_BASE_URL: https://deu-app.dive25.com
       NEXT_PUBLIC_KEYCLOAK_URL: https://deu-idp.dive25.com
       # NextAuth
@@ -260,10 +261,10 @@ services:
       - "3002:3000"
     volumes:
       - ../../frontend:/app
-      - ../../frontend/public:/app/public:ro
       - deu_frontend_modules:/app/node_modules
       - deu_frontend_next:/app/.next
-      - ./certs:/app/certs
+      - ./certs:/opt/keycloak/certs:ro
+      - ./certs:/opt/app/certs:ro
     depends_on:
       backend-deu:
         condition: service_healthy
