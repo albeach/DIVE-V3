@@ -181,15 +181,46 @@ sync_instance() {
 
 show_logs() {
   local code=$1
+  local service=${3:-}  # Optional third argument for specific service
+  
   if [[ -z "$code" ]]; then
     echo -e "${RED}Error: Country code required${NC}"
     exit 1
   fi
   
+  local compose_cmd="docker-compose"
+  local compose_args=""
+  
   if [[ "$code" == "usa" ]]; then
-    cd "$PROJECT_ROOT" && docker-compose logs -f
+    compose_args=""
   else
-    cd "$PROJECT_ROOT" && docker-compose -p "$code" -f "docker-compose.${code}.yml" logs -f
+    compose_args="-p $code -f docker-compose.${code}.yml"
+  fi
+  
+  cd "$PROJECT_ROOT"
+  
+  if [[ -n "$service" ]]; then
+    # Service-specific logs (e.g., frontend, backend, keycloak)
+    local service_name=""
+    case "$service" in
+      frontend) service_name="frontend" ;;
+      backend) service_name="backend" ;;
+      keycloak) service_name="keycloak" ;;
+      opa) service_name="opa" ;;
+      kas) service_name="kas" ;;
+      tunnel|cloudflared) service_name="cloudflared" ;;
+      *) service_name="$service" ;;
+    esac
+    
+    if [[ "$code" != "usa" ]]; then
+      service_name="${service_name}-${code}"
+    fi
+    
+    echo -e "${CYAN}Showing logs for ${service_name}...${NC}"
+    $compose_cmd $compose_args logs -f "$service_name" 2>/dev/null || \
+      $compose_cmd $compose_args logs -f 2>/dev/null
+  else
+    $compose_cmd $compose_args logs -f
   fi
 }
 
@@ -230,6 +261,9 @@ start_tunnel() {
   fi
 }
 
+# Get optional service argument
+SERVICE_NAME="${3:-}"
+
 # Main
 case "$COMMAND" in
   status) show_status ;;
@@ -237,10 +271,30 @@ case "$COMMAND" in
   stop) stop_instance "$COUNTRY_CODE" ;;
   restart) restart_instance "$COUNTRY_CODE" ;;
   sync) sync_instance "$COUNTRY_CODE" ;;
-  logs) show_logs "$COUNTRY_CODE" ;;
+  logs) show_logs "$COUNTRY_CODE" "$SERVICE_NAME" ;;
   tunnel) start_tunnel "$COUNTRY_CODE" ;;
+  health) "$SCRIPT_DIR/dive-status.sh" "$COUNTRY_CODE" ;;
+  federate) "$SCRIPT_DIR/add-federation-partner.sh" "$COUNTRY_CODE" "$SERVICE_NAME" ;;
   *)
-    echo "Usage: $0 {status|start|stop|restart|sync|logs|tunnel} [country_code]"
+    echo -e "${CYAN}DIVE V3 - Instance Management${NC}"
+    echo ""
+    echo "Usage: $0 <command> [instance_code] [service]"
+    echo ""
+    echo "Commands:"
+    echo "  status              Show status of all instances"
+    echo "  start <code>        Start an instance"
+    echo "  stop <code>         Stop an instance"
+    echo "  restart <code>      Restart an instance"
+    echo "  sync <code>         Sync Keycloak realm from USA"
+    echo "  logs <code> [svc]   Show logs (optionally for specific service)"
+    echo "  tunnel <code>       Start/restart Cloudflare tunnel"
+    echo "  health [code]       Show health dashboard"
+    echo "  federate <a> <b>    Federate two instances"
+    echo ""
+    echo "Examples:"
+    echo "  $0 start fra"
+    echo "  $0 logs usa frontend"
+    echo "  $0 federate usa fra"
     exit 1
     ;;
 esac
