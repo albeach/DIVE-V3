@@ -1,0 +1,299 @@
+#!/usr/bin/env bash
+# =============================================================================
+# DIVE V3 - Unified Instance Manager
+# =============================================================================
+# Best Practice: Single entry point for all instance operations
+# Usage: ./scripts/dive <command> [instance] [options]
+# =============================================================================
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+# Known instances (add new ones here)
+declare -A INSTANCES=(
+    ["usa"]="USA|docker-compose.yml|3000|4000|8443"
+    ["fra"]="France|instances/fra/docker-compose.yml|3001|4001|8444"
+    ["deu"]="Germany|instances/deu/docker-compose.yml|3002|4002|8445"
+)
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+log_info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+get_instance_config() {
+    local code="${1^^}"
+    local key="$2"
+    local config="${INSTANCES[${code,,}]:-}"
+    
+    if [[ -z "$config" ]]; then
+        return 1
+    fi
+    
+    IFS='|' read -r name compose frontend backend keycloak <<< "$config"
+    
+    case "$key" in
+        name) echo "$name" ;;
+        compose) echo "$compose" ;;
+        frontend) echo "$frontend" ;;
+        backend) echo "$backend" ;;
+        keycloak) echo "$keycloak" ;;
+        *) return 1 ;;
+    esac
+}
+
+# =============================================================================
+# COMMANDS
+# =============================================================================
+
+cmd_up() {
+    local instance="${1:-all}"
+    
+    if [[ "$instance" == "all" ]]; then
+        for code in "${!INSTANCES[@]}"; do
+            cmd_up "$code"
+        done
+        return
+    fi
+    
+    local code="${instance,,}"
+    local name=$(get_instance_config "$code" name) || { log_error "Unknown instance: $instance"; return 1; }
+    local compose=$(get_instance_config "$code" compose)
+    
+    log_info "Starting $name instance..."
+    
+    cd "$PROJECT_ROOT"
+    
+    # Use project name for network isolation
+    if [[ "$code" == "usa" ]]; then
+        docker-compose -p "dive-usa" -f "$compose" up -d
+    else
+        docker-compose -p "dive-$code" -f "$compose" up -d
+    fi
+    
+    log_ok "$name instance started"
+}
+
+cmd_down() {
+    local instance="${1:-all}"
+    
+    if [[ "$instance" == "all" ]]; then
+        for code in "${!INSTANCES[@]}"; do
+            cmd_down "$code"
+        done
+        return
+    fi
+    
+    local code="${instance,,}"
+    local name=$(get_instance_config "$code" name) || { log_error "Unknown instance: $instance"; return 1; }
+    local compose=$(get_instance_config "$code" compose)
+    
+    log_info "Stopping $name instance..."
+    
+    cd "$PROJECT_ROOT"
+    docker-compose -p "dive-$code" -f "$compose" down
+    
+    log_ok "$name instance stopped"
+}
+
+cmd_restart() {
+    local instance="${1:-all}"
+    cmd_down "$instance"
+    sleep 2
+    cmd_up "$instance"
+}
+
+cmd_status() {
+    echo ""
+    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║                    DIVE V3 Instance Status                     ║${NC}"
+    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    for code in usa fra deu; do
+        local name=$(get_instance_config "$code" name 2>/dev/null) || continue
+        local frontend=$(get_instance_config "$code" frontend)
+        local backend=$(get_instance_config "$code" backend)
+        local keycloak=$(get_instance_config "$code" keycloak)
+        
+        echo -e "${YELLOW}━━━ ${name^^} ($code) ━━━${NC}"
+        
+        # Check containers
+        local containers=$(docker ps --filter "name=dive-.*-$code\|dive-v3-$code\|dive-usa" --format "{{.Names}}: {{.Status}}" 2>/dev/null | grep -i "$code\|usa" | head -5)
+        
+        if [[ -n "$containers" ]]; then
+            echo "$containers" | while read line; do
+                if [[ "$line" == *"healthy"* ]]; then
+                    echo -e "  ${GREEN}●${NC} $line"
+                elif [[ "$line" == *"unhealthy"* ]]; then
+                    echo -e "  ${RED}●${NC} $line"
+                else
+                    echo -e "  ${YELLOW}●${NC} $line"
+                fi
+            done
+        else
+            echo -e "  ${RED}●${NC} No containers running"
+        fi
+        
+        # Quick health check
+        echo -n "  Frontend (localhost:$frontend): "
+        if curl -sf --max-time 2 "https://localhost:$frontend" -k >/dev/null 2>&1; then
+            echo -e "${GREEN}UP${NC}"
+        else
+            echo -e "${RED}DOWN${NC}"
+        fi
+        
+        echo -n "  Backend  (localhost:$backend): "
+        if curl -sf --max-time 2 "https://localhost:$backend/health" -k >/dev/null 2>&1; then
+            echo -e "${GREEN}UP${NC}"
+        else
+            echo -e "${RED}DOWN${NC}"
+        fi
+        
+        echo -n "  Keycloak (localhost:$keycloak): "
+        if curl -sf --max-time 2 "https://localhost:$keycloak/realms/master" -k >/dev/null 2>&1; then
+            echo -e "${GREEN}UP${NC}"
+        else
+            echo -e "${RED}DOWN${NC}"
+        fi
+        
+        echo ""
+    done
+    
+    echo -e "${CYAN}━━━ Cloudflare Tunnels ━━━${NC}"
+    cloudflared tunnel list 2>/dev/null | grep -E "dive-v3-(tunnel|fra|deu)" | while read line; do
+        if [[ "$line" == *"CONNECTIONS"* ]] || [[ -z "$line" ]]; then
+            continue
+        fi
+        local conns=$(echo "$line" | awk '{print $NF}')
+        if [[ -n "$conns" && "$conns" != "CONNECTIONS" ]]; then
+            echo -e "  ${GREEN}●${NC} $line"
+        else
+            echo -e "  ${YELLOW}○${NC} $line (no connections)"
+        fi
+    done
+    echo ""
+}
+
+cmd_logs() {
+    local instance="${1:-usa}"
+    local service="${2:-}"
+    
+    local code="${instance,,}"
+    local compose=$(get_instance_config "$code" compose) || { log_error "Unknown instance: $instance"; return 1; }
+    
+    cd "$PROJECT_ROOT"
+    
+    if [[ -n "$service" ]]; then
+        docker-compose -p "dive-$code" -f "$compose" logs -f "$service"
+    else
+        docker-compose -p "dive-$code" -f "$compose" logs -f
+    fi
+}
+
+cmd_tunnel() {
+    local instance="${1:-usa}"
+    local action="${2:-start}"
+    
+    case "$action" in
+        start)
+            log_info "Starting tunnel for $instance..."
+            case "${instance,,}" in
+                usa)
+                    nohup cloudflared tunnel --config ~/.cloudflared/config.yml run > /tmp/tunnel-usa.log 2>&1 &
+                    ;;
+                fra)
+                    nohup cloudflared tunnel --config "$PROJECT_ROOT/instances/fra/cloudflared/config.yml" run > /tmp/tunnel-fra.log 2>&1 &
+                    ;;
+                deu)
+                    nohup cloudflared tunnel --config "$PROJECT_ROOT/instances/deu/cloudflared/config.yml" run > /tmp/tunnel-deu.log 2>&1 &
+                    ;;
+            esac
+            sleep 2
+            log_ok "Tunnel started"
+            ;;
+        stop)
+            pkill -f "cloudflared.*$instance" 2>/dev/null || true
+            log_ok "Tunnel stopped"
+            ;;
+        *)
+            log_error "Unknown action: $action (use start/stop)"
+            ;;
+    esac
+}
+
+cmd_help() {
+    cat << EOF
+${CYAN}DIVE V3 Instance Manager${NC}
+
+${YELLOW}Usage:${NC}
+  ./scripts/dive <command> [instance] [options]
+
+${YELLOW}Commands:${NC}
+  up [instance]       Start instance(s)       ./scripts/dive up fra
+  down [instance]     Stop instance(s)        ./scripts/dive down all
+  restart [instance]  Restart instance(s)     ./scripts/dive restart usa
+  status              Show all instance status
+  logs <instance>     View instance logs      ./scripts/dive logs fra keycloak
+  tunnel <instance>   Manage CF tunnel        ./scripts/dive tunnel fra start
+
+${YELLOW}Instances:${NC}
+  usa    United States (primary)
+  fra    France
+  deu    Germany
+  all    All instances
+
+${YELLOW}Examples:${NC}
+  ./scripts/dive up usa          # Start USA only
+  ./scripts/dive up all          # Start all instances
+  ./scripts/dive status          # Health dashboard
+  ./scripts/dive logs fra        # Stream FRA logs
+  ./scripts/dive tunnel fra start # Start FRA tunnel
+
+EOF
+}
+
+# =============================================================================
+# MAIN
+# =============================================================================
+
+main() {
+    local cmd="${1:-help}"
+    shift || true
+    
+    case "$cmd" in
+        up)      cmd_up "$@" ;;
+        down)    cmd_down "$@" ;;
+        restart) cmd_restart "$@" ;;
+        status)  cmd_status "$@" ;;
+        logs)    cmd_logs "$@" ;;
+        tunnel)  cmd_tunnel "$@" ;;
+        help|--help|-h) cmd_help ;;
+        *)
+            log_error "Unknown command: $cmd"
+            cmd_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
+
