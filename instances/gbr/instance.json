@@ -1,0 +1,48 @@
+{
+  "instance_code": "GBR",
+  "instance_name": "United Kingdom",
+  "locale": "en",
+  "hostnames": {
+    "app": "gbr-app.dive25.com",
+    "api": "gbr-api.dive25.com",
+    "idp": "gbr-idp.dive25.com",
+    "kas": "gbr-kas.dive25.com"
+  },
+  "ports": {
+    "frontend": 3003,
+    "backend": 4003,
+    "keycloak_http": 8084,
+    "keycloak_https": 8446,
+    "mongodb": 27020,
+    "redis": 6382,
+    "opa": 8184,
+    "kas": 8093,
+    "postgres": 5436,
+    "cloudflared_metrics": 9129
+  },
+  "theme": {
+    "primary_color": "#012169",
+    "secondary_color": "#C8102E",
+    "accent_color": "#ffffff",
+    "background_image": "background-gbr.jpg",
+    "keycloak_theme": "dive-v3-gbr",
+    "css_variables": {
+      "--instance-primary": "#012169",
+      "--instance-secondary": "#C8102E",
+      "--instance-accent": "#ffffff",
+      "--instance-text": "#ffffff",
+      "--instance-banner-bg": "linear-gradient(135deg, #012169 0%, #C8102E 100%)"
+    }
+  },
+  "federation_partners": ["USA", "FRA", "DEU", "CAN"],
+  "cloudflare": {
+    "tunnel_id": "placeholder-tunnel-id",
+    "tunnel_name": "dive-v3-gbr-tunnel"
+  },
+  "test_users": {
+    "prefix": "testuser-gbr",
+    "password": "DiveDemo2025!",
+    "count": 4
+  }
+}
+

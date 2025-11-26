@@ -3,23 +3,23 @@
 /**
  * Instance Background Component
  * 
- * Provides visually distinct backgrounds for each coalition partner instance.
+ * Provides a visually distinct background for each coalition instance.
  * Supports multiple background types:
- * - gradient: Dynamic gradient from instance colors
+ * - gradient: Uses CSS variables for instance-specific gradients
  * - image: Country-specific background images
  * - pattern: Geometric patterns with instance colors
- * - mesh: Modern mesh gradient effect
+ * - animated: Subtle animated backgrounds with data flow effects
  * 
- * 🎨 All colors are derived from CSS variables set by ThemeProvider
+ * Scalable design - new instances only need to add their theme to instance.json
  */
 
 import React from 'react';
 import { useInstanceTheme } from './theme-provider';
 
-export type BackgroundType = 'gradient' | 'image' | 'pattern' | 'mesh' | 'minimal';
+type BackgroundType = 'gradient' | 'image' | 'pattern' | 'animated' | 'minimal';
 
 interface InstanceBackgroundProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   type?: BackgroundType;
   className?: string;
   overlay?: boolean;
@@ -27,315 +27,283 @@ interface InstanceBackgroundProps {
 }
 
 /**
- * Main InstanceBackground component
- * Wraps content with an instance-themed background
+ * Gradient Background - Uses instance CSS variables
  */
-export function InstanceBackground({ 
-  children, 
-  type = 'gradient',
-  className = '',
-  overlay = true,
-  intensity = 'medium'
-}: InstanceBackgroundProps) {
-  const { instanceCode } = useInstanceTheme();
-  
-  const overlayOpacity = {
-    light: 'bg-black/10',
-    medium: 'bg-black/30',
-    strong: 'bg-black/50',
+function GradientBackground({ intensity = 'medium' }: { intensity: string }) {
+  const opacityMap = {
+    light: 'opacity-90',
+    medium: 'opacity-95',
+    strong: 'opacity-100',
   };
 
   return (
-    <div className={`relative min-h-screen ${className}`}>
-      {/* Background Layer */}
-      <BackgroundLayer type={type} instanceCode={instanceCode} />
-      
-      {/* Optional overlay for better text readability */}
-      {overlay && (
-        <div className={`absolute inset-0 ${overlayOpacity[intensity]}`} />
-      )}
-      
-      {/* Content */}
-      <div className="relative z-10">
-        {children}
-      </div>
-    </div>
+    <div 
+      className={`absolute inset-0 ${opacityMap[intensity as keyof typeof opacityMap]}`}
+      style={{ background: 'var(--instance-banner-bg)' }}
+    />
   );
 }
 
 /**
- * Background Layer - renders the actual background based on type
+ * Pattern Background - Geometric grid with instance colors
  */
-function BackgroundLayer({ 
-  type, 
-  instanceCode 
-}: { 
-  type: BackgroundType; 
-  instanceCode: string;
-}) {
-  switch (type) {
-    case 'gradient':
-      return <GradientBackground instanceCode={instanceCode} />;
-    case 'image':
-      return <ImageBackground instanceCode={instanceCode} />;
-    case 'pattern':
-      return <PatternBackground instanceCode={instanceCode} />;
-    case 'mesh':
-      return <MeshBackground instanceCode={instanceCode} />;
-    case 'minimal':
-      return <MinimalBackground />;
-    default:
-      return <GradientBackground instanceCode={instanceCode} />;
-  }
-}
+function PatternBackground({ intensity = 'medium' }: { intensity: string }) {
+  const opacityMap = {
+    light: 0.05,
+    medium: 0.1,
+    strong: 0.15,
+  };
+  const opacity = opacityMap[intensity as keyof typeof opacityMap];
 
-/**
- * Gradient Background
- * Elegant gradient using instance primary and secondary colors
- */
-function GradientBackground({ instanceCode }: { instanceCode: string }) {
   return (
-    <div className="absolute inset-0 overflow-hidden">
-      {/* Primary gradient */}
+    <>
+      {/* Base gradient */}
       <div 
-        className="absolute inset-0 bg-instance-banner"
-        style={{ 
-          background: 'var(--instance-banner-bg)',
-        }}
+        className="absolute inset-0"
+        style={{ background: 'var(--instance-banner-bg)' }}
       />
       
-      {/* Animated accent orbs */}
+      {/* Grid pattern overlay */}
       <div 
-        className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-30 blur-3xl animate-pulse"
-        style={{ backgroundColor: 'var(--instance-secondary)' }}
-      />
-      <div 
-        className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-20 blur-3xl animate-pulse"
-        style={{ 
-          backgroundColor: 'var(--instance-accent)',
-          animationDelay: '1s'
-        }}
-      />
-      
-      {/* Subtle grid overlay */}
-      <div 
-        className="absolute inset-0 opacity-5"
+        className="absolute inset-0"
         style={{
           backgroundImage: `
-            linear-gradient(var(--instance-text) 1px, transparent 1px),
-            linear-gradient(90deg, var(--instance-text) 1px, transparent 1px)
+            linear-gradient(rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacity}) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacity}) 1px, transparent 1px)
           `,
-          backgroundSize: '60px 60px',
+          backgroundSize: '50px 50px',
         }}
       />
-    </div>
+      
+      {/* Diagonal lines */}
+      <div 
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `
+            repeating-linear-gradient(
+              45deg,
+              transparent,
+              transparent 100px,
+              rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacity * 0.5}) 100px,
+              rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacity * 0.5}) 101px
+            )
+          `,
+        }}
+      />
+    </>
   );
 }
 
 /**
- * Image Background
- * Country-specific background images with gradient overlay
+ * Image Background - Uses country-specific background images
  */
-function ImageBackground({ instanceCode }: { instanceCode: string }) {
+function ImageBackground({ instanceCode, intensity = 'medium' }: { instanceCode: string; intensity: string }) {
+  const overlayOpacity = {
+    light: 'bg-black/30',
+    medium: 'bg-black/50',
+    strong: 'bg-black/70',
+  };
+
+  // Map instance codes to background image paths
   const backgroundImages: Record<string, string> = {
-    USA: '/backgrounds/usa-capitol.jpg',
-    FRA: '/backgrounds/fra-eiffel.jpg',
-    DEU: '/backgrounds/deu-brandenburg.jpg',
-    GBR: '/backgrounds/gbr-parliament.jpg',
-    CAN: '/backgrounds/can-parliament.jpg',
-    ITA: '/backgrounds/ita-colosseum.jpg',
+    USA: '/backgrounds/background-usa.jpg',
+    FRA: '/backgrounds/background-fra.jpg',
+    DEU: '/backgrounds/background-deu.jpg',
+    GBR: '/backgrounds/background-gbr.jpg',
+    CAN: '/backgrounds/background-can.jpg',
+    ITA: '/backgrounds/background-ita.jpg',
+    ESP: '/backgrounds/background-esp.jpg',
+    NLD: '/backgrounds/background-nld.jpg',
+    POL: '/backgrounds/background-pol.jpg',
   };
 
   const imagePath = backgroundImages[instanceCode] || backgroundImages.USA;
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <>
       {/* Background image */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ 
-          backgroundImage: `url(${imagePath})`,
-        }}
+        style={{ backgroundImage: `url(${imagePath})` }}
       />
-      
-      {/* Gradient overlay using instance colors */}
+      {/* Gradient overlay for readability */}
+      <div className={`absolute inset-0 ${overlayOpacity[intensity as keyof typeof overlayOpacity]}`} />
+      {/* Instance color tint */}
       <div 
-        className="absolute inset-0"
-        style={{
-          background: `linear-gradient(
-            135deg, 
-            rgba(var(--instance-primary-rgb), 0.9) 0%, 
-            rgba(var(--instance-secondary-rgb), 0.8) 50%,
-            rgba(var(--instance-primary-rgb), 0.95) 100%
-          )`,
-        }}
+        className="absolute inset-0 mix-blend-overlay opacity-30"
+        style={{ background: 'var(--instance-banner-bg)' }}
       />
-    </div>
+    </>
   );
 }
 
 /**
- * Pattern Background
- * Geometric patterns with instance colors
+ * Animated Background - Data flow visualization
  */
-function PatternBackground({ instanceCode }: { instanceCode: string }) {
+function AnimatedBackground({ intensity = 'medium' }: { intensity: string }) {
+  const opacityMap = {
+    light: { grid: 0.1, lines: 0.15, particles: 0.4 },
+    medium: { grid: 0.2, lines: 0.25, particles: 0.6 },
+    strong: { grid: 0.3, lines: 0.35, particles: 0.8 },
+  };
+  const opacities = opacityMap[intensity as keyof typeof opacityMap];
+
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <>
       {/* Base gradient */}
       <div 
         className="absolute inset-0"
-        style={{ 
-          background: 'var(--instance-banner-bg)',
-        }}
+        style={{ background: 'var(--instance-banner-bg)' }}
       />
       
-      {/* Hexagonal pattern */}
+      {/* Animated grid */}
       <div 
-        className="absolute inset-0 opacity-10"
+        className="absolute inset-0"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l25.98 15v30L30 60 4.02 45V15z' fill='none' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E")`,
+          backgroundImage: `
+            linear-gradient(rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacities.grid}) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacities.grid}) 1px, transparent 1px)
+          `,
           backgroundSize: '60px 60px',
+          animation: 'backgroundScroll 20s linear infinite',
         }}
       />
       
-      {/* Floating shapes */}
-      <div className="absolute inset-0">
-        {[...Array(6)].map((_, i) => (
+      {/* Animated circuit lines */}
+      <div className="absolute inset-0 overflow-hidden" style={{ opacity: opacities.lines }}>
+        <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+          {/* Horizontal lines */}
+          <line x1="0" y1="25%" x2="100%" y2="25%" stroke="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.5)" strokeWidth="1" strokeDasharray="8,4">
+            <animate attributeName="stroke-dashoffset" from="0" to="12" dur="2s" repeatCount="indefinite" />
+          </line>
+          <line x1="0" y1="50%" x2="100%" y2="50%" stroke="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.5)" strokeWidth="1" strokeDasharray="8,4">
+            <animate attributeName="stroke-dashoffset" from="0" to="12" dur="3s" repeatCount="indefinite" />
+          </line>
+          <line x1="0" y1="75%" x2="100%" y2="75%" stroke="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.5)" strokeWidth="1" strokeDasharray="8,4">
+            <animate attributeName="stroke-dashoffset" from="0" to="12" dur="2.5s" repeatCount="indefinite" />
+          </line>
+          
+          {/* Data nodes */}
+          <circle cx="15%" cy="25%" r="4" fill="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.8)">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="45%" cy="50%" r="4" fill="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.8)">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="2.5s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="75%" cy="75%" r="4" fill="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.8)">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="3s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="85%" cy="25%" r="4" fill="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.8)">
+            <animate attributeName="opacity" values="0.3;1;0.3" dur="1.8s" repeatCount="indefinite" />
+          </circle>
+        </svg>
+      </div>
+      
+      {/* Floating particles */}
+      <div className="absolute inset-0 overflow-hidden">
+        {[...Array(8)].map((_, i) => (
           <div
             key={i}
-            className="absolute rounded-full opacity-10 animate-float"
+            className="absolute rounded-full animate-float"
             style={{
-              width: `${80 + i * 40}px`,
-              height: `${80 + i * 40}px`,
-              left: `${10 + i * 15}%`,
-              top: `${20 + (i % 3) * 25}%`,
-              backgroundColor: i % 2 === 0 ? 'var(--instance-secondary)' : 'var(--instance-accent)',
+              width: `${4 + (i % 3) * 2}px`,
+              height: `${4 + (i % 3) * 2}px`,
+              backgroundColor: `rgba(var(--instance-accent-rgb, 255, 255, 255), ${opacities.particles})`,
+              left: `${10 + i * 12}%`,
+              top: `${20 + (i % 4) * 20}%`,
               animationDelay: `${i * 0.5}s`,
-              animationDuration: `${4 + i}s`,
+              animationDuration: `${3 + i * 0.5}s`,
             }}
           />
         ))}
       </div>
-    </div>
-  );
-}
-
-/**
- * Mesh Gradient Background
- * Modern mesh gradient effect (Apple-style)
- */
-function MeshBackground({ instanceCode }: { instanceCode: string }) {
-  return (
-    <div className="absolute inset-0 overflow-hidden">
-      {/* Base color */}
-      <div 
-        className="absolute inset-0"
-        style={{ backgroundColor: 'var(--instance-primary)' }}
-      />
       
-      {/* Mesh gradient blobs */}
+      {/* Subtle radial glow */}
       <div 
-        className="absolute top-0 left-0 w-[60%] h-[60%] rounded-full blur-[120px] opacity-60"
-        style={{ backgroundColor: 'var(--instance-secondary)' }}
-      />
-      <div 
-        className="absolute bottom-0 right-0 w-[50%] h-[50%] rounded-full blur-[100px] opacity-50"
-        style={{ backgroundColor: 'var(--instance-accent)' }}
-      />
-      <div 
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] rounded-full blur-[80px] opacity-40"
-        style={{ backgroundColor: 'var(--instance-primary)' }}
-      />
-      
-      {/* Noise texture */}
-      <div 
-        className="absolute inset-0 opacity-[0.03]"
+        className="absolute inset-0 opacity-30"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+          background: 'radial-gradient(ellipse at 30% 20%, rgba(var(--instance-accent-rgb, 255, 255, 255), 0.15) 0%, transparent 50%)',
         }}
       />
-    </div>
+      <div 
+        className="absolute inset-0 opacity-20"
+        style={{
+          background: 'radial-gradient(ellipse at 70% 80%, rgba(var(--instance-secondary-rgb, 255, 255, 255), 0.15) 0%, transparent 50%)',
+        }}
+      />
+    </>
   );
 }
 
 /**
- * Minimal Background
- * Clean, subtle background for content-focused pages
+ * Minimal Background - Clean, professional look
  */
 function MinimalBackground() {
   return (
-    <div className="absolute inset-0 overflow-hidden">
-      {/* Very subtle gradient */}
+    <>
+      {/* Base gradient */}
       <div 
         className="absolute inset-0"
-        style={{ 
-          background: 'linear-gradient(180deg, rgba(var(--instance-primary-rgb), 0.03) 0%, transparent 50%)',
+        style={{ background: 'var(--instance-banner-bg)' }}
+      />
+      
+      {/* Subtle texture */}
+      <div 
+        className="absolute inset-0 opacity-5"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       />
       
-      {/* Top accent line */}
+      {/* Top shine accent */}
       <div 
-        className="absolute top-0 left-0 right-0 h-1"
-        style={{ 
-          background: 'var(--instance-banner-bg)',
-        }}
+        className="absolute top-0 left-0 right-0 h-px opacity-20"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(var(--instance-accent-rgb, 255, 255, 255), 0.5), transparent)' }}
       />
-    </div>
+    </>
   );
 }
 
 /**
- * Hero Section Background
- * For landing pages and prominent sections
+ * Main InstanceBackground Component
  */
-export function HeroBackground({ 
-  children,
-  className = ''
-}: { 
-  children: React.ReactNode;
-  className?: string;
-}) {
+export function InstanceBackground({ 
+  children, 
+  type = 'animated',
+  className = '',
+  overlay = false,
+  intensity = 'medium',
+}: InstanceBackgroundProps) {
   const { instanceCode } = useInstanceTheme();
-  
+
+  const renderBackground = () => {
+    switch (type) {
+      case 'gradient':
+        return <GradientBackground intensity={intensity} />;
+      case 'pattern':
+        return <PatternBackground intensity={intensity} />;
+      case 'image':
+        return <ImageBackground instanceCode={instanceCode} intensity={intensity} />;
+      case 'animated':
+        return <AnimatedBackground intensity={intensity} />;
+      case 'minimal':
+        return <MinimalBackground />;
+      default:
+        return <GradientBackground intensity={intensity} />;
+    }
+  };
+
   return (
     <div className={`relative overflow-hidden ${className}`}>
-      {/* Animated gradient background */}
-      <div 
-        className="absolute inset-0 animate-gradient"
-        style={{
-          background: `linear-gradient(
-            -45deg,
-            var(--instance-primary),
-            var(--instance-secondary),
-            var(--instance-primary),
-            var(--instance-accent)
-          )`,
-          backgroundSize: '400% 400%',
-        }}
-      />
+      {/* Background layer */}
+      {renderBackground()}
       
-      {/* Floating orbs */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div 
-          className="absolute w-72 h-72 rounded-full blur-3xl opacity-30 animate-float"
-          style={{ 
-            backgroundColor: 'var(--instance-accent)',
-            top: '10%',
-            right: '10%',
-          }}
-        />
-        <div 
-          className="absolute w-96 h-96 rounded-full blur-3xl opacity-20 animate-float"
-          style={{ 
-            backgroundColor: 'var(--instance-secondary)',
-            bottom: '10%',
-            left: '5%',
-            animationDelay: '2s',
-          }}
-        />
-      </div>
+      {/* Optional dark overlay for better content visibility */}
+      {overlay && (
+        <div className="absolute inset-0 bg-black/20" />
+      )}
       
-      {/* Content */}
+      {/* Content layer */}
       <div className="relative z-10">
         {children}
       </div>
@@ -344,65 +312,68 @@ export function HeroBackground({
 }
 
 /**
- * Card Background
- * For elevated content cards with subtle instance theming
+ * Full-page background wrapper
  */
-export function CardBackground({ 
+export function InstancePageBackground({ 
   children,
-  className = '',
-  glow = false
-}: { 
-  children: React.ReactNode;
-  className?: string;
-  glow?: boolean;
-}) {
+  type = 'animated',
+  intensity = 'medium',
+}: InstanceBackgroundProps) {
   return (
-    <div 
-      className={`
-        relative bg-white/90 backdrop-blur-sm rounded-2xl
-        border border-gray-200
-        ${glow ? 'shadow-lg' : 'shadow-md'}
-        ${className}
-      `}
-      style={{
-        boxShadow: glow 
-          ? '0 0 40px rgba(var(--instance-primary-rgb), 0.15), 0 8px 32px rgba(0,0,0,0.1)' 
-          : undefined,
-      }}
+    <InstanceBackground 
+      type={type} 
+      intensity={intensity}
+      className="min-h-screen"
     >
-      {/* Top accent border */}
-      <div 
-        className="absolute top-0 left-4 right-4 h-0.5 rounded-full"
-        style={{ backgroundColor: 'var(--instance-primary)' }}
-      />
-      
       {children}
-    </div>
+    </InstanceBackground>
   );
 }
 
 /**
- * Section Divider with instance colors
+ * Hero section background
  */
-export function InstanceDivider({ className = '' }: { className?: string }) {
+export function InstanceHeroBackground({ 
+  children,
+  type = 'animated',
+  className = '',
+}: InstanceBackgroundProps) {
   return (
-    <div className={`flex items-center gap-4 ${className}`}>
+    <InstanceBackground 
+      type={type} 
+      intensity="medium"
+      className={`py-12 md:py-20 ${className}`}
+    >
+      {children}
+    </InstanceBackground>
+  );
+}
+
+/**
+ * Card/Section background with lighter treatment
+ */
+export function InstanceCardBackground({ 
+  children,
+  className = '',
+}: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`relative overflow-hidden ${className}`}>
+      {/* Light gradient background */}
       <div 
-        className="flex-1 h-px"
-        style={{ background: 'linear-gradient(90deg, transparent, var(--instance-primary), transparent)' }}
+        className="absolute inset-0 opacity-5"
+        style={{ background: 'var(--instance-banner-bg)' }}
       />
+      {/* Subtle border accent */}
       <div 
-        className="w-2 h-2 rounded-full"
-        style={{ backgroundColor: 'var(--instance-accent)' }}
+        className="absolute top-0 left-0 right-0 h-1"
+        style={{ background: 'var(--instance-banner-bg)' }}
       />
-      <div 
-        className="flex-1 h-px"
-        style={{ background: 'linear-gradient(90deg, transparent, var(--instance-primary), transparent)' }}
-      />
+      {/* Content */}
+      <div className="relative z-10">
+        {children}
+      </div>
     </div>
   );
 }
 
 export default InstanceBackground;
-
-
