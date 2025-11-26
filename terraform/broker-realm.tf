@@ -581,3 +581,127 @@ resource "keycloak_user_roles" "broker_super_admin_roles" {
   ]
 }
 
+# ============================================
+# INDUSTRY PARTNER: Booz Allen Hamilton (USA)
+# ============================================
+# Primary Endorser Model - BAH endorsed by USA
+# Can access USA resources marked releasableToIndustry=true
+# Can federate to other instances that accept USA-endorsed contractors
+
+resource "keycloak_user" "industry_bah" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  username = "contractor.bah"
+  enabled  = true
+
+  email      = "contractor.bah@bah.com"
+  first_name = "Contractor"
+  last_name  = "Booz Allen Hamilton"
+
+  attributes = {
+    # Core DIVE attributes
+    uniqueID             = "contractor.bah@bah.com"
+    clearance            = "SECRET"
+    countryOfAffiliation = "USA"
+    acpCOI               = jsonencode(["NATO"])
+
+    # Industry-specific (Primary Endorser Model)
+    organizationType = "INDUSTRY"
+    organization     = "Booz Allen Hamilton"
+    primaryEndorser  = "USA"
+    userType         = "contractor"
+
+    # Pilot metadata
+    pilot_user    = "true"
+    industry_user = "true"
+    created_by    = "terraform"
+  }
+
+  initial_password {
+    value     = "DiveDemo2025!"
+    temporary = false
+  }
+
+  lifecycle {
+    ignore_changes = [initial_password]
+  }
+}
+
+# ============================================
+# INDUSTRY PARTNER: IABG (Germany)
+# ============================================
+# Primary Endorser Model - IABG endorsed by DEU
+
+resource "keycloak_user" "industry_iabg" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  username = "contractor.iabg"
+  enabled  = true
+
+  email      = "contractor.iabg@iabg.de"
+  first_name = "Contractor"
+  last_name  = "IABG"
+
+  attributes = {
+    uniqueID             = "contractor.iabg@iabg.de"
+    clearance            = "SECRET"
+    countryOfAffiliation = "DEU"
+    acpCOI               = jsonencode(["NATO"])
+    organizationType     = "INDUSTRY"
+    organization         = "IABG"
+    primaryEndorser      = "DEU"
+    userType             = "contractor"
+    pilot_user           = "true"
+    industry_user        = "true"
+    created_by           = "terraform"
+  }
+
+  initial_password {
+    value     = "DiveDemo2025!"
+    temporary = false
+  }
+
+  lifecycle {
+    ignore_changes = [initial_password]
+  }
+}
+
+# ============================================
+# INDUSTRY PARTNER: Thales (France)
+# ============================================
+# Primary Endorser Model - Thales endorsed by FRA
+
+resource "keycloak_user" "industry_thales" {
+  count    = var.create_test_users ? 1 : 0
+  realm_id = keycloak_realm.dive_v3_broker.id
+  username = "contractor.thales"
+  enabled  = true
+
+  email      = "contractor.thales@thalesgroup.com"
+  first_name = "Contractor"
+  last_name  = "Thales"
+
+  attributes = {
+    uniqueID             = "contractor.thales@thalesgroup.com"
+    clearance            = "SECRET"
+    countryOfAffiliation = "FRA"
+    acpCOI               = jsonencode(["NATO"])
+    organizationType     = "INDUSTRY"
+    organization         = "Thales"
+    primaryEndorser      = "FRA"
+    userType             = "contractor"
+    pilot_user           = "true"
+    industry_user        = "true"
+    created_by           = "terraform"
+  }
+
+  initial_password {
+    value     = "DiveDemo2025!"
+    temporary = false
+  }
+
+  lifecycle {
+    ignore_changes = [initial_password]
+  }
+}
+
