@@ -105,27 +105,43 @@
         </div>
 
         <#if realm.password && social.providers??>
-            <div id="kc-social-providers" class="dive-social-providers">
-                <hr class="dive-divider"/>
-                <h4 class="dive-social-title">${msg("identity-provider-login-label")}</h4>
+            <div id="kc-social-providers" class="dive-idp-section">
+                <div class="dive-idp-divider">
+                    <span class="dive-idp-divider-line"></span>
+                    <span class="dive-idp-divider-text">${msg("orFederatedIdp", "or federate via")}</span>
+                    <span class="dive-idp-divider-line"></span>
+                </div>
 
-                <ul class="dive-social-list">
+                <div class="dive-idp-grid">
                     <#list social.providers as p>
-                        <li class="dive-social-item">
-                            <a id="social-${p.alias}" 
-                               class="dive-social-link" 
-                               href="${p.loginUrl}"
-                               aria-label="Sign in with ${p.displayName}">
-                                <#if p.iconClasses?has_content>
-                                    <i class="${properties.kcCommonLogoIdP!} ${p.iconClasses!}" aria-hidden="true"></i>
-                                    <span class="dive-social-text">${p.displayName!}</span>
-                                <#else>
-                                    <span class="dive-social-text">${p.displayName!}</span>
-                                </#if>
-                            </a>
-                        </li>
+                        <#-- Extract country code and flag emoji from alias -->
+                        <#assign countryCode = "">
+                        <#assign flagEmoji = "🌐">
+                        <#assign idpAlias = p.alias!?lower_case>
+                        <#if idpAlias?contains("usa") || idpAlias?contains("us-")><#assign countryCode = "USA"><#assign flagEmoji = "🇺🇸"></#if>
+                        <#if idpAlias?contains("fra") || idpAlias?contains("france")><#assign countryCode = "FRA"><#assign flagEmoji = "🇫🇷"></#if>
+                        <#if idpAlias?contains("deu") || idpAlias?contains("germany")><#assign countryCode = "DEU"><#assign flagEmoji = "🇩🇪"></#if>
+                        <#if idpAlias?contains("can") || idpAlias?contains("canada")><#assign countryCode = "CAN"><#assign flagEmoji = "🇨🇦"></#if>
+                        <#if idpAlias?contains("gbr") || idpAlias?contains("uk")><#assign countryCode = "GBR"><#assign flagEmoji = "🇬🇧"></#if>
+                        <#if idpAlias?contains("esp") || idpAlias?contains("spain")><#assign countryCode = "ESP"><#assign flagEmoji = "🇪🇸"></#if>
+                        <#if idpAlias?contains("ita") || idpAlias?contains("italy")><#assign countryCode = "ITA"><#assign flagEmoji = "🇮🇹"></#if>
+                        <#if idpAlias?contains("nld") || idpAlias?contains("netherlands")><#assign countryCode = "NLD"><#assign flagEmoji = "🇳🇱"></#if>
+                        <#if idpAlias?contains("pol") || idpAlias?contains("poland")><#assign countryCode = "POL"><#assign flagEmoji = "🇵🇱"></#if>
+                        
+                        <a id="social-${p.alias}" 
+                           class="dive-idp-button" 
+                           href="${p.loginUrl}"
+                           title="${p.displayName!}"
+                           aria-label="Sign in with ${p.displayName}">
+                            <span class="dive-idp-flag-emoji">${flagEmoji}</span>
+                            <#if countryCode?has_content>
+                                <span class="dive-idp-code">${countryCode}</span>
+                            <#else>
+                                <span class="dive-idp-name">${p.displayName!}</span>
+                            </#if>
+                        </a>
                     </#list>
-                </ul>
+                </div>
             </div>
         </#if>
 
