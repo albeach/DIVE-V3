@@ -302,8 +302,61 @@ export function IdpSelector() {
     );
   }
 
+  // Direct login handler (for local users - no federation)
+  const handleDirectLogin = async () => {
+    const { signIn } = await import('next-auth/react');
+    // No kc_idp_hint = direct login to broker realm
+    await signIn('keycloak', {
+      callbackUrl: '/dashboard',
+    });
+  };
+
   return (
     <>
+      {/* Direct Login for Local Users */}
+      <div className="mb-6">
+        <button
+          onClick={handleDirectLogin}
+          className="w-full group p-4 border-2 border-[#009ab3] rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left bg-gradient-to-br from-[#009ab3]/5 to-[#79d85a]/5"
+        >
+          <div className="flex items-center gap-4">
+            {/* Flag */}
+            <div className="flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+              <FlagIcon alias="usa" size={56} />
+            </div>
+            
+            {/* Text */}
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
+                  Login as USA User
+                </h3>
+                <StatusIndicator status="active" />
+              </div>
+              <p className="text-sm text-gray-600 mt-0.5">
+                Authenticate directly with DIVE V3 credentials
+              </p>
+            </div>
+
+            {/* Arrow */}
+            <div className="text-[#009ab3] group-hover:text-[#79d85a] group-hover:translate-x-1 transition-all duration-300">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+          </div>
+        </button>
+      </div>
+
+      {/* Federation Partners - for users from other countries */}
+      {idps.length > 0 && (
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+            Or federate from partner nation
+          </h3>
+        </div>
+      )}
+
       {/* Federated Identity Providers - Compact View */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
         {idps

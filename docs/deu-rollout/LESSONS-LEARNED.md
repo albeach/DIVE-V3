@@ -18,10 +18,17 @@ This document captures critical lessons learned from the DEU (Germany) instance 
 
 **Symptom**: After successful federation login, SECRET user reached dashboard without being prompted for OTP.
 
-**Root Cause**: 
-1. The "Classified Access Browser Flow" exists in Terraform and is correctly configured with clearance-based MFA conditions
-2. BUT the realm-level binding was set to use "browser" (standard flow) for federation compatibility
-3. The client-level override was NOT configured, so the main application client used the default flow
+**Root Cause (Two-Part Problem)**:
+
+**Part 1 - Client Flow Binding Missing**:
+1. The "Classified Access Browser Flow" exists in Keycloak and is correctly configured
+2. BUT the `authentication_flow_binding_overrides` was **COMMENTED OUT** in `broker-realm.tf`
+3. The client used the default browser flow which has NO clearance-based MFA
+
+**Part 2 - Users Missing OTP Credentials**:
+1. Even with the correct flow, users without OTP configured skip the MFA step
+2. The flow's conditional OTP only triggers for users who HAVE OTP
+3. New users or users without OTP need `CONFIGURE_TOTP` required action
 
 **Authentication Flow Architecture**:
 ```
@@ -34,17 +41,41 @@ Client-Level Override (authentication_flow_binding_overrides):
   → Should point to "Classified Access Browser Flow"
 ```
 
-**Solution**: 
-Add `authentication_flow_binding_overrides` block to the broker client in Terraform:
+**Complete Solution (Applied 2025-11-25)**:
+
+**Step 1: Fix Client Flow Binding in Terraform (`broker-realm.tf`)**:
 ```hcl
+# Add data source to lookup existing flow
+data "keycloak_authentication_flow" "classified_access_browser_flow" {
+  realm_id = keycloak_realm.dive_v3_broker.id
+  alias    = "Classified Access Browser Flow - DIVE V3 Broker"
+}
+
 resource "keycloak_openid_client" "dive_v3_app_broker" {
   # ... other settings ...
   
+  # CRITICAL: Without this, SECRET users bypass MFA!
   authentication_flow_binding_overrides {
-    browser_id = module.broker_mfa.browser_flow_id
+    browser_id = data.keycloak_authentication_flow.classified_access_browser_flow.id
   }
 }
 ```
+
+**Step 2: Add CONFIGURE_TOTP Required Action for Users Without OTP**:
+```bash
+# For all users with CONFIDENTIAL/SECRET/TOP_SECRET clearance
+# who don't have OTP configured:
+curl -X PUT "https://localhost:8443/admin/realms/dive-v3-broker/users/$USER_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"requiredActions": ["CONFIGURE_TOTP"]}'
+```
+
+**Step 3: Verification**:
+After applying both fixes, SECRET users are now:
+1. Directed to the "Mobile Authenticator Setup" page
+2. Required to scan QR code with Google Authenticator or FreeOTP
+3. Cannot access dashboard without completing OTP setup
 
 **Clearance-Based MFA Rules**:
 | Clearance | Required Authentication | Keycloak Flow |

@@ -273,7 +273,7 @@ services:
       AUTH_TRUST_HOST: "true"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
       # Database for NextAuth sessions
-      DATABASE_URL: postgresql://postgres:password@postgres:5432/dive_v3_app
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Required}@postgres:5432/dive_v3_app
     ports:
       - "3000:3000"
     depends_on:

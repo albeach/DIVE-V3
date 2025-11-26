@@ -51,7 +51,7 @@
     <link href="${url.resourcesPath}/css/dive-v3.css" rel="stylesheet" />
 </head>
 
-<body class="dive-body ${bodyClass}">
+<body class="dive-body dive-compact ${bodyClass}">
     <!-- Background -->
     <div class="dive-background">
         <#if properties.backgroundImage?has_content>
@@ -60,6 +60,87 @@
         </#if>
     </div>
 
+    <!-- Federation Flow Banner (Above Main Container) -->
+    <#assign clientData = "">
+    <#if client?? && client.clientId??>
+        <#assign clientData = client.clientId>
+    </#if>
+    <#assign isFederated = (clientData?has_content && clientData?contains("federation")) || (brokerContext?? && brokerContext.username?has_content)>
+    <#assign spCode = "">
+    <#assign idpCode = "">
+    
+    <#-- Parse SP (Service Provider) from client ID -->
+    <#if clientData?has_content>
+        <#if clientData?lower_case?contains("usa")><#assign spCode = "USA"></#if>
+        <#if clientData?lower_case?contains("fra")><#assign spCode = "FRA"></#if>
+        <#if clientData?lower_case?contains("deu")><#assign spCode = "DEU"></#if>
+        <#if clientData?lower_case?contains("can")><#assign spCode = "CAN"></#if>
+        <#if clientData?lower_case?contains("gbr")><#assign spCode = "GBR"></#if>
+        <#if clientData?lower_case?contains("ita")><#assign spCode = "ITA"></#if>
+        <#if clientData?lower_case?contains("esp")><#assign spCode = "ESP"></#if>
+        <#if clientData?lower_case?contains("nld")><#assign spCode = "NLD"></#if>
+        <#if clientData?lower_case?contains("pol")><#assign spCode = "POL"></#if>
+    </#if>
+    
+    <#-- Get IdP from realm name -->
+    <#assign realmName = "">
+    <#if realm?? && realm.name??>
+        <#assign realmName = realm.name>
+    </#if>
+    <#if realmName?has_content && realmName?contains("broker")><#assign idpCode = "USA"></#if>
+
+    <#-- Flag emoji lookup -->
+    <#assign spFlag = "🌐">
+    <#assign idpFlag = "🇺🇸">
+    <#if spCode == "USA"><#assign spFlag = "🇺🇸"></#if>
+    <#if spCode == "FRA"><#assign spFlag = "🇫🇷"></#if>
+    <#if spCode == "DEU"><#assign spFlag = "🇩🇪"></#if>
+    <#if spCode == "CAN"><#assign spFlag = "🇨🇦"></#if>
+    <#if spCode == "GBR"><#assign spFlag = "🇬🇧"></#if>
+    <#if spCode == "ESP"><#assign spFlag = "🇪🇸"></#if>
+    <#if spCode == "ITA"><#assign spFlag = "🇮🇹"></#if>
+    <#if spCode == "NLD"><#assign spFlag = "🇳🇱"></#if>
+    <#if spCode == "POL"><#assign spFlag = "🇵🇱"></#if>
+    
+    <#assign idpCodeVal = idpCode!'USA'>
+    <#if idpCodeVal == "USA"><#assign idpFlag = "🇺🇸"></#if>
+    <#if idpCodeVal == "FRA"><#assign idpFlag = "🇫🇷"></#if>
+    <#if idpCodeVal == "DEU"><#assign idpFlag = "🇩🇪"></#if>
+
+    <#if isFederated && spCode?has_content>
+    <!-- Federation Flow Banner - Separate Visual Element -->
+    <div class="dive-federation-banner">
+        <div class="dive-federation-flow-visual">
+            <!-- Destination (Where you're going) -->
+            <div class="dive-flow-destination">
+                <span class="dive-flow-flag-emoji">${spFlag}</span>
+                <div class="dive-flow-text">
+                    <span class="dive-flow-tiny-label">Accessing</span>
+                    <span class="dive-flow-country">${spCode}</span>
+                </div>
+            </div>
+            
+            <!-- Flow Arrow -->
+            <div class="dive-flow-connector">
+                <div class="dive-flow-line"></div>
+                <svg class="dive-flow-arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
+                <div class="dive-flow-line"></div>
+            </div>
+            
+            <!-- Identity Provider (Where you're authenticating) -->
+            <div class="dive-flow-idp-badge">
+                <span class="dive-flow-flag-emoji">${idpFlag}</span>
+                <div class="dive-flow-text">
+                    <span class="dive-flow-tiny-label">via IdP</span>
+                    <span class="dive-flow-country">${idpCodeVal}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    </#if>
+
     <!-- Main Container -->
     <div class="dive-container">
         <!-- Split Layout -->
@@ -67,28 +148,16 @@
             <!-- LEFT: Login Form -->
             <div class="dive-form-column">
                 <div class="dive-card">
-                    <!-- Logo -->
-                    <#if realm.displayName?has_content || properties.logo?has_content>
-                        <div class="dive-logo-container">
-                            <#if properties.logo?has_content>
-                                <img src="${url.resourcesPath}/img/${properties.logo}" alt="Logo" class="dive-logo" />
-                            </#if>
-                        </div>
-                    </#if>
-
-                    <!-- Header -->
-                    <div class="dive-header">
-                        <#nested "header">
+                    <!-- Compact Header -->
+                    <div class="dive-compact-header">
+                        <#if realm?? && realm.displayName?has_content>
+                            <p class="dive-realm-name">${realm.displayName}</p>
+                        </#if>
                     </div>
 
-                    <!-- Realm Name -->
-                    <#if realm.displayName?has_content>
-                        <p class="dive-realm-name">${realm.displayName}</p>
-                    </#if>
-
-                    <!-- Alert Messages -->
+                    <!-- Alert Messages (Compact) -->
                     <#if displayMessage && message?has_content && (message.type != 'warning' || !isAppInitiatedAction??)>
-                        <div class="dive-alert dive-alert-${message.type}">
+                        <div class="dive-alert dive-alert-compact dive-alert-${message.type}">
                             <#if message.type = 'success'>
                                 <svg class="dive-alert-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -110,6 +179,11 @@
                         </div>
                     </#if>
 
+                    <!-- Header Section -->
+                    <div class="dive-header dive-header-compact">
+                        <#nested "header">
+                    </div>
+
                     <!-- Form Content -->
                     <div class="dive-form-content">
                         <#nested "form">
@@ -117,7 +191,7 @@
 
                     <!-- Info Section -->
                     <#if displayInfo>
-                        <div class="dive-info">
+                        <div class="dive-info dive-info-compact">
                             <#nested "info">
                         </div>
                     </#if>

@@ -1,7 +1,7 @@
 <#import "template.ftl" as layout>
-<@layout.registrationLayout displayInfo=true; section>
+<@layout.registrationLayout displayInfo=false displayMessage=false; section>
     <#if section = "header">
-        Passkey login
+        <#-- Empty header - we use compact inline header -->
     <#elseif section = "form">
 
     <form id="webauth" class="${properties.kcFormClass!}" action="${url.loginAction}" method="post">
@@ -13,16 +13,24 @@
         <input type="hidden" id="error" name="error"/>
     </form>
 
-    <!-- Modern Info Card -->
-    <div class="dive-webauthn-info-card">
-        <div class="dive-webauthn-icon-container">
-            <svg class="dive-webauthn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <!-- Compact AAL3 WebAuthn Authentication -->
+    <div class="dive-webauthn-wrapper">
+        <!-- AAL3 Badge -->
+        <div class="dive-aal3-badge" style="margin-bottom: 0.75rem;">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+            <span>AAL3 Required • TOP SECRET</span>
+        </div>
+
+        <!-- Icon & Title -->
+        <div class="dive-webauthn-icon" style="width: 2.5rem; height: 2.5rem;">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
             </svg>
         </div>
-        <p class="dive-webauthn-description">
-            Use your device's built-in security (Face ID, Touch ID, Windows Hello) or physical security key (YubiKey, Titan) to authenticate.
-        </p>
+        <h2 class="dive-webauthn-title">${msg("webauthnLoginTitle", "Security Key Login")}</h2>
+        <p class="dive-webauthn-subtitle">Use your passkey, security key, or biometric to authenticate</p>
     </div>
 
     <!-- Authenticate Button (Hero Style) -->
