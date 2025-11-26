@@ -79,3 +79,4 @@ export function AutoSignIn({ idpHint, callbackUrl = '/dashboard' }: AutoSignInPr
   );
 }
 
+

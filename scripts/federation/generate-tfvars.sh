@@ -184,3 +184,4 @@ if [[ "$DRY_RUN" == "false" ]]; then
     echo "  Or use: ./scripts/federation/apply-all.sh"
 fi
 
+

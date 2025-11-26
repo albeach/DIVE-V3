@@ -165,3 +165,4 @@ echo "  source $ALERTS_ENV"
 echo "  curl -X POST -H 'Content-type: application/json' \\"
 echo "    --data '{\"text\":\"🧪 Manual test alert\"}' \"\$SLACK_WEBHOOK_URL\""
 
+

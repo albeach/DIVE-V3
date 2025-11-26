@@ -155,3 +155,4 @@ echo "  1. Run: ./scripts/start.sh"
 echo "  2. Or manually: docker compose up -d"
 echo ""
 
+

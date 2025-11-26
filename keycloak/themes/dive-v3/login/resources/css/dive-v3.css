@@ -155,10 +155,128 @@
     margin-bottom: 0.5rem;
 }
 
-.dive-realm-name {
-    font-size: 0.875rem;
-    color: #6b7280;
+/* ============================================
+   INSTANCE IDENTITY BANNER - 2025 Modern Design
+   The showpiece - country-focused, bold, memorable
+   ============================================ */
+
+.dive-realm-banner {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
     margin-bottom: 1.5rem;
+    background: linear-gradient(135deg, #1e40af 0%, #7c3aed 50%, #db2777 100%);
+    border-radius: 1rem;
+    box-shadow: 
+        0 10px 40px -10px rgba(124, 58, 237, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animated gradient shimmer */
+.dive-realm-banner::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+    );
+    animation: shimmer 3s infinite;
+    pointer-events: none;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.dive-realm-flag {
+    font-size: 2.5rem;
+    line-height: 1;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.dive-realm-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.dive-realm-country {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #ffffff;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dive-realm-context {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* Country-Specific Theming - Bold & Distinctive */
+
+/* USA - Red, White, Blue */
+.dive-body[data-realm*="USA"] .dive-realm-banner,
+.dive-body[data-realm*="Federation Hub"] .dive-realm-banner {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #b91c1c 100%);
+    box-shadow: 
+        0 10px 40px -10px rgba(30, 64, 175, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+/* France - Bleu, Blanc, Rouge */
+.dive-body[data-realm*="France"] .dive-realm-banner {
+    background: linear-gradient(135deg, #002654 0%, #0055a4 50%, #ed2939 100%);
+    box-shadow: 
+        0 10px 40px -10px rgba(0, 85, 164, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+/* Germany - Schwarz, Rot, Gold */
+.dive-body[data-realm*="Germany"] .dive-realm-banner {
+    background: linear-gradient(135deg, #000000 0%, #dd0000 50%, #ffcc00 100%);
+    box-shadow: 
+        0 10px 40px -10px rgba(221, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+/* UK - Union Jack inspired */
+.dive-body[data-realm*="United Kingdom"] .dive-realm-banner {
+    background: linear-gradient(135deg, #012169 0%, #c8102e 50%, #012169 100%);
+    box-shadow: 
+        0 10px 40px -10px rgba(1, 33, 105, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+/* Canada - Red & White */
+.dive-body[data-realm*="Canada"] .dive-realm-banner {
+    background: linear-gradient(135deg, #ff0000 0%, #d52b1e 50%, #ff0000 100%);
+    box-shadow: 
+        0 10px 40px -10px rgba(213, 43, 30, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+/* Spain - Rojo y Amarillo */
+.dive-body[data-realm*="Spain"] .dive-realm-banner {
+    background: linear-gradient(135deg, #aa151b 0%, #f1bf00 50%, #aa151b 100%);
+    box-shadow: 
+        0 10px 40px -10px rgba(170, 21, 27, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.15) inset;
 }
 
 /* ============================================
@@ -482,115 +600,296 @@
 }
 
 /* ============================================
-   Welcome Panel (Right Side - Simple & Friendly)
+   TRANSPARENCY PANEL (Right Side - Microprogression)
+   Progressive disclosure: confidence → detail → technical
    ============================================ */
 
-.dive-welcome-panel {
-    max-width: 340px;
+.dive-transparency-panel {
+    max-width: 380px;
     display: flex;
     flex-direction: column;
-    gap: 2rem;
-}
-
-/* Friendly Welcome Header */
-.dive-welcome-header {
-    text-align: center;
-}
-
-.dive-welcome-wave {
-    font-size: 3rem;
-    display: block;
-    margin-bottom: 0.5rem;
-    animation: wave 2s ease-in-out infinite;
-}
-
-@keyframes wave {
-    0%, 100% { transform: rotate(0deg); }
-    25% { transform: rotate(20deg); }
-    75% { transform: rotate(-10deg); }
-}
-
-.dive-welcome-title {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0 0 0.5rem 0;
+    gap: 1rem;
     color: #ffffff;
 }
 
-.dive-welcome-subtitle {
-    font-size: 1rem;
-    opacity: 0.8;
-    margin: 0;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-/* Demo Quick Start Box */
-.dive-demo-quickstart {
-    background: rgba(255, 255, 255, 0.1);
+/* --- LEVEL 0: Trust Chain Summary (Always Visible) --- */
+.dive-trust-summary {
+    background: rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 1rem;
     padding: 1.25rem;
+    text-align: center;
 }
 
-.dive-demo-label {
-    font-size: 0.875rem;
+.dive-trust-chain-visual {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.dive-trust-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 0.75rem;
+    min-width: 60px;
+}
+
+.dive-trust-flag {
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.dive-trust-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.dive-trust-label {
+    font-size: 0.6875rem;
     font-weight: 600;
-    margin: 0 0 0.75rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
     color: rgba(255, 255, 255, 0.9);
 }
 
-.dive-demo-box {
-    background: rgba(0, 0, 0, 0.3);
+.dive-trust-arrow {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.dive-trust-arrow svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.dive-trust-tagline {
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+}
+
+/* --- MICROPROGRESSION: Expandable Details --- */
+.dive-microprogression {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 0.75rem;
-    padding: 1rem;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.dive-microprogression[open] {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dive-expand-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 0.875rem 1rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    list-style: none;
+    transition: color 0.2s;
+}
+
+.dive-expand-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.dive-expand-trigger:hover {
+    color: #ffffff;
+}
+
+.dive-expand-icon {
+    width: 1rem;
+    height: 1rem;
+    transition: transform 0.2s;
+    opacity: 0.6;
+}
+
+.dive-microprogression[open] .dive-expand-icon {
+    transform: rotate(180deg);
+}
+
+.dive-expand-content {
+    padding: 0 1rem 1rem 1rem;
+    animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-0.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Level 1: Trust Steps */
+.dive-trust-steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.8125rem;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.6;
+}
+
+.dive-trust-steps li {
+    margin-bottom: 0.5rem;
+}
+
+.dive-trust-steps li:last-child {
+    margin-bottom: 0;
+}
+
+.dive-trust-steps strong {
+    color: #a78bfa;
+}
+
+/* Level 2: Attribute List */
+.dive-attribute-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.75rem 0;
+}
+
+.dive-attribute-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.8125rem;
+}
+
+.dive-attribute-list li:last-child {
+    border-bottom: none;
+}
+
+.dive-attr-icon {
+    font-size: 1rem;
+    width: 1.5rem;
+    text-align: center;
+}
+
+.dive-attr-name {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.dive-attr-note {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+    font-style: italic;
+}
+
+/* Level 3: Technical Details */
+.dive-technical {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
 
-.dive-demo-row {
+.dive-tech-item {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 0.75rem;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.dive-demo-icon {
-    font-size: 1.25rem;
-    width: 2rem;
-    text-align: center;
+.dive-tech-item:last-child {
+    border-bottom: none;
 }
 
-.dive-demo-value {
-    font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
-    font-size: 1rem;
-    color: #a5f3fc;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-}
-
-.dive-demo-tip {
+.dive-tech-label {
     font-size: 0.75rem;
-    opacity: 0.6;
-    margin: 0.75rem 0 0 0;
-    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
 }
 
-/* Simple Help Link */
-.dive-help-link {
-    display: block;
-    text-align: center;
-    color: rgba(255, 255, 255, 0.7);
-    text-decoration: none;
-    font-size: 0.875rem;
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    transition: all 0.2s;
+.dive-tech-value {
+    font-size: 0.75rem;
+    font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+    color: #a78bfa;
 }
 
-.dive-help-link:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.1);
+/* --- Help Footer --- */
+.dive-help-footer {
+    text-align: center;
+    padding-top: 0.5rem;
+}
+
+.dive-help-trigger-small {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    transition: color 0.2s;
+}
+
+.dive-help-trigger-small:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.dive-help-panel {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: left;
+    animation: slideDown 0.2s ease-out;
+}
+
+.dive-help-heading {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #a78bfa;
+    margin: 0 0 0.625rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.dive-help-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.625rem 0;
+}
+
+.dive-help-list li {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0.3rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dive-help-list li:last-child {
+    border-bottom: none;
+}
+
+.dive-help-note {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    font-style: italic;
 }
 
 /* Legacy Features (keep for backwards compatibility) */
@@ -2085,4 +2384,281 @@ body:has(.dive-federation-banner) .dive-container {
     }
 }
 
+/* ============================================
+   Error Page - Direct & Clear
+   ============================================ */
+
+.dive-error-page {
+    text-align: center;
+    padding: 0.5rem 0;
+}
+
+.dive-error-status {
+    margin-bottom: 1rem;
+}
+
+.dive-error-code {
+    font-size: 2.5rem;
+    display: inline-block;
+}
+
+.dive-error-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 1rem 0;
+}
+
+.dive-error-message {
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border: 1px solid #f59e0b;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.dive-error-message p {
+    margin: 0;
+    color: #78350f;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+}
+
+.dive-error-message p + p {
+    margin-top: 0.5rem;
+}
+
+.dive-error-message strong {
+    color: #92400e;
+    font-weight: 600;
+}
+
+.dive-error-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dive-button-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    color: #374151;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.dive-button-secondary:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+
+.dive-error-details {
+    margin-top: 1.5rem;
+    text-align: left;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 1rem;
+}
+
+.dive-error-details summary {
+    font-size: 0.75rem;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    font-weight: 500;
+}
+
+.dive-error-details summary:hover {
+    color: #374151;
+}
+
+.dive-error-details[open] summary {
+    margin-bottom: 0.5rem;
+}
+
+.dive-error-details code {
+    display: block;
+    padding: 0.75rem;
+    background: #f3f4f6;
+    border-radius: 0.5rem;
+    font-size: 0.7rem;
+    color: #6b7280;
+    word-break: break-all;
+    white-space: pre-wrap;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* --- AUTHORIZATION CHECK VISUALIZATION --- */
+.dive-authz-check {
+    margin-top: 1rem;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 1px solid #f59e0b;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.dive-authz-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1rem;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #92400e;
+    list-style: none;
+}
+
+.dive-authz-summary::-webkit-details-marker {
+    display: none;
+}
+
+.dive-authz-chevron {
+    width: 1rem;
+    height: 1rem;
+    transition: transform 0.2s;
+    color: #b45309;
+}
+
+.dive-authz-check[open] .dive-authz-chevron {
+    transform: rotate(180deg);
+}
+
+.dive-authz-content {
+    padding: 0 1rem 1rem 1rem;
+}
+
+.dive-authz-note {
+    font-size: 0.75rem;
+    color: #78350f;
+    margin: 0 0 0.75rem 0;
+}
+
+.dive-authz-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.75rem 0;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+}
+
+.dive-authz-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.8125rem;
+}
+
+.dive-authz-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.dive-authz-pass .dive-authz-icon {
+    background: #10b981;
+    color: #ffffff;
+}
+
+.dive-authz-fail .dive-authz-icon {
+    background: #ef4444;
+    color: #ffffff;
+}
+
+.dive-authz-unknown .dive-authz-icon {
+    background: #9ca3af;
+    color: #ffffff;
+}
+
+.dive-authz-pass .dive-authz-label {
+    color: #065f46;
+}
+
+.dive-authz-fail .dive-authz-label {
+    color: #991b1b;
+}
+
+.dive-authz-unknown .dive-authz-label {
+    color: #4b5563;
+}
+
+.dive-authz-footer {
+    font-size: 0.6875rem;
+    color: #92400e;
+    margin: 0;
+    font-style: italic;
+}
+
+/* --- ERROR TRACE (Enhanced) --- */
+.dive-error-trace {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.dive-trace-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.375rem 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.dive-trace-header:last-of-type {
+    border-bottom: none;
+}
+
+.dive-trace-label {
+    font-size: 0.6875rem;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+
+.dive-trace-value {
+    font-size: 0.75rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    color: #374151;
+}
+
+.dive-trace-message {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.dive-trace-message .dive-trace-label {
+    display: block;
+    margin-bottom: 0.375rem;
+}
+
+.dive-trace-message code {
+    display: block;
+    padding: 0.625rem;
+    background: #f9fafb;
+    border-radius: 0.375rem;
+    font-size: 0.6875rem;
+    color: #4b5563;
+    word-break: break-all;
+    white-space: pre-wrap;
+    font-family: 'SF Mono', Monaco, monospace;
+    border: 1px solid #e5e7eb;
+}
 

@@ -448,3 +448,4 @@ The fix is simple: Generate a Docker-compatible `.env` file from `.env.secrets`,
 *Created: 2025-11-25*
 *Author: Gap Analysis Session*
 
+
