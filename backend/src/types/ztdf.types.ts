@@ -92,6 +92,13 @@ export interface ISTANAG4774Label {
 
     /** Display marking (computed from above fields) */
     displayMarking?: string;
+
+    /**
+     * Industry Access Control (ACP-240 Section 4.2)
+     * Optional: true = accessible to industry partners, false/undefined = government-only
+     * Used in conjunction with subject.organizationType attribute
+     */
+    releasableToIndustry?: boolean;
 }
 
 // ============================================
@@ -332,6 +339,8 @@ export interface IZTDFResource {
         encrypted: boolean;
         content?: string;
         encryptedContent?: string;
+        /** Industry Access Control (ACP-240 Section 4.2) */
+        releasableToIndustry?: boolean;
     };
 
     /** MongoDB timestamps */

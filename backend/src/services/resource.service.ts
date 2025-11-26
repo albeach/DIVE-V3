@@ -22,6 +22,8 @@ export interface IResource {
     encryptedContent?: string; // Ciphertext (if encrypted)
     createdAt?: Date;
     updatedAt?: Date;
+    // Industry Access Control (ACP-240 Section 4.2)
+    releasableToIndustry?: boolean; // Optional, defaults to false (gov-only) if not set
 }
 
 let cachedClient: MongoClient | null = null;
@@ -100,7 +102,8 @@ function extractLegacyFields(ztdfResource: IZTDFResource): IResource {
             content: ztdfResource.legacy.content,
             encryptedContent: ztdfResource.legacy.encryptedContent,
             createdAt: ztdfResource.createdAt,
-            updatedAt: ztdfResource.updatedAt
+            updatedAt: ztdfResource.updatedAt,
+            releasableToIndustry: ztdfResource.legacy.releasableToIndustry // Industry access control
         };
     }
 
@@ -117,7 +120,8 @@ function extractLegacyFields(ztdfResource: IZTDFResource): IResource {
         content: undefined, // ZTDF content is encrypted
         encryptedContent: ztdf.payload.encryptedChunks[0]?.encryptedData,
         createdAt: ztdfResource.createdAt,
-        updatedAt: ztdfResource.updatedAt
+        updatedAt: ztdfResource.updatedAt,
+        releasableToIndustry: ztdf.policy.securityLabel.releasableToIndustry // Industry access control
     };
 }
 
@@ -285,7 +289,8 @@ export async function createResource(resource: IResource): Promise<IResource> {
                 creationDate: resource.creationDate,
                 encrypted: resource.encrypted,
                 content: resource.content,
-                encryptedContent: resource.encryptedContent
+                encryptedContent: resource.encryptedContent,
+                releasableToIndustry: resource.releasableToIndustry // Industry access control
             },
             createdAt: resource.createdAt,
             updatedAt: resource.updatedAt

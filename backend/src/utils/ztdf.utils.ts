@@ -291,6 +291,7 @@ export function createSecurityLabel(params: {
     caveats?: string[];
     originatingCountry: string;
     creationDate?: string;
+    releasableToIndustry?: boolean;   // Industry access control (ACP-240 Section 4.2)
 }): ISTANAG4774Label {
     const label: ISTANAG4774Label = {
         classification: params.classification,
@@ -301,7 +302,8 @@ export function createSecurityLabel(params: {
         COI: params.COI,
         caveats: params.caveats,
         originatingCountry: params.originatingCountry,
-        creationDate: params.creationDate || new Date().toISOString()
+        creationDate: params.creationDate || new Date().toISOString(),
+        releasableToIndustry: params.releasableToIndustry       // Industry access control
     };
 
     // NEW: Map to NATO equivalent if original classification provided (ACP-240 Section 4.3)

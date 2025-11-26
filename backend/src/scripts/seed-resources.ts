@@ -51,12 +51,16 @@ async function main() {
             const coi = resource.ztdf.policy.securityLabel.COI?.length 
                 ? resource.ztdf.policy.securityLabel.COI.join(', ') 
                 : 'None';
+            const industryAccess = resource.ztdf.policy.securityLabel.releasableToIndustry === true 
+                ? '✅ Yes' 
+                : '❌ No (gov-only)';
 
             console.log(`📄 ${resource.resourceId}`);
             console.log(`   Title: ${resource.title}`);
             console.log(`   Classification: ${classification}`);
             console.log(`   Releasability: ${releasability}`);
             console.log(`   COI: ${coi}`);
+            console.log(`   Industry Access: ${industryAccess}`);
             console.log('');
         }
 
