@@ -33,6 +33,7 @@ allow := true if {
 	not is_upload_not_releasable_to_uploader
 	not is_authentication_strength_insufficient
 	not is_mfa_not_verified
+	not is_industry_access_blocked
 } else := false # Default case when conditions not met
 
 # Default obligations (empty array)
@@ -816,6 +817,57 @@ is_mfa_not_verified := msg if {
 }
 
 # ============================================
+# Check 11: Industry Access Control
+# ============================================
+# Reference: ACP-240 Section 4.2 - Organization Type Access Control
+# Industry partners (contractors, vendors) may have restricted access
+# to government-only resources even with proper clearance/releasability.
+#
+# Attributes:
+#   - subject.organizationType: GOV | MIL | INDUSTRY (optional, default: GOV)
+#   - resource.releasableToIndustry: true | false (optional, default: false)
+#
+# Logic:
+#   - INDUSTRY users blocked from resources where releasableToIndustry == false
+#   - GOV/MIL users always allowed (organizationType check doesn't apply)
+#   - Missing organizationType defaults to GOV (backward compatible)
+#   - Missing releasableToIndustry defaults to false (secure by default)
+
+# Valid organization types
+valid_org_types := {"GOV", "MIL", "INDUSTRY"}
+
+# Helper: Resolve organizationType with default
+resolved_org_type := org_type if {
+	org_type := input.subject.organizationType
+	valid_org_types[org_type]
+} else := "GOV" # Default to GOV for government IdPs
+
+# Helper: Resolve releasableToIndustry with secure default
+resolved_industry_allowed := allowed if {
+	allowed := input.resource.releasableToIndustry
+	is_boolean(allowed)
+} else := false # Default to false (secure by default)
+
+# Industry access check
+is_industry_access_blocked := msg if {
+	# Only applies to INDUSTRY organization type
+	resolved_org_type == "INDUSTRY"
+	
+	# Check if resource allows industry access
+	not resolved_industry_allowed
+	
+	msg := sprintf("Industry access denied: organizationType=%s but resource.releasableToIndustry=%v (default: false)", [
+		resolved_org_type,
+		object.get(input.resource, "releasableToIndustry", "not set"),
+	])
+}
+
+# Helper for evaluation details
+check_industry_access_allowed if {
+	not is_industry_access_blocked
+} else := false
+
+# ============================================
 # Decision Output (Simplified for Rego v1)
 # ============================================
 
@@ -853,6 +905,8 @@ reason := "Access granted - all conditions satisfied" if {
 	msg := is_under_embargo
 } else := msg if {
 	msg := is_ztdf_integrity_violation
+} else := msg if {
+	msg := is_industry_access_blocked
 } else := "Access denied"
 
 # ============================================
@@ -901,6 +955,7 @@ evaluation_details := {
 		"upload_releasability_valid": check_upload_releasability_valid,
 		"authentication_strength_sufficient": check_authentication_strength_sufficient,
 		"mfa_verified": check_mfa_verified,
+		"industry_access_allowed": check_industry_access_allowed,
 	},
 	"subject": {
 		"uniqueID": object.get(input.subject, "uniqueID", ""),
@@ -908,6 +963,7 @@ evaluation_details := {
 		"clearanceOriginal": object.get(input.subject, "clearanceOriginal", ""), # NEW: ACP-240 Section 4.3
 		"clearanceCountry": object.get(input.subject, "clearanceCountry", ""), # NEW: ACP-240 Section 4.3
 		"country": object.get(input.subject, "countryOfAffiliation", ""),
+		"organizationType": resolved_org_type, # NEW: Industry access control
 	},
 	"resource": {
 		"resourceId": object.get(input.resource, "resourceId", ""),
@@ -917,6 +973,7 @@ evaluation_details := {
 		"natoEquivalent": object.get(input.resource, "natoEquivalent", ""), # NEW: ACP-240 Section 4.3
 		"encrypted": object.get(input.resource, "encrypted", false),
 		"ztdfEnabled": ztdf_enabled,
+		"releasableToIndustry": resolved_industry_allowed, # NEW: Industry access control
 	},
 	"authentication": {
 		"acr": object.get(input.context, "acr", ""),
