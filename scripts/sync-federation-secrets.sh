@@ -220,3 +220,4 @@ echo "  3. Monitor Keycloak logs for 'unauthorized_client' errors"
 echo ""
 echo -e "${YELLOW}Note: Run this script after any Keycloak restart or client regeneration${NC}"
 
+

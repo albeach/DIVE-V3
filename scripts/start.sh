@@ -212,3 +212,4 @@ if [[ "$FOLLOW_LOGS" == "true" ]]; then
   docker compose logs -f
 fi
 
+

@@ -38,3 +38,4 @@ ingress:
   # Catch-all rule (required)
   - service: http_status:404
 
+

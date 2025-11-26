@@ -221,3 +221,4 @@ cat "$BACKUP_DIR/manifest.json" | jq .
 echo ""
 echo -e "${YELLOW}To restore, use: ./scripts/restore-all-data.sh $BACKUP_DIR${NC}"
 
+

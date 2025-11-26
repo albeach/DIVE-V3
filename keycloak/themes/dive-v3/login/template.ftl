@@ -51,7 +51,7 @@
     <link href="${url.resourcesPath}/css/dive-v3.css" rel="stylesheet" />
 </head>
 
-<body class="dive-body dive-compact ${bodyClass}">
+<body class="dive-body dive-compact ${bodyClass}" data-realm="<#if realm?? && realm.displayName?has_content>${realm.displayName}</#if>">
     <!-- Background -->
     <div class="dive-background">
         <#if properties.backgroundImage?has_content>
@@ -148,11 +148,27 @@
             <!-- LEFT: Login Form -->
             <div class="dive-form-column">
                 <div class="dive-card">
-                    <!-- Compact Header -->
-                    <div class="dive-compact-header">
-                        <#if realm?? && realm.displayName?has_content>
-                            <p class="dive-realm-name">${realm.displayName}</p>
-                        </#if>
+                    <!-- Instance Identity Banner - Informative -->
+                    <div class="dive-realm-banner">
+                        <div class="dive-realm-flag">
+                            <#if realm.displayName?has_content && realm.displayName?contains("France")>🇫🇷
+                            <#elseif realm.displayName?has_content && realm.displayName?contains("Germany")>🇩🇪
+                            <#elseif realm.displayName?has_content && realm.displayName?contains("Canada")>🇨🇦
+                            <#elseif realm.displayName?has_content && realm.displayName?contains("United Kingdom")>🇬🇧
+                            <#elseif realm.displayName?has_content && realm.displayName?contains("Spain")>🇪🇸
+                            <#else>🇺🇸</#if>
+                        </div>
+                        <div class="dive-realm-info">
+                            <div class="dive-realm-country">
+                                <#if realm.displayName?has_content && realm.displayName?contains("France")>FRANCE
+                                <#elseif realm.displayName?has_content && realm.displayName?contains("Germany")>GERMANY
+                                <#elseif realm.displayName?has_content && realm.displayName?contains("Canada")>CANADA
+                                <#elseif realm.displayName?has_content && realm.displayName?contains("United Kingdom")>UNITED KINGDOM
+                                <#elseif realm.displayName?has_content && realm.displayName?contains("Spain")>SPAIN
+                                <#else>USA</#if>
+                            </div>
+                            <div class="dive-realm-context">${msg("dive.banner.context")}</div>
+                        </div>
                     </div>
 
                     <!-- Alert Messages (Compact) -->
@@ -198,36 +214,149 @@
                 </div>
             </div>
 
-            <!-- RIGHT: Welcome Panel (Simple & Friendly) -->
+            <!-- RIGHT: Trust Chain & Transparency Panel -->
+            <#-- Determine country names for display -->
+            <#assign idpCountryName = "United States">
+            <#assign idpCountryCode = idpCodeVal!'USA'>
+            <#if idpCountryCode == "FRA"><#assign idpCountryName = "France"></#if>
+            <#if idpCountryCode == "DEU"><#assign idpCountryName = "Germany"></#if>
+            <#if idpCountryCode == "GBR"><#assign idpCountryName = "United Kingdom"></#if>
+            <#if idpCountryCode == "CAN"><#assign idpCountryName = "Canada"></#if>
+            <#if idpCountryCode == "ESP"><#assign idpCountryName = "Spain"></#if>
+            
             <div class="dive-description-column">
-                <div class="dive-welcome-panel">
-                    <!-- Friendly Welcome -->
-                    <div class="dive-welcome-header">
-                        <span class="dive-welcome-wave">👋</span>
-                        <h2 class="dive-welcome-title">${msg("dive.welcome.title")}</h2>
-                        <p class="dive-welcome-subtitle">${msg("dive.welcome.subtitle")}</p>
-                    </div>
-
-                    <!-- Demo Quick Start -->
-                    <div class="dive-demo-quickstart">
-                        <p class="dive-demo-label">${msg("dive.demo.label")}</p>
-                        <div class="dive-demo-box">
-                            <div class="dive-demo-row">
-                                <span class="dive-demo-icon">👤</span>
-                                <span class="dive-demo-value">testuser-usa-1</span>
+                <div class="dive-transparency-panel">
+                    
+                    <!-- LEVEL 0: Trust Chain Summary (Always Visible) -->
+                    <div class="dive-trust-summary">
+                        <div class="dive-trust-chain-visual">
+                            <div class="dive-trust-node dive-trust-idp">
+                                <span class="dive-trust-flag">${idpFlag}</span>
+                                <span class="dive-trust-label">${idpCountryCode}</span>
                             </div>
-                            <div class="dive-demo-row">
-                                <span class="dive-demo-icon">🔑</span>
-                                <span class="dive-demo-value">DiveDemo2025!</span>
+                            <div class="dive-trust-arrow">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                            </div>
+                            <div class="dive-trust-node dive-trust-hub">
+                                <span class="dive-trust-icon">🔗</span>
+                                <span class="dive-trust-label">DIVE</span>
+                            </div>
+                            <div class="dive-trust-arrow">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                            </div>
+                            <div class="dive-trust-node dive-trust-sp">
+                                <span class="dive-trust-icon">🌐</span>
+                                <span class="dive-trust-label">Resources</span>
                             </div>
                         </div>
-                        <p class="dive-demo-tip">${msg("dive.demo.tip")}</p>
+                        <p class="dive-trust-tagline">${msg("dive.trust.tagline")}</p>
                     </div>
-
-                    <!-- Simple Help -->
-                    <a href="mailto:support@dive-v3.example" class="dive-help-link">
-                        ${msg("dive.help.simple")}
-                    </a>
+                    
+                    <!-- LEVEL 1: "How does this work?" (Expandable) -->
+                    <details class="dive-microprogression dive-level-1">
+                        <summary class="dive-expand-trigger">
+                            ${msg("dive.trust.howItWorks")}
+                            <svg class="dive-expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </summary>
+                        <div class="dive-expand-content">
+                            <ol class="dive-trust-steps">
+                                <li>
+                                    <strong>${idpCountryName}</strong> ${msg("dive.trust.step1")}
+                                </li>
+                                <li>
+                                    <strong>DIVE</strong> ${msg("dive.trust.step2")}
+                                </li>
+                                <li>
+                                    ${msg("dive.trust.step3")}
+                                </li>
+                            </ol>
+                        </div>
+                    </details>
+                    
+                    <!-- LEVEL 2: "What gets shared?" (Expandable) -->
+                    <details class="dive-microprogression dive-level-2">
+                        <summary class="dive-expand-trigger">
+                            ${msg("dive.trust.whatShared")}
+                            <svg class="dive-expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </summary>
+                        <div class="dive-expand-content">
+                            <ul class="dive-attribute-list">
+                                <li>
+                                    <span class="dive-attr-icon">🆔</span>
+                                    <span class="dive-attr-name">${msg("dive.attr.uniqueId")}</span>
+                                </li>
+                                <li>
+                                    <span class="dive-attr-icon">🔐</span>
+                                    <span class="dive-attr-name">${msg("dive.attr.clearance")}</span>
+                                </li>
+                                <li>
+                                    <span class="dive-attr-icon">🌍</span>
+                                    <span class="dive-attr-name">${msg("dive.attr.country")}</span>
+                                </li>
+                                <li>
+                                    <span class="dive-attr-icon">🏷️</span>
+                                    <span class="dive-attr-name">${msg("dive.attr.coi")}</span>
+                                </li>
+                            </ul>
+                            <p class="dive-attr-note">${msg("dive.attr.note")}</p>
+                        </div>
+                    </details>
+                    
+                    <!-- LEVEL 3: "Technical Details" (Expandable) -->
+                    <details class="dive-microprogression dive-level-3">
+                        <summary class="dive-expand-trigger">
+                            ${msg("dive.trust.technical")}
+                            <svg class="dive-expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </summary>
+                        <div class="dive-expand-content dive-technical">
+                            <div class="dive-tech-item">
+                                <span class="dive-tech-label">${msg("dive.tech.protocol")}</span>
+                                <span class="dive-tech-value">OpenID Connect / SAML 2.0</span>
+                            </div>
+                            <div class="dive-tech-item">
+                                <span class="dive-tech-label">${msg("dive.tech.tokenFormat")}</span>
+                                <span class="dive-tech-value">JWT (RS256)</span>
+                            </div>
+                            <div class="dive-tech-item">
+                                <span class="dive-tech-label">${msg("dive.tech.policyEngine")}</span>
+                                <span class="dive-tech-value">OPA (Rego)</span>
+                            </div>
+                            <div class="dive-tech-item">
+                                <span class="dive-tech-label">${msg("dive.tech.standard")}</span>
+                                <span class="dive-tech-value">ACP-240 / STANAG 4774</span>
+                            </div>
+                            <div class="dive-tech-item">
+                                <span class="dive-tech-label">${msg("dive.tech.realm")}</span>
+                                <span class="dive-tech-value"><#if realm?? && realm.name?has_content>${realm.name}<#else>dive-v3</#if></span>
+                            </div>
+                        </div>
+                    </details>
+                    
+                    <!-- Help Notice (Generic) -->
+                    <div class="dive-help-footer">
+                        <button type="button" class="dive-help-trigger-small" onclick="document.getElementById('helpPanel').classList.toggle('dive-hidden')">
+                            ${msg("dive.help.trigger")}
+                        </button>
+                        <div id="helpPanel" class="dive-help-panel dive-hidden">
+                            <p class="dive-help-heading">${msg("dive.help.heading")}</p>
+                            <ul class="dive-help-list">
+                                <li>${msg("dive.help.item1")}</li>
+                                <li>${msg("dive.help.item2")}</li>
+                                <li>${msg("dive.help.item3")}</li>
+                            </ul>
+                            <p class="dive-help-note">${msg("dive.help.note")}</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
