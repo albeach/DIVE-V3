@@ -198,93 +198,36 @@
                 </div>
             </div>
 
-            <!-- RIGHT: Contextual Help Panel -->
+            <!-- RIGHT: Welcome Panel (Simple & Friendly) -->
             <div class="dive-description-column">
-                <div class="dive-help-panel">
-                    <!-- Access Guide -->
-                    <div class="dive-help-section">
-                        <h3 class="dive-help-title">
-                            <svg class="dive-help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                            </svg>
-                            ${msg("dive.help.accessGuide")}
-                        </h3>
-                        <div class="dive-clearance-grid">
-                            <div class="dive-clearance-item dive-clearance-unclass">
-                                <span class="dive-clearance-level">U</span>
-                                <span class="dive-clearance-label">UNCLASSIFIED</span>
-                                <span class="dive-clearance-auth">Password</span>
-                            </div>
-                            <div class="dive-clearance-item dive-clearance-conf">
-                                <span class="dive-clearance-level">C</span>
-                                <span class="dive-clearance-label">CONFIDENTIAL</span>
-                                <span class="dive-clearance-auth">Password</span>
-                            </div>
-                            <div class="dive-clearance-item dive-clearance-secret">
-                                <span class="dive-clearance-level">S</span>
-                                <span class="dive-clearance-label">SECRET</span>
-                                <span class="dive-clearance-auth">+ MFA</span>
-                            </div>
-                            <div class="dive-clearance-item dive-clearance-ts">
-                                <span class="dive-clearance-level">TS</span>
-                                <span class="dive-clearance-label">TOP SECRET</span>
-                                <span class="dive-clearance-auth">+ Passkey</span>
-                            </div>
-                        </div>
+                <div class="dive-welcome-panel">
+                    <!-- Friendly Welcome -->
+                    <div class="dive-welcome-header">
+                        <span class="dive-welcome-wave">👋</span>
+                        <h2 class="dive-welcome-title">${msg("dive.welcome.title")}</h2>
+                        <p class="dive-welcome-subtitle">${msg("dive.welcome.subtitle")}</p>
                     </div>
 
-                    <!-- Demo Credentials (Collapsible) -->
-                    <details class="dive-help-section dive-demo-section">
-                        <summary class="dive-demo-toggle">
-                            <svg class="dive-help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                            </svg>
-                            ${msg("dive.help.demoCredentials")}
-                            <svg class="dive-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </summary>
-                        <div class="dive-demo-content">
-                            <p class="dive-demo-hint">${msg("dive.help.demoHint")}</p>
-                            <div class="dive-demo-creds">
-                                <code>testuser-usa-{1,2,3,4}</code>
-                                <code>DiveDemo2025!</code>
+                    <!-- Demo Quick Start -->
+                    <div class="dive-demo-quickstart">
+                        <p class="dive-demo-label">${msg("dive.demo.label")}</p>
+                        <div class="dive-demo-box">
+                            <div class="dive-demo-row">
+                                <span class="dive-demo-icon">👤</span>
+                                <span class="dive-demo-value">testuser-usa-1</span>
                             </div>
-                            <p class="dive-demo-note">${msg("dive.help.demoNote")}</p>
+                            <div class="dive-demo-row">
+                                <span class="dive-demo-icon">🔑</span>
+                                <span class="dive-demo-value">DiveDemo2025!</span>
+                            </div>
                         </div>
-                    </details>
-
-                    <!-- Help & Support -->
-                    <div class="dive-help-section dive-support-section">
-                        <h3 class="dive-help-title">
-                            <svg class="dive-help-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
-                            ${msg("dive.help.support")}
-                        </h3>
-                        <div class="dive-support-links">
-                            <a href="mailto:support@dive-v3.example" class="dive-support-link">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                </svg>
-                                ${msg("dive.help.emailSupport")}
-                            </a>
-                            <a href="#" class="dive-support-link" onclick="return false;">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                </svg>
-                                ${msg("dive.help.documentation")}
-                            </a>
-                        </div>
+                        <p class="dive-demo-tip">${msg("dive.demo.tip")}</p>
                     </div>
 
-                    <!-- Security Notice -->
-                    <div class="dive-security-notice">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <span>${msg("dive.help.securityNotice")}</span>
-                    </div>
+                    <!-- Simple Help -->
+                    <a href="mailto:support@dive-v3.example" class="dive-help-link">
+                        ${msg("dive.help.simple")}
+                    </a>
                 </div>
             </div>
         </div>
