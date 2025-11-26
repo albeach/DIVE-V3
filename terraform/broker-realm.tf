@@ -44,8 +44,8 @@ resource "keycloak_realm" "dive_v3_broker" {
 
   # Broker realm sessions: Extended to align with NextAuth database sessions
   # MFA is still enforced via authentication flow, but sessions can persist
-  sso_session_idle_timeout = "2h"  # SSO idle: 2 hours (aligned with NextAuth)
-  sso_session_max_lifespan = "8h"  # Max session: 8 hours
+  sso_session_idle_timeout = "2h" # SSO idle: 2 hours (aligned with NextAuth)
+  sso_session_max_lifespan = "8h" # Max session: 8 hours
 
   offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
   offline_session_max_lifespan = "1440h" # Offline max (60 days)
@@ -91,6 +91,21 @@ resource "keycloak_realm" "dive_v3_broker" {
   }
 
   ssl_required = "none" # Development: Allow HTTP
+}
+
+# ============================================
+# Data Source: Classified Access Browser Flow
+# ============================================
+# SECURITY FIX (2025-11-25): Look up existing MFA flow for client binding
+# This flow enforces clearance-based MFA:
+#   - CONFIDENTIAL/SECRET → OTP required (AAL2)
+#   - TOP_SECRET → WebAuthn required (AAL3)
+#
+# NOTE: The flow must exist in Keycloak (created via realm-mfa module or manually)
+# If the flow doesn't exist, Terraform will fail with a clear error message.
+data "keycloak_authentication_flow" "classified_access_browser_flow" {
+  realm_id = keycloak_realm.dive_v3_broker.id
+  alias    = "Classified Access Browser Flow - DIVE V3 Broker"
 }
 
 # Application Client in Broker Realm
@@ -142,11 +157,16 @@ resource "keycloak_openid_client" "dive_v3_app_broker" {
   #   - AAL2 (OTP/TOTP) for CONFIDENTIAL and SECRET clearance users
   #   - AAL3 (WebAuthn) for TOP_SECRET clearance users
   # The realm-level binding stays as "browser" for federation compatibility.
+  # 
   # LESSON LEARNED (2025-11-25): Without this, SECRET users bypass MFA!
-  # NOTE: MFA flow binding will be applied after MFA module is created
-  # authentication_flow_binding_overrides {
-  #   browser_id = module.broker_mfa.browser_flow_id
-  # }
+  # ROOT CAUSE: This block was commented out, allowing SECRET users to login
+  # without OTP/MFA enforcement. This is a CRITICAL SECURITY GAP.
+  # 
+  # FIX: Use data source to lookup existing MFA flow and bind client to it.
+  # The flow "Classified Access Browser Flow - DIVE V3 Broker" must exist.
+  authentication_flow_binding_overrides {
+    browser_id = data.keycloak_authentication_flow.classified_access_browser_flow.id
+  }
 }
 
 # Client scope for DIVE attributes in broker realm
@@ -279,6 +299,29 @@ resource "keycloak_generic_protocol_mapper" "broker_coi" {
   config = {
     "user.attribute"       = "acpCOI"
     "claim.name"           = "acpCOI"
+    "jsonType.label"       = "String"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+  }
+}
+
+# ============================================
+# Organization Type Mapper (Industry Access Control)
+# ============================================
+# ACP-240 Section 4.2: Organization type attribute for industry access control
+# Values: GOV | MIL | INDUSTRY
+# Default: GOV (if not set, OPA policy defaults to GOV)
+resource "keycloak_generic_protocol_mapper" "broker_organization_type" {
+  realm_id        = keycloak_realm.dive_v3_broker.id
+  client_id       = keycloak_openid_client.dive_v3_app_broker.id
+  name            = "organizationType"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usermodel-attribute-mapper"
+
+  config = {
+    "user.attribute"       = "organizationType"
+    "claim.name"           = "organizationType"
     "jsonType.label"       = "String"
     "id.token.claim"       = "true"
     "access.token.claim"   = "true"

@@ -11,14 +11,14 @@ resource "keycloak_realm" "broker" {
   display_name_html = "<div class='kc-logo-text'><span>DIVE V3 - ${var.instance_name}</span></div>"
 
   # Login settings
-  login_theme                  = var.login_theme
-  registration_allowed         = false
-  reset_password_allowed       = true
-  remember_me                  = true
-  verify_email                 = false
-  login_with_email_allowed     = true
-  duplicate_emails_allowed     = false
-  edit_username_allowed        = false
+  login_theme              = var.login_theme
+  registration_allowed     = false
+  reset_password_allowed   = true
+  remember_me              = true
+  verify_email             = false
+  login_with_email_allowed = true
+  duplicate_emails_allowed = false
+  edit_username_allowed    = false
 
   # Token settings
   access_token_lifespan        = "15m"
@@ -39,11 +39,11 @@ resource "keycloak_realm" "broker" {
   # Security defenses
   security_defenses {
     headers {
-      x_frame_options                     = "DENY"
-      content_security_policy             = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
-      x_content_type_options              = "nosniff"
-      x_xss_protection                    = "1; mode=block"
-      strict_transport_security           = "max-age=31536000; includeSubDomains"
+      x_frame_options           = "DENY"
+      content_security_policy   = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
+      x_content_type_options    = "nosniff"
+      x_xss_protection          = "1; mode=block"
+      strict_transport_security = "max-age=31536000; includeSubDomains"
     }
     brute_force_detection {
       permanent_lockout                = false
@@ -58,13 +58,13 @@ resource "keycloak_realm" "broker" {
 
   # WebAuthn settings for passwordless auth
   web_authn_policy {
-    relying_party_entity_name = "DIVE V3 - ${var.instance_name}"
-    relying_party_id          = ""  # Use default (hostname)
-    signature_algorithms      = ["ES256", "RS256"]
+    relying_party_entity_name         = "DIVE V3 - ${var.instance_name}"
+    relying_party_id                  = "" # Use default (hostname)
+    signature_algorithms              = ["ES256", "RS256"]
     attestation_conveyance_preference = "indirect"
-    authenticator_attachment  = "platform"
-    require_resident_key      = "No"
-    user_verification_requirement = "preferred"
+    authenticator_attachment          = "platform"
+    require_resident_key              = "No"
+    user_verification_requirement     = "preferred"
   }
 }
 
@@ -81,7 +81,7 @@ resource "keycloak_openid_client" "broker_client" {
   access_type                  = "CONFIDENTIAL"
   standard_flow_enabled        = true
   implicit_flow_enabled        = false
-  direct_access_grants_enabled = true  # Required for custom login & OTP flows (see below)
+  direct_access_grants_enabled = true # Required for custom login & OTP flows (see below)
   service_accounts_enabled     = true
 
   # URLs - include both localhost (dev) and Cloudflare (prod)
@@ -99,7 +99,7 @@ resource "keycloak_openid_client" "broker_client" {
   ]
 
   # Token settings
-  access_token_lifespan = "900"  # 15 minutes
+  access_token_lifespan = "900" # 15 minutes
 
   # Login settings
   login_theme = var.login_theme
@@ -130,7 +130,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "clearance" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "clearance"
 
-  user_attribute       = "clearance"
+  user_attribute      = "clearance"
   claim_name          = "clearance"
   claim_value_type    = "String"
   add_to_id_token     = true
@@ -144,7 +144,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "country_of_affiliatio
   client_id = keycloak_openid_client.broker_client.id
   name      = "countryOfAffiliation"
 
-  user_attribute       = "countryOfAffiliation"
+  user_attribute      = "countryOfAffiliation"
   claim_name          = "countryOfAffiliation"
   claim_value_type    = "String"
   add_to_id_token     = true
@@ -158,7 +158,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "unique_id" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "uniqueID"
 
-  user_attribute       = "uniqueID"
+  user_attribute      = "uniqueID"
   claim_name          = "uniqueID"
   claim_value_type    = "String"
   add_to_id_token     = true
@@ -172,7 +172,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acp_coi" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "acpCOI"
 
-  user_attribute       = "acpCOI"
+  user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
   claim_value_type    = "String"
   multivalued         = true
@@ -187,8 +187,27 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "organization" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "organization"
 
-  user_attribute       = "organization"
+  user_attribute      = "organization"
   claim_name          = "organization"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# ============================================
+# Organization Type Mapper (Industry Access Control)
+# ============================================
+# ACP-240 Section 4.2: Organization type attribute for industry access control
+# Values: GOV | MIL | INDUSTRY
+# Default: GOV (if not set, OPA policy defaults to GOV)
+resource "keycloak_openid_user_attribute_protocol_mapper" "organization_type" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "organizationType"
+
+  user_attribute      = "organizationType"
+  claim_name          = "organizationType"
   claim_value_type    = "String"
   add_to_id_token     = true
   add_to_access_token = true
@@ -226,7 +245,7 @@ resource "keycloak_openid_client" "incoming_federation" {
   ]
 
   # Token settings
-  access_token_lifespan = "300"  # 5 minutes for federation tokens
+  access_token_lifespan = "300" # 5 minutes for federation tokens
 }
 
 # Protocol mappers for incoming federation clients
@@ -237,7 +256,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_clearance"
   client_id = keycloak_openid_client.incoming_federation[each.key].id
   name      = "clearance"
 
-  user_attribute       = "clearance"
+  user_attribute      = "clearance"
   claim_name          = "clearance"
   claim_value_type    = "String"
   add_to_id_token     = true
@@ -252,7 +271,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_country" {
   client_id = keycloak_openid_client.incoming_federation[each.key].id
   name      = "countryOfAffiliation"
 
-  user_attribute       = "countryOfAffiliation"
+  user_attribute      = "countryOfAffiliation"
   claim_name          = "countryOfAffiliation"
   claim_value_type    = "String"
   add_to_id_token     = true
@@ -267,7 +286,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_unique_id"
   client_id = keycloak_openid_client.incoming_federation[each.key].id
   name      = "uniqueID"
 
-  user_attribute       = "uniqueID"
+  user_attribute      = "uniqueID"
   claim_name          = "uniqueID"
   claim_value_type    = "String"
   add_to_id_token     = true
@@ -282,7 +301,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
   client_id = keycloak_openid_client.incoming_federation[each.key].id
   name      = "acpCOI"
 
-  user_attribute       = "acpCOI"
+  user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
   claim_value_type    = "String"
   multivalued         = true
@@ -298,7 +317,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_organizati
   client_id = keycloak_openid_client.incoming_federation[each.key].id
   name      = "organization"
 
-  user_attribute       = "organization"
+  user_attribute      = "organization"
   claim_name          = "organization"
   claim_value_type    = "String"
   add_to_id_token     = true
