@@ -24,6 +24,7 @@ export function createTestZTDFResource(params: {
     releasabilityTo: string[];
     COI?: string[];
     content?: string;
+    releasableToIndustry?: boolean; // Industry access control (ACP-240 Section 4.2)
 }): IZTDFResource {
     // Encrypt content
     const encryptionResult = encryptContent(params.content || 'Test content');
@@ -44,7 +45,8 @@ export function createTestZTDFResource(params: {
         releasabilityTo: params.releasabilityTo,
         COI: params.COI || [],
         originatingCountry: params.releasabilityTo[0] || 'USA',
-        creationDate: new Date().toISOString()
+        creationDate: new Date().toISOString(),
+        releasableToIndustry: params.releasableToIndustry // Industry access control (ACP-240 Section 4.2)
     });
 
     // Create policy
@@ -103,6 +105,13 @@ export function createTestZTDFResource(params: {
         resourceId: params.resourceId,
         title: params.title,
         ztdf,
+        legacy: {
+            classification: params.classification,
+            releasabilityTo: params.releasabilityTo,
+            COI: params.COI || [],
+            encrypted: true,
+            releasableToIndustry: params.releasableToIndustry // Industry access control
+        },
         createdAt: new Date(),
         updatedAt: new Date()
     };
@@ -170,6 +179,66 @@ export const TEST_RESOURCES = {
         releasabilityTo: ['FRA'],
         COI: [],
         content: 'French national defense information'
+    }),
+
+    // ============================================
+    // Industry Access Control Test Resources
+    // ============================================
+
+    /**
+     * Government-only SECRET document (default: releasableToIndustry not set)
+     * Industry users should be DENIED access
+     */
+    govOnlySecretDocument: createTestZTDFResource({
+        resourceId: 'doc-gov-only-001',
+        title: 'Government-Only Operations Plan',
+        classification: 'SECRET',
+        releasabilityTo: ['USA', 'DEU', 'FRA'],
+        COI: ['NATO'],
+        content: 'Sensitive government operations information - not for industry',
+        releasableToIndustry: false // Explicitly gov-only
+    }),
+
+    /**
+     * Industry-accessible CONFIDENTIAL document
+     * Industry users with proper clearance SHOULD have access
+     */
+    industryAllowedConfidentialDocument: createTestZTDFResource({
+        resourceId: 'doc-industry-001',
+        title: 'Coalition Industry Partnership Brief',
+        classification: 'CONFIDENTIAL',
+        releasabilityTo: ['USA', 'DEU', 'GBR'],
+        COI: [],
+        content: 'Information approved for cleared industry partners',
+        releasableToIndustry: true // Explicitly industry-accessible
+    }),
+
+    /**
+     * Industry-accessible UNCLASSIFIED document
+     * Wide distribution including industry partners
+     */
+    industryAllowedUnclassifiedDocument: createTestZTDFResource({
+        resourceId: 'doc-industry-002',
+        title: 'Coalition Logistics RFI',
+        classification: 'UNCLASSIFIED',
+        releasabilityTo: ['USA', 'DEU', 'FRA', 'GBR', 'CAN'],
+        COI: [],
+        content: 'Request for Information - open to industry bidders',
+        releasableToIndustry: true // Explicitly industry-accessible
+    }),
+
+    /**
+     * Government-only UNCLASSIFIED document
+     * Even unclassified can be restricted from industry
+     */
+    govOnlyUnclassifiedDocument: createTestZTDFResource({
+        resourceId: 'doc-gov-unclass-001',
+        title: 'Internal Policy Discussion',
+        classification: 'UNCLASSIFIED',
+        releasabilityTo: ['USA', 'DEU'],
+        COI: [],
+        content: 'Internal government policy discussion - not for public or industry',
+        releasableToIndustry: false // Gov-only even though unclassified
     })
 };
 
@@ -252,7 +321,60 @@ export const TEST_USERS = {
         email: 'bob@contractor.com',
         clearance: 'UNCLASSIFIED',
         countryOfAffiliation: 'USA',
-        acpCOI: []
+        acpCOI: [],
+        organizationType: 'INDUSTRY' // Industry partner
+    },
+
+    // ============================================
+    // Industry Partner Test Users
+    // ============================================
+    
+    /**
+     * German industry partner with SECRET clearance
+     */
+    germanIndustrySecret: {
+        uniqueID: 'testuser-deu-industry-1',
+        email: 'engineer@abc-llc.de',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'DEU',
+        acpCOI: ['NATO'],
+        organizationType: 'INDUSTRY' // Industry partner
+    },
+
+    /**
+     * US industry partner with CONFIDENTIAL clearance
+     */
+    usIndustryConfidential: {
+        uniqueID: 'testuser-usa-industry-1',
+        email: 'analyst@defense-corp.com',
+        clearance: 'CONFIDENTIAL',
+        countryOfAffiliation: 'USA',
+        acpCOI: [],
+        organizationType: 'INDUSTRY' // Industry partner
+    },
+
+    /**
+     * US government user (explicit GOV type)
+     */
+    usGovernmentSecret: {
+        uniqueID: 'testuser-usa-gov-1',
+        email: 'analyst@state.gov',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY'],
+        organizationType: 'GOV' // Government personnel
+    },
+
+    /**
+     * US military user (explicit MIL type)
+     */
+    usMilitaryTopSecret: {
+        uniqueID: 'testuser-usa-mil-1',
+        email: 'officer@army.mil',
+        clearance: 'TOP_SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY', 'US-ONLY'],
+        organizationType: 'MIL' // Military personnel
     }
 };
 
