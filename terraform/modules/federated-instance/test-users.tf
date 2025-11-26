@@ -53,28 +53,34 @@ locals {
   }
 
   # Industry partner test users (ACP-240 Section 4.2)
-  # Format: testuser-{code}-industry-{level}
-  # Level 1-2 = UNCLASSIFIED/CONFIDENTIAL (typical industry clearances)
-  industry_users = {
-    "1" = {
-      clearance         = "UNCLASSIFIED"
-      coi               = []
-      display_name      = "Industry Level 1 - Unclassified"
-      organization_type = "INDUSTRY"
+  # Real company names per country for realistic pilot demos
+  # Each country has ONE endorsed industry partner
+  industry_partners = {
+    "USA" = {
+      company_name  = "Booz Allen Hamilton"
+      company_short = "bah"
+      email_domain  = "bah.com"
+      clearance     = "SECRET"
+      coi           = ["NATO"]
     }
-    "2" = {
-      clearance         = "CONFIDENTIAL"
-      coi               = []
-      display_name      = "Industry Level 2 - Confidential"
-      organization_type = "INDUSTRY"
+    "DEU" = {
+      company_name  = "IABG"
+      company_short = "iabg"
+      email_domain  = "iabg.de"
+      clearance     = "SECRET"
+      coi           = ["NATO"]
     }
-    "3" = {
-      clearance         = "SECRET"
-      coi               = ["NATO"]
-      display_name      = "Industry Level 3 - Secret (Cleared Contractor)"
-      organization_type = "INDUSTRY"
+    "FRA" = {
+      company_name  = "Thales"
+      company_short = "thales"
+      email_domain  = "thalesgroup.com"
+      clearance     = "SECRET"
+      coi           = ["NATO"]
     }
   }
+
+  # Get this instance's industry partner (if defined)
+  this_industry_partner = lookup(local.industry_partners, var.instance_code, null)
 }
 
 # ============================================================================
@@ -122,19 +128,22 @@ resource "keycloak_user" "pilot_users" {
 # ============================================================================
 # INDUSTRY PARTNER TEST USERS (ACP-240 Section 4.2)
 # ============================================================================
-# Cleared contractors and industry partners for testing industry access control
-# Format: testuser-{code}-industry-{level}
-# Example: testuser-deu-industry-2 = German industry partner with CONFIDENTIAL clearance
+# Named industry partners per country for realistic pilot demos:
+#   USA: Booz Allen Hamilton (BAH) - contractor.bah@bah.com
+#   DEU: IABG - contractor.iabg@iabg.de
+#   FRA: Thales - contractor.thales@thalesgroup.com
+#
+# Each industry user is endorsed by their home country (primaryEndorser)
 
-resource "keycloak_user" "industry_users" {
-  for_each = var.create_test_users ? local.industry_users : {}
+resource "keycloak_user" "industry_partner" {
+  count = var.create_test_users && local.this_industry_partner != null ? 1 : 0
 
   realm_id   = keycloak_realm.broker.id
-  username   = "testuser-${lower(var.instance_code)}-industry-${each.key}"
+  username   = "contractor.${local.this_industry_partner.company_short}"
   enabled    = true
-  email      = "testuser-${lower(var.instance_code)}-industry-${each.key}@contractor.example"
-  first_name = "Industry Partner"
-  last_name  = "${upper(var.instance_code)}-${each.key}"
+  email      = "contractor.${local.this_industry_partner.company_short}@${local.this_industry_partner.email_domain}"
+  first_name = "Contractor"
+  last_name  = local.this_industry_partner.company_name
 
   initial_password {
     value     = local.pilot_password
@@ -143,21 +152,21 @@ resource "keycloak_user" "industry_users" {
 
   attributes = {
     # Core DIVE attributes
-    clearance            = each.value.clearance
+    clearance            = local.this_industry_partner.clearance
     countryOfAffiliation = var.instance_code
-    uniqueID             = "testuser-${lower(var.instance_code)}-industry-${each.key}"
+    uniqueID             = "contractor.${local.this_industry_partner.company_short}@${local.this_industry_partner.email_domain}"
 
-    # Extended attributes - INDUSTRY type
+    # Industry-specific attributes (Primary Endorser Model)
+    organizationType = "INDUSTRY"
+    organization     = local.this_industry_partner.company_name
+    primaryEndorser  = var.instance_code # This country endorses this contractor
     userType         = "contractor"
-    organization     = "${var.instance_name} Industry Partner"
-    organizationType = each.value.organization_type # INDUSTRY
-    acpCOI           = jsonencode(each.value.coi)
+    acpCOI           = jsonencode(local.this_industry_partner.coi)
 
     # Pilot metadata
-    pilot_user      = "true"
-    clearance_level = each.key
-    industry_user   = "true" # Flag for easy identification
-    created_by      = "terraform"
+    pilot_user    = "true"
+    industry_user = "true"
+    created_by    = "terraform"
   }
 
   lifecycle {
@@ -182,20 +191,23 @@ output "pilot_users" {
   sensitive = true
 }
 
-output "industry_users" {
-  description = "Industry partner test users created for this instance"
-  value = var.create_test_users ? {
-    for level, config in local.industry_users : "industry_${level}" => {
-      username          = "testuser-${lower(var.instance_code)}-industry-${level}"
-      clearance         = config.clearance
-      organization_type = config.organization_type
-      password          = local.pilot_password
-    }
-  } : {}
+output "industry_partner" {
+  description = "Industry partner for this instance"
+  value = var.create_test_users && local.this_industry_partner != null ? {
+    username  = "contractor.${local.this_industry_partner.company_short}"
+    company   = local.this_industry_partner.company_name
+    clearance = local.this_industry_partner.clearance
+    endorser  = var.instance_code
+    password  = local.pilot_password
+  } : null
   sensitive = true
 }
 
 output "pilot_user_credentials" {
   description = "Quick reference for demo credentials"
-  value       = var.create_test_users ? "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / DiveDemo2025! | INDUSTRY: testuser-${lower(var.instance_code)}-industry-{1,2,3} / DiveDemo2025!" : "Test users not created"
+  value = var.create_test_users ? (
+    local.this_industry_partner != null
+    ? "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / DiveDemo2025! | INDUSTRY: contractor.${local.this_industry_partner.company_short} / DiveDemo2025!"
+    : "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / DiveDemo2025!"
+  ) : "Test users not created"
 }
