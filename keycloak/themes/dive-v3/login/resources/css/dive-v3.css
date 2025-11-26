@@ -481,35 +481,218 @@
     }
 }
 
-.dive-description-content {
-    max-width: 540px;
+/* ============================================
+   Help Panel (Right Side)
+   ============================================ */
+
+.dive-help-panel {
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
 }
 
-.dive-description-title {
-    font-size: 2.5rem;
-    font-weight: 800;
-    margin-bottom: 1rem;
+.dive-help-section {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    padding: 1rem;
+}
+
+.dive-help-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.dive-help-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    opacity: 0.8;
+}
+
+/* Clearance Grid */
+.dive-clearance-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.dive-clearance-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-left: 3px solid;
+}
+
+.dive-clearance-level {
+    font-size: 0.75rem;
+    font-weight: 700;
+    width: 1.5rem;
+    height: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.dive-clearance-label {
+    flex: 1;
+    font-size: 0.7rem;
+    font-weight: 600;
     line-height: 1.2;
 }
 
-.dive-description-subtitle {
-    font-size: 1.25rem;
+.dive-clearance-auth {
+    font-size: 0.65rem;
+    opacity: 0.7;
+    text-align: right;
+}
+
+.dive-clearance-unclass { border-color: #22c55e; }
+.dive-clearance-conf { border-color: #3b82f6; }
+.dive-clearance-secret { border-color: #f59e0b; }
+.dive-clearance-ts { border-color: #ef4444; }
+
+/* Demo Credentials Section */
+.dive-demo-section {
+    cursor: pointer;
+}
+
+.dive-demo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
     font-weight: 600;
-    margin-bottom: 1rem;
-    opacity: 0.95;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.9);
+    list-style: none;
 }
 
-.dive-description-text {
-    font-size: 1.125rem;
-    line-height: 1.7;
-    opacity: 0.9;
-    margin-bottom: 2rem;
+.dive-demo-toggle::-webkit-details-marker {
+    display: none;
 }
 
-/* ============================================
-   Features List
-   ============================================ */
+.dive-chevron {
+    width: 1rem;
+    height: 1rem;
+    margin-left: auto;
+    transition: transform 0.2s;
+}
 
+details[open] .dive-chevron {
+    transform: rotate(180deg);
+}
+
+.dive-demo-content {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dive-demo-hint {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-bottom: 0.5rem;
+}
+
+.dive-demo-creds {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.dive-demo-creds code {
+    font-size: 0.8rem;
+    color: #a5f3fc;
+    background: none;
+}
+
+.dive-demo-note {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    margin-top: 0.5rem;
+    font-style: italic;
+}
+
+/* Support Section */
+.dive-support-section {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.dive-support-links {
+    display: flex;
+    gap: 1rem;
+}
+
+.dive-support-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.5rem;
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.dive-support-link:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+.dive-support-link svg {
+    width: 1rem;
+    height: 1rem;
+    opacity: 0.8;
+}
+
+/* Security Notice */
+.dive-security-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 0.5rem;
+    font-size: 0.7rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.dive-security-notice svg {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+    color: #fca5a5;
+    margin-top: 0.1rem;
+}
+
+/* Legacy Features (keep for backwards compatibility) */
 .dive-features {
     display: flex;
     flex-direction: column;
