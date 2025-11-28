@@ -3,14 +3,6 @@ version: '3.8'
 networks:
   dive-network:
     driver: bridge
-  # Shared network for cross-instance blacklist Redis (Phase 2 GAP-010)
-  dive-shared-network:
-    external: true
-    name: dive-v3-shared-network
-  # USA instance internal network (Phase 4: services run in separate stack)
-  dive-usa-internal:
-    external: true
-    name: dive-v3-usa_internal
 
 volumes:
   postgres_data:
@@ -64,7 +56,7 @@ services:
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       # Gap #6: Enable JavaScript providers for script-based protocol mappers
       KC_FEATURES: scripts
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
@@ -174,7 +166,7 @@ services:
     container_name: dive-v3-backend
     healthcheck:
       # Zero Trust: HTTPS with mkcert CA validation
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
+      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem -q -O- https://localhost:4000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -183,27 +175,23 @@ services:
       NODE_ENV: development
       PORT: 4000                      # HTTPS port (all access)
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm with HTTPS
-      # Using USA instance Keycloak (Phase 4 cleanup)
-      KEYCLOAK_URL: https://dive-v3-usa-keycloak:8443
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
-      KEYCLOAK_JWKS_URI: https://dive-v3-usa-keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
+      KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
       # Admin credentials for Keycloak Admin API (IdP listing, user management)
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs
-      # Updated to use USA instance services (Phase 4 cleanup)
-      MONGODB_URL: mongodb://admin:password@dive-v3-usa-mongodb:27017
+      MONGODB_URL: mongodb://admin:DivePilot2025!@mongo:27017
       MONGODB_DATABASE: dive-v3
-      OPA_URL: https://dive-v3-usa-opa:8181
-      KAS_URL: https://dive-v3-usa-kas:8080
-      AUTHZFORCE_URL: http://dive-v3-usa-authzforce:8080/authzforce-ce
+      OPA_URL: http://opa:8181
+      KAS_URL: https://kas:8080
+      AUTHZFORCE_URL: http://authzforce:8080/authzforce-ce
       LOG_LEVEL: info
-      # Redis for token blacklist (using USA instance Redis)
-      REDIS_URL: redis://dive-v3-usa-redis:6379
-      # Shared blacklist Redis (Phase 2 GAP-010)
-      BLACKLIST_REDIS_URL: redis://:DiveBlacklist2025!@blacklist-redis:6379
+      # Redis for token blacklist (Gap #7)
+      REDIS_URL: redis://redis:6379
       # CORS configuration - Updated for Cloudflare Tunnel (usa-* naming)
       # Allows both local development and Cloudflare domains
       CORS_ALLOWED_ORIGINS: http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000,https://usa-app.dive25.com,https://usa-api.dive25.com,https://usa-idp.dive25.com
@@ -214,12 +202,13 @@ services:
       ENABLE_FEDERATION_CORS: "false"
     ports:
       - "4000:4000"    # HTTPS (all access)
-    # Note: Dependencies on USA instance services are external (started separately)
-    # Connectivity ensured via network attachment to dive-v3-usa_internal
+    depends_on:
+      - keycloak
+      - mongo
+      - opa
+      - authzforce
     networks:
       - dive-network
-      - dive-shared-network  # Phase 2 GAP-010: Access to shared blacklist Redis
-      - dive-usa-internal    # Phase 4: Connect to USA instance services
     volumes:
       # Development: Mount source code for hot reload
       - ./backend/src:/app/src
@@ -246,7 +235,7 @@ services:
     healthcheck:
       # Zero Trust: HTTPS with mkcert CA validation
       # Uses the rootCA.pem from mkcert to validate the self-signed certificate
-      test: ["CMD-SHELL", "wget --no-check-certificate --spider -q https://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem --spider -q https://localhost:3000/ 2>/dev/null || curl --cacert /app/certs/rootCA.pem -s -f https://localhost:3000/ > /dev/null || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 10
@@ -260,10 +249,10 @@ services:
       NEXT_PUBLIC_BACKEND_URL: https://usa-api.dive25.com
       NEXT_PUBLIC_BASE_URL: https://usa-app.dive25.com
       # Server-side backend URL (Docker internal network)
-      BACKEND_URL: https://dive-v3-backend:4000
-      # Keycloak configuration (using USA instance)
-      KEYCLOAK_BASE_URL: https://dive-v3-usa-keycloak:8443
-      KEYCLOAK_URL: https://dive-v3-usa-keycloak:8443
+      BACKEND_URL: https://backend:4000
+      # Keycloak configuration
+      KEYCLOAK_BASE_URL: https://keycloak:8443
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       # Public Keycloak URLs (browser-side - Cloudflare tunnel)
       NEXT_PUBLIC_KEYCLOAK_URL: https://usa-idp.dive25.com
@@ -283,14 +272,15 @@ services:
       # SSL and host configuration
       AUTH_TRUST_HOST: "true"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
-      # Database for NextAuth sessions (using USA instance postgres)
-      DATABASE_URL: postgresql://postgres:postgres@dive-v3-usa-postgres:5432/dive_v3_app
+      # Database for NextAuth sessions
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Required}@postgres:5432/dive_v3_app
     ports:
       - "3000:3000"
-    # Note: Dependencies on USA instance services are external
+    depends_on:
+      - keycloak
+      - backend
     networks:
       - dive-network
-      - dive-usa-internal    # Phase 4: Connect to USA instance services
     volumes:
       # Development: Mount entire source for hot reload
       - ./frontend:/app
@@ -309,7 +299,7 @@ services:
     container_name: dive-v3-kas
     healthcheck:
       # Zero Trust: HTTPS with mkcert CA validation
-      test: ["CMD-SHELL", "wget --no-check-certificate --spider -q https://localhost:3000 || exit 1"]
+      test: ["CMD-SHELL", "wget --ca-certificate=/opt/app/certs/rootCA.pem -q -O- https://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -321,15 +311,14 @@ services:
       CERT_PATH: /opt/app/certs
       KEY_FILE: key.pem
       CERT_FILE: certificate.pem
-      BACKEND_URL: https://dive-v3-backend:4000  # Docker network service name (works on all platforms)
+      BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
-      # Updated to use USA instance services (Phase 4 cleanup)
-      OPA_URL: https://dive-v3-usa-opa:8181
-      MONGODB_URL: mongodb://admin:password@dive-v3-usa-mongodb:27017
+      OPA_URL: http://opa:8181
+      MONGODB_URL: mongodb://admin:DivePilot2025!@mongo:27017
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
       # Multi-realm migration (Oct 21, 2025): KAS needs Keycloak config for JWT validation
-      KEYCLOAK_URL: https://dive-v3-usa-keycloak:8443
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-broker-client  # Phase 2.1: Correct client name for national realms
       # Backend should be internal Docker network when fully containerized
@@ -337,10 +326,11 @@ services:
       # Currently: http://host.docker.internal:4000 (backend runs outside Docker)
     ports:
       - "8080:8080"
-    # Note: Dependencies on USA instance services are external
+    depends_on:
+      - opa
+      - mongo
     networks:
       - dive-network
-      - dive-usa-internal    # Phase 4: Connect to USA instance services
     volumes:
       # CRITICAL: Mount SSL certificates for HTTPS server
       - ./kas/certs:/opt/app/certs:ro
@@ -370,7 +360,7 @@ services:
       # We check if cloudflared process has established connections (not just running)
       # Note: localhost:9126/metrics is container-local only (loopback), acceptable per Zero Trust
       # since it never traverses network interfaces
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
+      test: ["CMD-SHELL", "pgrep cloudflared && wget -q -O- http://127.0.0.1:9126/metrics 2>/dev/null | grep -q 'cloudflared_tunnel_active_streams' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -1,95 +1,442 @@
 {
   "$schema": "./federation-registry.schema.json",
-  "version": "1.0.0",
-  "description": "DIVE V3 Federation Registry - Single Source of Truth for all instance configurations",
-  "lastUpdated": "2025-11-25T19:30:00Z",
-  
+  "version": "2.0.0",
+  "metadata": {
+    "lastUpdated": "2025-11-28T00:00:00Z",
+    "maintainer": "DIVE V3 Ops Team",
+    "compliance": [
+      "ACP-240",
+      "NIST 800-63",
+      "STANAG 4774",
+      "STANAG 4778"
+    ],
+    "description": "DIVE V3 Federation Registry - Single Source of Truth for all instance configurations"
+  },
+  "defaults": {
+    "realm": "dive-v3-broker",
+    "clientId": "dive-v3-client-broker",
+    "testUserPassword": "TestUser2025!Pilot",
+    "adminPassword": "DivePilot2025!SecureAdmin",
+    "tokenLifetime": "15m",
+    "sessionLifetime": "10h",
+    "clearanceLevels": [
+      "UNCLASSIFIED",
+      "CONFIDENTIAL",
+      "SECRET",
+      "TOP_SECRET"
+    ],
+    "passwordPolicy": {
+      "minLength": 16,
+      "requireUppercase": true,
+      "requireLowercase": true,
+      "requireDigits": true,
+      "requireSpecialChars": true,
+      "passwordHistory": 5
+    }
+  },
   "instances": {
     "usa": {
       "code": "USA",
       "name": "United States",
-      "domain": "dive25.com",
+      "type": "local",
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com"
+      },
       "urls": {
         "app": "https://usa-app.dive25.com",
         "api": "https://usa-api.dive25.com",
         "idp": "https://usa-idp.dive25.com"
       },
-      "keycloak": {
-        "localPort": 8443,
-        "adminUsername": "admin"
+      "ports": {
+        "frontend": 3000,
+        "backend": 4000,
+        "keycloak": 8443,
+        "keycloakHttp": 8080,
+        "keycloakManagement": 9000,
+        "postgres": 5433,
+        "mongodb": 27017,
+        "redis": 6379,
+        "opa": 8181,
+        "opaMetrics": 9181,
+        "kas": 8090
       },
-      "enabled": true,
-      "notes": "Primary instance - hosted locally on macOS"
+      "secrets": {
+        "gcpProjectId": "dive-v3-pilot",
+        "gcpSecretPath": "projects/dive-v3-pilot/secrets/usa",
+        "adminPasswordId": "usa-admin-password",
+        "clientSecretId": "usa-client-secret",
+        "postgresPasswordId": "usa-postgres-password",
+        "mongoPasswordId": "usa-mongo-password",
+        "redisPasswordId": "usa-redis-password"
+      },
+      "cloudflare": {
+        "tunnelId": "f8e6c558-847b-4952-b8b2-27f98a85e36c",
+        "tunnelName": "dive-v3-tunnel",
+        "credentialsFile": "cloudflared/tunnel-credentials.json"
+      },
+      "keycloak": {
+        "adminUsername": "admin",
+        "database": {
+          "name": "keycloak_db",
+          "user": "postgres"
+        },
+        "theme": "dive-v3-usa"
+      },
+      "mongodb": {
+        "database": "dive-v3",
+        "user": "admin"
+      },
+      "redis": {
+        "maxMemory": "256mb",
+        "password": "DiveRedis2025!"
+      },
+      "testUsers": {
+        "create": true,
+        "clearances": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "usernameTemplate": "testuser-{code}-{level}",
+        "emailDomain": "dive-demo.example"
+      }
     },
-    
     "fra": {
       "code": "FRA",
       "name": "France",
-      "domain": "dive25.com",
+      "type": "local",
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com"
+      },
       "urls": {
         "app": "https://fra-app.dive25.com",
         "api": "https://fra-api.dive25.com",
         "idp": "https://fra-idp.dive25.com"
       },
-      "keycloak": {
-        "localPort": 8444,
-        "adminUsername": "admin"
+      "ports": {
+        "frontend": 3001,
+        "backend": 4001,
+        "keycloak": 8444,
+        "keycloakHttp": 8084,
+        "keycloakManagement": 9001,
+        "postgres": 5434,
+        "mongodb": 27018,
+        "redis": 6380,
+        "opa": 8182,
+        "opaMetrics": 9182,
+        "kas": 8091
       },
-      "enabled": true,
-      "notes": "Secondary instance - hosted locally on macOS"
+      "secrets": {
+        "gcpProjectId": "dive-v3-pilot",
+        "gcpSecretPath": "projects/dive-v3-pilot/secrets/fra",
+        "adminPasswordId": "fra-admin-password",
+        "clientSecretId": "fra-client-secret",
+        "postgresPasswordId": "fra-postgres-password",
+        "mongoPasswordId": "fra-mongo-password",
+        "redisPasswordId": "fra-redis-password"
+      },
+      "cloudflare": {
+        "tunnelId": "e07574bd-6f32-478b-8f71-42fc3d4073f7",
+        "tunnelName": "dive-v3-fra",
+        "credentialsFile": "cloudflared/fra-tunnel-credentials.json"
+      },
+      "keycloak": {
+        "adminUsername": "admin",
+        "database": {
+          "name": "keycloak",
+          "user": "keycloak"
+        },
+        "theme": "dive-v3-fra"
+      },
+      "mongodb": {
+        "database": "dive-v3-fra",
+        "user": "admin"
+      },
+      "redis": {
+        "maxMemory": "128mb",
+        "password": "DiveRedis2025!"
+      },
+      "testUsers": {
+        "create": true,
+        "clearances": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "usernameTemplate": "testuser-{code}-{level}",
+        "emailDomain": "dive-demo.example"
+      }
     },
-    
+    "gbr": {
+      "code": "GBR",
+      "name": "United Kingdom",
+      "type": "local",
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com"
+      },
+      "urls": {
+        "app": "https://gbr-app.dive25.com",
+        "api": "https://gbr-api.dive25.com",
+        "idp": "https://gbr-idp.dive25.com"
+      },
+      "ports": {
+        "frontend": 3002,
+        "backend": 4002,
+        "keycloak": 8445,
+        "keycloakHttp": 8085,
+        "keycloakManagement": 9002,
+        "postgres": 5435,
+        "mongodb": 27019,
+        "redis": 6381,
+        "opa": 8183,
+        "opaMetrics": 9183,
+        "kas": 8092
+      },
+      "secrets": {
+        "gcpProjectId": "dive-v3-pilot",
+        "gcpSecretPath": "projects/dive-v3-pilot/secrets/gbr",
+        "adminPasswordId": "gbr-admin-password",
+        "clientSecretId": "gbr-client-secret",
+        "postgresPasswordId": "gbr-postgres-password",
+        "mongoPasswordId": "gbr-mongo-password",
+        "redisPasswordId": "gbr-redis-password"
+      },
+      "cloudflare": {
+        "tunnelId": "375d2bed-2002-4604-9fa6-22ca251ac957",
+        "tunnelName": "dive-v3-gbr",
+        "credentialsFile": "cloudflared/gbr-tunnel-credentials.json"
+      },
+      "keycloak": {
+        "adminUsername": "admin",
+        "database": {
+          "name": "keycloak",
+          "user": "keycloak"
+        },
+        "theme": "dive-v3-gbr"
+      },
+      "mongodb": {
+        "database": "dive-v3-gbr",
+        "user": "admin"
+      },
+      "redis": {
+        "maxMemory": "128mb",
+        "password": "DiveRedis2025!"
+      },
+      "testUsers": {
+        "create": true,
+        "clearances": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "usernameTemplate": "testuser-{code}-{level}",
+        "emailDomain": "dive-demo.example"
+      }
+    },
     "deu": {
       "code": "DEU",
       "name": "Germany",
-      "domain": "prosecurity.biz",
+      "type": "remote",
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "192.168.42.120",
+        "domain": "prosecurity.biz"
+      },
       "urls": {
         "app": "https://deu-app.prosecurity.biz",
         "api": "https://deu-api.prosecurity.biz",
         "idp": "https://deu-idp.prosecurity.biz"
       },
-      "keycloak": {
-        "remoteHost": "192.168.42.120",
-        "adminUsername": "admin"
+      "ports": {
+        "frontend": 3000,
+        "backend": 4000,
+        "keycloak": 8443,
+        "keycloakHttp": 8080,
+        "keycloakManagement": 9000,
+        "postgres": 5432,
+        "mongodb": 27017,
+        "redis": 6379,
+        "opa": 8181,
+        "opaMetrics": 9181,
+        "kas": 8080
       },
-      "enabled": true,
-      "notes": "Remote instance - hosted on Ubuntu server via Cloudflare Tunnel"
+      "secrets": {
+        "gcpProjectId": "dive-v3-pilot",
+        "gcpSecretPath": "projects/dive-v3-pilot/secrets/deu",
+        "adminPasswordId": "deu-admin-password",
+        "clientSecretId": "deu-client-secret",
+        "postgresPasswordId": "deu-postgres-password",
+        "mongoPasswordId": "deu-mongo-password",
+        "redisPasswordId": "deu-redis-password"
+      },
+      "cloudflare": {
+        "tunnelId": "2112e264-61e3-463f-9d13-b55273bde204",
+        "tunnelName": "dive-v3-deu-prosecurity",
+        "credentialsFile": "cloudflared/config-deu.yml"
+      },
+      "keycloak": {
+        "adminUsername": "admin",
+        "database": {
+          "name": "keycloak",
+          "user": "keycloak"
+        },
+        "theme": "dive-v3-deu"
+      },
+      "mongodb": {
+        "database": "dive-v3-deu",
+        "user": "admin"
+      },
+      "redis": {
+        "maxMemory": "256mb",
+        "password": "DiveRedis2025!"
+      },
+      "testUsers": {
+        "create": true,
+        "clearances": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "usernameTemplate": "testuser-{code}-{level}",
+        "emailDomain": "dive-demo.example"
+      }
     }
   },
-  
   "federation": {
-    "description": "Defines which instances can federate with each other",
+    "model": "hub-spoke",
     "matrix": {
-      "usa": ["fra", "deu"],
-      "fra": ["usa", "deu"],
-      "deu": ["usa", "fra"]
+      "usa": [
+        "fra",
+        "gbr",
+        "deu"
+      ],
+      "fra": [
+        "usa",
+        "gbr",
+        "deu"
+      ],
+      "gbr": [
+        "usa",
+        "fra",
+        "deu"
+      ],
+      "deu": [
+        "usa",
+        "fra",
+        "gbr"
+      ]
     },
-    "defaultEnabled": true
-  },
-  
-  "defaults": {
-    "realm": "dive-v3-broker",
-    "clientId": "dive-v3-client-broker",
-    "createTestUsers": true,
-    "adminPassword": "DivePilot2025!"
-  },
-  
-  "cloudflare": {
-    "tunnels": {
-      "usa": {
-        "id": "f8e6c558-847b-4952-b8b2-27f98a85e36c",
-        "name": "dive-v3-tunnel"
+    "defaultEnabled": true,
+    "trustModel": "bilateral",
+    "attributeMapping": {
+      "clearance": {
+        "required": true,
+        "claim": "clearance",
+        "type": "string",
+        "enum": [
+          "UNCLASSIFIED",
+          "CONFIDENTIAL",
+          "SECRET",
+          "TOP_SECRET"
+        ]
       },
-      "fra": {
-        "id": "e07574bd-6f32-478b-8f71-42fc3d4073f7",
-        "name": "dive-v3-fra"
+      "countryOfAffiliation": {
+        "required": true,
+        "claim": "countryOfAffiliation",
+        "type": "string",
+        "format": "ISO-3166-1-alpha-3"
       },
-      "deu": {
-        "id": "2112e264-61e3-463f-9d13-b55273bde204",
-        "name": "dive-v3-deu-prosecurity"
+      "uniqueID": {
+        "required": true,
+        "claim": "uniqueID",
+        "type": "string"
+      },
+      "acpCOI": {
+        "required": false,
+        "claim": "acpCOI",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "NATO",
+            "NATO-COSMIC",
+            "FVEY",
+            "CAN-US",
+            "US-ONLY"
+          ]
+        }
       }
+    }
+  },
+  "gcp": {
+    "projectId": "dive-v3-pilot",
+    "region": "us-east4",
+    "services": {
+      "secretManager": {
+        "enabled": true,
+        "replicationPolicy": "user-managed",
+        "locations": [
+          "us-east4"
+        ]
+      },
+      "cloudRun": {
+        "enabled": false,
+        "note": "Future deployment option"
+      },
+      "cloudBuild": {
+        "enabled": true,
+        "triggers": [
+          "main",
+          "develop"
+        ]
+      },
+      "logging": {
+        "enabled": true,
+        "retention": "90d"
+      },
+      "monitoring": {
+        "enabled": true,
+        "alerting": true
+      }
+    },
+    "workloadIdentity": {
+      "provider": "projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider",
+      "serviceAccount": "github-actions@dive-v3-pilot.iam.gserviceaccount.com"
+    }
+  },
+  "monitoring": {
+    "prometheus": {
+      "url": "http://localhost:9090",
+      "scrapeInterval": "30s",
+      "port": 9090
+    },
+    "grafana": {
+      "url": "http://localhost:3333",
+      "adminUser": "admin",
+      "port": 3333
+    },
+    "statusPage": {
+      "url": "https://status.dive25.com",
+      "checkInterval": "60s",
+      "port": 8888
+    },
+    "blacklistRedis": {
+      "port": 6399,
+      "network": "dive-v3-shared-network"
     }
   }
 }
-
-

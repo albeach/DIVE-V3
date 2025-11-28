@@ -27,8 +27,21 @@ resource "keycloak_realm" "broker" {
   sso_session_max_lifespan     = "10h"
   offline_session_idle_timeout = "720h"
 
-  # Security settings
-  password_policy = "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1)"
+  # NIST 800-63B Compliant Password Policy (Phase 1 - Nov 27, 2025)
+  # - Minimum 16 characters (exceeds NIST 12-char minimum)
+  # - Composition requirements (defense in depth)
+  # - Password history to prevent reuse
+  # - Cannot contain username or email
+  password_policy = join(" and ", [
+    "length(16)",           # Minimum 16 characters
+    "upperCase(1)",         # At least 1 uppercase
+    "lowerCase(1)",         # At least 1 lowercase
+    "digits(1)",            # At least 1 digit
+    "specialChars(1)",      # At least 1 special char
+    "notUsername()",        # Cannot contain username
+    "notEmail()",           # Cannot contain email
+    "passwordHistory(5)",   # Cannot reuse last 5 passwords
+  ])
 
   # Internationalization
   internationalization {

@@ -25,6 +25,7 @@ import scimRoutes from './routes/scim.routes';  // SCIM 2.0 user provisioning
 import federationRoutes from './routes/federation.routes';  // Federation endpoints
 import spManagementRoutes from './routes/sp-management.routes';  // SP Registry management
 import blacklistRoutes from './routes/blacklist.routes';  // Phase 2 GAP-007: Token blacklist
+import dashboardRoutes from './routes/dashboard.routes';  // Dashboard statistics
 import { metricsService } from './services/metrics.service';  // Phase 3 GAP-004: Prometheus metrics
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
@@ -121,6 +122,7 @@ app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints (must be befor
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
 app.use('/', blacklistRoutes);  // Phase 2 GAP-007: Token blacklist (mounted at root for /api/auth/blacklist-token and /api/blacklist/stats)
 app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
+app.use('/api/dashboard', dashboardRoutes);  // Dashboard statistics
 
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server

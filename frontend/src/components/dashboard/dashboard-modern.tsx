@@ -75,25 +75,48 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    // Fetch IdPs
+    // Fetch IdPs and dashboard stats
     async function fetchData() {
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-        const response = await fetch(`${backendUrl}/api/idps/public`);
         
-        if (response.ok) {
-          const data = await response.json();
+        // Fetch IdPs
+        const idpResponse = await fetch(`${backendUrl}/api/idps/public`);
+        if (idpResponse.ok) {
+          const data = await idpResponse.json();
           setIdps(data.idps || []);
         }
 
-        // Mock quick stats - replace with real API calls
-        setQuickStats([
-          { value: '24', label: 'Documents Accessible', change: '+3 this week', trend: 'up' },
-          { value: '98%', label: 'Authorization Rate', change: 'Stable', trend: 'neutral' },
-          { value: '156ms', label: 'Avg Response Time', change: '-12ms', trend: 'up' },
-        ]);
+        // Fetch dashboard stats (public endpoint, no auth needed)
+        const statsResponse = await fetch(`${backendUrl}/api/dashboard/stats/public`);
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          if (statsData.success && statsData.stats) {
+            setQuickStats(statsData.stats);
+          } else {
+            // Fallback to defaults if API returns unexpected format
+            setQuickStats([
+              { value: '0', label: 'Documents Accessible', change: 'Loading...', trend: 'neutral' },
+              { value: '100%', label: 'Authorization Rate', change: 'No data', trend: 'neutral' },
+              { value: 'N/A', label: 'Avg Response Time', change: 'No data', trend: 'neutral' },
+            ]);
+          }
+        } else {
+          // Fallback if API fails
+          setQuickStats([
+            { value: '0', label: 'Documents Accessible', change: 'Error', trend: 'neutral' },
+            { value: '100%', label: 'Authorization Rate', change: 'Error', trend: 'neutral' },
+            { value: 'N/A', label: 'Avg Response Time', change: 'Error', trend: 'neutral' },
+          ]);
+        }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        // Fallback on network error
+        setQuickStats([
+          { value: '0', label: 'Documents Accessible', change: 'Offline', trend: 'neutral' },
+          { value: '100%', label: 'Authorization Rate', change: 'Offline', trend: 'neutral' },
+          { value: 'N/A', label: 'Avg Response Time', change: 'Offline', trend: 'neutral' },
+        ]);
       } finally {
         setLoading(false);
       }

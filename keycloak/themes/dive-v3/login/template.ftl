@@ -49,9 +49,44 @@
     
     <!-- DIVE V3 Custom Styles -->
     <link href="${url.resourcesPath}/css/dive-v3.css" rel="stylesheet" />
+    
+    <#-- ============================================ -->
+    <#-- Detect HOST INSTANCE (before body for data attribute) -->
+    <#-- ============================================ -->
+    <#assign hostInstance = "">
+    <#assign hostFlag = "🌐">
+    <#assign hostCountryName = "">
+    
+    <#-- Parse from realm displayName (e.g., "France", "Germany", "United States") -->
+    <#if realm?? && realm.displayName?has_content>
+        <#if realm.displayName?lower_case?contains("france")>
+            <#assign hostInstance = "FRA"><#assign hostFlag = "🇫🇷"><#assign hostCountryName = "France">
+        <#elseif realm.displayName?lower_case?contains("germany") || realm.displayName?lower_case?contains("deutschland")>
+            <#assign hostInstance = "DEU"><#assign hostFlag = "🇩🇪"><#assign hostCountryName = "Germany">
+        <#elseif realm.displayName?lower_case?contains("united kingdom") || realm.displayName?lower_case?contains("britain")>
+            <#assign hostInstance = "GBR"><#assign hostFlag = "🇬🇧"><#assign hostCountryName = "United Kingdom">
+        <#elseif realm.displayName?lower_case?contains("canada")>
+            <#assign hostInstance = "CAN"><#assign hostFlag = "🇨🇦"><#assign hostCountryName = "Canada">
+        <#elseif realm.displayName?lower_case?contains("spain") || realm.displayName?lower_case?contains("españa")>
+            <#assign hostInstance = "ESP"><#assign hostFlag = "🇪🇸"><#assign hostCountryName = "Spain">
+        <#elseif realm.displayName?lower_case?contains("italy") || realm.displayName?lower_case?contains("italia")>
+            <#assign hostInstance = "ITA"><#assign hostFlag = "🇮🇹"><#assign hostCountryName = "Italy">
+        <#elseif realm.displayName?lower_case?contains("netherlands") || realm.displayName?lower_case?contains("nederland")>
+            <#assign hostInstance = "NLD"><#assign hostFlag = "🇳🇱"><#assign hostCountryName = "Netherlands">
+        <#elseif realm.displayName?lower_case?contains("poland") || realm.displayName?lower_case?contains("polska")>
+            <#assign hostInstance = "POL"><#assign hostFlag = "🇵🇱"><#assign hostCountryName = "Poland">
+        <#elseif realm.displayName?lower_case?contains("usa") || realm.displayName?lower_case?contains("united states") || realm.displayName?lower_case?contains("america")>
+            <#assign hostInstance = "USA"><#assign hostFlag = "🇺🇸"><#assign hostCountryName = "United States">
+        </#if>
+    </#if>
+    
+    <#-- Fallback: Default to USA -->
+    <#if !hostInstance?has_content>
+        <#assign hostInstance = "USA"><#assign hostFlag = "🇺🇸"><#assign hostCountryName = "United States">
+    </#if>
 </head>
 
-<body class="dive-body dive-compact ${bodyClass}" data-realm="<#if realm?? && realm.displayName?has_content>${realm.displayName}</#if>">
+<body class="dive-body dive-compact ${bodyClass}" data-realm="<#if realm?? && realm.displayName?has_content>${realm.displayName}</#if>" data-instance="${hostInstance}">
     <!-- Background -->
     <div class="dive-background">
         <#if properties.backgroundImage?has_content>
@@ -60,84 +95,130 @@
         </#if>
     </div>
 
-    <!-- Federation Flow Banner (Above Main Container) -->
+    <!-- ============================================ -->
+    <!-- FEDERATION HANDOFF BANNER                   -->
+    <!-- Modern 2025 UX with clear user education   -->
+    <!-- ============================================ -->
+    
+    <#-- Detect USER'S HOME COUNTRY from federation context -->
+    <#assign userHomeInstance = "">
+    <#assign userHomeFlag = "🌐">
+    <#assign userHomeCountryName = "Partner Nation">
+    <#assign isFederatedLogin = false>
+    
+    <#-- Check for brokerContext (user coming from external IdP) -->
+    <#if brokerContext?? && brokerContext.identityProviderAlias?has_content>
+        <#assign isFederatedLogin = true>
+        <#assign idpAlias = brokerContext.identityProviderAlias?lower_case>
+        
+        <#if idpAlias?contains("usa") || idpAlias?contains("us-")>
+            <#assign userHomeInstance = "USA"><#assign userHomeFlag = "🇺🇸"><#assign userHomeCountryName = "United States">
+        <#elseif idpAlias?contains("fra") || idpAlias?contains("france")>
+            <#assign userHomeInstance = "FRA"><#assign userHomeFlag = "🇫🇷"><#assign userHomeCountryName = "France">
+        <#elseif idpAlias?contains("deu") || idpAlias?contains("germany")>
+            <#assign userHomeInstance = "DEU"><#assign userHomeFlag = "🇩🇪"><#assign userHomeCountryName = "Germany">
+        <#elseif idpAlias?contains("gbr") || idpAlias?contains("uk")>
+            <#assign userHomeInstance = "GBR"><#assign userHomeFlag = "🇬🇧"><#assign userHomeCountryName = "United Kingdom">
+        <#elseif idpAlias?contains("can") || idpAlias?contains("canada")>
+            <#assign userHomeInstance = "CAN"><#assign userHomeFlag = "🇨🇦"><#assign userHomeCountryName = "Canada">
+        <#elseif idpAlias?contains("esp") || idpAlias?contains("spain")>
+            <#assign userHomeInstance = "ESP"><#assign userHomeFlag = "🇪🇸"><#assign userHomeCountryName = "Spain">
+        <#elseif idpAlias?contains("ita") || idpAlias?contains("italy")>
+            <#assign userHomeInstance = "ITA"><#assign userHomeFlag = "🇮🇹"><#assign userHomeCountryName = "Italy">
+        <#elseif idpAlias?contains("nld") || idpAlias?contains("netherlands")>
+            <#assign userHomeInstance = "NLD"><#assign userHomeFlag = "🇳🇱"><#assign userHomeCountryName = "Netherlands">
+        <#elseif idpAlias?contains("pol") || idpAlias?contains("poland")>
+            <#assign userHomeInstance = "POL"><#assign userHomeFlag = "🇵🇱"><#assign userHomeCountryName = "Poland">
+        </#if>
+    </#if>
+    
+    <#-- Also check client ID for federation hints -->
+    <#-- Client ID format: dive-v3-{source}-federation (e.g., dive-v3-usa-federation means coming FROM USA) -->
     <#assign clientData = "">
+    <#assign sourceInstance = "">
+    <#assign sourceFlag = "">
+    <#assign sourceCountryName = "">
     <#if client?? && client.clientId??>
-        <#assign clientData = client.clientId>
+        <#assign clientData = client.clientId?lower_case>
+        <#if clientData?contains("federation") || clientData?contains("broker")>
+            <#assign isFederatedLogin = true>
+            <#-- Extract source country from client_id (e.g., dive-v3-usa-federation) -->
+            <#if clientData?contains("-usa-")>
+                <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
+            <#elseif clientData?contains("-fra-")>
+                <#assign sourceInstance = "FRA"><#assign sourceFlag = "🇫🇷"><#assign sourceCountryName = "France">
+            <#elseif clientData?contains("-deu-")>
+                <#assign sourceInstance = "DEU"><#assign sourceFlag = "🇩🇪"><#assign sourceCountryName = "Germany">
+            <#elseif clientData?contains("-gbr-")>
+                <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
+            <#elseif clientData?contains("-can-")>
+                <#assign sourceInstance = "CAN"><#assign sourceFlag = "🇨🇦"><#assign sourceCountryName = "Canada">
+            <#elseif clientData?contains("-esp-")>
+                <#assign sourceInstance = "ESP"><#assign sourceFlag = "🇪🇸"><#assign sourceCountryName = "Spain">
+            </#if>
+        </#if>
     </#if>
-    <#assign isFederated = (clientData?has_content && clientData?contains("federation")) || (brokerContext?? && brokerContext.username?has_content)>
-    <#assign spCode = "">
-    <#assign idpCode = "">
-    
-    <#-- Parse SP (Service Provider) from client ID -->
-    <#if clientData?has_content>
-        <#if clientData?lower_case?contains("usa")><#assign spCode = "USA"></#if>
-        <#if clientData?lower_case?contains("fra")><#assign spCode = "FRA"></#if>
-        <#if clientData?lower_case?contains("deu")><#assign spCode = "DEU"></#if>
-        <#if clientData?lower_case?contains("can")><#assign spCode = "CAN"></#if>
-        <#if clientData?lower_case?contains("gbr")><#assign spCode = "GBR"></#if>
-        <#if clientData?lower_case?contains("ita")><#assign spCode = "ITA"></#if>
-        <#if clientData?lower_case?contains("esp")><#assign spCode = "ESP"></#if>
-        <#if clientData?lower_case?contains("nld")><#assign spCode = "NLD"></#if>
-        <#if clientData?lower_case?contains("pol")><#assign spCode = "POL"></#if>
-    </#if>
-    
-    <#-- Get IdP from realm name -->
-    <#assign realmName = "">
-    <#if realm?? && realm.name??>
-        <#assign realmName = realm.name>
-    </#if>
-    <#if realmName?has_content && realmName?contains("broker")><#assign idpCode = "USA"></#if>
 
-    <#-- Flag emoji lookup -->
-    <#assign spFlag = "🌐">
-    <#assign idpFlag = "🇺🇸">
-    <#if spCode == "USA"><#assign spFlag = "🇺🇸"></#if>
-    <#if spCode == "FRA"><#assign spFlag = "🇫🇷"></#if>
-    <#if spCode == "DEU"><#assign spFlag = "🇩🇪"></#if>
-    <#if spCode == "CAN"><#assign spFlag = "🇨🇦"></#if>
-    <#if spCode == "GBR"><#assign spFlag = "🇬🇧"></#if>
-    <#if spCode == "ESP"><#assign spFlag = "🇪🇸"></#if>
-    <#if spCode == "ITA"><#assign spFlag = "🇮🇹"></#if>
-    <#if spCode == "NLD"><#assign spFlag = "🇳🇱"></#if>
-    <#if spCode == "POL"><#assign spFlag = "🇵🇱"></#if>
-    
-    <#assign idpCodeVal = idpCode!'USA'>
-    <#if idpCodeVal == "USA"><#assign idpFlag = "🇺🇸"></#if>
-    <#if idpCodeVal == "FRA"><#assign idpFlag = "🇫🇷"></#if>
-    <#if idpCodeVal == "DEU"><#assign idpFlag = "🇩🇪"></#if>
-
-    <#if isFederated && spCode?has_content>
-    <!-- Federation Flow Banner - Separate Visual Element -->
-    <div class="dive-federation-banner">
-        <div class="dive-federation-flow-visual">
-            <!-- Destination (Where you're going) -->
-            <div class="dive-flow-destination">
-                <span class="dive-flow-flag-emoji">${spFlag}</span>
-                <div class="dive-flow-text">
-                    <span class="dive-flow-tiny-label">Accessing</span>
-                    <span class="dive-flow-country">${spCode}</span>
+    <#-- Show Federation Handoff Banner when cross-border authentication detected -->
+    <#-- This shows when: user comes from a different instance (sourceInstance != hostInstance) -->
+    <#if isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance>
+    <div class="dive-federation-banner dive-federation-banner-animated">
+        <div class="dive-federation-handoff">
+            <!-- LEFT: Your Identity (Where you're authenticating) -->
+            <div class="dive-handoff-source">
+                <div class="dive-handoff-flag-container dive-flag-glow">
+                    <span class="dive-handoff-flag">${hostFlag}</span>
+                </div>
+                <div class="dive-handoff-label">
+                    <span class="dive-handoff-micro">Your Identity</span>
+                    <span class="dive-handoff-country">${hostInstance}</span>
                 </div>
             </div>
             
-            <!-- Flow Arrow -->
-            <div class="dive-flow-connector">
-                <div class="dive-flow-line"></div>
-                <svg class="dive-flow-arrow-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-                <div class="dive-flow-line"></div>
+            <!-- Animated Flow Indicator -->
+            <div class="dive-handoff-flow">
+                <div class="dive-handoff-arrow-track">
+                    <div class="dive-handoff-arrow-particle"></div>
+                </div>
+                <span class="dive-handoff-via">→</span>
             </div>
             
-            <!-- Identity Provider (Where you're authenticating) -->
-            <div class="dive-flow-idp-badge">
-                <span class="dive-flow-flag-emoji">${idpFlag}</span>
-                <div class="dive-flow-text">
-                    <span class="dive-flow-tiny-label">via IdP</span>
-                    <span class="dive-flow-country">${idpCodeVal}</span>
+            <!-- RIGHT: Destination Application (Where you want access) -->
+            <div class="dive-handoff-destination">
+                <div class="dive-handoff-flag-container dive-flag-pulse">
+                    <span class="dive-handoff-flag">${sourceFlag}</span>
+                </div>
+                <div class="dive-handoff-label">
+                    <span class="dive-handoff-micro">Accessing</span>
+                    <span class="dive-handoff-country">${sourceInstance}</span>
                 </div>
             </div>
         </div>
+        
+        <!-- Policy Notice - Expandable -->
+        <details class="dive-policy-notice">
+            <summary class="dive-policy-trigger">
+                <svg class="dive-policy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>Cross-Border Access · Tap to learn more</span>
+                <svg class="dive-policy-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </summary>
+            <div class="dive-policy-content">
+                <p class="dive-policy-main">
+                    <strong>🤝 Bilateral Trust Agreement</strong><br/>
+                    By authenticating through <strong>${hostCountryName}</strong> to access <strong>${sourceCountryName}</strong>'s resources, 
+                    you agree to operate under ${sourceCountryName}'s data governance policies.
+                </p>
+                <ul class="dive-policy-list">
+                    <li>✓ Your identity is verified by ${hostCountryName} (${hostInstance})</li>
+                    <li>✓ Access decisions follow ${sourceInstance}'s security policies</li>
+                    <li>✓ Your actions may be logged for audit compliance</li>
+                </ul>
+            </div>
+        </details>
     </div>
     </#if>
 
@@ -215,20 +296,67 @@
             </div>
 
             <!-- RIGHT: Trust Chain & Transparency Panel -->
-            <#-- Determine country names for display -->
-            <#assign idpCountryName = "United States">
-            <#assign idpCountryCode = idpCodeVal!'USA'>
-            <#if idpCountryCode == "FRA"><#assign idpCountryName = "France"></#if>
-            <#if idpCountryCode == "DEU"><#assign idpCountryName = "Germany"></#if>
-            <#if idpCountryCode == "GBR"><#assign idpCountryName = "United Kingdom"></#if>
-            <#if idpCountryCode == "CAN"><#assign idpCountryName = "Canada"></#if>
-            <#if idpCountryCode == "ESP"><#assign idpCountryName = "Spain"></#if>
+            <#-- Determine IdP info for transparency panel -->
+            <#-- Use hostInstance as the "IdP" for this realm (since this IS the IdP) -->
+            <#assign idpCodeVal = hostInstance!'USA'>
+            <#assign idpCountryName = hostCountryName!'United States'>
+            <#assign idpFlag = hostFlag!'🇺🇸'>
+            
+            <#-- Override with userHomeInstance if this is a federation flow -->
+            <#if isFederatedLogin && userHomeInstance?has_content>
+                <#assign idpCodeVal = userHomeInstance>
+                <#assign idpCountryName = userHomeCountryName>
+                <#assign idpFlag = userHomeFlag>
+            </#if>
+            
+            <#assign idpCountryCode = idpCodeVal>
             
             <div class="dive-description-column">
                 <div class="dive-transparency-panel">
                     
                     <!-- LEVEL 0: Trust Chain Summary (Always Visible) -->
                     <div class="dive-trust-summary">
+                        <#-- Show different trust chains for federation vs direct login -->
+                        <#if isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance>
+                        <#-- FEDERATION FLOW: Show full handoff chain -->
+                        <div class="dive-trust-chain-visual dive-trust-federation">
+                            <div class="dive-trust-node dive-trust-idp">
+                                <span class="dive-trust-flag">${hostFlag}</span>
+                                <span class="dive-trust-label">${hostInstance}</span>
+                                <span class="dive-trust-sublabel">Identity</span>
+                            </div>
+                            <div class="dive-trust-arrow">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                            </div>
+                            <div class="dive-trust-node dive-trust-sp">
+                                <span class="dive-trust-flag">${sourceFlag}</span>
+                                <span class="dive-trust-label">${sourceInstance}</span>
+                                <span class="dive-trust-sublabel">Application</span>
+                            </div>
+                            <div class="dive-trust-arrow">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                            </div>
+                            <div class="dive-trust-node dive-trust-hub">
+                                <span class="dive-trust-icon">🤝</span>
+                                <span class="dive-trust-label">Coalition</span>
+                                <span class="dive-trust-sublabel">Resources</span>
+                            </div>
+                        </div>
+                        <div class="dive-trust-explanation">
+                            <p class="dive-trust-flow-text">
+                                Use your <strong>${hostInstance}</strong>-approved identity
+                                <span class="dive-flow-divider">→</span>
+                                Access <strong>${sourceInstance}</strong> application
+                                <span class="dive-flow-divider">→</span>
+                                Unlock shared coalition resources
+                            </p>
+                        </div>
+                        <#else>
+                        <#-- DIRECT LOGIN: Show simple chain -->
                         <div class="dive-trust-chain-visual">
                             <div class="dive-trust-node dive-trust-idp">
                                 <span class="dive-trust-flag">${idpFlag}</span>
@@ -254,6 +382,7 @@
                             </div>
                         </div>
                         <p class="dive-trust-tagline">${msg("dive.trust.tagline")}</p>
+                        </#if>
                     </div>
                     
                     <!-- LEVEL 1: "How does this work?" (Expandable) -->
@@ -377,6 +506,22 @@
                 passwordInput.type = 'password';
                 eyeIcon.classList.remove('dive-hidden');
                 eyeOffIcon.classList.add('dive-hidden');
+            }
+        }
+        
+        // Toggle forgot password info panel (matches desktop behavior)
+        function toggleForgotPasswordInfo() {
+            const infoPanel = document.getElementById('forgot-password-info');
+            const chevron = document.getElementById('forgot-chevron');
+            
+            if (infoPanel.classList.contains('dive-hidden')) {
+                infoPanel.classList.remove('dive-hidden');
+                infoPanel.style.maxHeight = infoPanel.scrollHeight + 'px';
+                chevron.style.transform = 'rotate(180deg)';
+            } else {
+                infoPanel.style.maxHeight = '0';
+                setTimeout(() => infoPanel.classList.add('dive-hidden'), 300);
+                chevron.style.transform = 'rotate(0deg)';
             }
         }
     </script>
