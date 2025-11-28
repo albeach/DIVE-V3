@@ -111,29 +111,73 @@
                     </button>
                 </div>
                 
-                <!-- Back to Instance Link -->
-                <#assign instanceCode = "USA">
-                <#assign instanceFlag = "🇺🇸">
-                <#assign appDomain = "usa-app.dive25.com">
-                <#if realm?? && realm.displayName?has_content>
-                    <#if realm.displayName?lower_case?contains("france")>
-                        <#assign instanceCode = "FRA"><#assign instanceFlag = "🇫🇷"><#assign appDomain = "fra-app.dive25.com">
-                    <#elseif realm.displayName?lower_case?contains("germany") || realm.displayName?lower_case?contains("deutschland")>
-                        <#assign instanceCode = "DEU"><#assign instanceFlag = "🇩🇪"><#assign appDomain = "deu-app.prosecurity.biz">
-                    <#elseif realm.displayName?lower_case?contains("united kingdom") || realm.displayName?lower_case?contains("britain")>
-                        <#assign instanceCode = "GBR"><#assign instanceFlag = "🇬🇧"><#assign appDomain = "gbr-app.dive25.com">
-                    <#elseif realm.displayName?lower_case?contains("canada")>
-                        <#assign instanceCode = "CAN"><#assign instanceFlag = "🇨🇦"><#assign appDomain = "can-app.dive25.com">
-                    <#elseif realm.displayName?lower_case?contains("usa") || realm.displayName?lower_case?contains("united states")>
-                        <#assign instanceCode = "USA"><#assign instanceFlag = "🇺🇸"><#assign appDomain = "usa-app.dive25.com">
+                <!-- Back to Instance Link - Determines DESTINATION app, not current IdP -->
+                <#-- 
+                    FEDERATION LOGIC:
+                    During federation, client_id is like "dive-v3-usa-federation" which means
+                    the user is coming FROM USA. So they should return TO USA app.
+                    
+                    Priority:
+                    1. Parse source country from client_id (federation flow)
+                    2. Fall back to current realm's app (direct login)
+                -->
+                <#assign destinationCode = "">
+                <#assign destinationFlag = "">
+                <#assign destinationDomain = "">
+                <#assign isFederationClient = false>
+                
+                <#-- Check client_id for federation pattern (dive-v3-{country}-federation) -->
+                <#if client?? && client.clientId??>
+                    <#assign clientIdLower = client.clientId?lower_case>
+                    <#if clientIdLower?contains("federation")>
+                        <#assign isFederationClient = true>
+                        <#-- Extract source country - this is WHERE THE USER CAME FROM -->
+                        <#if clientIdLower?contains("-usa-")>
+                            <#assign destinationCode = "USA"><#assign destinationFlag = "🇺🇸"><#assign destinationDomain = "usa-app.dive25.com">
+                        <#elseif clientIdLower?contains("-fra-")>
+                            <#assign destinationCode = "FRA"><#assign destinationFlag = "🇫🇷"><#assign destinationDomain = "fra-app.dive25.com">
+                        <#elseif clientIdLower?contains("-deu-")>
+                            <#assign destinationCode = "DEU"><#assign destinationFlag = "🇩🇪"><#assign destinationDomain = "deu-app.prosecurity.biz">
+                        <#elseif clientIdLower?contains("-gbr-")>
+                            <#assign destinationCode = "GBR"><#assign destinationFlag = "🇬🇧"><#assign destinationDomain = "gbr-app.dive25.com">
+                        <#elseif clientIdLower?contains("-can-")>
+                            <#assign destinationCode = "CAN"><#assign destinationFlag = "🇨🇦"><#assign destinationDomain = "can-app.dive25.com">
+                        <#elseif clientIdLower?contains("-esp-")>
+                            <#assign destinationCode = "ESP"><#assign destinationFlag = "🇪🇸"><#assign destinationDomain = "esp-app.dive25.com">
+                        </#if>
                     </#if>
                 </#if>
+                
+                <#-- Fall back to realm-based detection (for direct login, not federation) -->
+                <#if !destinationCode?has_content>
+                    <#if realm?? && realm.displayName?has_content>
+                        <#if realm.displayName?lower_case?contains("france")>
+                            <#assign destinationCode = "FRA"><#assign destinationFlag = "🇫🇷"><#assign destinationDomain = "fra-app.dive25.com">
+                        <#elseif realm.displayName?lower_case?contains("germany") || realm.displayName?lower_case?contains("deutschland")>
+                            <#assign destinationCode = "DEU"><#assign destinationFlag = "🇩🇪"><#assign destinationDomain = "deu-app.prosecurity.biz">
+                        <#elseif realm.displayName?lower_case?contains("united kingdom") || realm.displayName?lower_case?contains("britain")>
+                            <#assign destinationCode = "GBR"><#assign destinationFlag = "🇬🇧"><#assign destinationDomain = "gbr-app.dive25.com">
+                        <#elseif realm.displayName?lower_case?contains("canada")>
+                            <#assign destinationCode = "CAN"><#assign destinationFlag = "🇨🇦"><#assign destinationDomain = "can-app.dive25.com">
+                        <#elseif realm.displayName?lower_case?contains("usa") || realm.displayName?lower_case?contains("united states")>
+                            <#assign destinationCode = "USA"><#assign destinationFlag = "🇺🇸"><#assign destinationDomain = "usa-app.dive25.com">
+                        </#if>
+                    </#if>
+                </#if>
+                
+                <#-- Final fallback to USA -->
+                <#if !destinationCode?has_content>
+                    <#assign destinationCode = "USA"><#assign destinationFlag = "🇺🇸"><#assign destinationDomain = "usa-app.dive25.com">
+                </#if>
+                
+                <#assign destinationUrl = "https://${destinationDomain}">
+                
                 <div class="dive-back-link" style="text-align: center; margin-top: 1.25rem;">
-                    <a href="https://${appDomain}" style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: #6b7280; text-decoration: none; transition: color 0.2s ease;">
+                    <a href="${destinationUrl}" style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: #6b7280; text-decoration: none; transition: color 0.2s ease;">
                         <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                         </svg>
-                        <span>Return to ${instanceFlag} ${instanceCode} Portal</span>
+                        <span>Return to ${destinationFlag} ${destinationCode} Portal</span>
                     </a>
                 </div>
             </form>
