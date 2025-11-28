@@ -7,8 +7,14 @@ import {
     requestKeyHandler,
     downloadZTDFHandler
 } from '../controllers/resource.controller';
+import {
+    federatedSearchHandler,
+    federatedSearchGetHandler,
+    federatedStatusHandler
+} from '../controllers/federated-search.controller';
 import { authzMiddleware, authenticateJWT } from '../middleware/authz.middleware';
 import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
+import { enforceFederationAgreement } from '../middleware/federation-agreement.middleware';
 
 const router = Router();
 
@@ -48,21 +54,49 @@ router.get('/:id/download', authenticateJWT, downloadZTDFHandler);
 router.get('/:id/kas-flow', authenticateJWT, getKASFlowHandler);
 
 /**
+ * Phase 4: Federated Search Routes
+ * These must come BEFORE the /:id catch-all route
+ */
+
+/**
+ * GET /api/resources/federated-search
+ * Phase 4, Task 3.2: Search across all federated instances
+ * Returns aggregated results from USA, FRA, GBR, DEU
+ */
+router.get('/federated-search', authenticateJWT, federatedSearchGetHandler);
+
+/**
+ * POST /api/resources/federated-search
+ * Phase 4, Task 3.2: Search across all federated instances (POST variant)
+ * Supports complex query parameters in request body
+ */
+router.post('/federated-search', authenticateJWT, federatedSearchHandler);
+
+/**
+ * GET /api/resources/federated-status
+ * Phase 4, Task 3.2: Get federation instance availability
+ * Returns which instances are currently reachable
+ */
+router.get('/federated-status', authenticateJWT, federatedStatusHandler);
+
+/**
  * GET /api/resources/:id
  * Get a specific resource
  * Week 2: PEP middleware enforces ABAC authorization via OPA
  * Week 3: Enrichment middleware fills missing attributes BEFORE authz
+ * Phase 4: Federation agreement enforcement for SP access
  * 
  * IMPORTANT: This catch-all route MUST be LAST to avoid shadowing specific routes above
  */
-router.get('/:id', enrichmentMiddleware, authzMiddleware, getResourceHandler);
+router.get('/:id', enrichmentMiddleware, authzMiddleware, enforceFederationAgreement, getResourceHandler);
 
 /**
  * POST /api/resources/request-key
  * Request decryption key from KAS (Week 3.4.3 KAS Request Modal)
  * Calls KAS service and decrypts content if approved
+ * Phase 4: Federation agreement enforcement for SP access
  */
-router.post('/request-key', authenticateJWT, requestKeyHandler);
+router.post('/request-key', authenticateJWT, enforceFederationAgreement, requestKeyHandler);
 
 export default router;
 
