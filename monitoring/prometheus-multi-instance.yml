@@ -1,0 +1,273 @@
+#
+# Prometheus Configuration for DIVE V3 Multi-Instance Monitoring
+# Phase 3: Reliability & Monitoring (GAP-004 Fix)
+#
+# This configuration collects metrics from ALL instances (USA, FRA, DEU)
+# Use with: docker-compose -f docker-compose.monitoring.yml up -d
+#
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'dive-v3-federation'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Load alerting rules
+rule_files:
+  - "/etc/prometheus/alerts/*.yml"
+
+# ============================================================================
+# SCRAPE CONFIGURATIONS
+# ============================================================================
+
+scrape_configs:
+
+  # --------------------------------------------------------------------------
+  # USA INSTANCE
+  # --------------------------------------------------------------------------
+  
+  - job_name: 'dive-v3-backend-usa'
+    static_configs:
+      - targets: ['backend:4000']
+        labels:
+          instance: 'usa'
+          region: 'us-east-1'
+          environment: 'production'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'dive-v3-opa-usa'
+    static_configs:
+      - targets: ['opa:8181']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'dive-v3-kas-usa'
+    static_configs:
+      - targets: ['kas:8080']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'dive-v3-keycloak-usa'
+    static_configs:
+      - targets: ['keycloak:9000']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-cloudflared-usa'
+    static_configs:
+      - targets: ['cloudflared:9126']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # --------------------------------------------------------------------------
+  # FRA INSTANCE
+  # --------------------------------------------------------------------------
+  
+  - job_name: 'dive-v3-backend-fra'
+    static_configs:
+      - targets: ['backend-fra:4000']
+        labels:
+          instance: 'fra'
+          region: 'eu-west-3'
+          environment: 'production'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    # Note: FRA backend may use HTTP internally
+    scheme: http
+
+  - job_name: 'dive-v3-opa-fra'
+    static_configs:
+      - targets: ['opa-fra:8181']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'dive-v3-kas-fra'
+    static_configs:
+      - targets: ['kas-fra:8080']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'dive-v3-keycloak-fra'
+    static_configs:
+      - targets: ['keycloak-fra:8080']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-cloudflared-fra'
+    static_configs:
+      - targets: ['cloudflared-fra:9127']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # --------------------------------------------------------------------------
+  # DEU INSTANCE
+  # --------------------------------------------------------------------------
+  
+  - job_name: 'dive-v3-backend-deu'
+    static_configs:
+      - targets: ['backend-deu:4000']
+        labels:
+          instance: 'deu'
+          region: 'eu-central-1'
+          environment: 'production'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: http
+
+  - job_name: 'dive-v3-opa-deu'
+    static_configs:
+      - targets: ['opa-deu:8181']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'dive-v3-kas-deu'
+    static_configs:
+      - targets: ['kas-deu:8080']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'dive-v3-keycloak-deu'
+    static_configs:
+      - targets: ['keycloak-deu:8080']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-cloudflared-deu'
+    static_configs:
+      - targets: ['cloudflared-deu:9126']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # --------------------------------------------------------------------------
+  # DATABASE EXPORTERS (Shared monitoring)
+  # --------------------------------------------------------------------------
+
+  - job_name: 'dive-v3-mongo-usa'
+    static_configs:
+      - targets: ['mongo-exporter:9216']
+        labels:
+          instance: 'usa'
+          database: 'mongodb'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-postgres-usa'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          instance: 'usa'
+          database: 'postgresql'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-redis-usa'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          instance: 'usa'
+          database: 'redis'
+    scrape_interval: 20s
+
+  # FRA Database Exporters (if deployed)
+  - job_name: 'dive-v3-mongo-fra'
+    static_configs:
+      - targets: ['mongo-exporter-fra:9216']
+        labels:
+          instance: 'fra'
+          database: 'mongodb'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-redis-fra'
+    static_configs:
+      - targets: ['redis-exporter-fra:9121']
+        labels:
+          instance: 'fra'
+          database: 'redis'
+    scrape_interval: 20s
+
+  # DEU Database Exporters (if deployed)
+  - job_name: 'dive-v3-mongo-deu'
+    static_configs:
+      - targets: ['mongo-exporter-deu:9216']
+        labels:
+          instance: 'deu'
+          database: 'mongodb'
+    scrape_interval: 30s
+
+  - job_name: 'dive-v3-redis-deu'
+    static_configs:
+      - targets: ['redis-exporter-deu:9121']
+        labels:
+          instance: 'deu'
+          database: 'redis'
+    scrape_interval: 20s
+
+  # --------------------------------------------------------------------------
+  # PROMETHEUS SELF-MONITORING
+  # --------------------------------------------------------------------------
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'monitoring'
+
+# ============================================================================
+# RECORDING RULES (Pre-computed aggregations)
+# ============================================================================
+# Add to rule_files for these to take effect
+
+# Example recording rules (save as /etc/prometheus/rules/recording.yml):
+#
+# groups:
+#   - name: dive_v3_aggregations
+#     rules:
+#       # Total requests per instance
+#       - record: dive_v3:requests:rate5m
+#         expr: sum by (instance) (rate(dive_v3_http_requests_total[5m]))
+#       
+#       # Authorization decision latency per instance
+#       - record: dive_v3:authz_latency:p95
+#         expr: histogram_quantile(0.95, sum by (instance, le) (rate(dive_v3_authorization_latency_seconds_bucket[5m])))
+#       
+#       # Error rate per instance
+#       - record: dive_v3:errors:rate5m
+#         expr: sum by (instance) (rate(dive_v3_http_requests_total{status=~"5.."}[5m])) / sum by (instance) (rate(dive_v3_http_requests_total[5m]))
+

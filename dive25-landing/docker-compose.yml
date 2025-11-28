@@ -1,0 +1,19 @@
+services:
+  dive25-landing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dive-v3-landing
+    ports:
+      - "8889:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    labels:
+      - "com.dive-v3.service=landing"
+      - "com.dive-v3.description=DIVE25.COM Landing Page"
+

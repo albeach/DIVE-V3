@@ -149,18 +149,18 @@ export default async function Home() {
               
               {/* Flexbox Layout: Logo Left, Content Right - Compact */}
               <div className="relative flex flex-col md:flex-row items-center gap-4 md:gap-6">
-                {/* Logo */}
+                {/* Logo - Links to main DIVE25.COM portal */}
                 <div className="flex-shrink-0 animate-scale-in">
-                  <div className="relative inline-block">
+                  <a href="https://dive25.com" title="Go to DIVE25 Portal" className="relative inline-block group">
                     {/* Clean animated ring - no blur */}
                     <div className="absolute inset-0 border-4 border-[#79d85a] rounded-full opacity-30 animate-ping"></div>
-                    <div className="absolute -inset-2 border-2 border-[#009ab3] rounded-full opacity-20 animate-pulse"></div>
+                    <div className="absolute -inset-2 border-2 border-[#009ab3] rounded-full opacity-20 animate-pulse group-hover:opacity-40 transition-opacity"></div>
                     <img 
                       src="/DIVE-Logo.png" 
                       alt="DIVE - Digital Interoperability Verification Experiment" 
                       className="relative h-40 w-40 md:h-48 md:w-48 drop-shadow-2xl animate-float-logo hover:scale-110 transition-transform duration-500 cursor-pointer"
                     />
-                  </div>
+                  </a>
                 </div>
 
                 {/* Content - Compact */}

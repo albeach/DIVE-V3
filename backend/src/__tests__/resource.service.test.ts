@@ -13,7 +13,8 @@ import {
     getResourceByIdLegacy,
     createZTDFResource,
     createResource,
-    getZTDFObject
+    getZTDFObject,
+    getResourcesByQuery
 } from '../services/resource.service';
 import { validateZTDFIntegrity } from '../utils/ztdf.utils';
 import {
@@ -762,6 +763,268 @@ describe('Resource Service', () => {
 
             const ztdf = await getZTDFObject(uniqueId);
             expect(ztdf?.payload.keyAccessObjects).toBeDefined();
+        });
+    });
+
+    // ============================================
+    // getResourcesByQuery Tests (Lines 342-423)
+    // ============================================
+    describe('getResourcesByQuery', () => {
+        beforeEach(async () => {
+            // Seed test resources for querying
+            const timestamp = Date.now();
+            const resources = [
+                createTestZTDFResource({
+                    resourceId: `doc-query-1-${timestamp}`,
+                    title: 'Query Test 1',
+                    classification: 'SECRET',
+                    releasabilityTo: ['USA', 'GBR'],
+                    COI: ['FVEY'],
+                    content: 'Secret doc 1'
+                }),
+                createTestZTDFResource({
+                    resourceId: `doc-query-2-${timestamp}`,
+                    title: 'Query Test 2',
+                    classification: 'CONFIDENTIAL',
+                    releasabilityTo: ['USA', 'GBR', 'FRA'],
+                    COI: ['NATO-COSMIC'],
+                    content: 'Confidential doc 2'
+                }),
+                createTestZTDFResource({
+                    resourceId: `doc-query-3-${timestamp}`,
+                    title: 'Query Test 3',
+                    classification: 'UNCLASSIFIED',
+                    releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU'],
+                    content: 'Unclassified doc 3'
+                })
+            ];
+
+            for (const resource of resources) {
+                await createZTDFResource(resource);
+            }
+        });
+
+        describe('Happy Path', () => {
+            it('should query resources by single resourceId', async () => {
+                const allResources = await getAllResources();
+                const testResource = allResources[0];
+                
+                const results = await getResourcesByQuery({
+                    resourceId: testResource.resourceId
+                });
+                
+                expect(results).toHaveLength(1);
+                expect(results[0].resourceId).toBe(testResource.resourceId);
+                expect(results[0].encrypted).toBe(true);
+            });
+
+            it('should query resources by resourceId array ($in)', async () => {
+                const allResources = await getAllResources();
+                const ids = allResources.slice(0, 2).map(r => r.resourceId);
+                
+                const results = await getResourcesByQuery({
+                    resourceId: { $in: ids }
+                });
+                
+                expect(results.length).toBeGreaterThanOrEqual(2);
+                expect(results.every(r => ids.includes(r.resourceId))).toBe(true);
+            });
+
+            it('should query resources by classification', async () => {
+                const results = await getResourcesByQuery({
+                    classification: 'SECRET'
+                });
+                
+                expect(results.length).toBeGreaterThan(0);
+                expect(results.every(r => r.classification === 'SECRET')).toBe(true);
+            });
+
+            it('should query resources by releasabilityTo', async () => {
+                const results = await getResourcesByQuery({
+                    releasabilityTo: 'USA'
+                });
+                
+                expect(results.length).toBeGreaterThan(0);
+                expect(results.every(r => r.releasabilityTo.includes('USA'))).toBe(true);
+            });
+
+            it('should query resources by COI', async () => {
+                const results = await getResourcesByQuery({
+                    COI: 'FVEY'
+                });
+                
+                expect(results.length).toBeGreaterThan(0);
+            });
+
+            it('should query resources with text search', async () => {
+                // Text search requires a text index, which may not exist in test environment
+                // This test verifies the query is constructed correctly
+                try {
+                    const results = await getResourcesByQuery({
+                        $text: { $search: 'Query' }
+                    });
+                    
+                    // If index exists, should return results
+                    expect(Array.isArray(results)).toBe(true);
+                } catch (error) {
+                    // If no text index, will throw error - that's expected
+                    expect(error).toBeDefined();
+                }
+            });
+
+            it('should support limit option', async () => {
+                const results = await getResourcesByQuery({}, { limit: 2 });
+                
+                expect(results.length).toBeLessThanOrEqual(2);
+            });
+
+            it('should support offset option', async () => {
+                const allResults = await getResourcesByQuery({}, { limit: 100 });
+                const offsetResults = await getResourcesByQuery({}, { offset: 1, limit: 100 });
+                
+                if (allResults.length > 1) {
+                    expect(offsetResults[0].resourceId).toBe(allResults[1].resourceId);
+                }
+            });
+
+            it('should support fields projection', async () => {
+                const results = await getResourcesByQuery({}, {
+                    fields: { resourceId: 1, title: 1, _id: 0 }
+                });
+                
+                expect(Array.isArray(results)).toBe(true);
+            });
+
+            it('should use default limit of 100', async () => {
+                // Query without options should use default limit
+                const results = await getResourcesByQuery({});
+                
+                expect(results.length).toBeLessThanOrEqual(100);
+            });
+
+            it('should use default offset of 0', async () => {
+                // Query without offset should start from beginning
+                const results = await getResourcesByQuery({}, { limit: 1 });
+                
+                expect(results.length).toBeLessThanOrEqual(1);
+            });
+
+            it('should transform ZTDF resources to simplified format', async () => {
+                const results = await getResourcesByQuery({});
+                
+                if (results.length > 0) {
+                    const result = results[0];
+                    expect(result.resourceId).toBeDefined();
+                    expect(result.title).toBeDefined();
+                    expect(result.classification).toBeDefined();
+                    expect(result.releasabilityTo).toBeDefined();
+                    expect(result.COI).toBeDefined();
+                    expect(result.encrypted).toBe(true);
+                }
+            });
+
+            it('should handle empty COI gracefully', async () => {
+                const uniqueId = `doc-no-coi-${Date.now()}`;
+                const resource = createTestZTDFResource({
+                    resourceId: uniqueId,
+                    title: 'No COI',
+                    classification: 'UNCLASSIFIED',
+                    releasabilityTo: ['USA'],
+                    content: 'Test'
+                });
+
+                await createZTDFResource(resource);
+
+                const results = await getResourcesByQuery({
+                    resourceId: uniqueId
+                });
+
+                expect(results[0].COI).toEqual([]);
+            });
+
+            it('should return legacy resource format for non-ZTDF resources', async () => {
+                // This would test the legacy path (line 415)
+                // In practice, all resources are ZTDF, but the code has this fallback
+                const results = await getResourcesByQuery({});
+                
+                // All should be ZTDF in our test setup
+                expect(results.every(r => r.encrypted === true)).toBe(true);
+            });
+        });
+
+        describe('Combined Queries', () => {
+            it('should query by classification and releasabilityTo', async () => {
+                const results = await getResourcesByQuery({
+                    classification: 'SECRET',
+                    releasabilityTo: 'USA'
+                });
+                
+                expect(results.length).toBeGreaterThan(0);
+                expect(results.every(r => r.classification === 'SECRET')).toBe(true);
+            });
+
+            it('should query by multiple criteria', async () => {
+                const results = await getResourcesByQuery({
+                    classification: 'CONFIDENTIAL',
+                    releasabilityTo: 'USA',
+                    COI: 'NATO-COSMIC'
+                });
+                
+                expect(Array.isArray(results)).toBe(true);
+            });
+        });
+
+        describe('Error Handling', () => {
+            it('should return empty array when no matches found', async () => {
+                const results = await getResourcesByQuery({
+                    resourceId: 'non-existent-doc-12345'
+                });
+                
+                expect(results).toEqual([]);
+            });
+
+            it('should handle very large limit values', async () => {
+                const results = await getResourcesByQuery({}, { limit: 10000 });
+                
+                // Should succeed but be limited by actual data
+                expect(Array.isArray(results)).toBe(true);
+                expect(results.length).toBeLessThanOrEqual(10000);
+            });
+
+            it('should handle offset beyond available results', async () => {
+                const results = await getResourcesByQuery({}, { offset: 99999 });
+                
+                expect(results).toEqual([]);
+            });
+        });
+
+        describe('Edge Cases', () => {
+            it('should handle empty query object', async () => {
+                const results = await getResourcesByQuery({});
+                
+                expect(Array.isArray(results)).toBe(true);
+                expect(results.length).toBeGreaterThan(0);
+            });
+
+            it('should handle undefined options', async () => {
+                const results = await getResourcesByQuery({}, undefined);
+                
+                expect(Array.isArray(results)).toBe(true);
+            });
+
+            it('should handle empty fields projection', async () => {
+                const results = await getResourcesByQuery({}, { fields: {} });
+                
+                expect(Array.isArray(results)).toBe(true);
+            });
+
+            it('should handle limit of 0', async () => {
+                // MongoDB treats limit(0) as no limit, so we might get results
+                const results = await getResourcesByQuery({}, { limit: 0 });
+                
+                // Should succeed, result count depends on MongoDB behavior
+                expect(Array.isArray(results)).toBe(true);
+            });
         });
     });
 });

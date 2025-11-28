@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="DIVE V3 - Digital Interoperability Verification Experiment - Coalition Identity & Access Management Platform">
+    <title>DIVE25 - Coalition ICAM Platform</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23009ab3'/><text x='16' y='22' text-anchor='middle' font-size='18'>🌐</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #009ab3;
+            --secondary: #79d85a;
+            --dark: #0f172a;
+            --darker: #020617;
+            --light: #f8fafc;
+            --accent: #06b6d4;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: var(--darker);
+            color: var(--light);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: linear-gradient(135deg, var(--darker) 0%, #0c1929 50%, var(--dark) 100%);
+        }
+
+        .bg-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 154, 179, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 154, 179, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+
+        .bg-glow {
+            position: absolute;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            filter: blur(150px);
+            opacity: 0.15;
+        }
+
+        .bg-glow-1 {
+            top: -200px;
+            left: -200px;
+            background: var(--primary);
+            animation: float 15s ease-in-out infinite;
+        }
+
+        .bg-glow-2 {
+            bottom: -200px;
+            right: -200px;
+            background: var(--secondary);
+            animation: float 18s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(50px, 50px); }
+        }
+
+        /* Content */
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 3rem;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo img {
+            height: 60px;
+            width: 60px;
+            filter: drop-shadow(0 0 20px rgba(0, 154, 179, 0.5));
+        }
+
+        .logo-text {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .nav-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .nav-links a:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-links a.status {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+
+        /* Hero Section */
+        .hero {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 2rem 0;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 154, 179, 0.2);
+            border: 1px solid rgba(0, 154, 179, 0.4);
+            border-radius: 2rem;
+            font-size: 0.875rem;
+            color: var(--accent);
+            margin-bottom: 2rem;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 154, 179, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(0, 154, 179, 0); }
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 8vw, 5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, white 0%, rgba(255,255,255,0.8) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero h1 span {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.7);
+            max-width: 600px;
+            margin-bottom: 3rem;
+            line-height: 1.6;
+        }
+
+        /* Instance Cards */
+        .instances-section {
+            margin-bottom: 4rem;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            color: rgba(255, 255, 255, 0.5);
+            margin-bottom: 2rem;
+        }
+
+        .instances-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .instance-card {
+            position: relative;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .instance-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent, rgba(255,255,255,0.05));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .instance-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(0, 154, 179, 0.5);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 40px rgba(0, 154, 179, 0.1);
+        }
+
+        .instance-card:hover::before {
+            opacity: 1;
+        }
+
+        .instance-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .instance-flag {
+            font-size: 2.5rem;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+
+        .instance-info h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .instance-info p {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .instance-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--secondary);
+            border-radius: 50%;
+            animation: blink 2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Features */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto 4rem;
+        }
+
+        .feature {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .feature-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, rgba(0, 154, 179, 0.2), rgba(121, 216, 90, 0.2));
+            border-radius: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+
+        .feature h3 {
+            font-size: 1.125rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature p {
+            font-size: 0.875rem;
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.6;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: auto;
+        }
+
+        .footer-partners {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1.5rem;
+        }
+
+        .footer-partners span {
+            font-size: 1.5rem;
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+
+        .footer-partners span:hover {
+            opacity: 1;
+        }
+
+        .footer-text {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .footer-text a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .instances-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-animation">
+        <div class="bg-grid"></div>
+        <div class="bg-glow bg-glow-1"></div>
+        <div class="bg-glow bg-glow-2"></div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23009ab3' stroke='%2379d85a' stroke-width='3'/%3E%3Ctext x='50' y='60' font-family='Arial' font-size='24' font-weight='bold' fill='white' text-anchor='middle'%3EDIVE%3C/text%3E%3C/svg%3E" alt="DIVE Logo">
+                <span class="logo-text">DIVE25</span>
+            </div>
+            <nav class="nav-links">
+                <a href="https://status.dive25.com" class="status">📊 Status</a>
+            </nav>
+        </header>
+
+        <!-- Hero Section -->
+        <main class="hero">
+            <div class="hero-badge">
+                <span>🔐</span>
+                <span>Coalition Pilot • November 2025</span>
+            </div>
+            
+            <h1>Digital Interoperability<br><span>Verification Experiment</span></h1>
+            
+            <p class="hero-subtitle">
+                Secure federated identity management across coalition partners. 
+                Access controlled resources with policy-driven authorization.
+            </p>
+
+            <!-- Instance Cards -->
+            <section class="instances-section">
+                <h2 class="section-title">Select Your Instance</h2>
+                <div class="instances-grid">
+                    <a href="https://usa-app.dive25.com" class="instance-card">
+                        <div class="instance-header">
+                            <span class="instance-flag">🇺🇸</span>
+                            <div class="instance-info">
+                                <h3>United States</h3>
+                                <p>USA Instance</p>
+                            </div>
+                        </div>
+                        <div class="instance-status">
+                            <span class="status-dot"></span>
+                            <span>Online</span>
+                        </div>
+                    </a>
+
+                    <a href="https://fra-app.dive25.com" class="instance-card">
+                        <div class="instance-header">
+                            <span class="instance-flag">🇫🇷</span>
+                            <div class="instance-info">
+                                <h3>France</h3>
+                                <p>FRA Instance</p>
+                            </div>
+                        </div>
+                        <div class="instance-status">
+                            <span class="status-dot"></span>
+                            <span>Online</span>
+                        </div>
+                    </a>
+
+                    <a href="https://gbr-app.dive25.com" class="instance-card">
+                        <div class="instance-header">
+                            <span class="instance-flag">🇬🇧</span>
+                            <div class="instance-info">
+                                <h3>United Kingdom</h3>
+                                <p>GBR Instance</p>
+                            </div>
+                        </div>
+                        <div class="instance-status">
+                            <span class="status-dot"></span>
+                            <span>Online</span>
+                        </div>
+                    </a>
+
+                    <a href="https://deu-app.prosecurity.biz" class="instance-card">
+                        <div class="instance-header">
+                            <span class="instance-flag">🇩🇪</span>
+                            <div class="instance-info">
+                                <h3>Germany</h3>
+                                <p>DEU Instance</p>
+                            </div>
+                        </div>
+                        <div class="instance-status">
+                            <span class="status-dot"></span>
+                            <span>Online</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Features -->
+            <div class="features-grid">
+                <div class="feature">
+                    <div class="feature-icon">🔗</div>
+                    <h3>Federated Identity</h3>
+                    <p>Authenticate with your national identity provider and access coalition resources seamlessly.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>Policy-Driven Access</h3>
+                    <p>OPA-powered authorization ensures access decisions respect clearance levels and bilateral agreements.</p>
+                </div>
+                <div class="feature">
+                    <div class="feature-icon">📄</div>
+                    <h3>Secure Sharing</h3>
+                    <p>Share classified documents with coalition partners while maintaining data sovereignty.</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <div class="footer-partners">
+                <span title="United States">🇺🇸</span>
+                <span title="France">🇫🇷</span>
+                <span title="United Kingdom">🇬🇧</span>
+                <span title="Germany">🇩🇪</span>
+                <span title="Canada">🇨🇦</span>
+                <span title="Italy">🇮🇹</span>
+                <span title="Spain">🇪🇸</span>
+                <span title="Netherlands">🇳🇱</span>
+                <span title="Poland">🇵🇱</span>
+            </div>
+            <p class="footer-text">
+                DIVE V3 Coalition Pilot • Powered by Keycloak, OPA & Next.js<br>
+                <a href="https://status.dive25.com">System Status</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
+

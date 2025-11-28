@@ -83,7 +83,7 @@ router.get('/resources', async (req: Request, res: Response) => {
  * POST /federation/resources
  * Receive resources from another realm (USA)
  */
-router.post('/resources', async (req: Request, res: Response) => {
+router.post('/resources', async (req: Request, res: Response): Promise<void> => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const originRealm = req.headers['x-origin-realm'] as string;
   const { resources } = req.body;
@@ -92,11 +92,12 @@ router.post('/resources', async (req: Request, res: Response) => {
     console.log(`[${correlationId}] Receiving ${resources?.length || 0} resources from ${originRealm}`);
 
     if (!resources || !Array.isArray(resources)) {
-      return res.status(400).json({
+      res.status(400).json({
         correlationId,
         error: 'Invalid request',
         message: 'Resources array required'
       });
+      return;
     }
 
     // Import resources
@@ -128,7 +129,7 @@ router.post('/resources', async (req: Request, res: Response) => {
  * POST /federation/sync
  * Trigger manual sync with USA instance
  */
-router.post('/sync', async (req: Request, res: Response) => {
+router.post('/sync', async (req: Request, res: Response): Promise<void> => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const { targetRealm = 'USA' } = req.body;
 
@@ -136,18 +137,19 @@ router.post('/sync', async (req: Request, res: Response) => {
     console.log(`[${correlationId}] Triggering sync with ${targetRealm}`);
 
     if (targetRealm !== 'USA') {
-      return res.status(400).json({
+      res.status(400).json({
         correlationId,
         error: 'Invalid target realm',
         message: 'Only USA sync is currently supported'
       });
+      return;
     }
 
     const result = await federationService.syncWithUSA();
 
     res.json({
-      correlationId,
-      ...result
+      ...result,
+      correlationId
     });
   } catch (error: any) {
     console.error(`[${correlationId}] Sync error:`, error);
@@ -215,7 +217,7 @@ router.get('/conflicts', async (req: Request, res: Response) => {
  * POST /federation/decisions
  * Share authorization decisions between realms for audit correlation
  */
-router.post('/decisions', async (req: Request, res: Response) => {
+router.post('/decisions', async (req: Request, res: Response): Promise<void> => {
   const correlationId = req.headers['x-correlation-id'] as string;
   const originRealm = req.headers['x-origin-realm'] as string;
   const { decisions } = req.body;
@@ -224,11 +226,12 @@ router.post('/decisions', async (req: Request, res: Response) => {
     console.log(`[${correlationId}] Receiving ${decisions?.length || 0} decisions from ${originRealm}`);
 
     if (!decisions || !Array.isArray(decisions)) {
-      return res.status(400).json({
+      res.status(400).json({
         correlationId,
         error: 'Invalid request',
         message: 'Decisions array required'
       });
+      return;
     }
 
     // Store decisions in audit log

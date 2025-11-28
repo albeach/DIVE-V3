@@ -1,0 +1,71 @@
+# =============================================================================
+# DIVE V3 - Shared Infrastructure Services
+# Phase 2 Security Hardening (GAP-010, GAP-005)
+# =============================================================================
+# 
+# This stack contains shared services used by ALL instances (USA, FRA, GBR, DEU)
+# 
+# Architecture:
+# - blacklist-redis: Centralized token blacklist for cross-instance revocation
+#
+# Usage:
+#   cd instances/shared
+#   docker-compose up -d
+#
+# This MUST be started BEFORE any instance stacks
+# =============================================================================
+
+version: '3.8'
+
+networks:
+  dive-shared-network:
+    driver: bridge
+    name: dive-v3-shared-network
+
+volumes:
+  blacklist_redis_data:
+    name: dive-v3-blacklist-redis-data
+
+services:
+  # ============================================================================
+  # CENTRALIZED BLACKLIST REDIS (GAP-010 Remediation)
+  # ============================================================================
+  # All instances connect to this Redis for token blacklist operations
+  # Ensures token revocation propagates across ALL federated instances
+  # 
+  # Security Features (GAP-005):
+  # - Password authentication required
+  # - Persistence enabled (AOF + RDB)
+  # - Memory limit with LRU eviction
+  # - Logging enabled for audit
+  #
+  blacklist-redis:
+    image: redis:alpine
+    container_name: dive-v3-blacklist-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass DiveBlacklist2025!
+      --appendonly yes
+      --appendfsync everysec
+      --save 300 10
+      --save 60 1000
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --loglevel notice
+      --logfile ""
+    ports:
+      - "6399:6379"
+    volumes:
+      - blacklist_redis_data:/data
+    networks:
+      - dive-shared-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "DiveBlacklist2025!", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "dive.v3.component=blacklist-redis"
+      - "dive.v3.phase=2"
+      - "dive.v3.gap=010"

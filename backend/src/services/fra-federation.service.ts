@@ -26,6 +26,11 @@ interface FederationResource {
       version: number;
     };
   };
+  // Federation metadata fields
+  importedFrom?: string;
+  importedAt?: Date;
+  lastSyncedFrom?: string;
+  lastSyncedAt?: Date;
 }
 
 interface SyncResult {
@@ -49,9 +54,9 @@ interface ConflictRecord {
 }
 
 export class FRAFederationService {
-  private db: Db;
-  private resourcesCollection: Collection<FederationResource>;
-  private syncLogCollection: Collection<SyncResult>;
+  private db!: Db;
+  private resourcesCollection!: Collection<FederationResource>;
+  private syncLogCollection!: Collection<SyncResult>;
   private readonly INSTANCE_REALM = 'FRA';
   private readonly USA_FEDERATION_ENDPOINT = process.env.USA_FEDERATION_ENDPOINT || 'https://dev-api.dive25.com/federation';
   private readonly SYNC_INTERVAL = parseInt(process.env.FEDERATION_SYNC_INTERVAL || '300') * 1000; // 5 minutes default

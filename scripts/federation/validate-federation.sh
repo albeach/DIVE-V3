@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# ============================================================================
+# =============================================================================
 # DIVE V3 - Federation Validation Script
-# ============================================================================
+# =============================================================================
+# Purpose: Validates federation configuration across all instances
+# Usage: ./scripts/federation/validate-federation.sh
+# =============================================================================
 # Validates federation configuration across all instances by:
 # 1. Checking all IdP URLs are reachable
 # 2. Verifying federation clients exist with correct redirect_uris

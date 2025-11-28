@@ -38,6 +38,74 @@ const WIZARD_STEPS = [
     { number: 8, title: 'Results', description: 'Validation & risk assessment' }
 ];
 
+// Phase 4: Federation Partner Registry (pre-configured partners)
+interface FederationPartner {
+    code: string;
+    name: string;
+    idpUrl: string;
+    realm: string;
+    clientId: string;
+    protocol: 'oidc' | 'saml';
+    enabled: boolean;
+}
+
+const FEDERATION_PARTNERS: FederationPartner[] = [
+    {
+        code: 'USA',
+        name: 'United States',
+        idpUrl: 'https://usa-idp.dive25.com',
+        realm: 'dive-v3-broker',
+        clientId: 'dive-v3-client-broker',
+        protocol: 'oidc',
+        enabled: true
+    },
+    {
+        code: 'FRA',
+        name: 'France',
+        idpUrl: 'https://fra-idp.dive25.com',
+        realm: 'dive-v3-broker',
+        clientId: 'dive-v3-client-broker',
+        protocol: 'oidc',
+        enabled: true
+    },
+    {
+        code: 'GBR',
+        name: 'United Kingdom',
+        idpUrl: 'https://gbr-idp.dive25.com',
+        realm: 'dive-v3-broker',
+        clientId: 'dive-v3-client-broker',
+        protocol: 'oidc',
+        enabled: true
+    },
+    {
+        code: 'DEU',
+        name: 'Germany',
+        idpUrl: 'https://deu-idp.prosecurity.biz',
+        realm: 'dive-v3-broker',
+        clientId: 'dive-v3-client-broker',
+        protocol: 'oidc',
+        enabled: true
+    },
+    {
+        code: 'CAN',
+        name: 'Canada',
+        idpUrl: 'https://can-idp.dive25.com',
+        realm: 'dive-v3-broker',
+        clientId: 'dive-v3-client-broker',
+        protocol: 'oidc',
+        enabled: false // Not yet deployed
+    },
+    {
+        code: 'ESP',
+        name: 'Spain',
+        idpUrl: 'https://esp-idp.dive25.com',
+        realm: 'dive-v3-broker',
+        clientId: 'dive-v3-client-broker',
+        protocol: 'oidc',
+        enabled: false // Not yet deployed
+    }
+];
+
 export default function NewIdPWizard() {
     const router = useRouter();
     const { data: session, status } = useSession();
@@ -49,6 +117,10 @@ export default function NewIdPWizard() {
 
     const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
     const [isValidating, setIsValidating] = useState(false);
+
+    // Phase 4: Federation Partner Quick-Add
+    const [isFederationMode, setIsFederationMode] = useState(false);
+    const [selectedPartner, setSelectedPartner] = useState<FederationPartner | null>(null);
 
     const [formData, setFormData] = useState<IIdPFormData>({
         protocol: 'oidc',
@@ -127,7 +199,11 @@ export default function NewIdPWizard() {
 
         switch (currentStep) {
             case 1:
-                // Protocol selection (always valid)
+                // Protocol selection
+                // Phase 4: Require partner selection in federation mode
+                if (isFederationMode && !selectedPartner) {
+                    newErrors.partner = 'Please select a federation partner';
+                }
                 break;
 
             case 2:
@@ -192,7 +268,13 @@ export default function NewIdPWizard() {
 
     const handleNext = () => {
         if (validateStep()) {
-            setCurrentStep(currentStep + 1);
+            // Phase 4: Skip to Review (step 6) for federation partner quick-add
+            if (isFederationMode && selectedPartner && currentStep === 1) {
+                // Jump to Review step since all config is auto-populated
+                setCurrentStep(6);
+            } else {
+                setCurrentStep(currentStep + 1);
+            }
         }
     };
 
@@ -502,6 +584,171 @@ export default function NewIdPWizard() {
                                             )}
                                         </div>
                                     </button>
+                                </div>
+
+                                {/* Phase 4: Federation Partner Quick-Add */}
+                                <div className="relative mt-8 pt-8 border-t border-gray-200">
+                                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-white px-4">
+                                        <span className="text-sm font-medium text-gray-500">Or quick-add a federation partner</span>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setIsFederationMode(true);
+                                            setFormData({ ...formData, protocol: 'oidc' });
+                                        }}
+                                        className="group relative w-full transform transition-all duration-300 hover:scale-[1.02] focus:outline-none"
+                                    >
+                                        <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
+                                            isFederationMode 
+                                                ? 'bg-gradient-to-r from-emerald-600 to-teal-500 opacity-75 blur-sm' 
+                                                : 'bg-gradient-to-r from-emerald-400 to-teal-400 opacity-0 group-hover:opacity-50 blur-sm'
+                                        }`} />
+                                        
+                                        <div className={`relative flex items-center gap-6 rounded-2xl p-6 transition-all duration-300 ${
+                                            isFederationMode
+                                                ? 'bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-2xl'
+                                                : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl border-2 border-dashed border-gray-300 group-hover:border-emerald-400'
+                                        }`}>
+                                            <div className={`text-5xl transition-transform duration-300 ${
+                                                isFederationMode ? 'scale-110' : 'group-hover:scale-110'
+                                            }`}>
+                                                🌐
+                                            </div>
+                                            <div className="flex-1 text-left">
+                                                <span className={`text-xl font-bold block ${isFederationMode ? 'text-white' : 'text-gray-900'}`}>
+                                                    DIVE V3 Federation Partner
+                                                </span>
+                                                <span className={`text-sm ${isFederationMode ? 'text-emerald-100' : 'text-gray-600'}`}>
+                                                    Instantly connect a pre-configured coalition partner (&lt;5 min setup)
+                                                </span>
+                                            </div>
+                                            <div className={`flex items-center gap-2 px-4 py-2 rounded-full ${
+                                                isFederationMode ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700'
+                                            }`}>
+                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                                </svg>
+                                                <span className="text-sm font-semibold">Quick Setup</span>
+                                            </div>
+                                            {isFederationMode && (
+                                                <div className="absolute top-3 right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md">
+                                                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </button>
+
+                                    {/* Partner Selector (shown when federation mode is active) */}
+                                    {isFederationMode && (
+                                        <div className="mt-6 space-y-4 animate-in slide-in-from-top-4 duration-300">
+                                            <h4 className="text-lg font-semibold text-gray-900">Select Federation Partner</h4>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                                {FEDERATION_PARTNERS.filter(p => p.enabled).map((partner) => (
+                                                    <button
+                                                        key={partner.code}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedPartner(partner);
+                                                            // Auto-populate form data
+                                                            setFormData({
+                                                                ...formData,
+                                                                protocol: partner.protocol,
+                                                                alias: `${partner.code.toLowerCase()}-idp`,
+                                                                displayName: `${partner.name} IdP`,
+                                                                description: `Federation partner: ${partner.name}`,
+                                                                oidcConfig: {
+                                                                    issuer: `${partner.idpUrl}/realms/${partner.realm}`,
+                                                                    clientId: partner.clientId,
+                                                                    clientSecret: '', // To be provided
+                                                                    authorizationUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/auth`,
+                                                                    tokenUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/token`,
+                                                                    userInfoUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/userinfo`,
+                                                                    jwksUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/certs`,
+                                                                    defaultScopes: 'openid profile email clearance countryOfAffiliation acpCOI'
+                                                                },
+                                                                metadata: {
+                                                                    ...formData.metadata,
+                                                                    country: partner.code,
+                                                                    organization: `${partner.name} Government`
+                                                                }
+                                                            });
+                                                        }}
+                                                        className={`relative p-4 rounded-xl border-2 transition-all duration-200 ${
+                                                            selectedPartner?.code === partner.code
+                                                                ? 'border-emerald-500 bg-emerald-50 shadow-lg'
+                                                                : 'border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                                        }`}
+                                                    >
+                                                        <div className="text-3xl mb-2">
+                                                            {partner.code === 'USA' && '🇺🇸'}
+                                                            {partner.code === 'FRA' && '🇫🇷'}
+                                                            {partner.code === 'GBR' && '🇬🇧'}
+                                                            {partner.code === 'DEU' && '🇩🇪'}
+                                                            {partner.code === 'CAN' && '🇨🇦'}
+                                                            {partner.code === 'ESP' && '🇪🇸'}
+                                                        </div>
+                                                        <div className="font-semibold text-gray-900">{partner.name}</div>
+                                                        <div className="text-xs text-gray-500 mt-1">{partner.code}</div>
+                                                        {selectedPartner?.code === partner.code && (
+                                                            <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
+                                                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                </svg>
+                                                            </div>
+                                                        )}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            {/* Coming Soon Partners */}
+                                            <div className="mt-4">
+                                                <p className="text-xs text-gray-500 mb-2">Coming soon:</p>
+                                                <div className="flex gap-2">
+                                                    {FEDERATION_PARTNERS.filter(p => !p.enabled).map((partner) => (
+                                                        <span key={partner.code} className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs">
+                                                            {partner.code === 'CAN' && '🇨🇦'} {partner.code === 'ESP' && '🇪🇸'} {partner.name}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Quick Setup Note */}
+                                            {selectedPartner && (
+                                                <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                                            <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <h5 className="font-semibold text-emerald-900">Auto-Configured for {selectedPartner.name}</h5>
+                                                            <p className="text-sm text-emerald-700 mt-1">
+                                                                OIDC endpoints, attribute mappings, and security settings have been pre-populated.
+                                                                You only need to provide the <strong>client secret</strong> (obtain from {selectedPartner.name} admin).
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Cancel Federation Mode */}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsFederationMode(false);
+                                                    setSelectedPartner(null);
+                                                }}
+                                                className="text-sm text-gray-500 hover:text-gray-700 underline"
+                                            >
+                                                ← Back to manual configuration
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                             </div>
@@ -1060,9 +1307,16 @@ export default function NewIdPWizard() {
                             <button
                                 type="button"
                                 onClick={handleNext}
-                                className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+                                disabled={isFederationMode && currentStep === 1 && !selectedPartner}
+                                className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm ${
+                                    isFederationMode && selectedPartner && currentStep === 1
+                                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700'
+                                        : 'bg-blue-600 hover:bg-blue-700'
+                                } ${isFederationMode && currentStep === 1 && !selectedPartner ? 'opacity-50 cursor-not-allowed' : ''} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
                             >
-                                Next →
+                                {isFederationMode && selectedPartner && currentStep === 1 
+                                    ? '⚡ Skip to Review' 
+                                    : 'Next →'}
                             </button>
                             ) : currentStep === 7 ? (
                             <button

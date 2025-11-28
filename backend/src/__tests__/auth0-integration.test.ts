@@ -6,7 +6,23 @@
  */
 
 import { describe, it, expect } from '@jest/globals';
-import { auth0Service } from '../services/auth0.service';
+import {
+    auth0Service,
+    createAuth0Application,
+    listAuth0Applications,
+    getAuth0Application,
+    IAuth0ApplicationConfig
+} from '../services/auth0.service';
+
+// Mock logger
+jest.mock('../utils/logger', () => ({
+    logger: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+    },
+}));
 
 // Mock environment variables
 process.env.AUTH0_DOMAIN = 'test-tenant.auth0.com';
@@ -14,6 +30,8 @@ process.env.AUTH0_MCP_ENABLED = 'true';
 process.env.KEYCLOAK_URL = 'http://localhost:8080';
 process.env.KEYCLOAK_REALM = 'dive-v3-broker';
 process.env.FRONTEND_URL = 'http://localhost:3000';
+
+const { logger } = require('../utils/logger');
 
 describe('Auth0 MCP Integration - Service Functions', () => {
     describe('isAuth0Available', () => {
@@ -157,6 +175,209 @@ describe('Auth0 MCP Integration - Service Functions', () => {
             expect(urls1[0]).toContain('france-idp');
             expect(urls2[0]).toContain('canada-idp');
             expect(urls1[0]).not.toBe(urls2[0]);
+        });
+    });
+
+    // ============================================
+    // Async Function Tests (MCP Integration)
+    // ============================================
+    describe('createAuth0Application', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+        });
+
+        it('should throw error indicating MCP endpoint requirement', async () => {
+            const config: IAuth0ApplicationConfig = {
+                name: 'Test Application',
+                description: 'Test Description',
+                app_type: 'regular_web',
+                oidc_conformant: true,
+                callbacks: ['http://localhost:3000/callback'],
+            };
+
+            await expect(createAuth0Application(config)).rejects.toThrow(
+                'Auth0 MCP integration must be called from API endpoint with MCP access'
+            );
+        });
+
+        it('should log creation attempt before error', async () => {
+            const config: IAuth0ApplicationConfig = {
+                name: 'Test App',
+                app_type: 'spa',
+                oidc_conformant: true,
+            };
+
+            await expect(createAuth0Application(config)).rejects.toThrow();
+
+            expect(logger.info).toHaveBeenCalledWith(
+                'Creating Auth0 application',
+                expect.objectContaining({
+                    name: 'Test App',
+                    app_type: 'spa',
+                })
+            );
+        });
+
+        it('should log error on failure', async () => {
+            const config: IAuth0ApplicationConfig = {
+                name: 'Test App',
+                app_type: 'native',
+                oidc_conformant: true,
+            };
+
+            await expect(createAuth0Application(config)).rejects.toThrow();
+
+            expect(logger.error).toHaveBeenCalledWith(
+                'Auth0 application creation failed',
+                expect.objectContaining({
+                    config: expect.objectContaining({
+                        name: 'Test App',
+                        app_type: 'native',
+                    }),
+                })
+            );
+        });
+
+        it('should handle all app types', async () => {
+            const appTypes: Array<'spa' | 'regular_web' | 'native' | 'non_interactive'> = [
+                'spa',
+                'regular_web',
+                'native',
+                'non_interactive',
+            ];
+
+            for (const app_type of appTypes) {
+                const config: IAuth0ApplicationConfig = {
+                    name: `Test ${app_type}`,
+                    app_type,
+                    oidc_conformant: true,
+                };
+
+                await expect(createAuth0Application(config)).rejects.toThrow();
+            }
+        });
+
+        it('should handle optional config fields', async () => {
+            const config: IAuth0ApplicationConfig = {
+                name: 'Full Config App',
+                description: 'Full configuration',
+                app_type: 'regular_web',
+                oidc_conformant: true,
+                callbacks: ['http://localhost/callback'],
+                allowed_logout_urls: ['http://localhost'],
+                allowed_origins: ['http://localhost'],
+            };
+
+            await expect(createAuth0Application(config)).rejects.toThrow();
+        });
+    });
+
+    describe('listAuth0Applications', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+        });
+
+        it('should return empty list on error', async () => {
+            const result = await listAuth0Applications();
+
+            expect(result).toEqual({ applications: [], total: 0 });
+        });
+
+        it('should accept default pagination parameters', async () => {
+            const result = await listAuth0Applications();
+
+            expect(result.applications).toEqual([]);
+            expect(result.total).toBe(0);
+        });
+
+        it('should accept custom pagination parameters', async () => {
+            const result = await listAuth0Applications(2, 25);
+
+            expect(result).toEqual({ applications: [], total: 0 });
+        });
+
+        it('should log list attempt', async () => {
+            await listAuth0Applications(1, 10);
+
+            expect(logger.info).toHaveBeenCalledWith(
+                'Listing Auth0 applications',
+                expect.objectContaining({
+                    page: 1,
+                    per_page: 10,
+                })
+            );
+        });
+
+        it('should log error on failure', async () => {
+            await listAuth0Applications();
+
+            expect(logger.error).toHaveBeenCalledWith(
+                'Failed to list Auth0 applications',
+                expect.any(Object)
+            );
+        });
+
+        it('should handle zero page', async () => {
+            const result = await listAuth0Applications(0, 50);
+
+            expect(result).toEqual({ applications: [], total: 0 });
+        });
+
+        it('should handle large per_page values', async () => {
+            const result = await listAuth0Applications(0, 1000);
+
+            expect(result).toEqual({ applications: [], total: 0 });
+        });
+    });
+
+    describe('getAuth0Application', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+        });
+
+        it('should throw error when accessing application', async () => {
+            await expect(getAuth0Application('test-client-id')).rejects.toThrow(
+                'Auth0 MCP integration must be called from API endpoint with MCP access'
+            );
+        });
+
+        it('should log get attempt', async () => {
+            await expect(getAuth0Application('test-client-id')).rejects.toThrow();
+
+            expect(logger.info).toHaveBeenCalledWith(
+                'Getting Auth0 application',
+                expect.objectContaining({
+                    clientId: 'test-client-id',
+                })
+            );
+        });
+
+        it('should log error on failure', async () => {
+            await expect(getAuth0Application('test-client-id')).rejects.toThrow();
+
+            expect(logger.error).toHaveBeenCalledWith(
+                'Failed to get Auth0 application',
+                expect.objectContaining({
+                    clientId: 'test-client-id',
+                })
+            );
+        });
+
+        it('should handle various clientId formats', async () => {
+            const clientIds = [
+                'abc123',
+                'client-with-dashes',
+                'CLIENT_WITH_UNDERSCORES',
+                '12345678901234567890',
+            ];
+
+            for (const clientId of clientIds) {
+                await expect(getAuth0Application(clientId)).rejects.toThrow();
+            }
+        });
+
+        it('should handle empty clientId', async () => {
+            await expect(getAuth0Application('')).rejects.toThrow();
         });
     });
 });

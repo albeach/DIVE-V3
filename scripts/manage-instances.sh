@@ -1,301 +1,168 @@
 #!/bin/bash
-#
-# DIVE V3 - Multi-Instance Management Script
-#
-# Provides status, start, stop, and sync commands for all instances.
-#
+# =============================================================================
+# DIVE V3 Multi-Instance Management Script
+# =============================================================================
 # Usage:
-#   ./scripts/manage-instances.sh status           # Show status of all instances
-#   ./scripts/manage-instances.sh start <code>     # Start an instance
-#   ./scripts/manage-instances.sh stop <code>      # Stop an instance
-#   ./scripts/manage-instances.sh restart <code>   # Restart an instance
-#   ./scripts/manage-instances.sh sync <code>      # Sync Keycloak from USA to instance
-#   ./scripts/manage-instances.sh logs <code>      # Show logs for an instance
-#   ./scripts/manage-instances.sh tunnel <code>    # Start/restart tunnel for instance
-#
+#   ./scripts/manage-instances.sh start [all|shared|usa|fra|gbr]
+#   ./scripts/manage-instances.sh stop [all|shared|usa|fra|gbr]
+#   ./scripts/manage-instances.sh status
+#   ./scripts/manage-instances.sh logs [usa|fra|gbr] [service]
+# =============================================================================
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+INSTANCES_DIR="$PROJECT_ROOT/instances"
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+print_header() {
+    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC} $1"
+    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
+}
 
-COMMAND="${1:-status}"
-COUNTRY_CODE=$(echo "${2:-}" | tr '[:upper:]' '[:lower:]')
+start_stack() {
+    local stack=$1
+    local project_name=$2
+    local compose_file=$3
+    
+    echo -e "${GREEN}Starting $stack stack...${NC}"
+    docker-compose -p "$project_name" -f "$compose_file" up -d
+    echo -e "${GREEN}✓ $stack stack started${NC}"
+}
 
-# Helper function for uppercase
-to_upper() { echo "$1" | tr '[:lower:]' '[:upper:]'; }
+stop_stack() {
+    local stack=$1
+    local project_name=$2
+    local compose_file=$3
+    
+    echo -e "${YELLOW}Stopping $stack stack...${NC}"
+    docker-compose -p "$project_name" -f "$compose_file" down
+    echo -e "${YELLOW}✓ $stack stack stopped${NC}"
+}
 
-# Known instances
-KNOWN_INSTANCES=("usa" "fra" "deu" "gbr" "can" "ita" "esp" "pol" "nld")
-
-# Port mapping
-get_ports() {
-  local code=$1
-  case "$code" in
-    usa) echo "3000 4000 8443 8081" ;;
-    fra) echo "3001 4001 8444 8082" ;;
-    deu) echo "3002 4002 8445 8084" ;;
-    gbr) echo "3003 4003 8446 8086" ;;
+case "$1" in
+    start)
+        case "$2" in
+            all)
+                print_header "Starting ALL DIVE V3 Stacks"
+                start_stack "shared" "dive-v3-shared" "$INSTANCES_DIR/shared/docker-compose.yml"
+                echo ""
+                echo "Waiting for shared services to be healthy..."
+                sleep 10
+                start_stack "USA" "dive-v3-usa" "$INSTANCES_DIR/usa/docker-compose.yml"
+                echo ""
+                start_stack "FRA" "dive-v3-fra" "$INSTANCES_DIR/fra/docker-compose.yml"
+                echo ""
+                start_stack "GBR" "dive-v3-gbr" "$INSTANCES_DIR/gbr/docker-compose.yml"
+                ;;
+            shared)
+                print_header "Starting Shared Services"
+                start_stack "shared" "dive-v3-shared" "$INSTANCES_DIR/shared/docker-compose.yml"
+                ;;
+            usa)
+                print_header "Starting USA Instance"
+                start_stack "USA" "dive-v3-usa" "$INSTANCES_DIR/usa/docker-compose.yml"
+                ;;
+            fra)
+                print_header "Starting FRA Instance"
+                start_stack "FRA" "dive-v3-fra" "$INSTANCES_DIR/fra/docker-compose.yml"
+                ;;
+            gbr)
+                print_header "Starting GBR Instance"
+                start_stack "GBR" "dive-v3-gbr" "$INSTANCES_DIR/gbr/docker-compose.yml"
+                ;;
+            *)
+                echo "Usage: $0 start [all|shared|usa|fra|gbr]"
+                exit 1
+                ;;
+        esac
+        ;;
+    stop)
+        case "$2" in
+            all)
+                print_header "Stopping ALL DIVE V3 Stacks"
+                stop_stack "GBR" "dive-v3-gbr" "$INSTANCES_DIR/gbr/docker-compose.yml" || true
+                stop_stack "FRA" "dive-v3-fra" "$INSTANCES_DIR/fra/docker-compose.yml" || true
+                stop_stack "USA" "dive-v3-usa" "$INSTANCES_DIR/usa/docker-compose.yml" || true
+                stop_stack "shared" "dive-v3-shared" "$INSTANCES_DIR/shared/docker-compose.yml" || true
+                ;;
+            shared)
+                print_header "Stopping Shared Services"
+                stop_stack "shared" "dive-v3-shared" "$INSTANCES_DIR/shared/docker-compose.yml"
+                ;;
+            usa)
+                print_header "Stopping USA Instance"
+                stop_stack "USA" "dive-v3-usa" "$INSTANCES_DIR/usa/docker-compose.yml"
+                ;;
+            fra)
+                print_header "Stopping FRA Instance"
+                stop_stack "FRA" "dive-v3-fra" "$INSTANCES_DIR/fra/docker-compose.yml"
+                ;;
+            gbr)
+                print_header "Stopping GBR Instance"
+                stop_stack "GBR" "dive-v3-gbr" "$INSTANCES_DIR/gbr/docker-compose.yml"
+                ;;
+            *)
+                echo "Usage: $0 stop [all|shared|usa|fra|gbr]"
+                exit 1
+                ;;
+        esac
+        ;;
+    status)
+        print_header "DIVE V3 Instance Status"
+        echo ""
+        echo -e "${BLUE}=== Shared Services ===${NC}"
+        docker-compose -p dive-v3-shared -f "$INSTANCES_DIR/shared/docker-compose.yml" ps 2>/dev/null || echo "Not running"
+        echo ""
+        echo -e "${BLUE}=== USA Instance ===${NC}"
+        docker-compose -p dive-v3-usa -f "$INSTANCES_DIR/usa/docker-compose.yml" ps 2>/dev/null || echo "Not running"
+        echo ""
+        echo -e "${BLUE}=== FRA Instance ===${NC}"
+        docker-compose -p dive-v3-fra -f "$INSTANCES_DIR/fra/docker-compose.yml" ps 2>/dev/null || echo "Not running"
+        echo ""
+        echo -e "${BLUE}=== GBR Instance ===${NC}"
+        docker-compose -p dive-v3-gbr -f "$INSTANCES_DIR/gbr/docker-compose.yml" ps 2>/dev/null || echo "Not running"
+        ;;
+    logs)
+        if [ -z "$2" ]; then
+            echo "Usage: $0 logs [usa|fra|gbr] [service]"
+            exit 1
+        fi
+        case "$2" in
+            usa)
+                docker-compose -p dive-v3-usa -f "$INSTANCES_DIR/usa/docker-compose.yml" logs -f ${3:-}
+                ;;
+            fra)
+                docker-compose -p dive-v3-fra -f "$INSTANCES_DIR/fra/docker-compose.yml" logs -f ${3:-}
+                ;;
+            gbr)
+                docker-compose -p dive-v3-gbr -f "$INSTANCES_DIR/gbr/docker-compose.yml" logs -f ${3:-}
+                ;;
+            shared)
+                docker-compose -p dive-v3-shared -f "$INSTANCES_DIR/shared/docker-compose.yml" logs -f ${3:-}
+                ;;
+            *)
+                echo "Usage: $0 logs [shared|usa|fra|gbr] [service]"
+                exit 1
+                ;;
+        esac
+        ;;
     *)
-      local offset=$(echo -n "$code" | md5sum | tr -d -c '0-9' | cut -c1-2)
-      offset=$((10#$offset % 90 + 10))
-      echo "$((3000 + offset)) $((4000 + offset)) $((8443 + offset)) $((8080 + offset))"
-      ;;
-  esac
-}
-
-show_status() {
-  echo -e "${MAGENTA}══════════════════════════════════════════════════════════════════${NC}"
-  echo -e "${MAGENTA}  DIVE V3 - Multi-Instance Status${NC}"
-  echo -e "${MAGENTA}══════════════════════════════════════════════════════════════════${NC}"
-  echo ""
-  
-  # Check running tunnels
-  RUNNING_TUNNELS=$(ps aux | grep cloudflared | grep -v grep | grep -oE "dive-v3-[a-z]+" | sort -u || true)
-  
-  printf "${CYAN}%-6s %-12s %-12s %-12s %-12s %-10s${NC}\n" "CODE" "FRONTEND" "BACKEND" "KEYCLOAK" "TUNNEL" "STATUS"
-  printf "%-6s %-12s %-12s %-12s %-12s %-10s\n" "----" "--------" "-------" "--------" "------" "------"
-  
-  for code in "${KNOWN_INSTANCES[@]}"; do
-    ports=($(get_ports "$code"))
-    frontend_port=${ports[0]}
-    backend_port=${ports[1]}
-    keycloak_port=${ports[2]}
-    
-    # Check services
-    frontend_status="○"
-    backend_status="○"
-    keycloak_status="○"
-    tunnel_status="○"
-    overall_status="${RED}DOWN${NC}"
-    
-    # Frontend check
-    if curl -sk "https://localhost:${frontend_port}" -o /dev/null -w '%{http_code}' --max-time 2 2>/dev/null | grep -q "200\|302"; then
-      frontend_status="${GREEN}●${NC}"
-    fi
-    
-    # Backend check
-    if curl -sk "https://localhost:${backend_port}/health" -o /dev/null --max-time 2 2>/dev/null; then
-      backend_status="${GREEN}●${NC}"
-    fi
-    
-    # Keycloak check
-    if curl -sk "https://localhost:${keycloak_port}/realms/master" -o /dev/null --max-time 2 2>/dev/null; then
-      keycloak_status="${GREEN}●${NC}"
-    fi
-    
-    # Tunnel check
-    if echo "$RUNNING_TUNNELS" | grep -q "dive-v3-${code}"; then
-      tunnel_status="${GREEN}●${NC}"
-    fi
-    
-    # Overall status
-    if [[ "$frontend_status" == *"●"* && "$keycloak_status" == *"●"* ]]; then
-      overall_status="${GREEN}UP${NC}"
-    elif [[ "$frontend_status" == *"●"* || "$keycloak_status" == *"●"* ]]; then
-      overall_status="${YELLOW}PARTIAL${NC}"
-    fi
-    
-    printf "%-6s %-20s %-20s %-20s %-18s %-10s\n" \
-      "$(to_upper "$code")" \
-      "${frontend_status} :${frontend_port}" \
-      "${backend_status} :${backend_port}" \
-      "${keycloak_status} :${keycloak_port}" \
-      "${tunnel_status} ${code}-*.dive25.com" \
-      "$overall_status"
-  done
-  
-  echo ""
-  echo -e "${CYAN}Legend:${NC} ${GREEN}●${NC} Running  ○ Stopped"
-  echo ""
-  echo -e "${CYAN}Quick Commands:${NC}"
-  echo "  Start instance:   ./scripts/manage-instances.sh start <code>"
-  echo "  Stop instance:    ./scripts/manage-instances.sh stop <code>"
-  echo "  View logs:        ./scripts/manage-instances.sh logs <code>"
-  echo "  Sync from USA:    ./scripts/manage-instances.sh sync <code>"
-  echo ""
-}
-
-start_instance() {
-  local code=$1
-  if [[ -z "$code" ]]; then
-    echo -e "${RED}Error: Country code required${NC}"
-    exit 1
-  fi
-  
-  echo -e "${CYAN}Starting $(to_upper "$code") instance...${NC}"
-  "$SCRIPT_DIR/deploy-instance.sh" "$code"
-}
-
-stop_instance() {
-  local code=$1
-  if [[ -z "$code" ]]; then
-    echo -e "${RED}Error: Country code required${NC}"
-    exit 1
-  fi
-  
-  echo -e "${CYAN}Stopping $(to_upper "$code") instance...${NC}"
-  
-  # Stop Docker services
-  if [[ "$code" == "usa" ]]; then
-    cd "$PROJECT_ROOT" && docker-compose down
-  else
-    cd "$PROJECT_ROOT" && docker-compose -p "$code" -f "docker-compose.${code}.yml" down 2>/dev/null || true
-  fi
-  
-  # Stop tunnel
-  pkill -f "dive-v3-${code}" 2>/dev/null || true
-  
-  echo -e "${GREEN}✓ $(to_upper "$code") instance stopped${NC}"
-}
-
-restart_instance() {
-  local code=$1
-  stop_instance "$code"
-  sleep 2
-  start_instance "$code"
-}
-
-sync_instance() {
-  local code=$1
-  if [[ -z "$code" ]]; then
-    echo -e "${RED}Error: Country code required${NC}"
-    exit 1
-  fi
-  
-  if [[ "$code" == "usa" ]]; then
-    echo -e "${YELLOW}Cannot sync USA - it's the primary instance${NC}"
-    exit 1
-  fi
-  
-  "$SCRIPT_DIR/sync-keycloak-realm.sh" "usa" "$code"
-}
-
-show_logs() {
-  local code=$1
-  local service=${3:-}  # Optional third argument for specific service
-  
-  if [[ -z "$code" ]]; then
-    echo -e "${RED}Error: Country code required${NC}"
-    exit 1
-  fi
-  
-  local compose_cmd="docker-compose"
-  local compose_args=""
-  
-  if [[ "$code" == "usa" ]]; then
-    compose_args=""
-  else
-    compose_args="-p $code -f docker-compose.${code}.yml"
-  fi
-  
-  cd "$PROJECT_ROOT"
-  
-  if [[ -n "$service" ]]; then
-    # Service-specific logs (e.g., frontend, backend, keycloak)
-    local service_name=""
-    case "$service" in
-      frontend) service_name="frontend" ;;
-      backend) service_name="backend" ;;
-      keycloak) service_name="keycloak" ;;
-      opa) service_name="opa" ;;
-      kas) service_name="kas" ;;
-      tunnel|cloudflared) service_name="cloudflared" ;;
-      *) service_name="$service" ;;
-    esac
-    
-    if [[ "$code" != "usa" ]]; then
-      service_name="${service_name}-${code}"
-    fi
-    
-    echo -e "${CYAN}Showing logs for ${service_name}...${NC}"
-    $compose_cmd $compose_args logs -f "$service_name" 2>/dev/null || \
-      $compose_cmd $compose_args logs -f 2>/dev/null
-  else
-    $compose_cmd $compose_args logs -f
-  fi
-}
-
-start_tunnel() {
-  local code=$1
-  if [[ -z "$code" ]]; then
-    echo -e "${RED}Error: Country code required${NC}"
-    exit 1
-  fi
-  
-  TUNNEL_NAME="dive-v3-${code}"
-  TUNNEL_CONFIG="$HOME/.cloudflared/${TUNNEL_NAME}-config.yml"
-  
-  # For USA, use the main config
-  if [[ "$code" == "usa" ]]; then
-    TUNNEL_NAME="dive-v3-tunnel"
-    TUNNEL_CONFIG="$HOME/.cloudflared/config.yml"
-  fi
-  
-  if [[ ! -f "$TUNNEL_CONFIG" ]]; then
-    echo -e "${RED}Tunnel config not found: ${TUNNEL_CONFIG}${NC}"
-    exit 1
-  fi
-  
-  # Kill existing
-  pkill -f "${TUNNEL_NAME}" 2>/dev/null || true
-  sleep 2
-  
-  # Start
-  nohup cloudflared tunnel --config "$TUNNEL_CONFIG" run "$TUNNEL_NAME" > "/tmp/${TUNNEL_NAME}.log" 2>&1 &
-  sleep 3
-  
-  if ps aux | grep -q "[c]loudflared.*${TUNNEL_NAME}"; then
-    echo -e "${GREEN}✓ Tunnel ${TUNNEL_NAME} started${NC}"
-  else
-    echo -e "${RED}✗ Failed to start tunnel${NC}"
-    tail -10 "/tmp/${TUNNEL_NAME}.log"
-  fi
-}
-
-# Get optional service argument
-SERVICE_NAME="${3:-}"
-
-# Main
-case "$COMMAND" in
-  status) show_status ;;
-  start) start_instance "$COUNTRY_CODE" ;;
-  stop) stop_instance "$COUNTRY_CODE" ;;
-  restart) restart_instance "$COUNTRY_CODE" ;;
-  sync) sync_instance "$COUNTRY_CODE" ;;
-  logs) show_logs "$COUNTRY_CODE" "$SERVICE_NAME" ;;
-  tunnel) start_tunnel "$COUNTRY_CODE" ;;
-  health) "$SCRIPT_DIR/dive-status.sh" "$COUNTRY_CODE" ;;
-  federate) "$SCRIPT_DIR/add-federation-partner.sh" "$COUNTRY_CODE" "$SERVICE_NAME" ;;
-  *)
-    echo -e "${CYAN}DIVE V3 - Instance Management${NC}"
-    echo ""
-    echo "Usage: $0 <command> [instance_code] [service]"
-    echo ""
-    echo "Commands:"
-    echo "  status              Show status of all instances"
-    echo "  start <code>        Start an instance"
-    echo "  stop <code>         Stop an instance"
-    echo "  restart <code>      Restart an instance"
-    echo "  sync <code>         Sync Keycloak realm from USA"
-    echo "  logs <code> [svc]   Show logs (optionally for specific service)"
-    echo "  tunnel <code>       Start/restart Cloudflare tunnel"
-    echo "  health [code]       Show health dashboard"
-    echo "  federate <a> <b>    Federate two instances"
-    echo ""
-    echo "Examples:"
-    echo "  $0 start fra"
-    echo "  $0 logs usa frontend"
-    echo "  $0 federate usa fra"
-    exit 1
-    ;;
+        echo "DIVE V3 Multi-Instance Management"
+        echo ""
+        echo "Usage:"
+        echo "  $0 start [all|shared|usa|fra|gbr]  - Start instance(s)"
+        echo "  $0 stop [all|shared|usa|fra|gbr]   - Stop instance(s)"
+        echo "  $0 status                           - Show status of all instances"
+        echo "  $0 logs [shared|usa|fra|gbr] [svc] - View logs"
+        exit 1
+        ;;
 esac
-

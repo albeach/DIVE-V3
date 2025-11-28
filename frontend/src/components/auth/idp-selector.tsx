@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { getFlagComponent } from "../ui/flags";
+import { useInstanceTheme } from "../ui/theme-provider";
 
 /**
  * IdP Selector Component - Dynamic with Enable/Disable Support
@@ -75,6 +76,7 @@ const StatusIndicator = ({ status = 'active' }: { status?: 'active' | 'warning' 
 
 export function IdpSelector() {
   const router = useRouter();
+  const { instanceCode, instanceName } = useInstanceTheme();
   const [idps, setIdps] = useState<IdPOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -320,16 +322,16 @@ export function IdpSelector() {
           className="w-full group p-4 border-2 border-[#009ab3] rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left bg-gradient-to-br from-[#009ab3]/5 to-[#79d85a]/5"
         >
           <div className="flex items-center gap-4">
-            {/* Flag */}
+            {/* Flag - Dynamic based on instance */}
             <div className="flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
-              <FlagIcon alias="usa" size={56} />
+              <FlagIcon alias={instanceCode.toLowerCase()} size={56} />
             </div>
             
-            {/* Text */}
+            {/* Text - Dynamic based on instance */}
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
-                  Login as USA User
+                  Login as {instanceName} User
                 </h3>
                 <StatusIndicator status="active" />
               </div>
@@ -380,8 +382,8 @@ export function IdpSelector() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-sm font-semibold text-gray-900 group-hover:text-[#009ab3] transition-colors truncate">
-                    {/* Extract just the country name, remove parenthetical */}
-                    {idp.displayName.split('(')[0].trim()}
+                    {/* Extract just the country name, remove "DIVE V3 -" prefix and parenthetical */}
+                    {idp.displayName.replace(/^DIVE V3\s*-?\s*/i, '').split('(')[0].trim()}
                   </h3>
                   <StatusIndicator status={idp.enabled ? 'active' : 'offline'} />
                 </div>
