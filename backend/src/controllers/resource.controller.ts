@@ -5,6 +5,7 @@ import { NotFoundError } from '../middleware/error.middleware';
 import { IZTDFResource } from '../types/ztdf.types';
 import { validateZTDFIntegrity, decryptContent } from '../utils/ztdf.utils';
 import { convertToOpenTDFFormat } from '../services/ztdf-export.service';
+import { kasRegistryService } from '../services/kas-registry.service';
 import axios from 'axios';
 
 /**
@@ -122,6 +123,7 @@ export const listResourcesHandler = async (
 /**
  * Get a specific resource by ID
  * Week 3.1: Enhanced with ZTDF support and KAS obligations
+ * Phase 4: Cross-instance KAS integration for federated encrypted resources
  */
 export const getResourceHandler = async (
     req: Request,
@@ -130,6 +132,7 @@ export const getResourceHandler = async (
 ): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string;
     const { id } = req.params;
+    const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
 
     try {
         logger.info('Fetching resource', { requestId, resourceId: id });
@@ -143,6 +146,20 @@ export const getResourceHandler = async (
         // Check if PEP set any obligations (e.g., KAS key request required)
         const obligations = (req as any).authzObligations || [];
         const kasObligation = obligations.find((o: any) => o.type === 'kas');
+
+        // Phase 4: Check if this is a cross-instance resource
+        const isCrossInstance = kasRegistryService.isCrossInstanceResource(resource);
+        const kasAuthority = kasRegistryService.getKASAuthority(resource);
+
+        if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
+            logger.info('Cross-instance encrypted resource detected', {
+                requestId,
+                resourceId: resource.resourceId,
+                originRealm: (resource as any).originRealm || 'unknown',
+                currentRealm: INSTANCE_REALM,
+                kasAuthority
+            });
+        }
 
         if (isZTDFResource(resource)) {
             // ZTDF-enhanced resource
@@ -164,6 +181,11 @@ export const getResourceHandler = async (
                 // Include policy evaluation details for frontend replay
                 policyEvaluation: (req as any).policyEvaluation,
 
+                // Phase 4: Cross-instance metadata
+                originRealm: (resource as any).originRealm || INSTANCE_REALM,
+                kasAuthority,
+                isCrossInstance,
+
                 metadata: {
                     createdAt: resource.createdAt,
                     updatedAt: resource.updatedAt
@@ -172,11 +194,31 @@ export const getResourceHandler = async (
 
             // If KAS obligation present, include KAS endpoint info
             if (kasObligation) {
+                // Phase 4: Determine correct KAS URL for cross-instance access
+                let kasUrl = resource.ztdf.payload.keyAccessObjects[0]?.kasUrl;
+                
+                if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
+                    const remoteKas = kasRegistryService.getKAS(kasAuthority);
+                    if (remoteKas) {
+                        kasUrl = remoteKas.kasUrl;
+                        logger.debug('Using cross-instance KAS URL', {
+                            requestId,
+                            kasAuthority,
+                            kasUrl,
+                            organization: remoteKas.organization
+                        });
+                    }
+                }
+
                 response.kasObligation = {
                     required: true,
-                    kasUrl: resource.ztdf.payload.keyAccessObjects[0]?.kasUrl,
-                    wrappedKey: resource.ztdf.payload.keyAccessObjects[0]?.wrappedKey, // PILOT: Expose for KAS to use
-                    message: 'Decryption key must be requested from KAS'
+                    kasUrl,
+                    kasAuthority,
+                    isCrossInstance,
+                    wrappedKey: resource.ztdf.payload.keyAccessObjects[0]?.wrappedKey,
+                    message: isCrossInstance 
+                        ? `Decryption key must be requested from ${kasAuthority}`
+                        : 'Decryption key must be requested from KAS'
                 };
                 // CRITICAL: Set content to sentinel value so frontend knows to show KAS UI
                 response.content = '[Encrypted - KAS key request required]';
@@ -206,6 +248,9 @@ export const getResourceHandler = async (
 
                 // Include policy evaluation details for frontend replay
                 policyEvaluation: (req as any).policyEvaluation,
+
+                // Phase 4: Origin tracking for legacy resources
+                originRealm: legacyResource.originRealm || INSTANCE_REALM,
 
                 metadata: {
                     createdAt: legacyResource.createdAt,
@@ -474,15 +519,17 @@ export const getKASFlowHandler = async (
 /**
  * Request decryption key from KAS
  * Week 3.4.3: KAS Request Modal - handles live key request and decryption
+ * Phase 4: Cross-instance KAS support for federated encrypted resources
  */
 export const requestKeyHandler = async (
     req: Request,
     res: Response,
     next: NextFunction
 ): Promise<void> => {
-    const requestId = req.headers['x-request-id'] as string;
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
     const { resourceId, kaoId } = req.body;
     const startTime = Date.now();
+    const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
 
     try {
         logger.info('Key request initiated', { requestId, resourceId, kaoId });
@@ -534,76 +581,165 @@ export const requestKeyHandler = async (
             return;
         }
 
-        // Call KAS to request key
-        // Priority: KAO's kasUrl > Environment KAS_URL > Default 'https://kas:8080'
-        // Session expiration fix (Oct 21): Properly handle custom KAS URLs from KAOs
-        const kasUrl = kao.kasUrl
-            ? (kao.kasUrl.includes('/request-key') ? kao.kasUrl : `${kao.kasUrl}/request-key`)
-            : `${process.env.KAS_URL || 'https://kas:8080'}/request-key`;
+        // Phase 4: Check if this is a cross-instance resource
+        const isCrossInstance = kasRegistryService.isCrossInstanceResource(resource);
+        const kasAuthority = kasRegistryService.getKASAuthority(resource);
 
-        logger.info('Calling KAS', {
-            requestId,
-            kasUrl,
-            kaoKasUrl: kao.kasUrl,
-            envKasUrl: process.env.KAS_URL,
-            constructedUrl: kasUrl
-        });
+        // Get user info from request (set by JWT middleware)
+        const user = (req as any).user || {};
+        const subject = {
+            uniqueID: user.uniqueID || user.sub || 'unknown',
+            clearance: user.clearance || 'UNCLASSIFIED',
+            countryOfAffiliation: user.countryOfAffiliation || INSTANCE_REALM,
+            acpCOI: user.acpCOI || []
+        };
 
         // CRITICAL: Get the wrappedKey (actual DEK used during encryption)
         const wrappedKey = kao.wrappedKey;
-        logger.info('Passing wrappedKey to KAS', {
+
+        logger.info('Processing key request', {
             requestId,
             resourceId,
+            isCrossInstance,
+            kasAuthority,
+            originRealm: (resource as any).originRealm,
+            currentRealm: INSTANCE_REALM,
             hasWrappedKey: !!wrappedKey,
-            wrappedKeyLength: wrappedKey?.length
+            subject: {
+                uniqueID: subject.uniqueID,
+                clearance: subject.clearance,
+                country: subject.countryOfAffiliation
+            }
         });
 
-        let kasResponse;
-        try {
-            kasResponse = await axios.post(
-                kasUrl,  // Use full URL (already includes /request-key)
+        let kasResponse: any;
+
+        // Phase 4: Use cross-KAS client for remote resources
+        if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
+            logger.info('Initiating cross-instance KAS request', {
+                requestId,
+                resourceId,
+                kasAuthority,
+                subject: subject.uniqueID
+            });
+
+            const crossKASResult = await kasRegistryService.requestCrossKASKey(
+                kasAuthority,
                 {
                     resourceId,
                     kaoId,
-                    wrappedKey, // CRITICAL: Pass the actual DEK so KAS doesn't regenerate
+                    wrappedKey,
                     bearerToken,
-                    requestTimestamp: new Date().toISOString(),
+                    subject,
                     requestId
-                },
-                {
-                    headers: { 'Content-Type': 'application/json' },
-                    timeout: 10000 // 10 seconds
                 }
             );
-        } catch (error) {
-            logger.error('KAS request failed', {
-                requestId,
-                resourceId,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
 
-            // Check if it's a 403 (denial) vs network error
-            if (axios.isAxiosError(error) && error.response?.status === 403) {
-                // KAS denied - return detailed denial info
-                const kasData = error.response.data;
+            if (!crossKASResult.success) {
+                logger.warn('Cross-KAS key request denied', {
+                    requestId,
+                    resourceId,
+                    kasAuthority,
+                    denialReason: crossKASResult.denialReason,
+                    latencyMs: crossKASResult.latencyMs
+                });
+
                 res.status(403).json({
                     success: false,
                     error: 'Forbidden',
-                    denialReason: kasData.denialReason || 'Access denied by KAS',
-                    kasDecision: kasData.kasDecision,
-                    executionTimeMs: Date.now() - startTime
+                    denialReason: crossKASResult.denialReason,
+                    kasAuthority,
+                    organization: crossKASResult.organization,
+                    isCrossInstance: true,
+                    executionTimeMs: crossKASResult.latencyMs
                 });
                 return;
             }
 
-            // Network error or KAS unavailable
-            res.status(503).json({
-                success: false,
-                error: 'Service Unavailable',
-                message: 'KAS service is unavailable or timed out',
-                executionTimeMs: Date.now() - startTime
+            // Cross-KAS success - build response similar to local KAS
+            kasResponse = {
+                data: {
+                    success: true,
+                    dek: crossKASResult.dek,
+                    auditEventId: crossKASResult.auditEventId,
+                    kasDecision: {
+                        allow: true,
+                        kasAuthority,
+                        organization: crossKASResult.organization,
+                        isCrossInstance: true
+                    }
+                }
+            };
+
+            logger.info('Cross-KAS key released successfully', {
+                requestId,
+                resourceId,
+                kasAuthority,
+                organization: crossKASResult.organization,
+                latencyMs: crossKASResult.latencyMs
             });
-            return;
+
+        } else {
+            // Local KAS request (original implementation)
+            // Priority: KAO's kasUrl > Environment KAS_URL > Default 'https://kas:8080'
+            const kasUrl = kao.kasUrl
+                ? (kao.kasUrl.includes('/request-key') ? kao.kasUrl : `${kao.kasUrl}/request-key`)
+                : `${process.env.KAS_URL || 'https://kas:8080'}/request-key`;
+
+            logger.info('Calling local KAS', {
+                requestId,
+                kasUrl,
+                kaoKasUrl: kao.kasUrl,
+                envKasUrl: process.env.KAS_URL
+            });
+
+            try {
+                kasResponse = await axios.post(
+                    kasUrl,
+                    {
+                        resourceId,
+                        kaoId,
+                        wrappedKey,
+                        bearerToken,
+                        requestTimestamp: new Date().toISOString(),
+                        requestId
+                    },
+                    {
+                        headers: { 'Content-Type': 'application/json' },
+                        timeout: 10000
+                    }
+                );
+            } catch (error) {
+                logger.error('Local KAS request failed', {
+                    requestId,
+                    resourceId,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+
+                // Check if it's a 403 (denial) vs network error
+                if (axios.isAxiosError(error) && error.response?.status === 403) {
+                    const kasData = error.response.data;
+                    res.status(403).json({
+                        success: false,
+                        error: 'Forbidden',
+                        denialReason: kasData.denialReason || 'Access denied by KAS',
+                        kasDecision: kasData.kasDecision,
+                        isCrossInstance: false,
+                        executionTimeMs: Date.now() - startTime
+                    });
+                    return;
+                }
+
+                // Network error or KAS unavailable
+                res.status(503).json({
+                    success: false,
+                    error: 'Service Unavailable',
+                    message: 'KAS service is unavailable or timed out',
+                    isCrossInstance: false,
+                    executionTimeMs: Date.now() - startTime
+                });
+                return;
+            }
         }
 
         // KAS allowed - decrypt content
@@ -685,12 +821,19 @@ export const requestKeyHandler = async (
                     dek: kasResponse.data.dek
                 });
 
-                logger.info('Content decrypted successfully', { requestId, resourceId });
+                logger.info('Content decrypted successfully', { 
+                    requestId, 
+                    resourceId,
+                    isCrossInstance,
+                    kasAuthority: kasResponse.data.kasDecision?.kasAuthority
+                });
 
                 res.json({
                     success: true,
                     content: decryptedContent,
                     kasDecision: kasResponse.data.kasDecision,
+                    isCrossInstance,
+                    kasAuthority: isCrossInstance ? kasAuthority : undefined,
                     executionTimeMs: Date.now() - startTime
                 });
 

@@ -1,8 +1,15 @@
 import { Router, Request, Response } from 'express';
+import axios from 'axios';
 import { healthService } from '../services/health.service';
 import { KeycloakConfigSyncService } from '../services/keycloak-config-sync.service';
+import { policyVersionMonitor } from '../services/policy-version-monitor.service';
+import { kasRegistryService } from '../services/kas-registry.service';
+import { authenticateJWT } from '../middleware/authz.middleware';
 
 const router = Router();
+
+const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
+const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
 
 /**
  * GET /health
@@ -71,6 +78,105 @@ router.get('/ready', async (_req: Request, res: Response) => {
 router.get('/live', (_req: Request, res: Response) => {
     const liveness = healthService.livenessCheck();
     res.status(200).json(liveness);
+});
+
+/**
+ * GET /health/policy-version
+ * Phase 4, Task 3.1: Returns OPA policy version for drift detection
+ * Used by policy drift monitor to verify consistency across instances
+ */
+router.get('/policy-version', async (_req: Request, res: Response) => {
+    try {
+        const opaResponse = await axios.get(
+            `${OPA_URL}/v1/data/dive/policy_version`,
+            { timeout: 5000 }
+        );
+
+        res.json({
+            instance: INSTANCE_REALM,
+            policyVersion: opaResponse.data.result,
+            opaUrl: OPA_URL,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(503).json({
+            error: 'Service Unavailable',
+            message: 'OPA policy version unavailable',
+            instance: INSTANCE_REALM,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+/**
+ * GET /health/policy-consistency
+ * Phase 4, Task 3.1: Check policy consistency across federation
+ * Requires authentication (admin access)
+ */
+router.get('/policy-consistency', authenticateJWT, async (req: Request, res: Response) => {
+    try {
+        const user = (req as any).user;
+        if (!user?.roles?.includes('admin') && !user?.roles?.includes('super-admin')) {
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'Admin privileges required'
+            });
+            return;
+        }
+
+        const report = await policyVersionMonitor.checkPolicyConsistency();
+
+        res.json({
+            consistent: report.consistent,
+            expectedVersion: report.expectedVersion,
+            checkTimestamp: report.checkTimestamp,
+            instances: report.instances.map(i => ({
+                code: i.instanceCode,
+                version: i.policyVersion?.version || 'unavailable',
+                healthy: i.healthy,
+                latencyMs: i.latencyMs,
+                error: i.error
+            })),
+            driftDetails: report.driftDetails
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Policy consistency check failed',
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+/**
+ * GET /health/kas-federation
+ * Phase 4, Task 1.4: Returns KAS federation status
+ */
+router.get('/kas-federation', async (_req: Request, res: Response) => {
+    try {
+        const kasServers = kasRegistryService.getAllKAS();
+        const kasHealth = kasRegistryService.getKASHealth();
+        const crossKASEnabled = kasRegistryService.isCrossKASEnabled();
+
+        res.json({
+            instance: INSTANCE_REALM,
+            crossKASEnabled,
+            kasServers: kasServers.map(kas => ({
+                kasId: kas.kasId,
+                organization: kas.organization,
+                countryCode: kas.countryCode,
+                trustLevel: kas.trustLevel,
+                health: kasHealth[kas.kasId] || { healthy: false, lastCheck: null }
+            })),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to get KAS federation status',
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 /**

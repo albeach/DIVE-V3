@@ -177,6 +177,89 @@ export async function getAllResourcesLegacy(): Promise<IResource[]> {
 }
 
 /**
+ * Search resources with filters
+ * Phase 4, Task 3.2: Federated Resource Discovery
+ * 
+ * @param options Search options
+ * @returns Matching resources
+ */
+export interface ISearchOptions {
+    query?: string;
+    classification?: string;
+    releasableTo?: string;
+    coi?: string;
+    originRealm?: string;
+    limit?: number;
+}
+
+export async function searchResources(options: ISearchOptions): Promise<IZTDFResource[]> {
+    try {
+        const collection = await getCollection();
+        const filter: any = {};
+
+        // Text search on title (simple contains match)
+        if (options.query) {
+            filter.$or = [
+                { title: { $regex: options.query, $options: 'i' } },
+                { resourceId: { $regex: options.query, $options: 'i' } }
+            ];
+        }
+
+        // Classification filter (check both ZTDF and legacy fields)
+        if (options.classification) {
+            filter.$or = filter.$or || [];
+            filter.$or.push(
+                { 'ztdf.policy.securityLabel.classification': options.classification },
+                { classification: options.classification }
+            );
+        }
+
+        // Releasability filter (resource must include this country)
+        if (options.releasableTo) {
+            const country = options.releasableTo.toUpperCase();
+            filter.$or = filter.$or || [];
+            filter.$or.push(
+                { 'ztdf.policy.securityLabel.releasabilityTo': country },
+                { releasabilityTo: country },
+                { 'ztdf.policy.securityLabel.releasabilityTo': 'NATO' },
+                { releasabilityTo: 'NATO' }
+            );
+        }
+
+        // COI filter (resource must include this COI)
+        if (options.coi) {
+            filter.$or = filter.$or || [];
+            filter.$or.push(
+                { 'ztdf.policy.securityLabel.COI': options.coi },
+                { COI: options.coi }
+            );
+        }
+
+        // Origin realm filter
+        if (options.originRealm) {
+            filter.originRealm = options.originRealm;
+        }
+
+        const limit = options.limit || 100;
+
+        logger.debug('Searching resources', {
+            filter,
+            limit
+        });
+
+        const resources = await collection
+            .find(filter)
+            .limit(limit)
+            .toArray();
+
+        return resources;
+    } catch (error) {
+        logger.error('Failed to search resources', { error, options });
+        throw error;
+    }
+}
+
+/**
  * Get resource by ID
  * Returns ZTDF-enhanced resource with integrity validation
  */

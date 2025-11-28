@@ -1,0 +1,519 @@
+/**
+ * Federated Search Controller
+ * Phase 4, Task 3.2: Cross-Instance Resource Discovery
+ * 
+ * Enables unified search across all federated instances (USA, FRA, GBR, DEU).
+ * Queries are executed in parallel with graceful degradation if instances are down.
+ * 
+ * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
+ */
+
+import { Request, Response, NextFunction } from 'express';
+import axios from 'axios';
+import { logger } from '../utils/logger';
+import { searchResources } from '../services/resource.service';
+
+// ============================================
+// Configuration
+// ============================================
+
+interface FederationInstance {
+  code: string;
+  apiUrl: string;
+  type: 'local' | 'remote';
+  enabled: boolean;
+}
+
+const FEDERATION_INSTANCES: FederationInstance[] = [
+  {
+    code: 'USA',
+    apiUrl: process.env.USA_API_URL || 'https://usa-api.dive25.com',
+    type: 'local',
+    enabled: true
+  },
+  {
+    code: 'FRA',
+    apiUrl: process.env.FRA_API_URL || 'https://fra-api.dive25.com',
+    type: 'local',
+    enabled: true
+  },
+  {
+    code: 'GBR',
+    apiUrl: process.env.GBR_API_URL || 'https://gbr-api.dive25.com',
+    type: 'local',
+    enabled: true
+  },
+  {
+    code: 'DEU',
+    apiUrl: process.env.DEU_API_URL || 'https://deu-api.prosecurity.biz',
+    type: 'remote',
+    enabled: true
+  }
+];
+
+const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+const FEDERATED_SEARCH_TIMEOUT_MS = parseInt(process.env.FEDERATED_SEARCH_TIMEOUT_MS || '3000');
+const MAX_FEDERATED_RESULTS = parseInt(process.env.MAX_FEDERATED_RESULTS || '100');
+
+// Clearance hierarchy for filtering
+const CLEARANCE_HIERARCHY: Record<string, number> = {
+  'UNCLASSIFIED': 0,
+  'RESTRICTED': 0.5,
+  'CONFIDENTIAL': 1,
+  'SECRET': 2,
+  'TOP_SECRET': 3
+};
+
+// ============================================
+// Interfaces
+// ============================================
+
+interface FederatedSearchQuery {
+  query?: string;
+  classification?: string;
+  country?: string;
+  coi?: string;
+  originRealm?: string;
+  encrypted?: boolean;
+  limit?: number;
+}
+
+interface FederatedSearchResult {
+  resourceId: string;
+  title: string;
+  classification: string;
+  releasabilityTo: string[];
+  COI: string[];
+  encrypted: boolean;
+  creationDate?: string;
+  displayMarking?: string;
+  originRealm: string;
+  _federated?: boolean;
+  _relevanceScore?: number;
+}
+
+interface FederatedSearchResponse {
+  query: FederatedSearchQuery;
+  totalResults: number;
+  results: FederatedSearchResult[];
+  federatedFrom: string[];
+  instanceResults: Record<string, { count: number; latencyMs: number; error?: string }>;
+  executionTimeMs: number;
+  timestamp: string;
+}
+
+// ============================================
+// Federated Search Handler
+// ============================================
+
+/**
+ * POST /api/resources/federated-search
+ * Execute search across all federated instances
+ */
+export const federatedSearchHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const requestId = req.headers['x-request-id'] as string || `fed-${Date.now()}`;
+  const startTime = Date.now();
+  const user = (req as any).user;
+
+  try {
+    // Parse search query
+    const searchQuery: FederatedSearchQuery = {
+      query: req.body.query || req.query.query as string,
+      classification: req.body.classification || req.query.classification as string,
+      country: req.body.country || req.query.country as string,
+      coi: req.body.coi || req.query.coi as string,
+      originRealm: req.body.originRealm || req.query.originRealm as string,
+      encrypted: req.body.encrypted,
+      limit: parseInt(req.body.limit || req.query.limit as string || `${MAX_FEDERATED_RESULTS}`)
+    };
+
+    logger.info('Federated search initiated', {
+      requestId,
+      query: searchQuery,
+      user: user?.uniqueID,
+      country: user?.countryOfAffiliation,
+      clearance: user?.clearance
+    });
+
+    // Validate user has required attributes
+    if (!user?.clearance) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'User clearance not available'
+      });
+      return;
+    }
+
+    const userClearanceLevel = CLEARANCE_HIERARCHY[user.clearance] ?? 0;
+    const userCountry = user.countryOfAffiliation || INSTANCE_REALM;
+    const userCOIs = user.acpCOI || [];
+
+    // Execute parallel search across all instances
+    const instanceResults: Record<string, { count: number; latencyMs: number; error?: string }> = {};
+    const allResources: FederatedSearchResult[] = [];
+
+    const searchPromises = FEDERATION_INSTANCES
+      .filter(instance => instance.enabled)
+      .map(async (instance) => {
+        const instanceStart = Date.now();
+
+        try {
+          let resources: FederatedSearchResult[];
+
+          if (instance.code === INSTANCE_REALM) {
+            // Local search (direct MongoDB query)
+            resources = await executeLocalSearch(searchQuery);
+          } else {
+            // Remote search (Federation API)
+            resources = await executeRemoteSearch(instance, searchQuery, req.headers.authorization || '');
+          }
+
+          // Mark as federated and set origin
+          resources = resources.map(r => ({
+            ...r,
+            originRealm: r.originRealm || instance.code,
+            _federated: instance.code !== INSTANCE_REALM
+          }));
+
+          instanceResults[instance.code] = {
+            count: resources.length,
+            latencyMs: Date.now() - instanceStart
+          };
+
+          return resources;
+
+        } catch (error) {
+          logger.warn('Instance search failed', {
+            requestId,
+            instance: instance.code,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            latencyMs: Date.now() - instanceStart
+          });
+
+          instanceResults[instance.code] = {
+            count: 0,
+            latencyMs: Date.now() - instanceStart,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+
+          return []; // Graceful degradation
+        }
+      });
+
+    // Wait for all searches
+    const results = await Promise.all(searchPromises);
+    
+    // Flatten results
+    for (const resourceList of results) {
+      allResources.push(...resourceList);
+    }
+
+    // Deduplicate by resourceId (prefer local over federated)
+    const seen = new Map<string, FederatedSearchResult>();
+    for (const resource of allResources) {
+      const existing = seen.get(resource.resourceId);
+      if (!existing || (!resource._federated && existing._federated)) {
+        seen.set(resource.resourceId, resource);
+      }
+    }
+    let uniqueResources = Array.from(seen.values());
+
+    // Authorization filter (server-side enforcement)
+    uniqueResources = uniqueResources.filter(resource => {
+      // Check releasability
+      if (!resource.releasabilityTo.includes(userCountry) && 
+          !resource.releasabilityTo.includes('NATO') &&
+          !resource.releasabilityTo.includes('FVEY')) {
+        return false;
+      }
+
+      // Check clearance
+      const resourceLevel = CLEARANCE_HIERARCHY[resource.classification] ?? 0;
+      if (userClearanceLevel < resourceLevel) {
+        return false;
+      }
+
+      // Check COI (if resource has COI requirement)
+      if (resource.COI && resource.COI.length > 0) {
+        const hasCOI = resource.COI.some(coi => userCOIs.includes(coi));
+        if (!hasCOI) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Calculate relevance scores if query provided
+    if (searchQuery.query) {
+      uniqueResources = uniqueResources.map(resource => ({
+        ...resource,
+        _relevanceScore: calculateRelevance(resource, searchQuery.query!)
+      }));
+
+      // Sort by relevance
+      uniqueResources.sort((a, b) => (b._relevanceScore || 0) - (a._relevanceScore || 0));
+    }
+
+    // Apply limit
+    const limitedResults = uniqueResources.slice(0, searchQuery.limit || MAX_FEDERATED_RESULTS);
+
+    // Build response
+    const response: FederatedSearchResponse = {
+      query: searchQuery,
+      totalResults: limitedResults.length,
+      results: limitedResults,
+      federatedFrom: Object.entries(instanceResults)
+        .filter(([, result]) => !result.error)
+        .map(([code]) => code),
+      instanceResults,
+      executionTimeMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    };
+
+    logger.info('Federated search complete', {
+      requestId,
+      totalResults: response.totalResults,
+      instanceResults: Object.entries(instanceResults).map(([code, result]) => ({
+        code,
+        count: result.count,
+        latencyMs: result.latencyMs,
+        error: result.error
+      })),
+      executionTimeMs: response.executionTimeMs
+    });
+
+    res.json(response);
+
+  } catch (error) {
+    logger.error('Federated search failed', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    next(error);
+  }
+};
+
+/**
+ * Execute search on local MongoDB
+ */
+async function executeLocalSearch(query: FederatedSearchQuery): Promise<FederatedSearchResult[]> {
+  try {
+    // Use existing resource service
+    const resources = await searchResources({
+      query: query.query,
+      classification: query.classification,
+      releasableTo: query.country,
+      coi: query.coi
+    });
+
+    return resources.map(r => {
+      // Handle both ZTDF and legacy resources
+      const ztdf = (r as any).ztdf;
+      if (ztdf) {
+        return {
+          resourceId: r.resourceId,
+          title: r.title,
+          classification: ztdf.policy.securityLabel.classification,
+          releasabilityTo: ztdf.policy.securityLabel.releasabilityTo,
+          COI: ztdf.policy.securityLabel.COI || [],
+          encrypted: true,
+          creationDate: ztdf.policy.securityLabel.creationDate,
+          displayMarking: ztdf.policy.securityLabel.displayMarking,
+          originRealm: (r as any).originRealm || INSTANCE_REALM
+        };
+      } else {
+        return {
+          resourceId: r.resourceId,
+          title: r.title,
+          classification: (r as any).classification || 'UNCLASSIFIED',
+          releasabilityTo: (r as any).releasabilityTo || [],
+          COI: (r as any).COI || [],
+          encrypted: (r as any).encrypted || false,
+          creationDate: (r as any).creationDate,
+          originRealm: (r as any).originRealm || INSTANCE_REALM
+        };
+      }
+    });
+  } catch (error) {
+    logger.error('Local search failed', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    throw error;
+  }
+}
+
+/**
+ * Execute search on remote federated instance
+ */
+async function executeRemoteSearch(
+  instance: FederationInstance,
+  query: FederatedSearchQuery,
+  authHeader: string
+): Promise<FederatedSearchResult[]> {
+  try {
+    const response = await axios.get(
+      `${instance.apiUrl}/federation/resources/search`,
+      {
+        headers: {
+          'Authorization': authHeader,
+          'X-Origin-Realm': INSTANCE_REALM,
+          'Content-Type': 'application/json'
+        },
+        params: {
+          query: query.query,
+          classification: query.classification,
+          releasableTo: query.country,
+          coi: query.coi,
+          limit: query.limit
+        },
+        timeout: FEDERATED_SEARCH_TIMEOUT_MS
+      }
+    );
+
+    return (response.data.resources || []).map((r: any) => ({
+      ...r,
+      originRealm: r.originRealm || instance.code,
+      _federated: true
+    }));
+
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.code === 'ECONNABORTED') {
+        throw new Error(`Timeout after ${FEDERATED_SEARCH_TIMEOUT_MS}ms`);
+      }
+      throw new Error(`HTTP ${error.response?.status || 'unknown'}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Calculate relevance score for ranking
+ */
+function calculateRelevance(resource: FederatedSearchResult, query: string): number {
+  const q = query.toLowerCase();
+  let score = 0;
+
+  // Title match (highest weight)
+  if (resource.title?.toLowerCase().includes(q)) {
+    score += 10;
+    // Exact match bonus
+    if (resource.title.toLowerCase() === q) {
+      score += 5;
+    }
+    // Prefix match bonus
+    if (resource.title.toLowerCase().startsWith(q)) {
+      score += 3;
+    }
+  }
+
+  // ResourceId match
+  if (resource.resourceId?.toLowerCase().includes(q)) {
+    score += 3;
+  }
+
+  // Classification match
+  if (resource.classification?.toLowerCase().includes(q)) {
+    score += 2;
+  }
+
+  // COI match
+  if (resource.COI?.some(coi => coi.toLowerCase().includes(q))) {
+    score += 2;
+  }
+
+  // Country match
+  if (resource.releasabilityTo?.some(country => country.toLowerCase().includes(q))) {
+    score += 1;
+  }
+
+  // Recency bonus (newer resources rank higher)
+  if (resource.creationDate) {
+    const age = Date.now() - new Date(resource.creationDate).getTime();
+    const daysSinceCreation = age / (1000 * 60 * 60 * 24);
+    if (daysSinceCreation < 7) score += 2;
+    else if (daysSinceCreation < 30) score += 1;
+  }
+
+  // Local resources get slight preference
+  if (!resource._federated) {
+    score += 0.5;
+  }
+
+  return score;
+}
+
+/**
+ * GET /api/resources/federated-search
+ * Alias for POST handler (for convenience)
+ */
+export const federatedSearchGetHandler = federatedSearchHandler;
+
+/**
+ * GET /api/resources/federated-status
+ * Get federated search status (which instances are available)
+ */
+export const federatedStatusHandler = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const startTime = Date.now();
+
+  try {
+    const instanceChecks = await Promise.all(
+      FEDERATION_INSTANCES.map(async (instance) => {
+        const checkStart = Date.now();
+        try {
+          if (instance.code === INSTANCE_REALM) {
+            return {
+              code: instance.code,
+              apiUrl: instance.apiUrl,
+              type: instance.type,
+              available: true,
+              latencyMs: Date.now() - checkStart
+            };
+          }
+
+          await axios.get(`${instance.apiUrl}/api/health`, { timeout: 2000 });
+          return {
+            code: instance.code,
+            apiUrl: instance.apiUrl,
+            type: instance.type,
+            available: true,
+            latencyMs: Date.now() - checkStart
+          };
+        } catch {
+          return {
+            code: instance.code,
+            apiUrl: instance.apiUrl,
+            type: instance.type,
+            available: false,
+            latencyMs: Date.now() - checkStart
+          };
+        }
+      })
+    );
+
+    const availableCount = instanceChecks.filter(i => i.available).length;
+
+    res.json({
+      currentInstance: INSTANCE_REALM,
+      federatedSearchEnabled: true,
+      instances: instanceChecks,
+      availableInstances: availableCount,
+      totalInstances: FEDERATION_INSTANCES.length,
+      executionTimeMs: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+

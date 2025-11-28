@@ -24,8 +24,12 @@ import oauthRoutes from './routes/oauth.routes';  // OAuth 2.0 for SP federation
 import scimRoutes from './routes/scim.routes';  // SCIM 2.0 user provisioning
 import federationRoutes from './routes/federation.routes';  // Federation endpoints
 import spManagementRoutes from './routes/sp-management.routes';  // SP Registry management
+import blacklistRoutes from './routes/blacklist.routes';  // Phase 2 GAP-007: Token blacklist
+import { metricsService } from './services/metrics.service';  // Phase 3 GAP-004: Prometheus metrics
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
+import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
+import { policyVersionMonitor } from './services/policy-version-monitor.service';  // Phase 4: Policy drift
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -98,6 +102,12 @@ app.use((req, _res, next) => {
 // Routes
 // ============================================
 
+// Phase 3 GAP-004: Public metrics endpoint for Prometheus (no auth required)
+app.get('/metrics', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+  res.send(metricsService.exportPrometheus());
+});
+
 app.use('/health', healthRoutes);
 app.use('/api', publicRoutes);  // Public routes (no auth required)
 app.use('/api/resources', resourceRoutes);
@@ -109,6 +119,7 @@ app.use('/api/compliance', complianceRoutes);
 app.use('/api/coi-keys', coiKeysRoutes);
 app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints (must be before /api/auth)
 app.use('/api/auth', authRoutes);  // Gap #7: Token revocation endpoints
+app.use('/', blacklistRoutes);  // Phase 2 GAP-007: Token blacklist (mounted at root for /api/auth/blacklist-token and /api/blacklist/stats)
 app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
 
 // Federation endpoints (Phase 1)
@@ -187,6 +198,35 @@ if (process.env.NODE_ENV !== 'test' && !isImported) {
     }, 5 * 60 * 1000); // 5 minutes
 
     logger.info('Periodic Keycloak configuration sync scheduled (every 5 minutes)');
+
+    // Phase 4: Initialize KAS Registry for cross-instance encrypted access
+    try {
+      logger.info('Loading KAS registry for cross-instance federation');
+      await kasRegistryService.loadRegistry();
+      const kasCount = kasRegistryService.getAllKAS().length;
+      logger.info(`KAS registry loaded: ${kasCount} KAS servers configured`, {
+        crossKASEnabled: kasRegistryService.isCrossKASEnabled()
+      });
+    } catch (error) {
+      logger.warn('Failed to load KAS registry (cross-instance KAS disabled)', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Non-fatal: cross-instance access will fail gracefully
+    }
+
+    // Phase 4: Start policy version monitoring for drift detection
+    try {
+      const policyCheckInterval = parseInt(process.env.POLICY_CHECK_INTERVAL_MS || '300000'); // 5 min default
+      logger.info('Starting policy version monitoring', {
+        intervalMs: policyCheckInterval
+      });
+      policyVersionMonitor.startMonitoring(policyCheckInterval);
+    } catch (error) {
+      logger.warn('Failed to start policy version monitoring', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Non-fatal: policy drift detection disabled
+    }
   });
 }
 
