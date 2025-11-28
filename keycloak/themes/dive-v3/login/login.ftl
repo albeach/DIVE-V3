@@ -39,7 +39,7 @@
                         <div class="dive-reauth-user" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 0.5rem; margin-bottom: 0.5rem;">
                             <div style="display: flex; align-items: center; gap: 0.75rem;">
                                 <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.875rem; text-transform: uppercase;">
-                                    ${(login.username!'')?substring(0, 1)}
+                                   <#if (login.username!'')?has_content>${(login.username!'')?substring(0, 1)}<#else>?</#if>
                                 </div>
                                 <span style="font-weight: 600; color: #1e293b; font-size: 0.9375rem;">${login.username!''}</span>
                             </div>
