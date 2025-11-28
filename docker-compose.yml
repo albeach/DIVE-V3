@@ -248,6 +248,9 @@ services:
       NEXT_PUBLIC_API_URL: https://usa-api.dive25.com
       NEXT_PUBLIC_BACKEND_URL: https://usa-api.dive25.com
       NEXT_PUBLIC_BASE_URL: https://usa-app.dive25.com
+      # Instance identification for dashboard
+      NEXT_PUBLIC_INSTANCE: USA
+      NEXT_PUBLIC_APP_NAME: "DIVE V3 - United States"
       # Server-side backend URL (Docker internal network)
       BACKEND_URL: https://backend:4000
       # Keycloak configuration
