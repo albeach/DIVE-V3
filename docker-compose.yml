@@ -71,6 +71,7 @@ services:
       - dive-network
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro  # mkcert certificates
+      - ./keycloak/themes:/opt/keycloak/themes:ro  # Custom themes (dev: live reload)
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/realms/master || exit 1"]
       interval: 30s
