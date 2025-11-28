@@ -86,14 +86,21 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 get_admin_token() {
     local instance=$1
     local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
-    local keycloak_url="https://${instance_lower}-idp.dive25.com"
+    
+    # DEU uses prosecurity.biz domain (remote instance)
+    local keycloak_url
+    if [[ "$instance" == "DEU" ]]; then
+        keycloak_url="https://${instance_lower}-idp.prosecurity.biz"
+    else
+        keycloak_url="https://${instance_lower}-idp.dive25.com"
+    fi
     
     curl -sf -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "grant_type=password" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
-        -d "password=admin" \
+        -d "password=DivePilot2025!" \
         --insecure 2>/dev/null | jq -r '.access_token'
 }
 
@@ -257,8 +264,13 @@ test_federation() {
     
     log_info "Testing federation: ${source} → ${target}"
     
-    # Check if IdP is accessible
-    local target_url="https://${target_lower}-idp.dive25.com"
+    # Check if IdP is accessible (DEU uses prosecurity.biz)
+    local target_url
+    if [[ "$target" == "DEU" ]]; then
+        target_url="https://${target_lower}-idp.prosecurity.biz"
+    else
+        target_url="https://${target_lower}-idp.dive25.com"
+    fi
     local well_known=$(curl -sf "${target_url}/realms/${REALM}/.well-known/openid-configuration" --insecure 2>/dev/null)
     
     if [[ -n "$well_known" ]]; then
@@ -349,11 +361,21 @@ fi
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Get instance URLs
+# Get instance URLs (DEU uses prosecurity.biz domain)
 SOURCE_LOWER=$(echo "$SOURCE" | tr '[:upper:]' '[:lower:]')
 TARGET_LOWER=$(echo "$TARGET" | tr '[:upper:]' '[:lower:]')
-SOURCE_URL="https://${SOURCE_LOWER}-idp.dive25.com"
-TARGET_URL="https://${TARGET_LOWER}-idp.dive25.com"
+
+if [[ "$SOURCE" == "DEU" ]]; then
+    SOURCE_URL="https://${SOURCE_LOWER}-idp.prosecurity.biz"
+else
+    SOURCE_URL="https://${SOURCE_LOWER}-idp.dive25.com"
+fi
+
+if [[ "$TARGET" == "DEU" ]]; then
+    TARGET_URL="https://${TARGET_LOWER}-idp.prosecurity.biz"
+else
+    TARGET_URL="https://${TARGET_LOWER}-idp.dive25.com"
+fi
 
 # Step 1: Get admin tokens
 log_info "Obtaining admin tokens..."

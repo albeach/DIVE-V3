@@ -337,38 +337,53 @@
 }
 
 .dive-form-group {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
+    position: relative;
 }
 
 .dive-label {
     display: block;
-    font-size: 0.875rem;
+    font-size: 0.6875rem;
     font-weight: 600;
-    color: #374151;
-    margin-bottom: 0.5rem;
+    color: #6b7280;
+    margin-bottom: 0.375rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .dive-input {
     width: 100%;
-    padding: 0.75rem 1rem;
-    border: 1px solid #d1d5db;
-    border-radius: 0.75rem;
-    font-size: 1rem;
-    color: #111827;
-    background-color: #ffffff;
-    transition: all 0.2s ease;
+    padding: 0.875rem 1rem;
+    border: none;
+    border-bottom: 2px solid #e5e7eb;
+    border-radius: 0.5rem 0.5rem 0 0;
+    font-size: 0.9375rem;
+    font-weight: 400;
+    color: #1f2937;
+    background: linear-gradient(to bottom, #fafafa, #ffffff);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     outline: none;
+    letter-spacing: 0.01em;
+}
+
+.dive-input::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.dive-input:hover {
+    border-bottom-color: #cbd5e1;
+    background: linear-gradient(to bottom, #f5f5f5, #ffffff);
 }
 
 .dive-input:focus {
-    border-color: #667eea;
-    ring: 2px;
-    ring-color: rgba(102, 126, 234, 0.2);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    border-bottom-color: #3b82f6;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08);
 }
 
 .dive-input:disabled {
-    background-color: #f9fafb;
+    background: #f3f4f6;
     cursor: not-allowed;
     opacity: 0.6;
 }
@@ -489,6 +504,91 @@
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+}
+
+/* ============================================
+   Country-Specific Button Themes
+   ============================================ */
+
+/* USA - Navy Blue & Red accent */
+body[data-instance="USA"] .dive-button-primary {
+    background: linear-gradient(135deg, #1e3a5f 0%, #0f2744 100%);
+    box-shadow: 0 10px 15px -3px rgba(30, 58, 95, 0.4);
+}
+body[data-instance="USA"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(30, 58, 95, 0.5);
+}
+
+/* France - Bleu de France */
+body[data-instance="FRA"] .dive-button-primary {
+    background: linear-gradient(135deg, #0055a4 0%, #003d7a 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 85, 164, 0.4);
+}
+body[data-instance="FRA"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 85, 164, 0.5);
+}
+
+/* Germany - German Gold & Black */
+body[data-instance="DEU"] .dive-button-primary {
+    background: linear-gradient(135deg, #1a1a1a 0%, #333333 50%, #ffcc00 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+}
+body[data-instance="DEU"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(255, 204, 0, 0.3);
+}
+
+/* United Kingdom - Royal Blue */
+body[data-instance="GBR"] .dive-button-primary {
+    background: linear-gradient(135deg, #012169 0%, #001540 100%);
+    box-shadow: 0 10px 15px -3px rgba(1, 33, 105, 0.4);
+}
+body[data-instance="GBR"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(1, 33, 105, 0.5);
+}
+
+/* Canada - Red & White */
+body[data-instance="CAN"] .dive-button-primary {
+    background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+    box-shadow: 0 10px 15px -3px rgba(255, 0, 0, 0.3);
+}
+body[data-instance="CAN"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(255, 0, 0, 0.4);
+}
+
+/* Spain - Spanish Red */
+body[data-instance="ESP"] .dive-button-primary {
+    background: linear-gradient(135deg, #aa151b 0%, #8a1014 100%);
+    box-shadow: 0 10px 15px -3px rgba(170, 21, 27, 0.4);
+}
+body[data-instance="ESP"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(170, 21, 27, 0.5);
+}
+
+/* Italy - Italian Green */
+body[data-instance="ITA"] .dive-button-primary {
+    background: linear-gradient(135deg, #009246 0%, #006d34 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 146, 70, 0.4);
+}
+body[data-instance="ITA"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 146, 70, 0.5);
+}
+
+/* Netherlands - Dutch Orange */
+body[data-instance="NLD"] .dive-button-primary {
+    background: linear-gradient(135deg, #ff6600 0%, #cc5200 100%);
+    box-shadow: 0 10px 15px -3px rgba(255, 102, 0, 0.4);
+}
+body[data-instance="NLD"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(255, 102, 0, 0.5);
+}
+
+/* Poland - Polish Red */
+body[data-instance="POL"] .dive-button-primary {
+    background: linear-gradient(135deg, #dc143c 0%, #b01030 100%);
+    box-shadow: 0 10px 15px -3px rgba(220, 20, 60, 0.4);
+}
+body[data-instance="POL"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(220, 20, 60, 0.5);
 }
 
 /* ============================================
@@ -672,6 +772,61 @@
     font-size: 0.8125rem;
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
+}
+
+/* Sublabel for trust nodes (e.g., "Your IdP", "Their Policy") */
+.dive-trust-sublabel {
+    font-size: 0.5rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: -0.1rem;
+}
+
+/* Federation-specific trust chain styling */
+.dive-trust-federation {
+    gap: 0.35rem;
+}
+
+.dive-trust-federation .dive-trust-node {
+    padding: 0.4rem 0.5rem;
+    min-width: 55px;
+}
+
+/* Trust chain explanation text */
+.dive-trust-explanation {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    border-left: 3px solid rgba(59, 130, 246, 0.5);
+}
+
+.dive-trust-flow-text {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+    line-height: 1.5;
+}
+
+.dive-flow-step {
+    display: inline;
+}
+
+.dive-flow-step strong {
+    color: #60a5fa;
+    font-weight: 600;
+}
+
+.dive-flow-divider {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.65rem;
+    margin: 0 0.15rem;
 }
 
 /* --- MICROPROGRESSION: Expandable Details --- */
@@ -1801,17 +1956,17 @@
 }
 
 .dive-compact .dive-form-group {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.875rem;
 }
 
 .dive-compact .dive-label {
-    font-size: 0.8125rem;
+    font-size: 0.625rem;
     margin-bottom: 0.25rem;
 }
 
 .dive-compact .dive-input {
-    padding: 0.625rem 0.875rem;
-    font-size: 0.9375rem;
+    padding: 0.75rem 0.875rem;
+    font-size: 0.875rem;
 }
 
 .dive-compact .dive-button-primary {
@@ -1951,7 +2106,7 @@
 
 /* Adjust main container when banner is present */
 body:has(.dive-federation-banner) .dive-container {
-    padding-top: 4rem;
+    padding-top: 7rem;
 }
 
 
@@ -2660,5 +2815,413 @@ body:has(.dive-federation-banner) .dive-container {
     white-space: pre-wrap;
     font-family: 'SF Mono', Monaco, monospace;
     border: 1px solid #e5e7eb;
+}
+
+/* ============================================
+   FEDERATION HANDOFF BANNER (2025 Modern UX)
+   ============================================ */
+
+.dive-federation-banner-animated {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+    background-size: 200% 100%;
+    animation: shimmer 3s ease infinite;
+    padding: 0.75rem 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+.dive-federation-handoff {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.dive-handoff-source,
+.dive-handoff-destination {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+}
+
+.dive-handoff-source:hover,
+.dive-handoff-destination:hover {
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-2px);
+}
+
+.dive-handoff-flag-container {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.dive-flag-pulse {
+    animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
+    70% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+.dive-flag-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+    from { box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); }
+    to { box-shadow: 0 0 20px rgba(34, 197, 94, 0.6); }
+}
+
+.dive-handoff-flag {
+    font-size: 1.5rem;
+}
+
+.dive-handoff-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.dive-handoff-micro {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+.dive-handoff-country {
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.05em;
+}
+
+/* Flow Arrow Animation */
+.dive-handoff-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+    min-width: 60px;
+}
+
+.dive-handoff-arrow-track {
+    width: 50px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+}
+
+.dive-handoff-arrow-particle {
+    position: absolute;
+    width: 18px;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #60a5fa, #34d399);
+    border-radius: 2px;
+    animation: particle-flow 1.2s ease-in-out infinite;
+}
+
+@keyframes particle-flow {
+    0% { left: -18px; opacity: 0; }
+    15% { opacity: 1; }
+    85% { opacity: 1; }
+    100% { left: 50px; opacity: 0; }
+}
+
+/* Arrow indicator below the animated line */
+.dive-handoff-via {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 400;
+    margin-top: 0.1rem;
+    text-align: center;
+}
+
+/* Legacy class for backwards compatibility */
+.dive-handoff-direction {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 400;
+}
+
+/* Policy Notice Expandable */
+.dive-policy-notice {
+    margin-top: 0.5rem;
+}
+
+.dive-policy-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    margin: 0 auto;
+    cursor: pointer;
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: all 0.3s ease;
+    list-style: none;
+}
+
+.dive-policy-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.dive-policy-trigger:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.dive-policy-icon {
+    width: 14px;
+    height: 14px;
+    color: #22c55e;
+}
+
+.dive-policy-chevron {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.3s ease;
+}
+
+details[open] .dive-policy-chevron {
+    transform: rotate(180deg);
+}
+
+.dive-policy-content {
+    max-width: 500px;
+    margin: 0.75rem auto 0;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dive-policy-main {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+}
+
+.dive-policy-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.dive-policy-list li {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.7);
+    padding-left: 0.25rem;
+}
+
+/* Adjust container when animated banner is present */
+body:has(.dive-federation-banner-animated) .dive-container {
+    padding-top: 9.5rem;
+}
+
+/* Extra padding when cross-border details are expanded */
+body:has(.dive-policy-notice[open]) .dive-container {
+    padding-top: 16rem;
+}
+
+/* ============================================
+   FORGOT PASSWORD - Compact inline
+   ============================================ */
+
+.dive-forgot-password-details {
+    margin-top: 0.5rem;
+    text-align: right;
+}
+
+.dive-forgot-password-details > summary {
+    list-style: none;
+    display: inline;
+    cursor: pointer;
+}
+
+.dive-forgot-password-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.dive-forgot-password-details > summary::marker {
+    display: none;
+    content: none;
+}
+
+.dive-forgot-password-link {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-weight: 400;
+    transition: color 0.15s ease;
+}
+
+.dive-forgot-password-link:hover {
+    color: #6b7280;
+    text-decoration: underline;
+}
+
+.dive-forgot-password-hint {
+    font-size: 0.6875rem;
+    color: #6b7280;
+    margin: 0.25rem 0 0 0;
+    font-style: italic;
+}
+
+/* ============================================
+   Clearance Notice (Replaces Forgot Password)
+   ============================================ */
+
+.dive-clearance-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    background: #f0f9ff !important;
+    border: 1px solid #0ea5e9 !important;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dive-clearance-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    min-width: 1.25rem;
+    flex-shrink: 0;
+    color: #0ea5e9 !important;
+    margin-top: 0.125rem;
+}
+
+.dive-clearance-text {
+    font-size: 0.8125rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.01em;
+    color: #0c4a6e !important;
+    line-height: 1.5;
+}
+
+/* Mobile Adjustments for New Banner */
+@media (max-width: 640px) {
+    .dive-federation-banner-animated {
+        padding: 0.5rem;
+    }
+    
+    .dive-federation-handoff {
+        gap: 0.75rem;
+    }
+    
+    .dive-handoff-source,
+    .dive-handoff-destination {
+        padding: 0.375rem 0.625rem;
+        flex-direction: column;
+        gap: 0.25rem;
+        text-align: center;
+    }
+    
+    .dive-handoff-flag-container {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .dive-handoff-flag {
+        font-size: 1.25rem;
+    }
+    
+    .dive-handoff-country {
+        font-size: 0.875rem;
+    }
+    
+    .dive-handoff-flow {
+        flex-direction: column;
+        gap: 0.125rem;
+    }
+    
+    .dive-handoff-arrow-track {
+        width: 4px;
+        height: 20px;
+    }
+    
+    .dive-handoff-arrow-particle {
+        width: 4px;
+        height: 8px;
+        animation: particle-flow-vertical 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes particle-flow-vertical {
+        0% { top: -8px; opacity: 0; }
+        20% { opacity: 1; }
+        80% { opacity: 1; }
+        100% { top: 20px; opacity: 0; }
+    }
+    
+    .dive-handoff-direction {
+        transform: rotate(90deg);
+        font-size: 1rem;
+    }
+    
+    .dive-policy-trigger {
+        font-size: 0.625rem;
+    }
+    
+    .dive-policy-content {
+        padding: 0.75rem;
+    }
+    
+    .dive-forgot-password-content {
+        padding: 0.75rem;
+    }
+}
+
+@media (max-width: 380px) {
+    .dive-handoff-micro {
+        display: none;
+    }
+    
+    .dive-policy-trigger span {
+        display: none;
+    }
 }
 

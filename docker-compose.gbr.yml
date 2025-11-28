@@ -53,7 +53,7 @@ services:
       KC_FEATURES: scripts
     ports:
       - "8445:8443"
-      - "8083:8080"
+      - "8084:8080"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
@@ -182,20 +182,20 @@ services:
       PORT: 4000
       INSTANCE_REALM: GBR
       # Updated to use full container names (Phase 4 cleanup)
-      MONGODB_URI: mongodb://admin:admin@dive-v3-gbr-mongodb:27017/dive-v3-gbr?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@dive-v3-gbr-mongodb:27017/dive-v3-gbr?authSource=admin
-      REDIS_HOST: dive-v3-gbr-redis
+      MONGODB_URI: mongodb://admin:admin@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      MONGODB_URL: mongodb://admin:admin@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      REDIS_HOST: redis-gbr
       REDIS_PORT: 6379
-      REDIS_URL: redis://dive-v3-gbr-redis:6379
+      REDIS_URL: redis://redis-gbr:6379
       # Shared blacklist Redis (Phase 2 GAP-010)
-      BLACKLIST_REDIS_URL: redis://:DiveBlacklist2025!@dive-v3-blacklist-redis:6379
+      BLACKLIST_REDIS_URL: redis://:DiveBlacklist2025!@blacklist-redis:6379
       JWT_SECRET: gbr-backend-secret-change-in-production
-      OPA_URL: https://dive-v3-gbr-opa:8181
-      KEYCLOAK_URL: https://dive-v3-gbr-keycloak:8443
+      OPA_URL: http://opa-gbr:8181
+      KEYCLOAK_URL: https://keycloak-gbr:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: WeUC1RPtrxEOjvQeZbS2tETKat8RMWwV
+      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
       KAS_URL: http://kas-gbr:8080
@@ -251,7 +251,7 @@ services:
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3002,https://localhost:4002,https://localhost:8445,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: WeUC1RPtrxEOjvQeZbS2tETKat8RMWwV
+      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-gbr:8443
       KEYCLOAK_ISSUER: https://gbr-idp.dive25.com/realms/dive-v3-broker
@@ -260,6 +260,7 @@ services:
       NEXTAUTH_SECRET: 41EV5gv1LPQhyioNENysWEbVB+rj5coVsP2kwszQNbE=
       AUTH_SECRET: gbr-auth-secret-change-in-production
       AUTH_TRUST_HOST: "true"
+      DATABASE_URL: postgresql://keycloak:keycloak@postgres-gbr:5432/dive_v3_app
     ports:
       - "3002:3000"
     volumes:

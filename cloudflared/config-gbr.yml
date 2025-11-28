@@ -1,0 +1,42 @@
+# Cloudflare Tunnel Configuration for DIVE V3 - GBR Instance (United Kingdom)
+# This runs inside a Docker container and connects to GBR services via Docker network
+
+tunnel: 375d2bed-2002-4604-9fa6-22ca251ac957
+credentials-file: /etc/cloudflared/tunnel-credentials.json
+
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
+protocol: http2
+
+# Metrics for monitoring
+metrics: 0.0.0.0:9127
+
+ingress:
+  # GBR Frontend (Next.js) - CRITICAL: Use Docker service name with -gbr suffix
+  - hostname: gbr-app.dive25.com
+    service: https://frontend-gbr:3000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+  
+  # GBR Backend API - CRITICAL: Use Docker service name with -gbr suffix
+  - hostname: gbr-api.dive25.com
+    service: https://backend-gbr:4000
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+  
+  # GBR Keycloak IdP - CRITICAL: Use Docker service name with -gbr suffix
+  - hostname: gbr-idp.dive25.com
+    service: https://keycloak-gbr:8443
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+  
+  # GBR KAS - CRITICAL: Use Docker service name with -gbr suffix
+  - hostname: gbr-kas.dive25.com
+    service: http://kas-gbr:8080
+    originRequest:
+      connectTimeout: 60s
+  
+  # Catch-all rule (required)
+  - service: http_status:404

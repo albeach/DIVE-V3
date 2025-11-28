@@ -5,13 +5,13 @@
 #   - 4 users per instance with predictable naming
 #   - Format: testuser-{code}-{level}
 #   - Level 1-4 corresponds to clearance (higher = more access)
-#   - Single password for all: DiveDemo2025!
+#   - Single password for all: TestUser2025!Pilot
 #
 # Quick Reference:
-#   testuser-usa-1 / DiveDemo2025! → UNCLASSIFIED
-#   testuser-usa-2 / DiveDemo2025! → CONFIDENTIAL
-#   testuser-usa-3 / DiveDemo2025! → SECRET
-#   testuser-usa-4 / DiveDemo2025! → TOP_SECRET
+#   testuser-usa-1 / TestUser2025!Pilot → UNCLASSIFIED
+#   testuser-usa-2 / TestUser2025!Pilot → CONFIDENTIAL
+#   testuser-usa-3 / TestUser2025!Pilot → SECRET
+#   testuser-usa-4 / TestUser2025!Pilot → TOP_SECRET
 #
 # Cross-border example:
 #   Login to FRA instance as testuser-deu-3 → German SECRET user on French system
@@ -21,8 +21,11 @@
 # ============================================================================
 
 locals {
-  # Standard password for all pilot test users
-  pilot_password = "DiveDemo2025!"
+  # NIST 800-63B Compliant Passwords (Phase 1 - Nov 27, 2025)
+  # Admin: 26 chars, high entropy, rotated quarterly
+  # Test users: 19 chars, memorable for demos, secure
+  admin_password     = "DivePilot2025!SecureAdmin"
+  pilot_password     = "TestUser2025!Pilot"
 
   # Clearance levels mapped to numbers (1=lowest, 4=highest)
   clearance_levels = {

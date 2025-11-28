@@ -69,23 +69,12 @@
                     </#if>
                 </div>
 
-                <div class="dive-form-options">
-                    <#if realm.rememberMe && !usernameHidden??>
-                        <div class="dive-checkbox">
-                            <#if login.rememberMe??>
-                                <input tabindex="3" id="rememberMe" name="rememberMe" type="checkbox" checked> 
-                            <#else>
-                                <input tabindex="3" id="rememberMe" name="rememberMe" type="checkbox"> 
-                            </#if>
-                            <label for="rememberMe">${msg("rememberMe")}</label>
-                        </div>
-                    </#if>
-                    
-                    <#if realm.resetPasswordAllowed>
-                        <div class="dive-forgot-password">
-                            <a tabindex="5" href="${url.loginResetCredentialsUrl}">${msg("doForgotPassword")}</a>
-                        </div>
-                    </#if>
+                <!-- Clearance Notice -->
+                <div class="dive-clearance-notice" style="display: flex; align-items: flex-start; gap: 0.75rem; margin-top: 1rem; padding: 0.875rem 1rem; background: #f0f9ff; border: 1px solid #0ea5e9; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    <svg class="dive-clearance-icon" style="width: 1.25rem; height: 1.25rem; min-width: 1.25rem; flex-shrink: 0; color: #0ea5e9; margin-top: 0.125rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span class="dive-clearance-text" style="font-size: 0.8125rem; font-weight: 500; letter-spacing: 0.01em; color: #0c4a6e; line-height: 1.5;">Access level based on clearance assigned by your Identity Provider (IdP)</span>
                 </div>
 
                 <div id="kc-form-buttons" class="dive-form-buttons">
@@ -99,6 +88,32 @@
                     >
                         ${msg("doLogIn")}
                     </button>
+                </div>
+                
+                <!-- Back to Instance Link -->
+                <#assign instanceCode = "USA">
+                <#assign instanceFlag = "🇺🇸">
+                <#assign appDomain = "usa-app.dive25.com">
+                <#if realm?? && realm.displayName?has_content>
+                    <#if realm.displayName?lower_case?contains("france")>
+                        <#assign instanceCode = "FRA"><#assign instanceFlag = "🇫🇷"><#assign appDomain = "fra-app.dive25.com">
+                    <#elseif realm.displayName?lower_case?contains("germany") || realm.displayName?lower_case?contains("deutschland")>
+                        <#assign instanceCode = "DEU"><#assign instanceFlag = "🇩🇪"><#assign appDomain = "deu-app.prosecurity.biz">
+                    <#elseif realm.displayName?lower_case?contains("united kingdom") || realm.displayName?lower_case?contains("britain")>
+                        <#assign instanceCode = "GBR"><#assign instanceFlag = "🇬🇧"><#assign appDomain = "gbr-app.dive25.com">
+                    <#elseif realm.displayName?lower_case?contains("canada")>
+                        <#assign instanceCode = "CAN"><#assign instanceFlag = "🇨🇦"><#assign appDomain = "can-app.dive25.com">
+                    <#elseif realm.displayName?lower_case?contains("usa") || realm.displayName?lower_case?contains("united states")>
+                        <#assign instanceCode = "USA"><#assign instanceFlag = "🇺🇸"><#assign appDomain = "usa-app.dive25.com">
+                    </#if>
+                </#if>
+                <div class="dive-back-link" style="text-align: center; margin-top: 1.25rem;">
+                    <a href="https://${appDomain}" style="display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; color: #6b7280; text-decoration: none; transition: color 0.2s ease;">
+                        <svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        <span>Return to ${instanceFlag} ${instanceCode} Portal</span>
+                    </a>
                 </div>
             </form>
         </#if>

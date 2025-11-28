@@ -60,7 +60,7 @@ services:
     networks:
       - dive-fra-network
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/master HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 'HTTP/1.1 200'"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -86,27 +86,15 @@ services:
       retries: 5
 
   # Redis FRA Instance
-  # Redis FRA Instance (Phase 2 GAP-005: Security Hardening)
   redis-fra:
     image: redis:alpine
     container_name: dive-v3-redis-fra
-    restart: unless-stopped
-    command: >
-      redis-server
-      --requirepass DiveRedis2025!
-      --appendonly yes
-      --appendfsync everysec
-      --save 300 10
-      --maxmemory 128mb
-      --maxmemory-policy allkeys-lru
     ports:
       - "6380:6379"
-    volumes:
-      - redis_fra_data:/data
     networks:
       - dive-fra-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "DiveRedis2025!", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -116,7 +104,6 @@ services:
     image: openpolicyagent/opa:latest
     platform: linux/amd64
     container_name: dive-v3-opa-fra
-    restart: unless-stopped
     command:
       - "run"
       - "--server"
@@ -130,7 +117,7 @@ services:
     networks:
       - dive-fra-network
     healthcheck:
-      test: ["CMD", "/opa", "version"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -175,21 +162,18 @@ services:
       NODE_ENV: development
       PORT: 4000
       INSTANCE_REALM: FRA
-      # Updated to use full container names (Phase 4 cleanup)
-      MONGODB_URI: mongodb://admin:admin@dive-v3-fra-mongodb:27017/dive-v3-fra?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@dive-v3-fra-mongodb:27017/dive-v3-fra?authSource=admin
-      REDIS_HOST: dive-v3-fra-redis
+      MONGODB_URI: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
+      MONGODB_URL: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
+      REDIS_HOST: redis-fra
       REDIS_PORT: 6379
-      REDIS_URL: redis://dive-v3-fra-redis:6379
-      # Shared blacklist Redis (Phase 2 GAP-010)
-      BLACKLIST_REDIS_URL: redis://:DiveBlacklist2025!@dive-v3-blacklist-redis:6379
+      REDIS_URL: redis://redis-fra:6379
       JWT_SECRET: fra-backend-secret-change-in-production
-      OPA_URL: https://dive-v3-fra-opa:8181
-      KEYCLOAK_URL: https://dive-v3-fra-keycloak:8443
+      OPA_URL: http://opa-fra:8181
+      KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB
+      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
       KAS_URL: http://kas-fra:8080
@@ -214,10 +198,8 @@ services:
         condition: service_healthy
     networks:
       - dive-fra-network
-      - dive-shared-network  # Phase 2 GAP-010: Access to shared blacklist Redis
-      - dive-fra-internal    # Phase 4: Connect to FRA instance services
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -242,12 +224,15 @@ services:
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3001,https://localhost:4001,https://localhost:8444,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB
+      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-fra:8443
+      KEYCLOAK_ISSUER: https://fra-idp.dive25.com/realms/dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://fra-app.dive25.com
-      NEXTAUTH_SECRET: wnbQ2DszSAxEAIXjufcejpMeD9E1Cz2yJbiPO3iqmAk=
+      NEXTAUTH_SECRET: fra-frontend-secret-change-in-production
+      AUTH_TRUST_HOST: "true"
+      DATABASE_URL: postgresql://keycloak:keycloak@postgres-fra:5432/dive_v3_app
     ports:
       - "3001:3000"
     volumes:
@@ -263,7 +248,7 @@ services:
     networks:
       - dive-fra-network
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate --spider -q https://localhost:3000 || exit 1"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -296,8 +281,6 @@ services:
 volumes:
   postgres_fra_data:
   mongodb_fra_data:
-  # Phase 2 GAP-005: Redis persistence
-  redis_fra_data:
   # CRITICAL: Instance-specific frontend volumes for build isolation
   frontend_fra_node_modules:
   frontend_fra_next:
@@ -305,11 +288,3 @@ volumes:
 networks:
   dive-fra-network:
     driver: bridge
-  # Shared network for cross-instance blacklist Redis (Phase 2 GAP-010)
-  dive-shared-network:
-    external: true
-    name: dive-v3-shared-network
-  # FRA instance internal network (Phase 4: services run in separate stack)
-  dive-fra-internal:
-    external: true
-    name: dive-v3-fra_internal

@@ -38,9 +38,9 @@ ingress:
     originRequest:
       connectTimeout: 30s
   
-  # Status Page - Public status dashboard
-  - hostname: status.dive25.com
-    service: http://dive-v3-status-page:80
+  # Landing Page - Main portal at dive25.com
+  - hostname: dive25.com
+    service: http://host.docker.internal:8889
     originRequest:
       connectTimeout: 10s
   
