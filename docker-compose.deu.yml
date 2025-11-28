@@ -38,7 +38,7 @@ services:
       KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
-      KC_HOSTNAME: deu-idp.dive25.com
+      KC_HOSTNAME: deu-idp.prosecurity.biz
       KC_HOSTNAME_STRICT: false
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: true
@@ -59,7 +59,9 @@ services:
       postgres-deu:
         condition: service_healthy
     networks:
-      - dive-deu-network
+      dive-deu-network:
+        aliases:
+          - keycloak
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -79,7 +81,10 @@ services:
     volumes:
       - mongodb_deu_data:/data/db
     networks:
-      - dive-deu-network
+      dive-deu-network:
+        aliases:
+          - mongo
+          - mongodb
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
@@ -93,7 +98,9 @@ services:
     ports:
       - "6381:6379"
     networks:
-      - dive-deu-network
+      dive-deu-network:
+        aliases:
+          - redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -116,7 +123,9 @@ services:
     volumes:
       - ./policies:/policies:ro
     networks:
-      - dive-deu-network
+      dive-deu-network:
+        aliases:
+          - opa
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
       interval: 10s
@@ -164,23 +173,24 @@ services:
       NODE_ENV: development
       PORT: 4000
       INSTANCE_REALM: DEU
-      MONGODB_URI: mongodb://admin:admin@mongodb-deu:27017/dive-v3-deu?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@mongodb-deu:27017/dive-v3-deu?authSource=admin
-      REDIS_HOST: redis-deu
+      MONGODB_URI: mongodb://admin:admin@mongo:27017/dive-v3-deu?authSource=admin
+      MONGODB_URL: mongodb://admin:admin@mongo:27017/dive-v3-deu?authSource=admin
+      REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_URL: redis://redis-deu:6379
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: deu-backend-secret-change-in-production
-      OPA_URL: http://opa-deu:8181
-      KEYCLOAK_URL: https://keycloak-deu:8443
+      OPA_URL: http://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: LjO1LIj6LUhEMgJtWhGDqeYER6mpCfhB
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
       KAS_URL: http://kas-deu:8080
-      FEDERATION_ALLOWED_ORIGINS: https://deu-app.dive25.com,https://localhost:3002,http://localhost:3002
-      NEXT_PUBLIC_BASE_URL: https://deu-app.dive25.com
+      CORS_ORIGIN: https://deu-app.prosecurity.biz,https://deu-api.prosecurity.biz,https://localhost:3002
+      FEDERATION_ALLOWED_ORIGINS: https://deu-app.prosecurity.biz,https://localhost:3002
+      NEXT_PUBLIC_BASE_URL: https://deu-app.prosecurity.biz
     ports:
       - "4002:4000"
     volumes:
@@ -199,7 +209,10 @@ services:
       kas-deu:
         condition: service_healthy
     networks:
-      - dive-deu-network
+      dive-deu-network:
+        aliases:
+          - backend
+          - backend-deu
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
       interval: 30s
@@ -216,21 +229,23 @@ services:
       NODE_ENV: development
       PORT: 3000
       # CRITICAL: DEU-specific URLs - DO NOT cross-contaminate
-      NEXT_PUBLIC_API_URL: https://deu-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://deu-api.dive25.com
-      NEXT_PUBLIC_KEYCLOAK_URL: https://deu-idp.dive25.com
+      NEXT_PUBLIC_API_URL: https://deu-api.prosecurity.biz
+      NEXT_PUBLIC_BACKEND_URL: https://deu-api.prosecurity.biz
+      NEXT_PUBLIC_KEYCLOAK_URL: https://deu-idp.prosecurity.biz
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       NEXT_PUBLIC_APP_NAME: "DIVE V3 - Germany"
       NEXT_PUBLIC_INSTANCE: DEU
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3002,https://localhost:4002,https://localhost:8445,https://deu-app.dive25.com,https://deu-api.dive25.com,https://deu-idp.dive25.com"
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3002,https://localhost:4002,https://localhost:8445,https://deu-app.prosecurity.biz,https://deu-api.prosecurity.biz,https://deu-idp.prosecurity.biz"
+      NEXT_PUBLIC_IDP_DOMAINS: "https://usa-idp.dive25.com,https://fra-idp.dive25.com,https://gbr-idp.dive25.com"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       KEYCLOAK_CLIENT_SECRET: LjO1LIj6LUhEMgJtWhGDqeYER6mpCfhB
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-deu:8443
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      NEXTAUTH_URL: https://deu-app.dive25.com
+      NEXTAUTH_URL: https://deu-app.prosecurity.biz
+      KEYCLOAK_ISSUER: https://deu-idp.prosecurity.biz/realms/dive-v3-broker
       NEXTAUTH_SECRET: deu-frontend-secret-change-in-production
       DATABASE_URL: postgresql://keycloak:keycloak@postgres-deu:5432/dive_v3_deu
     ports:
