@@ -1,0 +1,424 @@
+#!/bin/bash
+#
+# DIVE V3 Infrastructure Phase 1: IaC-Based Remediation
+# 
+# This script aligns Docker Compose configurations with Terraform IaC
+# and fixes credential mismatches causing GAP-001.
+#
+# Root Cause: FRA/DEU docker-compose files use hardcoded "admin" password
+#             but Terraform configured Keycloak with "DivePilot2025!"
+#
+# Usage: ./scripts/infrastructure/phase1-iac-remediation.sh [--apply]
+#
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+APPLY_MODE=false
+[[ "${1:-}" == "--apply" ]] && APPLY_MODE=true
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_section() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}\n"; }
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
+echo ""
+echo "================================================================"
+echo "  DIVE V3 Phase 1: IaC-Based Infrastructure Remediation"
+echo "================================================================"
+echo ""
+echo "  This script will:"
+echo "  • GAP-001: Fix backend Keycloak Admin authentication"
+echo "  • GAP-002: Update cloudflared configurations"
+echo "  • GAP-008: Update status page health checks"
+echo "  • GAP-011: Add restart policies to all services"
+echo ""
+
+if ! $APPLY_MODE; then
+    log_warn "Running in DRY RUN mode. Use --apply to make changes."
+fi
+
+# ============================================================================
+# STEP 1: Read credentials from Terraform tfvars (source of truth)
+# ============================================================================
+
+log_section "Step 1: Reading credentials from Terraform IaC"
+
+# Read admin password from Terraform tfvars (source of truth)
+get_terraform_password() {
+    local instance=$1
+    local tfvars_file="terraform/instances/${instance}.tfvars"
+    
+    if [ -f "$tfvars_file" ]; then
+        grep 'keycloak_admin_password' "$tfvars_file" | cut -d'"' -f2
+    else
+        echo ""
+    fi
+}
+
+USA_PASSWORD=$(get_terraform_password "usa")
+FRA_PASSWORD=$(get_terraform_password "fra")
+DEU_PASSWORD=$(get_terraform_password "deu")
+
+log_info "Terraform credentials (source of truth):"
+echo "  USA: ${USA_PASSWORD:+[SET]} ${USA_PASSWORD:-[NOT FOUND]}"
+echo "  FRA: ${FRA_PASSWORD:+[SET]} ${FRA_PASSWORD:-[NOT FOUND]}"
+echo "  DEU: ${DEU_PASSWORD:+[SET]} ${DEU_PASSWORD:-[NOT FOUND]}"
+
+# ============================================================================
+# STEP 2: GAP-001 Fix - Align docker-compose with Terraform credentials
+# ============================================================================
+
+log_section "Step 2: GAP-001 Fix - Aligning credentials"
+
+fix_docker_compose_credentials() {
+    local compose_file=$1
+    local instance=$2
+    local password=$3
+    
+    if [ ! -f "$compose_file" ]; then
+        log_warn "File not found: $compose_file"
+        return
+    fi
+    
+    # Check current password
+    local current_password
+    current_password=$(grep 'KEYCLOAK_ADMIN_PASSWORD:' "$compose_file" | head -1 | sed 's/.*: *//' | tr -d '"' | tr -d "'" || echo "")
+    
+    log_info "[$instance] Current: $current_password → Target: $password"
+    
+    if [ "$current_password" = "$password" ]; then
+        log_success "[$instance] Credentials already aligned"
+        return
+    fi
+    
+    if $APPLY_MODE; then
+        # Backup
+        cp "$compose_file" "${compose_file}.backup-$(date +%Y%m%d%H%M%S)"
+        
+        # Replace password (handle both quoted and unquoted)
+        sed -i.tmp "s/KEYCLOAK_ADMIN_PASSWORD: admin/KEYCLOAK_ADMIN_PASSWORD: $password/g" "$compose_file"
+        sed -i.tmp "s/KEYCLOAK_ADMIN_PASSWORD: \"admin\"/KEYCLOAK_ADMIN_PASSWORD: \"$password\"/g" "$compose_file"
+        rm -f "${compose_file}.tmp"
+        
+        log_success "[$instance] Updated credentials in $compose_file"
+    else
+        log_warn "[$instance] Would update $compose_file (dry run)"
+    fi
+}
+
+# Fix FRA docker-compose
+if [ -n "$FRA_PASSWORD" ]; then
+    fix_docker_compose_credentials "docker-compose.fra.yml" "FRA" "$FRA_PASSWORD"
+    fix_docker_compose_credentials "instances/fra/docker-compose.yml" "FRA" "$FRA_PASSWORD"
+fi
+
+# Fix DEU docker-compose
+if [ -n "$DEU_PASSWORD" ]; then
+    fix_docker_compose_credentials "docker-compose.deu.yml" "DEU" "$DEU_PASSWORD"
+    fix_docker_compose_credentials "instances/deu/docker-compose.yml" "DEU" "$DEU_PASSWORD"
+fi
+
+# ============================================================================
+# STEP 3: GAP-008 Fix - Update status page with correct URLs
+# ============================================================================
+
+log_section "Step 3: GAP-008 Fix - Updating status page health checks"
+
+if $APPLY_MODE; then
+    cat > status-page/health-check.sh << 'HEALTH_EOF'
+#!/bin/bash
+# DIVE V3 Status Page Health Check
+# Auto-generated by phase1-iac-remediation.sh
+# Reads instance configuration from federation-registry.json
+
+TIMEOUT=15
+
+check_url() {
+    local url="$1"
+    local start=$(date +%s%N)
+    local code=$(curl -sk -o /dev/null -w "%{http_code}" "$url" --max-time "$TIMEOUT" 2>/dev/null) || code="000"
+    local end=$(date +%s%N)
+    local ms=$(( (end - start) / 1000000 ))
+    local status="DOWN"
+    [[ "$code" =~ ^(200|301|302|303|307|308)$ ]] && status="UP"
+    echo "$code|$ms|$status"
+}
+
+# Instance definitions - aligned with federation-registry.json
+# Format: code|name|app_url|idp_url|api_url
+INSTANCES=(
+    "usa|United States|https://usa-app.dive25.com|https://usa-idp.dive25.com|https://usa-api.dive25.com"
+    "fra|France|https://fra-app.dive25.com|https://fra-idp.dive25.com|https://fra-api.dive25.com"
+    "deu|Germany|https://deu-app.dive25.com|https://deu-idp.dive25.com|https://deu-api.dive25.com"
+)
+
+echo -n '{"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","instances":['
+
+first=true
+for inst in "${INSTANCES[@]}"; do
+    IFS='|' read -r code name app_url idp_url api_url <<< "$inst"
+    
+    # Check each service
+    IFS='|' read -r app_code app_ms app_status <<< "$(check_url "$app_url")"
+    IFS='|' read -r idp_code idp_ms idp_status <<< "$(check_url "${idp_url}/realms/dive-v3-broker")"
+    IFS='|' read -r api_code api_ms api_status <<< "$(check_url "${api_url}/health")"
+    
+    # Also check IdP public endpoint (GAP-001 indicator)
+    IFS='|' read -r idp_api_code idp_api_ms idp_api_status <<< "$(check_url "${api_url}/api/idps/public")"
+    
+    # Determine overall status
+    overall="HEALTHY"
+    [[ "$app_status" == "DOWN" || "$idp_status" == "DOWN" || "$api_status" == "DOWN" ]] && overall="DEGRADED"
+    [[ "$app_status" == "DOWN" && "$idp_status" == "DOWN" && "$api_status" == "DOWN" ]] && overall="DOWN"
+    
+    # IdP API failure indicates GAP-001
+    if [[ "$idp_api_status" == "DOWN" && "$api_status" == "UP" ]]; then
+        overall="DEGRADED"
+    fi
+    
+    $first || echo -n ','
+    first=false
+    
+    cat << EOF
+{"instance":"$code","name":"$name","status":"$overall","services":{"frontend":{"url":"$app_url","status":"$app_status","http_code":$app_code,"latency_ms":$app_ms},"keycloak":{"url":"$idp_url","status":"$idp_status","http_code":$idp_code,"latency_ms":$idp_ms},"backend":{"url":"$api_url","status":"$api_status","http_code":$api_code,"latency_ms":$api_ms},"idp_api":{"url":"${api_url}/api/idps/public","status":"$idp_api_status","http_code":$idp_api_code,"latency_ms":$idp_api_ms}}}
+EOF
+done
+
+echo ']}'
+HEALTH_EOF
+
+    chmod +x status-page/health-check.sh
+    log_success "Updated status-page/health-check.sh with corrected URLs"
+else
+    log_warn "Would update status-page/health-check.sh (dry run)"
+fi
+
+# ============================================================================
+# STEP 4: GAP-011 Fix - Add restart policies
+# ============================================================================
+
+log_section "Step 4: GAP-011 Fix - Adding restart policies"
+
+add_restart_policy() {
+    local compose_file=$1
+    local instance=$2
+    
+    if [ ! -f "$compose_file" ]; then
+        log_warn "File not found: $compose_file"
+        return
+    fi
+    
+    # Count services with restart policy
+    local with_restart=$(grep -c "restart:" "$compose_file" 2>/dev/null || echo 0)
+    local total_services=$(grep -E "^  [a-z][a-z0-9-]*(-[a-z]+)?:" "$compose_file" | wc -l | tr -d ' ')
+    
+    if [ "$with_restart" -ge "$total_services" ]; then
+        log_success "[$instance] All services have restart policies"
+        return
+    fi
+    
+    log_info "[$instance] Services with restart policy: $with_restart/$total_services"
+    
+    if $APPLY_MODE; then
+        # Backup
+        cp "$compose_file" "${compose_file}.backup-$(date +%Y%m%d%H%M%S)"
+        
+        # Add restart: unless-stopped after each image: line that doesn't have restart
+        # This is a safe addition that won't break anything
+        python3 << PYTHON_EOF
+import re
+import sys
+
+with open('$compose_file', 'r') as f:
+    content = f.read()
+
+# Find services without restart policy and add it
+lines = content.split('\n')
+result = []
+in_service = False
+service_indent = 0
+has_restart = False
+
+for i, line in enumerate(lines):
+    result.append(line)
+    
+    # Detect service start
+    if re.match(r'^  [a-z][a-z0-9_-]*(-[a-z]+)?:', line):
+        in_service = True
+        service_indent = 2
+        has_restart = False
+    
+    # Check if we see restart in current service
+    if in_service and 'restart:' in line:
+        has_restart = True
+    
+    # Add restart after image: if not present
+    if in_service and 'image:' in line and not has_restart:
+        indent = len(line) - len(line.lstrip())
+        result.append(' ' * indent + 'restart: unless-stopped')
+
+with open('$compose_file', 'w') as f:
+    f.write('\n'.join(result))
+
+print('Added restart policies')
+PYTHON_EOF
+        
+        log_success "[$instance] Added restart policies to $compose_file"
+    else
+        log_warn "[$instance] Would add restart policies (dry run)"
+    fi
+}
+
+add_restart_policy "docker-compose.fra.yml" "FRA"
+add_restart_policy "docker-compose.deu.yml" "DEU"
+
+# ============================================================================
+# STEP 5: GAP-002 Fix - Update cloudflared configurations
+# ============================================================================
+
+log_section "Step 5: GAP-002 Fix - Updating cloudflared configurations"
+
+update_cloudflared_config() {
+    local config_file=$1
+    local instance=$2
+    
+    if [ ! -f "$config_file" ]; then
+        log_warn "[$instance] Config file not found: $config_file"
+        return
+    fi
+    
+    # Check current timeout
+    local current_timeout=$(grep "connectTimeout:" "$config_file" | head -1 | grep -oE '[0-9]+' || echo "30")
+    
+    if [ "$current_timeout" -ge 60 ]; then
+        log_success "[$instance] Cloudflared timeout already adequate (${current_timeout}s)"
+        return
+    fi
+    
+    log_info "[$instance] Current timeout: ${current_timeout}s → Updating to 60s"
+    
+    if $APPLY_MODE; then
+        cp "$config_file" "${config_file}.backup-$(date +%Y%m%d%H%M%S)"
+        
+        # Update connect timeout from 30s to 60s
+        sed -i.tmp 's/connectTimeout: 30s/connectTimeout: 60s/g' "$config_file"
+        rm -f "${config_file}.tmp"
+        
+        log_success "[$instance] Updated cloudflared timeout to 60s"
+    else
+        log_warn "[$instance] Would update cloudflared timeout (dry run)"
+    fi
+}
+
+update_cloudflared_config "cloudflared/config.yml" "USA"
+update_cloudflared_config "cloudflared/config-fra.yml" "FRA"
+update_cloudflared_config "cloudflared/config-deu.yml" "DEU"
+
+# ============================================================================
+# STEP 6: Restart affected services
+# ============================================================================
+
+log_section "Step 6: Restarting affected services"
+
+if $APPLY_MODE; then
+    log_info "Restarting FRA backend to apply credential changes..."
+    docker restart dive-v3-backend-fra 2>/dev/null && log_success "FRA backend restarted" || log_warn "FRA backend not running"
+    
+    log_info "Restarting DEU backend to apply credential changes..."
+    docker restart dive-v3-backend-deu 2>/dev/null && log_success "DEU backend restarted" || log_warn "DEU backend not running"
+    
+    log_info "Restarting cloudflared tunnels..."
+    docker restart dive-v3-tunnel 2>/dev/null && log_success "USA tunnel restarted" || log_warn "USA tunnel not running"
+    docker restart dive-v3-tunnel-fra dive-v3-cloudflared-fra 2>/dev/null && log_success "FRA tunnel restarted" || log_warn "FRA tunnel not running"
+    docker restart dive-v3-tunnel-deu dive-v3-cloudflared-deu 2>/dev/null && log_success "DEU tunnel restarted" || log_warn "DEU tunnel not running"
+    
+    log_info "Waiting 10s for services to stabilize..."
+    sleep 10
+else
+    log_warn "Would restart backend and tunnel services (dry run)"
+fi
+
+# ============================================================================
+# STEP 7: Verification
+# ============================================================================
+
+log_section "Step 7: Verification"
+
+verify_idp_endpoint() {
+    local instance=$1
+    local url=$2
+    
+    log_info "Testing $instance IdP endpoint..."
+    
+    local response
+    response=$(curl -sk --max-time 10 "$url" 2>&1 || echo '{"success":false}')
+    
+    if echo "$response" | grep -q '"success":true'; then
+        local count=$(echo "$response" | grep -o '"total":[0-9]*' | cut -d: -f2 || echo "0")
+        log_success "$instance: IdP endpoint working ($count IdPs found)"
+        return 0
+    elif echo "$response" | grep -q 'invalid_grant\|authentication failed'; then
+        log_error "$instance: Keycloak Admin authentication still failing"
+        return 1
+    else
+        log_warn "$instance: IdP endpoint returned unexpected response"
+        return 1
+    fi
+}
+
+if $APPLY_MODE; then
+    verify_idp_endpoint "USA" "https://usa-api.dive25.com/api/idps/public"
+    verify_idp_endpoint "FRA" "https://fra-api.dive25.com/api/idps/public"
+    verify_idp_endpoint "DEU" "https://deu-api.dive25.com/api/idps/public"
+fi
+
+# ============================================================================
+# SUMMARY
+# ============================================================================
+
+echo ""
+echo "================================================================"
+echo "  Phase 1 IaC Remediation Summary"
+echo "================================================================"
+echo ""
+
+if $APPLY_MODE; then
+    echo "  Changes Applied:"
+    echo "  ✅ GAP-001: Updated FRA/DEU docker-compose credentials"
+    echo "  ✅ GAP-002: Increased cloudflared timeout to 60s"
+    echo "  ✅ GAP-008: Updated status page health checks"
+    echo "  ✅ GAP-011: Added restart policies to services"
+    echo ""
+    echo "  Services Restarted:"
+    echo "  • dive-v3-backend-fra"
+    echo "  • dive-v3-backend-deu"
+    echo "  • cloudflared tunnels"
+    echo ""
+    echo "  Verification:"
+    echo "  Run: ./scripts/infrastructure/validate-phase1.sh"
+    echo ""
+    echo "  If FRA/DEU still fail, the Keycloak admin password may need reset:"
+    echo "    docker exec dive-v3-keycloak-fra /opt/keycloak/bin/kcadm.sh \\"
+    echo "      config credentials --server http://localhost:8080 --realm master \\"
+    echo "      --user admin --password DivePilot2025!"
+else
+    echo "  DRY RUN - No changes made"
+    echo ""
+    echo "  Run with --apply to make changes:"
+    echo "    ./scripts/infrastructure/phase1-iac-remediation.sh --apply"
+fi
+
+echo ""
+

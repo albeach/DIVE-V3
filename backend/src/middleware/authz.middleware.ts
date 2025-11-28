@@ -8,6 +8,7 @@ import { getResourceById } from '../services/resource.service';
 import { isTokenBlacklisted, areUserTokensRevoked } from '../services/token-blacklist.service';
 import { validateSPToken } from './sp-auth.middleware';
 import { IRequestWithSP } from '../types/sp-federation.types';
+import { opaCircuitBreaker, keycloakCircuitBreaker } from '../utils/circuit-breaker';
 
 // ============================================
 // PEP (Policy Enforcement Point) Middleware
@@ -246,13 +247,16 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     }
 
     // Try to fetch JWKS from each URL until one succeeds
+    // Circuit breaker protects against Keycloak failures
     let lastError: Error | null = null;
     for (const jwksUri of jwksUris) {
         try {
             logger.debug('Attempting to fetch JWKS', { jwksUri, kid: header.kid });
 
-            // Fetch JWKS directly from Keycloak
-            const response = await axios.get(jwksUri);
+            // Fetch JWKS directly from Keycloak with circuit breaker protection
+            const response = await keycloakCircuitBreaker.execute(async () => {
+                return await axios.get(jwksUri, { timeout: 5000 });
+            });
             const jwks = response.data;
 
             // Find the key with matching kid and use="sig"
@@ -669,6 +673,7 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
 
 /**
  * Call OPA for authorization decision
+ * Circuit breaker protects against OPA failures (fail-fast pattern)
  */
 const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
     try {
@@ -676,13 +681,17 @@ const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
             endpoint: OPA_DECISION_ENDPOINT,
             subject: input.input.subject.uniqueID,
             resource: input.input.resource.resourceId,
+            circuitState: opaCircuitBreaker.getState(),
         });
 
-        const response = await axios.post<IOPAResponse>(OPA_DECISION_ENDPOINT, input, {
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            timeout: 5000, // 5 second timeout
+        // Circuit breaker wraps OPA call - fails fast if OPA is down
+        const response = await opaCircuitBreaker.execute(async () => {
+            return await axios.post<IOPAResponse>(OPA_DECISION_ENDPOINT, input, {
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                timeout: 5000, // 5 second timeout
+            });
         });
 
         logger.debug('OPA response received', {
@@ -710,11 +719,27 @@ const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
             },
         };
     } catch (error) {
+        // Check if circuit breaker is open (fail-fast)
+        const isCircuitOpen = (error as any)?.circuitBreakerOpen === true;
+        const retryAfter = (error as any)?.retryAfter;
+
         logger.error('OPA call failed', {
             error: error instanceof Error ? error.message : 'Unknown error',
             endpoint: OPA_DECISION_ENDPOINT,
+            circuitOpen: isCircuitOpen,
+            retryAfter: retryAfter,
+            circuitState: opaCircuitBreaker.getState(),
         });
-        throw new Error('Authorization service unavailable');
+
+        // Create error with circuit breaker info for upstream handling
+        const serviceError = new Error(
+            isCircuitOpen 
+                ? `Authorization service circuit breaker OPEN - retry in ${Math.ceil(retryAfter / 1000)}s`
+                : 'Authorization service unavailable'
+        );
+        (serviceError as any).circuitBreakerOpen = isCircuitOpen;
+        (serviceError as any).retryAfter = retryAfter;
+        throw serviceError;
     }
 };
 
@@ -1608,17 +1633,31 @@ export const authzMiddleware = async (
         try {
             opaDecision = await callOPA(opaInput);
         } catch (error) {
+            const isCircuitOpen = (error as any)?.circuitBreakerOpen === true;
+            const retryAfter = (error as any)?.retryAfter;
+
             logger.error('Failed to get authorization decision', {
                 requestId,
                 error: error instanceof Error ? error.message : 'Unknown error',
+                circuitOpen: isCircuitOpen,
+                retryAfter,
             });
+
+            // Set Retry-After header for circuit breaker failures
+            if (retryAfter && retryAfter > 0) {
+                res.setHeader('Retry-After', Math.ceil(retryAfter / 1000));
+            }
 
             res.status(503).json({
                 error: 'Service Unavailable',
-                message: 'Authorization service temporarily unavailable',
+                message: isCircuitOpen 
+                    ? 'Authorization service temporarily unavailable (circuit breaker open)'
+                    : 'Authorization service temporarily unavailable',
                 details: {
                     service: 'OPA',
                     endpoint: OPA_DECISION_ENDPOINT,
+                    circuitState: opaCircuitBreaker.getState(),
+                    retryAfterMs: retryAfter || null,
                 },
             });
             return;

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# ============================================================================
+# =============================================================================
 # DIVE V3 - Apply Federation Configuration to All Instances
-# ============================================================================
+# =============================================================================
+# Purpose: Applies Terraform configuration to all federated instances
+# Usage: ./scripts/federation/apply-all.sh [--plan]
+# =============================================================================
 # Applies Terraform configuration to all federated instances in the correct order.
 # This ensures federation is configured consistently across all instances.
 #

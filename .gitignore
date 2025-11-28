@@ -184,3 +184,17 @@ cloudflared/tunnel-credentials.json
 .env.secrets
 .env.secrets.*
 !.env.secrets.example
+
+# ============================================
+# ARCHIVE - Deprecated configs, scripts, docs
+# ============================================
+# Contains deprecated items from repository cleanup
+# These are kept locally for reference but not tracked
+.archive/
+
+# Terraform instance-specific variable files (generated from federation-registry.json)
+terraform/instances/*.tfvars
+terraform/instances/*.tfplan
+
+# Postgres init scripts (generated)
+scripts/postgres-init/

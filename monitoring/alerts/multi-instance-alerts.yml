@@ -1,0 +1,259 @@
+#
+# DIVE V3 Multi-Instance Alerting Rules
+# Phase 3: Reliability & Monitoring (GAP-004 Fix)
+#
+# Instance-aware alerts for USA, FRA, GBR, DEU deployments
+# Updated: Nov 26, 2025 - Phase 3 GAP-004
+#
+
+groups:
+  # ============================================================================
+  # CROSS-INSTANCE HEALTH ALERTS
+  # ============================================================================
+  - name: dive_v3_multi_instance_health
+    interval: 30s
+    rules:
+      # Alert when an entire instance is down
+      - alert: InstanceDown
+        expr: |
+          (
+            up{job=~"dive-v3-backend.*"} == 0
+            and up{job=~"dive-v3-keycloak.*"} == 0
+            and up{job=~"dive-v3-opa.*"} == 0
+          )
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "DIVE V3 Instance {{ $labels.instance }} is completely down"
+          description: "All core services (backend, keycloak, opa) are unreachable for {{ $labels.instance }}"
+          runbook_url: "https://wiki.dive25.com/runbooks/instance-down"
+
+      # Alert when instance is degraded (some services down)
+      - alert: InstanceDegraded
+        expr: |
+          count by (instance) (up{job=~"dive-v3-.*"} == 0) >= 2
+          and count by (instance) (up{job=~"dive-v3-.*"} == 1) >= 1
+        for: 5m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "DIVE V3 Instance {{ $labels.instance }} is degraded"
+          description: "Multiple services are down in {{ $labels.instance }}, but instance is partially operational"
+
+      # Alert when federation is broken
+      - alert: FederationBroken
+        expr: |
+          dive_v3_federation_redirects_total{status="error"} > 0
+          or (
+            increase(dive_v3_federation_redirects_total{status="success"}[10m]) == 0
+            and increase(dive_v3_federation_redirects_total{status="error"}[10m]) > 0
+          )
+        for: 5m
+        labels:
+          severity: critical
+          category: federation
+        annotations:
+          summary: "Federation broken between {{ $labels.source_instance }} and {{ $labels.target_instance }}"
+          description: "Cross-instance SSO is failing. Users cannot federate between instances."
+
+  # ============================================================================
+  # INSTANCE-SPECIFIC SERVICE ALERTS
+  # ============================================================================
+  - name: dive_v3_instance_services
+    interval: 30s
+    rules:
+      # Backend down per instance
+      - alert: BackendDownByInstance
+        expr: up{job=~"dive-v3-backend.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Backend API down on {{ $labels.instance }}"
+          description: "Backend service for {{ $labels.instance }} has been down for more than 1 minute"
+
+      # Keycloak down per instance
+      - alert: KeycloakDownByInstance
+        expr: up{job=~"dive-v3-keycloak.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: keycloak
+        annotations:
+          summary: "Keycloak IdP down on {{ $labels.instance }}"
+          description: "Keycloak for {{ $labels.instance }} is unreachable. Authentication will fail."
+
+      # OPA down per instance
+      - alert: OPADownByInstance
+        expr: up{job=~"dive-v3-opa.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: opa
+        annotations:
+          summary: "OPA down on {{ $labels.instance }}"
+          description: "OPA for {{ $labels.instance }} is unreachable. Authorization decisions will fail (fail-secure)."
+
+      # Cloudflared tunnel down
+      - alert: TunnelDownByInstance
+        expr: up{job=~"dive-v3-cloudflared.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: cloudflared
+        annotations:
+          summary: "Cloudflare Tunnel down for {{ $labels.instance }}"
+          description: "Public access to {{ $labels.instance }} is unavailable."
+
+  # ============================================================================
+  # PERFORMANCE ALERTS (Per Instance)
+  # ============================================================================
+  - name: dive_v3_instance_performance
+    interval: 60s
+    rules:
+      # High authorization latency per instance
+      - alert: HighAuthzLatencyByInstance
+        expr: |
+          histogram_quantile(0.95, 
+            sum by (instance, le) (rate(dive_v3_authorization_latency_seconds_bucket[5m]))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High authorization latency on {{ $labels.instance }} (p95 > 200ms)"
+          description: "p95 authorization latency is {{ $value }}s on {{ $labels.instance }}"
+
+      # High error rate per instance
+      - alert: HighErrorRateByInstance
+        expr: |
+          sum by (instance) (rate(dive_v3_http_requests_total{status=~"5.."}[5m]))
+          / sum by (instance) (rate(dive_v3_http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: reliability
+        annotations:
+          summary: "High error rate on {{ $labels.instance }} (>5%)"
+          description: "{{ $labels.instance }} is returning {{ $value | humanizePercentage }} errors"
+
+      # Low request throughput (possible issue)
+      - alert: LowThroughputByInstance
+        expr: |
+          sum by (instance) (rate(dive_v3_http_requests_total[5m])) < 0.1
+          and sum by (instance) (rate(dive_v3_http_requests_total[1h] offset 1h)) > 1
+        for: 10m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "Unusually low traffic on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} traffic dropped significantly. Possible connectivity issue."
+
+  # ============================================================================
+  # SESSION & TOKEN ALERTS
+  # ============================================================================
+  - name: dive_v3_session_alerts
+    interval: 60s
+    rules:
+      # High token revocation rate
+      - alert: HighTokenRevocationRate
+        expr: |
+          sum by (instance) (rate(dive_v3_tokens_revoked_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High token revocation rate on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} is revoking tokens at {{ $value }}/s. Possible security incident."
+
+      # Session synchronization lag (cross-instance)
+      - alert: SessionSyncLag
+        expr: |
+          dive_v3_session_sync_lag_seconds > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: session
+        annotations:
+          summary: "Session sync lag between instances"
+          description: "Session state is {{ $value }}s out of sync. Cross-instance logout may be delayed."
+
+      # Redis blacklist unavailable
+      - alert: TokenBlacklistUnavailable
+        expr: |
+          dive_v3_redis_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Token blacklist unavailable on {{ $labels.instance }}"
+          description: "Redis is down on {{ $labels.instance }}. Revoked tokens may still be accepted (fail-secure mode active)."
+
+  # ============================================================================
+  # COMPLIANCE ALERTS
+  # ============================================================================
+  - name: dive_v3_compliance_alerts
+    interval: 300s
+    rules:
+      # Decision logging failures
+      - alert: DecisionLoggingFailure
+        expr: |
+          rate(dive_v3_decision_log_failures_total[5m]) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          category: compliance
+        annotations:
+          summary: "Decision logging failing on {{ $labels.instance }}"
+          description: "Audit trail may be incomplete. {{ $value | humanizePercentage }} of decisions failing to log."
+
+      # ACP-240 violation detected
+      - alert: ACPViolationDetected
+        expr: |
+          increase(dive_v3_acp_violations_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: compliance
+        annotations:
+          summary: "ACP-240 policy violation on {{ $labels.instance }}"
+          description: "{{ $value }} violations detected. Review decision logs immediately."
+
+  # ============================================================================
+  # INFRASTRUCTURE ALERTS
+  # ============================================================================
+  - name: dive_v3_infrastructure
+    interval: 60s
+    rules:
+      # Certificate expiration
+      - alert: CertificateExpiringSoon
+        expr: |
+          dive_v3_certificate_expiry_seconds < 604800  # 7 days
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "SSL certificate expiring soon on {{ $labels.instance }}"
+          description: "Certificate for {{ $labels.domain }} expires in {{ $value | humanizeDuration }}"
+
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+

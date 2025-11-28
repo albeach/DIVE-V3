@@ -1,0 +1,75 @@
+# =============================================================================
+# DIVE V3 - Shared Infrastructure Services
+# Phase 2 Security Hardening (GAP-010, GAP-005)
+# =============================================================================
+# 
+# This file contains shared services used by ALL instances (USA, FRA, GBR)
+# 
+# Architecture:
+# - blacklist-redis: Centralized token blacklist for cross-instance revocation
+#
+# Usage (START THIS FIRST):
+#   docker network create dive-v3-shared-network 2>/dev/null || true
+#   docker-compose -f docker-compose.shared.yml up -d
+#
+# Then start instance stacks:
+#   docker-compose -f docker-compose.yml up -d        # USA
+#   docker-compose -f docker-compose.fra.yml up -d    # FRA
+#   docker-compose -f docker-compose.gbr.yml up -d    # GBR
+#
+# =============================================================================
+
+services:
+  # ============================================================================
+  # CENTRALIZED BLACKLIST REDIS (GAP-010 Remediation)
+  # ============================================================================
+  # All instances connect to this Redis for token blacklist operations
+  # Ensures token revocation propagates across ALL federated instances
+  # 
+  # Security Features (GAP-005):
+  # - Password authentication required
+  # - Persistence enabled (AOF + RDB)
+  # - Memory limit with LRU eviction
+  # - Logging enabled for audit
+  #
+  blacklist-redis:
+    image: redis:alpine
+    container_name: dive-v3-blacklist-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass DiveBlacklist2025!
+      --appendonly yes
+      --appendfsync everysec
+      --save 300 10
+      --save 60 1000
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --loglevel notice
+      --logfile ""
+    ports:
+      - "6399:6379"
+    volumes:
+      - blacklist_redis_data:/data
+    networks:
+      - dive-shared-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "DiveBlacklist2025!", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "dive.v3.component=blacklist-redis"
+      - "dive.v3.phase=2"
+      - "dive.v3.gap=010"
+
+volumes:
+  blacklist_redis_data:
+    name: dive-v3-blacklist-redis-data
+
+networks:
+  # Shared network for cross-instance communication
+  # This network is created externally before starting stacks
+  dive-shared-network:
+    driver: bridge
+    name: dive-v3-shared-network

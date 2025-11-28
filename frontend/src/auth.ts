@@ -745,12 +745,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // DrizzleAdapter doesn't auto-delete sessions on signOut()
             const sessionData = 'session' in message ? message.session : null;
             let userId: string | null = null;
+            let accessToken: string | null = null;
+            let refreshToken: string | null = null;
 
             if (sessionData?.userId) {
                 userId = sessionData.userId;
             } else if ('user' in message && message.user) {
                 const user = message.user as any;
                 userId = user.id || null;
+            }
+
+            // Phase 2 GAP-007: Get access/refresh tokens for Keycloak revocation
+            if (userId) {
+                try {
+                    const userAccounts = await db.select()
+                        .from(accounts)
+                        .where(eq(accounts.userId, userId));
+                    
+                    if (userAccounts.length > 0) {
+                        accessToken = userAccounts[0].access_token;
+                        refreshToken = userAccounts[0].refresh_token;
+                    }
+                } catch (error) {
+                    console.error('[DIVE] Error fetching account for logout:', error);
+                }
             }
 
             if (sessionData && sessionData.sessionToken) {
@@ -780,6 +798,76 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     console.log('[DIVE] Account tokens cleared for user:', userId);
                 } catch (error) {
                     console.error('[DIVE] Error clearing account tokens:', error);
+                }
+            }
+
+            // ============================================
+            // Phase 2 GAP-007: Coordinated Logout
+            // ============================================
+            // 1. Revoke tokens in Keycloak
+            // 2. Add tokens to shared blacklist Redis
+            // ============================================
+            if (refreshToken || accessToken) {
+                const keycloakUrl = process.env.KEYCLOAK_URL;
+                const realm = process.env.KEYCLOAK_REALM;
+                const clientId = process.env.KEYCLOAK_CLIENT_ID;
+                const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+
+                // Revoke refresh token in Keycloak (this also invalidates the access token)
+                if (refreshToken && keycloakUrl && realm && clientId && clientSecret) {
+                    try {
+                        const revokeUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/revoke`;
+                        const response = await fetch(revokeUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: new URLSearchParams({
+                                client_id: clientId,
+                                client_secret: clientSecret,
+                                token: refreshToken,
+                                token_type_hint: 'refresh_token',
+                            }),
+                        });
+
+                        if (response.ok || response.status === 204) {
+                            console.log('[DIVE] Keycloak refresh token revoked');
+                        } else {
+                            console.warn('[DIVE] Keycloak token revocation returned:', response.status);
+                        }
+                    } catch (error) {
+                        console.error('[DIVE] Keycloak token revocation failed:', error);
+                        // Continue - don't fail logout
+                    }
+                }
+
+                // Notify backend to add token to shared blacklist
+                // This ensures the token is blocked across ALL instances
+                if (accessToken) {
+                    try {
+                        const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL;
+                        if (backendUrl) {
+                            const blacklistResponse = await fetch(`${backendUrl}/api/auth/blacklist-token`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${accessToken}`,
+                                },
+                                body: JSON.stringify({
+                                    reason: 'User logout',
+                                }),
+                            });
+
+                            if (blacklistResponse.ok) {
+                                console.log('[DIVE] Token added to shared blacklist');
+                            } else {
+                                console.warn('[DIVE] Token blacklist request returned:', blacklistResponse.status);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[DIVE] Token blacklist request failed:', error);
+                        // Continue - don't fail logout
+                    }
                 }
             }
 
