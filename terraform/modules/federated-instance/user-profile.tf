@@ -1,0 +1,297 @@
+# Federated Instance Module - User Profile Configuration
+# Keycloak 26+ requires User Profile to define allowed custom attributes
+#
+# CRITICAL: Without this, custom user attributes (clearance, countryOfAffiliation, etc.)
+# cannot be set on users. The User Profile must be configured BEFORE creating users
+# with custom attributes.
+
+# ============================================================================
+# USER PROFILE - Define allowed custom attributes
+# ============================================================================
+resource "keycloak_realm_user_profile" "dive_attributes" {
+  realm_id = keycloak_realm.broker.id
+
+  # ============================================
+  # STANDARD KEYCLOAK ATTRIBUTES
+  # ============================================
+  attribute {
+    name         = "username"
+    display_name = "$${username}"
+
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+
+    validator {
+      name = "length"
+      config = {
+        min = "3"
+        max = "255"
+      }
+    }
+
+    validator {
+      name = "username-prohibited-characters"
+    }
+
+    validator {
+      name = "up-username-not-idn-homograph"
+    }
+  }
+
+  attribute {
+    name         = "email"
+    display_name = "$${email}"
+
+    required_for_roles = ["user"]
+
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+
+    validator {
+      name = "email"
+    }
+
+    validator {
+      name = "length"
+      config = {
+        max = "255"
+      }
+    }
+  }
+
+  attribute {
+    name         = "firstName"
+    display_name = "$${firstName}"
+
+    required_for_roles = ["user"]
+
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+
+    validator {
+      name = "length"
+      config = {
+        max = "255"
+      }
+    }
+
+    validator {
+      name = "person-name-prohibited-characters"
+    }
+  }
+
+  attribute {
+    name         = "lastName"
+    display_name = "$${lastName}"
+
+    required_for_roles = ["user"]
+
+    permissions {
+      view = ["admin", "user"]
+      edit = ["admin", "user"]
+    }
+
+    validator {
+      name = "length"
+      config = {
+        max = "255"
+      }
+    }
+
+    validator {
+      name = "person-name-prohibited-characters"
+    }
+  }
+
+  # ============================================
+  # DIVE V3 CUSTOM ATTRIBUTES
+  # ============================================
+
+  # Security Clearance (UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET)
+  attribute {
+    name         = "clearance"
+    display_name = "Security Clearance"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+
+    validator {
+      name = "options"
+      config = {
+        options = "[\"UNCLASSIFIED\",\"CONFIDENTIAL\",\"SECRET\",\"TOP_SECRET\"]"
+      }
+    }
+  }
+
+  # Country of Affiliation (ISO 3166-1 alpha-3)
+  attribute {
+    name         = "countryOfAffiliation"
+    display_name = "Country of Affiliation"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+
+    validator {
+      name = "length"
+      config = {
+        min = "3"
+        max = "3"
+      }
+    }
+  }
+
+  # Unique ID (user identifier for audit logs)
+  attribute {
+    name         = "uniqueID"
+    display_name = "Unique ID"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # User Type (military, civilian, contractor)
+  attribute {
+    name         = "userType"
+    display_name = "User Type"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Organization
+  attribute {
+    name         = "organization"
+    display_name = "Organization"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Organization Type (GOV, MIL, INDUSTRY) - ACP-240 Section 4.2
+  attribute {
+    name         = "organizationType"
+    display_name = "Organization Type"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+
+    validator {
+      name = "options"
+      config = {
+        options = "[\"GOV\",\"MIL\",\"INDUSTRY\"]"
+      }
+    }
+  }
+
+  # Communities of Interest (JSON array)
+  attribute {
+    name         = "acpCOI"
+    display_name = "Communities of Interest"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Pilot User Flag
+  attribute {
+    name         = "pilot_user"
+    display_name = "Pilot User"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Clearance Level (numeric 1-4)
+  attribute {
+    name         = "clearance_level"
+    display_name = "Clearance Level"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Created By (terraform, manual, etc.)
+  attribute {
+    name         = "created_by"
+    display_name = "Created By"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Primary Endorser (for industry users)
+  attribute {
+    name         = "primaryEndorser"
+    display_name = "Primary Endorser"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Industry User Flag
+  attribute {
+    name         = "industry_user"
+    display_name = "Industry User"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # ============================================
+  # ATTRIBUTE GROUPS
+  # ============================================
+  group {
+    name                = "user-metadata"
+    display_header      = "User Metadata"
+    display_description = "Attributes which refer to user metadata"
+  }
+
+  group {
+    name                = "dive-attributes"
+    display_header      = "DIVE V3 Attributes"
+    display_description = "Security clearance and coalition attributes for DIVE V3"
+  }
+}
+

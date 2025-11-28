@@ -16,6 +16,7 @@ services:
       - "5435:5432"
     volumes:
       - postgres_deu_data:/var/lib/postgresql/data
+      - ./scripts/postgres-init-deu/init-deu-db.sh:/docker-entrypoint-initdb.d/init-deu-db.sh
     networks:
       - dive-deu-network
     healthcheck:
@@ -36,7 +37,7 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
       KC_HOSTNAME: deu-idp.dive25.com
       KC_HOSTNAME_STRICT: false
       KC_PROXY_HEADERS: xforwarded
@@ -231,6 +232,7 @@ services:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://deu-app.dive25.com
       NEXTAUTH_SECRET: deu-frontend-secret-change-in-production
+      DATABASE_URL: postgresql://keycloak:keycloak@postgres-deu:5432/dive_v3_deu
     ports:
       - "3002:3000"
     volumes:
@@ -243,6 +245,7 @@ services:
     depends_on:
       - backend-deu
       - keycloak-deu
+      - postgres-deu
     networks:
       - dive-deu-network
     healthcheck:
