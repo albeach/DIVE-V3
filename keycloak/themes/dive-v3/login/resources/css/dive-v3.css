@@ -229,18 +229,18 @@
 }
 
 /* Country-Specific Theming - Bold & Distinctive */
+/* Selectors use data-instance attribute set in template.ftl */
 
-/* USA - Red, White, Blue */
-.dive-body[data-realm*="USA"] .dive-realm-banner,
-.dive-body[data-realm*="Federation Hub"] .dive-realm-banner {
+/* USA - Red, White, Blue (Stars & Stripes) */
+.dive-body[data-instance="USA"] .dive-realm-banner {
     background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #b91c1c 100%);
     box-shadow: 
         0 10px 40px -10px rgba(30, 64, 175, 0.6),
         0 0 0 1px rgba(255, 255, 255, 0.15) inset;
 }
 
-/* France - Bleu, Blanc, Rouge */
-.dive-body[data-realm*="France"] .dive-realm-banner {
+/* France - Bleu, Blanc, Rouge (Tricolore) */
+.dive-body[data-instance="FRA"] .dive-realm-banner {
     background: linear-gradient(135deg, #002654 0%, #0055a4 50%, #ed2939 100%);
     box-shadow: 
         0 10px 40px -10px rgba(0, 85, 164, 0.6),
@@ -248,7 +248,7 @@
 }
 
 /* Germany - Schwarz, Rot, Gold */
-.dive-body[data-realm*="Germany"] .dive-realm-banner {
+.dive-body[data-instance="DEU"] .dive-realm-banner {
     background: linear-gradient(135deg, #000000 0%, #dd0000 50%, #ffcc00 100%);
     box-shadow: 
         0 10px 40px -10px rgba(221, 0, 0, 0.5),
@@ -256,15 +256,15 @@
 }
 
 /* UK - Union Jack inspired */
-.dive-body[data-realm*="United Kingdom"] .dive-realm-banner {
+.dive-body[data-instance="GBR"] .dive-realm-banner {
     background: linear-gradient(135deg, #012169 0%, #c8102e 50%, #012169 100%);
     box-shadow: 
         0 10px 40px -10px rgba(1, 33, 105, 0.6),
         0 0 0 1px rgba(255, 255, 255, 0.15) inset;
 }
 
-/* Canada - Red & White */
-.dive-body[data-realm*="Canada"] .dive-realm-banner {
+/* Canada - Red & White (Maple Leaf) */
+.dive-body[data-instance="CAN"] .dive-realm-banner {
     background: linear-gradient(135deg, #ff0000 0%, #d52b1e 50%, #ff0000 100%);
     box-shadow: 
         0 10px 40px -10px rgba(213, 43, 30, 0.6),
@@ -272,7 +272,7 @@
 }
 
 /* Spain - Rojo y Amarillo */
-.dive-body[data-realm*="Spain"] .dive-realm-banner {
+.dive-body[data-instance="ESP"] .dive-realm-banner {
     background: linear-gradient(135deg, #aa151b 0%, #f1bf00 50%, #aa151b 100%);
     box-shadow: 
         0 10px 40px -10px rgba(170, 21, 27, 0.6),
