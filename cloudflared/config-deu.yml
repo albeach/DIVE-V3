@@ -11,29 +11,29 @@ protocol: http2
 metrics: 0.0.0.0:9126
 
 ingress:
-  # DEU Frontend (Next.js) - CRITICAL: Use Docker service name with -deu suffix
-  - hostname: deu-app.dive25.com
-    service: https://frontend-deu:3000
+  # DEU Frontend (Next.js) - Use network alias for docker compose v2
+  - hostname: deu-app.prosecurity.biz
+    service: http://frontend-deu:3000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
 
-  # DEU Backend API - CRITICAL: Use Docker service name with -deu suffix
-  - hostname: deu-api.dive25.com
-    service: https://backend-deu:4000
+  # DEU Backend API - Use network alias for docker compose v2
+  - hostname: deu-api.prosecurity.biz
+    service: http://backend-deu:4000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
 
-  # DEU Keycloak IdP - CRITICAL: Use Docker service name with -deu suffix
-  - hostname: deu-idp.dive25.com
+  # DEU Keycloak IdP - Use network alias for docker compose v2
+  - hostname: deu-idp.prosecurity.biz
     service: https://keycloak-deu:8443
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
 
-  # DEU KAS - CRITICAL: Use Docker service name with -deu suffix
-  - hostname: deu-kas.dive25.com
+  # DEU KAS - Use network alias for docker compose v2
+  - hostname: deu-kas.prosecurity.biz
     service: http://kas-deu:8080
     originRequest:
       connectTimeout: 60s

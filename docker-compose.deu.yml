@@ -277,7 +277,7 @@ services:
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared/config-deu.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared/deu-tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+      - ./cloudflared/tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
     networks:
       - dive-deu-network
     depends_on:
