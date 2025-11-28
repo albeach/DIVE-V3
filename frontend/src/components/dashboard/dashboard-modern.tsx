@@ -45,6 +45,32 @@ interface User {
   email?: string;
 }
 
+// Country flag emoji map
+const countryFlags: Record<string, string> = {
+  USA: '🇺🇸',
+  DEU: '🇩🇪',
+  FRA: '🇫🇷',
+  GBR: '🇬🇧',
+  CAN: '🇨🇦',
+  ITA: '🇮🇹',
+  NLD: '🇳🇱',
+  POL: '🇵🇱',
+  ESP: '🇪🇸',
+};
+
+// Country full names
+const countryNames: Record<string, string> = {
+  USA: 'United States',
+  DEU: 'Germany',
+  FRA: 'France',
+  GBR: 'United Kingdom',
+  CAN: 'Canada',
+  ITA: 'Italy',
+  NLD: 'Netherlands',
+  POL: 'Poland',
+  ESP: 'Spain',
+};
+
 interface Session {
   user?: User;
 }
@@ -133,9 +159,57 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
   const clearanceLevel = user?.clearance || 'UNCLASSIFIED';
   const country = user?.countryOfAffiliation || 'Unknown';
   const coi = user?.acpCOI || [];
+  
+  // Instance identification
+  const currentInstance = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+  const instanceFlag = countryFlags[currentInstance] || '🌐';
+  const instanceName = countryNames[currentInstance] || currentInstance;
+  
+  // Federation detection - is user from a different country than the instance?
+  const userHomeCountry = country;
+  const userHomeFlag = countryFlags[userHomeCountry] || '🌐';
+  const userHomeName = countryNames[userHomeCountry] || userHomeCountry;
+  const isFederated = userHomeCountry !== currentInstance && userHomeCountry !== 'Unknown';
 
   return (
     <div className="space-y-6">
+      {/* Instance Banner - Always visible at top */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 p-4 shadow-lg border border-slate-700">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          {/* Current Instance */}
+          <div className="flex items-center gap-4">
+            <div className="text-4xl">{instanceFlag}</div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Current Instance</p>
+              <p className="text-xl font-bold text-white">{instanceName} Portal</p>
+            </div>
+          </div>
+
+          {/* Federation Status */}
+          {isFederated ? (
+            <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{userHomeFlag}</span>
+                <ArrowRight className="w-4 h-4 text-amber-400" />
+                <span className="text-2xl">{instanceFlag}</span>
+              </div>
+              <div>
+                <p className="text-xs text-amber-300 font-medium">Federated Access</p>
+                <p className="text-sm font-bold text-white">Authenticated via {userHomeName}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <div>
+                <p className="text-xs text-emerald-300 font-medium">Direct Access</p>
+                <p className="text-sm font-bold text-white">Home Instance User</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Hero Section - Compact & Personalized */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-8 shadow-2xl">
         {/* Animated background pattern */}
