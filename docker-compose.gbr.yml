@@ -1,43 +1,46 @@
 # =============================================================================
-# DIVE V3 - FRA Instance (France)
-# CRITICAL: Uses isolated volumes for build isolation
+# DIVE V3 - GBR Instance (United Kingdom)
+# CRITICAL: Uses ports from former local DEU instance
+# Federation: USA (local), FRA (local), DEU (remote at prosecurity.biz)
 # =============================================================================
 
 services:
-  # PostgreSQL for FRA Keycloak
-  postgres-fra:
+  # PostgreSQL for GBR Keycloak
+  postgres-gbr:
     image: postgres:15-alpine
-    container_name: dive-v3-postgres-fra
+    container_name: dive-v3-postgres-gbr
+    restart: unless-stopped
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloak
     ports:
-      - "5434:5432"
+      - "5435:5432"
     volumes:
-      - postgres_fra_data:/var/lib/postgresql/data
+      - postgres_gbr_data:/var/lib/postgresql/data
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Keycloak FRA Instance
-  keycloak-fra:
+  # Keycloak GBR Instance
+  keycloak-gbr:
     image: quay.io/keycloak/keycloak:latest
     platform: linux/amd64
-    container_name: dive-v3-keycloak-fra
+    container_name: dive-v3-keycloak-gbr
+    restart: unless-stopped
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-fra:5432/keycloak
+      KC_DB_URL: jdbc:postgresql://postgres-gbr:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
-      KC_HOSTNAME: fra-idp.dive25.com
+      KC_HOSTNAME: gbr-idp.dive25.com
       KC_HOSTNAME_STRICT: false
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: true
@@ -49,47 +52,48 @@ services:
       KC_HEALTH_ENABLED: true
       KC_FEATURES: scripts
     ports:
-      - "8444:8443"
-      - "8082:8080"
+      - "8445:8443"
+      - "8083:8080"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
-      postgres-fra:
+      postgres-gbr:
         condition: service_healthy
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/master HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 'HTTP/1.1 200'"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # MongoDB FRA Instance
-  mongodb-fra:
+  # MongoDB GBR Instance
+  mongodb-gbr:
     image: mongo:7
-    container_name: dive-v3-mongodb-fra
+    container_name: dive-v3-mongodb-gbr
+    restart: unless-stopped
     environment:
-      MONGO_INITDB_DATABASE: dive-v3-fra
+      MONGO_INITDB_DATABASE: dive-v3-gbr
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin
     ports:
-      - "27018:27017"
+      - "27019:27017"
     volumes:
-      - mongodb_fra_data:/data/db
+      - mongodb_gbr_data:/data/db
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis FRA Instance
-  # Redis FRA Instance (Phase 2 GAP-005: Security Hardening)
-  redis-fra:
+  # Redis GBR Instance
+  # Redis GBR Instance (Phase 2 GAP-005: Security Hardening)
+  redis-gbr:
     image: redis:alpine
-    container_name: dive-v3-redis-fra
+    container_name: dive-v3-redis-gbr
     restart: unless-stopped
     command: >
       redis-server
@@ -100,22 +104,22 @@ services:
       --maxmemory 128mb
       --maxmemory-policy allkeys-lru
     ports:
-      - "6380:6379"
+      - "6381:6379"
     volumes:
-      - redis_fra_data:/data
+      - redis_gbr_data:/data
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "DiveRedis2025!", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # OPA FRA Instance
-  opa-fra:
+  # OPA GBR Instance
+  opa-gbr:
     image: openpolicyagent/opa:latest
     platform: linux/amd64
-    container_name: dive-v3-opa-fra
+    container_name: dive-v3-opa-gbr
     restart: unless-stopped
     command:
       - "run"
@@ -124,166 +128,174 @@ services:
       - "--log-level=info"
       - "/policies"
     ports:
-      - "8182:8181"
+      - "8283:8181"
     volumes:
       - ./policies:/policies:ro
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 3
 
-  # KAS FRA Instance
-  kas-fra:
+  # KAS GBR Instance
+  kas-gbr:
     image: node:20-alpine
-    container_name: dive-v3-kas-fra
+    container_name: dive-v3-kas-gbr
+    restart: unless-stopped
     working_dir: /app
     command: sh -c "npm install && npm run dev"
     environment:
       NODE_ENV: development
       PORT: 8080
-      OPA_URL: http://opa-fra:8181
-      KEYCLOAK_URL: https://keycloak-fra:8443
+      OPA_URL: http://opa-gbr:8181
+      KEYCLOAK_URL: https://keycloak-gbr:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      BACKEND_URL: http://backend-fra:4000
-      JWT_SECRET: fra-kas-secret-change-in-production
+      BACKEND_URL: http://backend-gbr:4000
+      JWT_SECRET: gbr-kas-secret-change-in-production
     ports:
-      - "8083:8080"
+      - "8092:8080"
     volumes:
       - ./kas:/app
     depends_on:
-      - opa-fra
-      - mongodb-fra
+      - opa-gbr
+      - mongodb-gbr
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Backend FRA Instance
-  backend-fra:
+  # Backend GBR Instance
+  backend-gbr:
     image: node:20-alpine
-    container_name: dive-v3-backend-fra
+    container_name: dive-v3-backend-gbr
+    restart: unless-stopped
     working_dir: /app
     command: sh -c "npm install && npm run dev"
     environment:
       NODE_ENV: development
       PORT: 4000
-      INSTANCE_REALM: FRA
+      INSTANCE_REALM: GBR
       # Updated to use full container names (Phase 4 cleanup)
-      MONGODB_URI: mongodb://admin:admin@dive-v3-fra-mongodb:27017/dive-v3-fra?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@dive-v3-fra-mongodb:27017/dive-v3-fra?authSource=admin
-      REDIS_HOST: dive-v3-fra-redis
+      MONGODB_URI: mongodb://admin:admin@dive-v3-gbr-mongodb:27017/dive-v3-gbr?authSource=admin
+      MONGODB_URL: mongodb://admin:admin@dive-v3-gbr-mongodb:27017/dive-v3-gbr?authSource=admin
+      REDIS_HOST: dive-v3-gbr-redis
       REDIS_PORT: 6379
-      REDIS_URL: redis://dive-v3-fra-redis:6379
+      REDIS_URL: redis://dive-v3-gbr-redis:6379
       # Shared blacklist Redis (Phase 2 GAP-010)
       BLACKLIST_REDIS_URL: redis://:DiveBlacklist2025!@dive-v3-blacklist-redis:6379
-      JWT_SECRET: fra-backend-secret-change-in-production
-      OPA_URL: https://dive-v3-fra-opa:8181
-      KEYCLOAK_URL: https://dive-v3-fra-keycloak:8443
+      JWT_SECRET: gbr-backend-secret-change-in-production
+      OPA_URL: https://dive-v3-gbr-opa:8181
+      KEYCLOAK_URL: https://dive-v3-gbr-keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB
+      KEYCLOAK_CLIENT_SECRET: WeUC1RPtrxEOjvQeZbS2tETKat8RMWwV
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
-      KAS_URL: http://kas-fra:8080
-      FEDERATION_ALLOWED_ORIGINS: https://fra-app.dive25.com,https://localhost:3001
-      NEXT_PUBLIC_BASE_URL: https://fra-app.dive25.com
+      KAS_URL: http://kas-gbr:8080
+      FEDERATION_ALLOWED_ORIGINS: https://gbr-app.dive25.com,https://localhost:3002
+      NEXT_PUBLIC_BASE_URL: https://gbr-app.dive25.com
     ports:
-      - "4001:4000"
+      - "4002:4000"
     volumes:
       - ./backend:/app
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./backend/certs:/app/certs:ro
     depends_on:
-      mongodb-fra:
+      mongodb-gbr:
         condition: service_healthy
-      redis-fra:
+      redis-gbr:
         condition: service_healthy
-      opa-fra:
+      opa-gbr:
         condition: service_healthy
-      keycloak-fra:
+      keycloak-gbr:
         condition: service_healthy
-      kas-fra:
+      kas-gbr:
         condition: service_healthy
     networks:
-      - dive-fra-network
+      - dive-gbr-network
       - dive-shared-network  # Phase 2 GAP-010: Access to shared blacklist Redis
-      - dive-fra-internal    # Phase 4: Connect to FRA instance services
+      - dive-gbr-internal    # Phase 4: Connect to GBR instance services
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Frontend FRA Instance
-  frontend-fra:
+  # Frontend GBR Instance
+  frontend-gbr:
     image: node:20-alpine
-    container_name: dive-v3-frontend-fra
+    container_name: dive-v3-frontend-gbr
+    restart: unless-stopped
     working_dir: /app
     command: sh -c "npm install && node server.js"
     environment:
       NODE_ENV: development
       PORT: 3000
-      # CRITICAL: FRA-specific URLs - DO NOT cross-contaminate
-      NEXT_PUBLIC_API_URL: https://fra-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://fra-api.dive25.com
-      NEXT_PUBLIC_KEYCLOAK_URL: https://fra-idp.dive25.com
+      # CRITICAL: GBR-specific URLs - DO NOT cross-contaminate
+      NEXT_PUBLIC_API_URL: https://gbr-api.dive25.com
+      NEXT_PUBLIC_BACKEND_URL: https://gbr-api.dive25.com
+      NEXT_PUBLIC_KEYCLOAK_URL: https://gbr-idp.dive25.com
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      NEXT_PUBLIC_APP_NAME: "DIVE V3 - France"
-      NEXT_PUBLIC_INSTANCE: FRA
+      NEXT_PUBLIC_APP_NAME: "DIVE V3 - United Kingdom"
+      NEXT_PUBLIC_INSTANCE: GBR
+      NEXT_PUBLIC_INSTANCE_NAME: "United Kingdom"
+      NEXT_PUBLIC_LOCALE: en-GB
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3001,https://localhost:4001,https://localhost:8444,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com"
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3002,https://localhost:4002,https://localhost:8445,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB
+      KEYCLOAK_CLIENT_SECRET: WeUC1RPtrxEOjvQeZbS2tETKat8RMWwV
       KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_URL: https://keycloak-fra:8443
+      KEYCLOAK_URL: https://keycloak-gbr:8443
+      KEYCLOAK_ISSUER: https://gbr-idp.dive25.com/realms/dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      NEXTAUTH_URL: https://fra-app.dive25.com
-      NEXTAUTH_SECRET: wnbQ2DszSAxEAIXjufcejpMeD9E1Cz2yJbiPO3iqmAk=
+      NEXTAUTH_URL: https://gbr-app.dive25.com
+      NEXTAUTH_SECRET: 41EV5gv1LPQhyioNENysWEbVB+rj5coVsP2kwszQNbE=
+      AUTH_SECRET: gbr-auth-secret-change-in-production
+      AUTH_TRUST_HOST: "true"
     ports:
-      - "3001:3000"
+      - "3002:3000"
     volumes:
       - ./frontend:/app
       - ./certs:/opt/app/certs:ro
-      - ./frontend/.env.fra:/app/.env.local:ro
+      - ./frontend/.env.gbr:/app/.env.local:ro
       # CRITICAL: Instance-specific volumes for build isolation
-      - frontend_fra_node_modules:/app/node_modules
-      - frontend_fra_next:/app/.next
+      - frontend_gbr_node_modules:/app/node_modules
+      - frontend_gbr_next:/app/.next
     depends_on:
-      - backend-fra
-      - keycloak-fra
+      - backend-gbr
+      - keycloak-gbr
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate --spider -q https://localhost:3000 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Cloudflare Tunnel FRA
-  cloudflared-fra:
+  # Cloudflare Tunnel GBR
+  cloudflared-gbr:
     image: cloudflare/cloudflared:latest
-    container_name: dive-v3-tunnel-fra
+    container_name: dive-v3-tunnel-gbr
     restart: unless-stopped
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
-      - ./cloudflared/config-fra.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared/fra-tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+      - ./cloudflared/config-gbr.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/gbr-tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
     networks:
-      - dive-fra-network
+      - dive-gbr-network
     depends_on:
-      - frontend-fra
-      - backend-fra
-      - keycloak-fra
-      - kas-fra
+      - frontend-gbr
+      - backend-gbr
+      - keycloak-gbr
+      - kas-gbr
     healthcheck:
       test: ["CMD", "cloudflared", "tunnel", "info"]
       interval: 30s
@@ -291,25 +303,26 @@ services:
       retries: 3
       start_period: 10s
     ports:
-      - "9127:9127"
+      - "9128:9127"
 
 volumes:
-  postgres_fra_data:
-  mongodb_fra_data:
+  postgres_gbr_data:
+  mongodb_gbr_data:
   # Phase 2 GAP-005: Redis persistence
-  redis_fra_data:
+  redis_gbr_data:
   # CRITICAL: Instance-specific frontend volumes for build isolation
-  frontend_fra_node_modules:
-  frontend_fra_next:
+  frontend_gbr_node_modules:
+  frontend_gbr_next:
 
 networks:
-  dive-fra-network:
+  dive-gbr-network:
     driver: bridge
   # Shared network for cross-instance blacklist Redis (Phase 2 GAP-010)
   dive-shared-network:
     external: true
     name: dive-v3-shared-network
-  # FRA instance internal network (Phase 4: services run in separate stack)
-  dive-fra-internal:
+  # GBR instance internal network (Phase 4: services run in separate stack)
+  dive-gbr-internal:
     external: true
-    name: dive-v3-fra_internal
+    name: dive-v3-gbr_internal
+
