@@ -76,13 +76,13 @@ export function middleware(req: NextRequest) {
         "default-src 'self'",
         `script-src ${scriptSrc.join(' ')}`,
         `style-src 'self' 'unsafe-inline'`, // Required for Tailwind and styled components
-        "img-src 'self' data: blob:", // Allow inline images and data URIs
+        "img-src 'self' data: blob: https://authjs.dev", // Allow inline images, data URIs, and AuthJS provider icons
         `font-src 'self' data:`, // Self-hosted fonts only
         `connect-src ${connectSrc.join(' ')}`,
         `frame-src 'self' ${keycloakBaseUrl}`, // Allow Keycloak iframe for OIDC
         "object-src 'none'", // Block Flash, Java, etc.
         "base-uri 'self'", // Prevent base tag injection
-        "form-action 'self'", // Prevent form submission to external domains
+        `form-action 'self' ${keycloakBaseUrl} https://*.dive25.com https://*.prosecurity.biz`, // Allow form submission to self, Keycloak, and federation IdPs
         "frame-ancestors 'none'", // Prevent clickjacking (use X-Frame-Options for broader support)
     ].join("; ");
 

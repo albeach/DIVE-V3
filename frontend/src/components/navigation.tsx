@@ -20,6 +20,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { SessionStatusIndicator } from '@/components/auth/session-status-indicator';
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
@@ -30,6 +31,7 @@ import {
     X,
     User,
     ArrowRight,
+    LogOut,
 } from 'lucide-react';
 import { IdentityDrawer } from '@/components/identity/IdentityDrawer';
 import { useIdentityDrawer } from '@/contexts/IdentityDrawerContext';
@@ -423,6 +425,9 @@ export default function Navigation({ user }: INavigationProps) {
                                 )}
                             </div>
 
+                            {/* Sign Out Icon Button - Visible in Desktop Nav */}
+                            <SignOutIconButton />
+
                             {/* Mobile Menu Button - Enhanced */}
                             <button
                                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -653,3 +658,89 @@ export default function Navigation({ user }: INavigationProps) {
         </>
     );
 }
+
+/**
+ * Compact Sign Out Icon Button
+ * Provides a visible, always-accessible sign-out option in the navigation
+ */
+const SignOutIconButton = memo(function SignOutIconButton() {
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const { data: session } = useSession();
+    
+    const handleLogout = async () => {
+        try {
+            setIsLoggingOut(true);
+            
+            // Get Keycloak logout URL first
+            let keycloakLogoutUrl: string | null = null;
+            try {
+                const response = await fetch('/api/auth/session-tokens');
+                if (response.ok) {
+                    const tokens = await response.json();
+                    if (tokens.idToken) {
+                        const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
+                        const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";
+                        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+                        keycloakLogoutUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout?id_token_hint=${tokens.idToken}&post_logout_redirect_uri=${baseUrl}`;
+                    }
+                }
+            } catch (e) {
+                console.error('[DIVE] Failed to get logout URL:', e);
+            }
+            
+            // Server-side logout
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) {
+                console.error('[DIVE] Server logout error:', e);
+            }
+            
+            // Clear storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Redirect to Keycloak logout or home
+            if (keycloakLogoutUrl) {
+                window.location.href = keycloakLogoutUrl;
+            } else {
+                window.location.href = "/";
+            }
+        } catch (error) {
+            console.error("[DIVE] Logout error:", error);
+            window.location.href = "/";
+        }
+    };
+    
+    return (
+        <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="hidden lg:flex relative p-2 rounded-xl 
+                       bg-gradient-to-br from-gray-50 to-gray-100/80
+                       border border-gray-200/60
+                       shadow-sm hover:shadow-md
+                       hover:from-red-50 hover:to-red-100/80
+                       hover:border-red-200/60
+                       active:scale-95
+                       transition-all duration-200 
+                       group
+                       disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Sign out"
+            title="Sign Out"
+        >
+            {isLoggingOut ? (
+                <svg className="w-5 h-5 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+            ) : (
+                <LogOut 
+                    className="w-5 h-5 text-gray-500 group-hover:text-red-600 transition-colors duration-200" 
+                    strokeWidth={2.5} 
+                />
+            )}
+        </button>
+    );
+});
+

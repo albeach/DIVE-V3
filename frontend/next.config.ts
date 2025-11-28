@@ -72,6 +72,12 @@ const nextConfig: NextConfig = {
             bodySizeLimit: "2mb",
         },
     },
+    // Hide the Next.js dev indicator (the "N" circle in bottom-left)
+    devIndicators: {
+        appIsrStatus: false,
+        buildActivity: false,
+        buildActivityPosition: 'bottom-right',
+    },
     // Docker deployment: Development mode for hot reload and runtime env vars
     // output: 'standalone',  // Use for production builds only
 };
