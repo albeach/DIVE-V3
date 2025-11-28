@@ -9,6 +9,7 @@
             <form id="kc-form-login" onsubmit="login.disabled = true; return true;" action="${url.loginAction}" method="post">
                 <div class="dive-form-group">
                     <#if !usernameHidden??>
+                        <#-- Fresh login: show editable username field -->
                         <label for="username" class="dive-label">
                             <#if !realm.loginWithEmailAllowed>${msg("username")}<#elseif !realm.registrationEmailAsUsername>${msg("usernameOrEmail")}<#else>${msg("email")}</#if>
                         </label>
@@ -30,6 +31,26 @@
                                 ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
                             </span>
                         </#if>
+                    <#else>
+                        <#-- Re-authentication: show read-only username with "Not you?" option -->
+                        <label for="username-display" class="dive-label">
+                            Signing in as
+                        </label>
+                        <div class="dive-reauth-user" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 0.5rem; margin-bottom: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.875rem; text-transform: uppercase;">
+                                    ${(login.username!'')?substring(0, 1)}
+                                </div>
+                                <span style="font-weight: 600; color: #1e293b; font-size: 0.9375rem;">${login.username!''}</span>
+                            </div>
+                            <a href="${url.loginRestartFlowUrl}" style="font-size: 0.8125rem; color: #6366f1; text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; transition: all 0.2s ease;" onmouseover="this.style.background='#eef2ff'" onmouseout="this.style.background='transparent'">
+                                <span>Not you?</span>
+                                <svg style="width: 0.875rem; height: 0.875rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                            </a>
+                        </div>
+                        <input type="hidden" id="username" name="username" value="${(login.username!'')}" />
                     </#if>
                 </div>
 
