@@ -356,11 +356,12 @@
                             </p>
                         </div>
                         <#else>
-                        <#-- DIRECT LOGIN: Show simple chain -->
+                        <#-- DIRECT LOGIN: Show simple, clear explanation -->
                         <div class="dive-trust-chain-visual">
                             <div class="dive-trust-node dive-trust-idp">
                                 <span class="dive-trust-flag">${idpFlag}</span>
                                 <span class="dive-trust-label">${idpCountryCode}</span>
+                                <span class="dive-trust-sublabel">Your Credentials</span>
                             </div>
                             <div class="dive-trust-arrow">
                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -368,8 +369,9 @@
                                 </svg>
                             </div>
                             <div class="dive-trust-node dive-trust-hub">
-                                <span class="dive-trust-icon">🔗</span>
-                                <span class="dive-trust-label">DIVE</span>
+                                <span class="dive-trust-icon">🔐</span>
+                                <span class="dive-trust-label">Verified</span>
+                                <span class="dive-trust-sublabel">Identity Check</span>
                             </div>
                             <div class="dive-trust-arrow">
                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -377,8 +379,9 @@
                                 </svg>
                             </div>
                             <div class="dive-trust-node dive-trust-sp">
-                                <span class="dive-trust-icon">🌐</span>
-                                <span class="dive-trust-label">Resources</span>
+                                <span class="dive-trust-icon">📁</span>
+                                <span class="dive-trust-label">Access</span>
+                                <span class="dive-trust-sublabel">Coalition Data</span>
                             </div>
                         </div>
                         <p class="dive-trust-tagline">${msg("dive.trust.tagline")}</p>
