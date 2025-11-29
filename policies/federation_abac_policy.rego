@@ -181,6 +181,111 @@ is_coi_violation := msg if {
 }
 
 # ============================================
+# Cross-Instance Federated Search (Phase 4)
+# ============================================
+# Authorization rules for federated search across multiple instances
+# Validates that federated resources can be accessed by the requesting user
+
+# Federated search is allowed if:
+# 1. User is authenticated
+# 2. User has sufficient clearance for their max accessible level
+# 3. User's country is in a valid federation agreement
+# 4. The request includes valid origin realm information
+
+default allow_federated_search := false
+
+allow_federated_search if {
+	not is_not_authenticated
+	not is_issuer_not_trusted
+	federated_search_enabled
+}
+
+# Check if federated search is enabled for this instance
+federated_search_enabled if {
+	input.context.federatedSearch == true
+}
+
+# Default: federated search allowed if not explicitly disabled
+federated_search_enabled if {
+	not input.context.federatedSearch == false
+}
+
+# Validate federated resource access
+# A federated resource from another instance can be accessed if:
+# 1. Basic ABAC checks pass
+# 2. The origin realm is trusted
+# 3. The user's country has a federation agreement with the origin realm
+
+default allow_federated_resource := false
+
+allow_federated_resource if {
+	allow
+	is_origin_realm_trusted
+	has_federation_agreement
+}
+
+# Check if origin realm is trusted
+is_origin_realm_trusted if {
+	origin := input.resource.originRealm
+	origin in trusted_origin_realms
+}
+
+# Default: local resources (no origin realm) are trusted
+is_origin_realm_trusted if {
+	not input.resource.originRealm
+}
+
+# Trusted origin realms (all DIVE V3 instances)
+trusted_origin_realms := {"USA", "FRA", "GBR", "DEU", "CAN", "ITA", "ESP", "POL", "NLD"}
+
+# Check federation agreement exists
+# Default: true if no origin realm (local resource)
+default has_federation_agreement := false
+
+has_federation_agreement if {
+	# If no origin realm, it's a local resource - always OK
+	not input.resource.originRealm
+}
+
+has_federation_agreement if {
+	user_country := input.subject.countryOfAffiliation
+	origin := input.resource.originRealm
+	origin  # Must have origin realm
+	
+	# Check if user's country has agreement with origin
+	federation_matrix[user_country][_] == origin
+}
+
+has_federation_agreement if {
+	user_country := input.subject.countryOfAffiliation
+	origin := input.resource.originRealm
+	origin  # Must have origin realm
+	
+	# Symmetric: check if origin has agreement with user's country
+	federation_matrix[origin][_] == user_country
+}
+
+# Federation matrix: which countries can federate with which
+# Based on existing federation agreements in DIVE V3
+federation_matrix := {
+	"USA": ["FRA", "GBR", "DEU", "CAN", "ITA", "ESP", "POL", "NLD"],
+	"FRA": ["USA", "GBR", "DEU", "ITA", "ESP", "POL", "NLD"],
+	"GBR": ["USA", "FRA", "DEU", "CAN", "ITA", "ESP", "POL", "NLD"],
+	"DEU": ["USA", "FRA", "GBR", "ITA", "ESP", "POL", "NLD"],
+	"CAN": ["USA", "GBR"],
+	"ITA": ["USA", "FRA", "GBR", "DEU", "ESP", "POL", "NLD"],
+	"ESP": ["USA", "FRA", "GBR", "DEU", "ITA", "POL", "NLD"],
+	"POL": ["USA", "FRA", "GBR", "DEU", "ITA", "ESP", "NLD"],
+	"NLD": ["USA", "FRA", "GBR", "DEU", "ITA", "ESP", "POL"],
+}
+
+# Federated search result filter
+# Returns true if a federated resource should be included in search results
+include_in_federated_results if {
+	allow_federated_resource
+}
+
+# ============================================
 # Decision Structure (Simplified for Rego v1)
 # ============================================
 
@@ -188,6 +293,8 @@ decision := d if {
 	d := {
 		"allow": allow,
 		"reason": decision_reason,
+		"federatedSearchAllowed": allow_federated_search,
+		"federatedResourceAllowed": allow_federated_resource,
 	}
 }
 

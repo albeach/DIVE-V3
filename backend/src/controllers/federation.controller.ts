@@ -46,8 +46,103 @@ router.get('/metadata', async (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /federation/resources/search
+ * User-initiated federated resource search (accepts JWT from federated realms)
+ * This endpoint is called by OTHER instances when performing cross-federation search
+ */
+router.get('/resources/search', authenticateJWT, async (req: Request, res: Response) => {
+  const { query, classification, releasableTo, coi, limit = '100' } = req.query;
+  const requestId = req.headers['x-request-id'] as string || `fed-${Date.now()}`;
+  const originRealm = req.headers['x-origin-realm'] as string;
+  const user = (req as any).user;
+
+  try {
+    logger.info('Federation user search request', {
+      requestId,
+      originRealm,
+      user: user?.uniqueID,
+      country: user?.countryOfAffiliation,
+      clearance: user?.clearance,
+      searchParams: { query, classification, releasableTo, coi }
+    });
+
+    // Build search query
+    const searchQuery: any = {};
+    
+    if (classification) {
+      searchQuery['ztdf.policy.securityLabel.classification'] = classification;
+    }
+    
+    if (releasableTo) {
+      searchQuery['ztdf.policy.securityLabel.releasabilityTo'] = { $in: [releasableTo] };
+    }
+    
+    if (coi) {
+      const coiArray = Array.isArray(coi) ? coi : [coi];
+      searchQuery['ztdf.policy.securityLabel.COI'] = { $in: coiArray };
+    }
+
+    if (query) {
+      searchQuery.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { resourceId: { $regex: query, $options: 'i' } }
+      ];
+    }
+
+    // Execute search
+    const resources = await getResourcesByQuery(searchQuery, {
+      limit: parseInt(limit as string),
+      fields: {
+        resourceId: 1,
+        title: 1,
+        'ztdf.policy.securityLabel': 1,
+        creationDate: 1
+      }
+    });
+
+    // Map to federated search result format
+    const results = resources.map((r: any) => ({
+      resourceId: r.resourceId,
+      title: r.title,
+      classification: r.ztdf?.policy?.securityLabel?.classification || r.classification || 'UNCLASSIFIED',
+      releasabilityTo: r.ztdf?.policy?.securityLabel?.releasabilityTo || r.releasabilityTo || [],
+      COI: r.ztdf?.policy?.securityLabel?.COI || r.COI || [],
+      encrypted: Boolean(r.ztdf?.payload?.encryptedContent),
+      creationDate: r.ztdf?.policy?.securityLabel?.creationDate || r.creationDate,
+      displayMarking: r.ztdf?.policy?.securityLabel?.displayMarking,
+      originRealm: process.env.INSTANCE_REALM || 'USA'
+    }));
+
+    logger.info('Federation user search completed', {
+      requestId,
+      originRealm,
+      resultsCount: results.length
+    });
+
+    res.json({
+      resources: results,
+      totalResults: results.length,
+      originRealm: process.env.INSTANCE_REALM || 'USA',
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Federation user search error', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Search failed',
+      requestId
+    });
+  }
+});
+
+/**
  * GET /federation/search
- * Federated resource search
+ * SP-to-SP federated resource search (requires SP authentication)
  */
 router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (req: Request, res: Response) => {
   const { classification, country, keywords, coi, limit = '100', offset = '0' } = req.query;

@@ -787,6 +787,54 @@ get_running_instances() {
     echo "${running[@]}"
 }
 
+# Sync federation secrets from GCP to Keycloak IdP brokers
+# This ensures IdP brokers have correct client secrets for federation
+sync_federation_secrets() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    
+    log_info "Syncing federation secrets from GCP to Keycloak..."
+    
+    # Check if the sync script exists
+    local sync_script="$SCRIPT_DIR/federation/sync-gcp-secrets-to-keycloak.sh"
+    
+    if [ ! -f "$sync_script" ]; then
+        log_warning "Federation sync script not found: $sync_script"
+        log_info "Skipping federation secret sync"
+        return 0
+    fi
+    
+    # Wait for Keycloak to be ready
+    local max_wait=60
+    local waited=0
+    local keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+    
+    while [ $waited -lt $max_wait ]; do
+        if curl -sf "${keycloak_url}/realms/dive-v3-broker" --insecure >/dev/null 2>&1; then
+            break
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        log_info "Waiting for Keycloak realm... ($waited/$max_wait seconds)"
+    done
+    
+    if [ $waited -ge $max_wait ]; then
+        log_warning "Keycloak realm not ready, skipping federation sync"
+        return 0
+    fi
+    
+    # Run the sync script
+    if INSTANCE="$instance_lower" \
+       KEYCLOAK_URL="$keycloak_url" \
+       KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}" \
+       GCP_PROJECT_ID="${GCP_PROJECT_ID:-dive25}" \
+       /usr/local/bin/bash "$sync_script" 2>&1; then
+        log_success "Federation secrets synced successfully"
+    else
+        log_warning "Federation secret sync completed with warnings"
+    fi
+}
+
 # Seed resources for an instance
 seed_resources() {
     local instance=$1
@@ -913,13 +961,17 @@ deploy_new_instance() {
     progress "Restarting services with credentials"
     start_docker_services "$instance"
     
-    # Step 7: Federate with existing instances (if requested)
+    # Step 7: Sync federation secrets from GCP to Keycloak IdP brokers
+    progress "Syncing federation secrets from GCP"
+    sync_federation_secrets "$instance"
+    
+    # Step 8: Federate with existing instances (if requested)
     if [[ "$FEDERATE" == "true" ]]; then
         progress "Federating with existing instances"
         federate_with_all "$instance"
     fi
     
-    # Step 8: Seed resources (if requested)
+    # Step 9: Seed resources (if requested)
     if [[ "$SEED" == "true" ]]; then
         progress "Seeding MongoDB resources"
         seed_resources "$instance" "$SEED_COUNT"
@@ -942,6 +994,10 @@ deploy_instance() {
     
     # Restart services with correct secrets
     start_docker_services "$instance"
+    
+    # Sync federation secrets from GCP to Keycloak IdP brokers
+    log_info "Syncing federation secrets..."
+    sync_federation_secrets "$instance"
     
     log_success "Instance $instance updated successfully!"
 }

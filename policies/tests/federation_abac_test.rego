@@ -477,3 +477,182 @@ test_decision_structure_deny if {
     d.allow == false
 }
 
+# =============================================================================
+# 10. CROSS-INSTANCE FEDERATED SEARCH TESTS
+# =============================================================================
+
+# Test: Allow federated search for authenticated user
+test_allow_federated_search if {
+    federation.allow_federated_search with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-fra-1",
+            "clearance": "SECRET",
+            "countryOfAffiliation": "FRA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-fra"
+        },
+        "resource": {},
+        "context": {
+            "federatedSearch": true,
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+}
+
+# Test: Deny federated search for unauthenticated user
+test_deny_federated_search_unauthenticated if {
+    not federation.allow_federated_search with input as {
+        "subject": {
+            "authenticated": false,
+            "uniqueID": "testuser-fra-1"
+        },
+        "resource": {},
+        "context": {
+            "federatedSearch": true
+        }
+    }
+}
+
+# Test: Allow federated resource from trusted origin
+test_allow_federated_resource_trusted_origin if {
+    federation.allow_federated_resource with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-usa-1",
+            "clearance": "SECRET",
+            "countryOfAffiliation": "USA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-usa"
+        },
+        "resource": {
+            "resourceId": "doc-fra-001",
+            "classification": "SECRET",
+            "releasabilityTo": ["USA", "FRA"],
+            "originRealm": "FRA"
+        },
+        "context": {
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+}
+
+# Test: Allow federated resource from GBR to USA user
+test_allow_federated_resource_gbr_to_usa if {
+    federation.allow_federated_resource with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-usa-2",
+            "clearance": "SECRET",
+            "countryOfAffiliation": "USA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-usa"
+        },
+        "resource": {
+            "resourceId": "doc-gbr-001",
+            "classification": "CONFIDENTIAL",
+            "releasabilityTo": ["USA", "GBR"],
+            "originRealm": "GBR"
+        },
+        "context": {
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+}
+
+# Test: Deny federated resource when user country not releasable
+test_deny_federated_resource_not_releasable if {
+    not federation.allow_federated_resource with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-usa-3",
+            "clearance": "SECRET",
+            "countryOfAffiliation": "USA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-usa"
+        },
+        "resource": {
+            "resourceId": "doc-fra-002",
+            "classification": "SECRET",
+            "releasabilityTo": ["FRA"],  # USA not in releasability
+            "originRealm": "FRA"
+        },
+        "context": {
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+}
+
+# Test: Deny federated resource when insufficient clearance
+test_deny_federated_resource_insufficient_clearance if {
+    not federation.allow_federated_resource with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-usa-4",
+            "clearance": "CONFIDENTIAL",  # Lower than required
+            "countryOfAffiliation": "USA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-usa"
+        },
+        "resource": {
+            "resourceId": "doc-fra-003",
+            "classification": "SECRET",
+            "releasabilityTo": ["USA", "FRA"],
+            "originRealm": "FRA"
+        },
+        "context": {
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+}
+
+# Test: Allow local resource (no origin realm)
+test_allow_local_resource_no_origin if {
+    federation.allow_federated_resource with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-usa-1",
+            "clearance": "SECRET",
+            "countryOfAffiliation": "USA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-usa"
+        },
+        "resource": {
+            "resourceId": "doc-usa-001",
+            "classification": "SECRET",
+            "releasabilityTo": ["USA"]
+            # No originRealm - local resource
+        },
+        "context": {
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+}
+
+# Test: Decision includes federated search fields
+test_decision_includes_federated_fields if {
+    d := federation.decision with input as {
+        "subject": {
+            "authenticated": true,
+            "uniqueID": "testuser-fra-1",
+            "clearance": "SECRET",
+            "countryOfAffiliation": "FRA",
+            "issuer": "https://keycloak:8080/realms/dive-v3-fra"
+        },
+        "resource": {
+            "resourceId": "doc-usa-001",
+            "classification": "SECRET",
+            "releasabilityTo": ["USA", "FRA"],
+            "originRealm": "USA"
+        },
+        "context": {
+            "federatedSearch": true,
+            "acr": "1",
+            "amr": ["pwd", "otp"]
+        }
+    }
+    d.allow == true
+    d.federatedSearchAllowed == true
+    d.federatedResourceAllowed == true
+}
+
