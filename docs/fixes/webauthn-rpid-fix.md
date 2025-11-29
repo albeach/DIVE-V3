@@ -1,7 +1,7 @@
 # WebAuthn (Passkey) Fix for Production Domains
 
 ## Issue
-When authenticating as a TOP_SECRET user (e.g., `testuser-pol-ts`), users were redirected to the WebAuthn registration page but encountered an "internal server error":
+When authenticating as a TOP_SECRET user (e.g., `testuser-usa-4`), users were redirected to the WebAuthn registration page but encountered an "internal server error":
 ```
 https://dev-auth.dive25.com/realms/dive-v3-pol/login-actions/required-action?execution=webauthn-register&...
 Error: "We are sorry..." An internal server error has occurred
@@ -75,7 +75,7 @@ This script:
 ## Testing
 1. Navigate to: `https://dev-app.dive25.com`
 2. Click **Sign In** → Select **Poland (POL)** realm
-3. Login as `testuser-pol-ts` / `DiveDemo2025!`
+3. Login as `testuser-usa-4` / `DiveDemo2025!`
 4. You should see the WebAuthn registration page (no more errors!)
 5. Register a passkey:
    - **1Password**: Use "Create Passkey" feature
@@ -184,7 +184,7 @@ After successful WebAuthn registration and authentication, the token should incl
   "amr": ["pwd", "hwk"],
   "clearance": "TOP_SECRET",
   "auth_time": 1731268800,
-  "uniqueID": "testuser-pol-ts@mon.gov.pl",
+  "uniqueID": "testuser-usa-4@mon.gov.pl",
   "countryOfAffiliation": "POL",
   "acpCOI": ["NATO-COSMIC", "FVEY"]
 }

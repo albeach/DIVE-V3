@@ -92,33 +92,33 @@ export const validateIdPCreation = [
 
     // OIDC Configuration (if protocol is 'oidc')
     body('oidcConfig.discoveryUrl')
-        .if(body('protocol').equals('oidc'))
+        .if((_value, { req }) => req.body?.protocol === 'oidc')
         .trim()
         .isURL({ protocols: ['https'], require_protocol: true })
         .withMessage('Discovery URL must be a valid HTTPS URL'),
 
     body('oidcConfig.clientId')
-        .if(body('protocol').equals('oidc'))
+        .if((_value, { req }) => req.body?.protocol === 'oidc')
         .trim()
         .isLength({ min: 1, max: 255 })
         .withMessage('Client ID is required and must not exceed 255 characters'),
 
     body('oidcConfig.clientSecret')
-        .if(body('protocol').equals('oidc'))
+        .if((_value, { req }) => req.body?.protocol === 'oidc')
         .trim()
         .isLength({ min: 1, max: 1000 })
         .withMessage('Client secret is required and must not exceed 1000 characters'),
 
     // SAML Configuration (if protocol is 'saml')
     body('samlConfig.metadataUrl')
-        .if(body('protocol').equals('saml'))
+        .if((_value, { req }) => req.body?.protocol === 'saml')
         .optional()
         .trim()
         .isURL({ protocols: ['https'], require_protocol: true })
         .withMessage('Metadata URL must be a valid HTTPS URL'),
 
     body('samlConfig.metadataXml')
-        .if(body('protocol').equals('saml'))
+        .if((_value, { req }) => req.body?.protocol === 'saml')
         .optional()
         .trim()
         .isLength({ min: 1, max: 100000 })
@@ -376,7 +376,7 @@ export const sanitizeAllStrings = (
  */
 export const validateRegexQuery = (
     req: Request,
-    _res: Response,
+    res: Response,
     next: NextFunction
 ): void => {
     const regexFields = ['search', 'filter', 'pattern'];
@@ -385,30 +385,33 @@ export const validateRegexQuery = (
     for (const field of regexFields) {
         const value = req.query[field] as string;
         if (value) {
-            // Check for catastrophic backtracking patterns
-            const dangerousPatterns = [
-                /(.*?)\1{10,}/, // Repetition with backreference
-                /(\w+\s?)+$/, // Greedy quantifier with optional whitespace
-                /((a+)+)+b/, // Nested quantifiers
+            // Check for dangerous regex patterns that could cause ReDoS
+            // These patterns look for nested quantifiers and backreferences in the INPUT string
+            // (i.e., if the user is trying to submit a malicious regex pattern)
+            const dangerousPatternIndicators = [
+                /\(\.\*\?\)\\1\{10,\}/, // Repetition with backreference like (.*?)\1{10,}
+                /\(\[\^[^\]]+\]\+\)\+/, // Nested quantifiers like ([^]+)+
+                /\(\([a-z]\+\)\+\)\+/i, // Nested quantifiers like ((a+)+)+
+                /\.\*\.\*\.\*/, // Multiple greedy wildcards
             ];
 
-            for (const pattern of dangerousPatterns) {
+            for (const pattern of dangerousPatternIndicators) {
                 try {
                     if (pattern.test(value)) {
-                logger.warn('Potential regex DoS pattern detected', {
-                    requestId,
-                    field,
-                    value: value.substring(0, 100),
-                });
+                        logger.warn('Potential regex DoS pattern detected', {
+                            requestId,
+                            field,
+                            value: value.substring(0, 100),
+                        });
 
-                _res.status(400).json({
-                    error: 'Validation Error',
-                    message: 'Invalid search pattern detected',
-                    requestId,
-                });
-                return;
+                        res.status(400).json({
+                            error: 'Validation Error',
+                            message: 'Invalid search pattern detected',
+                            requestId,
+                        });
+                        return;
                     }
-                } catch (error) {
+                } catch {
                     // Pattern itself might be invalid, skip
                 }
             }
@@ -421,7 +424,7 @@ export const validateRegexQuery = (
                     length: value.length,
                 });
 
-                _res.status(400).json({
+                res.status(400).json({
                     error: 'Validation Error',
                     message: 'Search pattern too long (max 200 characters)',
                     requestId,

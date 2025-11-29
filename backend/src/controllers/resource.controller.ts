@@ -681,16 +681,16 @@ export const requestKeyHandler = async (
 
         } else {
             // Local KAS request (original implementation)
-            // Priority: KAO's kasUrl > Environment KAS_URL > Default 'https://kas:8080'
-            const kasUrl = kao.kasUrl
-                ? (kao.kasUrl.includes('/request-key') ? kao.kasUrl : `${kao.kasUrl}/request-key`)
-                : `${process.env.KAS_URL || 'https://kas:8080'}/request-key`;
+            // CRITICAL: Always use internal KAS URL for local requests
+            // The KAO's kasUrl is the external URL for frontend clients
+            // Backend should use internal Docker network URL to avoid Cloudflare loop
+            const kasUrl = `${process.env.KAS_URL || 'https://kas:8080'}/request-key`;
 
             logger.info('Calling local KAS', {
                 requestId,
                 kasUrl,
-                kaoKasUrl: kao.kasUrl,
-                envKasUrl: process.env.KAS_URL
+                kaoKasUrl: kao.kasUrl,  // External URL (for reference)
+                internalKasUrl: kasUrl  // Actual URL being called
             });
 
             try {

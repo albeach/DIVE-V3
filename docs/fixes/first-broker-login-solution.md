@@ -4,7 +4,7 @@
 
 When clicking "United States" on the IdP selector and signing in as `test-usa-unclass`, you receive:
 ```
-User with email testuser-usa-unclass@example.mil already exists. 
+User with email testuser-usa-1@example.mil already exists. 
 Please login to account management to link the account.
 ```
 
@@ -60,17 +60,17 @@ Updated test user creation to set `username = uniqueID`:
 
 **Before:**
 ```hcl
-username = "testuser-usa-unclass"  # Generic username
+username = "testuser-usa-1"  # Generic username
 attributes = {
-  uniqueID = "testuser-usa-unclass@example.mil"  # Different from username
+  uniqueID = "testuser-usa-1@example.mil"  # Different from username
 }
 ```
 
 **After:**
 ```hcl
-username = "testuser-usa-unclass@example.mil"  # Same as uniqueID
+username = "testuser-usa-1@example.mil"  # Same as uniqueID
 attributes = {
-  uniqueID = "testuser-usa-unclass@example.mil"  # Matches username
+  uniqueID = "testuser-usa-1@example.mil"  # Matches username
 }
 ```
 
@@ -89,14 +89,14 @@ Post Broker Login Flow
 ### How It Works
 
 1. **User logs in to national realm** (e.g., `dive-v3-usa`)
-   - Username: `testuser-usa-unclass@example.mil`
-   - Token includes: `uniqueID: testuser-usa-unclass@example.mil`
+   - Username: `testuser-usa-1@example.mil`
+   - Token includes: `uniqueID: testuser-usa-1@example.mil`
 
 2. **Broker receives OIDC token** from national realm
    - Username mapper: Extracts `uniqueID` claim → sets broker username
 
 3. **`idp-auto-link`** (ALTERNATIVE):
-   - Checks if a user with username = `testuser-usa-unclass@example.mil` exists in broker
+   - Checks if a user with username = `testuser-usa-1@example.mil` exists in broker
    - **✅ Match found:** Links IdP identity to existing broker user
    - **Skip:** No match, try next execution
 
@@ -145,12 +145,12 @@ terraform apply tfplan
 
 1. Open: http://localhost:3000
 2. Click: **United States (DoD)**
-3. **Login with uniqueID as username:** `testuser-usa-unclass@example.mil` / `password123`
+3. **Login with uniqueID as username:** `testuser-usa-1@example.mil` / `password123`
 4. **Expected:** Successful login, no "user already exists" error
 5. **Redirected to:** Resources page with user info
 
 **Note:** The username is now the full `uniqueID` value, not the short form. If you get "Invalid username or password", ensure:
-- You're using the **full uniqueID** as the username (e.g., `testuser-usa-unclass@example.mil`)
+- You're using the **full uniqueID** as the username (e.g., `testuser-usa-1@example.mil`)
 - The user exists in the national realm (`dive-v3-usa`)
 - The password is correct (`password123` by default)
 

@@ -183,7 +183,7 @@ export const TEST_SCENARIOS = {
    * EXPECTED: ALLOW (clearance: SECRET, country: USA in releasabilityTo, COI: FVEY matches)
    */
   USA_SECRET_FVEY_ALLOW: {
-    user: 'testuser-usa-secret',
+    user: 'testuser-usa-3',
     resource: TEST_RESOURCES.SECRET.FVEY,
     expectedDecision: 'ALLOW',
     reason: 'User has SECRET clearance, USA nationality, and FVEY COI',
@@ -194,7 +194,7 @@ export const TEST_SCENARIOS = {
    * EXPECTED: DENY (country FRA not in releasabilityTo: [USA, GBR, CAN, AUS, NZL])
    */
   FRA_SECRET_FVEY_DENY: {
-    user: 'testuser-fra-secret',
+    user: 'testuser-fra-3',
     resource: TEST_RESOURCES.SECRET.FVEY,
     expectedDecision: 'DENY',
     reason: 'Country FRA not in releasabilityTo',
@@ -205,7 +205,7 @@ export const TEST_SCENARIOS = {
    * EXPECTED: DENY (clearance insufficient: UNCLASSIFIED < SECRET)
    */
   CAN_UNCLASS_SECRET_DENY: {
-    user: 'testuser-can-unclass',
+    user: 'testuser-can-1',
     resource: TEST_RESOURCES.SECRET.BASIC,
     expectedDecision: 'DENY',
     reason: 'Clearance UNCLASSIFIED insufficient for SECRET document',
@@ -216,7 +216,7 @@ export const TEST_SCENARIOS = {
    * EXPECTED: ALLOW (clearance: SECRET, country: DEU in releasabilityTo, COI: NATO-COSMIC matches)
    */
   DEU_SECRET_NATO_ALLOW: {
-    user: 'testuser-deu-secret',
+    user: 'testuser-deu-3',
     resource: TEST_RESOURCES.SECRET.NATO,
     expectedDecision: 'ALLOW',
     reason: 'User has SECRET clearance, DEU in NATO releasabilityTo, NATO-COSMIC COI',
@@ -227,7 +227,7 @@ export const TEST_SCENARIOS = {
    * EXPECTED: DENY (COI mismatch: contractor has [], document requires [US-ONLY])
    */
   INDUSTRY_SECRET_USONLY_DENY: {
-    user: 'testuser-industry-secret',
+    user: 'testuser-industry-3',
     resource: TEST_RESOURCES.SECRET.USA_ONLY,
     expectedDecision: 'DENY',
     reason: 'Industry user lacks US-ONLY COI',
@@ -238,7 +238,7 @@ export const TEST_SCENARIOS = {
    * EXPECTED: DENY (country: GBR not in releasabilityTo: [USA])
    */
   GBR_TS_USA_RESTRICTED_DENY: {
-    user: 'testuser-gbr-ts',
+    user: 'testuser-gbr-4',
     resource: TEST_RESOURCES.TOP_SECRET.USA_RESTRICTED,
     expectedDecision: 'DENY',
     reason: 'Country GBR not in releasabilityTo (USA only)',

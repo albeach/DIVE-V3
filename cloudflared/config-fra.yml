@@ -4,6 +4,9 @@
 tunnel: e07574bd-6f32-478b-8f71-42fc3d4073f7
 credentials-file: /etc/cloudflared/tunnel-credentials.json
 
+# Force HTTP/2 to avoid QUIC timeout issues
+protocol: http2
+
 # Metrics for monitoring
 metrics: 0.0.0.0:9127
 
@@ -24,7 +27,7 @@ ingress:
   
   # FRA Keycloak IdP - connects via Docker network
   - hostname: fra-idp.dive25.com
-    service: https://keycloak-fra:8443
+    service: https://keycloak:8443
     originRequest:
       noTLSVerify: true
       connectTimeout: 30s

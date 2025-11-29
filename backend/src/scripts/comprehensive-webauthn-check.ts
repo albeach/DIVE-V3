@@ -368,7 +368,7 @@ async function checkTestUserSetup(kcAdminClient: KcAdminClient): Promise<void> {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   kcAdminClient.setConfig({ realmName: TEST_REALM });
-  const users = await kcAdminClient.users.find({ username: 'testuser-pol-ts' });
+  const users = await kcAdminClient.users.find({ username: 'testuser-usa-4' });
   
   if (users.length > 0) {
     const user = users[0];
@@ -423,9 +423,9 @@ async function checkTestUserSetup(kcAdminClient: KcAdminClient): Promise<void> {
       name: 'Test User',
       status: 'FAIL',
       value: null,
-      message: 'testuser-pol-ts not found',
+      message: 'testuser-usa-4 not found',
     });
-    console.log('✗ FAIL: testuser-pol-ts not found');
+    console.log('✗ FAIL: testuser-usa-4 not found');
   }
 }
 

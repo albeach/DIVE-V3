@@ -107,23 +107,25 @@ test('User can access authorized resources', async ({ page }) => {
 ```typescript
 import { TEST_USERS } from './fixtures/test-users';
 
-// Access specific user
-const user = TEST_USERS.USA.SECRET;
-console.log(user.username);     // "testuser-usa-secret"
+// Access specific user by level (1=UNCLASS, 2=CONF, 3=SECRET, 4=TS)
+const user = TEST_USERS.USA.LEVEL_3;
+console.log(user.username);     // "testuser-usa-3"
 console.log(user.clearance);    // "SECRET"
 console.log(user.countryCode);  // "USA"
-console.log(user.coi);          // ["NATO-COSMIC"]
+console.log(user.coi);          // ["NATO"]
 
 // Helper functions
 getUsersByClearance('SECRET');  // All SECRET users
+getUsersByLevel(3);             // All level 3 (SECRET) users
 getUsersByCountry('USA');       // All USA users
 getUsersWithoutMFA();           // Users with no MFA (for quick tests)
 ```
 
 **Available Users:**
-- 11 countries: USA, FRA, CAN, DEU, GBR, ITA, ESP, POL, NLD, INDUSTRY, BROKER
-- 4 clearances per country: UNCLASS, CONFIDENTIAL, SECRET, TOP_SECRET
-- Total: 44 test users
+- 4 countries: USA, FRA, DEU, GBR (+ INDUSTRY)
+- 4 clearance levels per country: 1=UNCLASSIFIED, 2=CONFIDENTIAL, 3=SECRET, 4=TOP_SECRET
+- User pattern: `testuser-{country}-{level}` (e.g., `testuser-usa-3`)
+- Password: `TestUser2025!Pilot`
 
 #### Test Resources (`fixtures/test-resources.ts`)
 
@@ -229,7 +231,7 @@ import { DashboardPage } from './pages/DashboardPage';
 const dashboard = new DashboardPage(page);
 await dashboard.goto();
 await dashboard.verifyLoggedIn();
-await dashboard.verifyUserInfo('testuser-usa-secret', 'SECRET', 'USA');
+await dashboard.verifyUserInfo('testuser-usa-3', 'SECRET', 'USA');
 await dashboard.openIdentityDrawer();
 await dashboard.goToResources();
 ```
@@ -305,7 +307,7 @@ test.describe('Resource Access Tests', () => {
    await loginAs(page, TEST_USERS.USA.SECRET);
    
    // ❌ Bad
-   const user = { username: 'testuser-usa-secret', password: 'Password123!' };
+   const user = { username: 'testuser-usa-3', password: 'Password123!' };
    ```
 
 2. **Use Page Objects** - Encapsulate page interactions
@@ -383,7 +385,7 @@ test('User can view dashboard', async ({ page }) => {
   
   // Verify
   await dashboard.verifyLoggedIn();
-  await dashboard.verifyUserInfo('testuser-usa-secret', 'SECRET', 'USA');
+  await dashboard.verifyUserInfo('testuser-usa-3', 'SECRET', 'USA');
 });
 ```
 

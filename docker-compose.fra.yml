@@ -16,8 +16,11 @@ services:
       - "5434:5432"
     volumes:
       - postgres_fra_data:/var/lib/postgresql/data
+      - ./scripts/postgres-init-fra/init-fra-db.sh:/docker-entrypoint-initdb.d/init-fra-db.sh
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
@@ -58,7 +61,9 @@ services:
       postgres-fra:
         condition: service_healthy
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - keycloak
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -78,7 +83,10 @@ services:
     volumes:
       - mongodb_fra_data:/data/db
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - mongo
+          - mongodb
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
@@ -92,7 +100,9 @@ services:
     ports:
       - "6380:6379"
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -115,9 +125,12 @@ services:
     volumes:
       - ./policies:/policies:ro
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - opa
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
+      # OPA alpine image doesn't have wget - use /opa version instead
+      test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -131,11 +144,12 @@ services:
     environment:
       NODE_ENV: development
       PORT: 8080
-      OPA_URL: http://opa-fra:8181
-      KEYCLOAK_URL: https://keycloak-fra:8443
+      OPA_URL: http://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      BACKEND_URL: http://backend-fra:4000
+      BACKEND_URL: http://backend:4000
+      MONGODB_URI: mongodb://admin:admin@mongo:27017
       JWT_SECRET: fra-kas-secret-change-in-production
     ports:
       - "8083:8080"
@@ -145,7 +159,9 @@ services:
       - opa-fra
       - mongodb-fra
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - kas
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -162,22 +178,25 @@ services:
       NODE_ENV: development
       PORT: 4000
       INSTANCE_REALM: FRA
-      MONGODB_URI: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
-      REDIS_HOST: redis-fra
+      # Use network aliases for service discovery
+      MONGODB_URI: mongodb://admin:admin@mongo:27017/dive-v3-fra?authSource=admin
+      MONGODB_URL: mongodb://admin:admin@mongo:27017/dive-v3-fra?authSource=admin
+      REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_URL: redis://redis-fra:6379
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: fra-backend-secret-change-in-production
-      OPA_URL: http://opa-fra:8181
-      KEYCLOAK_URL: https://keycloak-fra:8443
+      OPA_URL: http://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
+      KEYCLOAK_CLIENT_SECRET: ${FRA_KEYCLOAK_CLIENT_SECRET:-placeholder-run-terraform}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
-      KAS_URL: http://kas-fra:8080
-      FEDERATION_ALLOWED_ORIGINS: https://fra-app.dive25.com,https://localhost:3001
+      KAS_URL: http://kas:8080
+      # Include all federation partner origins for cross-instance API calls
+      CORS_ORIGIN: https://fra-app.dive25.com,https://usa-app.dive25.com,https://gbr-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3001
+      FEDERATION_ALLOWED_ORIGINS: https://fra-app.dive25.com,https://usa-app.dive25.com,https://gbr-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3001
       NEXT_PUBLIC_BASE_URL: https://fra-app.dive25.com
     ports:
       - "4001:4000"
@@ -197,7 +216,10 @@ services:
       kas-fra:
         condition: service_healthy
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - backend
+          - backend-fra
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
       interval: 30s
@@ -221,18 +243,23 @@ services:
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       NEXT_PUBLIC_APP_NAME: "DIVE V3 - France"
       NEXT_PUBLIC_INSTANCE: FRA
+      NEXT_PUBLIC_INSTANCE_NAME: "France"
+      NEXT_PUBLIC_LOCALE: fr-FR
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3001,https://localhost:4001,https://localhost:8444,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com"
+      # Include federation partner IdP domains for SSO redirects
+      NEXT_PUBLIC_IDP_DOMAINS: "https://usa-idp.dive25.com,https://gbr-idp.dive25.com,https://deu-idp.prosecurity.biz"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
+      KEYCLOAK_CLIENT_SECRET: ${FRA_KEYCLOAK_CLIENT_SECRET:-placeholder-run-terraform}
       KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_URL: https://keycloak-fra:8443
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_ISSUER: https://fra-idp.dive25.com/realms/dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://fra-app.dive25.com
-      NEXTAUTH_SECRET: fra-frontend-secret-change-in-production
+      NEXTAUTH_SECRET: ${FRA_NEXTAUTH_SECRET:-fra-frontend-secret-change-in-production}
+      AUTH_SECRET: ${FRA_AUTH_SECRET:-fra-auth-secret-change-in-production}
       AUTH_TRUST_HOST: "true"
-      DATABASE_URL: postgresql://keycloak:keycloak@postgres-fra:5432/dive_v3_app
+      DATABASE_URL: postgresql://keycloak:keycloak@postgres:5432/dive_v3_fra
     ports:
       - "3001:3000"
     volumes:
@@ -245,8 +272,12 @@ services:
     depends_on:
       - backend-fra
       - keycloak-fra
+      - postgres-fra
     networks:
-      - dive-fra-network
+      dive-fra-network:
+        aliases:
+          - frontend
+          - frontend-fra
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s

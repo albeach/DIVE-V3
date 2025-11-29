@@ -224,6 +224,7 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
         // Custom Domain: Accept kas.js.usa.divedeeper.internal:8443 (KC_HOSTNAME) - Nov 6, 2025 fix
         // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
+        // USA IdP Domain: Accept usa-idp.dive25.com (Nov 29, 2025)
         const validIssuers: [string, ...string[]] = [
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Internal: dive-v3-broker
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
@@ -235,6 +236,8 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker
             'https://dev-auth.dive25.com/realms/dive-v3-broker',    // Cloudflare Tunnel: dive-v3-broker
             'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker
+            'https://usa-idp.dive25.com:8443/realms/dive-v3-broker', // USA IdP domain with port
+            'https://usa-idp.dive25.com/realms/dive-v3-broker',      // USA IdP via Cloudflare (no port)
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience

@@ -243,7 +243,7 @@ async function main(): Promise<void> {
     console.log('Next Steps:');
     console.log('  1. Run: npm run check-webauthn-comprehensive');
     console.log('  2. Verify all warnings are resolved');
-    console.log('  3. Test WebAuthn registration with testuser-pol-ts\n');
+    console.log('  3. Test WebAuthn registration with testuser-usa-4 (TOP_SECRET)\n');
     
     process.exit(0);
   } catch (error) {

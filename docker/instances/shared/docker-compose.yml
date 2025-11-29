@@ -1,0 +1,139 @@
+# =============================================================================
+# DIVE V3 - Shared Services
+# =============================================================================
+# Cross-instance shared services: monitoring, metrics, shared cache.
+# These services are accessible from all instance networks.
+#
+# Usage:
+#   cd docker/instances/shared
+#   docker compose up -d
+# =============================================================================
+
+name: dive-v3-shared
+
+services:
+  # ---------------------------------------------------------------------------
+  # Blacklist Redis - Shared Token Blacklist (Cross-Instance)
+  # ---------------------------------------------------------------------------
+  blacklist-redis:
+    image: redis:7-alpine
+    container_name: dive-v3-blacklist-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${BLACKLIST_REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${BLACKLIST_REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - shared
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics Collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dive-v3-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - shared
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Metrics Visualization
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dive-v3-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3333:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - shared
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Alertmanager - Alert Routing
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: dive-v3-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - shared
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Redis Exporter - Redis Metrics for Prometheus
+  # ---------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: dive-v3-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: blacklist-redis:6379
+      REDIS_PASSWORD: ${BLACKLIST_REDIS_PASSWORD}
+    ports:
+      - "9121:9121"
+    networks:
+      - shared
+    depends_on:
+      - blacklist-redis
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  shared:
+    name: dive-v3-shared
+    driver: bridge
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  prometheus_data:
+    name: dive-v3-prometheus-data
+  grafana_data:
+    name: dive-v3-grafana-data
+  alertmanager_data:
+    name: dive-v3-alertmanager-data
+

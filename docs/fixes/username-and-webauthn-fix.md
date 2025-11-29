@@ -6,7 +6,7 @@
 ## Issues Identified
 
 ### Issue 1: Full Email Required as Username
-**Problem:** After implementing the uniqueID-based username mapper, users had to enter their full email address (e.g., `testuser-usa-unclass@example.mil`) instead of the short username (`testuser-usa-unclass`).
+**Problem:** After implementing the uniqueID-based username mapper, users had to enter their full email address (e.g., `testuser-usa-1@example.mil`) instead of the short username (`testuser-usa-1`).
 
 **Root Cause:** 
 - In our previous fix, we added a `oidc-username-idp-mapper` that mapped the `uniqueID` claim to the Keycloak `username` field
@@ -36,10 +36,10 @@ MediaType not set on path /realms/dive-v3-usa/login-actions/required-action, wit
 
 ```hcl
 # Before (email format):
-username = "testuser-${var.country_code_lower}-unclass@${var.email_domain}"
+username = "testuser-${var.country_code_lower}-1@${var.email_domain}"
 
 # After (short format):
-username = "testuser-${var.country_code_lower}-unclass"
+username = "testuser-${var.country_code_lower}-1"
 ```
 
 **Rationale:** 
@@ -84,10 +84,10 @@ resource "keycloak_custom_identity_provider_mapper" "usa_broker_username" {
 ### 3. Cleaned Up Old Broker Users
 
 **Action:** Deleted old federated users from broker realm:
-- `testuser-usa-unclass` (old instance)
-- `testuser-usa-secret` (old instance)
-- `testuser-fra-unclass` (old instance)
-- `testuser-fra-secret` (old instance)
+- `testuser-usa-1` (old instance)
+- `testuser-usa-3` (old instance)
+- `testuser-fra-1` (old instance)
+- `testuser-fra-3` (old instance)
 
 **Rationale:** 
 - These users were created with the old username configuration
@@ -106,11 +106,11 @@ The existing flow is correct:
 ```
 
 **How It Works Now:**
-1. User logs in to national realm (e.g., `dive-v3-usa`) with short username (`testuser-usa-unclass`)
-2. National realm issues OIDC token with `username=testuser-usa-unclass` and `uniqueID=testuser-usa-unclass@example.mil`
+1. User logs in to national realm (e.g., `dive-v3-usa`) with short username (`testuser-usa-1`)
+2. National realm issues OIDC token with `username=testuser-usa-1` and `uniqueID=testuser-usa-1@example.mil`
 3. Broker receives token and runs first-broker-login flow
 4. `idp-auto-link` attempts to match by email/username (won't find a match on first login)
-5. `idp-create-user-if-unique` creates a new user in broker realm with `username=testuser-usa-unclass`
+5. `idp-create-user-if-unique` creates a new user in broker realm with `username=testuser-usa-1`
 6. Future logins: `idp-auto-link` will match by username and skip user creation
 
 ## Testing Instructions
@@ -119,7 +119,7 @@ The existing flow is correct:
 1. Navigate to frontend: `https://kas.js.usa.divedeeper.internal:3000`
 2. Click "United States"
 3. Login with:
-   - **Username:** `testuser-usa-unclass` ✅ (short format)
+   - **Username:** `testuser-usa-1` ✅ (short format)
    - **Password:** `password123`
 4. **Expected Result:**
    - Successfully authenticated
@@ -131,7 +131,7 @@ The existing flow is correct:
 1. Navigate to frontend
 2. Click "United States"
 3. Login with:
-   - **Username:** `testuser-usa-confidential` ✅ (short format)
+   - **Username:** `testuser-usa-2` ✅ (short format)
    - **Password:** `password123`
 4. **Expected Result:**
    - First login: prompted to configure TOTP
@@ -142,7 +142,7 @@ The existing flow is correct:
 1. Navigate to frontend
 2. Click "United States"
 3. Login with:
-   - **Username:** `testuser-usa-ts` ✅ (short format)
+   - **Username:** `testuser-usa-4` ✅ (short format)
    - **Password:** `password123`
 4. **Expected Result:**
    - First login: prompted to register WebAuthn (hardware key or platform authenticator)
@@ -157,32 +157,32 @@ TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-con
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=admin" -d "password=admin" -d "grant_type=password" -d "client_id=admin-cli" | jq -r '.access_token')
 
-curl -s "http://localhost:8081/admin/realms/dive-v3-usa/users?username=testuser-usa-unclass&exact=true" \
+curl -s "http://localhost:8081/admin/realms/dive-v3-usa/users?username=testuser-usa-1&exact=true" \
   -H "Authorization: Bearer $TOKEN" | jq -r '.[0] | {username, attributes: {uniqueID: .attributes.uniqueID[0]}}'
 ```
 
 **Expected Output:**
 ```json
 {
-  "username": "testuser-usa-unclass",
+  "username": "testuser-usa-1",
   "attributes": {
-    "uniqueID": "testuser-usa-unclass@example.mil"
+    "uniqueID": "testuser-usa-1@example.mil"
   }
 }
 ```
 
 ### Check Broker Realm (After First Login)
 ```bash
-curl -s "http://localhost:8081/admin/realms/dive-v3-broker/users?username=testuser-usa-unclass&exact=true" \
+curl -s "http://localhost:8081/admin/realms/dive-v3-broker/users?username=testuser-usa-1&exact=true" \
   -H "Authorization: Bearer $TOKEN" | jq -r '.[0] | {username, attributes: {uniqueID: .attributes.uniqueID[0]}}'
 ```
 
 **Expected Output:**
 ```json
 {
-  "username": "testuser-usa-unclass",
+  "username": "testuser-usa-1",
   "attributes": {
-    "uniqueID": "testuser-usa-unclass@example.mil"
+    "uniqueID": "testuser-usa-1@example.mil"
   }
 }
 ```
@@ -226,10 +226,10 @@ If UNCLASSIFIED users are being forced to register WebAuthn, check:
 # - 10 IdP brokers - username mappers removed
 
 # Users deleted from broker realm:
-# - testuser-usa-unclass (old)
-# - testuser-usa-secret (old)
-# - testuser-fra-unclass (old)
-# - testuser-fra-secret (old)
+# - testuser-usa-1 (old)
+# - testuser-usa-3 (old)
+# - testuser-fra-1 (old)
+# - testuser-fra-3 (old)
 ```
 
 ## Next Steps

@@ -57,7 +57,7 @@ describe('Security Headers Middleware', () => {
         });
 
         it('should add Cache-Control headers for /api/resources/ paths', () => {
-            mockReq.path = '/api/resources/doc-123';
+            (mockReq as Record<string, unknown>).path = '/api/resources/doc-123';
 
             customSecurityHeaders(mockReq as Request, mockRes as Response, mockNext);
 
@@ -72,7 +72,7 @@ describe('Security Headers Middleware', () => {
         });
 
         it('should add Cache-Control headers for /api/admin/ paths', () => {
-            mockReq.path = '/api/admin/users';
+            (mockReq as Record<string, unknown>).path = '/api/admin/users';
 
             customSecurityHeaders(mockReq as Request, mockRes as Response, mockNext);
 
@@ -85,7 +85,7 @@ describe('Security Headers Middleware', () => {
         });
 
         it('should NOT add Cache-Control headers for public paths', () => {
-            mockReq.path = '/api/health';
+            (mockReq as Record<string, unknown>).path = '/api/health';
 
             customSecurityHeaders(mockReq as Request, mockRes as Response, mockNext);
 
@@ -99,7 +99,7 @@ describe('Security Headers Middleware', () => {
         it('should log security headers when LOG_LEVEL is debug', () => {
             process.env.LOG_LEVEL = 'debug';
             mockReq.headers = { 'x-request-id': 'test-123' };
-            mockReq.path = '/api/test';
+            (mockReq as Record<string, unknown>).path = '/api/test';
             mockReq.method = 'POST';
 
             (mockRes.getHeader as jest.Mock).mockImplementation((header: string) => {
@@ -211,7 +211,7 @@ describe('Security Headers Middleware', () => {
             process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:3000';
 
             const config = getCorsConfig();
-            const callback = (err: Error | null, allow?: boolean) => {
+            const callback = (err: Error | null, _allow?: boolean) => {
                 expect(err).toBeDefined();
                 expect(err?.message).toBe('Not allowed by CORS');
                 done();
@@ -342,7 +342,7 @@ describe('Security Headers Middleware', () => {
 
     describe('Edge Cases', () => {
         it('should handle path with trailing slash', () => {
-            mockReq.path = '/api/resources/';
+            (mockReq as Record<string, unknown>).path = '/api/resources/';
 
             customSecurityHeaders(mockReq as Request, mockRes as Response, mockNext);
 
@@ -354,7 +354,7 @@ describe('Security Headers Middleware', () => {
         });
 
         it('should handle path without trailing slash', () => {
-            mockReq.path = '/api/admin';
+            (mockReq as Record<string, unknown>).path = '/api/admin';
 
             customSecurityHeaders(mockReq as Request, mockRes as Response, mockNext);
 

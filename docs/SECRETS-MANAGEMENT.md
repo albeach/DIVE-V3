@@ -4,6 +4,28 @@
 
 This document explains how secrets (passwords, API keys, tokens) flow through the DIVE V3 infrastructure.
 
+> **📢 Vault Integration Implemented**
+> 
+> Federation secrets (IdP broker client secrets) are now centrally managed via GCP Secret Manager + Keycloak Vault SPI. See:
+> - [ADR-001: Vault Secrets Management](./ADR-001-VAULT-SECRETS-MANAGEMENT.md)
+> - [Partner Onboarding Guide](./PARTNER-ONBOARDING-GUIDE.md)
+> 
+> **GCP Project**: `dive25`
+> **Total Secrets**: 12 federation secrets (4 instances × 3 partners each)
+> 
+> **Quick Start with Vault:**
+> ```bash
+> # Verify GCP secrets are configured
+> ./scripts/vault/verify-secrets.sh --verbose
+> 
+> # Deploy with Vault integration
+> ./scripts/vault/deploy-with-vault.sh
+> 
+> # Or manually:
+> ./scripts/vault/upload-federation-secrets.sh    # Upload to GCP
+> docker compose -f docker-compose.yml -f docker-compose.vault.yml up -d
+> ```
+
 ## Architecture
 
 ```
@@ -261,6 +283,76 @@ docker compose down -v
 source .env.secrets
 docker compose up -d
 ```
+
+## Federation Secrets (Vault Integration)
+
+For federation secrets between coalition partners, we use a centralized approach:
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     FEDERATION SECRETS FLOW                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                        ┌─────────────────────────────────────┐
+                        │        GCP SECRET MANAGER           │
+                        │   (Centralized, Audited, HA)        │
+                        │                                     │
+                        │   dive-v3-federation-usa-fra        │
+                        │   dive-v3-federation-usa-gbr        │
+                        │   dive-v3-federation-fra-usa        │
+                        │   ... (12 total for 4 partners)     │
+                        └──────────────────┬──────────────────┘
+                                           │
+                    ┌──────────────────────┼──────────────────────┐
+                    │                      │                      │
+                    ▼                      ▼                      ▼
+            ┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+            │  Vault Sync   │      │  Vault Sync   │      │  Vault Sync   │
+            │  (Init Cont.) │      │  (Init Cont.) │      │  (Init Cont.) │
+            └───────┬───────┘      └───────┬───────┘      └───────┬───────┘
+                    │                      │                      │
+                    ▼                      ▼                      ▼
+            ┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+            │  Keycloak     │      │  Keycloak     │      │  Keycloak     │
+            │  (USA)        │      │  (FRA)        │      │  (DEU)        │
+            │               │      │               │      │               │
+            │  IdP uses:    │      │  IdP uses:    │      │  IdP uses:    │
+            │  ${vault.key} │      │  ${vault.key} │      │  ${vault.key} │
+            └───────────────┘      └───────────────┘      └───────────────┘
+```
+
+### How It Works
+
+1. **Terraform** creates federation clients in each Keycloak instance
+2. **Upload Script** extracts client secrets and stores in GCP Secret Manager
+3. **Vault Sync** container fetches secrets to `/opt/keycloak/vault/`
+4. **Keycloak** uses `${vault.key}` references to read secrets at runtime
+
+### Key Commands
+
+```bash
+# Upload secrets after Terraform creates clients
+./scripts/vault/upload-federation-secrets.sh
+
+# Sync secrets to Keycloak vault directory (runs automatically in Docker)
+INSTANCE=usa ./scripts/vault/sync-secrets-to-files.sh
+
+# Verify all secrets are properly configured
+./scripts/vault/verify-secrets.sh --verbose
+
+# Full deployment with vault integration
+./scripts/vault/deploy-with-vault.sh
+```
+
+### Secret Naming Convention
+
+| GCP Secret Name | Purpose |
+|-----------------|---------|
+| `dive-v3-federation-{source}-{target}` | Secret for target's IdP to authenticate to source |
+
+Example: `dive-v3-federation-usa-fra` is the secret that FRA uses when federating to USA.
 
 ## Reference
 

@@ -5,19 +5,48 @@
         <div class="dive-error-page">
             <!-- Status Indicator -->
             <div class="dive-error-status">
-                <span class="dive-error-code">⚠</span>
+                <#if message?has_content && message.summary?has_content>
+                    <#assign errorText = message.summary?lower_case>
+                    <#if errorText?contains("expired") || errorText?contains("timeout") || errorText?contains("login again") || errorText?contains("please login")>
+                        <span class="dive-error-code">⏳</span>
+                    <#elseif errorText?contains("denied") || errorText?contains("unauthorized") || errorText?contains("forbidden")>
+                        <span class="dive-error-code">🚫</span>
+                    <#elseif errorText?contains("locked") || errorText?contains("disabled")>
+                        <span class="dive-error-code">🔒</span>
+                    <#else>
+                        <span class="dive-error-code">⚠</span>
+                    </#if>
+                <#else>
+                    <span class="dive-error-code">⚠</span>
+                </#if>
             </div>
             
             <!-- Title -->
-            <h1 class="dive-error-title">${msg("errorTitle")}</h1>
+            <#if message?has_content && message.summary?has_content>
+                <#assign errorText = message.summary?lower_case>
+                <#if errorText?contains("expired") || errorText?contains("timeout") || errorText?contains("login again") || errorText?contains("please login")>
+                    <h1 class="dive-error-title">${msg("errorSessionTitle")}</h1>
+                <#elseif errorText?contains("denied") || errorText?contains("unauthorized") || errorText?contains("forbidden")>
+                    <h1 class="dive-error-title">${msg("errorUnauthorizedTitle")}</h1>
+                <#else>
+                    <h1 class="dive-error-title">${msg("errorTitle")}</h1>
+                </#if>
+            <#else>
+                <h1 class="dive-error-title">${msg("errorTitle")}</h1>
+            </#if>
             
             <!-- Error-Specific Message -->
             <div class="dive-error-message">
                 <#if message?has_content && message.summary?has_content>
                     <#assign errorText = message.summary?lower_case>
                     
+                    <#-- SESSION EXPIRED / LOGIN AGAIN (most common error) -->
+                    <#if errorText?contains("login again") || errorText?contains("please login") || errorText?contains("error occurred")>
+                        <p><strong>${msg("errorSessionTitle")}</strong></p>
+                        <p>${msg("errorSessionDesc")}</p>
+                    
                     <#-- CONFIGURATION ERRORS -->
-                    <#if errorText?contains("redirect") || errorText?contains("client not found")>
+                    <#elseif errorText?contains("redirect") || errorText?contains("client not found")>
                         <p><strong>${msg("errorRedirectTitle")}</strong></p>
                         <p>${msg("errorRedirectDesc")}</p>
                     

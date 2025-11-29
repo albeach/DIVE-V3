@@ -35,9 +35,9 @@ All IdP brokers now have `oidc-username-idp-mapper` that maps `uniqueID` claim �
 All test users now use `uniqueID` as their `username`:
 
 **Example (USA UNCLASS):**
-- Username: `testuser-usa-unclass@example.mil` ✅
-- Email: `testuser-usa-unclass@example.mil`
-- uniqueID attribute: `testuser-usa-unclass@example.mil`
+- Username: `testuser-usa-1@example.mil` ✅
+- Email: `testuser-usa-1@example.mil`
+- uniqueID attribute: `testuser-usa-1@example.mil`
 - **Match:** Username = uniqueID ✅
 
 ### 3. Authentication Flow Updates
@@ -75,7 +75,7 @@ Post-Broker MFA flow updated in all realms with:
 1. Open browser: http://localhost:3000
 2. Click: **United States (DoD)**
 3. Login with:
-   - Username: `testuser-usa-unclass@example.mil` ⚠️ (full uniqueID)
+   - Username: `testuser-usa-1@example.mil` ⚠️ (full uniqueID)
    - Password: `password123`
 
 **Expected Result:**
@@ -96,15 +96,15 @@ Post-Broker MFA flow updated in all realms with:
 **Test each country:**
 ```bash
 # France
-Username: testuser-fra-unclass@example.fr
+Username: testuser-fra-1@example.fr
 Password: password123
 
 # Canada  
-Username: testuser-can-unclass@example.ca
+Username: testuser-can-1@example.ca
 Password: password123
 
 # UK
-Username: testuser-gbr-unclass@example.uk
+Username: testuser-gbr-1@example.uk
 Password: password123
 ```
 
@@ -115,7 +115,7 @@ Password: password123
 **Objective:** Verify clearance-based MFA still works
 
 **Steps:**
-1. Login as: `testuser-usa-secret@example.mil` / `password123`
+1. Login as: `testuser-usa-3@example.mil` / `password123`
 2. Should be prompted to configure OTP
 3. Scan QR code with authenticator app
 4. Enter OTP code
@@ -163,8 +163,8 @@ terraform apply
 **Cause:** Using old short username format
 
 **Solution:** Use full uniqueID as username
-- ❌ Old: `testuser-usa-unclass`
-- ✅ New: `testuser-usa-unclass@example.mil`
+- ❌ Old: `testuser-usa-1`
+- ✅ New: `testuser-usa-1@example.mil`
 
 ### Issue: "User already exists" error persists
 

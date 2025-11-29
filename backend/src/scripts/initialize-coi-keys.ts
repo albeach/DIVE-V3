@@ -68,7 +68,7 @@ const COI_DEFINITIONS: ICreateCOIKeyRequest[] = [
         status: 'active',
         color: '#DC2626', // Red
         icon: '🇺🇸',
-        mutuallyExclusiveWith: ['CAN-US', 'GBR-US', 'FRA-US', 'FVEY', 'NATO', 'NATO-COSMIC', 'EU-RESTRICTED', 'AUKUS', 'QUAD', 'NORTHCOM', 'EUCOM', 'PACOM', 'CENTCOM', 'SOCOM']
+        mutuallyExclusiveWith: ['CAN-US', 'GBR-US', 'FRA-US', 'DEU-US', 'FVEY', 'NATO', 'NATO-COSMIC', 'EU-RESTRICTED', 'AUKUS', 'QUAD', 'NORTHCOM', 'EUCOM', 'PACOM', 'CENTCOM', 'SOCOM']
     },
     {
         coiId: 'CAN-US',
@@ -100,6 +100,17 @@ const COI_DEFINITIONS: ICreateCOIKeyRequest[] = [
         status: 'active',
         color: '#6366F1', // Indigo
         icon: '🤝',
+        mutuallyExclusiveWith: ['US-ONLY']
+    },
+    {
+        coiId: 'DEU-US',
+        name: 'Germany-US',
+        description: 'Bilateral Germany-US partnership for defense cooperation and intelligence sharing. Strategic NATO partners.',
+        memberCountries: ['DEU', 'USA'],
+        status: 'active',
+        color: '#FACC15', // Yellow (German flag)
+        icon: '🤝',
+        subsetOf: 'NATO',
         mutuallyExclusiveWith: ['US-ONLY']
     },
     {
