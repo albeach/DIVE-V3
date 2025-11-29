@@ -730,9 +730,9 @@ default allow := false
             jest.spyOn(mockedFs, 'readdirSync').mockReturnValue(['test_policy.rego'] as any);
             readFileSyncSpy.mockReturnValue(policyWithDesc as any);
             existsSyncSpy.mockReturnValue(true);
-            
+
             const policies = await listPolicies();
-            
+
             // Should have extracted description from @policy pattern
             if (policies.length > 0) {
                 expect(policies[0].description).toBeTruthy();
@@ -744,9 +744,9 @@ default allow := false
             jest.spyOn(mockedFs, 'readdirSync').mockReturnValue(['admin_authorization_policy.rego'] as any);
             existsSyncSpy.mockReturnValue(true);
             readFileSyncSpy.mockReturnValue(mockPolicyContent as any);
-            
+
             const policies = await listPolicies();
-            
+
             // Should have returned admin policy with fallback description
             expect(policies.length).toBeGreaterThanOrEqual(0);
         });
@@ -758,11 +758,11 @@ default allow := false
             jest.spyOn(mockedFs, 'readdirSync')
                 .mockReturnValueOnce(['fuel_inventory_policy.rego'] as any) // policy files  
                 .mockReturnValueOnce(['fuel_inventory_test.rego'] as any); // test files
-            
-            existsSyncSpy.mockImplementation((path: any) => {
+
+            existsSyncSpy.mockImplementation((_path: any) => {
                 return true; // All paths exist
             });
-            
+
             readFileSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('fuel_inventory_test.rego')) {
                     // Must match the test file exactly with test_ prefixed functions
@@ -787,9 +787,9 @@ package dive.authorization
 default allow := false
 `;
             });
-            
+
             const policies = await listPolicies();
-            
+
             // Should have counted the tests (line 190 coverage)
             if (policies.length > 0) {
                 expect(policies[0].testCount).toBeGreaterThanOrEqual(0);
@@ -803,13 +803,13 @@ default allow := false
                 .mockImplementationOnce(() => {
                     throw new Error('Cannot read test directory');
                 });
-            
+
             existsSyncSpy.mockReturnValue(true);
             readFileSyncSpy.mockReturnValue(mockPolicyContent as any);
-            
+
             // Should handle error gracefully (lines 198-199 coverage)
             const policies = await listPolicies();
-            
+
             if (policies.length > 0) {
                 // Test count should be 0 when error occurs
                 expect(policies[0].testCount).toBe(0);
@@ -821,20 +821,20 @@ default allow := false
         it('should match by exact file name', async () => {
             jest.spyOn(mockedFs, 'readdirSync').mockReturnValueOnce(['test_policy.rego'] as any)
                 .mockReturnValueOnce(['test_tests.rego'] as any);
-            
+
             existsSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('policies/tests')) return true;
                 if (path.includes('test_policy')) return true;
                 return false;
             });
-            
+
             readFileSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('test_tests.rego')) {
                     return 'package test\ntest_something { true }';
                 }
                 return mockPolicyContent;
             });
-            
+
             const policies = await listPolicies();
             expect(policies.length).toBeGreaterThanOrEqual(0);
         });
@@ -842,20 +842,20 @@ default allow := false
         it('should match by policy keyword', async () => {
             jest.spyOn(mockedFs, 'readdirSync').mockReturnValueOnce(['inventory_policy.rego'] as any)
                 .mockReturnValueOnce(['inventory_tests.rego'] as any);
-            
+
             existsSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('policies/tests')) return true;
                 if (path.includes('inventory')) return true;
                 return false;
             });
-            
+
             readFileSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('inventory_tests.rego')) {
                     return 'package test\ntest_inventory { true }';
                 }
                 return mockPolicyContent;
             });
-            
+
             const policies = await listPolicies();
             expect(policies.length).toBeGreaterThanOrEqual(0);
         });
@@ -864,9 +864,9 @@ default allow := false
             jest.spyOn(mockedFs, 'readdirSync')
                 .mockReturnValueOnce(['custompolicy.rego'] as any)
                 .mockReturnValueOnce(['sometest.rego'] as any);
-            
+
             existsSyncSpy.mockReturnValue(true);
-            
+
             readFileSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('sometest.rego')) {
                     // Test file package includes normalized policy ID (line 233 coverage)
@@ -874,7 +874,7 @@ default allow := false
                 }
                 return 'package custompolicy\ndefault allow := false';
             });
-            
+
             const policies = await listPolicies();
             expect(policies.length).toBeGreaterThanOrEqual(0);
         });
@@ -883,9 +883,9 @@ default allow := false
             jest.spyOn(mockedFs, 'readdirSync')
                 .mockReturnValueOnce(['specialpolicy.rego'] as any)
                 .mockReturnValueOnce(['unrelated_test.rego'] as any);
-            
+
             existsSyncSpy.mockReturnValue(true);
-            
+
             readFileSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('unrelated_test.rego')) {
                     // Import statement references policy (line 240 coverage)
@@ -893,7 +893,7 @@ default allow := false
                 }
                 return 'package specialpolicy\ndefault allow := false';
             });
-            
+
             const policies = await listPolicies();
             expect(policies.length).toBeGreaterThanOrEqual(0);
         });
@@ -902,9 +902,9 @@ default allow := false
             jest.spyOn(mockedFs, 'readdirSync')
                 .mockReturnValueOnce(['fuel_inventory_abac_policy.rego'] as any)
                 .mockReturnValueOnce(['acp240_tests.rego'] as any);
-            
+
             existsSyncSpy.mockReturnValue(true);
-            
+
             readFileSyncSpy.mockImplementation((path: any) => {
                 if (path.includes('acp240_tests.rego')) {
                     // Matches special mapping keyword (line 254 coverage)
@@ -912,7 +912,7 @@ default allow := false
                 }
                 return mockPolicyContent;
             });
-            
+
             const policies = await listPolicies();
             expect(policies.length).toBeGreaterThanOrEqual(0);
         });

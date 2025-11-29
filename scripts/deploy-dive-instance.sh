@@ -23,6 +23,8 @@
 #   --destroy       Destroy the instance
 #   --force         Force recreation of existing resources
 #   --dry-run       Validate configuration without deploying
+#   --seed          Seed 7,000 ZTDF resources after deployment
+#   --seed-count=N  Number of resources to seed (default: 7000)
 #   --help          Show this help message
 #
 # Test Users (all passwords: DiveDemo2025!):
@@ -130,6 +132,8 @@ usage() {
     echo "  --destroy          Destroy the instance"
     echo "  --force            Force recreation of existing resources"
     echo "  --dry-run          Validate configuration without deploying"
+    echo "  --seed             Seed 7,000 ZTDF resources after deployment"
+    echo "  --seed-count=N     Number of resources to seed (default: 7000)"
     echo "  --help             Show this help message"
     echo ""
     echo -e "${GREEN}Examples:${NC}"
@@ -783,6 +787,25 @@ get_running_instances() {
     echo "${running[@]}"
 }
 
+# Seed resources for an instance
+seed_resources() {
+    local instance=$1
+    local count=${2:-7000}
+    
+    log_info "Seeding $count resources for $instance..."
+    
+    if [ -f "$SCRIPT_DIR/seed-instance-resources.sh" ]; then
+        "$SCRIPT_DIR/seed-instance-resources.sh" "$instance" --count="$count"
+    else
+        # Fallback to npm script
+        cd "$PROJECT_ROOT/backend"
+        npm run seed:instance -- --instance="$instance" --count="$count"
+        cd "$PROJECT_ROOT"
+    fi
+    
+    log_success "Resource seeding complete for $instance"
+}
+
 # Federate with all existing instances
 federate_with_all() {
     local new_instance=$1
@@ -836,11 +859,13 @@ federate_with_all() {
 deploy_new_instance() {
     local instance=$1
     
-    # Adjust step count based on federation
+    # Adjust step count based on options
+    TOTAL_STEPS=6
     if [[ "$FEDERATE" == "true" ]]; then
-        TOTAL_STEPS=7
-    else
-        TOTAL_STEPS=6
+        TOTAL_STEPS=$((TOTAL_STEPS + 1))
+    fi
+    if [[ "$SEED" == "true" ]]; then
+        TOTAL_STEPS=$((TOTAL_STEPS + 1))
     fi
     
     # Step 1: Generate all config files
@@ -894,6 +919,12 @@ deploy_new_instance() {
         federate_with_all "$instance"
     fi
     
+    # Step 8: Seed resources (if requested)
+    if [[ "$SEED" == "true" ]]; then
+        progress "Seeding MongoDB resources"
+        seed_resources "$instance" "$SEED_COUNT"
+    fi
+    
     log_success "Instance $instance deployed successfully!"
 }
 
@@ -929,6 +960,8 @@ DESTROY=false
 FORCE=false
 DRY_RUN=false
 FEDERATE=false
+SEED=false
+SEED_COUNT=7000
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -962,6 +995,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --federate)
             FEDERATE=true
+            shift
+            ;;
+        --seed)
+            SEED=true
+            shift
+            ;;
+        --seed-count=*)
+            SEED_COUNT="${1#*=}"
+            SEED=true
             shift
             ;;
         --help|-h)

@@ -407,8 +407,13 @@ describe('Authorization Middleware (PEP)', () => {
             expect(res.status).toHaveBeenCalledWith(403);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 error: 'Forbidden',
-                message: 'Access denied',
-                reason: expect.stringContaining('Insufficient clearance')
+                message: 'Insufficient security clearance',
+                guidance: expect.stringContaining('clearance'),
+                technical_reason: expect.stringContaining('Insufficient clearance'),
+                details: expect.objectContaining({
+                    subject: expect.any(Object),
+                    resource: expect.any(Object)
+                })
             }));
             expect(next).not.toHaveBeenCalled();
         });
@@ -981,8 +986,9 @@ describe('Authorization Middleware (PEP)', () => {
             expect(res.status).toHaveBeenCalledWith(403);
             expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
                 error: 'Forbidden',
-                message: 'Access denied',
-                reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
+                message: 'Insufficient security clearance',
+                guidance: expect.stringContaining('clearance'),
+                technical_reason: 'Insufficient clearance: CONFIDENTIAL < SECRET',
                 details: expect.objectContaining({
                     resource: expect.objectContaining({
                         resourceId: 'doc-concurrent-1',

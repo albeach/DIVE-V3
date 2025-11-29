@@ -15,6 +15,11 @@
 
 import fs from 'fs';
 
+// IMPORTANT: Unmock winston and logger for this test file
+// The global mock in setup.ts prevents testing actual logger behavior
+jest.unmock('winston');
+jest.unmock('../utils/logger');
+
 // We need to test the module, so we'll import after setting env vars
 describe('Logger Configuration', () => {
     const originalEnv = process.env;

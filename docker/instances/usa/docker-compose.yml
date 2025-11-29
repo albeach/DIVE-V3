@@ -1,0 +1,329 @@
+# =============================================================================
+# DIVE V3 - USA Instance
+# =============================================================================
+# Fully isolated United States instance with all services.
+#
+# Usage:
+#   cd docker/instances/usa
+#   docker compose up -d
+#
+# Environment: .env file in this directory
+# =============================================================================
+
+name: dive-v3-usa
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - Keycloak Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: keycloak_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Keycloak - Identity Provider
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    platform: linux/amd64
+    container_name: ${COMPOSE_PROJECT_NAME}-keycloak
+    restart: unless-stopped
+    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${IDP_HOSTNAME}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: "8443"
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: scripts
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "${KEYCLOAK_HTTP_PORT}:8080"
+      - "${KEYCLOAK_HTTPS_PORT}:8443"
+      - "${KEYCLOAK_MGMT_PORT}:9000"
+    volumes:
+      - ../../../keycloak/certs:/opt/keycloak/certs:ro
+      - ../../../keycloak/themes:/opt/keycloak/themes:ro
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/master HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 'HTTP/1.1 200'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # MongoDB - Resource Metadata Store
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: ${COMPOSE_PROJECT_NAME}-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: dive-v3
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - internal
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis - Session Cache & Token Blacklist
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
+    restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # OPA - Policy Decision Point
+  # ---------------------------------------------------------------------------
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-opa
+    restart: unless-stopped
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --tls-cert-file=/certs/certificate.pem
+      - --tls-private-key-file=/certs/key.pem
+      - --bundle
+      - /policies
+      - --log-level=info
+    ports:
+      - "${OPA_PORT}:8181"
+      - "${OPA_METRICS_PORT}:8182"
+    volumes:
+      - ../../../policies:/policies:ro
+      - ../../../keycloak/certs:/certs:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["NONE"]
+      disable: true
+
+  # ---------------------------------------------------------------------------
+  # KAS - Key Access Service
+  # ---------------------------------------------------------------------------
+  kas:
+    build:
+      context: ../../../kas
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-kas
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      KAS_PORT: "8080"
+      HTTPS_ENABLED: "true"
+      CERT_PATH: /opt/app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: certificate.pem
+      OPA_URL: https://opa:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
+      MONGODB_DATABASE: dive-v3
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      LOG_LEVEL: info
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    ports:
+      - "${KAS_PORT}:8080"
+    volumes:
+      - ../../../kas/certs:/opt/app/certs:ro
+    networks:
+      - internal
+    depends_on:
+      opa:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-qO-", "https://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Backend API - Policy Enforcement Point
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../../../backend
+      dockerfile: Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME}-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      INSTANCE_REALM: ${REALM}
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
+      MONGODB_DATABASE: dive-v3
+      OPA_URL: https://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      REDIS_URL: redis://redis:6379
+      BLACKLIST_REDIS_URL: redis://:${BLACKLIST_REDIS_PASSWORD}@dive-v3-blacklist-redis:6379
+      KAS_URL: https://kas:8080
+      CORS_ALLOWED_ORIGINS: ${CORS_ORIGINS}
+      NEXT_PUBLIC_BASE_URL: https://${APP_HOSTNAME}
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      LOG_LEVEL: info
+    ports:
+      - "${BACKEND_PORT}:4000"
+    volumes:
+      - ../../../backend/src:/app/src
+      - ../../../backend/package.json:/app/package.json:ro
+      - ../../../backend/tsconfig.json:/app/tsconfig.json:ro
+      - ../../../keycloak/certs:/opt/keycloak/certs:ro
+      - ../../../policies:/app/policies:ro
+      - ../../../backend/certs:/app/certs:ro
+      - ../../../backend/logs:/app/logs
+    networks:
+      - internal
+      - shared
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Frontend - Next.js Application
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../../../frontend
+      dockerfile: Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME}-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      BACKEND_URL: https://backend:4000
+      KEYCLOAK_BASE_URL: https://keycloak:8443
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      NEXT_PUBLIC_KEYCLOAK_URL: https://${IDP_HOSTNAME}
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_ISSUER: https://${IDP_HOSTNAME}/realms/dive-v3-broker
+      NEXTAUTH_URL: https://${APP_HOSTNAME}
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    ports:
+      - "${FRONTEND_PORT}:3000"
+    volumes:
+      - ../../../frontend:/app
+      - ../../../keycloak/certs:/opt/keycloak/certs:ro
+      - ../../../keycloak/certs:/opt/app/certs:ro
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    networks:
+      - internal
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # Cloudflare Tunnel - Secure External Access
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-tunnel
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./config/cloudflared.yml:/etc/cloudflared/config.yml:ro
+      - ./config/tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+    networks:
+      - internal
+    depends_on:
+      - frontend
+      - backend
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  internal:
+    name: ${COMPOSE_PROJECT_NAME}-internal
+    driver: bridge
+  shared:
+    external: true
+    name: dive-v3-shared
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    name: ${COMPOSE_PROJECT_NAME}-postgres-data
+  mongodb_data:
+    name: ${COMPOSE_PROJECT_NAME}-mongodb-data
+  frontend_node_modules:
+    name: ${COMPOSE_PROJECT_NAME}-frontend-node-modules
+  frontend_next:
+    name: ${COMPOSE_PROJECT_NAME}-frontend-next

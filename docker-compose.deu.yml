@@ -1,6 +1,8 @@
 # =============================================================================
 # DIVE V3 - DEU Instance (Germany)
 # CRITICAL: Uses isolated volumes for build isolation
+# LOCAL TESTING: Ports offset to avoid conflicts with GBR (5436, 8446, etc.)
+# REMOTE DEPLOYMENT: Uses standard ports (5432, 8443, etc.)
 # =============================================================================
 
 services:
@@ -13,7 +15,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: keycloak
     ports:
-      - "5435:5432"
+      - "5436:5432"
     volumes:
       - postgres_deu_data:/var/lib/postgresql/data
       - ./scripts/postgres-init-deu/init-deu-db.sh:/docker-entrypoint-initdb.d/init-deu-db.sh
@@ -25,9 +27,11 @@ services:
       timeout: 5s
       retries: 5
 
-  # Keycloak DEU Instance
+  # Keycloak DEU Instance (uses custom image with curl)
   keycloak-deu:
-    image: quay.io/keycloak/keycloak:latest
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
     platform: linux/amd64
     container_name: dive-v3-keycloak-deu
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
@@ -50,8 +54,8 @@ services:
       KC_HEALTH_ENABLED: true
       KC_FEATURES: scripts
     ports:
-      - "8445:8443"
-      - "8183:8080"
+      - "8446:8443"
+      - "8086:8080"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
@@ -63,10 +67,11 @@ services:
         aliases:
           - keycloak
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 90s
 
   # MongoDB DEU Instance
   mongodb-deu:
@@ -77,7 +82,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin
     ports:
-      - "27019:27017"
+      - "27020:27017"
     volumes:
       - mongodb_deu_data:/data/db
     networks:
@@ -96,7 +101,7 @@ services:
     image: redis:alpine
     container_name: dive-v3-redis-deu
     ports:
-      - "6381:6379"
+      - "6382:6379"
     networks:
       dive-deu-network:
         aliases:
@@ -119,7 +124,7 @@ services:
       - "--log-level=info"
       - "/policies"
     ports:
-      - "8283:8181"
+      - "8284:8181"
     volumes:
       - ./policies:/policies:ro
     networks:
@@ -127,7 +132,8 @@ services:
         aliases:
           - opa
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8181/health"]
+      # OPA alpine image doesn't have wget - use /opa version instead
+      test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -149,7 +155,7 @@ services:
       MONGODB_URI: mongodb://admin:admin@mongodb-deu:27017
       JWT_SECRET: deu-kas-secret-change-in-production
     ports:
-      - "8084:8080"
+      - "8093:8080"
     volumes:
       - ./kas:/app
     depends_on:
@@ -188,11 +194,12 @@ services:
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
       KAS_URL: http://kas-deu:8080
-      CORS_ORIGIN: https://deu-app.prosecurity.biz,https://deu-api.prosecurity.biz,https://localhost:3002
-      FEDERATION_ALLOWED_ORIGINS: https://deu-app.prosecurity.biz,https://localhost:3002
+      # Include all federation partner origins for cross-instance API calls
+      CORS_ORIGIN: https://deu-app.prosecurity.biz,https://usa-app.dive25.com,https://fra-app.dive25.com,https://gbr-app.dive25.com,https://localhost:3002
+      FEDERATION_ALLOWED_ORIGINS: https://deu-app.prosecurity.biz,https://usa-app.dive25.com,https://fra-app.dive25.com,https://gbr-app.dive25.com,https://localhost:3002
       NEXT_PUBLIC_BASE_URL: https://deu-app.prosecurity.biz
     ports:
-      - "4002:4000"
+      - "4003:4000"
     volumes:
       - ./backend:/app
       - ./keycloak/certs:/opt/keycloak/certs:ro
@@ -249,7 +256,7 @@ services:
       NEXTAUTH_SECRET: deu-frontend-secret-change-in-production
       DATABASE_URL: postgresql://keycloak:keycloak@postgres-deu:5432/dive_v3_deu
     ports:
-      - "3002:3000"
+      - "3003:3000"
     volumes:
       - ./frontend:/app
       - ./certs:/opt/app/certs:ro
@@ -270,6 +277,7 @@ services:
       retries: 3
 
   # Cloudflare Tunnel DEU
+  # CRITICAL: Uses DEU-specific tunnel credentials (prosecurity.biz domain)
   cloudflared-deu:
     image: cloudflare/cloudflared:latest
     container_name: dive-v3-tunnel-deu
@@ -277,7 +285,7 @@ services:
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared/config-deu.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared/tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+      - ./cloudflared/deu-tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
     networks:
       - dive-deu-network
     depends_on:
@@ -292,7 +300,7 @@ services:
       retries: 3
       start_period: 10s
     ports:
-      - "9128:9126"
+      - "9129:9126"
 
 volumes:
   postgres_deu_data:

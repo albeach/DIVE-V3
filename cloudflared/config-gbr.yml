@@ -25,9 +25,9 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
   
-  # GBR Keycloak IdP - CRITICAL: Use Docker service name with -gbr suffix
+  # GBR Keycloak IdP - Using network alias
   - hostname: gbr-idp.dive25.com
-    service: https://keycloak-gbr:8443
+    service: https://keycloak:8443
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s

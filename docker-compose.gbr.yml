@@ -18,8 +18,11 @@ services:
       - "5435:5432"
     volumes:
       - postgres_gbr_data:/var/lib/postgresql/data
+      - ./scripts/postgres-init-gbr/init-gbr-db.sh:/docker-entrypoint-initdb.d/init-gbr-db.sh
     networks:
-      - dive-gbr-network
+      dive-gbr-network:
+        aliases:
+          - postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
@@ -199,7 +202,9 @@ services:
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
       KAS_URL: http://kas-gbr:8080
-      FEDERATION_ALLOWED_ORIGINS: https://gbr-app.dive25.com,https://localhost:3002
+      # Include all federation partner origins for cross-instance API calls
+      CORS_ORIGIN: https://gbr-app.dive25.com,https://usa-app.dive25.com,https://fra-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3002
+      FEDERATION_ALLOWED_ORIGINS: https://gbr-app.dive25.com,https://usa-app.dive25.com,https://fra-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3002
       NEXT_PUBLIC_BASE_URL: https://gbr-app.dive25.com
     ports:
       - "4002:4000"
@@ -258,9 +263,9 @@ services:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://gbr-app.dive25.com
       NEXTAUTH_SECRET: 41EV5gv1LPQhyioNENysWEbVB+rj5coVsP2kwszQNbE=
-      AUTH_SECRET: gbr-auth-secret-change-in-production
+      AUTH_SECRET: ${GBR_AUTH_SECRET:-gbr-auth-secret-change-in-production}
       AUTH_TRUST_HOST: "true"
-      DATABASE_URL: postgresql://keycloak:keycloak@postgres-gbr:5432/dive_v3_app
+      DATABASE_URL: postgresql://keycloak:keycloak@postgres-gbr:5432/dive_v3_gbr
     ports:
       - "3002:3000"
     volumes:

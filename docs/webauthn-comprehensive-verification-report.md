@@ -4,7 +4,7 @@
 **System**: DIVE V3 Coalition Platform  
 **Keycloak Version**: 26.4.2  
 **Test Realm**: dive-v3-pol  
-**Test User**: testuser-pol-ts
+**Test User**: testuser-usa-4
 
 ---
 
@@ -81,8 +81,8 @@ The WebAuthn/Passkey configuration has been comprehensively verified against Key
 ### ✅ 6. Verify Test User Setup
 **Status**: ✓ PASS
 
-**User**: `testuser-pol-ts`
-- **Username**: testuser-pol-ts
+**User**: `testuser-usa-4`
+- **Username**: testuser-usa-4
 - **Enabled**: `true` ✓
 - **Required Actions**: `webauthn-register` ✓
 - **Existing WebAuthn Credentials**: 0 (ready for first registration)
@@ -119,7 +119,7 @@ With `authenticatorAttachment: "not specified"`, the following are supported:
 
 ### 2. Terraform Configuration
 - File: `terraform/modules/realm-test-users/main.tf`
-- User: `testuser-pol-ts` with `required_actions = ["webauthn-register"]`
+- User: `testuser-usa-4` with `required_actions = ["webauthn-register"]`
 
 ### 3. Custom Keycloak Theme
 - Template: `keycloak/themes/dive-v3/login/webauthn-register.ftl`
@@ -278,7 +278,7 @@ docker run -e KC_HOSTNAME_DEBUG=true ...
 ### On Desktop (Chrome/Firefox/Edge)
 1. Navigate to https://dev-app.dive25.com
 2. Click "Poland (MON)" IdP
-3. Login as `testuser-pol-ts` / `Password123!`
+3. Login as `testuser-usa-4` / `Password123!`
 4. On WebAuthn registration page, click "Register"
 5. Choose authenticator:
    - **Option A**: Insert Yubikey/FIDO2 key

@@ -7,7 +7,7 @@
  * ```typescript
  * const dashboardPage = new DashboardPage(page);
  * await dashboardPage.goto();
- * await dashboardPage.verifyUserInfo('testuser-usa-secret', 'SECRET', 'USA');
+ * await dashboardPage.verifyUserInfo('testuser-usa-3', 'SECRET', 'USA');
  * ```
  */
 

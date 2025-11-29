@@ -190,7 +190,7 @@ async function main() {
       console.log('[INFO] All realms configured successfully!');
       console.log('[INFO]');
       console.log('[INFO] Next steps:');
-      console.log('[INFO] 1. Test TOP_SECRET user login: testuser-pol-ts');
+      console.log('[INFO] 1. Test TOP_SECRET user login: testuser-usa-4');
       console.log('[INFO] 2. You should now see the WebAuthn registration page');
       console.log('[INFO] 3. Register a passkey (e.g., 1Password, YubiKey, Windows Hello)');
       console.log('[INFO] 4. Complete authentication to access the application\n');

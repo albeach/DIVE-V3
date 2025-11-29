@@ -295,11 +295,11 @@ describe('Validation Middleware', () => {
             expect(mockNext).toHaveBeenCalled();
         });
 
-        it('should block regex patterns matching dangerous patterns', () => {
+        it('should block regex patterns with nested quantifiers', () => {
             mockReq = {
                 headers: { 'x-request-id': 'test-123' },
                 query: {
-                    search: 'user123', // Matches /(\w+\s?)+$/ dangerous pattern
+                    search: '((a+)+)+b', // Dangerous nested quantifier pattern
                 },
             };
 
@@ -331,32 +331,34 @@ describe('Validation Middleware', () => {
             expect(mockRes.json).toHaveBeenCalled();
         });
 
-        it('should check filter field for dangerous patterns', () => {
+        it('should allow safe filter patterns', () => {
             mockReq = {
                 headers: { 'x-request-id': 'test-456' },
                 query: {
-                    filter: 'safe-filter', // This matches /(\w+\s?)+$/ pattern
+                    filter: 'safe-filter',
                 },
             };
 
             validateRegexQuery(mockReq as Request, mockRes as Response, mockNext);
 
-            // Should be blocked by dangerous pattern detection
-            expect(mockRes.status).toHaveBeenCalledWith(400);
+            // Safe patterns should be allowed
+            expect(mockNext).toHaveBeenCalled();
+            expect(mockRes.status).not.toHaveBeenCalled();
         });
 
-        it('should check pattern field for dangerous patterns', () => {
+        it('should allow safe pattern field values', () => {
             mockReq = {
                 headers: { 'x-request-id': 'test-789' },
                 query: {
-                    pattern: 'safe-pattern', // This matches /(\w+\s?)+$/ pattern
+                    pattern: 'safe-pattern',
                 },
             };
 
             validateRegexQuery(mockReq as Request, mockRes as Response, mockNext);
 
-            // Should be blocked by dangerous pattern detection
-            expect(mockRes.status).toHaveBeenCalledWith(400);
+            // Safe patterns should be allowed
+            expect(mockNext).toHaveBeenCalled();
+            expect(mockRes.status).not.toHaveBeenCalled();
         });
 
         it('should handle missing regex fields', () => {

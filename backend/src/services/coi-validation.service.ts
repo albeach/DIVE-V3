@@ -62,6 +62,7 @@ export const COI_MEMBERSHIP: Record<string, Set<string>> = {
     'CAN-US': new Set(['CAN', 'USA']),
     'GBR-US': new Set(['GBR', 'USA']),
     'FRA-US': new Set(['FRA', 'USA']),
+    'DEU-US': new Set(['DEU', 'USA']), // Germany-US bilateral
     'FVEY': new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']),
     'NATO': new Set([
         'ALB', 'BEL', 'BGR', 'CAN', 'HRV', 'CZE', 'DNK', 'EST', 'FIN', 'FRA',
@@ -100,15 +101,24 @@ export const COI_MEMBERSHIP: Record<string, Set<string>> = {
  */
 async function getCOIMembershipMapFromDB(): Promise<Record<string, Set<string>>> {
     try {
-        const membershipMap = await getCOIMembershipMap();
+        const dbMembershipMap = await getCOIMembershipMap();
 
-        // Special handling for NATO-COSMIC (requires NATO membership)
-        if (membershipMap['NATO-COSMIC']) {
-            // NATO-COSMIC inherits NATO membership
-            membershipMap['NATO-COSMIC'] = membershipMap['NATO'] || new Set();
+        // Merge database results with static COI_MEMBERSHIP for resilience
+        // Static map acts as a fallback for COIs not yet in the database
+        const mergedMap: Record<string, Set<string>> = { ...COI_MEMBERSHIP };
+        
+        // Override with database values (database is source of truth when available)
+        for (const [coiId, members] of Object.entries(dbMembershipMap)) {
+            mergedMap[coiId] = members;
         }
 
-        return membershipMap;
+        // Special handling for NATO-COSMIC (requires NATO membership)
+        if (mergedMap['NATO-COSMIC']) {
+            // NATO-COSMIC inherits NATO membership
+            mergedMap['NATO-COSMIC'] = mergedMap['NATO'] || new Set();
+        }
+
+        return mergedMap;
     } catch (error) {
         logger.warn('Failed to load COI membership from database, falling back to static map', { error });
         return COI_MEMBERSHIP; // Fallback for resilience
@@ -124,7 +134,7 @@ async function getCOIMembershipMapFromDB(): Promise<Record<string, Set<string>>>
  * These COIs MUST NOT coexist (hard deny)
  */
 export const MUTUAL_EXCLUSIONS: [string, string[]][] = [
-    ['US-ONLY', ['CAN-US', 'GBR-US', 'FRA-US', 'FVEY', 'NATO', 'NATO-COSMIC', 'EU-RESTRICTED', 'AUKUS', 'QUAD', 'NORTHCOM', 'EUCOM', 'PACOM', 'CENTCOM', 'SOCOM']],
+    ['US-ONLY', ['CAN-US', 'GBR-US', 'FRA-US', 'DEU-US', 'FVEY', 'NATO', 'NATO-COSMIC', 'EU-RESTRICTED', 'AUKUS', 'QUAD', 'NORTHCOM', 'EUCOM', 'PACOM', 'CENTCOM', 'SOCOM']],
     ['EU-RESTRICTED', ['US-ONLY', 'NATO-COSMIC']]
 ];
 
@@ -135,6 +145,7 @@ export const MUTUAL_EXCLUSIONS: [string, string[]][] = [
 export const SUBSET_SUPERSET_PAIRS: [string, string][] = [
     ['CAN-US', 'FVEY'],
     ['GBR-US', 'FVEY'],
+    ['DEU-US', 'NATO'],  // DEU-US is subset of NATO
     ['AUKUS', 'FVEY'],
     ['NATO-COSMIC', 'NATO']
 ];

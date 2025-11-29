@@ -286,49 +286,88 @@ export function createZTDFResourceWithoutHashes(): IZTDFResource {
 
 /**
  * Sample user profiles for testing
+ * 
+ * User Pattern: testuser-{country}-{1,2,3,4}
+ *   1 = UNCLASSIFIED
+ *   2 = CONFIDENTIAL
+ *   3 = SECRET
+ *   4 = TOP_SECRET
+ * 
+ * Password: TestUser2025!Pilot
  */
 export const TEST_USERS = {
-    usSecret: {
-        uniqueID: 'testuser-us',
-        email: 'testuser@example.mil',
-        clearance: 'SECRET',
-        countryOfAffiliation: 'USA',
-        acpCOI: ['FVEY']
-    },
-    usTopSecret: {
-        uniqueID: 'testuser-us-ts',
-        email: 'admin@pentagon.mil',
-        clearance: 'TOP_SECRET',
-        countryOfAffiliation: 'USA',
-        acpCOI: ['FVEY', 'US-ONLY']
-    },
-    frenchConfidential: {
-        uniqueID: 'testuser-fra',
-        email: 'testuser@gouv.fr',
-        clearance: 'CONFIDENTIAL',
-        countryOfAffiliation: 'FRA',
-        acpCOI: ['NATO-COSMIC']
-    },
-    canadianSecret: {
-        uniqueID: 'testuser-can',
-        email: 'testuser@gc.ca',
-        clearance: 'SECRET',
-        countryOfAffiliation: 'CAN',
-        acpCOI: ['FVEY']
-    },
-    contractor: {
-        uniqueID: 'bob.contractor',
-        email: 'bob@contractor.com',
+    // USA Test Users
+    usaLevel1: {
+        uniqueID: 'testuser-usa-1',
+        email: 'testuser-usa-1@dive-demo.example',
         clearance: 'UNCLASSIFIED',
         countryOfAffiliation: 'USA',
-        acpCOI: [],
+        acpCOI: []
+    },
+    usaLevel2: {
+        uniqueID: 'testuser-usa-2',
+        email: 'testuser-usa-2@dive-demo.example',
+        clearance: 'CONFIDENTIAL',
+        countryOfAffiliation: 'USA',
+        acpCOI: []
+    },
+    usaLevel3: {
+        uniqueID: 'testuser-usa-3',
+        email: 'testuser-usa-3@dive-demo.example',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['NATO']
+    },
+    usaLevel4: {
+        uniqueID: 'testuser-usa-4',
+        email: 'testuser-usa-4@dive-demo.example',
+        clearance: 'TOP_SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['FVEY', 'NATO-COSMIC']
+    },
+    // France Test Users
+    fraLevel1: {
+        uniqueID: 'testuser-fra-1',
+        email: 'testuser-fra-1@dive-demo.example',
+        clearance: 'UNCLASSIFIED',
+        countryOfAffiliation: 'FRA',
+        acpCOI: []
+    },
+    fraLevel2: {
+        uniqueID: 'testuser-fra-2',
+        email: 'testuser-fra-2@dive-demo.example',
+        clearance: 'CONFIDENTIAL',
+        countryOfAffiliation: 'FRA',
+        acpCOI: []
+    },
+    fraLevel3: {
+        uniqueID: 'testuser-fra-3',
+        email: 'testuser-fra-3@dive-demo.example',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'FRA',
+        acpCOI: ['NATO']
+    },
+    fraLevel4: {
+        uniqueID: 'testuser-fra-4',
+        email: 'testuser-fra-4@dive-demo.example',
+        clearance: 'TOP_SECRET',
+        countryOfAffiliation: 'FRA',
+        acpCOI: ['FVEY', 'NATO-COSMIC']
+    },
+    // Industry Partner Test User
+    contractor: {
+        uniqueID: 'contractor.bah',
+        email: 'contractor.bah@bah.com',
+        clearance: 'SECRET',
+        countryOfAffiliation: 'USA',
+        acpCOI: ['NATO'],
         organizationType: 'INDUSTRY' // Industry partner
     },
 
     // ============================================
     // Industry Partner Test Users
     // ============================================
-    
+
     /**
      * German industry partner with SECRET clearance
      */

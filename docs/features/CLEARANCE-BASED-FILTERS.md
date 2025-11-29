@@ -71,7 +71,7 @@ const CLEARANCE_HIERARCHY: Record<string, string[]> = {
 ## Examples
 
 ### Example 1: UNCLASSIFIED User
-**User**: `testuser-usa-unclass` (UNCLASSIFIED clearance)
+**User**: `testuser-usa-1` (UNCLASSIFIED clearance)
 
 **Classification Filter Shows:**
 - 🟢 UNCLASSIFIED
@@ -82,7 +82,7 @@ const CLEARANCE_HIERARCHY: Record<string, string[]> = {
 ---
 
 ### Example 2: SECRET User
-**User**: `testuser-usa-secret` (SECRET clearance)
+**User**: `testuser-usa-3` (SECRET clearance)
 
 **Classification Filter Shows:**
 - 🟢 UNCLASSIFIED
@@ -116,19 +116,19 @@ This is a **UI optimization only** - it does NOT affect backend authorization:
 ## Testing
 
 ### Test Case 1: UNCLASSIFIED User
-1. Login as: `testuser-usa-unclass` / `Password123!`
+1. Login as: `testuser-usa-1` / `TestUser2025!Pilot`
 2. Go to: `https://dev-app.dive25.com/resources`
 3. Open **Classification** filter
 4. **Expected**: Only see UNCLASSIFIED 🟢 and RESTRICTED 🔵
 
 ### Test Case 2: CONFIDENTIAL User
-1. Login as: `testuser-usa-conf` (if exists)
+1. Login as: `testuser-usa-2` / `TestUser2025!Pilot`
 2. Go to: `https://dev-app.dive25.com/resources`
 3. Open **Classification** filter
 4. **Expected**: See UNCLASSIFIED 🟢, RESTRICTED 🔵, CONFIDENTIAL 🟡
 
 ### Test Case 3: SECRET User
-1. Login as: `testuser-usa-secret` / `Password123!`
+1. Login as: `testuser-usa-3` / `TestUser2025!Pilot`
 2. Go to: `https://dev-app.dive25.com/resources`
 3. Open **Classification** filter
 4. **Expected**: See UNCLASSIFIED 🟢, RESTRICTED 🔵, CONFIDENTIAL 🟡, SECRET 🟠

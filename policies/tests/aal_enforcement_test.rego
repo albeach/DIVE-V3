@@ -27,7 +27,7 @@ import data.dive.authorization
 test_aal1_unclass_user_access_unclass_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-unclass",
+            "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -53,7 +53,7 @@ test_aal1_unclass_user_access_unclass_resource if {
 test_aal1_unclass_no_acr_amr if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-unclass",
+            "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -78,7 +78,7 @@ test_aal1_unclass_no_acr_amr if {
 test_aal1_unclass_user_denied_confidential_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-unclass",
+            "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -109,7 +109,7 @@ test_aal1_unclass_user_denied_confidential_resource if {
 test_aal2_confidential_user_access_confidential_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-confidential",
+            "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -135,7 +135,7 @@ test_aal2_confidential_user_access_confidential_resource if {
 test_aal2_confidential_string_format if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-confidential",
+            "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -161,7 +161,7 @@ test_aal2_confidential_string_format if {
 test_aal2_confidential_silver_acr if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-confidential",
+            "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -187,7 +187,7 @@ test_aal2_confidential_silver_acr if {
 test_aal2_secret_user_access_secret_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -213,7 +213,7 @@ test_aal2_secret_user_access_secret_resource if {
 test_aal1_confidential_user_denied_without_mfa if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-confidential",
+            "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -240,7 +240,7 @@ test_aal1_confidential_user_denied_without_mfa if {
 test_aal1_secret_user_denied_without_mfa if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -267,7 +267,7 @@ test_aal1_secret_user_denied_without_mfa if {
 test_aal2_secret_user_access_confidential_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -297,7 +297,7 @@ test_aal2_secret_user_access_confidential_resource if {
 test_aal3_ts_user_access_ts_resource_numeric if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-ts",
+            "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -323,7 +323,7 @@ test_aal3_ts_user_access_ts_resource_numeric if {
 test_aal3_ts_user_access_ts_resource_gold if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-ts",
+            "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -351,7 +351,7 @@ test_aal3_ts_user_access_ts_resource_gold if {
 test_aal2_ts_user_access_ts_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-ts",
+            "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -379,7 +379,7 @@ test_aal2_ts_user_access_ts_resource if {
 test_aal3_ts_user_access_secret_resource if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-ts",
+            "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -409,7 +409,7 @@ test_aal3_ts_user_access_secret_resource if {
 test_amr_otp_factor if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -435,7 +435,7 @@ test_amr_otp_factor if {
 test_amr_hwtoken_factor if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -461,7 +461,7 @@ test_amr_hwtoken_factor if {
 test_amr_single_factor_denied if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -491,7 +491,7 @@ test_amr_single_factor_denied if {
 test_amr_non_mfa_factors_allowed_by_count if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -523,7 +523,7 @@ test_amr_non_mfa_factors_allowed_by_count if {
 test_federated_fra_user_with_aal2 if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-fra-secret",
+            "uniqueID": "testuser-fra-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "FRA",
             "authenticated": true
@@ -550,7 +550,7 @@ test_federated_fra_user_with_aal2 if {
 test_federated_deu_user_with_aal1_denied if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-deu-secret",
+            "uniqueID": "testuser-deu-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "DEU",
             "authenticated": true
@@ -582,7 +582,7 @@ test_federated_deu_user_with_aal1_denied if {
 test_secret_user_cannot_access_ts if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -609,7 +609,7 @@ test_secret_user_cannot_access_ts if {
 test_confidential_user_cannot_access_secret if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-confidential",
+            "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -640,7 +640,7 @@ test_confidential_user_cannot_access_secret if {
 test_denial_reason_insufficient_aal if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true
@@ -666,7 +666,7 @@ test_denial_reason_insufficient_aal if {
 test_denial_reason_missing_mfa if {
     result := authorization.decision with input as {
         "subject": {
-            "uniqueID": "testuser-usa-secret",
+            "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "authenticated": true

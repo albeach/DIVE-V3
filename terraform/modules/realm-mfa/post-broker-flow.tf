@@ -168,9 +168,5 @@ resource "keycloak_authentication_execution" "post_broker_update_attributes" {
   ]
 }
 
-# Output the flow alias for broker configuration
-output "post_broker_mfa_flow_alias" {
-  description = "Post broker MFA flow alias"
-  value       = keycloak_authentication_flow.post_broker_mfa.alias
-}
+# NOTE: Output moved to outputs.tf for consistency
 

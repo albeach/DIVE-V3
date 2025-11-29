@@ -52,6 +52,7 @@ variable "federation_partners" {
     instance_name = string
     idp_url       = string
     enabled       = bool
+    client_secret = optional(string, "placeholder-sync-after-terraform")  # Set by sync-federation-secrets.sh
   }))
   default = {}
 }
@@ -77,5 +78,33 @@ variable "browser_flow_override_id" {
   description = "ID of the authentication flow to use for the broker client (for clearance-based MFA). If null, uses realm default."
   type        = string
   default     = null
+}
+
+# ============================================
+# Post-Broker MFA Flow (DEPRECATED - DO NOT USE)
+# ============================================
+# WARNING: Complex Post-Broker flows with conditional subflows DO NOT WORK
+# for federated users. They cause "REQUIRED and ALTERNATIVE elements at same level"
+# errors. Use simple_post_broker_otp_flow_alias instead.
+variable "post_broker_mfa_flow_alias" {
+  description = "DEPRECATED - Use simple_post_broker_otp_flow_alias instead"
+  type        = string
+  default     = null
+}
+
+# ============================================
+# Simple Post-Broker OTP Flow (THE WORKING SOLUTION)
+# ============================================
+# This is the CORRECT way to enforce MFA for federated users.
+# The flow should contain ONLY a single OTP Form authenticator as REQUIRED.
+#
+# Reference: https://www.keycloak.org/docs/latest/server_admin/index.html#requesting-2-factor-authentication-after-identity-provider-login
+# "The easiest way is to enforce authentication with one particular 2-factor method.
+#  For example, when requesting OTP, the flow can look like this with only a single
+#  authenticator configured."
+variable "simple_post_broker_otp_flow_alias" {
+  description = "Alias of the Simple Post-Broker OTP flow. Contains only OTP Form (REQUIRED). This is what makes MFA work for federated users."
+  type        = string
+  default     = "Simple Post-Broker OTP"
 }
 

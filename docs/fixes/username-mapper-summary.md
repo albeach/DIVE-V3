@@ -119,8 +119,8 @@ For each realm's IdP broker:
 
 For each national realm (e.g., `dive-v3-usa`):
 1. Navigate to: **{Realm}** → **Users**
-2. Find user: `testuser-{country}-unclass`
-3. Verify: Username field shows full uniqueID (e.g., `testuser-usa-unclass@example.mil`)
+2. Find user: `testuser-{country}-1`
+3. Verify: Username field shows full uniqueID (e.g., `testuser-usa-1@dive-demo.example`)
 
 ## Testing
 
@@ -134,7 +134,7 @@ For each national realm (e.g., `dive-v3-usa`):
 **Steps:**
 1. Go to: http://localhost:3000
 2. Click: **United States (DoD)**
-3. Login: `testuser-usa-unclass@example.mil` / `password123`
+3. Login: `testuser-usa-1@example.mil` / `password123`
 
 **Expected Result:**
 - ✅ Login succeeds
@@ -151,7 +151,7 @@ For each national realm (e.g., `dive-v3-usa`):
 **Steps:**
 1. Go to: http://localhost:3000
 2. Click: **France (Ministère des Armées)**
-3. Login: `testuser-fra-unclass@defense.gouv.fr` / `password123`
+3. Login: `testuser-fra-1@defense.gouv.fr` / `password123`
 
 **Expected Result:**
 - ✅ Login succeeds
@@ -181,8 +181,8 @@ For each national realm (e.g., `dive-v3-usa`):
 **Cause:** Trying to login with old short username format
 
 **Solution:** Use full uniqueID as username
-- ❌ Old: `testuser-usa-unclass`
-- ✅ New: `testuser-usa-unclass@example.mil`
+- ❌ Old: `testuser-usa-1`
+- ✅ New: `testuser-usa-1@example.mil`
 
 ### Issue: "User already exists" error persists
 

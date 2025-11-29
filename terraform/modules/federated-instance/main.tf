@@ -69,15 +69,49 @@ resource "keycloak_realm" "broker" {
     }
   }
 
-  # WebAuthn settings for passwordless auth
+  # ============================================================================
+  # WebAuthn Policy (Standard - AAL2)
+  # ============================================================================
+  # Used for standard 2FA with hardware keys or platform authenticators
+  # Allows platform (TouchID, FaceID, Windows Hello) and cross-platform (YubiKey)
   web_authn_policy {
-    relying_party_entity_name         = "DIVE V3 - ${var.instance_name}"
+    relying_party_entity_name         = "DIVE V3 Coalition - ${var.instance_name}"
     relying_party_id                  = "" # Use default (hostname)
     signature_algorithms              = ["ES256", "RS256"]
-    attestation_conveyance_preference = "indirect"
-    authenticator_attachment          = "platform"
-    require_resident_key              = "No"
+    attestation_conveyance_preference = "direct"  # Full attestation for audit
+    authenticator_attachment          = "not specified"  # Allows all types (platform, cross-platform, hybrid/QR)
+    require_resident_key              = "No"      # Server-side credential storage OK
     user_verification_requirement     = "preferred"
+    create_timeout                    = 60        # 60 seconds to complete
+    avoid_same_authenticator_register = false
+  }
+
+  # ============================================================================
+  # WebAuthn Passwordless Policy (AAL3 - TOP_SECRET)
+  # ============================================================================
+  # NIST SP 800-63B AAL3 compliant policy for TOP_SECRET users
+  # Allows: Hardware keys (YubiKey), Platform (TouchID), AND QR code/Hybrid flow
+  # 
+  # Key Settings:
+  # - authenticator_attachment = "" (not specified) → Allows ALL types including QR code
+  # - require_resident_key = "Yes" → Discoverable credential (passkey requirement)
+  # - user_verification_requirement = "required" → Biometric/PIN required
+  # - attestation_conveyance_preference = "direct" → Full attestation for audit
+  #
+  # AAL3 Compliance Notes:
+  # - Hardware-backed keys (Secure Enclave, TPM) meet AAL3 requirements
+  # - QR code flow uses phone's secure enclave (hardware-backed)
+  # - User verification ensures biometric/PIN is required
+  web_authn_passwordless_policy {
+    relying_party_entity_name         = "DIVE V3 Coalition - AAL3 - ${var.instance_name}"
+    relying_party_id                  = "" # Use default (hostname)
+    signature_algorithms              = ["ES256", "RS256"]
+    attestation_conveyance_preference = "direct"   # Full attestation for audit
+    authenticator_attachment          = "not specified"  # Allows ALL types (platform, cross-platform, hybrid/QR)
+    require_resident_key              = "Yes"      # Discoverable credential (AAL3)
+    user_verification_requirement     = "required" # Biometric/PIN required (AAL3)
+    create_timeout                    = 120        # 2 minutes for QR code flow
+    avoid_same_authenticator_register = false
   }
 }
 
@@ -99,6 +133,7 @@ resource "keycloak_openid_client" "broker_client" {
 
   # URLs - include both localhost (dev) and Cloudflare (prod)
   root_url = var.app_url
+  base_url = var.app_url
   valid_redirect_uris = [
     "${var.app_url}/*",
     "http://localhost:3000/*",
@@ -107,6 +142,16 @@ resource "keycloak_openid_client" "broker_client" {
   web_origins = [
     var.app_url,
     var.api_url,
+    "http://localhost:3000",
+    "https://localhost:3000",
+  ]
+
+  # Logout configuration - CRITICAL for proper Single Logout (SLO)
+  # Without these, logout redirects fail with "Unable to Complete Request"
+  frontchannel_logout_enabled = true
+  frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
+  valid_post_logout_redirect_uris = [
+    var.app_url,
     "http://localhost:3000",
     "https://localhost:3000",
   ]

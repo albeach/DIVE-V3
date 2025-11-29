@@ -172,8 +172,9 @@ describe('Compression Middleware', () => {
         it('should track compression statistics', () => {
             mockReq.headers = { 'x-request-id': 'test-123' };
 
-            const _originalWrite = mockRes.write;
-            const _originalEnd = mockRes.end;
+            // Store references for potential future use
+            void mockRes.write;
+            void mockRes.end;
 
             (mockRes.getHeader as jest.Mock).mockImplementation((header: string) => {
                 if (header === 'Content-Encoding') return 'gzip';

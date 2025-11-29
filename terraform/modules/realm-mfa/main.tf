@@ -1,19 +1,39 @@
 # ============================================
-# MFA Browser Authentication Flow (NATIVE KEYCLOAK 26.4.2) - FIXED
+# MFA Browser Authentication Flow (NATIVE KEYCLOAK 26.4.2) - BEST PRACTICE PATTERN
 # ============================================
 # Multi-Level AAL Enforcement: AAL1/AAL2/AAL3 Using ONLY Native Keycloak Features
 # 
-# CRITICAL FIX (Nov 4, 2025):
-# - Restructured flow to fix "user not set yet" error
-# - Username-Password and MFA now in SAME subflow (proper user context)
-# - Added AAL3 (WebAuthn) for TOP_SECRET clearance
+# CRITICAL FIX (Nov 29, 2025):
+# - Implements the "Conditional 2FA sub-flow with OTP default" pattern from Keycloak docs
+# - Reference: https://www.keycloak.org/docs/latest/server_admin/index.html#twofa-conditional-workflow-examples
 #
-# Flow Structure (CORRECTED):
+# KEY INSIGHT: The `auth-otp-form` authenticator ONLY validates existing OTP credentials.
+# It does NOT force enrollment if user has no OTP configured.
+# To force enrollment, we need to:
+#   1. First try existing 2FA methods (ALTERNATIVE)
+#   2. Check if 2FA was NOT completed using `Condition - sub-flow executed`
+#   3. If not completed, force OTP enrollment with REQUIRED OTP Form
+#
+# Flow Structure (BEST PRACTICE):
 # 1. Cookie (ALTERNATIVE) - SSO reuse
 # 2. Forms Subflow (ALTERNATIVE) - Contains auth + MFA together
 #    ├─ Username-Password (REQUIRED) - Authenticates user FIRST
 #    ├─ Conditional AAL3 (CONDITIONAL) - TOP_SECRET → WebAuthn
+#    │   ├─ Condition: clearance == TOP_SECRET
+#    │   └─ WebAuthn Authenticator (REQUIRED)
 #    └─ Conditional AAL2 (CONDITIONAL) - CONFIDENTIAL/SECRET → OTP
+#        ├─ Condition: clearance in (CONFIDENTIAL, SECRET)
+#        ├─ 2FA Options Subflow (CONDITIONAL) - Try existing 2FA first
+#        │   ├─ Condition - User Configured (checks if ANY 2FA is configured)
+#        │   └─ OTP Form (ALTERNATIVE) - Validates existing OTP
+#        └─ Force OTP Enrollment (CONDITIONAL) - Fallback for users without 2FA
+#            ├─ Condition - Sub-flow Executed (checks if 2FA Options was NOT executed)
+#            └─ OTP Form (REQUIRED) - Forces enrollment if no 2FA configured
+#
+# This pattern handles ALL use cases:
+# - New users (no OTP): Forced to enroll
+# - Returning users with OTP: Validates existing OTP
+# - Users from external IdPs: Clearance attribute determines MFA requirement
 #
 # ACR/AMR Mapping:
 # - AAL1 (password only): acr="0", amr=["pwd"]
@@ -23,14 +43,12 @@
 resource "keycloak_authentication_flow" "classified_browser" {
   realm_id    = var.realm_id
   alias       = "Classified Access Browser Flow - ${var.realm_display_name}"
-  description = "Multi-level AAL (AAL1/AAL2/AAL3) using NATIVE Keycloak 26.4.2 features"
+  description = "Multi-level AAL (AAL1/AAL2/AAL3) with mandatory MFA for classified clearances"
 }
 
 # ============================================
 # Top Level: Cookie vs Forms
 # ============================================
-# IMPORTANT: Cookie SSO is ALTERNATIVE but WebAuthn is REQUIRED for TOP_SECRET
-# This allows session management while still enforcing MFA on each authentication
 
 # Option 1: SSO Cookie (returning users, already authenticated)
 resource "keycloak_authentication_execution" "browser_cookie" {
@@ -55,8 +73,6 @@ resource "keycloak_authentication_subflow" "browser_forms_subflow" {
 # ============================================
 # Forms Subflow: Auth THEN Conditional MFA
 # ============================================
-# CRITICAL: User authentication happens FIRST, creating user context
-# THEN conditional checks can access user attributes
 
 # Step 1: Username + Password (REQUIRED - creates user context)
 resource "keycloak_authentication_execution" "browser_forms" {
@@ -98,6 +114,7 @@ resource "keycloak_authentication_execution" "browser_condition_top_secret" {
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
   authenticator     = "conditional-user-attribute"
   requirement       = "REQUIRED"
+  priority          = 10 # Execute FIRST to evaluate condition
 }
 
 resource "keycloak_authentication_execution_config" "browser_condition_top_secret_config" {
@@ -117,6 +134,7 @@ resource "keycloak_authentication_execution" "browser_webauthn_form" {
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
   authenticator     = "webauthn-authenticator"
   requirement       = "REQUIRED"
+  priority          = 20 # Execute AFTER condition check
 
   depends_on = [
     keycloak_authentication_execution.browser_condition_top_secret,
@@ -138,6 +156,8 @@ resource "keycloak_authentication_execution_config" "browser_webauthn_acr" {
 # ============================================
 # Step 3: Conditional AAL2 (CONFIDENTIAL/SECRET → OTP)
 # ============================================
+# BEST PRACTICE PATTERN: "Conditional 2FA sub-flow with OTP default"
+# This pattern handles both new users (enrollment) and returning users (validation)
 
 resource "keycloak_authentication_subflow" "browser_conditional_otp" {
   realm_id          = var.realm_id
@@ -155,6 +175,7 @@ resource "keycloak_authentication_execution" "browser_condition_user_attribute" 
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
   authenticator     = "conditional-user-attribute"
   requirement       = "REQUIRED"
+  priority          = 10 # Execute FIRST to evaluate condition
 }
 
 resource "keycloak_authentication_execution_config" "browser_condition_config" {
@@ -168,12 +189,19 @@ resource "keycloak_authentication_execution_config" "browser_condition_config" {
   }
 }
 
-# OTP Form (only for CONFIDENTIAL/SECRET)
-resource "keycloak_authentication_execution" "browser_otp_form" {
+# ============================================
+# Step 3a: 2FA Options Subflow - Try Existing 2FA First
+# ============================================
+# This subflow attempts to use existing 2FA credentials
+# If user has OTP configured, they'll enter their code here
+# If no 2FA is configured, this subflow is skipped (CONDITIONAL)
+
+resource "keycloak_authentication_subflow" "browser_2fa_options" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
-  authenticator     = "auth-otp-form"
-  requirement       = "REQUIRED"
+  alias             = "2FA Options - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
+  priority          = 20 # After clearance check
 
   depends_on = [
     keycloak_authentication_execution.browser_condition_user_attribute,
@@ -181,11 +209,92 @@ resource "keycloak_authentication_execution" "browser_otp_form" {
   ]
 }
 
+# Condition: User has 2FA configured (OTP credential exists)
+resource "keycloak_authentication_execution" "browser_condition_user_configured" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_2fa_options.alias
+  authenticator     = "conditional-user-configured"
+  requirement       = "REQUIRED"
+  priority          = 10 # Check if user has 2FA configured
+}
+
+# OTP Form (ALTERNATIVE) - Validates existing OTP for users who have it
+resource "keycloak_authentication_execution" "browser_otp_form_existing" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_2fa_options.alias
+  authenticator     = "auth-otp-form"
+  requirement       = "ALTERNATIVE"
+  priority          = 20 # After condition check
+
+  depends_on = [keycloak_authentication_execution.browser_condition_user_configured]
+}
+
 # Configure ACR and AMR for OTP (AAL2)
-resource "keycloak_authentication_execution_config" "browser_otp_acr" {
+resource "keycloak_authentication_execution_config" "browser_otp_existing_acr" {
   realm_id     = var.realm_id
-  execution_id = keycloak_authentication_execution.browser_otp_form.id
-  alias        = "OTP ACR AMR - ${var.realm_display_name}"
+  execution_id = keycloak_authentication_execution.browser_otp_form_existing.id
+  alias        = "OTP Existing ACR AMR - ${var.realm_display_name}"
+  config = {
+    acr_level = "1"   # AAL2 when OTP succeeds
+    reference = "otp" # AMR reference (RFC-8176 compliant)
+  }
+}
+
+# ============================================
+# Step 3b: Force OTP Enrollment - Fallback for Users Without 2FA
+# ============================================
+# This subflow executes ONLY if the 2FA Options subflow was NOT executed
+# (meaning the user has no 2FA configured)
+
+resource "keycloak_authentication_subflow" "browser_force_otp_enrollment" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
+  alias             = "Force OTP Enrollment - ${var.realm_display_name}"
+  requirement       = "CONDITIONAL"
+  priority          = 30 # After 2FA Options
+
+  depends_on = [keycloak_authentication_subflow.browser_2fa_options]
+}
+
+# Condition: 2FA Options subflow was NOT executed (user has no 2FA)
+resource "keycloak_authentication_execution" "browser_condition_subflow_not_executed" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_force_otp_enrollment.alias
+  authenticator     = "conditional-sub-flow-executed"
+  requirement       = "REQUIRED"
+  priority          = 10 # Check if 2FA Options was executed
+}
+
+resource "keycloak_authentication_execution_config" "browser_condition_subflow_not_executed_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_condition_subflow_not_executed.id
+  alias        = "2FA Not Executed Check - ${var.realm_display_name}"
+  config = {
+    flow_to_check = keycloak_authentication_subflow.browser_2fa_options.alias
+    negate        = "true" # Trigger if 2FA Options was NOT executed
+  }
+}
+
+# OTP Form (REQUIRED) - Forces enrollment for users without 2FA
+# This is the key: REQUIRED OTP Form will force the user to set up OTP
+resource "keycloak_authentication_execution" "browser_otp_form_enrollment" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_force_otp_enrollment.alias
+  authenticator     = "auth-otp-form"
+  requirement       = "REQUIRED"
+  priority          = 20 # After condition check
+
+  depends_on = [
+    keycloak_authentication_execution.browser_condition_subflow_not_executed,
+    keycloak_authentication_execution_config.browser_condition_subflow_not_executed_config
+  ]
+}
+
+# Configure ACR and AMR for OTP enrollment (AAL2)
+resource "keycloak_authentication_execution_config" "browser_otp_enrollment_acr" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_otp_form_enrollment.id
+  alias        = "OTP Enrollment ACR AMR - ${var.realm_display_name}"
   config = {
     acr_level = "1"   # AAL2 when OTP succeeds
     reference = "otp" # AMR reference (RFC-8176 compliant)
@@ -195,10 +304,6 @@ resource "keycloak_authentication_execution_config" "browser_otp_acr" {
 # ============================================
 # Authentication Flow Bindings  
 # ============================================
-# PERMANENT FIX (Nov 3, 2025):
-# - Broker realm: Uses custom MFA flow
-# - Federated realms: Use standard browser flow (federation compatible)
-# - MFA enforcement happens via post-broker login flow
 resource "keycloak_authentication_bindings" "classified_bindings" {
   realm_id     = var.realm_id
   browser_flow = var.use_standard_browser_flow ? "browser" : keycloak_authentication_flow.classified_browser.alias

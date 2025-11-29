@@ -3225,3 +3225,232 @@ body:has(.dive-policy-notice[open]) .dive-container {
     }
 }
 
+/* ============================================
+   Page Expired Styles
+   ============================================ */
+
+.dive-page-expired,
+.dive-logout-confirm,
+.dive-info-page,
+.dive-frontchannel-logout,
+.dive-select-authenticator {
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.dive-expired-icon,
+.dive-logout-icon,
+.dive-info-icon {
+    margin-bottom: 1.5rem;
+}
+
+.dive-expired-icon svg,
+.dive-logout-icon svg,
+.dive-info-icon svg {
+    color: var(--dive-accent, #f59e0b);
+    opacity: 0.9;
+}
+
+.dive-icon-success {
+    color: #10b981 !important;
+}
+
+.dive-icon-warning {
+    color: #f59e0b !important;
+}
+
+.dive-icon-error {
+    color: #ef4444 !important;
+}
+
+.dive-icon-info {
+    color: #3b82f6 !important;
+}
+
+.dive-expired-message,
+.dive-logout-message,
+.dive-info-message {
+    margin-bottom: 2rem;
+}
+
+.dive-expired-text,
+.dive-logout-text,
+.dive-info-text {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.6;
+    margin-bottom: 0.5rem;
+}
+
+.dive-expired-subtext {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dive-expired-actions,
+.dive-logout-actions,
+.dive-info-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (min-width: 480px) {
+    .dive-expired-actions,
+    .dive-logout-actions,
+    .dive-info-actions {
+        flex-direction: row;
+        justify-content: center;
+    }
+}
+
+.dive-expired-help {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================
+   Logout Confirm Styles
+   ============================================ */
+
+.dive-logout-form {
+    width: 100%;
+}
+
+/* ============================================
+   Frontchannel Logout Styles
+   ============================================ */
+
+.dive-logout-progress {
+    margin-bottom: 1.5rem;
+}
+
+.dive-logout-clients {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.dive-logout-client {
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* ============================================
+   Select Authenticator Styles
+   ============================================ */
+
+.dive-authenticator-message {
+    margin-bottom: 1.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.875rem;
+}
+
+.dive-authenticator-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dive-authenticator-option {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    width: 100%;
+    color: white;
+}
+
+.dive-authenticator-option:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.dive-authenticator-icon {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 0.5rem;
+}
+
+.dive-authenticator-icon svg {
+    color: var(--dive-accent, #f59e0b);
+}
+
+.dive-authenticator-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.dive-authenticator-name {
+    display: block;
+    font-weight: 600;
+    font-size: 1rem;
+    color: white;
+    margin-bottom: 0.25rem;
+}
+
+.dive-authenticator-help {
+    display: block;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dive-authenticator-arrow {
+    flex-shrink: 0;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.dive-authenticator-option:hover .dive-authenticator-arrow {
+    color: rgba(255, 255, 255, 0.8);
+    transform: translateX(2px);
+}
+
+/* ============================================
+   Required Actions Styles
+   ============================================ */
+
+.dive-required-actions {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+}
+
+.dive-required-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.5rem;
+}
+
+.dive-required-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.dive-required-list li {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 0.25rem 0;
+}
+

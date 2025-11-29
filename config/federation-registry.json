@@ -64,8 +64,8 @@
         "kas": 8090
       },
       "secrets": {
-        "gcpProjectId": "dive-v3-pilot",
-        "gcpSecretPath": "projects/dive-v3-pilot/secrets/usa",
+        "gcpProjectId": "dive25",
+        "gcpSecretPath": "projects/dive25/secrets/usa",
         "adminPasswordId": "usa-admin-password",
         "clientSecretId": "usa-client-secret",
         "postgresPasswordId": "usa-postgres-password",
@@ -134,8 +134,8 @@
         "kas": 8091
       },
       "secrets": {
-        "gcpProjectId": "dive-v3-pilot",
-        "gcpSecretPath": "projects/dive-v3-pilot/secrets/fra",
+        "gcpProjectId": "dive25",
+        "gcpSecretPath": "projects/dive25/secrets/fra",
         "adminPasswordId": "fra-admin-password",
         "clientSecretId": "fra-client-secret",
         "postgresPasswordId": "fra-postgres-password",
@@ -204,8 +204,8 @@
         "kas": 8092
       },
       "secrets": {
-        "gcpProjectId": "dive-v3-pilot",
-        "gcpSecretPath": "projects/dive-v3-pilot/secrets/gbr",
+        "gcpProjectId": "dive25",
+        "gcpSecretPath": "projects/dive25/secrets/gbr",
         "adminPasswordId": "gbr-admin-password",
         "clientSecretId": "gbr-client-secret",
         "postgresPasswordId": "gbr-postgres-password",
@@ -274,8 +274,8 @@
         "kas": 8080
       },
       "secrets": {
-        "gcpProjectId": "dive-v3-pilot",
-        "gcpSecretPath": "projects/dive-v3-pilot/secrets/deu",
+        "gcpProjectId": "dive25",
+        "gcpSecretPath": "projects/dive25/secrets/deu",
         "adminPasswordId": "deu-admin-password",
         "clientSecretId": "deu-client-secret",
         "postgresPasswordId": "deu-postgres-password",
@@ -285,7 +285,7 @@
       "cloudflare": {
         "tunnelId": "2112e264-61e3-463f-9d13-b55273bde204",
         "tunnelName": "dive-v3-deu-prosecurity",
-        "credentialsFile": "cloudflared/config-deu.yml"
+        "credentialsFile": "cloudflared/deu-tunnel-credentials.json"
       },
       "keycloak": {
         "adminUsername": "admin",
@@ -383,7 +383,7 @@
     }
   },
   "gcp": {
-    "projectId": "dive-v3-pilot",
+    "projectId": "dive25",
     "region": "us-east4",
     "services": {
       "secretManager": {

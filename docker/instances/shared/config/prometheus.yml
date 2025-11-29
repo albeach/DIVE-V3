@@ -1,0 +1,84 @@
+# DIVE V3 Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # USA Instance
+  - job_name: 'usa-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['dive-v3-usa-backend:4000']
+        labels:
+          instance: 'usa'
+          realm: 'USA'
+
+  - job_name: 'usa-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['dive-v3-usa-opa:8182']
+        labels:
+          instance: 'usa'
+          realm: 'USA'
+
+  # FRA Instance
+  - job_name: 'fra-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['dive-v3-fra-backend:4000']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+
+  - job_name: 'fra-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['dive-v3-fra-opa:8182']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+
+  # GBR Instance
+  - job_name: 'gbr-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['dive-v3-gbr-backend:4000']
+        labels:
+          instance: 'gbr'
+          realm: 'GBR'
+
+  - job_name: 'gbr-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['dive-v3-gbr-opa:8182']
+        labels:
+          instance: 'gbr'
+          realm: 'GBR'
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+

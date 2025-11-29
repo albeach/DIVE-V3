@@ -70,7 +70,7 @@ async function clearKeycloakSessions() {
     console.log('[INFO] 1. Clear your browser cache and cookies');
     console.log('[INFO] 2. Open an incognito/private window');
     console.log('[INFO] 3. Navigate to https://dev-app.dive25.com');
-    console.log('[INFO] 4. Login as testuser-pol-ts');
+    console.log('[INFO] 4. Login as testuser-usa-4 (TOP_SECRET)');
     console.log('[INFO] 5. WebAuthn registration should work without errors\n');
   }
 }

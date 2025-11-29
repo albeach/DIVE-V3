@@ -452,8 +452,11 @@ describe('Validation Middleware', () => {
 
             sanitizeAllStrings(mockReq as Request, mockRes as Response, mockNext);
 
+            // Forward slashes are escaped to &#x2F;
             expect(mockReq.body.file).not.toContain('/');
-            expect(mockReq.body.path).not.toContain('\\');
+            expect(mockReq.body.file).toContain('&#x2F;');
+            // Backslashes are preserved (not part of HTML escaping)
+            expect(mockReq.body.path).toContain('\\');
             expect(mockNext).toHaveBeenCalled();
         });
 

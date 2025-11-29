@@ -24,8 +24,10 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   issuer               = "${each.value.idp_url}/realms/dive-v3-broker"
   
   # Client credentials (these would be created in the partner's Keycloak)
+  # NOTE: client_secret is a placeholder until sync-federation-secrets.sh runs post-Terraform
+  # The chicken-and-egg problem: Partner creates the client, we need their secret
   client_id     = "dive-v3-${lower(var.instance_code)}-federation"
-  client_secret = lookup(each.value, "client_secret", "placeholder-configure-manually")
+  client_secret = each.value.client_secret
 
   # OIDC settings
   validate_signature   = true

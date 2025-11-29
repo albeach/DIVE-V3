@@ -1,17 +1,21 @@
 /**
  * Centralized Test Users for E2E Tests
  * 
- * Based on Terraform configuration in terraform/all-test-users.tf
- * 44 users total (4 per realm × 11 realms)
+ * Based on Terraform configuration in terraform/modules/federated-instance/test-users.tf
  * 
- * User Pattern: testuser-{country}-{clearance}
- * Password: All users share same password (from terraform.tfvars)
+ * User Pattern: testuser-{country}-{1,2,3,4}
+ *   1 = UNCLASSIFIED
+ *   2 = CONFIDENTIAL
+ *   3 = SECRET
+ *   4 = TOP_SECRET
+ * 
+ * Password: TestUser2025!Pilot (from terraform)
  * 
  * MFA Requirements:
- * - UNCLASSIFIED: No MFA (AAL1)
- * - CONFIDENTIAL: OTP required (AAL2)
- * - SECRET: OTP required (AAL2)
- * - TOP_SECRET: WebAuthn required (AAL3)
+ * - Level 1 (UNCLASSIFIED): No MFA (AAL1)
+ * - Level 2 (CONFIDENTIAL): OTP required (AAL2)
+ * - Level 3 (SECRET): OTP required (AAL2)
+ * - Level 4 (TOP_SECRET): WebAuthn required (AAL3)
  */
 
 export interface TestUser {
@@ -19,6 +23,7 @@ export interface TestUser {
   password: string;
   email: string;
   clearance: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
+  clearanceLevel: 1 | 2 | 3 | 4;
   country: string;
   countryCode: string; // ISO 3166-1 alpha-3
   coi: string[];
@@ -30,69 +35,83 @@ export interface TestUser {
 }
 
 /**
- * Default password for all test users
+ * Default password for all test users (from terraform/modules/federated-instance/test-users.tf)
  * Override with TEST_USER_PASSWORD env var
  */
-export const DEFAULT_TEST_PASSWORD = process.env.TEST_USER_PASSWORD || 'Password123!';
+export const DEFAULT_TEST_PASSWORD = process.env.TEST_USER_PASSWORD || 'TestUser2025!Pilot';
+
+/**
+ * Clearance level mapping
+ */
+export const CLEARANCE_LEVELS = {
+  1: { clearance: 'UNCLASSIFIED' as const, coi: [], mfaRequired: false },
+  2: { clearance: 'CONFIDENTIAL' as const, coi: [], mfaRequired: true, mfaType: 'otp' as const },
+  3: { clearance: 'SECRET' as const, coi: ['NATO'], mfaRequired: true, mfaType: 'otp' as const },
+  4: { clearance: 'TOP_SECRET' as const, coi: ['FVEY', 'NATO-COSMIC'], mfaRequired: true, mfaType: 'webauthn' as const },
+};
 
 /**
  * USA Test Users (4 users)
  */
 export const USA_USERS = {
-  UNCLASS: {
-    username: 'testuser-usa-unclass',
+  LEVEL_1: {
+    username: 'testuser-usa-1',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-usa-unclass@example.mil',
+    email: 'testuser-usa-1@dive-demo.example',
     clearance: 'UNCLASSIFIED',
+    clearanceLevel: 1,
     country: 'United States',
     countryCode: 'USA',
     coi: [],
-    dutyOrg: 'US_ARMY',
+    dutyOrg: 'United States Defense',
     mfaRequired: false,
-    idp: 'United States DoD',
-    realmName: 'dive-v3-usa',
+    idp: 'United States',
+    realmName: 'dive-v3-broker',
   },
-  CONFIDENTIAL: {
-    username: 'testuser-usa-confidential',
+  LEVEL_2: {
+    username: 'testuser-usa-2',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-usa-confidential@example.mil',
+    email: 'testuser-usa-2@dive-demo.example',
     clearance: 'CONFIDENTIAL',
+    clearanceLevel: 2,
     country: 'United States',
     countryCode: 'USA',
     coi: [],
-    dutyOrg: 'US_ARMY',
+    dutyOrg: 'United States Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'United States DoD',
-    realmName: 'dive-v3-usa',
+    idp: 'United States',
+    realmName: 'dive-v3-broker',
   },
-  SECRET: {
-    username: 'testuser-usa-secret',
+  LEVEL_3: {
+    username: 'testuser-usa-3',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-usa-secret@example.mil',
+    email: 'testuser-usa-3@dive-demo.example',
     clearance: 'SECRET',
+    clearanceLevel: 3,
     country: 'United States',
     countryCode: 'USA',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'US_ARMY',
+    coi: ['NATO'],
+    dutyOrg: 'United States Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'United States DoD',
-    realmName: 'dive-v3-usa',
+    idp: 'United States',
+    realmName: 'dive-v3-broker',
   },
-  TOP_SECRET: {
-    username: 'testuser-usa-ts',
+  LEVEL_4: {
+    username: 'testuser-usa-4',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-usa-ts@example.mil',
+    email: 'testuser-usa-4@dive-demo.example',
     clearance: 'TOP_SECRET',
+    clearanceLevel: 4,
     country: 'United States',
     countryCode: 'USA',
-    coi: ['NATO-COSMIC', 'FVEY', 'CAN-US'],
-    dutyOrg: 'US_ARMY',
+    coi: ['FVEY', 'NATO-COSMIC'],
+    dutyOrg: 'United States Defense',
     mfaRequired: true,
     mfaType: 'webauthn',
-    idp: 'United States DoD',
-    realmName: 'dive-v3-usa',
+    idp: 'United States',
+    realmName: 'dive-v3-broker',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -100,121 +119,64 @@ export const USA_USERS = {
  * France Test Users (4 users)
  */
 export const FRA_USERS = {
-  UNCLASS: {
-    username: 'testuser-fra-unclass',
+  LEVEL_1: {
+    username: 'testuser-fra-1',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-fra-unclass@example.fr',
+    email: 'testuser-fra-1@dive-demo.example',
     clearance: 'UNCLASSIFIED',
+    clearanceLevel: 1,
     country: 'France',
     countryCode: 'FRA',
     coi: [],
-    dutyOrg: 'FRENCH_AIR_FORCE',
+    dutyOrg: 'France Defense',
     mfaRequired: false,
-    idp: 'France Ministry of Defense',
-    realmName: 'dive-v3-fra',
+    idp: 'France',
+    realmName: 'dive-v3-broker',
   },
-  CONFIDENTIAL: {
-    username: 'testuser-fra-confidential',
+  LEVEL_2: {
+    username: 'testuser-fra-2',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-fra-confidential@example.fr',
+    email: 'testuser-fra-2@dive-demo.example',
     clearance: 'CONFIDENTIAL',
+    clearanceLevel: 2,
     country: 'France',
     countryCode: 'FRA',
     coi: [],
-    dutyOrg: 'FRENCH_AIR_FORCE',
+    dutyOrg: 'France Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'France Ministry of Defense',
-    realmName: 'dive-v3-fra',
+    idp: 'France',
+    realmName: 'dive-v3-broker',
   },
-  SECRET: {
-    username: 'testuser-fra-secret',
+  LEVEL_3: {
+    username: 'testuser-fra-3',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-fra-secret@example.fr',
+    email: 'testuser-fra-3@dive-demo.example',
     clearance: 'SECRET',
+    clearanceLevel: 3,
     country: 'France',
     countryCode: 'FRA',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'FRENCH_AIR_FORCE',
+    coi: ['NATO'],
+    dutyOrg: 'France Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'France Ministry of Defense',
-    realmName: 'dive-v3-fra',
+    idp: 'France',
+    realmName: 'dive-v3-broker',
   },
-  TOP_SECRET: {
-    username: 'testuser-fra-ts',
+  LEVEL_4: {
+    username: 'testuser-fra-4',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-fra-ts@example.fr',
+    email: 'testuser-fra-4@dive-demo.example',
     clearance: 'TOP_SECRET',
+    clearanceLevel: 4,
     country: 'France',
     countryCode: 'FRA',
-    coi: ['NATO-COSMIC'], // France NOT in FVEY
-    dutyOrg: 'FRENCH_AIR_FORCE',
+    coi: ['FVEY', 'NATO-COSMIC'],
+    dutyOrg: 'France Defense',
     mfaRequired: true,
     mfaType: 'webauthn',
-    idp: 'France Ministry of Defense',
-    realmName: 'dive-v3-fra',
-  },
-} as const satisfies Record<string, TestUser>;
-
-/**
- * Canada Test Users (4 users)
- */
-export const CAN_USERS = {
-  UNCLASS: {
-    username: 'testuser-can-unclass',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-can-unclass@example.ca',
-    clearance: 'UNCLASSIFIED',
-    country: 'Canada',
-    countryCode: 'CAN',
-    coi: [],
-    dutyOrg: 'CANADIAN_ARMED_FORCES',
-    mfaRequired: false,
-    idp: 'Canadian Armed Forces',
-    realmName: 'dive-v3-can',
-  },
-  CONFIDENTIAL: {
-    username: 'testuser-can-confidential',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-can-confidential@example.ca',
-    clearance: 'CONFIDENTIAL',
-    country: 'Canada',
-    countryCode: 'CAN',
-    coi: [],
-    dutyOrg: 'CANADIAN_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Canadian Armed Forces',
-    realmName: 'dive-v3-can',
-  },
-  SECRET: {
-    username: 'testuser-can-secret',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-can-secret@example.ca',
-    clearance: 'SECRET',
-    country: 'Canada',
-    countryCode: 'CAN',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'CANADIAN_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Canadian Armed Forces',
-    realmName: 'dive-v3-can',
-  },
-  TOP_SECRET: {
-    username: 'testuser-can-ts',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-can-ts@example.ca',
-    clearance: 'TOP_SECRET',
-    country: 'Canada',
-    countryCode: 'CAN',
-    coi: ['NATO-COSMIC', 'FVEY', 'CAN-US'],
-    dutyOrg: 'CANADIAN_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'webauthn',
-    idp: 'Canadian Armed Forces',
-    realmName: 'dive-v3-can',
+    idp: 'France',
+    realmName: 'dive-v3-broker',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -222,60 +184,64 @@ export const CAN_USERS = {
  * Germany Test Users (4 users)
  */
 export const DEU_USERS = {
-  UNCLASS: {
-    username: 'testuser-deu-unclass',
+  LEVEL_1: {
+    username: 'testuser-deu-1',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-deu-unclass@example.de',
+    email: 'testuser-deu-1@dive-demo.example',
     clearance: 'UNCLASSIFIED',
+    clearanceLevel: 1,
     country: 'Germany',
     countryCode: 'DEU',
     coi: [],
-    dutyOrg: 'BUNDESWEHR',
+    dutyOrg: 'Germany Defense',
     mfaRequired: false,
-    idp: 'German Bundeswehr',
-    realmName: 'dive-v3-deu',
+    idp: 'Germany',
+    realmName: 'dive-v3-broker',
   },
-  CONFIDENTIAL: {
-    username: 'testuser-deu-confidential',
+  LEVEL_2: {
+    username: 'testuser-deu-2',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-deu-confidential@example.de',
+    email: 'testuser-deu-2@dive-demo.example',
     clearance: 'CONFIDENTIAL',
+    clearanceLevel: 2,
     country: 'Germany',
     countryCode: 'DEU',
     coi: [],
-    dutyOrg: 'BUNDESWEHR',
+    dutyOrg: 'Germany Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'German Bundeswehr',
-    realmName: 'dive-v3-deu',
+    idp: 'Germany',
+    realmName: 'dive-v3-broker',
   },
-  SECRET: {
-    username: 'testuser-deu-secret',
+  LEVEL_3: {
+    username: 'testuser-deu-3',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-deu-secret@example.de',
+    email: 'testuser-deu-3@dive-demo.example',
     clearance: 'SECRET',
+    clearanceLevel: 3,
     country: 'Germany',
     countryCode: 'DEU',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'BUNDESWEHR',
+    coi: ['NATO'],
+    dutyOrg: 'Germany Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'German Bundeswehr',
-    realmName: 'dive-v3-deu',
+    idp: 'Germany',
+    realmName: 'dive-v3-broker',
   },
-  TOP_SECRET: {
-    username: 'testuser-deu-ts',
+  LEVEL_4: {
+    username: 'testuser-deu-4',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-deu-ts@example.de',
+    email: 'testuser-deu-4@dive-demo.example',
     clearance: 'TOP_SECRET',
+    clearanceLevel: 4,
     country: 'Germany',
     countryCode: 'DEU',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'BUNDESWEHR',
+    coi: ['FVEY', 'NATO-COSMIC'],
+    dutyOrg: 'Germany Defense',
     mfaRequired: true,
     mfaType: 'webauthn',
-    idp: 'German Bundeswehr',
-    realmName: 'dive-v3-deu',
+    idp: 'Germany',
+    realmName: 'dive-v3-broker',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -283,365 +249,85 @@ export const DEU_USERS = {
  * United Kingdom Test Users (4 users)
  */
 export const GBR_USERS = {
-  UNCLASS: {
-    username: 'testuser-gbr-unclass',
+  LEVEL_1: {
+    username: 'testuser-gbr-1',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-gbr-unclass@example.uk',
+    email: 'testuser-gbr-1@dive-demo.example',
     clearance: 'UNCLASSIFIED',
+    clearanceLevel: 1,
     country: 'United Kingdom',
     countryCode: 'GBR',
     coi: [],
-    dutyOrg: 'UK_MOD',
+    dutyOrg: 'United Kingdom Defense',
     mfaRequired: false,
-    idp: 'UK Ministry of Defence',
-    realmName: 'dive-v3-gbr',
+    idp: 'United Kingdom',
+    realmName: 'dive-v3-broker',
   },
-  CONFIDENTIAL: {
-    username: 'testuser-gbr-confidential',
+  LEVEL_2: {
+    username: 'testuser-gbr-2',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-gbr-confidential@example.uk',
+    email: 'testuser-gbr-2@dive-demo.example',
     clearance: 'CONFIDENTIAL',
+    clearanceLevel: 2,
     country: 'United Kingdom',
     countryCode: 'GBR',
     coi: [],
-    dutyOrg: 'UK_MOD',
+    dutyOrg: 'United Kingdom Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'UK Ministry of Defence',
-    realmName: 'dive-v3-gbr',
+    idp: 'United Kingdom',
+    realmName: 'dive-v3-broker',
   },
-  SECRET: {
-    username: 'testuser-gbr-secret',
+  LEVEL_3: {
+    username: 'testuser-gbr-3',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-gbr-secret@example.uk',
+    email: 'testuser-gbr-3@dive-demo.example',
     clearance: 'SECRET',
+    clearanceLevel: 3,
     country: 'United Kingdom',
     countryCode: 'GBR',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'UK_MOD',
+    coi: ['NATO'],
+    dutyOrg: 'United Kingdom Defense',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'UK Ministry of Defence',
-    realmName: 'dive-v3-gbr',
+    idp: 'United Kingdom',
+    realmName: 'dive-v3-broker',
   },
-  TOP_SECRET: {
-    username: 'testuser-gbr-ts',
+  LEVEL_4: {
+    username: 'testuser-gbr-4',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-gbr-ts@example.uk',
+    email: 'testuser-gbr-4@dive-demo.example',
     clearance: 'TOP_SECRET',
+    clearanceLevel: 4,
     country: 'United Kingdom',
     countryCode: 'GBR',
-    coi: ['NATO-COSMIC', 'FVEY'],
-    dutyOrg: 'UK_MOD',
+    coi: ['FVEY', 'NATO-COSMIC'],
+    dutyOrg: 'United Kingdom Defense',
     mfaRequired: true,
     mfaType: 'webauthn',
-    idp: 'UK Ministry of Defence',
-    realmName: 'dive-v3-gbr',
+    idp: 'United Kingdom',
+    realmName: 'dive-v3-broker',
   },
 } as const satisfies Record<string, TestUser>;
 
 /**
- * Italy Test Users (4 users)
- */
-export const ITA_USERS = {
-  UNCLASS: {
-    username: 'testuser-ita-unclass',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-ita-unclass@example.it',
-    clearance: 'UNCLASSIFIED',
-    country: 'Italy',
-    countryCode: 'ITA',
-    coi: [],
-    dutyOrg: 'ITALIAN_ARMED_FORCES',
-    mfaRequired: false,
-    idp: 'Italian Armed Forces',
-    realmName: 'dive-v3-ita',
-  },
-  CONFIDENTIAL: {
-    username: 'testuser-ita-confidential',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-ita-confidential@example.it',
-    clearance: 'CONFIDENTIAL',
-    country: 'Italy',
-    countryCode: 'ITA',
-    coi: [],
-    dutyOrg: 'ITALIAN_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Italian Armed Forces',
-    realmName: 'dive-v3-ita',
-  },
-  SECRET: {
-    username: 'testuser-ita-secret',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-ita-secret@example.it',
-    clearance: 'SECRET',
-    country: 'Italy',
-    countryCode: 'ITA',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'ITALIAN_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Italian Armed Forces',
-    realmName: 'dive-v3-ita',
-  },
-  TOP_SECRET: {
-    username: 'testuser-ita-ts',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-ita-ts@example.it',
-    clearance: 'TOP_SECRET',
-    country: 'Italy',
-    countryCode: 'ITA',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'ITALIAN_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'webauthn',
-    idp: 'Italian Armed Forces',
-    realmName: 'dive-v3-ita',
-  },
-} as const satisfies Record<string, TestUser>;
-
-/**
- * Spain Test Users (4 users)
- */
-export const ESP_USERS = {
-  UNCLASS: {
-    username: 'testuser-esp-unclass',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-esp-unclass@example.es',
-    clearance: 'UNCLASSIFIED',
-    country: 'Spain',
-    countryCode: 'ESP',
-    coi: [],
-    dutyOrg: 'SPANISH_ARMED_FORCES',
-    mfaRequired: false,
-    idp: 'Spanish Armed Forces',
-    realmName: 'dive-v3-esp',
-  },
-  CONFIDENTIAL: {
-    username: 'testuser-esp-confidential',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-esp-confidential@example.es',
-    clearance: 'CONFIDENTIAL',
-    country: 'Spain',
-    countryCode: 'ESP',
-    coi: [],
-    dutyOrg: 'SPANISH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Spanish Armed Forces',
-    realmName: 'dive-v3-esp',
-  },
-  SECRET: {
-    username: 'testuser-esp-secret',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-esp-secret@example.es',
-    clearance: 'SECRET',
-    country: 'Spain',
-    countryCode: 'ESP',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'SPANISH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Spanish Armed Forces',
-    realmName: 'dive-v3-esp',
-  },
-  TOP_SECRET: {
-    username: 'testuser-esp-ts',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-esp-ts@example.es',
-    clearance: 'TOP_SECRET',
-    country: 'Spain',
-    countryCode: 'ESP',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'SPANISH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'webauthn',
-    idp: 'Spanish Armed Forces',
-    realmName: 'dive-v3-esp',
-  },
-} as const satisfies Record<string, TestUser>;
-
-/**
- * Poland Test Users (4 users)
- */
-export const POL_USERS = {
-  UNCLASS: {
-    username: 'testuser-pol-unclass',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-pol-unclass@example.pl',
-    clearance: 'UNCLASSIFIED',
-    country: 'Poland',
-    countryCode: 'POL',
-    coi: [],
-    dutyOrg: 'POLISH_ARMED_FORCES',
-    mfaRequired: false,
-    idp: 'Polish Armed Forces',
-    realmName: 'dive-v3-pol',
-  },
-  CONFIDENTIAL: {
-    username: 'testuser-pol-confidential',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-pol-confidential@example.pl',
-    clearance: 'CONFIDENTIAL',
-    country: 'Poland',
-    countryCode: 'POL',
-    coi: [],
-    dutyOrg: 'POLISH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Polish Armed Forces',
-    realmName: 'dive-v3-pol',
-  },
-  SECRET: {
-    username: 'testuser-pol-secret',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-pol-secret@example.pl',
-    clearance: 'SECRET',
-    country: 'Poland',
-    countryCode: 'POL',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'POLISH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Polish Armed Forces',
-    realmName: 'dive-v3-pol',
-  },
-  TOP_SECRET: {
-    username: 'testuser-pol-ts',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-pol-ts@example.pl',
-    clearance: 'TOP_SECRET',
-    country: 'Poland',
-    countryCode: 'POL',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'POLISH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'webauthn',
-    idp: 'Polish Armed Forces',
-    realmName: 'dive-v3-pol',
-  },
-} as const satisfies Record<string, TestUser>;
-
-/**
- * Netherlands Test Users (4 users)
- */
-export const NLD_USERS = {
-  UNCLASS: {
-    username: 'testuser-nld-unclass',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-nld-unclass@example.nl',
-    clearance: 'UNCLASSIFIED',
-    country: 'Netherlands',
-    countryCode: 'NLD',
-    coi: [],
-    dutyOrg: 'DUTCH_ARMED_FORCES',
-    mfaRequired: false,
-    idp: 'Dutch Armed Forces',
-    realmName: 'dive-v3-nld',
-  },
-  CONFIDENTIAL: {
-    username: 'testuser-nld-confidential',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-nld-confidential@example.nl',
-    clearance: 'CONFIDENTIAL',
-    country: 'Netherlands',
-    countryCode: 'NLD',
-    coi: [],
-    dutyOrg: 'DUTCH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Dutch Armed Forces',
-    realmName: 'dive-v3-nld',
-  },
-  SECRET: {
-    username: 'testuser-nld-secret',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-nld-secret@example.nl',
-    clearance: 'SECRET',
-    country: 'Netherlands',
-    countryCode: 'NLD',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'DUTCH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Dutch Armed Forces',
-    realmName: 'dive-v3-nld',
-  },
-  TOP_SECRET: {
-    username: 'testuser-nld-ts',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-nld-ts@example.nl',
-    clearance: 'TOP_SECRET',
-    country: 'Netherlands',
-    countryCode: 'NLD',
-    coi: ['NATO-COSMIC'],
-    dutyOrg: 'DUTCH_ARMED_FORCES',
-    mfaRequired: true,
-    mfaType: 'webauthn',
-    idp: 'Dutch Armed Forces',
-    realmName: 'dive-v3-nld',
-  },
-} as const satisfies Record<string, TestUser>;
-
-/**
- * Industry (Contractor) Test Users (4 users)
+ * Industry Partner Test Users (Booz Allen Hamilton for USA)
  */
 export const INDUSTRY_USERS = {
-  UNCLASS: {
-    username: 'testuser-industry-unclass',
+  BAH: {
+    username: 'contractor.bah',
     password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-industry-unclass@contractor.com',
-    clearance: 'UNCLASSIFIED',
-    country: 'United States',
-    countryCode: 'USA',
-    coi: [],
-    dutyOrg: 'DEFENSE_CONTRACTOR',
-    mfaRequired: false,
-    idp: 'Industry Partner',
-    realmName: 'dive-v3-industry',
-  },
-  CONFIDENTIAL: {
-    username: 'testuser-industry-confidential',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-industry-confidential@contractor.com',
-    clearance: 'CONFIDENTIAL',
-    country: 'United States',
-    countryCode: 'USA',
-    coi: [],
-    dutyOrg: 'DEFENSE_CONTRACTOR',
-    mfaRequired: true,
-    mfaType: 'otp',
-    idp: 'Industry Partner',
-    realmName: 'dive-v3-industry',
-  },
-  SECRET: {
-    username: 'testuser-industry-secret',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-industry-secret@contractor.com',
+    email: 'contractor.bah@bah.com',
     clearance: 'SECRET',
+    clearanceLevel: 3,
     country: 'United States',
     countryCode: 'USA',
-    coi: [], // Industry gets minimal COI
-    dutyOrg: 'DEFENSE_CONTRACTOR',
+    coi: ['NATO'],
+    dutyOrg: 'Booz Allen Hamilton',
     mfaRequired: true,
     mfaType: 'otp',
-    idp: 'Industry Partner',
-    realmName: 'dive-v3-industry',
-  },
-  TOP_SECRET: {
-    username: 'testuser-industry-ts',
-    password: DEFAULT_TEST_PASSWORD,
-    email: 'testuser-industry-ts@contractor.com',
-    clearance: 'TOP_SECRET',
-    country: 'United States',
-    countryCode: 'USA',
-    coi: ['FVEY'], // Limited contractor access
-    dutyOrg: 'DEFENSE_CONTRACTOR',
-    mfaRequired: true,
-    mfaType: 'webauthn',
-    idp: 'Industry Partner',
-    realmName: 'dive-v3-industry',
+    idp: 'United States',
+    realmName: 'dive-v3-broker',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -652,13 +338,8 @@ export const INDUSTRY_USERS = {
 export const TEST_USERS = {
   USA: USA_USERS,
   FRA: FRA_USERS,
-  CAN: CAN_USERS,
   DEU: DEU_USERS,
   GBR: GBR_USERS,
-  ITA: ITA_USERS,
-  ESP: ESP_USERS,
-  POL: POL_USERS,
-  NLD: NLD_USERS,
   INDUSTRY: INDUSTRY_USERS,
 } as const;
 
@@ -684,6 +365,21 @@ export function getUsersByClearance(clearance: TestUser['clearance']): TestUser[
   for (const countryUsers of Object.values(TEST_USERS)) {
     for (const user of Object.values(countryUsers)) {
       if (user.clearance === clearance) {
+        users.push(user);
+      }
+    }
+  }
+  return users;
+}
+
+/**
+ * Helper: Get all users by numeric level (1-4)
+ */
+export function getUsersByLevel(level: 1 | 2 | 3 | 4): TestUser[] {
+  const users: TestUser[] = [];
+  for (const countryUsers of Object.values(TEST_USERS)) {
+    for (const user of Object.values(countryUsers)) {
+      if (user.clearanceLevel === level) {
         users.push(user);
       }
     }
@@ -720,5 +416,3 @@ export function getUsersWithoutMFA(): TestUser[] {
   }
   return users;
 }
-
-

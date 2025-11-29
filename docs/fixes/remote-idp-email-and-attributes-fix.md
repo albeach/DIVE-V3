@@ -268,16 +268,16 @@ docker compose exec postgres psql -U postgres -d dive_v3_app \
    - **COI:** NATO-COSMIC, FVEY
    - **uniqueID:** steve@remote-idp.example.com
 
-### Test 4: Federation Test User (testuser-usa-unclass)
+### Test 4: Federation Test User (testuser-usa-1)
 This user has email from national realm, should continue to work normally:
 
 1. Navigate to: `https://kas.js.usa.divedeeper.internal:3000`
 2. Click "United States"
 3. Login as:
-   - **Username:** `testuser-usa-unclass`
+   - **Username:** `testuser-usa-1`
    - **Password:** `password123`
 4. **Expected Result:**
-   - ✅ Email from national realm used: `testuser-usa-unclass@example.mil`
+   - ✅ Email from national realm used: `testuser-usa-1@example.mil`
    - ✅ DIVE attributes captured: clearance=UNCLASSIFIED, country=USA
 
 ## Architecture Changes
@@ -431,7 +431,7 @@ SELECT id, name, email FROM "user" WHERE email IS NULL;
 - [x] Frontend container restarted
 - [ ] Test login with steve
 - [ ] Test login with charles
-- [ ] Test login with testuser-usa-unclass (regression test)
+- [ ] Test login with testuser-usa-1 (regression test)
 - [ ] Verify DIVE attributes in session
 - [ ] Check database for generated emails
 

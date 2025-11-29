@@ -99,7 +99,7 @@ Both the backend and KAS now accept JWT tokens issued by `https://dev-auth.dive2
 
 1. Login via `https://dev-app.dive25.com/login`
 2. Select USA IdP
-3. Login with `testuser-usa-unclass` / `Password123!`
+3. Login with `testuser-usa-1` / `Password123!`
 4. Navigate to `https://dev-app.dive25.com/resources`
 5. Resources should load successfully (no 401 error)
 6. Click "Request Key" on an encrypted document

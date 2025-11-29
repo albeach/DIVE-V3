@@ -38,6 +38,59 @@ module "instance" {
 
   # Federation partners
   federation_partners = var.federation_partners
+
+  # ============================================
+  # MFA FLOW BINDING - CRITICAL FOR SECURITY
+  # ============================================
+  # Bind the clearance-based MFA flow to the broker client
+  # This enforces:
+  #   - AAL2 (OTP) for CONFIDENTIAL and SECRET users
+  #   - AAL3 (WebAuthn) for TOP_SECRET users
+  # Without this, higher clearance users can bypass MFA enrollment!
+  browser_flow_override_id = module.mfa.browser_flow_id
+
+  # ============================================
+  # SIMPLE POST-BROKER OTP FLOW - THE WORKING SOLUTION
+  # ============================================
+  # This is the KEY to making MFA work for FEDERATED users!
+  # 
+  # IMPORTANT: Use the SIMPLE flow, not the complex conditional flow!
+  # Complex flows with conditional subflows cause:
+  # "REQUIRED and ALTERNATIVE elements at same level! Those alternative executions will be ignored"
+  #
+  # The simple_post_broker_otp flow contains ONLY:
+  #   - OTP Form (REQUIRED)
+  # That's it. No user creation steps. No conditions.
+  #
+  # Reference: https://www.keycloak.org/docs/latest/server_admin/index.html#requesting-2-factor-authentication-after-identity-provider-login
+  simple_post_broker_otp_flow_alias = module.mfa.simple_post_broker_otp_flow_alias
+}
+
+# ============================================
+# MFA MODULE - Clearance-Based Authentication Flows
+# ============================================
+# Creates the "Classified Access Browser Flow" with conditional MFA:
+# - UNCLASSIFIED: Password only (AAL1)
+# - CONFIDENTIAL/SECRET: Password + OTP (AAL2)
+# - TOP_SECRET: Password + WebAuthn (AAL3)
+#
+# CRITICAL: This module MUST be included for MFA enforcement to work!
+# The flow is created and then bound to the client via browser_flow_override_id
+
+module "mfa" {
+  source = "../modules/realm-mfa"
+
+  realm_id           = module.instance.realm_id
+  realm_name         = "dive-v3-broker"
+  realm_display_name = lookup(local.instance_names, upper(terraform.workspace), terraform.workspace)
+
+  # Use the custom MFA flow (not standard browser)
+  # This enables clearance-based conditional authentication
+  use_standard_browser_flow = false
+
+  # Direct Grant MFA is disabled - use browser-based flows only
+  # (Custom SPI was removed in v2.0.0)
+  enable_direct_grant_mfa = false
 }
 
 # Instance name lookup

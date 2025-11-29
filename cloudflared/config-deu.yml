@@ -1,7 +1,8 @@
 # Cloudflare Tunnel Configuration for DIVE V3 - DEU Instance (Germany)
 # Remote Deployment at prosecurity.biz
+# CRITICAL: This tunnel is on prosecurity.biz Cloudflare account
 
-tunnel: 2856308e-2467-495d-b735-6f588140c387
+tunnel: 2112e264-61e3-463f-9d13-b55273bde204
 credentials-file: /etc/cloudflared/tunnel-credentials.json
 
 # Force HTTP/2 to avoid QUIC timeout issues on restricted networks
@@ -11,30 +12,31 @@ protocol: http2
 metrics: 0.0.0.0:9126
 
 ingress:
-  # DEU Frontend (Next.js) - Use network alias for docker compose v2
+  # DEU Frontend (Next.js with HTTPS) - matches USA/FRA/GBR pattern
+  # Note: Remote uses service names without -deu suffix
   - hostname: deu-app.prosecurity.biz
-    service: http://frontend-deu:3000
+    service: https://frontend:3000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
 
-  # DEU Backend API - Use network alias for docker compose v2
+  # DEU Backend API (HTTPS) - matches USA/FRA/GBR pattern
   - hostname: deu-api.prosecurity.biz
-    service: http://backend-deu:4000
+    service: https://backend:4000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
 
-  # DEU Keycloak IdP - Use network alias for docker compose v2
+  # DEU Keycloak IdP (HTTPS)
   - hostname: deu-idp.prosecurity.biz
-    service: https://keycloak-deu:8443
+    service: https://keycloak:8443
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
 
-  # DEU KAS - Use network alias for docker compose v2
+  # DEU KAS (HTTP - internal service, no TLS needed)
   - hostname: deu-kas.prosecurity.biz
-    service: http://kas-deu:8080
+    service: http://kas:8080
     originRequest:
       connectTimeout: 60s
 

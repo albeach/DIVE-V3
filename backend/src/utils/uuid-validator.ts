@@ -145,6 +145,11 @@ export function validateIdentifier(uniqueID: string): {
     }
 
     const trimmed = uniqueID.trim();
+    
+    // Check if trimmed value is empty (whitespace-only input)
+    if (!trimmed) {
+        return { valid: false, type: 'other', error: 'Identifier is empty or whitespace-only' };
+    }
 
     // Check if UUID
     if (isValidUUID(trimmed)) {
