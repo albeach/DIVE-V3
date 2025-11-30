@@ -199,3 +199,4 @@ terraform/instances/*.tfplan
 # Postgres init scripts (generated)
 scripts/postgres-init/
 gcp/
+.env.gcp

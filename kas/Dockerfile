@@ -1,5 +1,9 @@
 FROM node:20-alpine AS base
 
+# Install curl for health checks (required for Docker health check commands)
+# Best practice: Use proper HTTP client instead of BusyBox wget workarounds
+RUN apk add --no-cache curl
+
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
