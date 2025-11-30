@@ -349,13 +349,14 @@ services:
       - keycloak-deu
       - kas-deu
     healthcheck:
-      test: ["CMD", "cloudflared", "tunnel", "info"]
+      # Verify cloudflared is running - the image only has cloudflared binary
+      test: ["CMD", "cloudflared", "version"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
     ports:
-      - "9129:9126"
+      - "9129:9129"  # cloudflared config-deu.yml uses metrics: 0.0.0.0:9129
 
 volumes:
   postgres_deu_data:

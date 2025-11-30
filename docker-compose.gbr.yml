@@ -374,7 +374,7 @@ services:
       retries: 5
       start_period: 30s
     ports:
-      - "9128:9127"
+      - "9128:9128"  # cloudflared config-gbr.yml uses metrics: 0.0.0.0:9128
 
 volumes:
   postgres_gbr_data:
