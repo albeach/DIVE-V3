@@ -61,7 +61,7 @@ const EXPECTED_DISTRIBUTIONS = {
  * GET /api/resources/seed-status
  * Returns overall seed status including expected vs actual counts
  */
-router.get('/seed-status', async (req: Request, res: Response) => {
+router.get('/seed-status', async (_req: Request, res: Response) => {
     try {
         const database = await getDb();
         const collection = database.collection('resources');
@@ -143,7 +143,7 @@ router.get('/seed-status', async (req: Request, res: Response) => {
  * GET /api/resources/distribution
  * Returns detailed distribution breakdown by classification, COI, KAS count
  */
-router.get('/distribution', async (req: Request, res: Response) => {
+router.get('/distribution', async (_req: Request, res: Response) => {
     try {
         const database = await getDb();
         const collection = database.collection('resources');
@@ -281,7 +281,7 @@ router.get('/distribution', async (req: Request, res: Response) => {
  * GET /api/resources/seed-manifests
  * Returns list of all seed manifests with their statistics
  */
-router.get('/seed-manifests', async (req: Request, res: Response) => {
+router.get('/seed-manifests', async (_req: Request, res: Response) => {
     try {
         const database = await getDb();
         const collection = database.collection('resources');

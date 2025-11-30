@@ -281,9 +281,9 @@ describe('KAS Flow Endpoints', () => {
                 mockNext
             );
 
-            // Verify KAS was called
+            // Verify KAS was called (with HTTPS)
             expect(mockedAxios.post).toHaveBeenCalledWith(
-                'http://localhost:8080/request-key',
+                'https://localhost:8080/request-key',
                 expect.objectContaining({
                     resourceId: 'doc-ztdf-0001',
                     kaoId: 'kao-doc-ztdf-0001'
@@ -734,9 +734,9 @@ describe('KAS Flow Endpoints', () => {
                 mockNext
             );
 
-            // Verify it tried to call the custom KAS URL
+            // Verify it tried to call the KAS URL (uses configured KAS_URL with HTTPS)
             expect(mockedAxios.post).toHaveBeenCalledWith(
-                'http://custom-kas:9000/request-key',
+                'https://localhost:8080/request-key',
                 expect.any(Object),
                 expect.any(Object)
             );

@@ -13,7 +13,8 @@
 import { MongoClient } from 'mongodb';
 import { ICreateCOIKeyRequest } from '../types/coi-key.types';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
+// CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
+const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 
 /**

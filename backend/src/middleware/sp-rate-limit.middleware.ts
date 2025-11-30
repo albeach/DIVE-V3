@@ -22,11 +22,12 @@ export class SPRateLimiter {
   private keyPrefix = 'dive-v3:rate-limit:sp:';
 
   constructor() {
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'redis',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      keyPrefix: this.keyPrefix
+    // Use REDIS_URL for consistent connection across all instances (includes password)
+    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+    
+    this.redis = new Redis(redisUrl, {
+      keyPrefix: this.keyPrefix,
+      maxRetriesPerRequest: 3
     });
   }
 

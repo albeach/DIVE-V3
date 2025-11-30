@@ -9,7 +9,7 @@
  * ADatP-5663 Compliance: Audit logging for all key operations
  */
 
-import express, { Router, Request, Response } from 'express';
+import express, { Router, Request, Response, NextFunction } from 'express';
 import { authenticateJWT } from '../middleware/authz.middleware';
 import { enforceFederationAgreement } from '../middleware/federation-agreement.middleware';
 import { requestKeyHandler } from '../controllers/resource.controller';
@@ -30,7 +30,7 @@ const router: Router = express.Router();
  * @body {resourceId, kaoId, bearerToken}
  * @returns {success, key} on approval, {error, denialReason} on denial
  */
-router.post('/request-key', authenticateJWT, enforceFederationAgreement, (req: Request, res: Response) => {
+router.post('/request-key', authenticateJWT, enforceFederationAgreement, (req: Request, res: Response, next: NextFunction) => {
     logger.info('KAS route: request-key called', {
         requestId: req.headers['x-request-id'],
         resourceId: req.body?.resourceId,
@@ -39,7 +39,7 @@ router.post('/request-key', authenticateJWT, enforceFederationAgreement, (req: R
     });
     
     // Delegate to the existing requestKeyHandler
-    return requestKeyHandler(req, res);
+    return requestKeyHandler(req, res, next);
 });
 
 /**
