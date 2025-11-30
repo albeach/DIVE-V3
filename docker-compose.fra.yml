@@ -391,7 +391,7 @@ services:
       retries: 5
       start_period: 30s
     ports:
-      - "9127:9127"
+      - "9127:9127"  # cloudflared config-fra.yml uses metrics: 0.0.0.0:9127
 
 volumes:
   postgres_fra_data:
