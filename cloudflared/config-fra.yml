@@ -1,44 +1,82 @@
-# Cloudflare Tunnel Configuration for DIVE V3 - FRA Instance
-# This runs inside a Docker container and connects to FRA services via Docker network
+# ============================================================================
+# Cloudflare Tunnel Configuration - FRA Instance (France)
+# ============================================================================
+#
+# AUTO-GENERATED FROM SSOT - DO NOT EDIT MANUALLY
+#
+# Source: config/federation-registry.json
+# Generator: scripts/federation/generate-tunnel-configs.sh
+# Generated: 2025-11-30T02:13:43Z
+#
+# To modify this configuration:
+#   1. Edit config/federation-registry.json
+#   2. Run: ./scripts/federation/generate-tunnel-configs.sh fra
+#   3. Restart tunnel: docker compose -p fra up -d --force-recreate cloudflared
+#
+# ============================================================================
 
 tunnel: e07574bd-6f32-478b-8f71-42fc3d4073f7
 credentials-file: /etc/cloudflared/tunnel-credentials.json
 
-# Force HTTP/2 to avoid QUIC timeout issues
+# Force HTTP/2 to avoid QUIC timeout issues on restricted networks
 protocol: http2
 
-# Metrics for monitoring
+# Metrics endpoint for monitoring (accessible at localhost:9127)
 metrics: 0.0.0.0:9127
 
 ingress:
-  # FRA Frontend (Next.js) - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Docker Service: frontend-fra
+  # Internal Port:  3000
+  # Hostname:       fra-app.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-app.dive25.com
     service: https://frontend-fra:3000
     originRequest:
       noTLSVerify: true
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: fra-app.dive25.com
   
-  # FRA Backend API - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API (Express.js)
+  # Docker Service: backend-fra
+  # Internal Port:  4000
+  # Hostname:       fra-api.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-api.dive25.com
     service: https://backend-fra:4000
     originRequest:
       noTLSVerify: true
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: fra-api.dive25.com
   
-  # FRA Keycloak IdP - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Keycloak IdP
+  # Docker Service: keycloak-fra
+  # Internal Port:  8443
+  # Hostname:       fra-idp.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-idp.dive25.com
-    service: https://keycloak:8443
+    service: https://keycloak-fra:8443
     originRequest:
       noTLSVerify: true
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: fra-idp.dive25.com
   
-  # FRA KAS - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Key Access Service (KAS)
+  # Docker Service: kas-fra
+  # Internal Port:  8080
+  # Hostname:       fra-kas.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-kas.dive25.com
     service: http://kas-fra:8080
     originRequest:
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: fra-kas.dive25.com
   
-  # Catch-all rule (required)
+  # ─────────────────────────────────────────────────────────────────────────
+  # Catch-all (required by Cloudflare)
+  # ─────────────────────────────────────────────────────────────────────────
   - service: http_status:404
-
-

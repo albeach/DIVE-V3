@@ -134,6 +134,9 @@ usage() {
     echo "  --dry-run          Validate configuration without deploying"
     echo "  --seed             Seed 7,000 ZTDF resources after deployment"
     echo "  --seed-count=N     Number of resources to seed (default: 7000)"
+    echo "  --skip-verify      Skip post-deployment verification"
+    echo "  --skip-backup      Skip pre-deployment snapshot (not recommended)"
+    echo "  --no-rollback      Disable automatic rollback on failure"
     echo "  --help             Show this help message"
     echo ""
     echo -e "${GREEN}Examples:${NC}"
@@ -151,6 +154,65 @@ usage() {
     echo ""
     echo -e "${YELLOW}Tip: Higher number = Higher clearance${NC}"
     exit 0
+}
+
+# =============================================================================
+# SECRETS VALIDATION (GCP Secret Manager SSOT)
+# =============================================================================
+validate_secrets() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    local instance_upper=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  SECRETS VALIDATION (GCP Secret Manager)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    local missing_secrets=()
+    
+    # Check required environment variables for this instance
+    local required_vars=(
+        "KEYCLOAK_ADMIN_PASSWORD_${instance_upper}"
+        "MONGO_PASSWORD_${instance_upper}"
+        "POSTGRES_PASSWORD_${instance_upper}"
+        "AUTH_SECRET_${instance_upper}"
+        "JWT_SECRET_${instance_upper}"
+        "NEXTAUTH_SECRET_${instance_upper}"
+        "KEYCLOAK_CLIENT_SECRET_${instance_upper}"
+        "REDIS_PASSWORD_${instance_upper}"
+        "BLACKLIST_REDIS_PASSWORD"
+    )
+    
+    for var in "${required_vars[@]}"; do
+        if [ -z "${!var:-}" ]; then
+            echo -e "  ${RED}✗${NC} Missing: $var"
+            missing_secrets+=("$var")
+        else
+            echo -e "  ${GREEN}✓${NC} Set: $var"
+        fi
+    done
+    
+    if [ ${#missing_secrets[@]} -gt 0 ]; then
+        echo ""
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}  ❌ SECRETS VALIDATION FAILED${NC}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "  ${#missing_secrets[@]} required secrets are missing!"
+        echo ""
+        echo -e "  ${YELLOW}To fix, run:${NC}"
+        echo -e "    ${GREEN}source ./scripts/sync-gcp-secrets.sh ${instance_lower}${NC}"
+        echo ""
+        echo -e "  ${YELLOW}Or load all instance secrets:${NC}"
+        echo -e "    ${GREEN}source ./scripts/sync-gcp-secrets.sh${NC}"
+        echo ""
+        return 1
+    fi
+    
+    echo ""
+    log_success "All secrets validated for ${instance_upper}"
+    return 0
 }
 
 # Pre-flight checks
@@ -238,6 +300,148 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# =============================================================================
+# PRE-DEPLOYMENT SNAPSHOT (GAP-R4 Remediation)
+# =============================================================================
+SNAPSHOT_DIR=""
+
+create_snapshot() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    local timestamp=$(date +"%Y%m%d-%H%M%S")
+    
+    SNAPSHOT_DIR="$PROJECT_ROOT/backups/deployments/snapshot-${instance_lower}-$timestamp"
+    mkdir -p "$SNAPSHOT_DIR"
+    
+    log_info "Creating pre-deployment snapshot: $SNAPSHOT_DIR"
+    
+    # Save container states
+    docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' | grep -iE "(${instance_lower}|dive-v3)" > "$SNAPSHOT_DIR/containers.txt" 2>/dev/null || true
+    
+    # Save compose file
+    if [ "$instance_lower" == "usa" ]; then
+        [ -f "$PROJECT_ROOT/docker-compose.yml" ] && cp "$PROJECT_ROOT/docker-compose.yml" "$SNAPSHOT_DIR/"
+    else
+        [ -f "$PROJECT_ROOT/docker-compose.${instance_lower}.yml" ] && cp "$PROJECT_ROOT/docker-compose.${instance_lower}.yml" "$SNAPSHOT_DIR/"
+    fi
+    
+    # Save manifest
+    cat > "$SNAPSHOT_DIR/manifest.json" << EOF
+{
+  "instance": "$instance",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "type": "pre-deployment"
+}
+EOF
+    
+    log_success "Snapshot created"
+}
+
+# =============================================================================
+# POST-DEPLOYMENT VERIFICATION (GAP-R1 Remediation)
+# =============================================================================
+verify_deployment() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  POST-DEPLOYMENT VERIFICATION${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    local verify_script="$PROJECT_ROOT/scripts/deployment/verify-deployment.sh"
+    
+    if [ -x "$verify_script" ]; then
+        log_info "Running verification script..."
+        if "$verify_script" "$instance_lower"; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        # Fallback: Basic verification
+        log_info "Running basic verification..."
+        
+        local pass=0
+        local fail=0
+        
+        # Check containers are running
+        local containers=$(docker ps --format '{{.Names}}' | grep -iE "(${instance_lower}|dive-v3)" | wc -l)
+        if [ "$containers" -ge 5 ]; then
+            log_success "Containers running: $containers"
+            ((pass++))
+        else
+            log_error "Expected 5+ containers, found: $containers"
+            ((fail++))
+        fi
+        
+        # Check health endpoints (with retry)
+        log_info "Waiting 30s for services to stabilize..."
+        sleep 30
+        
+        local frontend_url="https://${instance_lower}-app.dive25.com"
+        local backend_url="https://${instance_lower}-api.dive25.com/health"
+        local keycloak_url="https://${instance_lower}-idp.dive25.com/realms/dive-v3-broker"
+        
+        for url in "$frontend_url" "$backend_url" "$keycloak_url"; do
+            local code=$(curl -sk -o /dev/null -w "%{http_code}" "$url" --max-time 15 2>/dev/null) || code="000"
+            if [[ "$code" =~ ^(200|301|302)$ ]]; then
+                log_success "  $url → HTTP $code"
+                ((pass++))
+            else
+                log_error "  $url → HTTP $code"
+                ((fail++))
+            fi
+        done
+        
+        echo ""
+        log_info "Verification: $pass passed, $fail failed"
+        
+        [ "$fail" -eq 0 ] && return 0 || return 1
+    fi
+}
+
+# =============================================================================
+# AUTOMATIC ROLLBACK (GAP-R4 Remediation)
+# =============================================================================
+rollback_deployment() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}  AUTOMATIC ROLLBACK${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    
+    if [ -z "$SNAPSHOT_DIR" ] || [ ! -d "$SNAPSHOT_DIR" ]; then
+        log_error "No snapshot available for rollback"
+        return 1
+    fi
+    
+    log_warn "Rolling back to: $SNAPSHOT_DIR"
+    
+    # Restore compose file if backed up
+    if [ "$instance_lower" == "usa" ]; then
+        [ -f "$SNAPSHOT_DIR/docker-compose.yml" ] && cp "$SNAPSHOT_DIR/docker-compose.yml" "$PROJECT_ROOT/"
+    else
+        [ -f "$SNAPSHOT_DIR/docker-compose.${instance_lower}.yml" ] && cp "$SNAPSHOT_DIR/docker-compose.${instance_lower}.yml" "$PROJECT_ROOT/"
+    fi
+    
+    # Restart services
+    log_info "Restarting services..."
+    if [ "$instance_lower" == "usa" ]; then
+        docker compose -p usa up -d 2>/dev/null || docker-compose up -d
+    else
+        docker compose -p "$instance_lower" -f "docker-compose.${instance_lower}.yml" up -d 2>/dev/null || \
+            docker-compose -f "docker-compose.${instance_lower}.yml" up -d
+    fi
+    
+    log_success "Rollback completed"
+    log_info "System restored to pre-deployment state"
+    
+    return 0
+}
+
 # Calculate ports for an instance
 calculate_ports() {
     local instance=$1
@@ -276,6 +480,9 @@ generate_docker_compose() {
 # =============================================================================
 # DIVE V3 - ${instance} Instance (${instance_name})
 # Auto-generated by deploy-dive-instance.sh
+# 
+# IMPORTANT: Before running this file, source GCP secrets:
+#   source ./scripts/sync-gcp-secrets.sh
 # =============================================================================
 
 services:
@@ -286,7 +493,7 @@ services:
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD_${instance}:?Run source ./scripts/sync-gcp-secrets.sh first}
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
@@ -301,7 +508,9 @@ services:
 
   # Keycloak ${instance} Instance
   keycloak-${instance_lower}:
-    image: quay.io/keycloak/keycloak:latest
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
     platform: linux/amd64
     container_name: dive-v3-keycloak-${instance_lower}
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
@@ -309,9 +518,9 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-${instance_lower}:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
+      KC_DB_PASSWORD: \${POSTGRES_PASSWORD_${instance}:?GCP secret required}
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${instance}:?GCP secret required}
       KC_HOSTNAME: ${instance_lower}-idp.dive25.com
       KC_HOSTNAME_STRICT: false
       KC_PROXY_HEADERS: xforwarded
@@ -335,7 +544,7 @@ services:
     networks:
       - dive-${instance_lower}-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-kfs", "https://localhost:8443/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -347,7 +556,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: dive-v3-${instance_lower}
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_ROOT_PASSWORD: \${MONGO_PASSWORD_${instance}:?GCP secret required}
     ports:
       - "${MONGO_PORT}:27017"
     volumes:
@@ -399,38 +608,46 @@ services:
 
   # KAS ${instance} Instance
   kas-${instance_lower}:
-    image: node:20-alpine
+    build:
+      context: ./kas
+      dockerfile: Dockerfile.dev
     container_name: dive-v3-kas-${instance_lower}
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
+    command: npm run dev
     environment:
       NODE_ENV: development
+      KAS_PORT: 8080
       PORT: 8080
       OPA_URL: http://opa-${instance_lower}:8181
       KEYCLOAK_URL: https://keycloak-${instance_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      BACKEND_URL: http://backend-${instance_lower}:4000
-      MONGODB_URI: mongodb://admin:admin@mongodb-${instance_lower}:27017
-      JWT_SECRET: ${instance_lower}-kas-secret-change-in-production
+      BACKEND_URL: https://backend-${instance_lower}:4000
+      MONGODB_URI: mongodb://admin:\${MONGO_PASSWORD_${instance}}@mongodb-${instance_lower}:27017/dive-v3-${instance_lower}?authSource=admin
+      JWT_SECRET: \${AUTH_SECRET_${instance}:?GCP secret required}
+      SSL_KEY_FILE: /app/certs/key.pem
+      SSL_CERT_FILE: /app/certs/certificate.pem
     ports:
       - "${KAS_PORT}:8080"
     volumes:
       - ./kas:/app
+      - ./certs:/app/certs:ro
+      - kas_${instance_lower}_node_modules:/app/node_modules
     depends_on:
       - opa-${instance_lower}
       - mongodb-${instance_lower}
     networks:
       - dive-${instance_lower}-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-kfs", "https://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # Backend ${instance} Instance
   backend-${instance_lower}:
-    image: node:20-alpine
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.node-alpine
     container_name: dive-v3-backend-${instance_lower}
     working_dir: /app
     command: sh -c "npm install && npm run dev"
@@ -438,28 +655,31 @@ services:
       NODE_ENV: development
       PORT: 4000
       INSTANCE_REALM: ${instance}
-      MONGODB_URI: mongodb://admin:admin@mongodb-${instance_lower}:27017/dive-v3-${instance_lower}?authSource=admin
+      MONGODB_URI: mongodb://admin:\${MONGO_PASSWORD_${instance}}@mongodb-${instance_lower}:27017/dive-v3-${instance_lower}?authSource=admin
       REDIS_HOST: redis-${instance_lower}
       REDIS_PORT: 6379
       REDIS_URL: redis://redis-${instance_lower}:6379
-      JWT_SECRET: ${instance_lower}-backend-secret-change-in-production
+      JWT_SECRET: \${AUTH_SECRET_${instance}:?GCP secret required}
       OPA_URL: http://opa-${instance_lower}:8181
       KEYCLOAK_URL: https://keycloak-${instance_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: \${${instance}_CLIENT_SECRET:-placeholder}
+      KEYCLOAK_CLIENT_SECRET: \${KEYCLOAK_CLIENT_SECRET:?GCP secret required}
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KAS_URL: http://kas-${instance_lower}:8080
+      KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${instance}:?GCP secret required}
+      KAS_URL: https://kas-${instance_lower}:8080
       FEDERATION_ALLOWED_ORIGINS: https://${instance_lower}-app.dive25.com,https://localhost:${FRONTEND_PORT}
       NEXT_PUBLIC_BASE_URL: https://${instance_lower}-app.dive25.com
+      SSL_KEY_FILE: /app/certs/key.pem
+      SSL_CERT_FILE: /app/certs/certificate.pem
     ports:
       - "${BACKEND_PORT}:4000"
     volumes:
       - ./backend:/app
       - ./keycloak/certs:/opt/keycloak/certs:ro
-      - ./backend/certs:/app/certs:ro
+      - ./certs:/app/certs:ro
+      - backend_${instance_lower}_node_modules:/app/node_modules
     depends_on:
       mongodb-${instance_lower}:
         condition: service_healthy
@@ -474,14 +694,16 @@ services:
     networks:
       - dive-${instance_lower}-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      test: ["CMD", "curl", "-kfs", "https://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # Frontend ${instance} Instance
   frontend-${instance_lower}:
-    image: node:20-alpine
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.node-alpine
     container_name: dive-v3-frontend-${instance_lower}
     working_dir: /app
     command: sh -c "npm install && npm run dev"
@@ -496,17 +718,19 @@ services:
       NEXT_PUBLIC_APP_NAME: "DIVE V3 - ${instance_name}"
       NEXT_PUBLIC_INSTANCE: ${instance}
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: \${${instance}_CLIENT_SECRET:-placeholder}
+      KEYCLOAK_CLIENT_SECRET: \${KEYCLOAK_CLIENT_SECRET:?GCP secret required}
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-${instance_lower}:8443
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://${instance_lower}-app.dive25.com
-      NEXTAUTH_SECRET: ${instance_lower}-frontend-secret-change-in-production
+      NEXTAUTH_SECRET: \${AUTH_SECRET_${instance}:?GCP secret required}
+      SSL_KEY_FILE: /app/certs/key.pem
+      SSL_CERT_FILE: /app/certs/certificate.pem
     ports:
       - "${FRONTEND_PORT}:3000"
     volumes:
       - ./frontend:/app
-      - ./certs:/opt/app/certs:ro
+      - ./certs:/app/certs:ro
       - ./frontend/.env.${instance_lower}:/app/.env.local:ro
       # CRITICAL: Instance-specific volumes for build isolation
       - frontend_${instance_lower}_node_modules:/app/node_modules
@@ -517,7 +741,7 @@ services:
     networks:
       - dive-${instance_lower}-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      test: ["CMD", "curl", "-kfs", "https://localhost:3000/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -550,9 +774,11 @@ services:
 volumes:
   postgres_${instance_lower}_data:
   mongodb_${instance_lower}_data:
-  # Instance-specific frontend volumes for build isolation
+  # Instance-specific volumes for build isolation
   frontend_${instance_lower}_node_modules:
   frontend_${instance_lower}_next:
+  backend_${instance_lower}_node_modules:
+  kas_${instance_lower}_node_modules:
 
 networks:
   dive-${instance_lower}-network:
@@ -600,8 +826,9 @@ ingress:
       connectTimeout: 30s
 
   - hostname: ${instance_lower}-kas.dive25.com
-    service: http://kas-${instance_lower}:8080
+    service: https://kas-${instance_lower}:8080
     originRequest:
+      noTLSVerify: true
       connectTimeout: 30s
 
   - service: http_status:404
@@ -762,10 +989,21 @@ start_docker_services() {
     
     log_info "Starting Docker services for $instance..."
     
-    if [ "$instance" == "USA" ]; then
-        docker-compose up -d
+    # Source GCP secrets first
+    if [ -f "$PROJECT_ROOT/scripts/sync-gcp-secrets.sh" ]; then
+        log_info "Loading GCP secrets..."
+        source "$PROJECT_ROOT/scripts/sync-gcp-secrets.sh" 2>/dev/null || {
+            log_warning "Could not load GCP secrets - ensure gcloud is authenticated"
+            log_warning "Run: source ./scripts/sync-gcp-secrets.sh"
+        }
     else
-        docker-compose -f "docker-compose.${instance_lower}.yml" up -d
+        log_warning "sync-gcp-secrets.sh not found - secrets must be set via environment"
+    fi
+    
+    if [ "$instance" == "USA" ]; then
+        docker compose --env-file .env.gcp -p usa -f docker-compose.yml up -d
+    else
+        docker compose -p "${instance_lower}" -f "docker-compose.${instance_lower}.yml" up -d
     fi
     
     log_success "Docker services started for $instance"
@@ -1018,6 +1256,9 @@ DRY_RUN=false
 FEDERATE=false
 SEED=false
 SEED_COUNT=7000
+VERIFY=true           # NEW: Enable verification by default
+SKIP_BACKUP=false     # NEW: Create snapshot before deploy
+AUTO_ROLLBACK=true    # NEW: Rollback on failure
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -1060,6 +1301,18 @@ while [[ $# -gt 0 ]]; do
         --seed-count=*)
             SEED_COUNT="${1#*=}"
             SEED=true
+            shift
+            ;;
+        --skip-verify)
+            VERIFY=false
+            shift
+            ;;
+        --skip-backup)
+            SKIP_BACKUP=true
+            shift
+            ;;
+        --no-rollback)
+            AUTO_ROLLBACK=false
             shift
             ;;
         --help|-h)
@@ -1110,6 +1363,16 @@ echo -e "${CYAN}╚════════════════════�
 # Run pre-flight checks
 preflight_checks
 
+# Validate secrets from GCP Secret Manager
+if ! validate_secrets "$INSTANCE"; then
+    log_error "Deployment aborted: Missing secrets from GCP Secret Manager"
+    echo ""
+    echo -e "${YELLOW}Hint: Secrets must be sourced BEFORE running this script:${NC}"
+    echo -e "  ${GREEN}source ./scripts/sync-gcp-secrets.sh ${INSTANCE_LOWER}${NC}"
+    echo ""
+    exit 1
+fi
+
 # Dry run mode - just validate and exit
 if [ "$DRY_RUN" = true ]; then
     echo ""
@@ -1138,29 +1401,101 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-# Execute deployment
+# =============================================================================
+# PRE-DEPLOYMENT: Create snapshot
+# =============================================================================
+if [ "$SKIP_BACKUP" = false ]; then
+    create_snapshot "$INSTANCE"
+fi
+
+# =============================================================================
+# EXECUTE DEPLOYMENT
+# =============================================================================
+DEPLOY_SUCCESS=true
+
 if [ "$TERRAFORM_ONLY" = true ]; then
     TOTAL_STEPS=1
     progress "Applying Terraform"
-    apply_terraform "$INSTANCE"
+    apply_terraform "$INSTANCE" || DEPLOY_SUCCESS=false
 elif [ "$DOCKER_ONLY" = true ]; then
     TOTAL_STEPS=1
     progress "Starting Docker services"
-    start_docker_services "$INSTANCE"
+    start_docker_services "$INSTANCE" || DEPLOY_SUCCESS=false
 elif [ "$TUNNEL_ONLY" = true ]; then
     TOTAL_STEPS=1
     progress "Setting up Cloudflare tunnel"
-    setup_cloudflare_tunnel "$INSTANCE"
+    setup_cloudflare_tunnel "$INSTANCE" || DEPLOY_SUCCESS=false
 elif [ "$NEW_INSTANCE" = true ]; then
-    deploy_new_instance "$INSTANCE"
+    deploy_new_instance "$INSTANCE" || DEPLOY_SUCCESS=false
 else
     TOTAL_STEPS=3
     progress "Starting Docker services"
-    start_docker_services "$INSTANCE"
-    progress "Applying Terraform"
-    apply_terraform "$INSTANCE"
-    progress "Restarting services with secrets"
-    start_docker_services "$INSTANCE"
+    start_docker_services "$INSTANCE" || DEPLOY_SUCCESS=false
+    if [ "$DEPLOY_SUCCESS" = true ]; then
+        progress "Applying Terraform"
+        apply_terraform "$INSTANCE" || DEPLOY_SUCCESS=false
+    fi
+    if [ "$DEPLOY_SUCCESS" = true ]; then
+        progress "Restarting services with secrets"
+        start_docker_services "$INSTANCE" || DEPLOY_SUCCESS=false
+    fi
+fi
+
+# =============================================================================
+# POST-DEPLOYMENT: Verify and rollback if needed
+# =============================================================================
+if [ "$DEPLOY_SUCCESS" = true ] && [ "$VERIFY" = true ]; then
+    if ! verify_deployment "$INSTANCE"; then
+        log_error "Deployment verification FAILED"
+        
+        if [ "$AUTO_ROLLBACK" = true ] && [ "$SKIP_BACKUP" = false ]; then
+            log_warn "Initiating automatic rollback..."
+            if rollback_deployment "$INSTANCE"; then
+                echo ""
+                echo -e "${RED}╔══════════════════════════════════════════════════════════════════╗${NC}"
+                echo -e "${RED}║          DEPLOYMENT FAILED - ROLLED BACK                         ║${NC}"
+                echo -e "${RED}╠══════════════════════════════════════════════════════════════════╣${NC}"
+                echo -e "${RED}║  Verification failed after deployment.                           ║${NC}"
+                echo -e "${RED}║  System has been restored to previous state.                     ║${NC}"
+                echo -e "${RED}║                                                                  ║${NC}"
+                echo -e "${RED}║  Snapshot: $SNAPSHOT_DIR${NC}"
+                echo -e "${RED}╚══════════════════════════════════════════════════════════════════╝${NC}"
+                exit 1
+            else
+                echo ""
+                echo -e "${RED}╔══════════════════════════════════════════════════════════════════╗${NC}"
+                echo -e "${RED}║          CRITICAL: ROLLBACK FAILED                               ║${NC}"
+                echo -e "${RED}╠══════════════════════════════════════════════════════════════════╣${NC}"
+                echo -e "${RED}║  Manual intervention required!                                   ║${NC}"
+                echo -e "${RED}║  Check snapshot: $SNAPSHOT_DIR${NC}"
+                echo -e "${RED}╚══════════════════════════════════════════════════════════════════╝${NC}"
+                exit 2
+            fi
+        else
+            echo ""
+            echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${YELLOW}║          DEPLOYMENT COMPLETED WITH WARNINGS                      ║${NC}"
+            echo -e "${YELLOW}╠══════════════════════════════════════════════════════════════════╣${NC}"
+            echo -e "${YELLOW}║  Verification failed but rollback was disabled.                  ║${NC}"
+            echo -e "${YELLOW}║  Please check the services manually.                             ║${NC}"
+            echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════╝${NC}"
+        fi
+    else
+        log_success "Deployment verification PASSED"
+    fi
+elif [ "$DEPLOY_SUCCESS" = false ]; then
+    log_error "Deployment execution failed"
+    
+    if [ "$AUTO_ROLLBACK" = true ] && [ "$SKIP_BACKUP" = false ]; then
+        log_warn "Initiating automatic rollback..."
+        rollback_deployment "$INSTANCE"
+    fi
+    
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║          DEPLOYMENT FAILED                                       ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════╝${NC}"
+    exit 1
 fi
 
 # Display success summary
