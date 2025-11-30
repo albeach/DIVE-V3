@@ -1,5 +1,6 @@
 # Production Dockerfile for Next.js
 # Uses standalone output for minimal image size and proper HTTP/2 support
+# Includes curl for Docker healthchecks
 
 FROM node:20-alpine AS base
 
@@ -9,7 +10,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -23,7 +24,23 @@ ARG NEXT_PUBLIC_BACKEND_URL
 ARG NEXT_PUBLIC_BASE_URL
 ARG NEXT_PUBLIC_KEYCLOAK_URL
 ARG NEXT_PUBLIC_KEYCLOAK_REALM
+ARG NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=dive-v3-client-broker
+ARG NEXT_PUBLIC_APP_NAME="DIVE V3"
+ARG NEXT_PUBLIC_INSTANCE=USA
+ARG NEXT_PUBLIC_INSTANCE_NAME="United States"
+ARG NEXT_PUBLIC_LOCALE=en-US
 
+# Pass build args to environment for Next.js build
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
+ENV NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL
+ENV NEXT_PUBLIC_KEYCLOAK_URL=$NEXT_PUBLIC_KEYCLOAK_URL
+ENV NEXT_PUBLIC_KEYCLOAK_REALM=$NEXT_PUBLIC_KEYCLOAK_REALM
+ENV NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=$NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+ENV NEXT_PUBLIC_INSTANCE=$NEXT_PUBLIC_INSTANCE
+ENV NEXT_PUBLIC_INSTANCE_NAME=$NEXT_PUBLIC_INSTANCE_NAME
+ENV NEXT_PUBLIC_LOCALE=$NEXT_PUBLIC_LOCALE
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
@@ -33,6 +50,9 @@ RUN npm run build
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
+
+# Install curl for healthchecks
+RUN apk add --no-cache curl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -47,8 +67,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy certificates for HTTPS
-COPY --from=builder /app/certs ./certs
+# Copy certificates for HTTPS (optional, mount at runtime if needed)
+# COPY --from=builder /app/certs ./certs
 
 USER nextjs
 

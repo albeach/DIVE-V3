@@ -78,8 +78,9 @@ const nextConfig: NextConfig = {
         buildActivity: false,
         buildActivityPosition: 'bottom-right',
     },
-    // Docker deployment: Development mode for hot reload and runtime env vars
-    // output: 'standalone',  // Use for production builds only
+    // Docker deployment: Use standalone output for production builds
+    // This creates a minimal server that can run without node_modules
+    output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
 };
 
 export default nextConfig;
