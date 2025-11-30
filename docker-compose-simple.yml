@@ -1,5 +1,11 @@
 version: '3.8'
 
+# =============================================================================
+# SIMPLE DEMO STACK - For quick testing only
+# =============================================================================
+# Usage: source ./scripts/sync-gcp-secrets.sh && docker compose -f docker-compose-simple.yml up
+# =============================================================================
+
 services:
   # Simple Keycloak for testing
   keycloak-simple:
@@ -8,7 +14,7 @@ services:
     command: start-dev
     environment:
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-dev-only-change-me}
     ports:
       - "8080:8080"
     

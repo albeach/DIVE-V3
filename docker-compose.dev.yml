@@ -1,7 +1,11 @@
 version: '3.8'
 
-# Simplified development configuration
+# =============================================================================
+# DEVELOPMENT CONFIGURATION
+# =============================================================================
 # Only infrastructure services, run frontend/backend locally for faster iteration
+# Usage: source ./scripts/sync-gcp-secrets.sh && docker compose -f docker-compose.dev.yml up
+# =============================================================================
 
 networks:
   dive-network:
@@ -17,7 +21,7 @@ services:
     container_name: dive-v3-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-change-me}
       POSTGRES_DB: postgres
     ports:
       - "5433:5432"
@@ -39,7 +43,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: password
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-change-me}
       KC_HOSTNAME: localhost
       KC_HOSTNAME_PORT: 8081
       KC_HOSTNAME_STRICT: false
@@ -48,7 +52,7 @@ services:
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-dev-only-change-me}
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
     depends_on:
       postgres:
@@ -69,7 +73,7 @@ services:
     container_name: dive-v3-mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-dev-only-change-me}
       MONGO_INITDB_DATABASE: dive-v3
     ports:
       - "27017:27017"

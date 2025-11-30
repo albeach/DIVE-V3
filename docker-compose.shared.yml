@@ -1,25 +1,52 @@
 # =============================================================================
 # DIVE V3 - Shared Infrastructure Services
-# Phase 2 Security Hardening (GAP-010, GAP-005)
 # =============================================================================
 # 
-# This file contains shared services used by ALL instances (USA, FRA, GBR)
-# 
-# Architecture:
-# - blacklist-redis: Centralized token blacklist for cross-instance revocation
+# This file contains ALL shared services used across instances (USA, FRA, GBR, DEU)
+# START THIS FIRST before any instance stacks!
 #
-# Usage (START THIS FIRST):
+# Services:
+# - landing: DIVE25.COM landing page with instance links
+# - blacklist-redis: Centralized token blacklist for cross-instance revocation
+# - prometheus: Metrics collection
+# - grafana: Visualization & dashboards
+# - alertmanager: Alert routing
+#
+# Usage:
 #   docker network create dive-v3-shared-network 2>/dev/null || true
-#   docker-compose -f docker-compose.shared.yml up -d
+#   docker compose -p shared -f docker-compose.shared.yml up -d
 #
 # Then start instance stacks:
-#   docker-compose -f docker-compose.yml up -d        # USA
-#   docker-compose -f docker-compose.fra.yml up -d    # FRA
-#   docker-compose -f docker-compose.gbr.yml up -d    # GBR
+#   docker compose -p usa -f docker-compose.yml up -d
+#   docker compose -p fra -f docker-compose.fra.yml up -d
+#   docker compose -p gbr -f docker-compose.gbr.yml up -d
 #
 # =============================================================================
 
 services:
+  # ============================================================================
+  # LANDING PAGE - DIVE25.COM Main Portal
+  # ============================================================================
+  landing:
+    build:
+      context: ./dive25-landing
+      dockerfile: Dockerfile
+    container_name: dive-v3-landing
+    restart: unless-stopped
+    ports:
+      - "8889:80"
+    networks:
+      - dive-shared-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "dive.v3.component=landing"
+      - "dive.v3.description=DIVE25.COM Landing Page"
+
   # ============================================================================
   # CENTRALIZED BLACKLIST REDIS (GAP-010 Remediation)
   # ============================================================================
@@ -36,9 +63,11 @@ services:
     image: redis:alpine
     container_name: dive-v3-blacklist-redis
     restart: unless-stopped
+    environment:
+      - REDIS_PASSWORD=${BLACKLIST_REDIS_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}
     command: >
       redis-server
-      --requirepass DiveBlacklist2025!
+      --requirepass ${BLACKLIST_REDIS_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}
       --appendonly yes
       --appendfsync everysec
       --save 300 10
@@ -54,7 +83,7 @@ services:
     networks:
       - dive-shared-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "DiveBlacklist2025!", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,13 +92,110 @@ services:
       - "dive.v3.phase=2"
       - "dive.v3.gap=010"
 
+  # ============================================================================
+  # PROMETHEUS - Metrics Collection
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dive-v3-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - dive-shared-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "dive.v3.component=prometheus"
+      - "dive.v3.phase=5"
+
+  # ============================================================================
+  # GRAFANA - Visualization & Dashboards
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dive-v3-grafana
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,redis-datasource
+      - GF_SERVER_ROOT_URL=https://monitoring.dive25.com
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - dive-shared-network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "dive.v3.component=grafana"
+      - "dive.v3.phase=5"
+
+  # ============================================================================
+  # ALERTMANAGER - Alert Routing
+  # ============================================================================
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: dive-v3-alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - dive-shared-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "dive.v3.component=alertmanager"
+      - "dive.v3.phase=5"
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
 volumes:
   blacklist_redis_data:
     name: dive-v3-blacklist-redis-data
+  prometheus_data:
+    name: dive-v3-prometheus-data
+  grafana_data:
+    name: dive-v3-grafana-data
+  alertmanager_data:
+    name: dive-v3-alertmanager-data
 
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
   # Shared network for cross-instance communication
-  # This network is created externally before starting stacks
+  # All instance stacks should connect to this network
   dive-shared-network:
     driver: bridge
     name: dive-v3-shared-network

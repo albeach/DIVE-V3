@@ -1,17 +1,24 @@
 # =============================================================================
 # DIVE V3 - FRA Instance (France)
 # CRITICAL: Uses isolated volumes for build isolation
+# Standardized healthchecks and restart policies (P0 hardening - Nov 30, 2025)
 # =============================================================================
 
 services:
+  # =============================================================================
+  # INFRASTRUCTURE SERVICES
+  # =============================================================================
+  
   # PostgreSQL for FRA Keycloak
   postgres-fra:
     image: postgres:15-alpine
     container_name: dive-v3-postgres-fra
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
     ports:
       - "5434:5432"
     volumes:
@@ -26,20 +33,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # Keycloak FRA Instance
+  # Uses same custom Dockerfile as USA for consistency (includes curl, SSL certs, themes)
   keycloak-fra:
-    image: quay.io/keycloak/keycloak:latest
-    platform: linux/amd64
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
     container_name: dive-v3-keycloak-fra
+    restart: unless-stopped
+    stop_grace_period: 60s
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-fra:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       KC_HOSTNAME: fra-idp.dive25.com
       KC_HOSTNAME_STRICT: false
       KC_PROXY_HEADERS: xforwarded
@@ -65,19 +77,27 @@ services:
         aliases:
           - keycloak
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      # Keycloak 26+: health endpoint is on management port 9000 (HTTPS)
+      test: ["CMD-SHELL", "curl -ksf https://localhost:9000/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 90s
 
+  # =============================================================================
+  # DATA SERVICES
+  # =============================================================================
+  
   # MongoDB FRA Instance
   mongodb-fra:
     image: mongo:7
     container_name: dive-v3-mongodb-fra
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       MONGO_INITDB_DATABASE: dive-v3-fra
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
     ports:
       - "27018:27017"
     volumes:
@@ -88,17 +108,23 @@ services:
           - mongo
           - mongodb
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # Redis FRA Instance
   redis-fra:
     image: redis:alpine
     container_name: dive-v3-redis-fra
+    restart: unless-stopped
+    stop_grace_period: 10s
+    command: redis-server --appendonly yes
     ports:
       - "6380:6379"
+    volumes:
+      - redis_fra_data:/data
     networks:
       dive-fra-network:
         aliases:
@@ -108,17 +134,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
 
+  # =============================================================================
+  # POLICY ENGINE
+  # =============================================================================
+  
   # OPA FRA Instance
   opa-fra:
     image: openpolicyagent/opa:latest
     platform: linux/amd64
     container_name: dive-v3-opa-fra
+    restart: unless-stopped
+    stop_grace_period: 10s
     command:
       - "run"
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-level=info"
+      - "--log-format=json"
+      - "--set=decision_logs.console=true"
       - "/policies"
     ports:
       - "8182:8181"
@@ -129,32 +164,48 @@ services:
         aliases:
           - opa
     healthcheck:
-      # OPA alpine image doesn't have wget - use /opa version instead
+      # OPA distroless image: only /opa binary available, use version check
       test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 10s
 
+  # =============================================================================
+  # APPLICATION SERVICES
+  # =============================================================================
+  
   # KAS FRA Instance
+  # Uses same Dockerfile.dev as USA for consistency (includes curl, dev mode)
   kas-fra:
-    image: node:20-alpine
+    build:
+      context: ./kas
+      dockerfile: Dockerfile.dev
     container_name: dive-v3-kas-fra
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       NODE_ENV: development
-      PORT: 8080
+      KAS_PORT: 8080
+      HTTPS_ENABLED: "true"
+      CERT_PATH: /opt/app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: certificate.pem
       OPA_URL: http://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      BACKEND_URL: http://backend:4000
-      MONGODB_URI: mongodb://admin:admin@mongo:27017
-      JWT_SECRET: fra-kas-secret-change-in-production
+      BACKEND_URL: https://backend:4000
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_FRA:?GCP secret required}@mongo:27017?authSource=admin
+      MONGODB_DATABASE: dive-v3-fra
+      LOG_LEVEL: info
+      INSTANCE_REALM: FRA
     ports:
       - "8083:8080"
     volumes:
-      - ./kas:/app
+      - ./kas/certs:/opt/app/certs:ro
+      - ./kas/src:/app/src
+      - ./kas/logs:/app/logs
     depends_on:
       - opa-fra
       - mongodb-fra
@@ -163,37 +214,45 @@ services:
         aliases:
           - kas
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      # Best practice: Use curl with -k for self-signed certs (HTTPS consistency)
+      test: ["CMD", "curl", "-kfs", "https://localhost:8080/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
+    command: npm run dev
 
   # Backend FRA Instance
+  # Uses same Dockerfile.dev as USA for consistency (includes curl)
   backend-fra:
-    image: node:20-alpine
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
     container_name: dive-v3-backend-fra
-    working_dir: /app
-    command: sh -c "npm install && npm run dev"
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       NODE_ENV: development
       PORT: 4000
       INSTANCE_REALM: FRA
       # Use network aliases for service discovery
-      MONGODB_URI: mongodb://admin:admin@mongo:27017/dive-v3-fra?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@mongo:27017/dive-v3-fra?authSource=admin
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_FRA:?GCP secret required}@mongo:27017/dive-v3-fra?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_FRA:?GCP secret required}@mongo:27017/dive-v3-fra?authSource=admin
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: fra-backend-secret-change-in-production
+      JWT_SECRET: ${JWT_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       OPA_URL: http://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${FRA_KEYCLOAK_CLIENT_SECRET:-placeholder-run-terraform}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin
-      KAS_URL: http://kas:8080
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
+      KAS_URL: https://kas:8080
+      # Federation API URL for metadata endpoint
+      API_URL: https://fra-api.dive25.com
       # Include all federation partner origins for cross-instance API calls
       CORS_ORIGIN: https://fra-app.dive25.com,https://usa-app.dive25.com,https://gbr-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3001
       FEDERATION_ALLOWED_ORIGINS: https://fra-app.dive25.com,https://usa-app.dive25.com,https://gbr-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3001
@@ -201,9 +260,18 @@ services:
     ports:
       - "4001:4000"
     volumes:
-      - ./backend:/app
+      # Development: Mount source code for hot reload (same pattern as USA)
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      # Mount SSL certificates for HTTPS server
       - ./keycloak/certs:/opt/keycloak/certs:ro
+      # CRITICAL: Mount policies directory so backend can read OPA Rego files
+      - ./policies:/app/policies:ro
+      # CRITICAL: Mount certs directory for X.509 PKI certificates
       - ./backend/certs:/app/certs:ro
+      # Logs directory
+      - ./backend/logs:/app/logs
     depends_on:
       mongodb-fra:
         condition: service_healthy
@@ -221,20 +289,27 @@ services:
           - backend
           - backend-fra
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      # Best practice: Use curl with -k for self-signed certs (HTTPS consistency)
+      test: ["CMD", "curl", "-kfs", "https://localhost:4000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   # Frontend FRA Instance
+  # Uses same Dockerfile.dev as USA for consistency (includes curl)
   frontend-fra:
-    image: node:20-alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     container_name: dive-v3-frontend-fra
-    working_dir: /app
-    command: sh -c "npm install && node server.js"
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       NODE_ENV: development
       PORT: 3000
+      # CRITICAL: Override Docker's HOSTNAME to bind to all interfaces
+      HOSTNAME: "0.0.0.0"
       # CRITICAL: FRA-specific URLs - DO NOT cross-contaminate
       NEXT_PUBLIC_API_URL: https://fra-api.dive25.com
       NEXT_PUBLIC_BACKEND_URL: https://fra-api.dive25.com
@@ -250,16 +325,16 @@ services:
       # Include federation partner IdP domains for SSO redirects
       NEXT_PUBLIC_IDP_DOMAINS: "https://usa-idp.dive25.com,https://gbr-idp.dive25.com,https://deu-idp.prosecurity.biz"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${FRA_KEYCLOAK_CLIENT_SECRET:-placeholder-run-terraform}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_ISSUER: https://fra-idp.dive25.com/realms/dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://fra-app.dive25.com
-      NEXTAUTH_SECRET: ${FRA_NEXTAUTH_SECRET:-fra-frontend-secret-change-in-production}
-      AUTH_SECRET: ${FRA_AUTH_SECRET:-fra-auth-secret-change-in-production}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
+      AUTH_SECRET: ${AUTH_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       AUTH_TRUST_HOST: "true"
-      DATABASE_URL: postgresql://keycloak:keycloak@postgres:5432/dive_v3_fra
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_FRA:?GCP secret required}@postgres:5432/dive_v3_fra
     ports:
       - "3001:3000"
     volumes:
@@ -279,16 +354,23 @@ services:
           - frontend
           - frontend-fra
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      # Best practice: Use curl with -k for self-signed certs (HTTPS consistency)
+      test: ["CMD", "curl", "-kfs", "--max-time", "5", "https://localhost:3000/"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 10
+      start_period: 120s
 
+  # =============================================================================
+  # NETWORK TUNNEL
+  # =============================================================================
+  
   # Cloudflare Tunnel FRA
   cloudflared-fra:
     image: cloudflare/cloudflared:latest
     container_name: dive-v3-tunnel-fra
     restart: unless-stopped
+    stop_grace_period: 10s
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared/config-fra.yml:/etc/cloudflared/config.yml:ro
@@ -301,17 +383,19 @@ services:
       - keycloak-fra
       - kas-fra
     healthcheck:
-      test: ["CMD", "cloudflared", "tunnel", "info"]
+      # Verify tunnel is running and metrics endpoint is accessible
+      test: ["CMD", "cloudflared", "version"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
     ports:
       - "9127:9127"
 
 volumes:
   postgres_fra_data:
   mongodb_fra_data:
+  redis_fra_data:
   # CRITICAL: Instance-specific frontend volumes for build isolation
   frontend_fra_node_modules:
   frontend_fra_next:

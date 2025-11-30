@@ -88,7 +88,7 @@ services:
     ports:
       - "9216:9216"
     environment:
-      - MONGODB_URI=mongodb://admin:password@mongo:27017
+      - MONGODB_URI=mongodb://admin:${MONGO_PASSWORD:?GCP secret required}@mongo:27017?authSource=admin
     networks:
       - dive-v3-network
     restart: unless-stopped
