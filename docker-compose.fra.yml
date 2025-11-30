@@ -64,8 +64,9 @@ services:
       KC_HEALTH_ENABLED: true
       KC_FEATURES: scripts
     ports:
-      - "8444:8443"
-      - "8082:8080"
+      - "8444:8443"   # HTTPS (with mkcert certs)
+      - "8082:8080"   # HTTP (internal Docker access)
+      - "9001:9000"   # HTTPS Management (health checks, metrics)
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
