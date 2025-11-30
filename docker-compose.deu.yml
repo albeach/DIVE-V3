@@ -299,9 +299,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3000
-      # CRITICAL: Override Docker's HOSTNAME to bind to all interfaces
       HOSTNAME: "0.0.0.0"
-      # CRITICAL: DEU-specific URLs - DO NOT cross-contaminate
       NEXT_PUBLIC_API_URL: https://deu-api.prosecurity.biz
       NEXT_PUBLIC_BACKEND_URL: https://deu-api.prosecurity.biz
       NEXT_PUBLIC_KEYCLOAK_URL: https://deu-idp.prosecurity.biz
@@ -331,7 +329,6 @@ services:
       - ./frontend:/app
       - ./certs:/opt/app/certs:ro
       - ./frontend/.env.deu:/app/.env.local:ro
-      # CRITICAL: Instance-specific volumes for build isolation
       - frontend_deu_node_modules:/app/node_modules
       - frontend_deu_next:/app/.next
     depends_on:
