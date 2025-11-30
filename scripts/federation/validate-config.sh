@@ -270,11 +270,11 @@ validate_secrets() {
     local secrets_valid=true
     
     local required_secrets=(
-        "adminPasswordId"
-        "clientSecretId"
-        "postgresPasswordId"
-        "mongoPasswordId"
-        "redisPasswordId"
+        "keycloakAdmin"
+        "keycloakClientSecret"
+        "postgres"
+        "mongodb"
+        "redis"
     )
     
     for instance in $instances; do

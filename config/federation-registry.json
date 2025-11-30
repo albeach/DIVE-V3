@@ -1,8 +1,8 @@
 {
   "$schema": "./federation-registry.schema.json",
-  "version": "2.0.0",
+  "version": "3.1.0",
   "metadata": {
-    "lastUpdated": "2025-11-28T00:00:00Z",
+    "lastUpdated": "2025-11-30T12:00:00Z",
     "maintainer": "DIVE V3 Ops Team",
     "compliance": [
       "ACP-240",
@@ -10,13 +10,180 @@
       "STANAG 4774",
       "STANAG 4778"
     ],
-    "description": "DIVE V3 Federation Registry - Single Source of Truth for all instance configurations"
+    "description": "DIVE V3 Federation Registry - Single Source of Truth for ALL instance configurations including service definitions, ports, routing, and healthcheck configurations"
+  },
+  "serviceDefaults": {
+    "_comment": "Default internal ports for all services - containers always listen on these ports",
+    "frontend": {
+      "internalPort": 3000,
+      "protocol": "https",
+      "healthcheck": "/",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "30s"
+    },
+    "backend": {
+      "internalPort": 4000,
+      "protocol": "https",
+      "healthcheck": "/health",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "30s"
+    },
+    "keycloak": {
+      "internalPort": 8443,
+      "internalPortHttp": 8080,
+      "protocol": "https",
+      "healthcheck": "/health/ready",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "60s"
+    },
+    "kas": {
+      "internalPort": 8080,
+      "protocol": "http",
+      "healthcheck": "/health",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "30s"
+    },
+    "postgres": {
+      "internalPort": 5432,
+      "protocol": "tcp",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "30s"
+    },
+    "mongodb": {
+      "internalPort": 27017,
+      "protocol": "tcp",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "30s"
+    },
+    "redis": {
+      "internalPort": 6379,
+      "protocol": "tcp",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "10s"
+    },
+    "opa": {
+      "internalPort": 8181,
+      "protocol": "http",
+      "healthcheck": "/health",
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "10s"
+    },
+    "cloudflared": {
+      "restartPolicy": "unless-stopped",
+      "stopGracePeriod": "10s"
+    }
+  },
+  "healthcheckTemplates": {
+    "_comment": "Standardized healthcheck configurations for Docker Compose (P0 hardening - Nov 30, 2025)",
+    "postgres": {
+      "test": [
+        "CMD-SHELL",
+        "pg_isready -U ${POSTGRES_USER:-postgres}"
+      ],
+      "interval": "10s",
+      "timeout": "5s",
+      "retries": 5,
+      "startPeriod": "10s"
+    },
+    "mongodb": {
+      "test": [
+        "CMD",
+        "mongosh",
+        "--eval",
+        "db.adminCommand('ping')"
+      ],
+      "interval": "10s",
+      "timeout": "5s",
+      "retries": 5,
+      "startPeriod": "10s"
+    },
+    "redis": {
+      "test": [
+        "CMD",
+        "redis-cli",
+        "ping"
+      ],
+      "interval": "10s",
+      "timeout": "5s",
+      "retries": 5,
+      "startPeriod": "5s"
+    },
+    "keycloak": {
+      "test": [
+        "CMD-SHELL",
+        "curl -ksf https://localhost:9000/health/ready || exit 1"
+      ],
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "90s",
+      "_note": "Keycloak 26+ health on management port 9000 (HTTPS)"
+    },
+    "opa": {
+      "test": [
+        "CMD",
+        "/opa",
+        "version"
+      ],
+      "interval": "10s",
+      "timeout": "5s",
+      "retries": 5,
+      "startPeriod": "10s",
+      "_note": "OPA distroless image only has /opa binary, no wget/curl"
+    },
+    "backend": {
+      "test": [
+        "CMD",
+        "curl",
+        "-kfs",
+        "https://localhost:4000/health"
+      ],
+      "interval": "15s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "30s"
+    },
+    "frontend": {
+      "test": [
+        "CMD",
+        "curl",
+        "-kfsI",
+        "--max-time",
+        "5",
+        "https://localhost:3000/"
+      ],
+      "interval": "30s",
+      "timeout": "15s",
+      "retries": 10,
+      "startPeriod": "120s"
+    },
+    "kas": {
+      "test": [
+        "CMD",
+        "curl",
+        "-kfs",
+        "https://localhost:8080/health"
+      ],
+      "interval": "15s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "30s"
+    },
+    "cloudflared": {
+      "test": [
+        "CMD",
+        "cloudflared",
+        "version"
+      ],
+      "interval": "30s",
+      "timeout": "10s",
+      "retries": 5,
+      "startPeriod": "30s"
+    }
   },
   "defaults": {
     "realm": "dive-v3-broker",
     "clientId": "dive-v3-client-broker",
-    "testUserPassword": "TestUser2025!Pilot",
-    "adminPassword": "DivePilot2025!SecureAdmin",
     "tokenLifetime": "15m",
     "sessionLifetime": "10h",
     "clearanceLevels": [
@@ -38,44 +205,93 @@
     "usa": {
       "code": "USA",
       "name": "United States",
+      "locale": "en-US",
       "type": "local",
+      "primary": true,
       "enabled": true,
       "deployment": {
         "provider": "docker",
         "host": "localhost",
-        "domain": "dive25.com"
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.yml",
+        "projectName": "usa"
       },
-      "urls": {
-        "app": "https://usa-app.dive25.com",
-        "api": "https://usa-api.dive25.com",
-        "idp": "https://usa-idp.dive25.com"
-      },
-      "ports": {
-        "frontend": 3000,
-        "backend": 4000,
-        "keycloak": 8443,
-        "keycloakHttp": 8080,
-        "keycloakManagement": 9000,
-        "postgres": 5433,
-        "mongodb": 27017,
-        "redis": 6379,
-        "opa": 8181,
-        "opaMetrics": 9181,
-        "kas": 8090
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "gcpSecretPath": "projects/dive25/secrets/usa",
-        "adminPasswordId": "usa-admin-password",
-        "clientSecretId": "usa-client-secret",
-        "postgresPasswordId": "usa-postgres-password",
-        "mongoPasswordId": "usa-mongo-password",
-        "redisPasswordId": "usa-redis-password"
+      "services": {
+        "_comment": "USA is the primary instance - services use base names without suffix",
+        "frontend": {
+          "name": "frontend",
+          "containerName": "dive-v3-frontend",
+          "internalPort": 3000,
+          "externalPort": 3000,
+          "protocol": "https",
+          "hostname": "usa-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend",
+          "containerName": "dive-v3-backend",
+          "internalPort": 4000,
+          "externalPort": 4000,
+          "protocol": "https",
+          "hostname": "usa-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak",
+          "containerName": "dive-v3-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8443,
+          "protocol": "https",
+          "hostname": "usa-idp.dive25.com"
+        },
+        "kas": {
+          "name": "kas",
+          "containerName": "dive-v3-kas",
+          "internalPort": 8080,
+          "externalPort": 8090,
+          "protocol": "http",
+          "hostname": "usa-kas.dive25.com"
+        },
+        "postgres": {
+          "name": "postgres",
+          "containerName": "dive-v3-postgres",
+          "internalPort": 5432,
+          "externalPort": 5433
+        },
+        "mongodb": {
+          "name": "mongo",
+          "containerName": "dive-v3-mongo",
+          "internalPort": 27017,
+          "externalPort": 27017
+        },
+        "redis": {
+          "name": "redis",
+          "containerName": "dive-v3-redis",
+          "internalPort": 6379,
+          "externalPort": 6379
+        },
+        "opa": {
+          "name": "opa",
+          "containerName": "dive-v3-opa",
+          "internalPort": 8181,
+          "externalPort": 8181
+        }
       },
       "cloudflare": {
         "tunnelId": "f8e6c558-847b-4952-b8b2-27f98a85e36c",
         "tunnelName": "dive-v3-tunnel",
-        "credentialsFile": "cloudflared/tunnel-credentials.json"
+        "credentialsFile": "cloudflared/tunnel-credentials.json",
+        "configFile": "cloudflared/config.yml",
+        "metricsPort": 9126
+      },
+      "secrets": {
+        "gcpProjectId": "dive25",
+        "keycloakAdmin": "dive-v3-keycloak-usa",
+        "keycloakClientSecret": "dive-v3-keycloak-client-secret-usa",
+        "postgres": "dive-v3-postgres-usa",
+        "mongodb": "dive-v3-mongodb-usa",
+        "redis": "dive-v3-redis-usa",
+        "authSecret": "dive-v3-auth-secret-usa",
+        "jwtSecret": "dive-v3-jwt-secret-usa",
+        "nextauthSecret": "dive-v3-nextauth-secret-usa"
       },
       "keycloak": {
         "adminUsername": "admin",
@@ -88,10 +304,6 @@
       "mongodb": {
         "database": "dive-v3",
         "user": "admin"
-      },
-      "redis": {
-        "maxMemory": "256mb",
-        "password": "DiveRedis2025!"
       },
       "testUsers": {
         "create": true,
@@ -108,44 +320,93 @@
     "fra": {
       "code": "FRA",
       "name": "France",
+      "locale": "fr-FR",
       "type": "local",
+      "primary": false,
       "enabled": true,
       "deployment": {
         "provider": "docker",
         "host": "localhost",
-        "domain": "dive25.com"
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.fra.yml",
+        "projectName": "fra"
       },
-      "urls": {
-        "app": "https://fra-app.dive25.com",
-        "api": "https://fra-api.dive25.com",
-        "idp": "https://fra-idp.dive25.com"
-      },
-      "ports": {
-        "frontend": 3001,
-        "backend": 4001,
-        "keycloak": 8444,
-        "keycloakHttp": 8084,
-        "keycloakManagement": 9001,
-        "postgres": 5434,
-        "mongodb": 27018,
-        "redis": 6380,
-        "opa": 8182,
-        "opaMetrics": 9182,
-        "kas": 8091
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "gcpSecretPath": "projects/dive25/secrets/fra",
-        "adminPasswordId": "fra-admin-password",
-        "clientSecretId": "fra-client-secret",
-        "postgresPasswordId": "fra-postgres-password",
-        "mongoPasswordId": "fra-mongo-password",
-        "redisPasswordId": "fra-redis-password"
+      "services": {
+        "_comment": "FRA uses -fra suffix on all service names",
+        "frontend": {
+          "name": "frontend-fra",
+          "containerName": "dive-v3-frontend-fra",
+          "internalPort": 3000,
+          "externalPort": 3001,
+          "protocol": "https",
+          "hostname": "fra-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-fra",
+          "containerName": "dive-v3-backend-fra",
+          "internalPort": 4000,
+          "externalPort": 4001,
+          "protocol": "https",
+          "hostname": "fra-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-fra",
+          "containerName": "dive-v3-keycloak-fra",
+          "internalPort": 8443,
+          "externalPort": 8444,
+          "protocol": "https",
+          "hostname": "fra-idp.dive25.com"
+        },
+        "kas": {
+          "name": "kas-fra",
+          "containerName": "dive-v3-kas-fra",
+          "internalPort": 8080,
+          "externalPort": 8091,
+          "protocol": "http",
+          "hostname": "fra-kas.dive25.com"
+        },
+        "postgres": {
+          "name": "postgres-fra",
+          "containerName": "dive-v3-postgres-fra",
+          "internalPort": 5432,
+          "externalPort": 5434
+        },
+        "mongodb": {
+          "name": "mongodb-fra",
+          "containerName": "dive-v3-mongodb-fra",
+          "internalPort": 27017,
+          "externalPort": 27018
+        },
+        "redis": {
+          "name": "redis-fra",
+          "containerName": "dive-v3-redis-fra",
+          "internalPort": 6379,
+          "externalPort": 6380
+        },
+        "opa": {
+          "name": "opa-fra",
+          "containerName": "dive-v3-opa-fra",
+          "internalPort": 8181,
+          "externalPort": 8182
+        }
       },
       "cloudflare": {
         "tunnelId": "e07574bd-6f32-478b-8f71-42fc3d4073f7",
         "tunnelName": "dive-v3-fra",
-        "credentialsFile": "cloudflared/fra-tunnel-credentials.json"
+        "credentialsFile": "cloudflared/fra-tunnel-credentials.json",
+        "configFile": "cloudflared/config-fra.yml",
+        "metricsPort": 9127
+      },
+      "secrets": {
+        "gcpProjectId": "dive25",
+        "keycloakAdmin": "dive-v3-keycloak-fra",
+        "keycloakClientSecret": "dive-v3-keycloak-client-secret-fra",
+        "postgres": "dive-v3-postgres-fra",
+        "mongodb": "dive-v3-mongodb-fra",
+        "redis": "dive-v3-redis-fra",
+        "authSecret": "dive-v3-auth-secret-fra",
+        "jwtSecret": "dive-v3-jwt-secret-fra",
+        "nextauthSecret": "dive-v3-nextauth-secret-fra"
       },
       "keycloak": {
         "adminUsername": "admin",
@@ -158,10 +419,6 @@
       "mongodb": {
         "database": "dive-v3-fra",
         "user": "admin"
-      },
-      "redis": {
-        "maxMemory": "128mb",
-        "password": "DiveRedis2025!"
       },
       "testUsers": {
         "create": true,
@@ -178,44 +435,93 @@
     "gbr": {
       "code": "GBR",
       "name": "United Kingdom",
+      "locale": "en-GB",
       "type": "local",
+      "primary": false,
       "enabled": true,
       "deployment": {
         "provider": "docker",
         "host": "localhost",
-        "domain": "dive25.com"
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.gbr.yml",
+        "projectName": "gbr"
       },
-      "urls": {
-        "app": "https://gbr-app.dive25.com",
-        "api": "https://gbr-api.dive25.com",
-        "idp": "https://gbr-idp.dive25.com"
-      },
-      "ports": {
-        "frontend": 3002,
-        "backend": 4002,
-        "keycloak": 8445,
-        "keycloakHttp": 8085,
-        "keycloakManagement": 9002,
-        "postgres": 5435,
-        "mongodb": 27019,
-        "redis": 6381,
-        "opa": 8183,
-        "opaMetrics": 9183,
-        "kas": 8092
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "gcpSecretPath": "projects/dive25/secrets/gbr",
-        "adminPasswordId": "gbr-admin-password",
-        "clientSecretId": "gbr-client-secret",
-        "postgresPasswordId": "gbr-postgres-password",
-        "mongoPasswordId": "gbr-mongo-password",
-        "redisPasswordId": "gbr-redis-password"
+      "services": {
+        "_comment": "GBR uses -gbr suffix on all service names",
+        "frontend": {
+          "name": "frontend-gbr",
+          "containerName": "dive-v3-frontend-gbr",
+          "internalPort": 3000,
+          "externalPort": 3002,
+          "protocol": "https",
+          "hostname": "gbr-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-gbr",
+          "containerName": "dive-v3-backend-gbr",
+          "internalPort": 4000,
+          "externalPort": 4002,
+          "protocol": "https",
+          "hostname": "gbr-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-gbr",
+          "containerName": "dive-v3-keycloak-gbr",
+          "internalPort": 8443,
+          "externalPort": 8445,
+          "protocol": "https",
+          "hostname": "gbr-idp.dive25.com"
+        },
+        "kas": {
+          "name": "kas-gbr",
+          "containerName": "dive-v3-kas-gbr",
+          "internalPort": 8080,
+          "externalPort": 8092,
+          "protocol": "http",
+          "hostname": "gbr-kas.dive25.com"
+        },
+        "postgres": {
+          "name": "postgres-gbr",
+          "containerName": "dive-v3-postgres-gbr",
+          "internalPort": 5432,
+          "externalPort": 5435
+        },
+        "mongodb": {
+          "name": "mongodb-gbr",
+          "containerName": "dive-v3-mongodb-gbr",
+          "internalPort": 27017,
+          "externalPort": 27019
+        },
+        "redis": {
+          "name": "redis-gbr",
+          "containerName": "dive-v3-redis-gbr",
+          "internalPort": 6379,
+          "externalPort": 6381
+        },
+        "opa": {
+          "name": "opa-gbr",
+          "containerName": "dive-v3-opa-gbr",
+          "internalPort": 8181,
+          "externalPort": 8183
+        }
       },
       "cloudflare": {
         "tunnelId": "375d2bed-2002-4604-9fa6-22ca251ac957",
         "tunnelName": "dive-v3-gbr",
-        "credentialsFile": "cloudflared/gbr-tunnel-credentials.json"
+        "credentialsFile": "cloudflared/gbr-tunnel-credentials.json",
+        "configFile": "cloudflared/config-gbr.yml",
+        "metricsPort": 9128
+      },
+      "secrets": {
+        "gcpProjectId": "dive25",
+        "keycloakAdmin": "dive-v3-keycloak-gbr",
+        "keycloakClientSecret": "dive-v3-keycloak-client-secret-gbr",
+        "postgres": "dive-v3-postgres-gbr",
+        "mongodb": "dive-v3-mongodb-gbr",
+        "redis": "dive-v3-redis-gbr",
+        "authSecret": "dive-v3-auth-secret-gbr",
+        "jwtSecret": "dive-v3-jwt-secret-gbr",
+        "nextauthSecret": "dive-v3-nextauth-secret-gbr"
       },
       "keycloak": {
         "adminUsername": "admin",
@@ -228,10 +534,6 @@
       "mongodb": {
         "database": "dive-v3-gbr",
         "user": "admin"
-      },
-      "redis": {
-        "maxMemory": "128mb",
-        "password": "DiveRedis2025!"
       },
       "testUsers": {
         "create": true,
@@ -248,44 +550,96 @@
     "deu": {
       "code": "DEU",
       "name": "Germany",
+      "locale": "de-DE",
       "type": "remote",
+      "primary": false,
       "enabled": true,
       "deployment": {
         "provider": "docker",
         "host": "192.168.42.120",
-        "domain": "prosecurity.biz"
+        "domain": "prosecurity.biz",
+        "composeFile": "docker-compose.deu.yml",
+        "projectName": "deu",
+        "sshUser": "mike",
+        "sshKeyPath": "~/.ssh/id_rsa",
+        "remotePath": "/opt/dive-v3"
       },
-      "urls": {
-        "app": "https://deu-app.prosecurity.biz",
-        "api": "https://deu-api.prosecurity.biz",
-        "idp": "https://deu-idp.prosecurity.biz"
-      },
-      "ports": {
-        "frontend": 3000,
-        "backend": 4000,
-        "keycloak": 8443,
-        "keycloakHttp": 8080,
-        "keycloakManagement": 9000,
-        "postgres": 5432,
-        "mongodb": 27017,
-        "redis": 6379,
-        "opa": 8181,
-        "opaMetrics": 9181,
-        "kas": 8080
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "gcpSecretPath": "projects/dive25/secrets/deu",
-        "adminPasswordId": "deu-admin-password",
-        "clientSecretId": "deu-client-secret",
-        "postgresPasswordId": "deu-postgres-password",
-        "mongoPasswordId": "deu-mongo-password",
-        "redisPasswordId": "deu-redis-password"
+      "services": {
+        "_comment": "DEU uses -deu suffix on all service names",
+        "frontend": {
+          "name": "frontend-deu",
+          "containerName": "dive-v3-frontend-deu",
+          "internalPort": 3000,
+          "externalPort": 3000,
+          "protocol": "https",
+          "hostname": "deu-app.prosecurity.biz"
+        },
+        "backend": {
+          "name": "backend-deu",
+          "containerName": "dive-v3-backend-deu",
+          "internalPort": 4000,
+          "externalPort": 4000,
+          "protocol": "https",
+          "hostname": "deu-api.prosecurity.biz"
+        },
+        "keycloak": {
+          "name": "keycloak-deu",
+          "containerName": "dive-v3-keycloak-deu",
+          "internalPort": 8443,
+          "externalPort": 8443,
+          "protocol": "https",
+          "hostname": "deu-idp.prosecurity.biz"
+        },
+        "kas": {
+          "name": "kas-deu",
+          "containerName": "dive-v3-kas-deu",
+          "internalPort": 8080,
+          "externalPort": 8080,
+          "protocol": "http",
+          "hostname": "deu-kas.prosecurity.biz"
+        },
+        "postgres": {
+          "name": "postgres-deu",
+          "containerName": "dive-v3-postgres-deu",
+          "internalPort": 5432,
+          "externalPort": 5432
+        },
+        "mongodb": {
+          "name": "mongodb-deu",
+          "containerName": "dive-v3-mongodb-deu",
+          "internalPort": 27017,
+          "externalPort": 27017
+        },
+        "redis": {
+          "name": "redis-deu",
+          "containerName": "dive-v3-redis-deu",
+          "internalPort": 6379,
+          "externalPort": 6379
+        },
+        "opa": {
+          "name": "opa-deu",
+          "containerName": "dive-v3-opa-deu",
+          "internalPort": 8181,
+          "externalPort": 8181
+        }
       },
       "cloudflare": {
         "tunnelId": "2112e264-61e3-463f-9d13-b55273bde204",
         "tunnelName": "dive-v3-deu-prosecurity",
-        "credentialsFile": "cloudflared/deu-tunnel-credentials.json"
+        "credentialsFile": "cloudflared/deu-tunnel-credentials.json",
+        "configFile": "cloudflared/config-deu.yml",
+        "metricsPort": 9129
+      },
+      "secrets": {
+        "gcpProjectId": "dive25",
+        "keycloakAdmin": "dive-v3-keycloak-deu",
+        "keycloakClientSecret": "dive-v3-keycloak-client-secret-deu",
+        "postgres": "dive-v3-postgres-deu",
+        "mongodb": "dive-v3-mongodb-deu",
+        "redis": "dive-v3-redis-deu",
+        "authSecret": "dive-v3-auth-secret-deu",
+        "jwtSecret": "dive-v3-jwt-secret-deu",
+        "nextauthSecret": "dive-v3-nextauth-secret-deu"
       },
       "keycloak": {
         "adminUsername": "admin",
@@ -298,10 +652,6 @@
       "mongodb": {
         "database": "dive-v3-deu",
         "user": "admin"
-      },
-      "redis": {
-        "maxMemory": "256mb",
-        "password": "DiveRedis2025!"
       },
       "testUsers": {
         "create": true,
@@ -393,17 +743,6 @@
           "us-east4"
         ]
       },
-      "cloudRun": {
-        "enabled": false,
-        "note": "Future deployment option"
-      },
-      "cloudBuild": {
-        "enabled": true,
-        "triggers": [
-          "main",
-          "develop"
-        ]
-      },
       "logging": {
         "enabled": true,
         "retention": "90d"
@@ -412,27 +751,20 @@
         "enabled": true,
         "alerting": true
       }
-    },
-    "workloadIdentity": {
-      "provider": "projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider",
-      "serviceAccount": "github-actions@dive-v3-pilot.iam.gserviceaccount.com"
     }
   },
   "monitoring": {
     "prometheus": {
-      "url": "http://localhost:9090",
-      "scrapeInterval": "30s",
-      "port": 9090
+      "port": 9090,
+      "scrapeInterval": "30s"
     },
     "grafana": {
-      "url": "http://localhost:3333",
-      "adminUser": "admin",
-      "port": 3333
+      "port": 3333,
+      "adminUser": "admin"
     },
     "statusPage": {
-      "url": "https://status.dive25.com",
-      "checkInterval": "60s",
-      "port": 8888
+      "port": 8888,
+      "checkInterval": "60s"
     },
     "blacklistRedis": {
       "port": 6399,
