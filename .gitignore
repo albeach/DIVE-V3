@@ -200,3 +200,7 @@ terraform/instances/*.tfplan
 scripts/postgres-init/
 gcp/
 .env.gcp
+
+# Terraform generated files
+*.plan
+*.tfplan
