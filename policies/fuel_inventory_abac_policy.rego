@@ -507,12 +507,11 @@ classification_equivalent(user_clearance, user_country, resource_classification,
 
 # Check 3: Clearance Level (with Classification Equivalency support)
 # NEW: ACP-240 Section 4.3 - Supports national classifications
+# FIX (Nov 30, 2025): Properly handle null values for optional fields
 is_insufficient_clearance := msg if {
 	# Priority 1: Check using original classifications (if available)
-	input.subject.clearanceOriginal
-	input.subject.clearanceCountry
-	input.resource.originalClassification
-	input.resource.originalCountry
+	# Uses helper function to check all fields are present AND non-null
+	uses_classification_equivalency
 
 	# Use equivalency comparison
 	not classification_equivalent(
@@ -534,7 +533,8 @@ is_insufficient_clearance := msg if {
 } else := msg if {
 	# Priority 2: Fallback to DIVE V3 standard clearance comparison
 	# (backward compatibility for resources without originalClassification)
-	not input.subject.clearanceOriginal # No original clearance available
+	# This branch handles both missing AND null originalClassification values
+	not uses_classification_equivalency
 
 	# Get numeric clearance levels
 	user_clearance_level := clearance_levels[input.subject.clearance]
@@ -550,17 +550,37 @@ is_insufficient_clearance := msg if {
 }
 
 # Validation: Deny if clearance not in valid enum (when not using equivalency)
+# FIX: Handle both null and missing clearanceOriginal
 is_insufficient_clearance := msg if {
-	not input.subject.clearanceOriginal # Standard clearance mode
+	# Standard clearance mode: clearanceOriginal is null/missing OR equivalency path didn't apply
+	# This rule only fires when NOT using classification equivalency
+	not uses_classification_equivalency
 	not clearance_levels[input.subject.clearance]
 	msg := sprintf("Invalid clearance level: %s", [input.subject.clearance])
 }
 
 # Validation: Deny if classification not in valid enum (when not using equivalency)
+# FIX: Handle both null and missing originalClassification
 is_insufficient_clearance := msg if {
-	not input.resource.originalClassification # Standard classification mode
+	# Standard classification mode: originalClassification is null/missing
+	# This rule only fires when NOT using classification equivalency
+	not uses_classification_equivalency
 	not clearance_levels[input.resource.classification]
 	msg := sprintf("Invalid classification level: %s", [input.resource.classification])
+}
+
+# Helper: Determines if classification equivalency is being used
+# Returns true only when ALL required fields are present AND non-null
+uses_classification_equivalency if {
+	input.subject.clearanceOriginal
+	input.subject.clearanceCountry
+	input.resource.originalClassification
+	input.resource.originalCountry
+	# Must also be non-null (Rego treats null as truthy for existence checks)
+	input.subject.clearanceOriginal != null
+	input.subject.clearanceCountry != null
+	input.resource.originalClassification != null
+	input.resource.originalCountry != null
 }
 
 # Clearance level mapping (higher number = higher clearance)
