@@ -43,7 +43,7 @@
     },
     "defaults": {
       "type": "object",
-      "required": ["realm", "clientId", "testUserPassword", "adminPassword"],
+      "required": ["realm", "clientId"],
       "properties": {
         "realm": {
           "type": "string",
@@ -205,8 +205,30 @@
   "definitions": {
     "instance": {
       "type": "object",
-      "required": ["code", "name", "type", "enabled", "deployment", "urls", "ports"],
+      "required": ["code", "name", "type", "enabled", "deployment"],
       "properties": {
+        "primary": {
+          "type": "boolean",
+          "description": "Whether this is the primary instance"
+        },
+        "locale": {
+          "type": "string",
+          "description": "Default locale for this instance"
+        },
+        "services": {
+          "type": "object",
+          "description": "Service configuration for this instance",
+          "properties": {
+            "frontend": { "type": "object" },
+            "backend": { "type": "object" },
+            "keycloak": { "type": "object" },
+            "kas": { "type": "object" },
+            "opa": { "type": "object" },
+            "mongodb": { "type": "object" },
+            "postgres": { "type": "object" },
+            "redis": { "type": "object" }
+          }
+        },
         "code": {
           "type": "string",
           "pattern": "^[A-Z]{3}$",
