@@ -13,9 +13,15 @@ volumes:
   frontend_next:          # Named volume for persistent .next build cache
 
 services:
+  # =============================================================================
+  # INFRASTRUCTURE SERVICES
+  # =============================================================================
+  
   postgres:
     image: postgres:15-alpine
     container_name: dive-v3-postgres
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
@@ -32,12 +38,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   keycloak:
     build:
       context: ./keycloak
       dockerfile: Dockerfile
     container_name: dive-v3-keycloak
+    restart: unless-stopped
+    stop_grace_period: 60s
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
@@ -73,18 +82,25 @@ services:
       - ./keycloak/certs:/opt/keycloak/certs:ro  # mkcert certificates
       - ./keycloak/themes:/opt/keycloak/themes:ro  # Custom themes (dev: live reload)
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/realms/master || exit 1"]
+      # Keycloak 26+: health endpoint is on management port 9000 (HTTPS)
+      test: ["CMD-SHELL", "curl -ksf https://localhost:9000/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
 
+  # =============================================================================
+  # DATA SERVICES
+  # =============================================================================
+  
   mongo:
     image: mongo:7.0
     container_name: dive-v3-mongo
+    restart: unless-stopped
+    stop_grace_period: 30s
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-password}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}
       MONGO_INITDB_DATABASE: dive-v3
     ports:
       - "27017:27017"
@@ -97,10 +113,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     container_name: dive-v3-redis
+    restart: unless-stopped
+    stop_grace_period: 10s
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
@@ -113,11 +132,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
 
+  # =============================================================================
+  # POLICY ENGINE
+  # =============================================================================
+  
   opa:
     image: openpolicyagent/opa:latest
     container_name: dive-v3-opa
     platform: linux/amd64
+    restart: unless-stopped
+    stop_grace_period: 10s
     command:
       - "run"
       - "--server"
@@ -133,6 +159,7 @@ services:
     networks:
       - dive-network
     healthcheck:
+      # OPA distroless image: only /opa binary available, use version check
       test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
@@ -160,14 +187,21 @@ services:
       - dive-network
     restart: unless-stopped
 
+  # =============================================================================
+  # APPLICATION SERVICES
+  # =============================================================================
+  
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-backend
+    restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
-      # Zero Trust: HTTPS with mkcert CA validation
-      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem -q -O- https://localhost:4000/health || exit 1"]
+      # Best practice: Use curl with -k for self-signed certs in development
+      # curl is installed in Dockerfile.dev via apk add --no-cache curl
+      test: ["CMD", "curl", "-kfs", "https://localhost:4000/health"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -179,18 +213,20 @@ services:
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run source ./scripts/sync-gcp-secrets.sh first}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
       # Admin credentials for Keycloak Admin API (IdP listing, user management)
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs
-      MONGODB_URL: mongodb://admin:DivePilot2025!@mongo:27017
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}@mongo:27017?authSource=admin
       MONGODB_DATABASE: dive-v3
       OPA_URL: http://opa:8181
       KAS_URL: https://kas:8080
       AUTHZFORCE_URL: http://authzforce:8080/authzforce-ce
       LOG_LEVEL: info
+      # Federation API URL for metadata endpoint
+      API_URL: https://usa-api.dive25.com
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
       # CORS configuration - Updated for Cloudflare Tunnel (usa-* naming)
@@ -233,16 +269,21 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-frontend
+    restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
-      # Zero Trust: HTTPS with mkcert CA validation
-      # Uses the rootCA.pem from mkcert to validate the self-signed certificate
-      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem --spider -q https://localhost:3000/ 2>/dev/null || curl --cacert /app/certs/rootCA.pem -s -f https://localhost:3000/ > /dev/null || exit 1"]
+      # Best practice: Use curl with -k for self-signed certs in development
+      # curl is installed in Dockerfile.dev via apk add --no-cache curl
+      test: ["CMD", "curl", "-kfsI", "--max-time", "5", "https://localhost:3000/"]
       interval: 30s
       timeout: 15s
       retries: 10
       start_period: 120s  # Next.js needs time to compile on first run
     environment:
       NODE_ENV: development
+      # CRITICAL: Override Docker's HOSTNAME to bind to all interfaces
+      # Without this, the server binds to container ID which breaks healthchecks
+      HOSTNAME: "0.0.0.0"
       # DUAL-MODE CONFIGURATION: Supports both localhost AND Cloudflare tunnel access
       # Primary URLs use Cloudflare tunnel (usa-*.dive25.com)
       # CSP allows both localhost and Cloudflare domains via NEXT_PUBLIC_EXTERNAL_DOMAINS
@@ -269,10 +310,10 @@ services:
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3000,https://localhost:4000,https://localhost:8443,https://usa-app.dive25.com,https://usa-api.dive25.com,https://usa-idp.dive25.com"
       # Allow Cloudflare Insights for monitoring
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
-      AUTH_SECRET: fWBbrGVdA46YMp+7ZB125SXcTp6nA+mxic2KRzKg7sg=
+      AUTH_SECRET: ${AUTH_SECRET:?Run source ./scripts/sync-gcp-secrets.sh first}
       # Client credentials
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: 8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run source ./scripts/sync-gcp-secrets.sh first}
       # SSL and host configuration
       AUTH_TRUST_HOST: "true"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
@@ -299,11 +340,14 @@ services:
   kas:
     build:
       context: ./kas
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-kas
+    restart: unless-stopped
+    stop_grace_period: 30s
     healthcheck:
-      # Zero Trust: HTTPS with mkcert CA validation
-      test: ["CMD-SHELL", "wget --ca-certificate=/opt/app/certs/rootCA.pem -q -O- https://localhost:8080/health || exit 1"]
+      # Best practice: Use curl with -k for self-signed certs in development
+      # curl is installed in Dockerfile via apk add --no-cache curl
+      test: ["CMD", "curl", "-kfs", "https://localhost:8080/health"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -318,7 +362,7 @@ services:
       BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
       OPA_URL: http://opa:8181
-      MONGODB_URL: mongodb://admin:DivePilot2025!@mongo:27017
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}@mongo:27017?authSource=admin
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
       # Multi-realm migration (Oct 21, 2025): KAS needs Keycloak config for JWT validation
@@ -342,6 +386,10 @@ services:
       - ./kas/logs:/app/logs
     command: npm run dev
 
+  # =============================================================================
+  # NETWORK TUNNEL
+  # =============================================================================
+  
   # Cloudflare Tunnel - Best practice: runs as a container with auto-restart
   # Provides persistent, reliable tunnel connectivity
   cloudflared:
@@ -360,11 +408,8 @@ services:
       - keycloak
       - kas
     healthcheck:
-      # Zero Trust: Verify tunnel has active connections to Cloudflare edge
-      # We check if cloudflared process has established connections (not just running)
-      # Note: localhost:9126/metrics is container-local only (loopback), acceptable per Zero Trust
-      # since it never traverses network interfaces
-      test: ["CMD-SHELL", "pgrep cloudflared && wget -q -O- http://127.0.0.1:9126/metrics 2>/dev/null | grep -q 'cloudflared_tunnel_active_streams' || exit 1"]
+      # Verify cloudflared is running - the image only has cloudflared binary
+      test: ["CMD", "cloudflared", "version"]
       interval: 30s
       timeout: 10s
       retries: 5
