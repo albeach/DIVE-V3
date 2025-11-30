@@ -1,0 +1,29 @@
+# =============================================================================
+# DIVE V3 - Shared Node Alpine Base Image
+# =============================================================================
+# This Dockerfile provides a consistent base for all Node.js services.
+# It includes curl for health checks and proper user setup.
+#
+# Best Practice: Use proper HTTP client (curl) instead of BusyBox wget workarounds
+# =============================================================================
+
+FROM node:20-alpine
+
+# Install essential tools for health checks and debugging
+# - curl: Required for Docker health checks with HTTPS support (-k flag)
+# - ca-certificates: Required for HTTPS connections
+RUN apk add --no-cache curl ca-certificates
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 appuser
+
+# Set working directory
+WORKDIR /app
+
+# Default to non-root user (can be overridden in compose)
+USER appuser
+
+# Default command (overridden in compose files)
+CMD ["node"]
+
