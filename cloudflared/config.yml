@@ -1,5 +1,19 @@
-# Cloudflare Tunnel Configuration for DIVE V3
-# This runs inside a Docker container and connects to services via Docker network
+# ============================================================================
+# Cloudflare Tunnel Configuration - USA Instance (United States)
+# ============================================================================
+#
+# AUTO-GENERATED FROM SSOT - DO NOT EDIT MANUALLY
+#
+# Source: config/federation-registry.json
+# Generator: scripts/federation/generate-tunnel-configs.sh
+# Generated: 2025-11-30T02:13:43Z
+#
+# To modify this configuration:
+#   1. Edit config/federation-registry.json
+#   2. Run: ./scripts/federation/generate-tunnel-configs.sh usa
+#   3. Restart tunnel: docker compose -p usa up -d --force-recreate cloudflared
+#
+# ============================================================================
 
 tunnel: f8e6c558-847b-4952-b8b2-27f98a85e36c
 credentials-file: /etc/cloudflared/tunnel-credentials.json
@@ -7,42 +21,62 @@ credentials-file: /etc/cloudflared/tunnel-credentials.json
 # Force HTTP/2 to avoid QUIC timeout issues on restricted networks
 protocol: http2
 
-# Metrics for monitoring
+# Metrics endpoint for monitoring (accessible at localhost:9126)
 metrics: 0.0.0.0:9126
 
 ingress:
-  # USA Frontend (Next.js dev server with HTTPS)
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Docker Service: frontend
+  # Internal Port:  3000
+  # Hostname:       usa-app.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-app.dive25.com
     service: https://frontend:3000
     originRequest:
       noTLSVerify: true
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: usa-app.dive25.com
   
-  # USA Backend API - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API (Express.js)
+  # Docker Service: backend
+  # Internal Port:  4000
+  # Hostname:       usa-api.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-api.dive25.com
     service: https://backend:4000
     originRequest:
       noTLSVerify: true
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: usa-api.dive25.com
   
-  # USA Keycloak IdP - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Keycloak IdP
+  # Docker Service: keycloak
+  # Internal Port:  8443
+  # Hostname:       usa-idp.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-idp.dive25.com
     service: https://keycloak:8443
     originRequest:
       noTLSVerify: true
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: usa-idp.dive25.com
   
-  # USA KAS - connects via Docker network
+  # ─────────────────────────────────────────────────────────────────────────
+  # Key Access Service (KAS)
+  # Docker Service: kas
+  # Internal Port:  8080
+  # Hostname:       usa-kas.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-kas.dive25.com
     service: http://kas:8080
     originRequest:
-      connectTimeout: 30s
+      connectTimeout: 60s
+      httpHostHeader: usa-kas.dive25.com
   
-  # Landing Page - Main portal at dive25.com
-  - hostname: dive25.com
-    service: http://host.docker.internal:8889
-    originRequest:
-      connectTimeout: 10s
-  
-  # Catch-all rule (required)
+  # ─────────────────────────────────────────────────────────────────────────
+  # Catch-all (required by Cloudflare)
+  # ─────────────────────────────────────────────────────────────────────────
   - service: http_status:404

@@ -69,7 +69,7 @@ generate_tfvars() {
         return 1
     fi
     
-    # Extract instance data
+    # Extract instance data (NO SECRETS - those come from GCP via environment)
     local instance_name=$(jq -r ".instances.$instance_code_lower.name" "$REGISTRY_FILE")
     local instance_type=$(jq -r ".instances.$instance_code_lower.type" "$REGISTRY_FILE")
     local app_url=$(jq -r ".instances.$instance_code_lower.urls.app" "$REGISTRY_FILE")
@@ -77,8 +77,11 @@ generate_tfvars() {
     local idp_url=$(jq -r ".instances.$instance_code_lower.urls.idp" "$REGISTRY_FILE")
     local keycloak_port=$(jq -r ".instances.$instance_code_lower.ports.keycloak" "$REGISTRY_FILE")
     local admin_username=$(jq -r ".instances.$instance_code_lower.keycloak.adminUsername" "$REGISTRY_FILE")
-    local admin_password=$(jq -r ".defaults.adminPassword" "$REGISTRY_FILE")
     local create_test_users=$(jq -r ".instances.$instance_code_lower.testUsers.create" "$REGISTRY_FILE")
+    
+    # SECURITY: Password comes from environment variable (sourced from GCP Secret Manager)
+    local instance_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local admin_password_var="KEYCLOAK_ADMIN_PASSWORD_${instance_upper}"
     
     # Determine keycloak_url based on instance type
     local keycloak_url
@@ -103,13 +106,18 @@ generate_tfvars() {
 #   2. Run: ./scripts/federation/generate-tfvars.sh
 #   3. Commit the registry change (this file is regenerated)
 #
+# 🔐 SECURITY: Admin password is NOT stored here!
+#    Set environment variable: TF_VAR_keycloak_admin_password
+#    Or use: source ./scripts/sync-gcp-secrets.sh ${instance_code_lower}
+#            export TF_VAR_keycloak_admin_password=\$${admin_password_var}
+#
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # Source: federation-registry.json v$(jq -r '.version' "$REGISTRY_FILE")
 # =============================================================================
 
 keycloak_url            = "$keycloak_url"
 keycloak_admin_username = "$admin_username"
-keycloak_admin_password = "$admin_password"
+# keycloak_admin_password - DO NOT SET HERE! Use TF_VAR_keycloak_admin_password env var
 app_url                 = "$app_url"
 api_url                 = "$api_url"
 idp_url                 = "$idp_url"

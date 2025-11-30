@@ -1,6 +1,19 @@
-# Cloudflare Tunnel Configuration for DIVE V3 - DEU Instance (Germany)
-# Remote Deployment at prosecurity.biz
-# CRITICAL: This tunnel is on prosecurity.biz Cloudflare account
+# ============================================================================
+# Cloudflare Tunnel Configuration - DEU Instance (Germany)
+# ============================================================================
+#
+# AUTO-GENERATED FROM SSOT - DO NOT EDIT MANUALLY
+#
+# Source: config/federation-registry.json
+# Generator: scripts/federation/generate-tunnel-configs.sh
+# Generated: 2025-11-30T02:13:44Z
+#
+# To modify this configuration:
+#   1. Edit config/federation-registry.json
+#   2. Run: ./scripts/federation/generate-tunnel-configs.sh deu
+#   3. Restart tunnel: docker compose -p deu up -d --force-recreate cloudflared
+#
+# ============================================================================
 
 tunnel: 2112e264-61e3-463f-9d13-b55273bde204
 credentials-file: /etc/cloudflared/tunnel-credentials.json
@@ -8,38 +21,62 @@ credentials-file: /etc/cloudflared/tunnel-credentials.json
 # Force HTTP/2 to avoid QUIC timeout issues on restricted networks
 protocol: http2
 
-# Metrics for monitoring
-metrics: 0.0.0.0:9126
+# Metrics endpoint for monitoring (accessible at localhost:9129)
+metrics: 0.0.0.0:9129
 
 ingress:
-  # DEU Frontend (Next.js with HTTPS) - matches USA/FRA/GBR pattern
-  # Note: Remote uses service names without -deu suffix
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend (Next.js)
+  # Docker Service: frontend-deu
+  # Internal Port:  3000
+  # Hostname:       deu-app.prosecurity.biz
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: deu-app.prosecurity.biz
-    service: https://frontend:3000
+    service: https://frontend-deu:3000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
-
-  # DEU Backend API (HTTPS) - matches USA/FRA/GBR pattern
+      httpHostHeader: deu-app.prosecurity.biz
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend API (Express.js)
+  # Docker Service: backend-deu
+  # Internal Port:  4000
+  # Hostname:       deu-api.prosecurity.biz
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: deu-api.prosecurity.biz
-    service: https://backend:4000
+    service: https://backend-deu:4000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
-
-  # DEU Keycloak IdP (HTTPS)
+      httpHostHeader: deu-api.prosecurity.biz
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # Keycloak IdP
+  # Docker Service: keycloak-deu
+  # Internal Port:  8443
+  # Hostname:       deu-idp.prosecurity.biz
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: deu-idp.prosecurity.biz
-    service: https://keycloak:8443
+    service: https://keycloak-deu:8443
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
-
-  # DEU KAS (HTTP - internal service, no TLS needed)
+      httpHostHeader: deu-idp.prosecurity.biz
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # Key Access Service (KAS)
+  # Docker Service: kas-deu
+  # Internal Port:  8080
+  # Hostname:       deu-kas.prosecurity.biz
+  # ─────────────────────────────────────────────────────────────────────────
   - hostname: deu-kas.prosecurity.biz
-    service: http://kas:8080
+    service: http://kas-deu:8080
     originRequest:
       connectTimeout: 60s
-
-  # Catch-all rule (required)
+      httpHostHeader: deu-kas.prosecurity.biz
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # Catch-all (required by Cloudflare)
+  # ─────────────────────────────────────────────────────────────────────────
   - service: http_status:404
-

@@ -165,6 +165,66 @@ restart_services() {
     ssh_remote "$instance" "docker ps --format '{{.Names}}: {{.Status}}' | grep -E 'keycloak|frontend|backend'"
 }
 
+# Helper function: Sync tunnel config from SSOT to remote instance
+# Usage: sync_tunnel deu
+# This regenerates the tunnel config from federation-registry.json and syncs to remote
+sync_tunnel() {
+    local instance="$1"
+    local remote_dir=$(get_remote_config "$instance" "dir")
+    
+    if [ -z "$remote_dir" ]; then
+        echo "Error: Unknown instance '$instance'" >&2
+        return 1
+    fi
+    
+    local registry_file="$PROJECT_ROOT/config/federation-registry.json"
+    local generator="$PROJECT_ROOT/scripts/federation/generate-tunnel-configs.sh"
+    
+    echo "=== Syncing Cloudflare tunnel config to $instance (from SSOT) ==="
+    
+    # 1. Generate tunnel config from SSOT
+    echo "  Step 1: Regenerating config from federation-registry.json..."
+    if [ -x "$generator" ]; then
+        "$generator" "$instance" || {
+            echo "  ERROR: Failed to generate tunnel config"
+            return 1
+        }
+    else
+        echo "  ERROR: generate-tunnel-configs.sh not found at $generator"
+        return 1
+    fi
+    
+    # 2. Get config file path from registry
+    local config_file=$(jq -r ".instances.${instance}.cloudflare.configFile // empty" "$registry_file")
+    if [ -z "$config_file" ]; then
+        echo "  ERROR: configFile not found for instance $instance in registry"
+        return 1
+    fi
+    
+    local local_config="$PROJECT_ROOT/$config_file"
+    local remote_config="$remote_dir/$config_file"
+    
+    # 3. Transfer to remote
+    echo "  Step 2: Transferring to $instance..."
+    echo "    Local:  $local_config"
+    echo "    Remote: $remote_config"
+    
+    sudo_remote "$instance" "mkdir -p $(dirname $remote_config)"
+    rsync_remote "$instance" "$local_config" "$remote_config"
+    
+    # 4. Restart cloudflared
+    echo "  Step 3: Restarting cloudflared..."
+    ssh_remote "$instance" "docker restart cloudflared-${instance} 2>/dev/null || docker restart dive-v3-cloudflared-${instance} 2>/dev/null" || \
+        echo "  Warning: Could not restart cloudflared"
+    
+    # 5. Verify tunnel is running
+    sleep 5
+    echo "  Step 4: Verifying tunnel status..."
+    ssh_remote "$instance" "docker ps --format '{{.Names}}: {{.Status}}' | grep cloudflared"
+    
+    echo "✅ Tunnel config sync complete for $instance"
+}
+
 # Check if sshpass is available
 check_ssh_prereqs() {
     if [ ! -x "$SSHPASS" ]; then
@@ -181,6 +241,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
     export -f sudo_remote 2>/dev/null || true
     export -f rsync_remote 2>/dev/null || true
     export -f sync_themes 2>/dev/null || true
+    export -f sync_tunnel 2>/dev/null || true
     export -f restart_services 2>/dev/null || true
     export -f get_remote_dir 2>/dev/null || true
     export -f get_remote_domain 2>/dev/null || true
