@@ -81,8 +81,7 @@ scrape_configs:
     scrape_interval: 30s
 
   # ---------------------------------------------------------------------------
-  # FRA INSTANCE (Backend:4001, OPA:8182, Tunnel:9127)
-  # Note: KAS doesn't expose /metrics; Keycloak management port not exposed
+  # FRA INSTANCE (Backend:4001, OPA:8182, Keycloak:9001, Tunnel:9127)
   # ---------------------------------------------------------------------------
   
   - job_name: 'fra-backend'
@@ -105,6 +104,17 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 15s
 
+  - job_name: 'fra-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9001']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
   - job_name: 'fra-cloudflared'
     static_configs:
       - targets: ['host.docker.internal:9127']
@@ -114,8 +124,7 @@ scrape_configs:
     scrape_interval: 30s
 
   # ---------------------------------------------------------------------------
-  # GBR INSTANCE (Backend:4002, OPA:8283, Tunnel:9128)
-  # Note: KAS doesn't expose /metrics; Keycloak management port not exposed
+  # GBR INSTANCE (Backend:4002, OPA:8283, Keycloak:9002, Tunnel:9128)
   # ---------------------------------------------------------------------------
   
   - job_name: 'gbr-backend'
@@ -138,6 +147,17 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 15s
 
+  - job_name: 'gbr-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9002']
+        labels:
+          instance: 'gbr'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
   - job_name: 'gbr-cloudflared'
     static_configs:
       - targets: ['host.docker.internal:9128']
@@ -148,7 +168,7 @@ scrape_configs:
 
   # ---------------------------------------------------------------------------
   # DEU INSTANCE (Remote - 192.168.42.120)
-  # Note: Remote instance may not be reachable from local Prometheus
+  # Note: Remote instance - may not be reachable from local Prometheus
   # ---------------------------------------------------------------------------
   
   - job_name: 'deu-backend'
@@ -170,3 +190,14 @@ scrape_configs:
           instance: 'deu'
     metrics_path: '/metrics'
     scrape_interval: 15s
+
+  - job_name: 'deu-keycloak'
+    static_configs:
+      - targets: ['192.168.42.120:9003']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
