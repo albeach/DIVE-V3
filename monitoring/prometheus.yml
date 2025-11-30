@@ -1,14 +1,17 @@
 #
 # Prometheus Configuration for DIVE V3
-# Phase 5 Task 5.2: Production Monitoring
+# Multi-Instance Monitoring via Host Gateway
+#
+# Uses host.docker.internal to reach services in other Docker networks
+# Each instance exposes metrics on different ports
 #
 
 global:
-  scrape_interval: 15s       # Scrape targets every 15 seconds
-  evaluation_interval: 15s   # Evaluate rules every 15 seconds
+  scrape_interval: 15s
+  evaluation_interval: 15s
   external_labels:
-    cluster: 'dive-v3-broker'
-    environment: 'development'
+    cluster: 'dive-v3-federation'
+    environment: 'production'
 
 # Alertmanager configuration
 alerting:
@@ -21,56 +24,149 @@ alerting:
 rule_files:
   - "/etc/prometheus/alerts/*.yml"
 
-# Scrape configurations
+# =============================================================================
+# SCRAPE CONFIGURATIONS
+# =============================================================================
+
 scrape_configs:
-  # Backend API metrics
-  - job_name: 'dive-v3-backend'
-    static_configs:
-      - targets: ['backend:4000']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
 
-  # OPA metrics
-  - job_name: 'dive-v3-opa'
-    static_configs:
-      - targets: ['opa:8181']
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-
-  # KAS metrics
-  - job_name: 'dive-v3-kas'
-    static_configs:
-      - targets: ['kas:8080']
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-
-  # Keycloak metrics (if JMX exporter enabled)
-  - job_name: 'dive-v3-keycloak'
-    static_configs:
-      - targets: ['keycloak:8080']
-    metrics_path: '/metrics'
-    scrape_interval: 30s
-
-  # MongoDB exporter
-  - job_name: 'dive-v3-mongo'
-    static_configs:
-      - targets: ['mongo-exporter:9216']
-    scrape_interval: 30s
-
-  # PostgreSQL exporter
-  - job_name: 'dive-v3-postgres'
-    static_configs:
-      - targets: ['postgres-exporter:9187']
-    scrape_interval: 30s
-
-  # Redis exporter
-  - job_name: 'dive-v3-redis'
-    static_configs:
-      - targets: ['redis-exporter:9121']
-    scrape_interval: 20s
-
-  # Prometheus self-monitoring
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS SELF-MONITORING
+  # ---------------------------------------------------------------------------
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
+  # ---------------------------------------------------------------------------
+  # USA INSTANCE (Ports: 3000, 4000, 8080, 8181, 8443, 9000)
+  # ---------------------------------------------------------------------------
+  
+  - job_name: 'usa-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4000']
+        labels:
+          instance: 'usa'
+          region: 'americas'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'usa-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8181']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'usa-keycloak'
+    static_configs:
+      - targets: ['host.docker.internal:9000']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'usa-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9126']
+        labels:
+          instance: 'usa'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # FRA INSTANCE (Backend:4001, OPA:8182, Tunnel:9127)
+  # Note: KAS doesn't expose /metrics; Keycloak management port not exposed
+  # ---------------------------------------------------------------------------
+  
+  - job_name: 'fra-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4001']
+        labels:
+          instance: 'fra'
+          region: 'europe'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'fra-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8182']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'fra-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9127']
+        labels:
+          instance: 'fra'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # GBR INSTANCE (Backend:4002, OPA:8283, Tunnel:9128)
+  # Note: KAS doesn't expose /metrics; Keycloak management port not exposed
+  # ---------------------------------------------------------------------------
+  
+  - job_name: 'gbr-backend'
+    static_configs:
+      - targets: ['host.docker.internal:4002']
+        labels:
+          instance: 'gbr'
+          region: 'europe'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'gbr-opa'
+    static_configs:
+      - targets: ['host.docker.internal:8283']
+        labels:
+          instance: 'gbr'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  - job_name: 'gbr-cloudflared'
+    static_configs:
+      - targets: ['host.docker.internal:9128']
+        labels:
+          instance: 'gbr'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ---------------------------------------------------------------------------
+  # DEU INSTANCE (Remote - 192.168.42.120)
+  # Note: Remote instance may not be reachable from local Prometheus
+  # ---------------------------------------------------------------------------
+  
+  - job_name: 'deu-backend'
+    static_configs:
+      - targets: ['192.168.42.120:4003']
+        labels:
+          instance: 'deu'
+          region: 'europe'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+
+  - job_name: 'deu-opa'
+    static_configs:
+      - targets: ['192.168.42.120:8184']
+        labels:
+          instance: 'deu'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
