@@ -16,7 +16,7 @@
  *   GBR_API_URL=<url>            GBR backend URL
  */
 
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import https from 'https';
 
 // Skip in normal CI/CD unless explicitly enabled
@@ -31,7 +31,8 @@ const client = axios.create({ httpsAgent, timeout: 10000 });
 // Configuration
 // ============================================
 
-interface IInstanceConfig {
+// Export for use in other test files
+export interface IInstanceConfig {
     code: string;
     name: string;
     apiUrl: string;
@@ -72,7 +73,8 @@ const INSTANCES: IInstanceConfig[] = [
 ];
 
 // Test user credentials (must exist in Keycloak)
-const TEST_USERS = {
+// Export for use in other test files
+export const TEST_USERS = {
     usa_secret: {
         username: 'testuser-usa-1',
         password: 'TestUser2025!Pilot',
@@ -100,7 +102,14 @@ const TEST_USERS = {
 // Utilities
 // ============================================
 
-async function getAuthToken(instance: IInstanceConfig, username: string, password: string): Promise<string | null> {
+/**
+ * Get authentication token from Keycloak for the specified instance
+ * Currently uses TEST_AUTH_TOKEN env var; can be extended for full OIDC flow
+ * @param _instance - Instance config (unused, for future OIDC flow per instance)
+ * @param _username - Username (unused, for future OIDC flow)
+ * @param _password - Password (unused, for future OIDC flow)
+ */
+export async function getAuthToken(_instance: IInstanceConfig, _username: string, _password: string): Promise<string | null> {
     try {
         // Would need to authenticate via Keycloak
         // For now, use environment variable

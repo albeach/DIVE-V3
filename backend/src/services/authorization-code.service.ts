@@ -13,16 +13,21 @@ export class AuthorizationCodeService {
   private readonly CODE_TTL = 60; // 60 seconds per OAuth spec
 
   constructor() {
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'redis',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
+    // Use REDIS_URL for consistent connection across all instances (includes password)
+    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+    
+    logger.info('Initializing Authorization Code Service Redis connection', { 
+      redisUrl: redisUrl.replace(/:[^:@]+@/, ':***@') // Mask password in logs
+    });
+
+    this.redis = new Redis(redisUrl, {
       keyPrefix: 'dive-v3:oauth:code:',
       retryStrategy: (times) => {
         const delay = Math.min(times * 50, 2000);
         logger.warn(`Redis connection retry attempt ${times}, delay ${delay}ms`);
         return delay;
-      }
+      },
+      maxRetriesPerRequest: 3
     });
 
     this.redis.on('connect', () => {

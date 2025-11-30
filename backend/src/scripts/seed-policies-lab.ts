@@ -10,7 +10,8 @@
 import { MongoClient } from 'mongodb';
 import crypto from 'crypto';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@localhost:27017';
+// CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
+const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
 const DB_NAME = 'dive-v3';
 const COLLECTION_NAME = 'policy_uploads';
 

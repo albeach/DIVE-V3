@@ -22,7 +22,11 @@ import { generateDisplayMarking, COIOperator, ClassificationLevel } from '../typ
 import { encryptContent, computeSHA384, computeObjectHash } from '../utils/ztdf.utils';
 import { validateCOICoherence } from '../services/coi-validation.service';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
+// CRITICAL: No hardcoded passwords - use environment variables loaded from GCP Secret Manager
+// Run: source ./scripts/sync-gcp-secrets.sh before running this script
+const MONGODB_URL = process.env.MONGODB_URL || (() => {
+    throw new Error('MONGODB_URL not set. Run: source ./scripts/sync-gcp-secrets.sh');
+})();
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const KAS_URL = process.env.KAS_URL || 'https://kas:8080';
 
@@ -628,13 +632,8 @@ async function main() {
     }
 
     // Production mode: seed to MongoDB
-    const client = new MongoClient(MONGODB_URL, {
-        authSource: 'admin',
-        auth: {
-            username: 'admin',
-            password: 'password'
-        }
-    });
+    // NOTE: Credentials should be in MONGODB_URL (e.g., mongodb://admin:PASSWORD@host:27017?authSource=admin)
+    const client = new MongoClient(MONGODB_URL);
 
     try {
         await client.connect();

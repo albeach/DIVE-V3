@@ -11,7 +11,8 @@ import { MongoClient } from 'mongodb';
 import { validateCOICoherence } from '../services/coi-validation.service';
 // import { logger } from '../utils/logger';  // Commented out - not used in this script
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@mongo:27017';
+// CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
+const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 
 interface IViolationReport {
@@ -33,11 +34,7 @@ async function main() {
     console.log('===============================================\n');
 
     const client = new MongoClient(MONGODB_URL, {
-        authSource: 'admin',
-        auth: {
-            username: 'admin',
-            password: 'password'
-        },
+        // Credentials should be in MONGODB_URL,
         serverSelectionTimeoutMS: 5000 // Fail fast if MongoDB not available
     });
 
