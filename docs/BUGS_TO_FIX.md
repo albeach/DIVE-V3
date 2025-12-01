@@ -352,21 +352,30 @@ if (userCountry) {
 const totalCount = await collection.countDocuments(countFilter);
 ```
 
-### Results After Fix
+### Results After Complete Fix
 
 | Instance | User | Before | After |
 |----------|------|--------|-------|
-| FRA | FRA/UNCLASSIFIED | 7000 total, 100 returned | **720 accessible, 50/page** |
-| USA | FRA/UNCLASSIFIED | 7000 total, 16 returned | **562 accessible** |
+| FRA Local | FRA/UNCLASSIFIED | 7,000 total (raw) | **720 accessible** ✅ |
+| USA Federated | FRA/UNCLASSIFIED | 7,000 total (raw) | **562 accessible** ✅ |
+| **Federated Total** | FRA/UNCLASSIFIED | **100** (wrong) | **1,282** ✅ |
 
 ### Files Fixed
 
 - `backend/src/controllers/paginated-search.controller.ts` - ABAC filters in MongoDB query
+- `backend/src/services/federated-resource.service.ts` - ABAC filters for local federated queries
+- `frontend/src/app/api/resources/search/route.ts` - Use totalAccessible in response normalization
+
+### Commits
+
+- `f3084bb` - fix(backend): Add ABAC filtering to paginated search
+- `8847637` - fix(federation): Increase per-instance limit and capture accessibleCount
+- `aff2800` - fix(federation): Add ABAC filters to local federated queries
 
 ### Related Issues
 
 - BUG-001: Terraform user attributes (affects ABAC decisions)
-- Federated pagination cursor handling needs review
+- Federated pagination cursor handling works correctly after fix
 
 ---
 
