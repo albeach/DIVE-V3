@@ -26,15 +26,22 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
       POSTGRES_DB: postgres
+      # IMPORTANT: If you see "password authentication failed":
+      # 1. The volume was created with a different password
+      # 2. Run: docker compose down && docker volume rm dive-v3_postgres_data
+      # 3. Then: docker compose up -d
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+      - ./scripts/setup/postgres-healthcheck.sh:/usr/local/bin/postgres-healthcheck.sh:ro
     networks:
       - dive-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # Enhanced healthcheck: verifies both connectivity AND password
+      # This catches volume/password mismatches that pg_isready misses
+      test: ["CMD-SHELL", "pg_isready -U postgres && PGPASSWORD=$POSTGRES_PASSWORD psql -U postgres -d postgres -c 'SELECT 1' > /dev/null 2>&1"]
       interval: 10s
       timeout: 5s
       retries: 5
