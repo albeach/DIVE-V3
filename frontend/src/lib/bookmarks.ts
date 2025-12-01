@@ -9,7 +9,7 @@
  */
 
 const STORAGE_KEY = 'dive-bookmarks';
-const MAX_BOOKMARKS = 20;
+export const MAX_BOOKMARKS = 20;
 
 export interface Bookmark {
   id: string;

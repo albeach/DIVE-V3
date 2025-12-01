@@ -181,3 +181,4 @@ echo "  3. Add your monitors to the status page"
 echo "  4. Configure custom domain: status.dive25.com"
 echo ""
 
+

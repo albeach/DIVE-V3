@@ -649,3 +649,6 @@ Each remote partner needs:
 - [Federation Registry](../config/federation-registry.json)
 - [KAS Registry](../config/kas-registry.json)
 
+
+
+

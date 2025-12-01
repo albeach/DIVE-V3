@@ -58,3 +58,6 @@ output "simple_post_broker_otp_flow_id" {
   value       = keycloak_authentication_flow.simple_post_broker_otp.id
 }
 
+
+
+

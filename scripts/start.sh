@@ -186,6 +186,13 @@ wait_for_service keycloak 90
 wait_for_service mongo 30
 wait_for_service backend 60
 
+# Step 7.5: Fix Docker networks (ensure all backends can reach MongoDB)
+echo ""
+echo -e "${CYAN}→ Fixing Docker network connectivity...${NC}"
+if [[ -x "$SCRIPT_DIR/fix-docker-networks.sh" ]]; then
+  "$SCRIPT_DIR/fix-docker-networks.sh" 2>/dev/null || true
+fi
+
 # Step 8: Summary
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════${NC}"

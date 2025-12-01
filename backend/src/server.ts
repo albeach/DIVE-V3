@@ -28,6 +28,8 @@ import blacklistRoutes from './routes/blacklist.routes';  // Phase 2 GAP-007: To
 import dashboardRoutes from './routes/dashboard.routes';  // Dashboard statistics
 import seedStatusRoutes from './routes/seed-status.routes';  // Seed status monitoring
 import kasRoutes from './routes/kas.routes';  // KAS proxy routes for ZTDF key access
+import federatedQueryRoutes from './routes/federated-query.routes';  // Phase 3: Direct MongoDB federation
+import analyticsRoutes from './routes/analytics.routes';  // Phase 2: Search analytics
 import { metricsService } from './services/metrics.service';  // Phase 3 GAP-004: Prometheus metrics
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
@@ -126,6 +128,8 @@ app.use('/', blacklistRoutes);  // Phase 2 GAP-007: Token blacklist (mounted at 
 app.use('/api/decision-replay', decisionReplayRoutes);  // ADatP-5663 x ACP-240: Decision replay for UI
 app.use('/api/dashboard', dashboardRoutes);  // Dashboard statistics
 app.use('/api/resources', seedStatusRoutes);  // Seed status monitoring (appended to /api/resources)
+app.use('/api/resources', federatedQueryRoutes);  // Phase 3: Direct MongoDB federation queries
+app.use('/api/analytics', analyticsRoutes);  // Phase 2: Search analytics tracking
 app.use('/api/kas', kasRoutes);  // KAS proxy routes for ZTDF key access (matches KAO URLs)
 
 // Federation endpoints (Phase 1)

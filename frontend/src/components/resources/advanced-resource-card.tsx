@@ -7,12 +7,18 @@
  * - Quick actions and preview
  * - Accessibility optimized
  * - Skeleton loading states
+ * 
+ * IMPORTANT: Cards are NOT links by default.
+ * - Single click: Select/focus the card
+ * - Double click: Open preview modal
+ * - Click "Open" button or press Enter: Navigate to resource
+ * This enables bulk selection, keyboard navigation, and preview features.
  */
 
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export interface IResourceCardData {
   resourceId: string;
@@ -48,6 +54,8 @@ interface AdvancedResourceCardProps {
     country?: string;
     coi?: string[];
   };
+  /** If true, clicking anywhere navigates (legacy behavior). Default: false */
+  clickToNavigate?: boolean;
 }
 
 const classificationColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -143,7 +151,9 @@ export default function AdvancedResourceCard({
   resource,
   viewMode,
   userAttributes,
+  clickToNavigate = false,
 }: AdvancedResourceCardProps) {
+  const router = useRouter();
   const classColors = classificationColors[resource.classification] || {
     bg: 'bg-gray-100',
     text: 'text-gray-800',
@@ -151,11 +161,19 @@ export default function AdvancedResourceCard({
   };
 
   const accessIndicator = getAccessIndicator(resource, userAttributes);
+  
+  const handleOpenResource = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering parent's onClick (selection)
+    router.push(`/resources/${resource.resourceId}`);
+  };
 
   // Grid View (Default - Most detailed)
   if (viewMode === 'grid') {
     return (
-      <Link href={`/resources/${resource.resourceId}`} className="block group h-full">
+      <article 
+        className="block group h-full cursor-pointer"
+        data-resource-id={resource.resourceId}
+      >
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
           {/* Header with Classification Badge + Instance Badge */}
           <div className="flex items-start justify-between gap-3 mb-4">
@@ -190,12 +208,14 @@ export default function AdvancedResourceCard({
             {resource.title}
           </h3>
 
-          {/* Resource ID */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-4">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          {/* Resource ID - Truncated to fit on one line */}
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-4 max-w-full">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
             </svg>
-            <span className="font-mono">{resource.resourceId}</span>
+            <span className="font-mono truncate text-[10px]" title={resource.resourceId}>
+              {resource.resourceId.length > 24 ? resource.resourceId.slice(0, 24) + '...' : resource.resourceId}
+            </span>
           </div>
 
           {/* Metadata Grid */}
@@ -255,7 +275,7 @@ export default function AdvancedResourceCard({
             )}
           </div>
 
-          {/* Footer: Access Indicator */}
+          {/* Footer: Access Indicator + Open Button */}
           <div className="mt-auto pt-3 border-t border-gray-100">
             <div className="flex items-center justify-between">
               <div className={`flex items-center gap-1.5 text-xs font-semibold ${
@@ -270,25 +290,32 @@ export default function AdvancedResourceCard({
                 }`} />
                 {accessIndicator.message}
               </div>
-              <svg
-                className="h-5 w-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+              <button
+                onClick={handleOpenResource}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
+                title="Open document (Enter)"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+                Open
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
-      </Link>
+      </article>
     );
   }
 
   // List View (Horizontal layout)
   if (viewMode === 'list') {
     return (
-      <Link href={`/resources/${resource.resourceId}`} className="block group">
+      <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-xl hover:border-blue-400 transition-all duration-200 hover:-translate-y-0.5">
           <div className="flex items-center justify-between gap-4">
             {/* Left: Classification + Instance + Title */}
@@ -312,7 +339,9 @@ export default function AdvancedResourceCard({
                 <h3 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate mb-1">
                   {resource.title}
                 </h3>
-                <p className="text-xs text-gray-500 font-mono">{resource.resourceId}</p>
+                <p className="text-[10px] text-gray-500 font-mono truncate max-w-[200px]" title={resource.resourceId}>
+                  {resource.resourceId.length > 28 ? resource.resourceId.slice(0, 28) + '...' : resource.resourceId}
+                </p>
               </div>
             </div>
 
@@ -362,7 +391,7 @@ export default function AdvancedResourceCard({
               )}
             </div>
 
-            {/* Right: Access Indicator + Arrow */}
+            {/* Right: Access Indicator + Open Button */}
             <div className="flex items-center gap-3 flex-shrink-0">
               <div className={`hidden md:flex items-center gap-1.5 text-xs font-semibold ${
                 accessIndicator.status === 'likely' ? 'text-green-700' :
@@ -375,24 +404,26 @@ export default function AdvancedResourceCard({
                   'bg-red-500'
                 }`} />
               </div>
-              <svg
-                className="h-5 w-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+              <button
+                onClick={handleOpenResource}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
+                title="Open document"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+                Open
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
-      </Link>
+      </article>
     );
   }
 
   // Compact View (Minimal, table-like)
   return (
-    <Link href={`/resources/${resource.resourceId}`} className="block group">
+    <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
       <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition-all duration-150">
         <div className="flex items-center justify-between gap-3">
           {/* Classification Icon + Instance Flag */}
@@ -412,10 +443,10 @@ export default function AdvancedResourceCard({
             </h3>
           </div>
 
-          {/* Quick Badges */}
+          {/* Quick Badges + Open Button */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="hidden sm:inline-block text-xs text-gray-500 font-mono">
-              {resource.resourceId}
+            <span className="hidden sm:inline-block text-[10px] text-gray-500 font-mono truncate max-w-[150px]" title={resource.resourceId}>
+              {resource.resourceId.length > 20 ? resource.resourceId.slice(0, 20) + '...' : resource.resourceId}
             </span>
             {resource.encrypted && (
               <span className="text-sm">🔐</span>
@@ -425,18 +456,19 @@ export default function AdvancedResourceCard({
                 {resource.releasabilityTo.length}
               </span>
             )}
-            <svg
-              className="h-4 w-4 text-gray-400 group-hover:text-blue-600 transition-colors"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+            <button
+              onClick={handleOpenResource}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              title="Open document"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
 

@@ -1,0 +1,777 @@
+/**
+ * Federated Resource Service
+ * Phase 3, Task 3.1-3.4: Distributed Query Federation
+ * 
+ * Provides direct MongoDB connections to all federated instances for
+ * high-performance cross-instance resource queries.
+ * 
+ * Features:
+ * - Connection pooling to all federated instance MongoDBs
+ * - Parallel query execution with timeout handling
+ * - Circuit breaker pattern for unavailable instances
+ * - ABAC filtering based on user attributes
+ * - Result caching with Redis (optional)
+ * 
+ * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
+ */
+
+import { MongoClient, Db } from 'mongodb';
+import fs from 'fs';
+import path from 'path';
+import axios from 'axios';
+import https from 'https';
+import { logger } from '../utils/logger';
+import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+
+// Create axios instance with custom HTTPS agent for self-signed certs
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: process.env.NODE_ENV !== 'development'
+});
+const federationAxios = axios.create({ httpsAgent, timeout: 8000 });
+
+// ============================================
+// Interfaces
+// ============================================
+
+export interface IFederatedInstance {
+    code: string;
+    name: string;
+    type: 'local' | 'remote';
+    enabled: boolean;
+    mongoUrl: string;
+    mongoDatabase: string;
+    apiUrl?: string; // For HTTP-based federation to remote instances
+    useApiMode?: boolean; // True if we should use API instead of direct MongoDB
+    connection?: {
+        client: MongoClient;
+        db: Db;
+        lastConnected: Date;
+    };
+    circuitBreaker: {
+        state: 'closed' | 'open' | 'half-open';
+        failures: number;
+        lastFailure?: Date;
+        nextRetry?: Date;
+    };
+}
+
+export interface IFederatedSearchOptions {
+    query?: string;
+    classification?: string[];
+    releasableTo?: string[];
+    coi?: string[];
+    encrypted?: boolean;
+    originRealm?: string;
+    limit?: number;
+    offset?: number;
+    instances?: string[];
+    /** Authorization header to forward to remote instances */
+    authHeader?: string;
+}
+
+export interface IFederatedSearchResult {
+    resourceId: string;
+    title: string;
+    classification: string;
+    releasabilityTo: string[];
+    COI: string[];
+    encrypted: boolean;
+    creationDate?: string;
+    displayMarking?: string;
+    originRealm: string;
+    sourceInstance: string;
+}
+
+export interface IFederatedSearchResponse {
+    totalResults: number;
+    results: IFederatedSearchResult[];
+    instanceResults: Record<string, {
+        count: number;
+        latencyMs: number;
+        error?: string;
+        circuitBreakerState: string;
+    }>;
+    executionTimeMs: number;
+    cacheHit: boolean;
+}
+
+export interface IUserAttributes {
+    uniqueID: string;
+    clearance: string;
+    countryOfAffiliation: string;
+    acpCOI?: string[];
+}
+
+// ============================================
+// Constants
+// ============================================
+
+const CIRCUIT_BREAKER_THRESHOLD = 3; // Failures before opening circuit
+const CIRCUIT_BREAKER_TIMEOUT_MS = 30000; // Time before half-open retry
+const QUERY_TIMEOUT_MS = 5000; // Per-instance query timeout
+const REMOTE_QUERY_TIMEOUT_MS = 8000; // Remote instance query timeout
+const MAX_RESULTS_PER_INSTANCE = 100;
+
+const CLEARANCE_HIERARCHY: Record<string, number> = {
+    'UNCLASSIFIED': 0,
+    'RESTRICTED': 0.5,
+    'CONFIDENTIAL': 1,
+    'SECRET': 2,
+    'TOP_SECRET': 3
+};
+
+// ============================================
+// FederatedResourceService Class
+// ============================================
+
+class FederatedResourceService {
+    private instances: Map<string, IFederatedInstance> = new Map();
+    private initialized = false;
+    private currentInstanceRealm: string;
+
+    constructor() {
+        this.currentInstanceRealm = process.env.INSTANCE_REALM || 'USA';
+    }
+
+    /**
+     * Initialize connections to all federated instances
+     * Loads configuration from federation-registry.json
+     */
+    async initialize(): Promise<void> {
+        if (this.initialized) {
+            logger.debug('FederatedResourceService already initialized');
+            return;
+        }
+
+        logger.info('Initializing FederatedResourceService');
+
+        // Load federation registry
+        const registry = await this.loadFederationRegistry();
+        if (!registry) {
+            logger.error('Failed to load federation registry');
+            return;
+        }
+
+        // Initialize each instance
+        for (const [key, instance] of Object.entries(registry.instances)) {
+            const inst = instance as any;
+            if (!inst.enabled) {
+                logger.debug(`Instance ${key} is disabled, skipping`);
+                continue;
+            }
+
+            try {
+                const federatedInstance = await this.createInstanceConfig(key, inst);
+                this.instances.set(key.toUpperCase(), federatedInstance);
+                logger.info(`Initialized federated instance: ${key}`, {
+                    code: federatedInstance.code,
+                    type: federatedInstance.type,
+                    database: federatedInstance.mongoDatabase
+                });
+            } catch (error) {
+                logger.error(`Failed to initialize instance ${key}`, {
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        }
+
+        this.initialized = true;
+        logger.info('FederatedResourceService initialized', {
+            instances: Array.from(this.instances.keys())
+        });
+    }
+
+    /**
+     * Load federation registry from config file
+     */
+    private async loadFederationRegistry(): Promise<any | null> {
+        const registryPaths = [
+            path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
+            path.join(process.cwd(), 'config', 'federation-registry.json')
+        ];
+
+        for (const registryPath of registryPaths) {
+            try {
+                if (fs.existsSync(registryPath)) {
+                    return JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
+                }
+            } catch (error) {
+                logger.warn('Failed to read federation registry', {
+                    path: registryPath,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Create instance configuration with MongoDB connection details
+     * For non-current instances, uses API-based federation via Cloudflare tunnels
+     * 
+     * FIX: For current instance, use existing MONGODB_URL environment variable
+     * instead of building a new one (ensures consistency with paginated-search.controller.ts)
+     */
+    private async createInstanceConfig(key: string, inst: any): Promise<IFederatedInstance> {
+        const instanceCode = key.toUpperCase();
+        const isSameInstance = instanceCode === this.currentInstanceRealm;
+        
+        // For different instances, use API-based federation (more reliable across networks)
+        const useApiMode = !isSameInstance;
+        
+        // Build API URL for HTTP-based federation
+        const backendService = inst.services?.backend;
+        let apiUrl: string;
+        if (inst.type === 'remote') {
+            apiUrl = process.env[`${instanceCode}_API_URL`] ||
+                `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
+        } else {
+            // Local instances go through Cloudflare tunnels when accessed from other instances
+            apiUrl = process.env[`${instanceCode}_API_URL`] ||
+                `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
+        }
+        
+        // For MongoDB connection, use existing env var for current instance
+        let mongoUrl: string = '';
+        let mongoDatabase: string = '';
+        
+        if (isSameInstance) {
+            // FIX: Use the existing MONGODB_URL environment variable
+            // This ensures consistency with paginated-search.controller.ts
+            // The env var is already configured correctly in docker-compose
+            mongoUrl = getMongoDBUrl();
+            mongoDatabase = getMongoDBName();
+            
+            logger.info(`Using existing MongoDB URL for ${instanceCode}`, {
+                database: mongoDatabase,
+                hasUrl: !!mongoUrl
+            });
+        }
+
+        logger.info(`Configured instance ${instanceCode}`, {
+            useApiMode,
+            apiUrl: useApiMode ? apiUrl : undefined,
+            hasMongoDB: isSameInstance
+        });
+
+        return {
+            code: inst.code,
+            name: inst.name,
+            type: inst.type,
+            enabled: inst.enabled,
+            mongoUrl,
+            mongoDatabase,
+            apiUrl,
+            useApiMode,
+            circuitBreaker: {
+                state: 'closed',
+                failures: 0
+            }
+        };
+    }
+
+    /**
+     * Get or create MongoDB connection for an instance
+     */
+    private async getConnection(instance: IFederatedInstance): Promise<Db | null> {
+        // Check circuit breaker
+        if (instance.circuitBreaker.state === 'open') {
+            const now = new Date();
+            if (instance.circuitBreaker.nextRetry && now < instance.circuitBreaker.nextRetry) {
+                logger.debug(`Circuit breaker OPEN for ${instance.code}, skipping`);
+                return null;
+            }
+            // Try half-open
+            instance.circuitBreaker.state = 'half-open';
+            logger.info(`Circuit breaker HALF-OPEN for ${instance.code}, attempting reconnect`);
+        }
+
+        // Return existing connection if valid
+        if (instance.connection?.client) {
+            try {
+                await instance.connection.client.db().admin().ping();
+                return instance.connection.db;
+            } catch {
+                // Connection lost, reconnect below
+                logger.warn(`Lost connection to ${instance.code}, reconnecting`);
+            }
+        }
+
+        // Create new connection
+        try {
+            const client = new MongoClient(instance.mongoUrl, {
+                connectTimeoutMS: instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS,
+                socketTimeoutMS: instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS,
+                maxPoolSize: 5,
+                minPoolSize: 1
+            });
+
+            await client.connect();
+            const db = client.db(instance.mongoDatabase);
+
+            instance.connection = {
+                client,
+                db,
+                lastConnected: new Date()
+            };
+
+            // Reset circuit breaker on success
+            instance.circuitBreaker.state = 'closed';
+            instance.circuitBreaker.failures = 0;
+
+            logger.info(`Connected to MongoDB for ${instance.code}`, {
+                database: instance.mongoDatabase
+            });
+
+            return db;
+
+        } catch (error) {
+            this.handleConnectionFailure(instance, error);
+            return null;
+        }
+    }
+
+    /**
+     * Handle connection failure with circuit breaker logic
+     */
+    private handleConnectionFailure(instance: IFederatedInstance, error: unknown): void {
+        instance.circuitBreaker.failures++;
+        instance.circuitBreaker.lastFailure = new Date();
+
+        if (instance.circuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+            instance.circuitBreaker.state = 'open';
+            instance.circuitBreaker.nextRetry = new Date(Date.now() + CIRCUIT_BREAKER_TIMEOUT_MS);
+            logger.warn(`Circuit breaker OPENED for ${instance.code}`, {
+                failures: instance.circuitBreaker.failures,
+                nextRetry: instance.circuitBreaker.nextRetry
+            });
+        }
+
+        logger.error(`Connection failed for ${instance.code}`, {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            failures: instance.circuitBreaker.failures,
+            circuitState: instance.circuitBreaker.state
+        });
+    }
+
+    /**
+     * Execute federated search across all instances
+     * Phase 3: Supports Redis caching for improved performance
+     */
+    async search(
+        options: IFederatedSearchOptions,
+        userAttributes: IUserAttributes
+    ): Promise<IFederatedSearchResponse> {
+        const startTime = Date.now();
+        
+        if (!this.initialized) {
+            await this.initialize();
+        }
+
+        // Phase 3: Check cache first
+        try {
+            const { federationCacheService } = await import('./federation-cache.service');
+            const cached = await federationCacheService.get(options, userAttributes);
+            if (cached) {
+                logger.info('Federated search served from cache', {
+                    query: options.query,
+                    totalResults: cached.totalResults,
+                    user: userAttributes.uniqueID
+                });
+                return cached;
+            }
+        } catch (cacheError) {
+            // Cache unavailable, continue with live query
+            logger.debug('Cache check failed, continuing with live query', {
+                error: cacheError instanceof Error ? cacheError.message : 'Unknown error'
+            });
+        }
+
+        const targetInstances = options.instances?.length
+            ? Array.from(this.instances.entries()).filter(([key]) => 
+                options.instances!.map(i => i.toUpperCase()).includes(key))
+            : Array.from(this.instances.entries());
+
+        logger.info('Executing federated search', {
+            targetInstances: targetInstances.map(([key]) => key),
+            query: options.query,
+            classification: options.classification,
+            user: userAttributes.uniqueID
+        });
+
+        // Execute parallel queries
+        const searchPromises = targetInstances.map(async ([key, instance]) => {
+            const instanceStart = Date.now();
+            try {
+                const results = await this.searchInstance(instance, options);
+                return {
+                    key,
+                    results,
+                    latencyMs: Date.now() - instanceStart,
+                    error: undefined as string | undefined,
+                    circuitBreakerState: instance.circuitBreaker.state
+                };
+            } catch (error) {
+                return {
+                    key,
+                    results: [] as IFederatedSearchResult[],
+                    latencyMs: Date.now() - instanceStart,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                    circuitBreakerState: instance.circuitBreaker.state
+                };
+            }
+        });
+
+        const results = await Promise.all(searchPromises);
+
+        // Aggregate results
+        const allResults: IFederatedSearchResult[] = [];
+        const instanceResults: Record<string, any> = {};
+
+        for (const result of results) {
+            instanceResults[result.key] = {
+                count: result.results.length,
+                latencyMs: result.latencyMs,
+                error: result.error,
+                circuitBreakerState: result.circuitBreakerState
+            };
+            allResults.push(...result.results);
+        }
+
+        // Apply ABAC filtering
+        const filteredResults = this.applyABACFilter(allResults, userAttributes);
+
+        // Deduplicate by resourceId (prefer local over federated)
+        const deduped = this.deduplicateResults(filteredResults);
+
+        // Apply limit and offset
+        const offset = options.offset || 0;
+        const limit = options.limit || MAX_RESULTS_PER_INSTANCE;
+        const paginatedResults = deduped.slice(offset, offset + limit);
+
+        const response: IFederatedSearchResponse = {
+            totalResults: deduped.length,
+            results: paginatedResults,
+            instanceResults,
+            executionTimeMs: Date.now() - startTime,
+            cacheHit: false
+        };
+
+        // Phase 3: Cache the response for future requests
+        try {
+            const { federationCacheService } = await import('./federation-cache.service');
+            await federationCacheService.set(options, userAttributes, response);
+        } catch (cacheError) {
+            // Cache write failed, log but don't fail the request
+            logger.debug('Failed to cache federated search response', {
+                error: cacheError instanceof Error ? cacheError.message : 'Unknown error'
+            });
+        }
+
+        return response;
+    }
+
+    /**
+     * Search a single instance
+     * Uses API-based federation for remote instances, direct MongoDB for local
+     */
+    private async searchInstance(
+        instance: IFederatedInstance,
+        options: IFederatedSearchOptions
+    ): Promise<IFederatedSearchResult[]> {
+        // Use API-based federation for non-local instances
+        if (instance.useApiMode && instance.apiUrl) {
+            return this.searchInstanceViaApi(instance, options);
+        }
+        
+        // Direct MongoDB connection for local instance
+        const db = await this.getConnection(instance);
+        if (!db) {
+            throw new Error(`Cannot connect to ${instance.code}`);
+        }
+
+        const collection = db.collection('resources');
+
+        // Build MongoDB query
+        const query: any = {};
+
+        // Text search on title/resourceId
+        if (options.query) {
+            query.$or = [
+                { title: { $regex: options.query, $options: 'i' } },
+                { resourceId: { $regex: options.query, $options: 'i' } }
+            ];
+        }
+
+        // Classification filter
+        if (options.classification?.length) {
+            query.$or = query.$or || [];
+            query.$or.push(
+                { 'ztdf.policy.securityLabel.classification': { $in: options.classification } },
+                { classification: { $in: options.classification } }
+            );
+        }
+
+        // Releasability filter
+        if (options.releasableTo?.length) {
+            query.$or = query.$or || [];
+            query.$or.push(
+                { 'ztdf.policy.securityLabel.releasabilityTo': { $in: options.releasableTo } },
+                { releasabilityTo: { $in: options.releasableTo } }
+            );
+        }
+
+        // COI filter
+        if (options.coi?.length) {
+            query.$or = query.$or || [];
+            query.$or.push(
+                { 'ztdf.policy.securityLabel.COI': { $in: options.coi } },
+                { COI: { $in: options.coi } }
+            );
+        }
+
+        // Execute query with timeout
+        const timeoutMs = instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS;
+        
+        const cursor = collection.find(query)
+            .limit(MAX_RESULTS_PER_INSTANCE)
+            .maxTimeMS(timeoutMs);
+
+        const documents = await cursor.toArray();
+
+        // Transform to federated search result format
+        return documents.map(doc => this.transformDocument(doc, instance.code));
+    }
+
+    /**
+     * Search instance via API (for cross-network federation)
+     * Uses the instance's backend API through Cloudflare tunnels
+     */
+    private async searchInstanceViaApi(
+        instance: IFederatedInstance,
+        options: IFederatedSearchOptions
+    ): Promise<IFederatedSearchResult[]> {
+        const apiUrl = `${instance.apiUrl}/api/resources/search`;
+        
+        logger.info(`Federated API search to ${instance.code}`, {
+            apiUrl,
+            query: options.query,
+            hasAuth: !!options.authHeader
+        });
+
+        // Build headers with optional auth
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'X-Federated-From': this.currentInstanceRealm,
+        };
+        
+        // Forward auth header if provided
+        if (options.authHeader) {
+            headers['Authorization'] = options.authHeader;
+        }
+
+        try {
+            const response = await federationAxios.post(apiUrl, {
+                query: options.query,
+                filters: {
+                    classifications: options.classification,
+                    countries: options.releasableTo,
+                    cois: options.coi,
+                    encrypted: options.encrypted,
+                },
+                pagination: {
+                    limit: options.limit || MAX_RESULTS_PER_INSTANCE,
+                },
+                // Don't include facets for federated sub-queries
+                includeFacets: false,
+            }, {
+                headers,
+            });
+
+            const results = response.data.results || [];
+            
+            // Transform to federated search result format
+            return results.map((doc: any) => ({
+                resourceId: doc.resourceId,
+                title: doc.title,
+                classification: doc.classification || 'UNCLASSIFIED',
+                releasabilityTo: doc.releasabilityTo || [],
+                COI: doc.COI || doc.coi || [],
+                encrypted: doc.encrypted || false,
+                creationDate: doc.creationDate,
+                displayMarking: doc.displayMarking,
+                originRealm: instance.code,
+                sourceInstance: instance.code,
+            }));
+
+        } catch (error) {
+            this.handleConnectionFailure(instance, error);
+            throw new Error(`API federation failed for ${instance.code}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Transform MongoDB document to FederatedSearchResult
+     */
+    private transformDocument(doc: any, sourceInstance: string): IFederatedSearchResult {
+        const ztdf = doc.ztdf;
+        
+        if (ztdf) {
+            return {
+                resourceId: doc.resourceId,
+                title: doc.title,
+                classification: ztdf.policy?.securityLabel?.classification || 'UNCLASSIFIED',
+                releasabilityTo: ztdf.policy?.securityLabel?.releasabilityTo || [],
+                COI: ztdf.policy?.securityLabel?.COI || [],
+                encrypted: true,
+                creationDate: ztdf.policy?.securityLabel?.creationDate,
+                displayMarking: ztdf.policy?.securityLabel?.displayMarking,
+                originRealm: doc.originRealm || sourceInstance,
+                sourceInstance
+            };
+        }
+
+        // Legacy format
+        return {
+            resourceId: doc.resourceId,
+            title: doc.title,
+            classification: doc.classification || 'UNCLASSIFIED',
+            releasabilityTo: doc.releasabilityTo || [],
+            COI: doc.COI || [],
+            encrypted: doc.encrypted || false,
+            creationDate: doc.creationDate,
+            originRealm: doc.originRealm || sourceInstance,
+            sourceInstance
+        };
+    }
+
+    /**
+     * Apply ABAC filtering based on user attributes
+     * 
+     * Note: Results from remote instances (via API) are NOT re-filtered here
+     * because the user already authenticated with the remote instance's ABAC.
+     * Only local MongoDB results need filtering.
+     */
+    private applyABACFilter(
+        results: IFederatedSearchResult[],
+        user: IUserAttributes
+    ): IFederatedSearchResult[] {
+        const userClearanceLevel = CLEARANCE_HIERARCHY[user.clearance] ?? 0;
+        const userCountry = user.countryOfAffiliation;
+        const userCOIs = user.acpCOI || [];
+
+        return results.filter(resource => {
+            // Skip ABAC filtering for results from remote instances (API-based federation)
+            // Those instances already authenticated and filtered for this user
+            if (resource.sourceInstance !== this.currentInstanceRealm) {
+                return true;
+            }
+
+            // Check clearance (local results only)
+            const resourceLevel = CLEARANCE_HIERARCHY[resource.classification] ?? 0;
+            if (userClearanceLevel < resourceLevel) {
+                return false;
+            }
+
+            // Check releasability (local results only)
+            if (!resource.releasabilityTo.includes(userCountry) &&
+                !resource.releasabilityTo.includes('NATO') &&
+                !resource.releasabilityTo.includes('FVEY')) {
+                return false;
+            }
+
+            // Check COI (if resource has COI requirement, local results only)
+            if (resource.COI && resource.COI.length > 0) {
+                const hasCOI = resource.COI.some(coi => userCOIs.includes(coi));
+                if (!hasCOI) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+    }
+
+    /**
+     * Deduplicate results, preferring local over federated
+     */
+    private deduplicateResults(results: IFederatedSearchResult[]): IFederatedSearchResult[] {
+        const seen = new Map<string, IFederatedSearchResult>();
+
+        for (const result of results) {
+            const existing = seen.get(result.resourceId);
+            if (!existing) {
+                seen.set(result.resourceId, result);
+            } else {
+                // Prefer local (current instance) over federated
+                const isCurrentLocal = result.sourceInstance === this.currentInstanceRealm;
+                const isExistingLocal = existing.sourceInstance === this.currentInstanceRealm;
+                
+                if (isCurrentLocal && !isExistingLocal) {
+                    seen.set(result.resourceId, result);
+                }
+            }
+        }
+
+        return Array.from(seen.values());
+    }
+
+    /**
+     * Get instance status
+     */
+    getInstanceStatus(): Record<string, any> {
+        const status: Record<string, any> = {};
+
+        for (const [key, instance] of this.instances) {
+            status[key] = {
+                code: instance.code,
+                name: instance.name,
+                type: instance.type,
+                enabled: instance.enabled,
+                connected: !!instance.connection,
+                lastConnected: instance.connection?.lastConnected,
+                circuitBreaker: instance.circuitBreaker
+            };
+        }
+
+        return status;
+    }
+
+    /**
+     * Get list of available instances
+     */
+    getAvailableInstances(): string[] {
+        return Array.from(this.instances.entries())
+            .filter(([, inst]) => inst.circuitBreaker.state !== 'open')
+            .map(([key]) => key);
+    }
+
+    /**
+     * Close all connections
+     */
+    async shutdown(): Promise<void> {
+        logger.info('Shutting down FederatedResourceService');
+
+        for (const [key, instance] of this.instances) {
+            if (instance.connection?.client) {
+                try {
+                    await instance.connection.client.close();
+                    logger.info(`Closed connection for ${key}`);
+                } catch (error) {
+                    logger.error(`Error closing connection for ${key}`, {
+                        error: error instanceof Error ? error.message : 'Unknown error'
+                    });
+                }
+            }
+        }
+
+        this.instances.clear();
+        this.initialized = false;
+    }
+}
+
+// Singleton instance
+export const federatedResourceService = new FederatedResourceService();
+export default federatedResourceService;
+

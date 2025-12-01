@@ -59,12 +59,37 @@ variable "create_test_users" {
 variable "federation_partners" {
   description = "Map of partner instances for IdP federation"
   type = map(object({
-    instance_code  = string
-    instance_name  = string
-    idp_url        = string
-    enabled        = bool
-    client_secret  = optional(string)
+    instance_code = string
+    instance_name = string
+    idp_url       = string
+    enabled       = bool
+    client_secret = optional(string)
   }))
   default = {}
+}
+
+# WebAuthn / Passkey Configuration
+variable "webauthn_rp_id" {
+  description = <<-EOT
+    WebAuthn Relying Party ID - the effective domain for passkey/WebAuthn credentials.
+    MUST match the parent domain of all subdomains (e.g., "dive25.com" for *.dive25.com).
+    
+    Per-instance defaults:
+    - USA/FRA/GBR: "dive25.com"
+    - DEU: "prosecurity.biz"
+    
+    An empty string ("") only works for localhost development and will cause
+    "Your device can't be used with this site" errors in production.
+  EOT
+  type        = string
+  default     = "" # Empty = use lookup in instance.tf
+}
+
+# Incoming Federation Secrets
+variable "incoming_federation_secrets" {
+  description = "Map of partner instance codes to their client secrets for incoming federation"
+  type        = map(string)
+  default     = {}
+  sensitive   = true
 }
 

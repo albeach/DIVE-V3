@@ -1,23 +1,115 @@
-/* Italy Custom Colors - Green, White, Red */
+/**
+ * Italy Keycloak Theme
+ * Auto-generated from instance.json
+ * Generated: 2025-12-01T01:00:00Z
+ * 
+ * Primary: #009246
+ * Secondary: #CE2B37
+ * Accent: #FFFFFF
+ */
 
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #009246;
+    --instance-secondary: #CE2B37;
+    --instance-accent: #FFFFFF;
+    --instance-primary-rgb: 0, 146, 70;
+    --instance-secondary-rgb: 206, 43, 55;
+}
+
+/* Background gradient */
 .dive-background {
     background: linear-gradient(135deg, #009246 0%, #CE2B37 100%);
 }
 
+/* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #009246 0%, #CE2B37 100%);
+    background: linear-gradient(135deg, #009246 0%, #006d34 100%);
+    transition: all 0.3s ease;
 }
 
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(0, 146, 70, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
 .dive-header h1 {
     color: #009246;
 }
 
+.dive-header .logo {
+    border-color: #009246;
+}
+
+/* Input focus states */
 .dive-input:focus {
     border-color: #009246;
-    box-shadow: 0 0 0 3px rgba(0, 146, 70, 0.1);
+    box-shadow: 0 0 0 3px rgba(0, 146, 70, 0.15);
 }
 
+/* Social/IdP link styling */
 .dive-social-link:hover {
     border-color: #009246;
+    background: rgba(0, 146, 70, 0.05);
 }
 
+.dive-social-link:focus {
+    border-color: #009246;
+    box-shadow: 0 0 0 3px rgba(0, 146, 70, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #009246;
+}
+
+.dive-link:hover {
+    color: #CE2B37;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #FFFFFF;
+}
+
+.dive-accent-bg {
+    background-color: #FFFFFF;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(0, 146, 70, 0.1);
+    border: 1px solid #009246;
+    color: #009246;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #009246;
+    background: rgba(0, 146, 70, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #009246;
+    box-shadow: 0 0 0 3px rgba(0, 146, 70, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #009246 0%, #CE2B37 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #009246;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #009246;
+}
+
+.dive-footer a:hover {
+    color: #CE2B37;
+}

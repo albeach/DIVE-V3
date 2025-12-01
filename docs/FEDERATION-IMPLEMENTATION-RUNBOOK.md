@@ -344,3 +344,6 @@ sync_themes deu
 - Registry Schema: `config/federation-registry.schema.json`
 - Project Conventions: `.cursorrules`
 
+
+
+

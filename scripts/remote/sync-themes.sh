@@ -77,3 +77,6 @@ else
     echo "  ssh_remote $INSTANCE 'docker logs dive-v3-keycloak-$INSTANCE --tail 50'"
 fi
 
+
+
+

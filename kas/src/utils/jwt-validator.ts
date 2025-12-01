@@ -91,14 +91,14 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 
     // Determine which realm to fetch JWKS from
     const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
-    
+
     // Try multiple JWKS URLs (Docker internal, HTTP external, HTTPS external)
     const jwksUris = [
         `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal
         `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External HTTP
         `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // External HTTPS
     ];
-    
+
     const jwksUri = jwksUris[0]; // Primary URI for logging
 
     kasLogger.debug('Getting signing key for token', {
@@ -125,7 +125,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
         // Fetch JWKS directly from Keycloak (try multiple URIs)
         let jwks: any = null;
         let lastError: Error | null = null;
-        
+
         for (const uri of jwksUris) {
             try {
                 const response = await axios.get(uri, { timeout: 5000 });
@@ -137,7 +137,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
                 kasLogger.debug('JWKS fetch failed, trying next URI', { uri, error: lastError.message });
             }
         }
-        
+
         if (!jwks) {
             throw new Error(`Failed to fetch JWKS from all URIs. Last error: ${lastError?.message}`);
         }

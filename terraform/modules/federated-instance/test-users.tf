@@ -24,8 +24,8 @@ locals {
   # NIST 800-63B Compliant Passwords (Phase 1 - Nov 27, 2025)
   # Admin: 26 chars, high entropy, rotated quarterly
   # Test users: 19 chars, memorable for demos, secure
-  admin_password     = "DivePilot2025!SecureAdmin"
-  pilot_password     = "TestUser2025!Pilot"
+  admin_password = "DivePilot2025!SecureAdmin"
+  pilot_password = "TestUser2025!Pilot"
 
   # Clearance levels mapped to numbers (1=lowest, 4=highest)
   clearance_levels = {

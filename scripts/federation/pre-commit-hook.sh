@@ -77,3 +77,6 @@ echo -e "${GREEN}✓✓✓ Pre-commit validation passed! ✓✓✓${NC}"
 echo ""
 exit 0
 
+
+
+

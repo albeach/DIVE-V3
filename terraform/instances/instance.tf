@@ -39,6 +39,19 @@ module "instance" {
   # Federation partners
   federation_partners = var.federation_partners
 
+  # Incoming federation secrets (for clients that other instances use to federate TO this instance)
+  incoming_federation_secrets = var.incoming_federation_secrets
+
+  # ============================================
+  # WEBAUTHN / PASSKEY CONFIGURATION - CRITICAL!
+  # ============================================
+  # The WebAuthn Relying Party ID MUST be set to the parent domain for production.
+  # Empty string ("") only works for localhost and causes "Your device can't be used 
+  # with this site" errors on subdomains like usa-idp.dive25.com.
+  #
+  # Priority: explicit variable > instance lookup > module default ("dive25.com")
+  webauthn_rp_id = var.webauthn_rp_id != "" ? var.webauthn_rp_id : lookup(local.instance_rp_ids, upper(terraform.workspace), "dive25.com")
+
   # ============================================
   # MFA FLOW BINDING - CRITICAL FOR SECURITY
   # ============================================
@@ -93,7 +106,7 @@ module "mfa" {
   enable_direct_grant_mfa = false
 }
 
-# Instance name lookup
+# Instance configuration lookups
 locals {
   instance_names = {
     "USA"      = "United States"
@@ -119,6 +132,26 @@ locals {
     "NLD"      = "dive-v3-nld"
     "POL"      = "dive-v3-pol"
     "INDUSTRY" = "dive-v3-industry"
+  }
+
+  # WebAuthn Relying Party IDs per instance
+  # CRITICAL: Must be the parent domain of the IdP subdomain
+  # e.g., "dive25.com" works for usa-idp.dive25.com, fra-idp.dive25.com, etc.
+  # e.g., "prosecurity.biz" works for deu-idp.prosecurity.biz
+  #
+  # Reference: https://www.keycloak.org/docs/latest/server_admin/#webauthn_server_administration_guide
+  # "The ID must be the origin's effective domain"
+  instance_rp_ids = {
+    "USA"      = "dive25.com"
+    "FRA"      = "dive25.com"
+    "GBR"      = "dive25.com"
+    "DEU"      = "prosecurity.biz"
+    "CAN"      = "dive25.com"
+    "ITA"      = "dive25.com"
+    "ESP"      = "dive25.com"
+    "NLD"      = "dive25.com"
+    "POL"      = "dive25.com"
+    "INDUSTRY" = "dive25.com"
   }
 }
 

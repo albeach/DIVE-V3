@@ -44,8 +44,8 @@ resource "keycloak_realm" "dive_v3_broker" {
 
   # Broker realm sessions: Extended to align with NextAuth database sessions
   # MFA is still enforced via authentication flow, but sessions can persist
-  sso_session_idle_timeout = "2h"  # SSO idle: 2 hours (aligned with NextAuth)
-  sso_session_max_lifespan = "8h"  # Max session: 8 hours
+  sso_session_idle_timeout = "2h" # SSO idle: 2 hours (aligned with NextAuth)
+  sso_session_max_lifespan = "8h" # Max session: 8 hours
 
   offline_session_idle_timeout = "720h"  # Offline token (30 days - for refresh)
   offline_session_max_lifespan = "1440h" # Offline max (60 days)

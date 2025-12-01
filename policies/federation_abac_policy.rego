@@ -248,6 +248,13 @@ has_federation_agreement if {
 }
 
 has_federation_agreement if {
+	# Same country access - always OK (no federation needed)
+	user_country := input.subject.countryOfAffiliation
+	origin := input.resource.originRealm
+	user_country == origin
+}
+
+has_federation_agreement if {
 	user_country := input.subject.countryOfAffiliation
 	origin := input.resource.originRealm
 	origin  # Must have origin realm

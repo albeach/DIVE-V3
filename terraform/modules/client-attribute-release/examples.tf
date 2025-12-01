@@ -42,3 +42,6 @@ output "attribute_release_config" {
   value       = module.client_attribute_release.client_scopes
 }
 
+
+
+

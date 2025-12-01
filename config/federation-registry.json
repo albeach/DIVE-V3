@@ -149,13 +149,14 @@
         "curl",
         "-kfsI",
         "--max-time",
-        "5",
+        "10",
         "https://localhost:3000/"
       ],
       "interval": "30s",
       "timeout": "15s",
       "retries": 10,
-      "startPeriod": "120s"
+      "startPeriod": "120s",
+      "_note": "P0 Fix (Dec 2025): max-time increased from 5s to 10s to prevent false unhealthy due to slow SSR"
     },
     "kas": {
       "test": [

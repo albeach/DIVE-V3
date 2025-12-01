@@ -38,7 +38,7 @@ const nextConfig: NextConfig = {
         // Proxy Keycloak endpoints for autodiscovery and OIDC flows
         // This allows external clients to discover IdP metadata
         const keycloakUrl = process.env.KEYCLOAK_URL || 'https://keycloak:8443';
-        
+
         return [
             {
                 // OIDC discovery endpoints

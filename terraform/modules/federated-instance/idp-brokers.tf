@@ -15,14 +15,14 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   enabled      = each.value.enabled
 
   # Provider settings
-  provider_id           = "oidc"
-  authorization_url     = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/auth"
-  token_url            = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/token"
-  user_info_url        = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/userinfo"
-  jwks_url             = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/certs"
-  logout_url           = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/logout"
-  issuer               = "${each.value.idp_url}/realms/dive-v3-broker"
-  
+  provider_id       = "oidc"
+  authorization_url = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/auth"
+  token_url         = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/token"
+  user_info_url     = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/userinfo"
+  jwks_url          = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/certs"
+  logout_url        = "${each.value.idp_url}/realms/dive-v3-broker/protocol/openid-connect/logout"
+  issuer            = "${each.value.idp_url}/realms/dive-v3-broker"
+
   # Client credentials (these would be created in the partner's Keycloak)
   # NOTE: client_secret is a placeholder until sync-federation-secrets.sh runs post-Terraform
   # The chicken-and-egg problem: Partner creates the client, we need their secret
@@ -30,19 +30,19 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   client_secret = each.value.client_secret
 
   # OIDC settings
-  validate_signature   = true
-  default_scopes       = "openid profile email"
-  
+  validate_signature = true
+  default_scopes     = "openid profile email"
+
   # Sync settings
-  sync_mode           = "FORCE"
-  trust_email         = true
-  
+  sync_mode   = "FORCE"
+  trust_email = true
+
   # Store tokens for later use
-  store_token         = true
-  
+  store_token = true
+
   # UI settings
-  gui_order           = lookup(local.federation_order, each.value.instance_code, 99)
-  hide_on_login_page  = false
+  gui_order          = lookup(local.federation_order, each.value.instance_code, 99)
+  hide_on_login_page = false
 
   # Extra config for attribute mapping
   extra_config = {
@@ -64,9 +64,9 @@ resource "keycloak_custom_identity_provider_mapper" "clearance_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"               = "clearance"
-    "user.attribute"      = "clearance"
-    "syncMode"           = "FORCE"
+    "claim"          = "clearance"
+    "user.attribute" = "clearance"
+    "syncMode"       = "FORCE"
   }
 }
 
@@ -79,9 +79,9 @@ resource "keycloak_custom_identity_provider_mapper" "country_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"               = "countryOfAffiliation"
-    "user.attribute"      = "countryOfAffiliation"
-    "syncMode"           = "FORCE"
+    "claim"          = "countryOfAffiliation"
+    "user.attribute" = "countryOfAffiliation"
+    "syncMode"       = "FORCE"
   }
 }
 
@@ -94,9 +94,9 @@ resource "keycloak_custom_identity_provider_mapper" "unique_id_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"               = "uniqueID"
-    "user.attribute"      = "uniqueID"
-    "syncMode"           = "FORCE"
+    "claim"          = "uniqueID"
+    "user.attribute" = "uniqueID"
+    "syncMode"       = "FORCE"
   }
 }
 
@@ -109,9 +109,9 @@ resource "keycloak_custom_identity_provider_mapper" "coi_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"               = "acpCOI"
-    "user.attribute"      = "acpCOI"
-    "syncMode"           = "FORCE"
+    "claim"          = "acpCOI"
+    "user.attribute" = "acpCOI"
+    "syncMode"       = "FORCE"
   }
 }
 
@@ -124,9 +124,9 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"               = "organization"
-    "user.attribute"      = "organization"
-    "syncMode"           = "FORCE"
+    "claim"          = "organization"
+    "user.attribute" = "organization"
+    "syncMode"       = "FORCE"
   }
 }
 

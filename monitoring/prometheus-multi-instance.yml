@@ -271,3 +271,6 @@ scrape_configs:
 #       - record: dive_v3:errors:rate5m
 #         expr: sum by (instance) (rate(dive_v3_http_requests_total{status=~"5.."}[5m])) / sum by (instance) (rate(dive_v3_http_requests_total[5m]))
 
+
+
+

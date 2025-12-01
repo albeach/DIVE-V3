@@ -196,13 +196,18 @@ interface IInstanceConfig {
         host: string;
         domain: string;
     };
-    urls: {
+    urls?: {
         app: string;
         api: string;
         idp: string;
     };
-    ports: {
-        mongodb: number;
+    services: {
+        mongodb: {
+            name: string;
+            containerName: string;
+            internalPort: number;
+            externalPort: number;
+        };
     };
     mongodb: {
         database: string;
@@ -448,7 +453,7 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
     const isDocker = process.env.CONTAINER === 'docker' || process.env.HOSTNAME?.startsWith('dive-v3');
     const defaultHost = isDocker ? 'mongo' : 'localhost';
     const host = config.type === 'remote' ? config.deployment.host : defaultHost;
-    const port = config.ports.mongodb;
+    const port = config.services.mongodb.externalPort;
     const database = config.mongodb.database;
     const user = config.mongodb.user;
     
@@ -1199,7 +1204,7 @@ async function seedInstance(
     const kasServers = getKASServersForInstance(kasRegistry, instanceCode);
 
     console.log(`\n🌱 Seeding ${instanceCode} (${config.name})`);
-    console.log(`   MongoDB: ${config.mongodb.database} @ port ${config.ports.mongodb}`);
+    console.log(`   MongoDB: ${config.mongodb.database} @ port ${config.services.mongodb.externalPort}`);
     console.log(`   Secrets: ${gcpAvailable ? '🔐 GCP Secret Manager' : '📁 Environment Variables'}`);
     console.log(`   KAS Servers: ${kasServers.map(k => k.kasId).join(', ')}`);
     console.log(`   Documents: ${options.count}`);
@@ -1257,7 +1262,7 @@ async function seedInstance(
             distribution,
             seedBatchId,
             duration_ms: Date.now() - startTime,
-            mongodbUri: `mongodb://***@localhost:${config.ports.mongodb}/${config.mongodb.database}`
+            mongodbUri: `mongodb://***@localhost:${config.services.mongodb.externalPort}/${config.mongodb.database}`
         };
     }
 
@@ -1428,7 +1433,7 @@ async function seedInstance(
             distribution,
             seedBatchId,
             duration_ms: duration,
-            mongodbUri: `mongodb://***@localhost:${config.ports.mongodb}/${config.mongodb.database}`
+            mongodbUri: `mongodb://***@localhost:${config.services.mongodb.externalPort}/${config.mongodb.database}`
         };
 
         // Save manifest

@@ -219,9 +219,23 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     // Default to KEYCLOAK_REALM (dive-v3-broker), but support multi-realm
     const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
 
+    // Phase 3B: Extract full issuer URL from token for federated JWKS fetching
+    let tokenIssuer: string | null = null;
+    if (token) {
+        try {
+            const decoded = jwt.decode(token, { complete: true });
+            tokenIssuer = (decoded?.payload as any)?.iss;
+        } catch {
+            // Ignore decoding errors
+        }
+    }
+
     // FIX: Try both internal (Docker) and external (localhost) URLs for JWKS
     // HTTPS Support: Also try HTTPS port 8443 (production setup)
+    // Phase 3B: Also try the token's issuer JWKS endpoint for federated tokens
     const jwksUris = [
+        // If token has a different issuer (federated token), try its JWKS first
+        ...(tokenIssuer ? [`${tokenIssuer}/protocol/openid-connect/certs`] : []),
         `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal: http://keycloak:8080
         `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External HTTP: http://localhost:8081
         `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // External HTTPS: https://localhost:8443
@@ -372,8 +386,8 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Keycloak 26 Fix: Also accept localhost:8080 (frontend container accessing Keycloak)
         // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
         // Custom Domain: Accept kas.js.usa.divedeeper.internal:8443 (KC_HOSTNAME)
-            // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
-            // USA IdP Domain: Accept usa-idp.dive25.com (Nov 29, 2025)
+        // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
+        // USA IdP Domain: Accept usa-idp.dive25.com (Nov 29, 2025)
         const validIssuers: [string, ...string[]] = [
             // Legacy pilot realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Internal: dive-v3-broker
@@ -384,6 +398,12 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'https://dev-auth.dive25.com/realms/dive-v3-broker',    // Cloudflare Tunnel: dive-v3-broker
             'https://usa-idp.dive25.com:8443/realms/dive-v3-broker', // USA IdP domain with port: dive-v3-broker
             'https://usa-idp.dive25.com/realms/dive-v3-broker',      // USA IdP domain via Cloudflare (no port)
+
+            // Phase 3B: Federation Partner IdPs (Cloudflare Tunnel domains)
+            // These are required for cross-instance federated search
+            'https://fra-idp.dive25.com/realms/dive-v3-broker',      // FRA IdP domain via Cloudflare
+            'https://gbr-idp.dive25.com/realms/dive-v3-broker',      // GBR IdP domain via Cloudflare
+            'https://deu-idp.prosecurity.biz/realms/dive-v3-broker', // DEU IdP domain via Cloudflare
 
             // Main broker realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
@@ -736,7 +756,7 @@ const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
 
         // Create error with circuit breaker info for upstream handling
         const serviceError = new Error(
-            isCircuitOpen 
+            isCircuitOpen
                 ? `Authorization service circuit breaker OPEN - retry in ${Math.ceil(retryAfter / 1000)}s`
                 : 'Authorization service unavailable'
         );
@@ -812,7 +832,7 @@ const getUserFriendlyDenialMessage = (
 
     if (opaReason.includes('Insufficient AAL') || opaReason.includes('AAL2 claimed but')) {
         const requiredAAL = resourceInfo.classification === 'UNCLASSIFIED' ? 'AAL1' :
-                           resourceInfo.classification === 'TOP_SECRET' ? 'AAL3' : 'AAL2';
+            resourceInfo.classification === 'TOP_SECRET' ? 'AAL3' : 'AAL2';
         return {
             message: 'Multi-factor authentication required',
             guidance: `This ${resourceInfo.classification} resource requires ${requiredAAL} authentication. Please enroll in multi-factor authentication through your account settings.`
@@ -914,7 +934,7 @@ export const authenticateJWT = async (
 
         // Extract user attributes
         const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
-        
+
         // Check if user's tokens are revoked
         if (await areUserTokensRevoked(uniqueID)) {
             logger.warn('User tokens revoked', {
@@ -988,7 +1008,7 @@ export const authenticateJWT = async (
             preferred_username: decodedToken.preferred_username,
             // Store original AMR and ACR values (for tests and debugging)
             amr: normalizedAMR,  // Already normalized to array
-            acr: decodedToken.acr !== undefined && decodedToken.acr !== null 
+            acr: decodedToken.acr !== undefined && decodedToken.acr !== null
                 ? String(decodedToken.acr)  // Store original as string
                 : undefined,
             // Store normalized values for internal AAL checking
@@ -1084,7 +1104,7 @@ export const authzMiddleware = async (
         // Try user token first
         let decodedToken: IKeycloakToken | null = null;
         let isSPToken = false;
-        
+
         try {
             decodedToken = await verifyToken(token);
         } catch (userTokenError) {
@@ -1093,13 +1113,13 @@ export const authzMiddleware = async (
                 requestId,
                 error: userTokenError instanceof Error ? userTokenError.message : 'Unknown error'
             });
-            
+
             const spContext = await validateSPToken(token);
             if (spContext) {
                 // SP token is valid
                 (req as IRequestWithSP).sp = spContext;
                 isSPToken = true;
-                
+
                 logger.info('Using SP token for authorization', {
                     requestId,
                     clientId: spContext.clientId,
@@ -1129,7 +1149,7 @@ export const authzMiddleware = async (
         // ============================================
         // Step 1.5: Check Token Revocation (Gap #7)
         // ============================================
-        
+
         // Skip revocation check for SP tokens (they manage their own revocation)
         if (!isSPToken && decodedToken) {
             // Check if token has been blacklisted (logout or manual revocation)
@@ -1161,7 +1181,7 @@ export const authzMiddleware = async (
         // Handle SP tokens differently - they don't have user attributes
         if (isSPToken) {
             const spContext = (req as IRequestWithSP).sp!;
-            
+
             // Check if SP has resource:read scope
             if (!spContext.scopes.includes('resource:read')) {
                 res.status(403).json({
@@ -1174,19 +1194,19 @@ export const authzMiddleware = async (
                 });
                 return;
             }
-            
+
             // For SP tokens, we'll do simplified authorization based on federation agreements
             // The actual resource access will be checked against SP's allowed classifications and countries
             // Continue to resource fetch to check releasability
-            
+
         }
 
         // User token flow - extract user attributes
         const tokenData = (req as any).enrichedUser || decodedToken;
         const wasEnriched = (req as any).wasEnriched || false;
 
-        const uniqueID = isSPToken ? 
-            `sp:${(req as IRequestWithSP).sp!.clientId}` : 
+        const uniqueID = isSPToken ?
+            `sp:${(req as IRequestWithSP).sp!.clientId}` :
             (tokenData?.uniqueID || tokenData?.preferred_username || tokenData?.sub);
 
         // Check if all user tokens are revoked (global logout)
@@ -1272,7 +1292,7 @@ export const authzMiddleware = async (
         // ============================================
         if (isSPToken) {
             const spContext = (req as IRequestWithSP).sp!;
-            
+
             // Extract resource metadata
             const isZTDF = resource && 'ztdf' in resource;
             const classification = isZTDF
@@ -1285,7 +1305,7 @@ export const authzMiddleware = async (
             // const COI = isZTDF
             //     ? (resource.ztdf.policy.securityLabel.COI || [])
             //     : ((resource as any).COI || []);
-                
+
             // Check releasability to SP's country
             if (!releasabilityTo.includes(spContext.sp.country)) {
                 logger.warn('SP access denied - releasability', {
@@ -1294,7 +1314,7 @@ export const authzMiddleware = async (
                     country: spContext.sp.country,
                     releasabilityTo
                 });
-                
+
                 res.status(403).json({
                     error: 'Forbidden',
                     message: 'Resource not releasable to your country',
@@ -1309,14 +1329,14 @@ export const authzMiddleware = async (
                 });
                 return;
             }
-            
+
             // Check classification agreements
             const activeAgreements = spContext.sp.federationAgreements
                 .filter(agreement => agreement.validUntil > new Date());
-            
+
             const allowedClassifications = activeAgreements
                 .flatMap(agreement => agreement.classifications);
-                
+
             if (!allowedClassifications.includes(classification)) {
                 logger.warn('SP access denied - classification', {
                     requestId,
@@ -1324,7 +1344,7 @@ export const authzMiddleware = async (
                     classification,
                     allowedClassifications
                 });
-                
+
                 res.status(403).json({
                     error: 'Forbidden',
                     message: 'Classification not covered by federation agreement',
@@ -1339,7 +1359,7 @@ export const authzMiddleware = async (
                 });
                 return;
             }
-            
+
             // Log SP access decision
             const latencyMs = Date.now() - startTime;
             logger.info('SP authorization granted', {
@@ -1350,7 +1370,7 @@ export const authzMiddleware = async (
                 classification,
                 latency_ms: latencyMs
             });
-            
+
             // Attach SP context and continue to resource handler
             (req as any).authzDecision = {
                 allow: true,
@@ -1359,7 +1379,7 @@ export const authzMiddleware = async (
                 spId: spContext.sp.spId,
                 country: spContext.sp.country
             };
-            
+
             next();
             return;
         }
@@ -1492,7 +1512,7 @@ export const authzMiddleware = async (
             const errorMsg = 'Missing decoded token for AAL validation';
             logger.error(errorMsg, { requestId, resourceId });
             logDecision(requestId, uniqueID, resourceId, false, errorMsg, latencyMs);
-            
+
             res.status(401).json({
                 error: 'Unauthorized',
                 message: 'Invalid or missing authentication token'
@@ -1512,7 +1532,7 @@ export const authzMiddleware = async (
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : 'AAL validation failed';
             const latencyMs = Date.now() - startTime;
-            
+
             logger.warn('AAL validation failed', {
                 requestId,
                 classification,
@@ -1522,16 +1542,16 @@ export const authzMiddleware = async (
                 uniqueID,
                 latencyMs
             });
-            
+
             // Log denial decision for audit trail
             logDecision(requestId, uniqueID, resourceId, false, errorMsg, latencyMs);
-            
+
             res.status(403).json({
                 error: 'Forbidden',
                 message: errorMsg,
                 details: {
-                    required_aal: classification === 'UNCLASSIFIED' ? 'AAL1' : 
-                                  classification === 'TOP_SECRET' ? 'AAL3' : 'AAL2',
+                    required_aal: classification === 'UNCLASSIFIED' ? 'AAL1' :
+                        classification === 'TOP_SECRET' ? 'AAL3' : 'AAL2',
                     user_aal: `AAL${normalizeACR(decodedToken?.acr) + 1}`,
                     user_acr: decodedToken?.acr || 'missing',
                     user_amr: decodedToken?.amr || [],
@@ -1653,7 +1673,7 @@ export const authzMiddleware = async (
 
             res.status(503).json({
                 error: 'Service Unavailable',
-                message: isCircuitOpen 
+                message: isCircuitOpen
                     ? 'Authorization service temporarily unavailable (circuit breaker open)'
                     : 'Authorization service temporarily unavailable',
                 details: {

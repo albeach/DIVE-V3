@@ -295,3 +295,6 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
   }
 }
 
+
+
+

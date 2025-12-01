@@ -356,3 +356,6 @@ Generate `.env.{instance}` files from federation-registry.json.
 - Terraform: `terraform/modules/federated-instance/`
 - Sync Script: `scripts/sync-federation-secrets.sh`
 
+
+
+

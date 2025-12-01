@@ -68,14 +68,118 @@ dive-v3/
 - **Interfaces**: PascalCase with `I` prefix (`IOPAInput`, `IResourceMetadata`)
 
 ### Environment Variables
-All sensitive data in `.env.local`:
-- Database connections (MongoDB, PostgreSQL)
-- Keycloak client secrets
-- JWT signing keys
-- OPA auth tokens
-- KAS endpoints
+All sensitive data must be stored in **GCP Secret Manager** - NOT in `.env.local` or hardcoded!
 
-Never commit `.env.local` or `.env.production` to Git.
+Never commit secrets to Git - use GCP Secret Manager for ALL environments.
+
+## 🔐 SECRETS MANAGEMENT - CRITICAL SECURITY REQUIREMENT
+
+### ABSOLUTE RULE: NO HARDCODED SECRETS
+**NEVER hardcode passwords, API keys, tokens, or any sensitive values in:**
+- ❌ TypeScript/JavaScript files (`.ts`, `.js`, `.tsx`)
+- ❌ Docker Compose files (`docker-compose*.yml`)
+- ❌ Configuration files (`.json`, `.yaml`)
+- ❌ Shell scripts (`.sh`)
+- ❌ Environment files (`.env*`)
+
+### GCP Secret Manager Integration
+ALL secrets MUST be stored in Google Cloud Secret Manager:
+
+**Project:** `dive25`
+**Naming Convention:** `dive-v3-<type>-<instance>`
+
+**Required Secrets:**
+| Secret Name | Description |
+|------------|-------------|
+| `dive-v3-mongodb-usa` | USA MongoDB root password |
+| `dive-v3-mongodb-fra` | FRA MongoDB root password |
+| `dive-v3-mongodb-gbr` | GBR MongoDB root password |
+| `dive-v3-mongodb-deu` | DEU MongoDB root password |
+| `dive-v3-keycloak-usa` | USA Keycloak admin password |
+| `dive-v3-keycloak-fra` | FRA Keycloak admin password |
+| `dive-v3-keycloak-gbr` | GBR Keycloak admin password |
+| `dive-v3-keycloak-deu` | DEU Keycloak admin password |
+| `dive-v3-postgres-usa` | USA PostgreSQL password |
+| `dive-v3-postgres-fra` | FRA PostgreSQL password |
+| `dive-v3-postgres-gbr` | GBR PostgreSQL password |
+| `dive-v3-postgres-deu` | DEU PostgreSQL password |
+| `dive-v3-redis-blacklist` | Shared blacklist Redis password |
+| `dive-v3-grafana` | Grafana admin password |
+| `dive-v3-auth-secret-usa` | USA NextAuth secret |
+| `dive-v3-auth-secret-fra` | FRA NextAuth secret |
+| `dive-v3-auth-secret-gbr` | GBR NextAuth secret |
+| `dive-v3-auth-secret-deu` | DEU NextAuth secret |
+| `dive-v3-keycloak-client-secret` | Keycloak client secret |
+| `dive-v3-kas-signing-key` | KAS JWT signing key |
+| `dive-v3-federation-<src>-<tgt>` | Federation secrets (12 bidirectional) |
+
+### How to Use GCP Secrets in Code
+```typescript
+// ✅ CORRECT: Use the GCP secrets utility
+import { getMongoDBPassword, getKeycloakPassword, getSecret } from '../utils/gcp-secrets';
+
+const mongoPassword = await getMongoDBPassword('USA');
+const keycloakPassword = await getKeycloakPassword('USA');
+const authSecret = await getSecret('auth-secret', 'USA');
+
+// ❌ WRONG: Never hardcode secrets
+const password = 'DivePilot2025!'; // FORBIDDEN!
+const mongoUrl = 'mongodb://admin:password@mongo:27017'; // FORBIDDEN!
+```
+
+### How to Use GCP Secrets in Docker Compose
+```yaml
+# ✅ CORRECT: Reference environment variables (loaded from GCP at runtime)
+environment:
+  MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongo:27017?authSource=admin
+  KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+  AUTH_SECRET: ${AUTH_SECRET}
+
+# ❌ WRONG: Never hardcode in docker-compose
+environment:
+  MONGODB_URL: mongodb://admin:DivePilot2025!@mongo:27017  # FORBIDDEN!
+  KEYCLOAK_ADMIN_PASSWORD: DivePilot2025!SecureAdmin       # FORBIDDEN!
+```
+
+### Setting Up GCP Secrets
+```bash
+# Create a new secret
+gcloud secrets create dive-v3-mongodb-usa --project=dive25
+
+# Add secret value
+echo -n "your-secure-password" | gcloud secrets versions add dive-v3-mongodb-usa --data-file=-
+
+# Verify secret exists
+gcloud secrets versions access latest --secret=dive-v3-mongodb-usa --project=dive25
+
+# List all DIVE secrets
+gcloud secrets list --project=dive25 --filter="name:dive-v3"
+```
+
+### Environment Variables for GCP Integration
+```bash
+# Enable GCP secrets in the application
+USE_GCP_SECRETS=true
+GCP_PROJECT_ID=dive25
+
+# Ensure gcloud is authenticated
+gcloud auth application-default login
+```
+
+### Fallback Behavior (Development Only)
+The `gcp-secrets.ts` utility will:
+1. First try GCP Secret Manager
+2. Fall back to environment variables if GCP fails
+3. Log a warning if using default passwords (NOT FOR PRODUCTION)
+
+### Creating New Secrets Checklist
+When adding a new service that needs secrets:
+1. [ ] Create secret in GCP: `gcloud secrets create dive-v3-<name> --project=dive25`
+2. [ ] Add initial value: `echo -n "value" | gcloud secrets versions add dive-v3-<name> --data-file=-`
+3. [ ] Update `backend/src/utils/gcp-secrets.ts` with getter function
+4. [ ] Update docker-compose to use `${VAR_NAME}` syntax
+5. [ ] Document in this section
+6. [ ] NEVER commit the actual secret value anywhere
 
 ### Security Requirements
 
@@ -348,6 +452,11 @@ docker-compose down -v && ./scripts/dev-start.sh
 6. ❌ Don't mix SAML and OIDC claim names - normalize in Keycloak mappers
 7. ❌ Don't allow empty `releasabilityTo` - empty means deny all
 8. ❌ Don't skip clock skew tolerance - use ±5 minutes for embargo checks
+9. ❌ **NEVER hardcode secrets** - Use GCP Secret Manager for ALL passwords, keys, tokens
+10. ❌ **NEVER use default passwords** like 'admin', 'password', 'secret' in any file
+11. ❌ **NEVER commit .env files** with real secrets to Git
+12. ❌ **NEVER use string literals** for passwords in TypeScript/JavaScript
+13. ❌ **NEVER inline credentials** in MongoDB/PostgreSQL connection strings
 
 ### Keycloak Specific
 - **Realm**: `dive-v3-broker`

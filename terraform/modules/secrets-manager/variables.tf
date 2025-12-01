@@ -12,7 +12,7 @@ variable "instances" {
   description = "Map of DIVE V3 instances"
   type = map(object({
     name    = string
-    type    = string  # "local" or "remote"
+    type    = string # "local" or "remote"
     idp_url = string
   }))
   default = {
