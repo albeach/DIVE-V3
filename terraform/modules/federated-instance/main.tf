@@ -10,6 +10,13 @@ resource "keycloak_realm" "broker" {
   display_name      = "DIVE V3 - ${var.instance_name}"
   display_name_html = "<div class='kc-logo-text'><span>DIVE V3 - ${var.instance_name}</span></div>"
 
+  # Phase 3B FIX: Frontend URL ensures consistent issuer regardless of access method
+  # This prevents token refresh failures when internal Docker access uses different port
+  # than external Cloudflare tunnel access (e.g., keycloak:8443 vs usa-idp.dive25.com)
+  attributes = {
+    frontendUrl = var.idp_url
+  }
+
   # Login settings
   login_theme              = var.login_theme
   registration_allowed     = false
@@ -33,14 +40,14 @@ resource "keycloak_realm" "broker" {
   # - Password history to prevent reuse
   # - Cannot contain username or email
   password_policy = join(" and ", [
-    "length(16)",           # Minimum 16 characters
-    "upperCase(1)",         # At least 1 uppercase
-    "lowerCase(1)",         # At least 1 lowercase
-    "digits(1)",            # At least 1 digit
-    "specialChars(1)",      # At least 1 special char
-    "notUsername()",        # Cannot contain username
-    "notEmail()",           # Cannot contain email
-    "passwordHistory(5)",   # Cannot reuse last 5 passwords
+    "length(16)",         # Minimum 16 characters
+    "upperCase(1)",       # At least 1 uppercase
+    "lowerCase(1)",       # At least 1 lowercase
+    "digits(1)",          # At least 1 digit
+    "specialChars(1)",    # At least 1 special char
+    "notUsername()",      # Cannot contain username
+    "notEmail()",         # Cannot contain email
+    "passwordHistory(5)", # Cannot reuse last 5 passwords
   ])
 
   # Internationalization
@@ -74,15 +81,23 @@ resource "keycloak_realm" "broker" {
   # ============================================================================
   # Used for standard 2FA with hardware keys or platform authenticators
   # Allows platform (TouchID, FaceID, Windows Hello) and cross-platform (YubiKey)
+  #
+  # CRITICAL: relying_party_id MUST be set to the parent domain (e.g., "dive25.com")
+  # for production. Empty string ("") only works for localhost and will cause
+  # "Your device can't be used with this site" errors on subdomains like
+  # usa-idp.dive25.com, fra-idp.dive25.com, etc.
+  #
+  # Reference: https://www.keycloak.org/docs/latest/server_admin/#webauthn_server_administration_guide
+  # "The ID must be the origin's effective domain"
   web_authn_policy {
-    relying_party_entity_name         = "DIVE V3 Coalition - ${var.instance_name}"
-    relying_party_id                  = "" # Use default (hostname)
+    relying_party_entity_name         = "DIVE V3 Coalition Platform"
+    relying_party_id                  = var.webauthn_rp_id # MUST be "dive25.com" for *.dive25.com
     signature_algorithms              = ["ES256", "RS256"]
-    attestation_conveyance_preference = "direct"  # Full attestation for audit
-    authenticator_attachment          = "not specified"  # Allows all types (platform, cross-platform, hybrid/QR)
-    require_resident_key              = "No"      # Server-side credential storage OK
+    attestation_conveyance_preference = "direct"        # Full attestation for audit
+    authenticator_attachment          = "not specified" # Allows all types (platform, cross-platform, hybrid/QR)
+    require_resident_key              = "No"            # Server-side credential storage OK
     user_verification_requirement     = "preferred"
-    create_timeout                    = 60        # 60 seconds to complete
+    create_timeout                    = 60 # 60 seconds to complete
     avoid_same_authenticator_register = false
   }
 
@@ -93,6 +108,7 @@ resource "keycloak_realm" "broker" {
   # Allows: Hardware keys (YubiKey), Platform (TouchID), AND QR code/Hybrid flow
   # 
   # Key Settings:
+  # - relying_party_id = var.webauthn_rp_id → Parent domain for all subdomains
   # - authenticator_attachment = "" (not specified) → Allows ALL types including QR code
   # - require_resident_key = "Yes" → Discoverable credential (passkey requirement)
   # - user_verification_requirement = "required" → Biometric/PIN required
@@ -103,14 +119,14 @@ resource "keycloak_realm" "broker" {
   # - QR code flow uses phone's secure enclave (hardware-backed)
   # - User verification ensures biometric/PIN is required
   web_authn_passwordless_policy {
-    relying_party_entity_name         = "DIVE V3 Coalition - AAL3 - ${var.instance_name}"
-    relying_party_id                  = "" # Use default (hostname)
+    relying_party_entity_name         = "DIVE V3 Coalition Platform"
+    relying_party_id                  = var.webauthn_rp_id # MUST be "dive25.com" for *.dive25.com
     signature_algorithms              = ["ES256", "RS256"]
-    attestation_conveyance_preference = "direct"   # Full attestation for audit
-    authenticator_attachment          = "not specified"  # Allows ALL types (platform, cross-platform, hybrid/QR)
-    require_resident_key              = "Yes"      # Discoverable credential (AAL3)
-    user_verification_requirement     = "required" # Biometric/PIN required (AAL3)
-    create_timeout                    = 120        # 2 minutes for QR code flow
+    attestation_conveyance_preference = "direct"        # Full attestation for audit
+    authenticator_attachment          = "not specified" # Allows ALL types (platform, cross-platform, hybrid/QR)
+    require_resident_key              = "Yes"           # Discoverable credential (AAL3)
+    user_verification_requirement     = "required"      # Biometric/PIN required (AAL3)
+    create_timeout                    = 120             # 2 minutes for QR code flow
     avoid_same_authenticator_register = false
   }
 }
@@ -277,6 +293,11 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "organization_type" {
 # ============================================================================
 # Create clients for partner instances to federate TO this instance
 # When USA wants to federate to FRA, FRA needs a client called "dive-v3-usa-federation"
+#
+# CLIENT SECRET MANAGEMENT:
+# The client_secret is sourced from GCP Secret Manager via incoming_federation_secrets variable.
+# GCP naming: dive-v3-federation-{this_instance}-{partner}
+# Example: FRA creates "dive-v3-usa-federation" client, uses dive-v3-federation-fra-usa
 
 resource "keycloak_openid_client" "incoming_federation" {
   for_each = var.federation_partners
@@ -293,6 +314,11 @@ resource "keycloak_openid_client" "incoming_federation" {
   direct_access_grants_enabled = false
   service_accounts_enabled     = false
 
+  # CLIENT SECRET from GCP Secret Manager
+  # Use the secret from incoming_federation_secrets if provided, otherwise let Keycloak generate
+  # GCP secret name: dive-v3-federation-{this_instance}-{partner}
+  client_secret = lookup(var.incoming_federation_secrets, each.key, null)
+
   # URLs - redirect back to the partner's Keycloak
   valid_redirect_uris = [
     "${each.value.idp_url}/realms/dive-v3-broker/broker/${lower(var.instance_code)}-federation/endpoint",
@@ -304,6 +330,16 @@ resource "keycloak_openid_client" "incoming_federation" {
 
   # Token settings
   access_token_lifespan = "300" # 5 minutes for federation tokens
+
+  # Lifecycle: ignore changes to client_secret if managed externally
+  # This prevents Terraform from overwriting secrets set via sync scripts
+  lifecycle {
+    ignore_changes = [
+      # Only ignore if you want sync scripts to manage secrets post-Terraform
+      # Comment out to have Terraform fully manage secrets
+      # client_secret,
+    ]
+  }
 }
 
 # Protocol mappers for incoming federation clients

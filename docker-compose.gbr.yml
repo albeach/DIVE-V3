@@ -60,7 +60,9 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
-      KC_LOG_LEVEL: info
+      # Debug logging for authentication flow troubleshooting (AAL/MFA enforcement)
+      # Categories: authentication (flow execution), events (login events), x509 (cert auth)
+      KC_LOG_LEVEL: INFO,org.keycloak.authentication:DEBUG,org.keycloak.events:DEBUG,org.keycloak.services.x509:DEBUG,org.keycloak.protocol:DEBUG
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KC_FEATURES: scripts
@@ -236,6 +238,7 @@ services:
       # Updated to use full container names (Phase 4 cleanup)
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_GBR:?GCP secret required}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_GBR:?GCP secret required}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      MONGODB_DATABASE: dive-v3-gbr
       REDIS_HOST: redis-gbr
       REDIS_PORT: 6379
       REDIS_URL: redis://:${REDIS_PASSWORD_GBR:?GCP secret required}@redis-gbr:6379
@@ -263,6 +266,8 @@ services:
       - ./backend:/app
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./backend/certs:/app/certs:ro
+      # Phase 3B: Federation Registry configuration
+      - ./config:/app/config:ro
     depends_on:
       mongodb-gbr:
         condition: service_healthy
@@ -338,8 +343,9 @@ services:
     networks:
       - dive-gbr-network
     healthcheck:
-      # Best practice: Use curl with -k for self-signed certs (HTTPS consistency)
-      test: ["CMD", "curl", "-kfs", "--max-time", "5", "https://localhost:3000/"]
+      # P0 Fix (Dec 2025): Increased max-time from 5s to 10s to prevent false unhealthy
+      # Next.js SSR can take 5+ seconds on first render; 5s timeout caused intermittent failures
+      test: ["CMD", "curl", "-kfsI", "--max-time", "10", "https://localhost:3000/"]
       interval: 30s
       timeout: 15s
       retries: 10

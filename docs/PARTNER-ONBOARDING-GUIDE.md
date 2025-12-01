@@ -527,3 +527,6 @@ With N partners, there are N×(N-1) federation relationships:
 - [Federation Registry Schema](../config/federation-registry.schema.json)
 - [Keycloak Vault SPI Documentation](https://www.keycloak.org/docs/latest/server_admin/index.html#_vault-administration)
 
+
+
+

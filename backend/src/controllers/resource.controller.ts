@@ -31,11 +31,11 @@ export const listResourcesHandler = async (
         logger.info('Listing resources', { requestId });
 
         const resources = await getAllResources();
-        
+
         // Get user's clearance from JWT token (set by authenticateJWT middleware)
         const token = (req as any).user;
         const userClearance = token?.clearance || 'UNCLASSIFIED';
-        
+
         // Clearance hierarchy for filtering
         // CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
         // - UNCLASSIFIED users CANNOT access RESTRICTED content
@@ -47,9 +47,9 @@ export const listResourcesHandler = async (
             'SECRET': 2,
             'TOP_SECRET': 3
         };
-        
+
         const userClearanceLevel = clearanceHierarchy[userClearance] ?? 0;
-        
+
         logger.debug('Filtering resources by clearance', {
             requestId,
             userClearance,
@@ -64,50 +64,50 @@ export const listResourcesHandler = async (
                 const resourceClassification = isZTDFResource(r)
                     ? r.ztdf.policy.securityLabel.classification
                     : (r as any).classification || 'UNCLASSIFIED';
-                
+
                 const resourceLevel = clearanceHierarchy[resourceClassification] ?? 0;
-                
+
                 // Only show resources at or below user's clearance
                 return resourceLevel <= userClearanceLevel;
             })
             .map(r => {
-            if (isZTDFResource(r)) {
-                // ZTDF-enhanced resource
-                return {
-                    resourceId: r.resourceId,
-                    title: r.title,
-                    classification: r.ztdf.policy.securityLabel.classification,
-                    releasabilityTo: r.ztdf.policy.securityLabel.releasabilityTo,
-                    COI: r.ztdf.policy.securityLabel.COI || [],
-                    encrypted: true, // ZTDF is always encrypted
-                    creationDate: r.ztdf.policy.securityLabel.creationDate,
-                    displayMarking: r.ztdf.policy.securityLabel.displayMarking, // ACP-240 STANAG 4774
-                    ztdfVersion: r.ztdf.manifest.version,
-                    // Multi-KAS support: Include KAO count and basic KAO info
-                    kaoCount: r.ztdf.payload.keyAccessObjects.length,
-                    kaos: r.ztdf.payload.keyAccessObjects.map(kao => ({
-                        kaoId: kao.kaoId,
-                        kasId: kao.kasId,
-                        policyBinding: {
-                            coiRequired: kao.policyBinding.coiRequired || [],
-                            countriesAllowed: kao.policyBinding.countriesAllowed || []
-                        }
-                    }))
-                };
-            } else {
-                // Legacy resource (should not happen after migration)
-                const legacyResource: any = r;
-                return {
-                    resourceId: legacyResource.resourceId,
-                    title: legacyResource.title,
-                    classification: legacyResource.classification,
-                    releasabilityTo: legacyResource.releasabilityTo,
-                    COI: legacyResource.COI || [],
-                    encrypted: legacyResource.encrypted || false,
-                    creationDate: legacyResource.creationDate
-                };
-            }
-        });
+                if (isZTDFResource(r)) {
+                    // ZTDF-enhanced resource
+                    return {
+                        resourceId: r.resourceId,
+                        title: r.title,
+                        classification: r.ztdf.policy.securityLabel.classification,
+                        releasabilityTo: r.ztdf.policy.securityLabel.releasabilityTo,
+                        COI: r.ztdf.policy.securityLabel.COI || [],
+                        encrypted: true, // ZTDF is always encrypted
+                        creationDate: r.ztdf.policy.securityLabel.creationDate,
+                        displayMarking: r.ztdf.policy.securityLabel.displayMarking, // ACP-240 STANAG 4774
+                        ztdfVersion: r.ztdf.manifest.version,
+                        // Multi-KAS support: Include KAO count and basic KAO info
+                        kaoCount: r.ztdf.payload.keyAccessObjects.length,
+                        kaos: r.ztdf.payload.keyAccessObjects.map(kao => ({
+                            kaoId: kao.kaoId,
+                            kasId: kao.kasId,
+                            policyBinding: {
+                                coiRequired: kao.policyBinding.coiRequired || [],
+                                countriesAllowed: kao.policyBinding.countriesAllowed || []
+                            }
+                        }))
+                    };
+                } else {
+                    // Legacy resource (should not happen after migration)
+                    const legacyResource: any = r;
+                    return {
+                        resourceId: legacyResource.resourceId,
+                        title: legacyResource.title,
+                        classification: legacyResource.classification,
+                        releasabilityTo: legacyResource.releasabilityTo,
+                        COI: legacyResource.COI || [],
+                        encrypted: legacyResource.encrypted || false,
+                        creationDate: legacyResource.creationDate
+                    };
+                }
+            });
 
         res.json({
             resources: resourceList,
@@ -196,7 +196,7 @@ export const getResourceHandler = async (
             if (kasObligation) {
                 // Phase 4: Determine correct KAS URL for cross-instance access
                 let kasUrl = resource.ztdf.payload.keyAccessObjects[0]?.kasUrl;
-                
+
                 if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
                     const remoteKas = kasRegistryService.getKAS(kasAuthority);
                     if (remoteKas) {
@@ -216,7 +216,7 @@ export const getResourceHandler = async (
                     kasAuthority,
                     isCrossInstance,
                     wrappedKey: resource.ztdf.payload.keyAccessObjects[0]?.wrappedKey,
-                    message: isCrossInstance 
+                    message: isCrossInstance
                         ? `Decryption key must be requested from ${kasAuthority}`
                         : 'Decryption key must be requested from KAS'
                 };
@@ -821,8 +821,8 @@ export const requestKeyHandler = async (
                     dek: kasResponse.data.dek
                 });
 
-                logger.info('Content decrypted successfully', { 
-                    requestId, 
+                logger.info('Content decrypted successfully', {
+                    requestId,
                     resourceId,
                     isCrossInstance,
                     kasAuthority: kasResponse.data.kasDecision?.kasAuthority

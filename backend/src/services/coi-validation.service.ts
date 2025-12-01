@@ -106,7 +106,7 @@ async function getCOIMembershipMapFromDB(): Promise<Record<string, Set<string>>>
         // Merge database results with static COI_MEMBERSHIP for resilience
         // Static map acts as a fallback for COIs not yet in the database
         const mergedMap: Record<string, Set<string>> = { ...COI_MEMBERSHIP };
-        
+
         // Override with database values (database is source of truth when available)
         for (const [coiId, members] of Object.entries(dbMembershipMap)) {
             mergedMap[coiId] = members;
@@ -235,7 +235,7 @@ async function checkReleasabilityAlignment(releasabilityTo: string[], cois: stri
     // Compute union of all COI member countries (excluding no-affiliation COIs)
     const union = new Set<string>();
     let hasCountryBasedCOI = false;
-    
+
     for (const coi of cois) {
         // Skip COIs with no country affiliation
         if (noCountryAffiliationCOIs.has(coi)) {

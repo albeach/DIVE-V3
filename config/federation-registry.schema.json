@@ -4,7 +4,13 @@
   "title": "DIVE V3 Federation Registry Schema",
   "description": "JSON Schema for validating DIVE V3 federation configuration",
   "type": "object",
-  "required": ["version", "metadata", "defaults", "instances", "federation"],
+  "required": [
+    "version",
+    "metadata",
+    "defaults",
+    "instances",
+    "federation"
+  ],
   "properties": {
     "$schema": {
       "type": "string",
@@ -17,7 +23,11 @@
     },
     "metadata": {
       "type": "object",
-      "required": ["lastUpdated", "maintainer", "compliance"],
+      "required": [
+        "lastUpdated",
+        "maintainer",
+        "compliance"
+      ],
       "properties": {
         "lastUpdated": {
           "type": "string",
@@ -32,7 +42,12 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["ACP-240", "NIST 800-63", "STANAG 4774", "STANAG 4778"]
+            "enum": [
+              "ACP-240",
+              "NIST 800-63",
+              "STANAG 4774",
+              "STANAG 4778"
+            ]
           },
           "description": "Compliance frameworks adhered to"
         },
@@ -43,7 +58,10 @@
     },
     "defaults": {
       "type": "object",
-      "required": ["realm", "clientId"],
+      "required": [
+        "realm",
+        "clientId"
+      ],
       "properties": {
         "realm": {
           "type": "string",
@@ -78,7 +96,12 @@
           "type": "array",
           "items": {
             "type": "string",
-            "enum": ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+            "enum": [
+              "UNCLASSIFIED",
+              "CONFIDENTIAL",
+              "SECRET",
+              "TOP_SECRET"
+            ]
           }
         },
         "passwordPolicy": {
@@ -120,11 +143,20 @@
     },
     "federation": {
       "type": "object",
-      "required": ["model", "matrix", "defaultEnabled", "trustModel"],
+      "required": [
+        "model",
+        "matrix",
+        "defaultEnabled",
+        "trustModel"
+      ],
       "properties": {
         "model": {
           "type": "string",
-          "enum": ["hub-spoke", "mesh", "hierarchical"],
+          "enum": [
+            "hub-spoke",
+            "mesh",
+            "hierarchical"
+          ],
           "description": "Federation topology model"
         },
         "matrix": {
@@ -145,7 +177,11 @@
         },
         "trustModel": {
           "type": "string",
-          "enum": ["bilateral", "transitive", "hierarchical"]
+          "enum": [
+            "bilateral",
+            "transitive",
+            "hierarchical"
+          ]
         },
         "attributeMapping": {
           "type": "object",
@@ -205,7 +241,13 @@
   "definitions": {
     "instance": {
       "type": "object",
-      "required": ["code", "name", "type", "enabled", "deployment"],
+      "required": [
+        "code",
+        "name",
+        "type",
+        "enabled",
+        "deployment"
+      ],
       "properties": {
         "primary": {
           "type": "boolean",
@@ -219,14 +261,30 @@
           "type": "object",
           "description": "Service configuration for this instance",
           "properties": {
-            "frontend": { "type": "object" },
-            "backend": { "type": "object" },
-            "keycloak": { "type": "object" },
-            "kas": { "type": "object" },
-            "opa": { "type": "object" },
-            "mongodb": { "type": "object" },
-            "postgres": { "type": "object" },
-            "redis": { "type": "object" }
+            "frontend": {
+              "type": "object"
+            },
+            "backend": {
+              "type": "object"
+            },
+            "keycloak": {
+              "type": "object"
+            },
+            "kas": {
+              "type": "object"
+            },
+            "opa": {
+              "type": "object"
+            },
+            "mongodb": {
+              "type": "object"
+            },
+            "postgres": {
+              "type": "object"
+            },
+            "redis": {
+              "type": "object"
+            }
           }
         },
         "code": {
@@ -240,7 +298,10 @@
         },
         "type": {
           "type": "string",
-          "enum": ["local", "remote"],
+          "enum": [
+            "local",
+            "remote"
+          ],
           "description": "Deployment type"
         },
         "enabled": {
@@ -249,11 +310,19 @@
         },
         "deployment": {
           "type": "object",
-          "required": ["provider", "host", "domain"],
+          "required": [
+            "provider",
+            "host",
+            "domain"
+          ],
           "properties": {
             "provider": {
               "type": "string",
-              "enum": ["docker", "kubernetes", "cloudrun"]
+              "enum": [
+                "docker",
+                "kubernetes",
+                "cloudrun"
+              ]
             },
             "host": {
               "type": "string",
@@ -267,7 +336,11 @@
         },
         "urls": {
           "type": "object",
-          "required": ["app", "api", "idp"],
+          "required": [
+            "app",
+            "api",
+            "idp"
+          ],
           "properties": {
             "app": {
               "type": "string",
@@ -285,7 +358,14 @@
         },
         "ports": {
           "type": "object",
-          "required": ["frontend", "backend", "keycloak", "postgres", "mongodb", "redis"],
+          "required": [
+            "frontend",
+            "backend",
+            "keycloak",
+            "postgres",
+            "mongodb",
+            "redis"
+          ],
           "properties": {
             "frontend": {
               "type": "integer",
@@ -431,7 +511,11 @@
     },
     "attributeDefinition": {
       "type": "object",
-      "required": ["required", "claim", "type"],
+      "required": [
+        "required",
+        "claim",
+        "type"
+      ],
       "properties": {
         "required": {
           "type": "boolean"
@@ -441,7 +525,12 @@
         },
         "type": {
           "type": "string",
-          "enum": ["string", "array", "integer", "boolean"]
+          "enum": [
+            "string",
+            "array",
+            "integer",
+            "boolean"
+          ]
         },
         "format": {
           "type": "string"
@@ -456,4 +545,3 @@
     }
   }
 }
-

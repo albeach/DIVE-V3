@@ -67,3 +67,6 @@ EOSQL
 
 echo "=== DIVE V3 DEU PostgreSQL Initialization Complete ==="
 
+
+
+

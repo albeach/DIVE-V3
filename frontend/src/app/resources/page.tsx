@@ -1,746 +1,622 @@
+/**
+ * Resources Page - Clean Layout
+ * 
+ * Simplified layout with:
+ * - Command palette search (press "/" to open)
+ * - Horizontal filter pills (modern design)
+ * - Bento dashboard in main content area
+ * - Normalized card layout with compact IDs
+ */
+
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
-import ResourceFilters, { ResourceFiltersState } from '@/components/resources/resource-filters';
-import Pagination from '@/components/resources/pagination';
-import AdvancedResourceCard, { ViewMode, ResourceCardSkeleton, IResourceCardData } from '@/components/resources/advanced-resource-card';
-import ViewModeSwitcher from '@/components/resources/view-mode-switcher';
-import AdvancedSearch from '@/components/resources/advanced-search';
-import CategoryBrowser from '@/components/resources/category-browser';
-import SavedFilters from '@/components/resources/saved-filters';
-import { Globe2, Server } from 'lucide-react';
 
-// ViewMode and IResourceCardData now imported from advanced-resource-card
+import {
+  VirtualResourceList,
+  CommandPaletteSearch,
+  FacetedFilters,
+  MobileFilterDrawer,
+  ResourcePreviewModal,
+  ResourcesPageSkeleton,
+  ViewModeSwitcher,
+  BulkActionsToolbar,
+  ResourceComparisonView,
+  BookmarksPanel,
+  BookmarksTrigger,
+  BentoDashboard,
+  BentoDashboardSkeleton,
+  EmptySearchResults,
+  EmptyFilterResults,
+  ErrorState,
+  MobileResourceDrawer,
+} from '@/components/resources';
 
-const VIEW_MODE_KEY = 'dive_resources_view_mode';
+import type { IResourceCardData, ViewMode } from '@/components/resources/advanced-resource-card';
+
+import { 
+  useInfiniteScroll, 
+  useKeyboardNavigation,
+  useBookmarks,
+} from '@/hooks';
+
+import { Globe2, Server, RefreshCw, X, Filter } from 'lucide-react';
+
+// ============================================
+// Types
+// ============================================
+
+interface ISelectedFilters {
+  classifications: string[];
+  countries: string[];
+  cois: string[];
+  instances: string[];
+  encryptionStatus: string;
+  dateRange?: { start: string; end: string };
+}
+
+// ============================================
+// Constants
+// ============================================
+
+const VIEW_MODE_KEY = 'dive_resources_view_mode_v2';
 const FEDERATED_MODE_KEY = 'dive_resources_federated_mode';
-
-// Federation instances
 const FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'] as const;
-type FederationInstance = typeof FEDERATION_INSTANCES[number];
 
-// Clearance hierarchy for filtering
-// CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
-// - UNCLASSIFIED users CANNOT access RESTRICTED content
-// - RESTRICTED users CAN access UNCLASSIFIED content
-const CLEARANCE_ORDER: Record<string, number> = {
-  'UNCLASSIFIED': 0,
-  'RESTRICTED': 0.5,
-  'CONFIDENTIAL': 1,
-  'SECRET': 2,
-  'TOP_SECRET': 3,
-};
+const CLASSIFICATION_OPTIONS = [
+  { value: 'UNCLASSIFIED', label: 'Unclassified', color: 'bg-green-100 text-green-800 border-green-300' },
+  { value: 'CONFIDENTIAL', label: 'Confidential', color: 'bg-amber-100 text-amber-800 border-amber-300' },
+  { value: 'SECRET', label: 'Secret', color: 'bg-orange-100 text-orange-800 border-orange-300' },
+  { value: 'TOP_SECRET', label: 'Top Secret', color: 'bg-red-100 text-red-800 border-red-300' },
+];
 
-function filterAndSortResources(
-  resources: IResourceCardData[], 
-  filters: ResourceFiltersState
-): IResourceCardData[] {
-  let filtered = [...resources];
-
-  // Search filter (title or resource ID)
-  if (filters.search) {
-    const searchLower = filters.search.toLowerCase();
-    filtered = filtered.filter(r => 
-      r.title.toLowerCase().includes(searchLower) ||
-      r.resourceId.toLowerCase().includes(searchLower)
-    );
-  }
-
-  // Classification filter (OR logic - match any selected)
-  if (filters.classifications.length > 0) {
-    filtered = filtered.filter(r =>
-      filters.classifications.includes(r.classification)
-    );
-  }
-
-  // Country filter (AND logic - must be releasable to ALL selected countries)
-  if (filters.countries.length > 0) {
-    filtered = filtered.filter(r =>
-      filters.countries.every(country => r.releasabilityTo.includes(country))
-    );
-  }
-
-  // COI filter (OR logic - must have ANY selected COI)
-  if (filters.cois.length > 0) {
-    filtered = filtered.filter(r =>
-      r.COI.some(coi => filters.cois.includes(coi))
-    );
-  }
-
-  // Encryption filter
-  if (filters.encryptionStatus === 'encrypted') {
-    filtered = filtered.filter(r => r.encrypted);
-  } else if (filters.encryptionStatus === 'unencrypted') {
-    filtered = filtered.filter(r => !r.encrypted);
-  }
-
-  // Sort
-  filtered.sort((a, b) => {
-    let comparison = 0;
-
-    if (filters.sortBy === 'title') {
-      comparison = a.title.localeCompare(b.title);
-    } else if (filters.sortBy === 'classification') {
-      const aLevel = CLEARANCE_ORDER[a.classification] || 0;
-      const bLevel = CLEARANCE_ORDER[b.classification] || 0;
-      comparison = aLevel - bLevel;
-    } else if (filters.sortBy === 'createdAt') {
-      const aTime = new Date(a.creationDate || 0).getTime();
-      const bTime = new Date(b.creationDate || 0).getTime();
-      comparison = aTime - bTime;
-    }
-
-    return filters.sortOrder === 'asc' ? comparison : -comparison;
-  });
-
-  return filtered;
-}
-
-function paginateResources(resources: IResourceCardData[], page: number, perPage: number) {
-  const totalPages = Math.ceil(resources.length / perPage);
-  const start = (page - 1) * perPage;
-  const end = start + perPage;
-
-  return {
-    items: resources.slice(start, end),
-    totalPages,
-    currentPage: page,
-    totalItems: resources.length,
-  };
-}
+// ============================================
+// Component
+// ============================================
 
 export default function ResourcesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  
-  const [resources, setResources] = useState<IResourceCardData[]>([]);
-  const [filteredResources, setFilteredResources] = useState<IResourceCardData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // View mode with localStorage persistence
+  // State
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  
-  // Federated search state
   const [federatedMode, setFederatedMode] = useState(false);
-  const [selectedInstances, setSelectedInstances] = useState<FederationInstance[]>(['USA']);
-  const [federatedStats, setFederatedStats] = useState<Record<string, { count: number; latencyMs: number; error?: string }>>({});
-  const [federatedLoading, setFederatedLoading] = useState(false);
-  const [federatedTotalResults, setFederatedTotalResults] = useState<number>(0); // True total across all instances
+  const [selectedInstances, setSelectedInstances] = useState<string[]>(['USA']);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [previewResource, setPreviewResource] = useState<IResourceCardData | null>(null);
+  const [previewIndex, setPreviewIndex] = useState(-1);
+  const [showComparison, setShowComparison] = useState(false);
+  const [comparisonResources, setComparisonResources] = useState<IResourceCardData[]>([]);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [mobileDrawerResource, setMobileDrawerResource] = useState<IResourceCardData | null>(null);
+  const [showMobileDrawer, setShowMobileDrawer] = useState(false);
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const { bookmarks, isItemBookmarked, toggle: toggleBookmark } = useBookmarks();
   
-  // Filter state (lifted from child component for sort dropdown)
-  const [filters, setFilters] = useState<ResourceFiltersState>({
-    search: '',
+  const [selectedFilters, setSelectedFilters] = useState<ISelectedFilters>({
     classifications: [],
     countries: [],
     cois: [],
-    encryptionStatus: 'all',
-    sortBy: 'title',
-    sortOrder: 'asc',
+    instances: ['USA'],
+    encryptionStatus: '',
   });
 
-  // UI state
-  const [showCategoryBrowser, setShowCategoryBrowser] = useState(false);
-  
-  // Ref to prevent duplicate fetches
-  const hasFetchedRef = useRef(false);
-  const lastFederatedModeRef = useRef(federatedMode);
-  const lastInstancesRef = useRef(selectedInstances.join(','));
+  // Infinite Scroll
+  const {
+    items: resources,
+    facets,
+    isLoading,
+    isLoadingMore,
+    error,
+    hasMore,
+    totalCount,
+    filters,
+    sort,
+    loadMore,
+    refresh,
+    setFilters,
+    setSort,
+    sentinelRef,
+    timing,
+  } = useInfiniteScroll<IResourceCardData>({
+    initialFilters: {
+      instances: federatedMode ? selectedInstances : undefined,
+    },
+    initialSort: { field: 'title', order: 'asc' },
+    pageSize: 50,
+    includeFacets: true,
+    federated: federatedMode,
+    autoLoad: true,
+  });
 
-  // Load view mode and federated mode from localStorage
+  // Session-aware load
+  const hasLoadedRef = useRef(false);
+  useEffect(() => {
+    if (status === 'authenticated' && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      const timer = setTimeout(() => refresh(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [status, refresh]);
+
+  // Keyboard Navigation
+  const [navState, navActions] = useKeyboardNavigation({
+    items: resources,
+    getItemKey: (r) => r.resourceId,
+    onSelect: (resource) => router.push(`/resources/${resource.resourceId}`),
+    onPreview: (resource) => {
+      const index = resources.findIndex(r => r.resourceId === resource.resourceId);
+      setPreviewResource(resource);
+      setPreviewIndex(index);
+    },
+    enableMultiSelect: true,
+    enableVimNavigation: true,
+  });
+
+  // Load Preferences
   useEffect(() => {
     try {
       const storedViewMode = localStorage.getItem(VIEW_MODE_KEY);
       if (storedViewMode && ['grid', 'list', 'compact'].includes(storedViewMode)) {
         setViewMode(storedViewMode as ViewMode);
       }
-      
       const storedFederatedMode = localStorage.getItem(FEDERATED_MODE_KEY);
       if (storedFederatedMode === 'true') {
         setFederatedMode(true);
       }
-    } catch (error) {
-      console.error('Failed to load preferences:', error);
-    }
+    } catch (e) {}
   }, []);
 
-  // Save view mode to localStorage
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    try {
-      localStorage.setItem(VIEW_MODE_KEY, mode);
-    } catch (error) {
-      console.error('Failed to save view mode:', error);
-    }
-  };
+  // Keyboard shortcut: 'B' for Bookmarks
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+      if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault();
+        setShowBookmarks(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
-  // Toggle federated mode
-  const handleFederatedModeToggle = () => {
+  // Handlers
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    try { localStorage.setItem(VIEW_MODE_KEY, mode); } catch (e) {}
+  }, []);
+
+  const handleFederatedModeToggle = useCallback(() => {
     const newMode = !federatedMode;
     setFederatedMode(newMode);
-    try {
-      localStorage.setItem(FEDERATED_MODE_KEY, String(newMode));
-    } catch (error) {
-      console.error('Failed to save federated mode:', error);
-    }
-  };
+    try { localStorage.setItem(FEDERATED_MODE_KEY, String(newMode)); } catch (e) {}
+    setFilters({ ...filters, instances: newMode ? selectedInstances : undefined });
+  }, [federatedMode, selectedInstances, filters, setFilters]);
 
-  // Toggle instance selection
-  const toggleInstance = (instance: FederationInstance) => {
+  const handleInstanceToggle = useCallback((instance: string) => {
     setSelectedInstances(prev => {
-      if (prev.includes(instance)) {
-        // Don't allow deselecting all instances
-        if (prev.length === 1) return prev;
-        return prev.filter(i => i !== instance);
-      }
-      return [...prev, instance];
+      const newInstances = prev.includes(instance)
+        ? prev.filter(i => i !== instance)
+        : [...prev, instance];
+      if (newInstances.length === 0) return prev;
+      if (federatedMode) setFilters({ ...filters, instances: newInstances });
+      return newInstances;
     });
-  };
+  }, [federatedMode, filters, setFilters]);
 
-  // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
+  const handleFilterChange = useCallback((newFilters: ISelectedFilters) => {
+    setSelectedFilters(newFilters);
+    setFilters({
+      query: filters.query,
+      classifications: newFilters.classifications.length > 0 ? newFilters.classifications : undefined,
+      countries: newFilters.countries.length > 0 ? newFilters.countries : undefined,
+      cois: newFilters.cois.length > 0 ? newFilters.cois : undefined,
+      instances: federatedMode ? newFilters.instances : undefined,
+      encrypted: newFilters.encryptionStatus === 'encrypted' ? true : 
+                 newFilters.encryptionStatus === 'unencrypted' ? false : undefined,
+      dateRange: newFilters.dateRange,
+    });
+  }, [federatedMode, filters.query, setFilters]);
+
+  const handleSearch = useCallback((query: string) => {
+    setFilters({ ...filters, query: query || undefined });
+  }, [filters, setFilters]);
+
+  const handleSortChange = useCallback((value: string) => {
+    const [field, order] = value.split('-') as ['title' | 'classification' | 'creationDate' | 'resourceId', 'asc' | 'desc'];
+    setSort({ field, order });
+  }, [setSort]);
+
+  const handlePreviewNavigate = useCallback((direction: 'prev' | 'next') => {
+    const newIndex = direction === 'prev' 
+      ? Math.max(0, previewIndex - 1)
+      : Math.min(resources.length - 1, previewIndex + 1);
+    setPreviewIndex(newIndex);
+    setPreviewResource(resources[newIndex]);
+  }, [previewIndex, resources]);
+
+  const handleClassificationToggle = useCallback((value: string) => {
+    const newClassifications = selectedFilters.classifications.includes(value)
+      ? selectedFilters.classifications.filter(c => c !== value)
+      : [...selectedFilters.classifications, value];
+    handleFilterChange({ ...selectedFilters, classifications: newClassifications });
+  }, [selectedFilters, handleFilterChange]);
+
+  const clearAllFilters = useCallback(() => {
+    handleFilterChange({
+      classifications: [],
+      countries: [],
+      cois: [],
+      instances: ['USA'],
+      encryptionStatus: '',
+    });
+  }, [handleFilterChange]);
+
+  // Derived state
+  const selectedResourcesForBulk = useMemo(() => 
+    resources.filter(r => navState.selectedKeys.has(r.resourceId)), 
+    [resources, navState.selectedKeys]
+  );
+
+  const activeFilterCount = useMemo(() => (
+    selectedFilters.classifications.length +
+    selectedFilters.countries.length +
+    selectedFilters.cois.length +
+    (selectedFilters.encryptionStatus ? 1 : 0)
+  ), [selectedFilters]);
+
+  // Auth Check
   useEffect(() => {
-    if (status !== 'loading' && !session) {
-      router.push('/login');
-    }
+    if (status !== 'loading' && !session) router.push('/login');
   }, [status, session, router]);
 
-  // Fetch resources - supports both local and federated modes
-  // Note: Filters are applied client-side after fetching, not in the API call
-  const fetchResources = useCallback(async (isFederated: boolean, instanceList: FederationInstance[]) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      if (isFederated) {
-        // Federated search across multiple instances
-        setFederatedLoading(true);
-        const response = await fetch('/api/resources/federated-search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instances: instanceList,
-            limit: 500, // Get more results for client-side filtering
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || `HTTP ${response.status}: Failed to fetch federated resources`);
-        }
-
-        const data = await response.json();
-        const fetchedResources = data.results || [];
-        
-        // Store instance stats
-        setFederatedStats(data.instanceResults || {});
-        
-        // Store true total (sum of all instance counts)
-        const instanceStats = data.instanceResults || {};
-        const trueTotalFromInstances = Object.values(instanceStats)
-          .reduce((sum: number, stats: any) => sum + (stats?.count || 0), 0);
-        setFederatedTotalResults(data.totalResults || trueTotalFromInstances);
-        
-        console.log('[Resources] Loaded federated resources:', {
-          count: fetchedResources.length,
-          totalResults: data.totalResults,
-          trueTotalFromInstances,
-          instances: Object.keys(instanceStats),
-          cacheHit: data.cacheHit,
-          executionTimeMs: data.executionTimeMs,
-        });
-        
-        setResources(fetchedResources);
-        setFilteredResources(fetchedResources);
-        setFederatedLoading(false);
-      } else {
-        // Local resources only
-        const response = await fetch('/api/resources', {
-          method: 'GET',
-          cache: 'no-store',
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || `HTTP ${response.status}: Failed to fetch resources`);
-        }
-
-        const data = await response.json();
-        const fetchedResources = data.resources || [];
-        
-        console.log('[Resources] Loaded local resources:', {
-          count: fetchedResources.length,
-          timestamp: new Date().toISOString(),
-        });
-        
-        setResources(fetchedResources);
-        setFilteredResources(fetchedResources);
-        setFederatedStats({});
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load resources';
-      setError(errorMessage);
-      console.error('[Resources] Error fetching resources:', err);
-      setFederatedLoading(false);
-    } finally {
-      setLoading(false);
-    }
-  }, []); // No dependencies - function is stable
-
-  // Initial fetch on mount (once session is ready)
-  useEffect(() => {
-    if (status === 'loading' || !session) return;
-    if (hasFetchedRef.current) return; // Already fetched
-    
-    hasFetchedRef.current = true;
-    fetchResources(federatedMode, selectedInstances);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, session]);
-
-  // Re-fetch when federated mode or instances change (after initial load)
-  useEffect(() => {
-    if (!hasFetchedRef.current) return; // Wait for initial fetch
-    
-    const modeChanged = lastFederatedModeRef.current !== federatedMode;
-    const instancesChanged = lastInstancesRef.current !== selectedInstances.join(',');
-    
-    if (modeChanged || (federatedMode && instancesChanged)) {
-      lastFederatedModeRef.current = federatedMode;
-      lastInstancesRef.current = selectedInstances.join(',');
-      fetchResources(federatedMode, selectedInstances);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps  
-  }, [federatedMode, selectedInstances.join(',')]);
-
-  // Handle filter changes - wrapped in useCallback to prevent infinite loops
-  const handleFilterChange = useCallback((newFilters: ResourceFiltersState) => {
-    setFilters(newFilters);
-    const filtered = filterAndSortResources(resources, newFilters);
-    setFilteredResources(filtered);
-    setCurrentPage(1); // Reset to page 1 when filters change
-  }, [resources]); // Only recreate when resources change
-
-  // Re-filter when sort changes from dropdown (local state change)
-  useEffect(() => {
-    const filtered = filterAndSortResources(resources, filters);
-    setFilteredResources(filtered);
-  }, [filters.sortBy, filters.sortOrder, resources, filters]);
-
-  // Handle category click from browser
-  const handleCategoryClick = (category: string, value: string) => {
-    if (category === 'classification') {
-      setFilters(prev => ({
-        ...prev,
-        classifications: [value]
-      }));
-    } else if (category === 'country') {
-      setFilters(prev => ({
-        ...prev,
-        countries: [value]
-      }));
-    } else if (category === 'coi') {
-      setFilters(prev => ({
-        ...prev,
-        cois: [value]
-      }));
-    } else if (category === 'encryption') {
-      setFilters(prev => ({
-        ...prev,
-        encryptionStatus: value.toLowerCase() === 'encrypted' ? 'encrypted' : 'unencrypted'
-      }));
-    }
-    setShowCategoryBrowser(false);
-  };
-
-  // Handle pagination
-  const paginatedData = paginateResources(filteredResources, currentPage, itemsPerPage);
-
-  // Get grid classes based on view mode
-  const getGridClasses = () => {
-    switch (viewMode) {
-      case 'grid':
-        return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4';
-      case 'list':
-        return 'space-y-3';
-      case 'compact':
-        return 'space-y-2';
-      default:
-        return 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4';
-    }
-  };
-
-  if (status === 'loading' || loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
-          <p className="mt-6 text-lg font-semibold text-gray-700">Loading classified documents...</p>
-          <p className="mt-2 text-sm text-gray-500">Verifying security clearance</p>
-        </div>
-      </div>
-    );
+  if (status === 'loading') {
+    return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"><ResourcesPageSkeleton /></div>;
   }
 
-  if (!session) {
-    return null;
-  }
+  if (!session) return null;
 
   return (
-    <PageLayout 
+    <PageLayout
       user={session.user}
-      breadcrumbs={[
-        { label: 'Classified Documents', href: null }
-      ]}
+      breadcrumbs={[{ label: 'Documents', href: null }]}
     >
-      {/* Modern Header with Gradient */}
-      <div className="mb-8">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex-1">
-            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 mb-3">
-              Classified Documents
-            </h1>
-            <p className="text-lg text-gray-600 max-w-3xl">
-              Browse, search, and access classified documents based on your clearance level, 
-              country affiliation, and communities of interest.
-            </p>
-          </div>
+      {/* Command Palette Search - Opens with "/" */}
+      <CommandPaletteSearch
+        resources={resources}
+        onSearch={handleSearch}
+        onFilterApply={(filter) => {
+          if (filter.type === 'classification') {
+            handleFilterChange({ ...selectedFilters, classifications: [filter.value] });
+          } else if (filter.type === 'country') {
+            handleFilterChange({ ...selectedFilters, countries: [filter.value] });
+          } else if (filter.type === 'encrypted') {
+            handleFilterChange({ ...selectedFilters, encryptionStatus: 'encrypted' });
+          }
+        }}
+        onResourceSelect={(resourceId) => router.push(`/resources/${resourceId}`)}
+        userClearance={session.user?.clearance}
+        userCountry={session.user?.countryOfAffiliation}
+      />
+
+      {/* Toolbar: Federation + Actions */}
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-3">
+          {/* Federation Toggle */}
           <button
-            onClick={() => setShowCategoryBrowser(!showCategoryBrowser)}
-            className={`flex-shrink-0 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm ${
-              showCategoryBrowser
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+            onClick={handleFederatedModeToggle}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              federatedMode 
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
             }`}
           >
-            <span className="flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              {showCategoryBrowser ? 'Hide' : 'Browse'} Categories
-            </span>
+            {federatedMode ? <Globe2 className="w-4 h-4" /> : <Server className="w-4 h-4" />}
+            {federatedMode ? 'Federated' : 'Local'}
+          </button>
+
+          {/* Instance Pills */}
+          <div className="flex items-center gap-1">
+            {FEDERATION_INSTANCES.map((instance) => {
+              const isSelected = selectedInstances.includes(instance);
+              return (
+                <button
+                  key={instance}
+                  onClick={() => handleInstanceToggle(instance)}
+                  disabled={!federatedMode && instance !== 'USA'}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                    isSelected
+                      ? 'bg-blue-600 text-white'
+                      : federatedMode
+                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'
+                        : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                  }`}
+                >
+                  {instance}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <BookmarksTrigger onClick={() => setShowBookmarks(true)} />
+          <button
+            onClick={() => refresh()}
+            disabled={isLoading}
+            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
-
-        {/* Federated Search Toggle */}
-        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-gradient-to-r from-slate-50 to-blue-50 rounded-xl border-2 border-slate-200">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleFederatedModeToggle}
-              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                federatedMode ? 'bg-blue-600' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
-                  federatedMode ? 'translate-x-8' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <div className="flex items-center gap-2">
-              {federatedMode ? (
-                <Globe2 className="w-5 h-5 text-blue-600" />
-              ) : (
-                <Server className="w-5 h-5 text-gray-500" />
-              )}
-              <span className={`font-semibold ${federatedMode ? 'text-blue-700' : 'text-gray-600'}`}>
-                {federatedMode ? 'Federated Search' : 'Local Only'}
-              </span>
-            </div>
-          </div>
-
-          {/* Instance Selection (only shown in federated mode) */}
-          {federatedMode && (
-            <div className="flex items-center gap-2 ml-4 pl-4 border-l-2 border-slate-300">
-              <span className="text-sm font-medium text-gray-600">Instances:</span>
-              <div className="flex gap-1.5">
-                {FEDERATION_INSTANCES.map((instance) => {
-                  const isSelected = selectedInstances.includes(instance);
-                  const stats = federatedStats[instance];
-                  return (
-                    <button
-                      key={instance}
-                      onClick={() => toggleInstance(instance)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                        isSelected
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'bg-white text-gray-600 border border-gray-300 hover:border-blue-400'
-                      }`}
-                      title={stats ? `${stats.count} docs, ${stats.latencyMs}ms` : undefined}
-                    >
-                      {instance}
-                      {isSelected && stats && (
-                        <span className="ml-1 opacity-75">({stats.count})</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {federatedLoading && (
-                <div className="ml-2 animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Compliance Badges */}
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-bold shadow-sm">
-            <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-            ACP-240 Compliant
-          </span>
-          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white border-2 border-gray-200 text-gray-700 text-sm font-semibold">
-            NATO STANAG 4774
-          </span>
-          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white border-2 border-gray-200 text-gray-700 text-sm font-semibold">
-            🔐 ZTDF Encrypted
-          </span>
-          <span className="inline-flex items-center px-2.5 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs font-bold">
-            {federatedMode && federatedTotalResults > 0 
-              ? federatedTotalResults.toLocaleString() 
-              : resources.length.toLocaleString()
-            } Documents
-            {federatedMode && Object.keys(federatedStats).length > 0 && (
-              <span className="ml-1 text-blue-600">
-                ({Object.keys(federatedStats).filter(k => !federatedStats[k].error).length} instances)
-              </span>
-            )}
-            {federatedMode && resources.length < federatedTotalResults && (
-              <span className="ml-1 text-gray-500">
-                (showing {resources.length.toLocaleString()})
-              </span>
-            )}
-          </span>
-        </div>
       </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-5 mb-8 flex items-start gap-3">
-          <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="flex-1">
-            <h3 className="text-sm font-bold text-red-900 mb-1">Error Loading Documents</h3>
-            <p className="text-sm text-red-800">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Advanced Search Bar (Full Width) */}
-      <div className="mb-6">
-        <AdvancedSearch
-          resources={resources}
-          value={filters.search}
-          onChange={(value) => setFilters(prev => ({ ...prev, search: value }))}
+      {/* Bento Dashboard - Now in main content */}
+      {isLoading && resources.length === 0 ? (
+        <BentoDashboardSkeleton />
+      ) : (
+        <BentoDashboard
+          totalDocuments={totalCount}
+          encryptedCount={resources.filter(r => r.encrypted).length}
+          classificationBreakdown={{
+            UNCLASSIFIED: facets?.classifications?.find(c => c.value === 'UNCLASSIFIED')?.count || 0,
+            CONFIDENTIAL: facets?.classifications?.find(c => c.value === 'CONFIDENTIAL')?.count || 0,
+            SECRET: facets?.classifications?.find(c => c.value === 'SECRET')?.count || 0,
+            TOP_SECRET: facets?.classifications?.find(c => c.value === 'TOP_SECRET')?.count || 0,
+          }}
+          activeInstances={federatedMode ? selectedInstances : ['USA']}
+          federatedMode={federatedMode}
+          timing={timing || undefined}
+          userAttributes={{
+            clearance: session.user?.clearance,
+            country: session.user?.countryOfAffiliation,
+            coi: session.user?.acpCOI,
+          }}
+          bookmarkCount={bookmarks.length}
+          isLoading={isLoading}
         />
-      </div>
-
-      {/* Category Browser (Collapsible) */}
-      {showCategoryBrowser && (
-        <div className="mb-6 animate-in slide-in-from-top duration-300">
-          <CategoryBrowser
-            resources={resources}
-            onCategoryClick={handleCategoryClick}
-          />
-        </div>
       )}
 
-      {/* Three-Column Layout: Sidebar + Main + Analytics */}
+      {/* Error State */}
+      {error && !isLoading && <ErrorState message={error} onRetry={refresh} />}
+
+      {/* Main Layout with Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Sidebar: User Info, Filters, Saved Filters */}
-        <div className="lg:col-span-3">
-          <div className="sticky top-4 space-y-5">
-            {/* User Access Level Card */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-5 shadow-sm">
-              <h3 className="text-sm font-bold text-blue-900 mb-4 flex items-center">
-                <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                Your Security Level
-              </h3>
-              <dl className="space-y-3 text-sm">
-                <div className="flex justify-between items-center">
-                  <dt className="text-blue-700 font-medium">Clearance:</dt>
-                  <dd className="px-2.5 py-1 bg-white rounded-md font-mono font-bold text-blue-900 text-xs border border-blue-200">
-                    {session.user?.clearance || 'Not Set'}
-                  </dd>
-                </div>
-                <div className="flex justify-between items-center">
-                  <dt className="text-blue-700 font-medium">Country:</dt>
-                  <dd className="px-2.5 py-1 bg-white rounded-md font-mono font-bold text-blue-900 text-xs border border-blue-200">
-                    {session.user?.countryOfAffiliation || 'Not Set'}
-                  </dd>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <dt className="text-blue-700 font-medium">Communities:</dt>
-                  <dd className="flex flex-wrap gap-1">
-                    {session.user?.acpCOI && session.user.acpCOI.length > 0 ? (
-                      session.user.acpCOI.map(coi => (
-                        <span key={coi} className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-md text-xs font-semibold border border-purple-200">
-                          {coi}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-blue-600">None assigned</span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-
-            {/* Saved Filters */}
-            <SavedFilters
-              currentFilters={filters}
-              onApplyFilter={(newFilters) => {
-                setFilters(newFilters);
-                const filtered = filterAndSortResources(resources, newFilters);
-                setFilteredResources(filtered);
-                setCurrentPage(1);
+        {/* Desktop Filters Sidebar */}
+        <div className="hidden lg:block lg:col-span-3">
+          <div className="sticky top-4">
+            <FacetedFilters
+              facets={{
+                classifications: CLASSIFICATION_OPTIONS.map(o => ({ 
+                  value: o.value, 
+                  label: o.label, 
+                  count: facets?.classifications?.find(c => c.value === o.value)?.count || 0 
+                })),
+                countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
+                cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
+                instances: FEDERATION_INSTANCES.map(i => ({ 
+                  value: i, 
+                  label: i, 
+                  count: facets?.instances?.find(f => f.value === i)?.count || 0 
+                })),
+                encryptionStatus: [
+                  { value: 'encrypted', label: 'Encrypted (ZTDF)', count: resources.filter(r => r.encrypted).length },
+                  { value: 'unencrypted', label: 'Unencrypted', count: resources.filter(r => !r.encrypted).length },
+                ],
               }}
-            />
-
-            {/* Filter Resources */}
-            <ResourceFilters
+              selectedFilters={selectedFilters}
+              onFilterChange={handleFilterChange}
+              isLoading={isLoading}
+              totalCount={totalCount}
+              filteredCount={resources.length}
               userAttributes={{
                 clearance: session.user?.clearance,
                 country: session.user?.countryOfAffiliation,
                 coi: session.user?.acpCOI,
               }}
-              onFilterChange={handleFilterChange}
-              totalCount={resources.length}
-              filteredCount={filteredResources.length}
             />
           </div>
         </div>
 
-        {/* Main Content: Document Grid/List */}
-        <div className="lg:col-span-9 space-y-5">
-          {/* Toolbar: Sort + View Mode + Results Count */}
-          <div className="bg-white shadow-sm border-2 border-gray-200 rounded-xl px-5 py-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-4 flex-1">
-                {/* Sort Dropdown */}
-                <div className="flex items-center gap-2">
-                  <label htmlFor="sort-select" className="text-sm font-semibold text-gray-700 whitespace-nowrap">
-                    Sort:
-                  </label>
-                  <select
-                    id="sort-select"
-                    value={`${filters.sortBy}-${filters.sortOrder}`}
-                    onChange={(e) => {
-                      const [sortBy, sortOrder] = e.target.value.split('-') as [any, any];
-                      setFilters(prev => ({ ...prev, sortBy, sortOrder }));
-                    }}
-                    className="px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  >
-                    <option value="title-asc">Title (A-Z)</option>
-                    <option value="title-desc">Title (Z-A)</option>
-                    <option value="createdAt-desc">Newest First</option>
-                    <option value="createdAt-asc">Oldest First</option>
-                    <option value="classification-desc">Highest Classification</option>
-                    <option value="classification-asc">Lowest Classification</option>
-                  </select>
-                </div>
+        {/* Mobile Filter Button */}
+        <div className="lg:hidden mb-4">
+          <button
+            onClick={() => setShowMobileFilters(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">{activeFilterCount}</span>
+            )}
+          </button>
+        </div>
 
-                {/* Results Count */}
-                <div className="hidden md:flex items-center gap-2 text-sm">
-                  <span className="text-gray-600">Showing</span>
-                  <span className="px-2.5 py-1 bg-blue-100 text-blue-900 rounded-lg font-bold">
-                    {paginatedData.items.length}
+        {/* Main Content */}
+        <div className="lg:col-span-9 space-y-4">
+          {/* Quick Classification Pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            {CLASSIFICATION_OPTIONS.map((opt) => {
+              const isSelected = selectedFilters.classifications.includes(opt.value);
+              const count = facets?.classifications?.find(c => c.value === opt.value)?.count || 0;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => handleClassificationToggle(opt.value)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    isSelected
+                      ? opt.color + ' border-current shadow-sm'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-400'
+                  }`}
+                >
+                  {opt.label}
+                  <span className={`${isSelected ? 'opacity-80' : 'text-gray-400'}`}>
+                    {count.toLocaleString()}
                   </span>
-                  <span className="text-gray-600">of</span>
-                  <span className="px-2.5 py-1 bg-gray-100 text-gray-900 rounded-lg font-bold">
-                    {filteredResources.length}
-                  </span>
-                </div>
-              </div>
-
-              {/* View Mode Switcher */}
-              <ViewModeSwitcher
-                viewMode={viewMode}
-                onChange={handleViewModeChange}
-              />
-            </div>
-
-            {/* Mobile Results Count */}
-            <div className="md:hidden mt-3 pt-3 border-t border-gray-200 text-sm text-center text-gray-600">
-              Showing <span className="font-bold text-gray-900">{paginatedData.items.length}</span> of{' '}
-              <span className="font-bold text-gray-900">{filteredResources.length}</span> documents
-            </div>
+                </button>
+              );
+            })}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={clearAllFilters}
+                className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-3 h-3" />
+                Clear all
+              </button>
+            )}
           </div>
 
-          {/* Document Grid/List */}
-          {paginatedData.items.length === 0 ? (
-            <div className="bg-white shadow-md border-2 border-gray-200 rounded-2xl px-8 py-16 text-center">
-              <div className="max-w-md mx-auto">
-                <svg className="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No Documents Found</h3>
-                <p className="text-gray-600 mb-6">
-                  No documents match your current filters. Try adjusting your search criteria or clearing some filters.
-                </p>
-                <button
-                  onClick={() => {
-                    setFilters({
-                      search: '',
-                      classifications: [],
-                      countries: [],
-                      cois: [],
-                      encryptionStatus: 'all',
-                      sortBy: 'title',
-                      sortOrder: 'asc',
-                    });
-                  }}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-sm"
-                >
-                  Clear All Filters
-                </button>
-              </div>
+          {/* Results Toolbar */}
+          <div className="flex items-center justify-between gap-4 p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+              <span>
+                <strong className="text-gray-900 dark:text-white">{resources.length}</strong> of{' '}
+                <strong className="text-gray-900 dark:text-white">{totalCount.toLocaleString()}</strong>
+              </span>
+              <select
+                value={`${sort.field}-${sort.order}`}
+                onChange={(e) => handleSortChange(e.target.value)}
+                className="px-2 py-1 text-xs bg-transparent border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="title-asc">Title A-Z</option>
+                <option value="title-desc">Title Z-A</option>
+                <option value="creationDate-desc">Newest</option>
+                <option value="creationDate-asc">Oldest</option>
+              </select>
             </div>
+            <ViewModeSwitcher viewMode={viewMode} onChange={handleViewModeChange} />
+          </div>
+
+          {/* Resource List */}
+          {!isLoading && !error && resources.length === 0 && filters.query ? (
+            <EmptySearchResults query={filters.query} onClearSearch={() => handleSearch('')} />
+          ) : !isLoading && !error && resources.length === 0 && activeFilterCount > 0 ? (
+            <EmptyFilterResults onClearFilters={clearAllFilters} />
           ) : (
-            <div className={getGridClasses()}>
-              {paginatedData.items.map((resource) => (
-                <AdvancedResourceCard
-                  key={resource.resourceId}
-                  resource={resource}
-                  viewMode={viewMode}
-                  userAttributes={{
-                    clearance: session.user?.clearance,
-                    country: session.user?.countryOfAffiliation,
-                    coi: session.user?.acpCOI,
-                  }}
-                />
-              ))}
-            </div>
+            <VirtualResourceList
+              resources={resources}
+              viewMode={viewMode}
+              userAttributes={{
+                clearance: session.user?.clearance,
+                country: session.user?.countryOfAffiliation,
+                coi: session.user?.acpCOI,
+              }}
+              isLoading={isLoading}
+              isLoadingMore={isLoadingMore}
+              error={error}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              focusedIndex={navState.focusedIndex}
+              selectedIds={navState.selectedKeys}
+              onItemClick={(resource, index) => {
+                navActions.focusIndex(index);
+                if (window.innerWidth < 768) {
+                  setMobileDrawerResource(resource);
+                  setShowMobileDrawer(true);
+                }
+              }}
+              onItemSelect={() => navActions.toggleSelection()}
+              onItemPreview={(resource, index) => {
+                setPreviewResource(resource);
+                setPreviewIndex(index);
+              }}
+            />
           )}
 
-          {/* Pagination */}
-          {paginatedData.items.length > 0 && (
-            <div className="mt-8">
-              <Pagination
-                currentPage={paginatedData.currentPage}
-                totalPages={paginatedData.totalPages}
-                totalItems={paginatedData.totalItems}
-                itemsPerPage={itemsPerPage}
-                onPageChange={setCurrentPage}
-                onItemsPerPageChange={(newPerPage) => {
-                  setItemsPerPage(newPerPage);
-                  setCurrentPage(1);
-                }}
-              />
-            </div>
-          )}
+          <div ref={sentinelRef} className="h-4" />
         </div>
       </div>
+
+      {/* Modals & Panels */}
+      <MobileFilterDrawer
+        isOpen={showMobileFilters}
+        onClose={() => setShowMobileFilters(false)}
+        facets={{
+          classifications: CLASSIFICATION_OPTIONS.map(o => ({ 
+            value: o.value, label: o.label, count: facets?.classifications?.find(c => c.value === o.value)?.count || 0 
+          })),
+          countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
+          cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
+          instances: FEDERATION_INSTANCES.map(i => ({ value: i, label: i, count: 0 })),
+          encryptionStatus: [
+            { value: 'encrypted', label: 'Encrypted', count: 0 },
+            { value: 'unencrypted', label: 'Unencrypted', count: 0 },
+          ],
+        }}
+        selectedFilters={selectedFilters}
+        onFilterChange={handleFilterChange}
+        isLoading={isLoading}
+        totalCount={totalCount}
+        filteredCount={resources.length}
+        userAttributes={{
+          clearance: session.user?.clearance,
+          country: session.user?.countryOfAffiliation,
+          coi: session.user?.acpCOI,
+        }}
+      />
+
+      <ResourcePreviewModal
+        resource={previewResource}
+        isOpen={!!previewResource}
+        onClose={() => { setPreviewResource(null); setPreviewIndex(-1); }}
+        onNavigate={handlePreviewNavigate}
+        hasPrev={previewIndex > 0}
+        hasNext={previewIndex < resources.length - 1}
+        userAttributes={{
+          clearance: session.user?.clearance,
+          country: session.user?.countryOfAffiliation,
+          coi: session.user?.acpCOI,
+        }}
+      />
+
+      <BulkActionsToolbar
+        selectedResources={selectedResourcesForBulk}
+        totalResources={resources.length}
+        onClearSelection={navActions.clearSelection}
+        onSelectAll={navActions.selectAll}
+        onCompare={(items) => { setComparisonResources(items); setShowComparison(true); }}
+        allSelected={navState.selectedKeys.size === resources.length && resources.length > 0}
+      />
+
+      <ResourceComparisonView
+        resources={comparisonResources}
+        isOpen={showComparison}
+        onClose={() => { setShowComparison(false); setComparisonResources([]); }}
+        userAttributes={{
+          clearance: session.user?.clearance,
+          country: session.user?.countryOfAffiliation,
+          coi: session.user?.acpCOI,
+        }}
+      />
+
+      <BookmarksPanel isOpen={showBookmarks} onClose={() => setShowBookmarks(false)} />
+
+      <MobileResourceDrawer
+        resource={mobileDrawerResource}
+        isOpen={showMobileDrawer}
+        onClose={() => { setShowMobileDrawer(false); setMobileDrawerResource(null); }}
+        onOpen={() => setShowMobileDrawer(true)}
+        onBookmark={() => {
+          if (mobileDrawerResource) {
+            toggleBookmark({
+              id: mobileDrawerResource.resourceId,
+              title: mobileDrawerResource.title,
+              type: 'document',
+              classification: mobileDrawerResource.classification,
+            });
+          }
+        }}
+        isBookmarked={mobileDrawerResource ? isItemBookmarked(mobileDrawerResource.resourceId, 'document') : false}
+        userAttributes={{
+          clearance: session.user?.clearance,
+          country: session.user?.countryOfAffiliation,
+        }}
+      />
     </PageLayout>
   );
 }

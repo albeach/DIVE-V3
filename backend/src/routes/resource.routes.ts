@@ -12,6 +12,10 @@ import {
     federatedSearchGetHandler,
     federatedStatusHandler
 } from '../controllers/federated-search.controller';
+import {
+    paginatedSearchHandler,
+    getFacetsHandler
+} from '../controllers/paginated-search.controller';
 import { authzMiddleware, authenticateJWT } from '../middleware/authz.middleware';
 import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
 import { enforceFederationAgreement } from '../middleware/federation-agreement.middleware';
@@ -52,6 +56,24 @@ router.get('/:id/download', authenticateJWT, downloadZTDFHandler);
  * Returns 6-step KAS access flow with current status
  */
 router.get('/:id/kas-flow', authenticateJWT, getKASFlowHandler);
+
+/**
+ * Phase 1: Performance Foundation - Paginated Search Routes
+ * Server-side cursor pagination for 28K+ documents
+ */
+
+/**
+ * POST /api/resources/search
+ * Paginated search with cursor-based pagination and facets
+ * Supports complex filters in request body
+ */
+router.post('/search', authenticateJWT, paginatedSearchHandler);
+
+/**
+ * GET /api/resources/search/facets
+ * Get facet counts without results (for filter UI)
+ */
+router.get('/search/facets', authenticateJWT, getFacetsHandler);
 
 /**
  * Phase 4: Federated Search Routes

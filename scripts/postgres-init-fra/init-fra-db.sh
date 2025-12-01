@@ -72,3 +72,6 @@ EOSQL
 
 echo "=== DIVE V3 FRA PostgreSQL Initialization Complete ==="
 
+
+
+

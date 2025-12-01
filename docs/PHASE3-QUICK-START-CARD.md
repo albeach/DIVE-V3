@@ -162,3 +162,6 @@ gcloud services enable secretmanager.googleapis.com
 
 *Quick Start Card v1.0 - Nov 28, 2025*
 
+
+
+

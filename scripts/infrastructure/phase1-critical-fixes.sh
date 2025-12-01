@@ -352,3 +352,6 @@ echo "  • Run ./scripts/infrastructure/validate-phase1.sh to verify fixes"
 echo "  • Proceed to Phase 2 once validation passes"
 echo ""
 
+
+
+

@@ -29,3 +29,6 @@ ENV NODE_ENV=development
 # Development mode with hot reload (tsx watch)
 CMD ["npm", "run", "dev"]
 
+
+
+

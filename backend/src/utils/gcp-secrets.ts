@@ -2,12 +2,18 @@
  * DIVE V3 - GCP Secret Manager Utility
  * 
  * Provides secure access to secrets stored in GCP Secret Manager.
- * Falls back to environment variables for local development.
+ * GCP secrets are used BY DEFAULT when gcloud CLI is authenticated.
+ * Falls back to environment variables only if GCP is unavailable.
  * 
  * Secrets naming convention: dive-v3-<type>-<instance>
  * Example: dive-v3-mongodb-usa, dive-v3-mongodb-fra
  * 
- * Date: November 29, 2025
+ * Environment Variables:
+ *   USE_GCP_SECRETS=false  - Explicitly disable GCP (uses env vars only)
+ *   USE_GCP_SECRETS=true   - Force GCP (fails if unavailable)
+ *   (not set)              - Auto-detect: use GCP if available, else env vars
+ * 
+ * Date: December 1, 2025
  */
 
 import { logger } from './logger';
@@ -18,7 +24,14 @@ import { logger } from './logger';
 
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || 'dive25';
 const SECRET_PREFIX = 'dive-v3';
-const USE_GCP_SECRETS = process.env.USE_GCP_SECRETS === 'true';
+
+// GCP Secrets mode: 'force' | 'disabled' | 'auto'
+const GCP_MODE = process.env.USE_GCP_SECRETS === 'false' ? 'disabled' 
+               : process.env.USE_GCP_SECRETS === 'true' ? 'force' 
+               : 'auto';
+
+// Track if gcloud CLI is available (cached on first check)
+let gcpCliAvailable: boolean | null = null;
 
 // Secret types
 export type SecretType = 
@@ -72,10 +85,40 @@ function setCachedSecret(key: string, value: string): void {
 // ============================================
 
 /**
+ * Check if gcloud CLI is available and authenticated (cached)
+ */
+async function checkGCloudCLI(): Promise<boolean> {
+    if (gcpCliAvailable !== null) {
+        return gcpCliAvailable;
+    }
+    
+    try {
+        const { execSync } = await import('child_process');
+        execSync('gcloud auth print-access-token', { 
+            encoding: 'utf-8', 
+            timeout: 5000, 
+            stdio: ['pipe', 'pipe', 'pipe'] 
+        });
+        gcpCliAvailable = true;
+        logger.info('GCP gcloud CLI is authenticated and available');
+        return true;
+    } catch {
+        gcpCliAvailable = false;
+        logger.debug('GCP gcloud CLI not available or not authenticated');
+        return false;
+    }
+}
+
+/**
  * Fetch secret from GCP Secret Manager using gcloud CLI
- * This is more reliable in development environments where ADC may be expired
+ * This is the most reliable method in development environments
  */
 async function fetchFromGCloudCLI(secretName: string): Promise<string | null> {
+    // Quick check if gcloud is available
+    if (!(await checkGCloudCLI())) {
+        return null;
+    }
+    
     try {
         const { execSync } = await import('child_process');
         const result = execSync(
@@ -160,7 +203,9 @@ export function getSecretName(type: SecretType, instanceCode?: string): string {
 
 /**
  * Get MongoDB password for an instance
- * Priority: GCP Secret Manager > Environment Variable > Default
+ * Priority (in 'auto' mode): GCP Secret Manager > Environment Variable > ERROR
+ * 
+ * SECURITY: No default password fallback! Must have valid credentials.
  */
 export async function getMongoDBPassword(instanceCode: string): Promise<string> {
     const secretName = getSecretName('mongodb', instanceCode);
@@ -171,8 +216,8 @@ export async function getMongoDBPassword(instanceCode: string): Promise<string> 
         return cached;
     }
     
-    // Try GCP Secret Manager if enabled
-    if (USE_GCP_SECRETS) {
+    // Try GCP Secret Manager (unless explicitly disabled)
+    if (GCP_MODE !== 'disabled') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
@@ -185,6 +230,11 @@ export async function getMongoDBPassword(instanceCode: string): Promise<string> 
             setCachedSecret(secretName, genericSecret);
             return genericSecret;
         }
+        
+        // If GCP mode is 'force' and we didn't get a secret, that's an error
+        if (GCP_MODE === 'force') {
+            throw new Error(`GCP Secret Manager required but secret not found: ${secretName}. Ensure gcloud is authenticated and secret exists.`);
+        }
     }
     
     // Fall back to environment variables
@@ -193,17 +243,26 @@ export async function getMongoDBPassword(instanceCode: string): Promise<string> 
         || process.env.MONGO_PASSWORD;
     
     if (envPassword) {
+        logger.info(`Using MongoDB password from environment variable for ${instanceCode}`);
         setCachedSecret(secretName, envPassword);
         return envPassword;
     }
     
-    // Default for local development
-    logger.warn(`Using default MongoDB password for ${instanceCode} - NOT FOR PRODUCTION`);
-    return 'password';
+    // NO DEFAULT PASSWORD - this is a security risk
+    // Throw a clear error with instructions
+    throw new Error(
+        `MongoDB password not found for ${instanceCode}!\n` +
+        `Options:\n` +
+        `  1. Run: source ./scripts/sync-gcp-secrets.sh (loads from GCP)\n` +
+        `  2. Set: export MONGO_PASSWORD=<password>\n` +
+        `  3. Ensure gcloud is authenticated: gcloud auth login`
+    );
 }
 
 /**
  * Get Keycloak admin password
+ * 
+ * SECURITY: No default password fallback! Must have valid credentials.
  */
 export async function getKeycloakPassword(instanceCode?: string): Promise<string> {
     const secretName = getSecretName('keycloak', instanceCode);
@@ -211,22 +270,30 @@ export async function getKeycloakPassword(instanceCode?: string): Promise<string
     const cached = getCachedSecret(secretName);
     if (cached) return cached;
     
-    if (USE_GCP_SECRETS) {
+    // Try GCP Secret Manager (unless explicitly disabled)
+    if (GCP_MODE !== 'disabled') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
             return gcpSecret;
         }
+        
+        if (GCP_MODE === 'force') {
+            throw new Error(`GCP Secret Manager required but secret not found: ${secretName}`);
+        }
     }
     
     const envPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD;
     if (envPassword) {
+        logger.info('Using Keycloak password from environment variable');
         setCachedSecret(secretName, envPassword);
         return envPassword;
     }
     
-    logger.warn('Using default Keycloak password - NOT FOR PRODUCTION');
-    return 'admin';
+    throw new Error(
+        `Keycloak password not found${instanceCode ? ` for ${instanceCode}` : ''}!\n` +
+        `Run: source ./scripts/sync-gcp-secrets.sh or set KEYCLOAK_ADMIN_PASSWORD`
+    );
 }
 
 /**
@@ -238,7 +305,8 @@ export async function getSecret(type: SecretType, instanceCode?: string): Promis
     const cached = getCachedSecret(secretName);
     if (cached) return cached;
     
-    if (USE_GCP_SECRETS) {
+    // Try GCP Secret Manager (unless explicitly disabled)
+    if (GCP_MODE !== 'disabled') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
@@ -260,36 +328,14 @@ export async function getSecret(type: SecretType, instanceCode?: string): Promis
 
 /**
  * Check if GCP Secret Manager is available and configured
- * Checks both gcloud CLI and google-auth-library
+ * Returns true if gcloud CLI is authenticated
  */
 export async function isGCPSecretsAvailable(): Promise<boolean> {
-    if (!USE_GCP_SECRETS) {
+    if (GCP_MODE === 'disabled') {
         return false;
     }
     
-    // First check if gcloud CLI is available and authenticated
-    try {
-        const { execSync } = await import('child_process');
-        execSync('gcloud auth print-access-token', { 
-            encoding: 'utf-8', 
-            timeout: 5000, 
-            stdio: ['pipe', 'pipe', 'pipe'] 
-        });
-        return true;
-    } catch {
-        // gcloud CLI not available, try google-auth-library
-    }
-    
-    try {
-        const { GoogleAuth } = await import('google-auth-library');
-        const auth = new GoogleAuth({
-            scopes: ['https://www.googleapis.com/auth/cloud-platform']
-        });
-        await auth.getClient();
-        return true;
-    } catch {
-        return false;
-    }
+    return await checkGCloudCLI();
 }
 
 /**
@@ -304,12 +350,12 @@ export function clearSecretCache(): void {
 // INITIALIZATION LOGGING
 // ============================================
 
-if (USE_GCP_SECRETS) {
-    logger.info('GCP Secret Manager integration ENABLED', { 
-        projectId: GCP_PROJECT_ID,
-        secretPrefix: SECRET_PREFIX 
-    });
-} else {
-    logger.debug('GCP Secret Manager integration disabled, using environment variables');
-}
+logger.info('GCP Secret Manager configuration', { 
+    mode: GCP_MODE,
+    projectId: GCP_PROJECT_ID,
+    secretPrefix: SECRET_PREFIX,
+    description: GCP_MODE === 'force' ? 'GCP required - will fail without secrets' :
+                 GCP_MODE === 'disabled' ? 'GCP disabled - using env vars only' :
+                 'Auto-detect - GCP if available, else env vars'
+});
 

@@ -598,3 +598,6 @@ export const kasRegistryService = new KASRegistryService();
 // Export for initialization
 export default kasRegistryService;
 
+
+
+

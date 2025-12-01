@@ -168,6 +168,7 @@ async function refreshAccessToken(account: any) {
 // Determine cookie domain based on NEXTAUTH_URL
 // NextAuth v5 officially uses NEXTAUTH_URL per documentation
 // CRITICAL FIX: Handle both localhost development and Cloudflare tunnel domains
+// FEDERATION FIX (Dec 2025): Support multiple domains (dive25.com, prosecurity.biz)
 const getAuthCookieDomain = (): string | undefined => {
     const authUrl = process.env.NEXTAUTH_URL;
 
@@ -182,7 +183,11 @@ const getAuthCookieDomain = (): string | undefined => {
         return '.divedeeper.internal'; // Allow cookies across all subdomains
     }
     if (authUrl.includes('dive25.com')) {
-        return '.dive25.com'; // Allow cookies across Cloudflare tunnel subdomains
+        return '.dive25.com'; // Allow cookies across Cloudflare tunnel subdomains (USA, FRA, GBR)
+    }
+    // DEU instance uses prosecurity.biz domain (remote deployment)
+    if (authUrl.includes('prosecurity.biz')) {
+        return '.prosecurity.biz'; // Allow cookies across DEU Cloudflare tunnel subdomains
     }
 
     return undefined; // Use default (exact domain match)
@@ -193,7 +198,8 @@ const AUTH_COOKIE_SECURE = process.env.NEXTAUTH_URL?.startsWith('https://') ?? f
 
 // Environment detection for proper cookie configuration
 const isLocalhost = process.env.NEXTAUTH_URL?.includes('localhost') || process.env.NEXTAUTH_URL?.includes('3000') || false;
-const isCloudflareTunnel = process.env.NEXTAUTH_URL?.includes('dive25.com') ?? false;
+// FEDERATION FIX: Include prosecurity.biz (DEU remote instance) in Cloudflare tunnel check
+const isCloudflareTunnel = (process.env.NEXTAUTH_URL?.includes('dive25.com') || process.env.NEXTAUTH_URL?.includes('prosecurity.biz')) ?? false;
 
 console.log('[DIVE] NextAuth v5 cookie configuration:', {
     nextauthUrl: process.env.NEXTAUTH_URL,
@@ -253,9 +259,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email offline_access",
-                    // Force re-authentication when switching users
-                    // This prevents "You are already authenticated as different user" error
-                    prompt: "login",
+                    // REMOVED prompt: "login" - was causing random logouts
+                    // The "already authenticated as different user" error should be handled
+                    // by signing out first before signing in as a different user
                 }
             },
             // Server-side: Use internal Docker network for token exchange
@@ -527,7 +533,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         // The client only receives:
                         // - User profile data (name, email, custom claims)
                         // - No raw tokens
-                        
+
                         // Parse DIVE attributes from id_token if available
                         if (account.id_token) {
                             try {
@@ -600,7 +606,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     // FIX: Extract acr (Authentication Context Class Reference) and amr (Authentication Methods Reference)
                                     // These are critical for AAL2/AAL3 enforcement in OPA policies
                                     // Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #1)
-                                    
+
                                     // ACR: Normalize to string format
                                     // Keycloak may return numeric (0,1,2) or string ("aal1","aal2","aal3")
                                     if (payload.acr !== undefined && payload.acr !== null) {
@@ -761,7 +767,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     const userAccounts = await db.select()
                         .from(accounts)
                         .where(eq(accounts.userId, userId));
-                    
+
                     if (userAccounts.length > 0) {
                         accessToken = userAccounts[0].access_token;
                         refreshToken = userAccounts[0].refresh_token;

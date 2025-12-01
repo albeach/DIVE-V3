@@ -54,14 +54,18 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
       # Keycloak 26 Configuration with HTTPS (Defense in Depth)
       # Using mkcert certificates for internal HTTPS
-      # For localhost development, use localhost hostname
+      # Hostname: Public URL used in tokens (Cloudflare tunnel, port 443 default)
+      # NOTE: Realm frontendUrl is set via Admin API to ensure consistent issuer
       KC_HOSTNAME: usa-idp.dive25.com
       KC_HOSTNAME_STRICT: false
       KC_HTTP_ENABLED: true
+      KC_PROXY_HEADERS: xforwarded
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
-      KC_LOG_LEVEL: info
+      # Debug logging for authentication flow troubleshooting (AAL/MFA enforcement)
+      # Categories: authentication (flow execution), events (login events), x509 (cert auth)
+      KC_LOG_LEVEL: INFO,org.keycloak.authentication:DEBUG,org.keycloak.events:DEBUG,org.keycloak.services.x509:DEBUG,org.keycloak.protocol:DEBUG
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
@@ -209,6 +213,8 @@ services:
     environment:
       NODE_ENV: development
       PORT: 4000                      # HTTPS port (all access)
+      # Phase 3B: Instance identifier for federation
+      INSTANCE_REALM: USA
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm with HTTPS
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
@@ -227,6 +233,11 @@ services:
       LOG_LEVEL: info
       # Federation API URL for metadata endpoint
       API_URL: https://usa-api.dive25.com
+      # Phase 3B: Federation instance URLs (use Cloudflare tunnel URLs)
+      USA_API_URL: https://usa-api.dive25.com
+      FRA_API_URL: https://fra-api.dive25.com
+      GBR_API_URL: https://gbr-api.dive25.com
+      DEU_API_URL: https://deu-api.prosecurity.biz
       # Redis for token blacklist (Gap #7)
       REDIS_URL: redis://redis:6379
       # CORS configuration - Updated for Cloudflare Tunnel (usa-* naming)
@@ -263,6 +274,8 @@ services:
       - ./backend/uploads:/app/uploads
       # Policies Lab: Upload directory for user policies
       - ./policies/uploads:/app/policies/uploads
+      # Phase 3B: Federation Registry configuration
+      - ./config:/app/config:ro
 
   frontend:
     build:
@@ -272,9 +285,10 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     healthcheck:
-      # Best practice: Use curl with -k for self-signed certs in development
+      # P0 Fix (Dec 2025): Increased max-time from 5s to 10s to prevent false unhealthy
+      # Next.js SSR can take 5+ seconds on first render; 5s timeout caused intermittent failures
       # curl is installed in Dockerfile.dev via apk add --no-cache curl
-      test: ["CMD", "curl", "-kfsI", "--max-time", "5", "https://localhost:3000/"]
+      test: ["CMD", "curl", "-kfsI", "--max-time", "10", "https://localhost:3000/"]
       interval: 30s
       timeout: 15s
       retries: 10
@@ -297,9 +311,10 @@ services:
       BACKEND_URL: https://backend:4000
       # Keycloak configuration
       KEYCLOAK_BASE_URL: https://keycloak:8443
+      # Use internal Docker hostname for server-side token operations
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
-      # Public Keycloak URLs (browser-side - Cloudflare tunnel)
+      # Public Keycloak URLs (browser-side - Cloudflare tunnel, port 443 default)
       NEXT_PUBLIC_KEYCLOAK_URL: https://usa-idp.dive25.com
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       # Keycloak Issuer (must match token issuer - use public URL)

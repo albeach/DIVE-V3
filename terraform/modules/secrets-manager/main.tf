@@ -173,3 +173,6 @@ resource "google_service_account_iam_member" "workload_identity" {
   member             = "serviceAccount:${var.project_id}.svc.id.goog[${var.workload_identity_namespace}/keycloak-${each.key}]"
 }
 
+
+
+

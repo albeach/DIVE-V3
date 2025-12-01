@@ -1,23 +1,115 @@
-/* Canada Custom Colors - Red and White */
+/**
+ * Canada Keycloak Theme
+ * Auto-generated from instance.json
+ * Generated: 2025-12-01T01:00:00Z
+ * 
+ * Primary: #FF0000
+ * Secondary: #FFFFFF
+ * Accent: #FF0000
+ */
 
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #FF0000;
+    --instance-secondary: #FFFFFF;
+    --instance-accent: #FF0000;
+    --instance-primary-rgb: 255, 0, 0;
+    --instance-secondary-rgb: 255, 255, 255;
+}
+
+/* Background gradient */
 .dive-background {
-    background: linear-gradient(135deg, #FF0000 0%, #FFFFFF 50%, #FF0000 100%);
+    background: linear-gradient(135deg, #FF0000 0%, #8B0000 100%);
 }
 
+/* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #FF0000 0%, #C8102E 100%);
+    background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+    transition: all 0.3s ease;
 }
 
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(255, 0, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
 .dive-header h1 {
     color: #FF0000;
 }
 
+.dive-header .logo {
+    border-color: #FF0000;
+}
+
+/* Input focus states */
 .dive-input:focus {
     border-color: #FF0000;
-    box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.1);
+    box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.15);
 }
 
+/* Social/IdP link styling */
 .dive-social-link:hover {
     border-color: #FF0000;
+    background: rgba(255, 0, 0, 0.05);
 }
 
+.dive-social-link:focus {
+    border-color: #FF0000;
+    box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #FF0000;
+}
+
+.dive-link:hover {
+    color: #CC0000;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #FF0000;
+}
+
+.dive-accent-bg {
+    background-color: #FF0000;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid #FF0000;
+    color: #FF0000;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #FF0000;
+    background: rgba(255, 0, 0, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #FF0000;
+    box-shadow: 0 0 0 3px rgba(255, 0, 0, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #FF0000;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #FF0000;
+}
+
+.dive-footer a:hover {
+    color: #CC0000;
+}

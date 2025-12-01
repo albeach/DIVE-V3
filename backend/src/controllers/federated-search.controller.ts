@@ -407,7 +407,7 @@ async function executeLocalSearch(query: FederatedSearchQuery): Promise<{ resour
         const { MongoClient } = await import('mongodb');
         const client = await MongoClient.connect(getMongoDBUrl());
         const db = client.db(getMongoDBName());
-        
+
         // Build query for counting
         const countQuery: any = {};
         if (query.classification) {
@@ -425,7 +425,7 @@ async function executeLocalSearch(query: FederatedSearchQuery): Promise<{ resour
                 { resourceId: { $regex: query.query, $options: 'i' } }
             ];
         }
-        
+
         // Get TRUE total count
         const trueTotalCount = await db.collection('resources').countDocuments(
             Object.keys(countQuery).length > 0 ? countQuery : {}

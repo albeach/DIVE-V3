@@ -52,7 +52,7 @@ variable "federation_partners" {
     instance_name = string
     idp_url       = string
     enabled       = bool
-    client_secret = optional(string, "placeholder-sync-after-terraform")  # Set by sync-federation-secrets.sh
+    client_secret = optional(string, "placeholder-sync-after-terraform") # Set by sync-federation-secrets.sh
   }))
   default = {}
 }
@@ -107,4 +107,15 @@ variable "simple_post_broker_otp_flow_alias" {
   type        = string
   default     = "Simple Post-Broker OTP"
 }
+
+# ============================================
+# WebAuthn / Passkey Configuration
+# ============================================
+variable "webauthn_rp_id" {
+  description = "WebAuthn Relying Party ID. Must be the effective domain for production (e.g., 'dive25.com' works for all *.dive25.com subdomains). Empty string only works for localhost."
+  type        = string
+  default     = "dive25.com"
+}
+
+# NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
 

@@ -27,3 +27,6 @@ USER appuser
 # Default command (overridden in compose files)
 CMD ["node"]
 
+
+
+

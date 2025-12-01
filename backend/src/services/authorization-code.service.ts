@@ -15,8 +15,8 @@ export class AuthorizationCodeService {
   constructor() {
     // Use REDIS_URL for consistent connection across all instances (includes password)
     const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-    
-    logger.info('Initializing Authorization Code Service Redis connection', { 
+
+    logger.info('Initializing Authorization Code Service Redis connection', {
       redisUrl: redisUrl.replace(/:[^:@]+@/, ':***@') // Mask password in logs
     });
 
@@ -54,7 +54,7 @@ export class AuthorizationCodeService {
     nonce?: string;
   }): Promise<string> {
     const code = crypto.randomBytes(32).toString('base64url');
-    
+
     const authCode: IAuthorizationCode = {
       code,
       clientId: params.clientId,
@@ -89,13 +89,13 @@ export class AuthorizationCodeService {
    * Validate and consume authorization code
    */
   async validateAndConsumeCode(
-    code: string, 
-    clientId: string, 
+    code: string,
+    clientId: string,
     redirectUri: string
   ): Promise<IAuthorizationCode> {
     // Get code from Redis
     const codeData = await this.redis.get(code);
-    
+
     if (!codeData) {
       throw new Error('invalid_grant: Authorization code not found or expired');
     }

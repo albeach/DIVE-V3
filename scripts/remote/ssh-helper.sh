@@ -17,6 +17,7 @@ SSHPASS="$PROJECT_ROOT/bin/sshpass"
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no -o PreferredAuthentications=password -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o LogLevel=ERROR"
 
 # Get remote instance configuration
+# P0 Fix (Dec 2025): Passwords now fetched from GCP Secret Manager for security
 get_remote_config() {
     local instance="$1"
     local field="$2"
@@ -25,7 +26,16 @@ get_remote_config() {
         deu)
             case "$field" in
                 host) echo "mike@192.168.42.120" ;;
-                password) echo "mike2222" ;;
+                password) 
+                    # Fetch from GCP Secret Manager (persistent, secure)
+                    local secret=$(gcloud secrets versions access latest --secret=dive-v3-ssh-deu --project=dive25 2>/dev/null)
+                    if [ -n "$secret" ]; then
+                        echo "$secret"
+                    else
+                        # Fallback for local development without GCP access
+                        echo "${SSH_DEU_PASSWORD:-}" 
+                    fi
+                    ;;
                 dir) echo "/opt/dive-v3" ;;
                 domain) echo "prosecurity.biz" ;;
             esac

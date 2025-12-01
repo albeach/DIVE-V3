@@ -37,11 +37,14 @@ output "keycloak_service_account_names" {
 output "summary" {
   description = "Summary of created resources"
   value = {
-    total_secrets          = length(local.federation_secrets_map)
-    instances              = keys(var.instances)
-    replication_locations  = var.replication_locations
-    audit_logging_enabled  = true
-    workload_identity      = var.enable_workload_identity
+    total_secrets         = length(local.federation_secrets_map)
+    instances             = keys(var.instances)
+    replication_locations = var.replication_locations
+    audit_logging_enabled = true
+    workload_identity     = var.enable_workload_identity
   }
 }
+
+
+
 
