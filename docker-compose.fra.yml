@@ -319,6 +319,8 @@ services:
       # CRITICAL: FRA-specific URLs - DO NOT cross-contaminate
       NEXT_PUBLIC_API_URL: https://fra-api.dive25.com
       NEXT_PUBLIC_BACKEND_URL: https://fra-api.dive25.com
+      # Server-side API routes use internal Docker network
+      BACKEND_URL: https://backend:4000
       NEXT_PUBLIC_KEYCLOAK_URL: https://fra-idp.dive25.com
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: dive-v3-client-broker
