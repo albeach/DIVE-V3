@@ -84,9 +84,13 @@ export interface IFederatedSearchResult {
 
 export interface IFederatedSearchResponse {
     totalResults: number;
+    /** Sum of accessible documents across all instances (ABAC-filtered) */
+    totalAccessible: number;
     results: IFederatedSearchResult[];
     instanceResults: Record<string, {
         count: number;
+        /** Total ABAC-accessible documents in this instance */
+        accessibleCount: number;
         latencyMs: number;
         error?: string;
         circuitBreakerState: string;
@@ -110,7 +114,9 @@ const CIRCUIT_BREAKER_THRESHOLD = 3; // Failures before opening circuit
 const CIRCUIT_BREAKER_TIMEOUT_MS = 30000; // Time before half-open retry
 const QUERY_TIMEOUT_MS = 5000; // Per-instance query timeout
 const REMOTE_QUERY_TIMEOUT_MS = 8000; // Remote instance query timeout
-const MAX_RESULTS_PER_INSTANCE = 100;
+// Increased from 100 to 500 - allows better pagination across federated instances
+// The actual per-page limit is controlled by the client request
+const MAX_RESULTS_PER_INSTANCE = 500;
 
 const CLEARANCE_HIERARCHY: Record<string, number> = {
     'UNCLASSIFIED': 0,
@@ -400,14 +406,15 @@ class FederatedResourceService {
             user: userAttributes.uniqueID
         });
 
-        // Execute parallel queries
+        // Execute parallel queries - now returns { results, accessibleCount }
         const searchPromises = targetInstances.map(async ([key, instance]) => {
             const instanceStart = Date.now();
             try {
-                const results = await this.searchInstance(instance, options);
+                const searchResult = await this.searchInstance(instance, options);
                 return {
                     key,
-                    results,
+                    results: searchResult.results,
+                    accessibleCount: searchResult.accessibleCount,
                     latencyMs: Date.now() - instanceStart,
                     error: undefined as string | undefined,
                     circuitBreakerState: instance.circuitBreaker.state
@@ -416,6 +423,7 @@ class FederatedResourceService {
                 return {
                     key,
                     results: [] as IFederatedSearchResult[],
+                    accessibleCount: 0,
                     latencyMs: Date.now() - instanceStart,
                     error: error instanceof Error ? error.message : 'Unknown error',
                     circuitBreakerState: instance.circuitBreaker.state
@@ -425,21 +433,24 @@ class FederatedResourceService {
 
         const results = await Promise.all(searchPromises);
 
-        // Aggregate results
+        // Aggregate results and sum accessible counts
         const allResults: IFederatedSearchResult[] = [];
         const instanceResults: Record<string, any> = {};
+        let totalAccessible = 0;
 
         for (const result of results) {
             instanceResults[result.key] = {
                 count: result.results.length,
+                accessibleCount: result.accessibleCount,
                 latencyMs: result.latencyMs,
                 error: result.error,
                 circuitBreakerState: result.circuitBreakerState
             };
             allResults.push(...result.results);
+            totalAccessible += result.accessibleCount;
         }
 
-        // Apply ABAC filtering
+        // Apply ABAC filtering (safety net - primary ABAC is now in each instance)
         const filteredResults = this.applyABACFilter(allResults, userAttributes);
 
         // Deduplicate by resourceId (prefer local over federated)
@@ -452,6 +463,7 @@ class FederatedResourceService {
 
         const response: IFederatedSearchResponse = {
             totalResults: deduped.length,
+            totalAccessible, // Sum of accessible docs from all instances
             results: paginatedResults,
             instanceResults,
             executionTimeMs: Date.now() - startTime,
@@ -475,11 +487,12 @@ class FederatedResourceService {
     /**
      * Search a single instance
      * Uses API-based federation for remote instances, direct MongoDB for local
+     * Returns both results and the total accessible count
      */
     private async searchInstance(
         instance: IFederatedInstance,
         options: IFederatedSearchOptions
-    ): Promise<IFederatedSearchResult[]> {
+    ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number }> {
         // Use API-based federation for non-local instances
         if (instance.useApiMode && instance.apiUrl) {
             return this.searchInstanceViaApi(instance, options);
@@ -534,6 +547,9 @@ class FederatedResourceService {
         // Execute query with timeout
         const timeoutMs = instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS;
         
+        // Get total count first (for accurate accessibleCount)
+        const accessibleCount = await collection.countDocuments(query);
+        
         const cursor = collection.find(query)
             .limit(MAX_RESULTS_PER_INSTANCE)
             .maxTimeMS(timeoutMs);
@@ -541,17 +557,20 @@ class FederatedResourceService {
         const documents = await cursor.toArray();
 
         // Transform to federated search result format
-        return documents.map(doc => this.transformDocument(doc, instance.code));
+        const results = documents.map(doc => this.transformDocument(doc, instance.code));
+        
+        return { results, accessibleCount };
     }
 
     /**
      * Search instance via API (for cross-network federation)
      * Uses the instance's backend API through Cloudflare tunnels
+     * Returns both results and the ABAC-accessible totalCount from the remote instance
      */
     private async searchInstanceViaApi(
         instance: IFederatedInstance,
         options: IFederatedSearchOptions
-    ): Promise<IFederatedSearchResult[]> {
+    ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number }> {
         const apiUrl = `${instance.apiUrl}/api/resources/search`;
         
         logger.info(`Federated API search to ${instance.code}`, {
@@ -589,10 +608,17 @@ class FederatedResourceService {
                 headers,
             });
 
-            const results = response.data.results || [];
+            const responseResults = response.data.results || [];
+            // Capture the ABAC-filtered totalCount from the remote instance
+            const accessibleCount = response.data.pagination?.totalCount || responseResults.length;
+            
+            logger.debug(`Federated API response from ${instance.code}`, {
+                resultsCount: responseResults.length,
+                accessibleCount,
+            });
             
             // Transform to federated search result format
-            return results.map((doc: any) => ({
+            const results = responseResults.map((doc: any) => ({
                 resourceId: doc.resourceId,
                 title: doc.title,
                 classification: doc.classification || 'UNCLASSIFIED',
@@ -604,6 +630,8 @@ class FederatedResourceService {
                 originRealm: instance.code,
                 sourceInstance: instance.code,
             }));
+
+            return { results, accessibleCount };
 
         } catch (error) {
             this.handleConnectionFailure(instance, error);
