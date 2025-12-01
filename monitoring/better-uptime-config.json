@@ -1,0 +1,197 @@
+{
+  "_comment": "Better Uptime Monitor Configuration for DIVE V3",
+  "_docs": "https://betterstack.com/docs/uptime/api/",
+  "_setup_url": "https://betteruptime.com",
+  
+  "status_page": {
+    "name": "DIVE V3 Status",
+    "subdomain": "dive25",
+    "custom_domain": "status.dive25.com",
+    "timezone": "America/New_York",
+    "design": {
+      "header_bg_color": "#009ab3",
+      "brand_color": "#009ab3",
+      "logo_url": "https://dive25.com/logo.svg"
+    }
+  },
+  
+  "monitors": [
+    {
+      "name": "🇺🇸 USA - Frontend",
+      "url": "https://usa-app.dive25.com",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "USA Instance"
+    },
+    {
+      "name": "🇺🇸 USA - Backend API",
+      "url": "https://usa-api.dive25.com/health",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "USA Instance"
+    },
+    {
+      "name": "🇺🇸 USA - Keycloak IdP",
+      "url": "https://usa-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "USA Instance"
+    },
+    {
+      "name": "🇫🇷 FRA - Frontend",
+      "url": "https://fra-app.dive25.com",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "France Instance"
+    },
+    {
+      "name": "🇫🇷 FRA - Backend API",
+      "url": "https://fra-api.dive25.com/health",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "France Instance"
+    },
+    {
+      "name": "🇫🇷 FRA - Keycloak IdP",
+      "url": "https://fra-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "France Instance"
+    },
+    {
+      "name": "🇬🇧 GBR - Frontend",
+      "url": "https://gbr-app.dive25.com",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "United Kingdom Instance"
+    },
+    {
+      "name": "🇬🇧 GBR - Backend API",
+      "url": "https://gbr-api.dive25.com/health",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "United Kingdom Instance"
+    },
+    {
+      "name": "🇬🇧 GBR - Keycloak IdP",
+      "url": "https://gbr-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "United Kingdom Instance"
+    },
+    {
+      "name": "🇩🇪 DEU - Frontend",
+      "url": "https://deu-app.prosecurity.biz",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "Germany Instance"
+    },
+    {
+      "name": "🇩🇪 DEU - Backend API",
+      "url": "https://deu-api.prosecurity.biz/health",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "Germany Instance"
+    },
+    {
+      "name": "🇩🇪 DEU - Keycloak IdP",
+      "url": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker/.well-known/openid-configuration",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 180,
+      "regions": ["us", "eu"],
+      "group": "Germany Instance"
+    },
+    {
+      "name": "🌐 Landing Page (dive25.com)",
+      "url": "https://dive25.com",
+      "monitor_type": "status",
+      "expected_status_codes": [200],
+      "check_frequency": 300,
+      "regions": ["us", "eu", "ap"],
+      "group": "Infrastructure"
+    }
+  ],
+  
+  "monitor_groups": [
+    {
+      "name": "USA Instance",
+      "sort_index": 1
+    },
+    {
+      "name": "France Instance",
+      "sort_index": 2
+    },
+    {
+      "name": "United Kingdom Instance",
+      "sort_index": 3
+    },
+    {
+      "name": "Germany Instance",
+      "sort_index": 4
+    },
+    {
+      "name": "Infrastructure",
+      "sort_index": 5
+    }
+  ],
+  
+  "incident_templates": [
+    {
+      "name": "Scheduled Maintenance",
+      "message": "We are performing scheduled maintenance on the DIVE V3 platform. During this time, some services may be temporarily unavailable. We apologize for any inconvenience.",
+      "status": "maintenance"
+    },
+    {
+      "name": "Service Degradation",
+      "message": "We are experiencing degraded performance on some DIVE V3 services. Our team is investigating the issue. Updates will be provided as available.",
+      "status": "degraded"
+    },
+    {
+      "name": "Service Outage",
+      "message": "We are currently experiencing an outage affecting DIVE V3 services. Our team is actively working to resolve this issue. We apologize for the inconvenience.",
+      "status": "down"
+    }
+  ],
+  
+  "alerting": {
+    "wait_seconds_before_alerting": 60,
+    "recovery_period_seconds": 60,
+    "escalation_policy": {
+      "name": "Default Escalation",
+      "steps": [
+        {
+          "delay_minutes": 0,
+          "notify": ["email", "slack"]
+        },
+        {
+          "delay_minutes": 15,
+          "notify": ["sms"]
+        }
+      ]
+    }
+  }
+}
+
