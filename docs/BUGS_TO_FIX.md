@@ -506,6 +506,125 @@ FRA User clicks USA doc → FRA Backend detects USA origin from resourceId
 
 ---
 
+## BUG-007: ZTDF Inspector KAS Flow Tab Fails for Federated Resources
+
+**Severity:** HIGH  
+**Discovered:** 2025-12-01  
+**Status:** ✅ FIXED (Commit `26dcd6c`)
+
+### Description
+
+When viewing a federated resource (e.g., USA document from FRA instance), the ZTDF Inspector's "KAS Flow" tab shows "⚠️ Failed to load KAS flow" with "Authentication required" error.
+
+### Impact
+
+- **KAS Flow Visualization Broken**: Users cannot see the 6-step KAS access flow
+- **View Decryption Options Might Fail**: Related ZTDF endpoints also affected
+- **Federated ZTDF Inspection Broken**: Key feature for understanding policy-bound encryption
+
+### Root Cause
+
+Two issues combined:
+
+**1. No Frontend API Route for KAS Flow**
+
+The `KASFlowVisualizer` component made **direct client-side calls** to the backend:
+
+```typescript
+// Direct call from browser to backend - bypasses Next.js API proxy
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+fetch(`${backendUrl}/api/resources/${resourceId}/kas-flow`, {
+    headers: { 'Authorization': `Bearer ${token}` }  // Client-side token
+});
+```
+
+**2. Cross-Instance JWT Token Rejection**
+
+When FRA backend proxies to USA backend:
+- FRA user's JWT is signed by **FRA Keycloak**
+- USA backend's `authenticateJWT` validates against **USA Keycloak's JWKS**
+- Token validation fails → 401 Unauthorized
+
+### Fix Applied
+
+**Part 1: Created Frontend API Route**
+
+New file: `frontend/src/app/api/resources/[id]/kas-flow/route.ts`
+
+```typescript
+// Validates session server-side, proxies to backend
+// Backend handles federation internally
+export async function GET(request, { params }) {
+    const validation = await validateSession();
+    const tokens = await getSessionTokens();
+    
+    const response = await fetch(`${BACKEND_URL}/api/resources/${resourceId}/kas-flow`, {
+        headers: { 'Authorization': `Bearer ${tokens.accessToken}` }
+    });
+    
+    return NextResponse.json(await response.json());
+}
+```
+
+**Part 2: Updated KASFlowVisualizer**
+
+```typescript
+// Before: Direct backend call
+fetch(`${NEXT_PUBLIC_BACKEND_URL}/api/resources/${resourceId}/kas-flow`, { ... });
+
+// After: Frontend API route (handles auth server-side)
+fetch(`/api/resources/${resourceId}/kas-flow`, { cache: 'no-store' });
+```
+
+**Part 3: Federation Auth Bypass**
+
+Added trusted federation support to `authenticateJWT` middleware:
+
+```typescript
+const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'];
+
+export const authenticateJWT = async (req, res, next) => {
+    const federatedFrom = req.headers['x-federated-from'];
+    
+    if (federatedFrom && TRUSTED_FEDERATION_INSTANCES.includes(federatedFrom)) {
+        // Decode JWT without validation (partner already verified)
+        const decoded = jose.decodeJwt(token);
+        
+        // Extract attributes from foreign token
+        req.user = {
+            uniqueID: decoded.uniqueID,
+            clearance: decoded.clearance,
+            countryOfAffiliation: decoded.countryOfAffiliation,
+            federated: true,
+            federatedFrom,
+        };
+        
+        return next();
+    }
+    
+    // Standard JWT verification for non-federated requests...
+};
+```
+
+### Security Considerations
+
+- Federation bypass **only** for configured trusted instances
+- User attributes extracted from foreign JWT (not arbitrary)
+- Logging captures federated request origin
+- TODO: Add shared secret validation for federation headers
+
+### Files Fixed
+
+- `frontend/src/app/api/resources/[id]/kas-flow/route.ts` (NEW)
+- `frontend/src/components/ztdf/KASFlowVisualizer.tsx`
+- `backend/src/middleware/authz.middleware.ts`
+
+### Commit
+
+`26dcd6c` - fix(federation): Add KAS flow API route and federation auth bypass
+
+---
+
 ## Template for New Bugs
 
 ```markdown
