@@ -430,6 +430,82 @@ const [selectedInstances, setSelectedInstances] = useState<string[]>([CURRENT_IN
 
 ---
 
+## BUG-006: Cross-Federation Resource Access Returns 404
+
+**Severity:** CRITICAL  
+**Discovered:** 2025-12-01  
+**Status:** ✅ FIXED (Commit `d08adb7`)
+
+### Description
+
+When a user on one instance (e.g., FRA) clicks to view a document from a different instance (e.g., USA document `doc-USA-seed-...`), the request fails with a generic error or 404.
+
+The document exists on USA and is visible in federated search results, but clicking to view details fails because the FRA backend only checks its **local MongoDB**.
+
+### Impact
+
+- **Broken Cross-Federation**: Users cannot access documents from federated instances
+- **Confusing UX**: Documents appear in search results but fail to open
+- **Federation Promise Broken**: The whole point of federation is transparent access
+
+### Root Cause
+
+The `getResourceById` service function only queries **local MongoDB**:
+
+```typescript
+// Only checks local DB!
+const resource = await collection.findOne({ resourceId });
+```
+
+When FRA receives a request for `doc-USA-seed-...`:
+1. FRA backend queries FRA MongoDB
+2. Document not found (it's only on USA)
+3. Returns 404
+
+### Fix Applied
+
+Created federation-aware resource fetching in `resource.service.ts`:
+
+```typescript
+export async function getResourceByIdFederated(resourceId: string, authToken?: string) {
+    // 1. Try local MongoDB first
+    const localResource = await getResourceById(resourceId);
+    if (localResource) return { resource: localResource, source: 'local' };
+    
+    // 2. Extract origin instance from resourceId (doc-USA-seed-...)
+    const originInstance = extractOriginFromResourceId(resourceId);
+    
+    // 3. Proxy to origin instance's API with user's auth token
+    const response = await axios.get(`${originApiUrl}/api/resources/${resourceId}`, {
+        headers: { 'Authorization': authToken },
+    });
+    
+    return { resource: response.data, source: 'federated' };
+}
+```
+
+### Flow After Fix
+
+```
+FRA User clicks USA doc → FRA Backend detects USA origin from resourceId
+    → FRA proxies request to USA API with user's token
+    → USA backend does full OPA authorization 
+    → USA returns authorized resource
+    → FRA returns to user
+```
+
+### Files Fixed
+
+- `backend/src/services/resource.service.ts` - Add `getResourceByIdFederated()`
+- `backend/src/middleware/authz.middleware.ts` - Use federation-aware fetch
+- `backend/src/controllers/resource.controller.ts` - Handle federated response
+
+### Commit
+
+`d08adb7` - feat(federation): Add transparent cross-instance resource access
+
+---
+
 ## Template for New Bugs
 
 ```markdown
