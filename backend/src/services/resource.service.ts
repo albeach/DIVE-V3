@@ -346,7 +346,7 @@ export function extractOriginFromResourceId(resourceId: string): string | null {
  * Federation instance API URLs
  * TODO: Move to federation-registry.json or environment config
  */
-const FEDERATION_API_URLS: Record<string, string> = {
+export const FEDERATION_API_URLS: Record<string, string> = {
     'USA': process.env.USA_API_URL || 'https://usa-api.dive25.com',
     'FRA': process.env.FRA_API_URL || 'https://fra-api.dive25.com',
     'GBR': process.env.GBR_API_URL || 'https://gbr-api.dive25.com',

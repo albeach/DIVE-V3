@@ -300,9 +300,57 @@ export const getZTDFDetailsHandler = async (
     try {
         logger.info('Fetching ZTDF details', { requestId, resourceId: id });
 
-        const resource = await getResourceById(id);
-
+        // First try local
+        let resource = await getResourceById(id);
+        
+        // If not found locally, check if it's a federated resource
         if (!resource) {
+            const { extractOriginFromResourceId, FEDERATION_API_URLS } = await import('../services/resource.service');
+            const originInstance = extractOriginFromResourceId(id);
+            const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+            
+            if (originInstance && originInstance !== CURRENT_INSTANCE) {
+                // Proxy to origin instance's ZTDF endpoint
+                const originApiUrl = FEDERATION_API_URLS[originInstance];
+                const authHeader = req.headers['authorization'];
+                
+                if (originApiUrl && authHeader) {
+                    logger.info('Proxying ZTDF details request to federated instance', {
+                        requestId,
+                        resourceId: id,
+                        originInstance,
+                    });
+                    
+                    try {
+                        const axios = (await import('axios')).default;
+                        const fedResponse = await axios.get(`${originApiUrl}/api/resources/${id}/ztdf`, {
+                            headers: {
+                                'Authorization': authHeader,
+                                'Content-Type': 'application/json',
+                                'X-Federated-From': CURRENT_INSTANCE,
+                            },
+                            timeout: 10000,
+                            validateStatus: (status) => status < 500,
+                        });
+                        
+                        if (fedResponse.status === 200) {
+                            res.status(200).json(fedResponse.data);
+                            return;
+                        }
+                        
+                        // Forward error from origin
+                        res.status(fedResponse.status).json(fedResponse.data);
+                        return;
+                    } catch (fedError) {
+                        logger.error('Federated ZTDF request failed', {
+                            requestId,
+                            resourceId: id,
+                            error: fedError instanceof Error ? fedError.message : 'Unknown',
+                        });
+                    }
+                }
+            }
+            
             throw new NotFoundError(`Resource ${id} not found`);
         }
 
@@ -445,9 +493,57 @@ export const getKASFlowHandler = async (
     try {
         logger.info('Fetching KAS flow status', { requestId, resourceId: id });
 
-        const resource = await getResourceById(id);
-
+        // First try local
+        let resource = await getResourceById(id);
+        
+        // If not found locally, check if it's a federated resource
         if (!resource) {
+            const { extractOriginFromResourceId, FEDERATION_API_URLS } = await import('../services/resource.service');
+            const originInstance = extractOriginFromResourceId(id);
+            const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+            
+            if (originInstance && originInstance !== CURRENT_INSTANCE) {
+                // Proxy to origin instance's KAS flow endpoint
+                const originApiUrl = FEDERATION_API_URLS[originInstance];
+                const authHeader = req.headers['authorization'];
+                
+                if (originApiUrl && authHeader) {
+                    logger.info('Proxying KAS flow request to federated instance', {
+                        requestId,
+                        resourceId: id,
+                        originInstance,
+                    });
+                    
+                    try {
+                        const axios = (await import('axios')).default;
+                        const fedResponse = await axios.get(`${originApiUrl}/api/resources/${id}/kas-flow`, {
+                            headers: {
+                                'Authorization': authHeader,
+                                'Content-Type': 'application/json',
+                                'X-Federated-From': CURRENT_INSTANCE,
+                            },
+                            timeout: 10000,
+                            validateStatus: (status) => status < 500,
+                        });
+                        
+                        if (fedResponse.status === 200) {
+                            res.status(200).json(fedResponse.data);
+                            return;
+                        }
+                        
+                        // Forward error from origin
+                        res.status(fedResponse.status).json(fedResponse.data);
+                        return;
+                    } catch (fedError) {
+                        logger.error('Federated KAS flow request failed', {
+                            requestId,
+                            resourceId: id,
+                            error: fedError instanceof Error ? fedError.message : 'Unknown',
+                        });
+                    }
+                }
+            }
+            
             throw new NotFoundError(`Resource ${id} not found`);
         }
 
