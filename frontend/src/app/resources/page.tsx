@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
@@ -11,10 +11,16 @@ import ViewModeSwitcher from '@/components/resources/view-mode-switcher';
 import AdvancedSearch from '@/components/resources/advanced-search';
 import CategoryBrowser from '@/components/resources/category-browser';
 import SavedFilters from '@/components/resources/saved-filters';
+import { Globe2, Server } from 'lucide-react';
 
 // ViewMode and IResourceCardData now imported from advanced-resource-card
 
 const VIEW_MODE_KEY = 'dive_resources_view_mode';
+const FEDERATED_MODE_KEY = 'dive_resources_federated_mode';
+
+// Federation instances
+const FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'] as const;
+type FederationInstance = typeof FEDERATION_INSTANCES[number];
 
 // Clearance hierarchy for filtering
 // CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
@@ -118,6 +124,13 @@ export default function ResourcesPage() {
   // View mode with localStorage persistence
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   
+  // Federated search state
+  const [federatedMode, setFederatedMode] = useState(false);
+  const [selectedInstances, setSelectedInstances] = useState<FederationInstance[]>(['USA']);
+  const [federatedStats, setFederatedStats] = useState<Record<string, { count: number; latencyMs: number; error?: string }>>({});
+  const [federatedLoading, setFederatedLoading] = useState(false);
+  const [federatedTotalResults, setFederatedTotalResults] = useState<number>(0); // True total across all instances
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
@@ -135,16 +148,26 @@ export default function ResourcesPage() {
 
   // UI state
   const [showCategoryBrowser, setShowCategoryBrowser] = useState(false);
+  
+  // Ref to prevent duplicate fetches
+  const hasFetchedRef = useRef(false);
+  const lastFederatedModeRef = useRef(federatedMode);
+  const lastInstancesRef = useRef(selectedInstances.join(','));
 
-  // Load view mode from localStorage
+  // Load view mode and federated mode from localStorage
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(VIEW_MODE_KEY);
-      if (stored && ['grid', 'list', 'compact'].includes(stored)) {
-        setViewMode(stored as ViewMode);
+      const storedViewMode = localStorage.getItem(VIEW_MODE_KEY);
+      if (storedViewMode && ['grid', 'list', 'compact'].includes(storedViewMode)) {
+        setViewMode(storedViewMode as ViewMode);
+      }
+      
+      const storedFederatedMode = localStorage.getItem(FEDERATED_MODE_KEY);
+      if (storedFederatedMode === 'true') {
+        setFederatedMode(true);
       }
     } catch (error) {
-      console.error('Failed to load view mode:', error);
+      console.error('Failed to load preferences:', error);
     }
   }, []);
 
@@ -158,6 +181,29 @@ export default function ResourcesPage() {
     }
   };
 
+  // Toggle federated mode
+  const handleFederatedModeToggle = () => {
+    const newMode = !federatedMode;
+    setFederatedMode(newMode);
+    try {
+      localStorage.setItem(FEDERATED_MODE_KEY, String(newMode));
+    } catch (error) {
+      console.error('Failed to save federated mode:', error);
+    }
+  };
+
+  // Toggle instance selection
+  const toggleInstance = (instance: FederationInstance) => {
+    setSelectedInstances(prev => {
+      if (prev.includes(instance)) {
+        // Don't allow deselecting all instances
+        if (prev.length === 1) return prev;
+        return prev.filter(i => i !== instance);
+      }
+      return [...prev, instance];
+    });
+  };
+
   // Redirect to login if not authenticated (separate effect to avoid render-phase updates)
   useEffect(() => {
     if (status !== 'loading' && !session) {
@@ -165,18 +211,56 @@ export default function ResourcesPage() {
     }
   }, [status, session, router]);
 
-  // Fetch resources - Modern 2025 pattern: No client-side token access
-  useEffect(() => {
-    if (status === 'loading') return;
-    
-    if (!session) {
-      return;
-    }
+  // Fetch resources - supports both local and federated modes
+  // Note: Filters are applied client-side after fetching, not in the API call
+  const fetchResources = useCallback(async (isFederated: boolean, instanceList: FederationInstance[]) => {
+    try {
+      setLoading(true);
+      setError(null);
 
-    async function fetchResources() {
-      try {
-        // Call our server-side API route (NO tokens in client!)
-        // Server validates session and handles token management
+      if (isFederated) {
+        // Federated search across multiple instances
+        setFederatedLoading(true);
+        const response = await fetch('/api/resources/federated-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instances: instanceList,
+            limit: 500, // Get more results for client-side filtering
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.message || `HTTP ${response.status}: Failed to fetch federated resources`);
+        }
+
+        const data = await response.json();
+        const fetchedResources = data.results || [];
+        
+        // Store instance stats
+        setFederatedStats(data.instanceResults || {});
+        
+        // Store true total (sum of all instance counts)
+        const instanceStats = data.instanceResults || {};
+        const trueTotalFromInstances = Object.values(instanceStats)
+          .reduce((sum: number, stats: any) => sum + (stats?.count || 0), 0);
+        setFederatedTotalResults(data.totalResults || trueTotalFromInstances);
+        
+        console.log('[Resources] Loaded federated resources:', {
+          count: fetchedResources.length,
+          totalResults: data.totalResults,
+          trueTotalFromInstances,
+          instances: Object.keys(instanceStats),
+          cacheHit: data.cacheHit,
+          executionTimeMs: data.executionTimeMs,
+        });
+        
+        setResources(fetchedResources);
+        setFilteredResources(fetchedResources);
+        setFederatedLoading(false);
+      } else {
+        // Local resources only
         const response = await fetch('/api/resources', {
           method: 'GET',
           cache: 'no-store',
@@ -190,25 +274,49 @@ export default function ResourcesPage() {
         const data = await response.json();
         const fetchedResources = data.resources || [];
         
-        console.log('[Resources] Loaded resources:', {
+        console.log('[Resources] Loaded local resources:', {
           count: fetchedResources.length,
           timestamp: new Date().toISOString(),
         });
         
         setResources(fetchedResources);
         setFilteredResources(fetchedResources);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load resources';
-        setError(errorMessage);
-        console.error('[Resources] Error fetching resources:', err);
-      } finally {
-        setLoading(false);
+        setFederatedStats({});
       }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load resources';
+      setError(errorMessage);
+      console.error('[Resources] Error fetching resources:', err);
+      setFederatedLoading(false);
+    } finally {
+      setLoading(false);
     }
+  }, []); // No dependencies - function is stable
 
-    fetchResources();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]); // Only fetch once when component mounts, not on every session change
+  // Initial fetch on mount (once session is ready)
+  useEffect(() => {
+    if (status === 'loading' || !session) return;
+    if (hasFetchedRef.current) return; // Already fetched
+    
+    hasFetchedRef.current = true;
+    fetchResources(federatedMode, selectedInstances);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, session]);
+
+  // Re-fetch when federated mode or instances change (after initial load)
+  useEffect(() => {
+    if (!hasFetchedRef.current) return; // Wait for initial fetch
+    
+    const modeChanged = lastFederatedModeRef.current !== federatedMode;
+    const instancesChanged = lastInstancesRef.current !== selectedInstances.join(',');
+    
+    if (modeChanged || (federatedMode && instancesChanged)) {
+      lastFederatedModeRef.current = federatedMode;
+      lastInstancesRef.current = selectedInstances.join(',');
+      fetchResources(federatedMode, selectedInstances);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps  
+  }, [federatedMode, selectedInstances.join(',')]);
 
   // Handle filter changes - wrapped in useCallback to prevent infinite loops
   const handleFilterChange = useCallback((newFilters: ResourceFiltersState) => {
@@ -319,6 +427,67 @@ export default function ResourcesPage() {
           </button>
         </div>
 
+        {/* Federated Search Toggle */}
+        <div className="flex flex-wrap items-center gap-4 mb-4 p-4 bg-gradient-to-r from-slate-50 to-blue-50 rounded-xl border-2 border-slate-200">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFederatedModeToggle}
+              className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                federatedMode ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform ${
+                  federatedMode ? 'translate-x-8' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <div className="flex items-center gap-2">
+              {federatedMode ? (
+                <Globe2 className="w-5 h-5 text-blue-600" />
+              ) : (
+                <Server className="w-5 h-5 text-gray-500" />
+              )}
+              <span className={`font-semibold ${federatedMode ? 'text-blue-700' : 'text-gray-600'}`}>
+                {federatedMode ? 'Federated Search' : 'Local Only'}
+              </span>
+            </div>
+          </div>
+
+          {/* Instance Selection (only shown in federated mode) */}
+          {federatedMode && (
+            <div className="flex items-center gap-2 ml-4 pl-4 border-l-2 border-slate-300">
+              <span className="text-sm font-medium text-gray-600">Instances:</span>
+              <div className="flex gap-1.5">
+                {FEDERATION_INSTANCES.map((instance) => {
+                  const isSelected = selectedInstances.includes(instance);
+                  const stats = federatedStats[instance];
+                  return (
+                    <button
+                      key={instance}
+                      onClick={() => toggleInstance(instance)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        isSelected
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'bg-white text-gray-600 border border-gray-300 hover:border-blue-400'
+                      }`}
+                      title={stats ? `${stats.count} docs, ${stats.latencyMs}ms` : undefined}
+                    >
+                      {instance}
+                      {isSelected && stats && (
+                        <span className="ml-1 opacity-75">({stats.count})</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {federatedLoading && (
+                <div className="ml-2 animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Compliance Badges */}
         <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-bold shadow-sm">
@@ -334,7 +503,20 @@ export default function ResourcesPage() {
             🔐 ZTDF Encrypted
           </span>
           <span className="inline-flex items-center px-2.5 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs font-bold">
-            {resources.length} Documents
+            {federatedMode && federatedTotalResults > 0 
+              ? federatedTotalResults.toLocaleString() 
+              : resources.length.toLocaleString()
+            } Documents
+            {federatedMode && Object.keys(federatedStats).length > 0 && (
+              <span className="ml-1 text-blue-600">
+                ({Object.keys(federatedStats).filter(k => !federatedStats[k].error).length} instances)
+              </span>
+            )}
+            {federatedMode && resources.length < federatedTotalResults && (
+              <span className="ml-1 text-gray-500">
+                (showing {resources.length.toLocaleString()})
+              </span>
+            )}
           </span>
         </div>
       </div>

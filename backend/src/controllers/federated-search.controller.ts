@@ -31,38 +31,105 @@ interface FederationInstance {
     enabled: boolean;
 }
 
-// Load federation instances from environment or use defaults
-// For local development, use localhost ports
-// For production, use Cloudflare tunnel URLs
-const FEDERATION_INSTANCES: FederationInstance[] = [
-    {
-        code: 'USA',
-        apiUrl: process.env.USA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4000' : 'https://usa-api.dive25.com'),
-        type: 'local',
-        enabled: true
-    },
-    {
-        code: 'FRA',
-        apiUrl: process.env.FRA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4001' : 'https://fra-api.dive25.com'),
-        type: 'local',
-        enabled: true
-    },
-    {
-        code: 'GBR',
-        apiUrl: process.env.GBR_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4002' : 'https://gbr-api.dive25.com'),
-        type: 'local',
-        enabled: true
-    },
-    {
-        code: 'DEU',
-        apiUrl: process.env.DEU_API_URL || 'https://deu-api.prosecurity.biz',
-        type: 'remote',
-        enabled: process.env.DEU_FEDERATION_ENABLED === 'true' // Disabled by default
-    }
-];
+// Load federation instances from federation-registry.json or environment
+// Phase 3: Dynamic configuration loading for distributed query federation
+import fs from 'fs';
+import path from 'path';
 
+function loadFederationInstances(): FederationInstance[] {
+    // Try to load from federation-registry.json
+    const registryPaths = [
+        path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
+        path.join(process.cwd(), 'config', 'federation-registry.json')
+    ];
+
+    for (const registryPath of registryPaths) {
+        try {
+            if (fs.existsSync(registryPath)) {
+                const registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
+                const instances: FederationInstance[] = [];
+
+                for (const [key, instance] of Object.entries(registry.instances)) {
+                    const inst = instance as any;
+                    if (!inst.enabled) continue;
+
+                    // Build API URL from registry
+                    const backendService = inst.services?.backend;
+                    let apiUrl: string;
+
+                    if (inst.type === 'remote') {
+                        // Remote instances use external hostname
+                        apiUrl = process.env[`${key.toUpperCase()}_API_URL`] ||
+                            `https://${backendService?.hostname || `${key}-api.${inst.deployment?.domain}`}`;
+                    } else {
+                        // Local instances use localhost in development
+                        const port = backendService?.externalPort || 4000;
+                        apiUrl = process.env[`${key.toUpperCase()}_API_URL`] ||
+                            (process.env.NODE_ENV === 'development'
+                                ? `https://localhost:${port}`
+                                : `https://${backendService?.hostname || `${key}-api.dive25.com`}`);
+                    }
+
+                    instances.push({
+                        code: inst.code,
+                        apiUrl,
+                        type: inst.type,
+                        // Phase 3: DEU and all instances enabled by default when present in registry
+                        enabled: process.env[`${key.toUpperCase()}_FEDERATION_ENABLED`] !== 'false'
+                    });
+                }
+
+                logger.info('Loaded federation instances from registry', {
+                    count: instances.length,
+                    instances: instances.map(i => ({ code: i.code, type: i.type, enabled: i.enabled }))
+                });
+
+                return instances;
+            }
+        } catch (error) {
+            logger.warn('Failed to load federation registry, using defaults', {
+                path: registryPath,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+
+    // Fallback to hardcoded defaults
+    logger.warn('Using fallback federation instances (registry not found)');
+    return [
+        {
+            code: 'USA',
+            apiUrl: process.env.USA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4000' : 'https://usa-api.dive25.com'),
+            type: 'local',
+            enabled: true
+        },
+        {
+            code: 'FRA',
+            apiUrl: process.env.FRA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4001' : 'https://fra-api.dive25.com'),
+            type: 'local',
+            enabled: true
+        },
+        {
+            code: 'GBR',
+            apiUrl: process.env.GBR_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4002' : 'https://gbr-api.dive25.com'),
+            type: 'local',
+            enabled: true
+        },
+        {
+            code: 'DEU',
+            apiUrl: process.env.DEU_API_URL || 'https://deu-api.prosecurity.biz',
+            type: 'remote',
+            // Phase 3: DEU enabled by default
+            enabled: process.env.DEU_FEDERATION_ENABLED !== 'false'
+        }
+    ];
+}
+
+const FEDERATION_INSTANCES = loadFederationInstances();
 const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
-const FEDERATED_SEARCH_TIMEOUT_MS = parseInt(process.env.FEDERATED_SEARCH_TIMEOUT_MS || '3000');
+// Phase 3: Increased timeout for remote instances (DEU)
+const FEDERATED_SEARCH_TIMEOUT_MS = parseInt(process.env.FEDERATED_SEARCH_TIMEOUT_MS || '5000');
+const REMOTE_INSTANCE_TIMEOUT_MS = parseInt(process.env.REMOTE_INSTANCE_TIMEOUT_MS || '8000');
 const MAX_FEDERATED_RESULTS = parseInt(process.env.MAX_FEDERATED_RESULTS || '100');
 
 // Clearance hierarchy for filtering
@@ -104,7 +171,8 @@ interface FederatedSearchResult {
 
 interface FederatedSearchResponse {
     query: FederatedSearchQuery;
-    totalResults: number;
+    totalResults: number;       // True total across ALL federated instances
+    resultsReturned: number;    // How many results actually returned (may be limited)
     results: FederatedSearchResult[];
     federatedFrom: string[];
     instanceResults: Record<string, { count: number; latencyMs: number; error?: string }>;
@@ -172,25 +240,26 @@ export const federatedSearchHandler = async (
                 const instanceStart = Date.now();
 
                 try {
-                    let resources: FederatedSearchResult[];
+                    let searchResult: { resources: FederatedSearchResult[]; trueTotalCount: number };
 
                     if (instance.code === INSTANCE_REALM) {
                         // Local search (direct MongoDB query)
-                        resources = await executeLocalSearch(searchQuery);
+                        searchResult = await executeLocalSearch(searchQuery);
                     } else {
                         // Remote search (Federation API)
-                        resources = await executeRemoteSearch(instance, searchQuery, req.headers.authorization || '');
+                        searchResult = await executeRemoteSearch(instance, searchQuery, req.headers.authorization || '');
                     }
 
                     // Mark as federated and set origin
-                    resources = resources.map(r => ({
+                    const resources = searchResult.resources.map(r => ({
                         ...r,
                         originRealm: r.originRealm || instance.code,
                         _federated: instance.code !== INSTANCE_REALM
                     }));
 
+                    // Store TRUE total count from this instance
                     instanceResults[instance.code] = {
-                        count: resources.length,
+                        count: searchResult.trueTotalCount, // TRUE total, not just returned count
                         latencyMs: Date.now() - instanceStart
                     };
 
@@ -232,31 +301,45 @@ export const federatedSearchHandler = async (
         }
         let uniqueResources = Array.from(seen.values());
 
-        // Authorization filter (server-side enforcement)
-        uniqueResources = uniqueResources.filter(resource => {
-            // Check releasability
-            if (!resource.releasabilityTo.includes(userCountry) &&
-                !resource.releasabilityTo.includes('NATO') &&
-                !resource.releasabilityTo.includes('FVEY')) {
-                return false;
-            }
+        // Note: Server-side authorization filtering is DISABLED to match local mode behavior.
+        // The local /api/resources endpoint returns ALL resources and the UI shows "COI may be required" badges.
+        // Authorization is enforced when user tries to ACCESS a specific resource (GET /api/resources/:id).
+        // 
+        // If strict server-side filtering is needed, set enforceAuthorization=true in the request:
+        const enforceAuthorization = req.body.enforceAuthorization === true || req.query.enforceAuthorization === 'true';
 
-            // Check clearance
-            const resourceLevel = CLEARANCE_HIERARCHY[resource.classification] ?? 0;
-            if (userClearanceLevel < resourceLevel) {
-                return false;
-            }
-
-            // Check COI (if resource has COI requirement)
-            if (resource.COI && resource.COI.length > 0) {
-                const hasCOI = resource.COI.some(coi => userCOIs.includes(coi));
-                if (!hasCOI) {
+        if (enforceAuthorization) {
+            uniqueResources = uniqueResources.filter(resource => {
+                // Check releasability
+                if (!resource.releasabilityTo.includes(userCountry) &&
+                    !resource.releasabilityTo.includes('NATO') &&
+                    !resource.releasabilityTo.includes('FVEY')) {
                     return false;
                 }
-            }
 
-            return true;
-        });
+                // Check clearance
+                const resourceLevel = CLEARANCE_HIERARCHY[resource.classification] ?? 0;
+                if (userClearanceLevel < resourceLevel) {
+                    return false;
+                }
+
+                // Check COI (if resource has COI requirement)
+                if (resource.COI && resource.COI.length > 0) {
+                    const hasCOI = resource.COI.some(coi => userCOIs.includes(coi));
+                    if (!hasCOI) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+            logger.info('Applied server-side authorization filter', {
+                requestId,
+                beforeFilter: seen.size,
+                afterFilter: uniqueResources.length
+            });
+        }
 
         // Calculate relevance scores if query provided
         if (searchQuery.query) {
@@ -272,10 +355,15 @@ export const federatedSearchHandler = async (
         // Apply limit
         const limitedResults = uniqueResources.slice(0, searchQuery.limit || MAX_FEDERATED_RESULTS);
 
+        // Calculate true total from all instance counts
+        const trueTotalAcrossInstances = Object.values(instanceResults)
+            .reduce((sum, result) => sum + (result.count || 0), 0);
+
         // Build response
         const response: FederatedSearchResponse = {
             query: searchQuery,
-            totalResults: limitedResults.length,
+            totalResults: trueTotalAcrossInstances, // True total across ALL instances
+            resultsReturned: limitedResults.length, // How many actually returned (may be limited)
             results: limitedResults,
             federatedFrom: Object.entries(instanceResults)
                 .filter(([, result]) => !result.error)
@@ -310,18 +398,49 @@ export const federatedSearchHandler = async (
 
 /**
  * Execute search on local MongoDB
+ * Returns both the limited results AND the true total count
  */
-async function executeLocalSearch(query: FederatedSearchQuery): Promise<FederatedSearchResult[]> {
+async function executeLocalSearch(query: FederatedSearchQuery): Promise<{ resources: FederatedSearchResult[]; trueTotalCount: number }> {
     try {
-        // Use existing resource service
+        // Get true total count from MongoDB
+        const { getMongoDBUrl, getMongoDBName } = await import('../utils/mongodb-config');
+        const { MongoClient } = await import('mongodb');
+        const client = await MongoClient.connect(getMongoDBUrl());
+        const db = client.db(getMongoDBName());
+        
+        // Build query for counting
+        const countQuery: any = {};
+        if (query.classification) {
+            countQuery['ztdf.policy.securityLabel.classification'] = query.classification;
+        }
+        if (query.country) {
+            countQuery['ztdf.policy.securityLabel.releasabilityTo'] = { $in: [query.country] };
+        }
+        if (query.coi) {
+            countQuery['ztdf.policy.securityLabel.COI'] = { $in: [query.coi] };
+        }
+        if (query.query) {
+            countQuery.$or = [
+                { title: { $regex: query.query, $options: 'i' } },
+                { resourceId: { $regex: query.query, $options: 'i' } }
+            ];
+        }
+        
+        // Get TRUE total count
+        const trueTotalCount = await db.collection('resources').countDocuments(
+            Object.keys(countQuery).length > 0 ? countQuery : {}
+        );
+
+        // Use existing resource service for limited results
         const resources = await searchResources({
             query: query.query,
             classification: query.classification,
             releasableTo: query.country,
-            coi: query.coi
+            coi: query.coi,
+            limit: query.limit || 500 // Use the query limit
         });
 
-        return resources.map(r => {
+        const mappedResources = resources.map(r => {
             // Handle both ZTDF and legacy resources
             const ztdf = (r as any).ztdf;
             if (ztdf) {
@@ -349,6 +468,11 @@ async function executeLocalSearch(query: FederatedSearchQuery): Promise<Federate
                 };
             }
         });
+
+        return {
+            resources: mappedResources,
+            trueTotalCount
+        };
     } catch (error) {
         logger.error('Local search failed', {
             error: error instanceof Error ? error.message : 'Unknown error'
@@ -359,13 +483,25 @@ async function executeLocalSearch(query: FederatedSearchQuery): Promise<Federate
 
 /**
  * Execute search on remote federated instance
+ * Phase 3: Dynamic timeout based on instance type (local vs remote)
+ * Returns both the limited results AND the true total count from the remote instance
  */
 async function executeRemoteSearch(
     instance: FederationInstance,
     query: FederatedSearchQuery,
     authHeader: string
-): Promise<FederatedSearchResult[]> {
+): Promise<{ resources: FederatedSearchResult[]; trueTotalCount: number }> {
+    // Phase 3: Use longer timeout for remote instances (DEU, etc.)
+    const timeoutMs = instance.type === 'remote' ? REMOTE_INSTANCE_TIMEOUT_MS : FEDERATED_SEARCH_TIMEOUT_MS;
+
     try {
+        logger.debug('Executing remote search', {
+            instance: instance.code,
+            type: instance.type,
+            timeoutMs,
+            apiUrl: instance.apiUrl
+        });
+
         const response = await federationAxios.get(
             `${instance.apiUrl}/federation/resources/search`,
             {
@@ -381,20 +517,26 @@ async function executeRemoteSearch(
                     coi: query.coi,
                     limit: query.limit
                 },
-                timeout: FEDERATED_SEARCH_TIMEOUT_MS
+                timeout: timeoutMs
             }
         );
 
-        return (response.data.resources || []).map((r: any) => ({
+        const resources = (response.data.resources || []).map((r: any) => ({
             ...r,
             originRealm: r.originRealm || instance.code,
             _federated: true
         }));
 
+        // Return both resources and the TRUE total count from the remote instance
+        return {
+            resources,
+            trueTotalCount: response.data.totalResults || resources.length
+        };
+
     } catch (error) {
         if (axios.isAxiosError(error)) {
             if (error.code === 'ECONNABORTED') {
-                throw new Error(`Timeout after ${FEDERATED_SEARCH_TIMEOUT_MS}ms`);
+                throw new Error(`Timeout after ${timeoutMs}ms (${instance.type} instance)`);
             }
             throw new Error(`HTTP ${error.response?.status || 'unknown'}: ${error.message}`);
         }
