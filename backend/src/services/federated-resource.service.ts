@@ -410,7 +410,8 @@ class FederatedResourceService {
         const searchPromises = targetInstances.map(async ([key, instance]) => {
             const instanceStart = Date.now();
             try {
-                const searchResult = await this.searchInstance(instance, options);
+                // Pass user attributes for ABAC filtering
+                const searchResult = await this.searchInstance(instance, options, userAttributes);
                 return {
                     key,
                     results: searchResult.results,
@@ -488,12 +489,15 @@ class FederatedResourceService {
      * Search a single instance
      * Uses API-based federation for remote instances, direct MongoDB for local
      * Returns both results and the total accessible count
+     * Now includes ABAC filters (clearance, releasability) for accurate counts
      */
     private async searchInstance(
         instance: IFederatedInstance,
-        options: IFederatedSearchOptions
+        options: IFederatedSearchOptions,
+        userAttributes: IUserAttributes
     ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number }> {
         // Use API-based federation for non-local instances
+        // API calls already include auth token, so remote instance applies ABAC
         if (instance.useApiMode && instance.apiUrl) {
             return this.searchInstanceViaApi(instance, options);
         }
@@ -506,55 +510,113 @@ class FederatedResourceService {
 
         const collection = db.collection('resources');
 
-        // Build MongoDB query
-        const query: any = {};
+        // Build MongoDB query with ABAC filters
+        const query: any = { $and: [] };
 
+        // ========================================
+        // ABAC Filter 1: Classification (Clearance)
+        // ========================================
+        const userClearanceLevel = CLEARANCE_HIERARCHY[userAttributes.clearance] ?? 0;
+        const allowedClassifications = Object.entries(CLEARANCE_HIERARCHY)
+            .filter(([_, level]) => level <= userClearanceLevel)
+            .map(([name]) => name);
+        
+        query.$and.push({
+            $or: [
+                { classification: { $in: allowedClassifications } },
+                { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
+                // Allow null/missing classification (treat as UNCLASSIFIED)
+                { 
+                    $and: [
+                        { classification: { $exists: false } },
+                        { 'ztdf.policy.securityLabel.classification': { $exists: false } }
+                    ]
+                }
+            ]
+        });
+
+        // ========================================
+        // ABAC Filter 2: Releasability (Country)
+        // ========================================
+        const userCountry = userAttributes.countryOfAffiliation;
+        if (userCountry) {
+            query.$and.push({
+                $or: [
+                    { releasabilityTo: userCountry },
+                    { releasabilityTo: 'NATO' },
+                    { releasabilityTo: 'FVEY' },
+                    { 'ztdf.policy.securityLabel.releasabilityTo': userCountry },
+                    { 'ztdf.policy.securityLabel.releasabilityTo': 'NATO' },
+                    { 'ztdf.policy.securityLabel.releasabilityTo': 'FVEY' },
+                ]
+            });
+        }
+
+        // ========================================
+        // UI Filters (optional, in addition to ABAC)
+        // ========================================
         // Text search on title/resourceId
         if (options.query) {
-            query.$or = [
-                { title: { $regex: options.query, $options: 'i' } },
-                { resourceId: { $regex: options.query, $options: 'i' } }
-            ];
+            query.$and.push({
+                $or: [
+                    { title: { $regex: options.query, $options: 'i' } },
+                    { resourceId: { $regex: options.query, $options: 'i' } }
+                ]
+            });
         }
 
-        // Classification filter
+        // UI Classification filter (further restrict)
         if (options.classification?.length) {
-            query.$or = query.$or || [];
-            query.$or.push(
-                { 'ztdf.policy.securityLabel.classification': { $in: options.classification } },
-                { classification: { $in: options.classification } }
-            );
+            query.$and.push({
+                $or: [
+                    { 'ztdf.policy.securityLabel.classification': { $in: options.classification } },
+                    { classification: { $in: options.classification } }
+                ]
+            });
         }
 
-        // Releasability filter
+        // UI Releasability filter (further restrict)
         if (options.releasableTo?.length) {
-            query.$or = query.$or || [];
-            query.$or.push(
-                { 'ztdf.policy.securityLabel.releasabilityTo': { $in: options.releasableTo } },
-                { releasabilityTo: { $in: options.releasableTo } }
-            );
+            query.$and.push({
+                $or: [
+                    { 'ztdf.policy.securityLabel.releasabilityTo': { $in: options.releasableTo } },
+                    { releasabilityTo: { $in: options.releasableTo } }
+                ]
+            });
         }
 
-        // COI filter
+        // UI COI filter
         if (options.coi?.length) {
-            query.$or = query.$or || [];
-            query.$or.push(
-                { 'ztdf.policy.securityLabel.COI': { $in: options.coi } },
-                { COI: { $in: options.coi } }
-            );
+            query.$and.push({
+                $or: [
+                    { 'ztdf.policy.securityLabel.COI': { $in: options.coi } },
+                    { COI: { $in: options.coi } }
+                ]
+            });
         }
 
         // Execute query with timeout
         const timeoutMs = instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS;
         
-        // Get total count first (for accurate accessibleCount)
-        const accessibleCount = await collection.countDocuments(query);
+        // Final query filter (use $and if we have conditions)
+        const finalQuery = query.$and.length > 0 ? query : {};
         
-        const cursor = collection.find(query)
+        // Get total ABAC-accessible count
+        const accessibleCount = await collection.countDocuments(finalQuery);
+        
+        const cursor = collection.find(finalQuery)
             .limit(MAX_RESULTS_PER_INSTANCE)
             .maxTimeMS(timeoutMs);
 
         const documents = await cursor.toArray();
+
+        logger.debug('Local instance search completed', {
+            instance: instance.code,
+            userClearance: userAttributes.clearance,
+            userCountry,
+            accessibleCount,
+            returnedCount: documents.length,
+        });
 
         // Transform to federated search result format
         const results = documents.map(doc => this.transformDocument(doc, instance.code));
