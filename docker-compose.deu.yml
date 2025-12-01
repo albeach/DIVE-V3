@@ -59,7 +59,9 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
-      KC_LOG_LEVEL: info
+      # Debug logging for authentication flow troubleshooting (AAL/MFA enforcement)
+      # Categories: authentication (flow execution), events (login events), x509 (cert auth)
+      KC_LOG_LEVEL: INFO,org.keycloak.authentication:DEBUG,org.keycloak.events:DEBUG,org.keycloak.services.x509:DEBUG,org.keycloak.protocol:DEBUG
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KC_FEATURES: scripts
@@ -234,6 +236,7 @@ services:
       INSTANCE_REALM: DEU
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_DEU:?GCP secret required}@mongo:27017/dive-v3-deu?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_DEU:?GCP secret required}@mongo:27017/dive-v3-deu?authSource=admin
+      MONGODB_DATABASE: dive-v3-deu
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379
@@ -249,6 +252,10 @@ services:
       KAS_URL: https://kas-deu:8080
       # Federation API URL for metadata endpoint
       API_URL: https://deu-api.prosecurity.biz
+      # Phase 3B: Federation partner API URLs for federated search
+      USA_API_URL: https://usa-api.dive25.com
+      FRA_API_URL: https://fra-api.dive25.com
+      GBR_API_URL: https://gbr-api.dive25.com
       # Include all federation partner origins for cross-instance API calls
       CORS_ORIGIN: https://deu-app.prosecurity.biz,https://usa-app.dive25.com,https://fra-app.dive25.com,https://gbr-app.dive25.com,https://localhost:3003
       FEDERATION_ALLOWED_ORIGINS: https://deu-app.prosecurity.biz,https://usa-app.dive25.com,https://fra-app.dive25.com,https://gbr-app.dive25.com,https://localhost:3003
@@ -265,6 +272,8 @@ services:
       - ./backend/logs:/app/logs
       - ./backend/uploads:/app/uploads
       - ./policies/uploads:/app/policies/uploads
+      # Phase 3B: Federation registry mount for federated search
+      - ./config:/app/config:ro
     depends_on:
       mongodb-deu:
         condition: service_healthy
@@ -338,9 +347,11 @@ services:
     networks:
       - dive-deu-network
     healthcheck:
-      test: ["CMD", "curl", "-kfs", "--max-time", "15", "https://localhost:3000/"]
-      interval: 30s
-      timeout: 20s
+      # P0 Fix (Dec 2025): DEU remote server is slower; increased max-time to 20s
+      # Responses take ~15s due to server constraints; 15s timeout was too tight
+      test: ["CMD", "curl", "-kfsI", "--max-time", "20", "https://localhost:3000/"]
+      interval: 45s
+      timeout: 25s
       retries: 10
       start_period: 180s
 
