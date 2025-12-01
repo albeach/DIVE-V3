@@ -11,6 +11,10 @@ import ContentViewer from '@/components/resources/content-viewer';
 import KAOSelector from '@/components/ztdf/KAOSelector';
 import { PolicyDecisionReplay } from '@/components/resources/policy-decision-replay';
 
+// Get current instance from environment (FRA, USA, GBR, DEU)
+// Used for instance-aware fallbacks in user attributes
+const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
 interface IResource {
   resourceId: string;
   title: string;
@@ -874,7 +878,7 @@ export default function ResourceDetailPage() {
                             kaos={kaos}
                             selectedKaoId={selectedKaoId}
                             onSelect={setSelectedKaoId}
-                            userCountry={session?.user?.countryOfAffiliation || 'USA'}
+                            userCountry={session?.user?.countryOfAffiliation || CURRENT_INSTANCE}
                             userCOI={(session?.user as any)?.acpCOI || []}
                             userClearance={session?.user?.clearance || 'UNCLASSIFIED'}
                           />

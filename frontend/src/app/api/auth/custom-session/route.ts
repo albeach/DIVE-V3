@@ -54,12 +54,14 @@ export async function POST(request: NextRequest) {
 
         // Extract DIVE-specific attributes for future session retrieval
         // These will be populated by the auth.ts session callback
+        // Fallback to current instance if country not in token
+        const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
         console.log('[Custom Session] Extracted user attributes:', {
             uniqueID,
             email,
             name,
             clearance: payload.clearance || 'UNCLASSIFIED',
-            countryOfAffiliation: payload.countryOfAffiliation || 'USA',
+            countryOfAffiliation: payload.countryOfAffiliation || CURRENT_INSTANCE,
             acpCOI: payload.acpCOI || [],
             roles: payload.realm_access?.roles || payload.roles || []
         });

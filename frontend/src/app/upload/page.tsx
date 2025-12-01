@@ -15,13 +15,18 @@ const classificationColors: Record<string, string> = {
   'TOP_SECRET': 'bg-red-100 text-red-800 border-red-300',
 };
 
+// Get current instance from environment (FRA, USA, GBR, DEU)
+// Used for instance-aware defaults in upload form
+const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
 export default function UploadPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
   const [file, setFile] = useState<File | null>(null);
   const [classification, setClassification] = useState('UNCLASSIFIED');
-  const [releasabilityTo, setReleasabilityTo] = useState<string[]>(['USA']);
+  // Default releasability to current instance (not hardcoded USA)
+  const [releasabilityTo, setReleasabilityTo] = useState<string[]>([CURRENT_INSTANCE]);
   const [COI, setCOI] = useState<string[]>([]);
   const [caveats, setCaveats] = useState<string[]>([]);
   const [title, setTitle] = useState('');
@@ -31,7 +36,8 @@ export default function UploadPage() {
   const [error, setError] = useState<string | null>(null);
 
   const userClearance = session?.user?.clearance || 'UNCLASSIFIED';
-  const userCountry = session?.user?.countryOfAffiliation || 'USA';
+  // Fallback to current instance if user country not available
+  const userCountry = session?.user?.countryOfAffiliation || CURRENT_INSTANCE;
   const userCOI = (session?.user as any)?.acpCOI || [];
 
   // National classification mappings (ACP-240 Section 4.3)
