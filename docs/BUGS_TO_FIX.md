@@ -179,6 +179,163 @@ resource "keycloak_openid_client" "broker_client" {
 
 ---
 
+## BUG-005: Federated Search Returns Wrong totalCount and Limited Results
+
+**Severity:** CRITICAL  
+**Discovered:** 2025-12-01  
+**Status:** OPEN (Architecture Review Required)
+
+### Description
+
+When a FRA user selects USA + FRA in federated mode, the page shows "16 documents" when it should show 14,000 (7,000 from each instance). This is actually a combination of correct ABAC behavior and incorrect count reporting.
+
+### Stack Trace Analysis
+
+```
+FRA Frontend → /api/resources/search → FRA Backend /api/resources/federated-query
+                                       ↓
+    ┌──────────────────────────────────┴──────────────────────────────────┐
+    ↓                                                                      ↓
+FRA Local MongoDB                                            USA Remote API Call
+  - Direct query                                              - HTTPS to usa-api.dive25.com
+  - limit(100) cap                                            - limit(100) cap
+  - Returns 100 results                                       - ABAC filtering by USA backend
+                                                              - Returns 16 results (FRA/UNCLAS accessible)
+    ↓                                                                      ↓
+    └──────────────────────────────────┬──────────────────────────────────┘
+                                       ↓
+                              Aggregate + ABAC filter + Deduplicate
+                                       ↓
+                              Return 16 results, totalCount: 16
+```
+
+### Root Causes
+
+#### 1. `totalCount` doesn't include ABAC filtering (paginated-search.controller.ts)
+```typescript
+// Line 549-556: Counts ALL documents, not ABAC-filtered
+const totalCount = await collection.countDocuments(
+  query && query.trim() ? { $or: [...] } : {}  // No clearance/releasability filter!
+);
+```
+
+**Impact:** USA backend reports `totalCount: 7000` but only 16 are accessible to FRA/UNCLASSIFIED user.
+
+#### 2. MAX_RESULTS_PER_INSTANCE = 100 (federated-resource.service.ts)
+```typescript
+// Line 113
+const MAX_RESULTS_PER_INSTANCE = 100;
+// Line 538
+.limit(MAX_RESULTS_PER_INSTANCE)
+```
+
+**Impact:** Even local FRA query only returns 100 of 7,000 available documents.
+
+#### 3. No "accessibleCount" computed
+Neither local nor federated search computes the true count of documents the user can actually access.
+
+### Actual Backend Logs
+
+```json
+// FRA Backend federated query
+{"instanceResults":[
+  {"count":16,"instance":"USA","latencyMs":308},   // ← ABAC filtered (correct)
+  {"count":100,"instance":"FRA","latencyMs":18}    // ← Capped at 100 (wrong)
+]}
+"totalResults":16  // ← Only shows USA results after dedup??
+
+// USA Backend receiving federated request
+{"clearance":"UNCLASSIFIED","countryOfAffiliation":"FRA"}
+{"resultCount":16,"totalCount":7000}  // ← 7000 is unfiltered count!
+```
+
+### Why 16 Results (ABAC Explanation)
+
+The FRA user with UNCLASSIFIED clearance can only access USA documents that:
+1. Are UNCLASSIFIED classification
+2. Have FRA in `releasabilityTo` array (or NATO/FVEY)
+
+Most USA documents don't meet these criteria, so only 16 are accessible. **This is correct ABAC behavior.**
+
+### What's Wrong (Summary)
+
+| Issue | Current Behavior | Expected Behavior |
+|-------|------------------|-------------------|
+| `totalCount` | 7000 (unfiltered) | Count of accessible docs |
+| FRA local results | 100 (capped) | Proper pagination across all accessible |
+| Federated total | 16 (just USA filtered) | Sum of accessible from all instances |
+
+### Best Practice Solutions
+
+#### Option A: Compute accessibleCount (Recommended)
+
+Add ABAC-aware count query to `paginated-search.controller.ts`:
+
+```typescript
+// Build ABAC-aware filter
+const abacFilter: any = { ...mongoFilter };
+
+// Only show documents user can access by clearance
+const userClearance = CLEARANCE_ORDER[token?.clearance || 'UNCLASSIFIED'];
+const allowedClassifications = Object.entries(CLEARANCE_ORDER)
+  .filter(([_, level]) => level <= userClearance)
+  .map(([name]) => name);
+abacFilter.$and = abacFilter.$and || [];
+abacFilter.$and.push({
+  $or: [
+    { classification: { $in: allowedClassifications } },
+    { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } }
+  ]
+});
+
+// Add releasability filter
+if (token?.countryOfAffiliation) {
+  abacFilter.$and.push({
+    $or: [
+      { releasabilityTo: token.countryOfAffiliation },
+      { releasabilityTo: 'NATO' },
+      { releasabilityTo: 'FVEY' },
+    ]
+  });
+}
+
+// Count accessible documents
+const accessibleCount = await collection.countDocuments(abacFilter);
+```
+
+#### Option B: Pre-computed Accessibility Index (Long-term)
+
+Create materialized view or index that pre-calculates document accessibility:
+- By clearance level (UNCLAS, CONF, SECRET, TS)
+- By country affiliation
+
+#### Option C: Show Per-Instance Counts (Short-term)
+
+Display breakdown: "16 accessible from USA, 7000 accessible from FRA"
+
+### Performance Considerations
+
+The ABAC-aware count query adds ~50-100ms per request because it must evaluate:
+- Classification filtering
+- Releasability array intersection
+- COI membership (optional)
+
+Consider caching counts by user attribute combination (clearance + country).
+
+### Files Affected
+
+1. `backend/src/controllers/paginated-search.controller.ts` - Add accessibleCount
+2. `backend/src/services/federated-resource.service.ts` - Aggregate accessibleCounts
+3. `frontend/src/hooks/useInfiniteScroll.ts` - Handle new response format
+4. `frontend/src/app/resources/page.tsx` - Display accessibleCount
+
+### Related Issues
+
+- BUG-001: Terraform user attributes (affects ABAC decisions)
+- Federated pagination cursor handling needs review
+
+---
+
 ## BUG-004: Resources Page Hardcoded 'USA' Instance Defaults
 
 **Severity:** CRITICAL  
