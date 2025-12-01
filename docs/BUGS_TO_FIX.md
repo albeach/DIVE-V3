@@ -183,7 +183,7 @@ resource "keycloak_openid_client" "broker_client" {
 
 **Severity:** CRITICAL  
 **Discovered:** 2025-12-01  
-**Status:** OPEN (Architecture Review Required)
+**Status:** ✅ FIXED (Commit `f3084bb`)
 
 ### Description
 
@@ -322,12 +322,46 @@ The ABAC-aware count query adds ~50-100ms per request because it must evaluate:
 
 Consider caching counts by user attribute combination (clearance + country).
 
-### Files Affected
+### Fix Applied (Commit `f3084bb`)
 
-1. `backend/src/controllers/paginated-search.controller.ts` - Add accessibleCount
-2. `backend/src/services/federated-resource.service.ts` - Aggregate accessibleCounts
-3. `frontend/src/hooks/useInfiniteScroll.ts` - Handle new response format
-4. `frontend/src/app/resources/page.tsx` - Display accessibleCount
+Added ABAC filters directly to MongoDB query in `paginated-search.controller.ts`:
+
+```typescript
+// ABAC Filter 1: Classification - only fetch docs user can access
+mongoFilter.$and.push({
+  $or: [
+    { classification: { $in: allowedClassifications } },
+    { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
+  ]
+});
+
+// ABAC Filter 2: Releasability - only fetch docs releasable to user's country
+if (userCountry) {
+  mongoFilter.$and.push({
+    $or: [
+      { releasabilityTo: userCountry },
+      { releasabilityTo: 'NATO' },
+      { releasabilityTo: 'FVEY' },
+      { 'ztdf.policy.securityLabel.releasabilityTo': userCountry },
+      // ... etc
+    ]
+  });
+}
+
+// totalCount now uses same ABAC filters
+const totalCount = await collection.countDocuments(countFilter);
+```
+
+### Results After Fix
+
+| Instance | User | Before | After |
+|----------|------|--------|-------|
+| FRA | FRA/UNCLASSIFIED | 7000 total, 100 returned | **720 accessible, 50/page** |
+| USA | FRA/UNCLASSIFIED | 7000 total, 16 returned | **562 accessible** |
+
+### Files Fixed
+
+- `backend/src/controllers/paginated-search.controller.ts` - ABAC filters in MongoDB query
 
 ### Related Issues
 

@@ -136,6 +136,18 @@ export async function POST(request: NextRequest) {
         // For federated responses, transform to match expected format
         if (isFederated && data.results) {
             // Federated response has different structure, normalize it
+            // Use totalAccessible (sum of ABAC-accessible docs from all instances)
+            // Fall back to totalResults (deduplicated fetched results) if not available
+            const totalCount = data.totalAccessible || data.totalResults || data.results?.length || 0;
+            
+            // Build instance facets from instanceResults if available
+            const instanceFacets = data.instanceResults 
+                ? Object.entries(data.instanceResults).map(([instance, info]: [string, any]) => ({
+                    value: instance,
+                    count: info.accessibleCount || info.count || 0,
+                  }))
+                : [];
+            
             const normalizedResponse = {
                 results: data.results.map((r: any) => ({
                     resourceId: r.resourceId,
@@ -146,27 +158,35 @@ export async function POST(request: NextRequest) {
                     encrypted: r.encrypted || false,
                     ztdfVersion: r.ztdfVersion,
                     kaoCount: r.kaoCount,
-                    originRealm: r.originRealm || r.source,
+                    originRealm: r.originRealm || r.source || r.sourceInstance,
                 })),
                 facets: data.facets || {
                     classifications: [],
                     countries: [],
                     cois: [],
-                    instances: data.instanceStatus?.map((i: any) => ({
-                        value: i.instance,
-                        count: i.count || 0,
-                    })) || [],
+                    instances: instanceFacets,
                     encryptionStatus: [],
                 },
                 pagination: {
                     nextCursor: data.pagination?.nextCursor || null,
                     prevCursor: data.pagination?.prevCursor || null,
-                    totalCount: data.totalCount || data.results?.length || 0,
-                    hasMore: data.pagination?.hasMore || false,
+                    totalCount,
+                    hasMore: data.results?.length >= (body.pagination?.limit || 50),
                     pageSize: data.pagination?.pageSize || body.pagination?.limit || 50,
                 },
-                timing: data.timing || { searchMs: 0, facetMs: 0, totalMs: 0 },
+                timing: {
+                    searchMs: data.executionTimeMs || 0,
+                    facetMs: 0,
+                    totalMs: data.executionTimeMs || 0,
+                },
             };
+            
+            console.log('[SearchAPI] Federated response normalized:', {
+                totalAccessible: data.totalAccessible,
+                totalResults: data.totalResults,
+                normalizedTotalCount: totalCount,
+                instanceResults: data.instanceResults,
+            });
             
             return NextResponse.json(normalizedResponse);
         }
