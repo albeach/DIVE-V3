@@ -210,6 +210,7 @@ export const paginatedSearchHandler = async (
     const token = (req as any).user;
     const userClearance = token?.clearance || 'UNCLASSIFIED';
     const userClearanceLevel = CLEARANCE_ORDER[userClearance] ?? 0;
+    const userCountry = token?.countryOfAffiliation || '';
 
     logger.info('Paginated search request', {
       requestId,
@@ -219,6 +220,7 @@ export const paginatedSearchHandler = async (
       limit,
       hasCursor: !!cursor,
       userClearance,
+      userCountry,
     });
 
     // Get MongoDB connection
@@ -228,10 +230,60 @@ export const paginatedSearchHandler = async (
     const collection = db.collection(COLLECTION_NAME);
 
     // ========================================
-    // Build Query Filter
+    // Build Query Filter with ABAC
     // ========================================
     const mongoFilter: any = {};
     let useTextScore = false;
+
+    // ========================================
+    // ABAC Filter 1: Clearance Level
+    // Only fetch documents user has clearance to access
+    // ========================================
+    const allowedClassifications = Object.entries(CLEARANCE_ORDER)
+      .filter(([_, level]) => level <= userClearanceLevel)
+      .map(([name]) => name);
+    
+    // Classification can be in top-level field OR nested in ztdf.policy.securityLabel
+    mongoFilter.$and = mongoFilter.$and || [];
+    mongoFilter.$and.push({
+      $or: [
+        { classification: { $in: allowedClassifications } },
+        { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
+        // Also allow null/missing classification (treat as UNCLASSIFIED)
+        { 
+          $and: [
+            { classification: { $exists: false } },
+            { 'ztdf.policy.securityLabel.classification': { $exists: false } }
+          ]
+        }
+      ]
+    });
+
+    // ========================================
+    // ABAC Filter 2: Releasability
+    // Only fetch documents releasable to user's country
+    // ========================================
+    if (userCountry) {
+      // Document is releasable if user's country is in releasabilityTo array
+      // OR if NATO/FVEY is in releasabilityTo (broad release markings)
+      mongoFilter.$and.push({
+        $or: [
+          { releasabilityTo: userCountry },
+          { releasabilityTo: 'NATO' },
+          { releasabilityTo: 'FVEY' },
+          { 'ztdf.policy.securityLabel.releasabilityTo': userCountry },
+          { 'ztdf.policy.securityLabel.releasabilityTo': 'NATO' },
+          { 'ztdf.policy.securityLabel.releasabilityTo': 'FVEY' },
+        ]
+      });
+    }
+
+    logger.debug('ABAC filters applied', {
+      requestId,
+      allowedClassifications,
+      userCountry,
+      filterCount: mongoFilter.$and?.length || 0,
+    });
 
     // Text search (title or resourceId)
     if (query && query.trim()) {
@@ -446,12 +498,43 @@ export const paginatedSearchHandler = async (
     const searchMs = Date.now() - searchStart;
 
     // ========================================
-    // Filter by Clearance Level
+    // ABAC Safety Filter (defense in depth)
+    // Primary ABAC filtering is now in MongoDB query above.
+    // This is a safety net in case documents slip through.
     // ========================================
     const filteredResults = results.filter((resource: WithId<Document>) => {
       const resourceClassification = getClassification(resource);
       const resourceClearanceLevel = CLEARANCE_ORDER[resourceClassification] ?? 0;
-      return userClearanceLevel >= resourceClearanceLevel;
+      
+      // Safety check 1: Clearance level
+      if (userClearanceLevel < resourceClearanceLevel) {
+        logger.warn('ABAC safety filter caught unauthorized document', {
+          requestId,
+          resourceId: resource.resourceId,
+          resourceClassification,
+          userClearance,
+        });
+        return false;
+      }
+      
+      // Safety check 2: Releasability (if user country known)
+      if (userCountry) {
+        const releasability = getReleasability(resource);
+        const isReleasable = releasability.includes(userCountry) ||
+                            releasability.includes('NATO') ||
+                            releasability.includes('FVEY');
+        if (!isReleasable) {
+          logger.warn('ABAC safety filter caught non-releasable document', {
+            requestId,
+            resourceId: resource.resourceId,
+            releasabilityTo: releasability,
+            userCountry,
+          });
+          return false;
+        }
+      }
+      
+      return true;
     });
 
     // ========================================
@@ -544,15 +627,52 @@ export const paginatedSearchHandler = async (
     }
 
     // ========================================
-    // Get Total Count
+    // Get Total Count (with ABAC filters)
     // ========================================
-    const totalCount = await collection.countDocuments(
-      query && query.trim() ? {
+    // Build count filter with same ABAC constraints as search query
+    const countFilter: any = { $and: [] };
+    
+    // Text search filter (if provided)
+    if (query && query.trim()) {
+      countFilter.$and.push({
         $or: [
           { title: { $regex: query.trim(), $options: 'i' } },
           { resourceId: { $regex: query.trim(), $options: 'i' } },
         ]
-      } : {}
+      });
+    }
+    
+    // ABAC: Classification filter
+    countFilter.$and.push({
+      $or: [
+        { classification: { $in: allowedClassifications } },
+        { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
+        { 
+          $and: [
+            { classification: { $exists: false } },
+            { 'ztdf.policy.securityLabel.classification': { $exists: false } }
+          ]
+        }
+      ]
+    });
+    
+    // ABAC: Releasability filter
+    if (userCountry) {
+      countFilter.$and.push({
+        $or: [
+          { releasabilityTo: userCountry },
+          { releasabilityTo: 'NATO' },
+          { releasabilityTo: 'FVEY' },
+          { 'ztdf.policy.securityLabel.releasabilityTo': userCountry },
+          { 'ztdf.policy.securityLabel.releasabilityTo': 'NATO' },
+          { 'ztdf.policy.securityLabel.releasabilityTo': 'FVEY' },
+        ]
+      });
+    }
+    
+    // Get ABAC-filtered total count
+    const totalCount = await collection.countDocuments(
+      countFilter.$and.length > 0 ? countFilter : {}
     );
 
     // ========================================
