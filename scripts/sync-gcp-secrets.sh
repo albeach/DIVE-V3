@@ -110,30 +110,42 @@ load_instance_secrets() {
         export "MONGO_INITDB_ROOT_PASSWORD_$INST_UPPER"="${!mongo_var}"
     fi
     
-    # Also set generic vars if this is the primary instance (USA)
-    if [ "$inst" = "usa" ]; then
-        local var_name="MONGO_PASSWORD_$INST_UPPER"
-        export MONGO_PASSWORD="${!var_name:-}"
-        export MONGO_INITDB_ROOT_PASSWORD="${!var_name:-}"
-        var_name="KEYCLOAK_ADMIN_PASSWORD_$INST_UPPER"
-        export KEYCLOAK_ADMIN_PASSWORD="${!var_name:-}"
-        var_name="POSTGRES_PASSWORD_$INST_UPPER"
-        export POSTGRES_PASSWORD="${!var_name:-}"
-        var_name="AUTH_SECRET_$INST_UPPER"
-        export AUTH_SECRET="${!var_name:-}"
-        var_name="NEXTAUTH_SECRET_$INST_UPPER"
-        export NEXTAUTH_SECRET="${!var_name:-}"
-        var_name="JWT_SECRET_$INST_UPPER"
-        export JWT_SECRET="${!var_name:-}"
-        var_name="KEYCLOAK_CLIENT_SECRET_$INST_UPPER"
-        # Always use instance-specific client secret if available
-        # This ensures each instance uses its own Keycloak client secret
-        if [ -n "${!var_name:-}" ]; then
-            export KEYCLOAK_CLIENT_SECRET="${!var_name}"
-        fi
-        var_name="REDIS_PASSWORD_$INST_UPPER"
-        export REDIS_PASSWORD="${!var_name:-}"
+}
+
+# Set generic variable aliases for the specified instance
+# This ensures docker-compose can use generic names like KEYCLOAK_CLIENT_SECRET
+set_instance_aliases() {
+    local inst="$1"
+    local INST_UPPER=$(echo "$inst" | tr '[:lower:]' '[:upper:]')
+    
+    local var_name="MONGO_PASSWORD_$INST_UPPER"
+    export MONGO_PASSWORD="${!var_name:-}"
+    export MONGO_INITDB_ROOT_PASSWORD="${!var_name:-}"
+    
+    var_name="KEYCLOAK_ADMIN_PASSWORD_$INST_UPPER"
+    export KEYCLOAK_ADMIN_PASSWORD="${!var_name:-}"
+    
+    var_name="POSTGRES_PASSWORD_$INST_UPPER"
+    export POSTGRES_PASSWORD="${!var_name:-}"
+    
+    var_name="AUTH_SECRET_$INST_UPPER"
+    export AUTH_SECRET="${!var_name:-}"
+    
+    var_name="NEXTAUTH_SECRET_$INST_UPPER"
+    export NEXTAUTH_SECRET="${!var_name:-}"
+    
+    var_name="JWT_SECRET_$INST_UPPER"
+    export JWT_SECRET="${!var_name:-}"
+    
+    var_name="KEYCLOAK_CLIENT_SECRET_$INST_UPPER"
+    # Always use instance-specific client secret
+    # This ensures each instance uses its own Keycloak client secret
+    if [ -n "${!var_name:-}" ]; then
+        export KEYCLOAK_CLIENT_SECRET="${!var_name}"
     fi
+    
+    var_name="REDIS_PASSWORD_$INST_UPPER"
+    export REDIS_PASSWORD="${!var_name:-}"
 }
 
 if [ "$INSTANCE" = "all" ]; then
@@ -141,8 +153,12 @@ if [ "$INSTANCE" = "all" ]; then
     load_instance_secrets "fra"
     load_instance_secrets "gbr"
     load_instance_secrets "deu"
+    # Default to USA aliases for 'all' mode
+    set_instance_aliases "usa"
 else
     load_instance_secrets "$INSTANCE"
+    # Set generic variable aliases for the specified instance
+    set_instance_aliases "$INSTANCE"
 fi
 
 # =============================================================================
