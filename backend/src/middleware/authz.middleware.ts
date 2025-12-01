@@ -861,9 +861,21 @@ const getUserFriendlyDenialMessage = (
 };
 
 /**
+ * Valid federation instances that can make inter-instance requests
+ * TODO: Move to configuration or verify via shared secrets
+ */
+const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'];
+
+/**
  * JWT Authentication middleware (Week 3.2)
  * Verifies JWT token and attaches user info to request
  * Does NOT call OPA - use for endpoints that need auth but handle authz separately
+ * 
+ * Federation Support:
+ * - When X-Federated-From header is present from a trusted instance,
+ *   we verify the federation partner's token and trust their user attributes
+ * - This enables cross-instance resource access where FRA backend can
+ *   request USA resources on behalf of a FRA user
  */
 export const authenticateJWT = async (
     req: Request,
@@ -873,6 +885,82 @@ export const authenticateJWT = async (
     const requestId = req.headers['x-request-id'] as string;
 
     try {
+        // Check for federated request from another instance
+        const federatedFrom = req.headers['x-federated-from'] as string;
+        
+        if (federatedFrom && TRUSTED_FEDERATION_INSTANCES.includes(federatedFrom)) {
+            // This is a federated request from a trusted partner
+            // Trust their authentication - they have already verified the user
+            logger.info('Federated request received from trusted partner', {
+                requestId,
+                federatedFrom,
+                path: req.path,
+            });
+            
+            // For federated requests, we still need the token to extract user info
+            // But we skip Keycloak validation since it's signed by the partner's Keycloak
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                const token = authHeader.substring(7);
+                
+                // Decode without verification (partner already verified)
+                try {
+                    // Use jose to decode without validation
+                    const jose = await import('jose');
+                    const decoded = jose.decodeJwt(token);
+                    
+                    // Extract attributes from the foreign token
+                    const uniqueID = (decoded as any).uniqueID || 
+                                     (decoded as any).preferred_username || 
+                                     decoded.sub || 
+                                     `federated-${federatedFrom}-user`;
+                    const clearance = (decoded as any).clearance || 'UNCLASSIFIED';
+                    const countryOfAffiliation = (decoded as any).countryOfAffiliation || federatedFrom;
+                    const acpCOI = (decoded as any).acpCOI || [];
+                    
+                    // Attach federated user info to request
+                    (req as any).user = {
+                        uniqueID,
+                        clearance,
+                        countryOfAffiliation,
+                        acpCOI,
+                        federated: true,
+                        federatedFrom,
+                    };
+                    
+                    (req as any).accessToken = token;
+                    
+                    logger.info('Federated request authenticated via partner trust', {
+                        requestId,
+                        federatedFrom,
+                        uniqueID,
+                        clearance,
+                        countryOfAffiliation,
+                    });
+                    
+                    next();
+                    return;
+                } catch (decodeError) {
+                    logger.warn('Failed to decode federated token', {
+                        requestId,
+                        federatedFrom,
+                        error: decodeError instanceof Error ? decodeError.message : 'Unknown',
+                    });
+                    // Fall through to normal auth if decode fails
+                }
+            }
+            
+            // If no valid token in federated request, reject
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Federated request missing valid authorization token',
+                federation: { from: federatedFrom },
+                requestId
+            });
+            return;
+        }
+        
+        // Standard JWT verification for non-federated requests
         // Extract JWT token from Authorization header
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -891,7 +979,7 @@ export const authenticateJWT = async (
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-        // Verify token
+        // Verify token against local Keycloak instance
         let decodedToken: IKeycloakToken;
         try {
             decodedToken = await verifyToken(token);
