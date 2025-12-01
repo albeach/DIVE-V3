@@ -137,10 +137,31 @@ export const getResourceHandler = async (
     try {
         logger.info('Fetching resource', { requestId, resourceId: id });
 
-        const resource = await getResourceById(id);
+        // Check if authz middleware already fetched the resource (federated case)
+        let resource = (req as any).resource;
+        const federatedSource = (req as any).federatedSource;
+        
+        if (!resource) {
+            // Local resource: fetch from MongoDB
+            resource = await getResourceById(id);
+        }
 
         if (!resource) {
             throw new NotFoundError(`Resource ${id} not found`);
+        }
+        
+        // Handle federated resource response
+        if (federatedSource === 'federated') {
+            logger.info('Returning federated resource', {
+                requestId,
+                resourceId: id,
+                federatedSource,
+            });
+            
+            // The federated response is already in the expected format
+            // Return it directly (it was authorized by the origin instance)
+            res.status(200).json(resource);
+            return;
         }
 
         // Check if PEP set any obligations (e.g., KAS key request required)
