@@ -506,6 +506,53 @@ FRA User clicks USA doc → FRA Backend detects USA origin from resourceId
 
 ---
 
+## BUG-008: Upload Page Hardcoded 'USA' Releasability Default
+
+**Severity:** MEDIUM  
+**Discovered:** 2025-12-01  
+**Status:** ✅ FIXED
+
+### Description
+
+The upload page (`/upload`) defaulted the "Releasable To" field to `['USA']` regardless of which instance the user was on. This caused FRA/GBR/DEU users to see a validation warning that their country wasn't in the releasability list.
+
+### Impact
+
+- **Bad UX**: Users immediately see validation warning on page load
+- **Wrong Default**: FRA user on FRA instance sees USA selected by default
+- **Potential Errors**: User might accidentally upload documents not releasable to their own country
+
+### Root Cause
+
+Similar to BUG-004, hardcoded `'USA'` in multiple places:
+
+```typescript
+// upload/page.tsx line 24
+const [releasabilityTo, setReleasabilityTo] = useState<string[]>(['USA']);  // Wrong!
+
+// upload/page.tsx line 34
+const userCountry = session?.user?.countryOfAffiliation || 'USA';  // Wrong fallback!
+```
+
+### Fix Applied
+
+Used `NEXT_PUBLIC_INSTANCE` environment variable for instance-aware defaults:
+
+```typescript
+const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
+const [releasabilityTo, setReleasabilityTo] = useState<string[]>([CURRENT_INSTANCE]);
+const userCountry = session?.user?.countryOfAffiliation || CURRENT_INSTANCE;
+```
+
+### Files Fixed
+
+- `frontend/src/app/upload/page.tsx`
+- `frontend/src/app/resources/[id]/page.tsx` 
+- `frontend/src/app/api/auth/custom-session/route.ts`
+
+---
+
 ## BUG-007: ZTDF Inspector KAS Flow Tab Fails for Federated Resources
 
 **Severity:** HIGH  
