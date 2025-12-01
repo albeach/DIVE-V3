@@ -131,19 +131,13 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
             console.warn('Failed to load cached KAS flow:', e);
         }
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) {
-                setError('Authentication required');
-                setLoading(false);
-                return;
-            }
-
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            const response = await fetch(`${backendUrl}/api/resources/${resourceId}/kas-flow`, {
+            // Call frontend API route - handles auth and federation server-side
+            // No need to pass token - session validation done server-side
+            const response = await fetch(`/api/resources/${resourceId}/kas-flow`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                cache: 'no-store',
             });
 
             if (!response.ok) {
