@@ -68,15 +68,15 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
 
     // Build search query
     const searchQuery: any = {};
-    
+
     if (classification) {
       searchQuery['ztdf.policy.securityLabel.classification'] = classification;
     }
-    
+
     if (releasableTo) {
       searchQuery['ztdf.policy.securityLabel.releasabilityTo'] = { $in: [releasableTo] };
     }
-    
+
     if (coi) {
       const coiArray = Array.isArray(coi) ? coi : [coi];
       searchQuery['ztdf.policy.securityLabel.COI'] = { $in: coiArray };
@@ -89,7 +89,14 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
       ];
     }
 
-    // Execute search
+    // Get TRUE total count from the database
+    const { getMongoDBUrl, getMongoDBName } = await import('../utils/mongodb-config');
+    const { MongoClient } = await import('mongodb');
+    const client = await MongoClient.connect(getMongoDBUrl());
+    const db = client.db(getMongoDBName());
+    const trueTotalCount = await db.collection('resources').countDocuments(searchQuery);
+
+    // Execute search with limit for actual results
     const resources = await getResourcesByQuery(searchQuery, {
       limit: parseInt(limit as string),
       fields: {
@@ -116,12 +123,14 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
     logger.info('Federation user search completed', {
       requestId,
       originRealm,
-      resultsCount: results.length
+      resultsReturned: results.length,
+      trueTotalCount
     });
 
     res.json({
       resources: results,
-      totalResults: results.length,
+      resultsReturned: results.length,   // How many results in this response
+      totalResults: trueTotalCount,       // TRUE total matching documents in this instance
       originRealm: process.env.INSTANCE_REALM || 'USA',
       timestamp: new Date().toISOString()
     });
@@ -172,7 +181,7 @@ router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (r
     }
 
     // Validate at least one agreement covers SP's country
-    const countryCovered = activeAgreements.some(agreement => 
+    const countryCovered = activeAgreements.some(agreement =>
       agreement.countries.includes(spContext.sp.country)
     );
 
@@ -195,7 +204,7 @@ router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (r
     if (classification) {
       const allowedClassifications = activeAgreements
         .flatMap(agreement => agreement.classifications);
-      
+
       if (!allowedClassifications.includes(classification as string)) {
         res.status(403).json({
           error: 'Forbidden',
@@ -204,7 +213,7 @@ router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (r
         });
         return;
       }
-      
+
       query.classification = classification;
     }
 
@@ -279,7 +288,7 @@ router.post('/resources/request', requireSPAuth, requireSPScope('resource:read')
   try {
     // Validate resource exists and check basic access
     const resource = await getResourcesByQuery({ resourceId }, { limit: 1 });
-    
+
     if (!resource || resource.length === 0) {
       res.status(404).json({
         error: 'Not Found',

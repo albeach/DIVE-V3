@@ -33,6 +33,9 @@ export interface IResourceCardData {
       countriesAllowed?: string[];
     };
   }>;
+  // Federation origin tracking
+  originRealm?: string;    // Source instance code (USA, FRA, GBR, DEU)
+  _federated?: boolean;    // True if from a remote instance
 }
 
 export type ViewMode = 'grid' | 'list' | 'compact';
@@ -61,6 +64,23 @@ const classificationEmojis: Record<string, string> = {
   'CONFIDENTIAL': '🟡',
   'SECRET': '🟠',
   'TOP_SECRET': '🔴',
+};
+
+// Instance flags for federated resources
+const instanceFlags: Record<string, string> = {
+  'USA': '🇺🇸',
+  'FRA': '🇫🇷',
+  'GBR': '🇬🇧',
+  'DEU': '🇩🇪',
+  'CAN': '🇨🇦',
+  'AUS': '🇦🇺',
+};
+
+const instanceColors: Record<string, string> = {
+  'USA': 'bg-blue-50 text-blue-700 border-blue-200',
+  'FRA': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  'GBR': 'bg-red-50 text-red-700 border-red-200',
+  'DEU': 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 function formatDate(dateString?: string): string {
@@ -137,11 +157,23 @@ export default function AdvancedResourceCard({
     return (
       <Link href={`/resources/${resource.resourceId}`} className="block group h-full">
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
-          {/* Header with Classification Badge */}
+          {/* Header with Classification Badge + Instance Badge */}
           <div className="flex items-start justify-between gap-3 mb-4">
-            <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-              <span className="mr-1">{classificationEmojis[resource.classification]}</span>
-              {resource.classification.replace('_', ' ')}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
+                <span className="mr-1">{classificationEmojis[resource.classification]}</span>
+                {resource.classification.replace('_', ' ')}
+              </div>
+              {/* Instance Origin Badge - shown for federated resources */}
+              {resource.originRealm && (
+                <div 
+                  className={`flex-shrink-0 px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
+                  title={`Source: ${resource.originRealm} instance`}
+                >
+                  <span className="mr-1">{instanceFlags[resource.originRealm] || '🌐'}</span>
+                  {resource.originRealm}
+                </div>
+              )}
             </div>
             {resource.encrypted && (
               <div className="flex-shrink-0 px-2.5 py-1 rounded-md text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
@@ -259,11 +291,22 @@ export default function AdvancedResourceCard({
       <Link href={`/resources/${resource.resourceId}`} className="block group">
         <div className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-xl hover:border-blue-400 transition-all duration-200 hover:-translate-y-0.5">
           <div className="flex items-center justify-between gap-4">
-            {/* Left: Classification + Title */}
+            {/* Left: Classification + Instance + Title */}
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-                <span className="mr-1">{classificationEmojis[resource.classification]}</span>
-                {resource.classification.replace('_', ' ')}
+              <div className="flex items-center gap-2">
+                <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
+                  <span className="mr-1">{classificationEmojis[resource.classification]}</span>
+                  {resource.classification.replace('_', ' ')}
+                </div>
+                {/* Instance Badge */}
+                {resource.originRealm && (
+                  <div 
+                    className={`flex-shrink-0 px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
+                    title={`Source: ${resource.originRealm}`}
+                  >
+                    <span>{instanceFlags[resource.originRealm] || '🌐'}</span>
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate mb-1">
@@ -352,9 +395,14 @@ export default function AdvancedResourceCard({
     <Link href={`/resources/${resource.resourceId}`} className="block group">
       <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition-all duration-150">
         <div className="flex items-center justify-between gap-3">
-          {/* Classification Icon */}
-          <div className="flex-shrink-0 text-xl">
-            {classificationEmojis[resource.classification]}
+          {/* Classification Icon + Instance Flag */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <span className="text-xl">{classificationEmojis[resource.classification]}</span>
+            {resource.originRealm && (
+              <span className="text-sm" title={`Source: ${resource.originRealm}`}>
+                {instanceFlags[resource.originRealm] || '🌐'}
+              </span>
+            )}
           </div>
 
           {/* Title */}
