@@ -126,8 +126,10 @@ load_instance_secrets() {
         var_name="JWT_SECRET_$INST_UPPER"
         export JWT_SECRET="${!var_name:-}"
         var_name="KEYCLOAK_CLIENT_SECRET_$INST_UPPER"
-        if [ -z "$KEYCLOAK_CLIENT_SECRET" ]; then
-            export KEYCLOAK_CLIENT_SECRET="${!var_name:-}"
+        # Always use instance-specific client secret if available
+        # This ensures each instance uses its own Keycloak client secret
+        if [ -n "${!var_name:-}" ]; then
+            export KEYCLOAK_CLIENT_SECRET="${!var_name}"
         fi
         var_name="REDIS_PASSWORD_$INST_UPPER"
         export REDIS_PASSWORD="${!var_name:-}"
