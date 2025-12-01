@@ -4,7 +4,7 @@ import axios from 'axios';
 import NodeCache from 'node-cache';
 import jwkToPem from 'jwk-to-pem';
 import { logger } from '../utils/logger';
-import { getResourceById } from '../services/resource.service';
+import { getResourceById, getResourceByIdFederated } from '../services/resource.service';
 import { isTokenBlacklisted, areUserTokensRevoked } from '../services/token-blacklist.service';
 import { validateSPToken } from './sp-auth.middleware';
 import { IRequestWithSP } from '../types/sp-federation.types';
@@ -1274,18 +1274,66 @@ export const authzMiddleware = async (
         });
 
         // ============================================
-        // Step 3: Fetch resource metadata
+        // Step 3: Fetch resource metadata (federation-aware)
         // ============================================
-
-        const resource = await getResourceById(resourceId);
+        
+        // Try federation-aware fetch (checks local first, then remote if needed)
+        // Use existing authHeader from this scope for federated requests
+        const { resource, source, error: fetchError } = await getResourceByIdFederated(
+            resourceId, 
+            authHeader as string | undefined // Forward auth token for federated requests
+        );
 
         if (!resource) {
+            // Log federation attempt for debugging
+            logger.info('Resource not found', {
+                requestId,
+                resourceId,
+                source,
+                error: fetchError,
+            });
+            
             res.status(404).json({
                 error: 'Not Found',
-                message: `Resource ${resourceId} not found`,
+                message: fetchError || `Resource ${resourceId} not found`,
+                federation: {
+                    source,
+                    attempted: source === 'federated',
+                }
             });
             return;
         }
+        
+        // Log successful federation if applicable
+        if (source === 'federated') {
+            logger.info('Resource fetched via federation', {
+                requestId,
+                resourceId,
+                source,
+            });
+            
+            // ============================================
+            // FEDERATED RESOURCE: Authorization already done by origin
+            // ============================================
+            // The origin instance has already performed OPA authorization.
+            // The fact that we got a 200 response means the user is authorized.
+            // Attach the resource to request and skip local OPA check.
+            (req as any).resource = resource;
+            (req as any).federatedSource = source;
+            
+            logger.info('Federated authorization passed (delegated to origin)', {
+                requestId,
+                resourceId,
+                source,
+            });
+            
+            next();
+            return;
+        }
+
+        // ============================================
+        // LOCAL RESOURCE: Full OPA Authorization Required
+        // ============================================
 
         // ============================================
         // SP Token Authorization Path
