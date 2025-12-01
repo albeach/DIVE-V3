@@ -66,6 +66,10 @@ const VIEW_MODE_KEY = 'dive_resources_view_mode_v2';
 const FEDERATED_MODE_KEY = 'dive_resources_federated_mode';
 const FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'] as const;
 
+// Get current instance from environment (FRA, USA, GBR, DEU)
+// This determines the default instance for local searches
+const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
 const CLASSIFICATION_OPTIONS = [
   { value: 'UNCLASSIFIED', label: 'Unclassified', color: 'bg-green-100 text-green-800 border-green-300' },
   { value: 'CONFIDENTIAL', label: 'Confidential', color: 'bg-amber-100 text-amber-800 border-amber-300' },
@@ -84,7 +88,7 @@ export default function ResourcesPage() {
   // State
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [federatedMode, setFederatedMode] = useState(false);
-  const [selectedInstances, setSelectedInstances] = useState<string[]>(['USA']);
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([CURRENT_INSTANCE]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [previewResource, setPreviewResource] = useState<IResourceCardData | null>(null);
   const [previewIndex, setPreviewIndex] = useState(-1);
@@ -100,7 +104,7 @@ export default function ResourcesPage() {
     classifications: [],
     countries: [],
     cois: [],
-    instances: ['USA'],
+    instances: [CURRENT_INSTANCE],
     encryptionStatus: '',
   });
 
@@ -251,7 +255,7 @@ export default function ResourcesPage() {
       classifications: [],
       countries: [],
       cois: [],
-      instances: ['USA'],
+      instances: [CURRENT_INSTANCE],
       encryptionStatus: '',
     });
   }, [handleFilterChange]);
@@ -327,7 +331,7 @@ export default function ResourcesPage() {
                 <button
                   key={instance}
                   onClick={() => handleInstanceToggle(instance)}
-                  disabled={!federatedMode && instance !== 'USA'}
+                  disabled={!federatedMode && instance !== CURRENT_INSTANCE}
                   className={`px-2 py-1 rounded text-xs font-medium transition-all ${
                     isSelected
                       ? 'bg-blue-600 text-white'
@@ -368,7 +372,7 @@ export default function ResourcesPage() {
             SECRET: facets?.classifications?.find(c => c.value === 'SECRET')?.count || 0,
             TOP_SECRET: facets?.classifications?.find(c => c.value === 'TOP_SECRET')?.count || 0,
           }}
-          activeInstances={federatedMode ? selectedInstances : ['USA']}
+          activeInstances={federatedMode ? selectedInstances : [CURRENT_INSTANCE]}
           federatedMode={federatedMode}
           timing={timing || undefined}
           userAttributes={{
