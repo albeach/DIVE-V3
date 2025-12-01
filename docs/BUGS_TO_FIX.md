@@ -179,6 +179,57 @@ resource "keycloak_openid_client" "broker_client" {
 
 ---
 
+## BUG-004: Resources Page Hardcoded 'USA' Instance Defaults
+
+**Severity:** CRITICAL  
+**Discovered:** 2025-12-01  
+**Status:** ✅ FIXED
+
+### Description
+
+The resources page (`frontend/src/app/resources/page.tsx`) had hardcoded `'USA'` as the default instance in multiple places:
+
+1. `selectedInstances` initial state: `useState<string[]>(['USA'])`
+2. `selectedFilters.instances` initial state: `instances: ['USA']`
+3. `clearAllFilters` reset value: `instances: ['USA']`
+4. Instance pill disabled logic: `instance !== 'USA'`
+5. BentoDashboard `activeInstances` prop: `['USA']`
+
+This caused FRA, GBR, and DEU instances to show USA as the default/selected instance.
+
+### Impact
+
+- **Wrong Instance Filter:** FRA users see USA selected by default
+- **Wrong Bento Dashboard:** "Local" card shows USA instead of FRA
+- **Wrong Filter Badge:** USA badge shown in filters panel
+- **Confusing UX:** Users think they're searching USA when on FRA
+
+### Root Cause
+
+Developer oversight - hardcoded `'USA'` instead of using `NEXT_PUBLIC_INSTANCE` environment variable which is correctly set per instance.
+
+### Fix Applied
+
+Added `CURRENT_INSTANCE` constant that reads from `process.env.NEXT_PUBLIC_INSTANCE`:
+
+```typescript
+// Get current instance from environment (FRA, USA, GBR, DEU)
+const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
+// Then replaced all hardcoded 'USA' with CURRENT_INSTANCE
+const [selectedInstances, setSelectedInstances] = useState<string[]>([CURRENT_INSTANCE]);
+```
+
+### Files Fixed
+
+- `frontend/src/app/resources/page.tsx` - All 5 hardcoded references replaced
+
+### Commit
+
+`697eb0c` - fix(resources): Use NEXT_PUBLIC_INSTANCE for instance-aware defaults
+
+---
+
 ## Template for New Bugs
 
 ```markdown
