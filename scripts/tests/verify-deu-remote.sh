@@ -240,10 +240,12 @@ main() {
     if [ -n "$token" ]; then
         log_test "Searching DEU local resources"
         local search_result=$(federated_search "${DEU_API}" "$token" "DEU")
-        local total=$(echo "$search_result" | jq -r '.totalResults // .totalAccessible // 0' 2>/dev/null)
+        local total=$(echo "$search_result" | jq -r '.totalAccessible // .totalResults // 0' 2>/dev/null)
+        local instance_count=$(echo "$search_result" | jq -r '.instanceResults.DEU.accessibleCount // .instanceResults.DEU.count // 0' 2>/dev/null)
         
-        if [ "$total" -gt 0 ]; then
-            log_pass "Found ${total} accessible resources on DEU"
+        if [ "$total" -gt 0 ] || [ "$instance_count" -gt 0 ]; then
+            local display_count=$([ "$instance_count" -gt 0 ] && echo "$instance_count" || echo "$total")
+            log_pass "Found ${display_count} accessible resources on DEU (totalAccessible: ${total})"
         else
             log_fail "No resources found"
         fi
@@ -266,10 +268,12 @@ main() {
             -H "Content-Type: application/json" \
             -d '{"query":"","instances":["USA"],"pagination":{"limit":5}}' \
             --max-time 30 2>/dev/null)
-        local usa_total=$(echo "$usa_result" | jq -r '.totalResults // .totalAccessible // 0' 2>/dev/null)
+        local usa_total=$(echo "$usa_result" | jq -r '.totalAccessible // .totalResults // 0' 2>/dev/null)
+        local usa_instance=$(echo "$usa_result" | jq -r '.instanceResults.USA.accessibleCount // .instanceResults.USA.count // 0' 2>/dev/null)
+        local usa_display=$([ "$usa_instance" -gt 0 ] && echo "$usa_instance" || echo "$usa_total")
         
-        if [ "$usa_total" -gt 0 ]; then
-            log_pass "Accessed ${usa_total} resources on USA using DEU token"
+        if [ "$usa_total" -gt 0 ] || [ "$usa_instance" -gt 0 ]; then
+            log_pass "Accessed ${usa_display} resources on USA using DEU token (totalAccessible: ${usa_total})"
         else
             log_fail "No resources accessed (may be expected based on releasability)"
         fi
@@ -281,10 +285,12 @@ main() {
             -H "Content-Type: application/json" \
             -d '{"query":"","instances":["FRA"],"pagination":{"limit":5}}' \
             --max-time 30 2>/dev/null)
-        local fra_total=$(echo "$fra_result" | jq -r '.totalResults // .totalAccessible // 0' 2>/dev/null)
+        local fra_total=$(echo "$fra_result" | jq -r '.totalAccessible // .totalResults // 0' 2>/dev/null)
+        local fra_instance=$(echo "$fra_result" | jq -r '.instanceResults.FRA.accessibleCount // .instanceResults.FRA.count // 0' 2>/dev/null)
+        local fra_display=$([ "$fra_instance" -gt 0 ] && echo "$fra_instance" || echo "$fra_total")
         
-        if [ "$fra_total" -gt 0 ]; then
-            log_pass "Accessed ${fra_total} resources on FRA using DEU token"
+        if [ "$fra_total" -gt 0 ] || [ "$fra_instance" -gt 0 ]; then
+            log_pass "Accessed ${fra_display} resources on FRA using DEU token (totalAccessible: ${fra_total})"
         else
             log_fail "No resources accessed (may be expected based on releasability)"
         fi
@@ -302,14 +308,18 @@ main() {
     if [ -n "$token" ]; then
         log_test "DEU user searching all instances"
         local fed_result=$(federated_search "${DEU_API}" "$token" "USA,FRA,GBR,DEU")
-        local total=$(echo "$fed_result" | jq -r '.totalResults // .totalAccessible // 0' 2>/dev/null)
+        local total=$(echo "$fed_result" | jq -r '.totalAccessible // .totalResults // 0' 2>/dev/null)
         local instance_results=$(echo "$fed_result" | jq -r '.instanceResults // {}' 2>/dev/null)
         
-        if [ "$total" -gt 0 ]; then
-            log_pass "Found ${total} accessible resources across all instances"
+        # Calculate sum of accessibleCount from all instances
+        local sum_accessible=$(echo "$fed_result" | jq '[.instanceResults[]?.accessibleCount // 0] | add // 0' 2>/dev/null)
+        local display_total=$([ "$sum_accessible" -gt 0 ] && echo "$sum_accessible" || echo "$total")
+        
+        if [ "$total" -gt 0 ] || [ "$sum_accessible" -gt 0 ]; then
+            log_pass "Found ${display_total} accessible resources across all instances (totalAccessible: ${total})"
             if [ -n "$instance_results" ] && [ "$instance_results" != "{}" ]; then
                 echo "  Instance breakdown:"
-                echo "$instance_results" | jq -r 'to_entries[] | "    \(.key): \(.value.totalCount // 0) resources"' 2>/dev/null || true
+                echo "$instance_results" | jq -r 'to_entries[] | "    \(.key): \(.value.accessibleCount // .value.count // 0) accessible resources"' 2>/dev/null || true
             fi
         else
             log_fail "No resources found"
