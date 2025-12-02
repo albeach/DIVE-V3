@@ -322,6 +322,8 @@ services:
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-gbr:8443
       KEYCLOAK_ISSUER: https://gbr-idp.dive25.com/realms/dive-v3-broker
+      # CRITICAL: Backend URL for server-side API proxy (inside Docker network)
+      BACKEND_URL: https://backend-gbr:4000
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://gbr-app.dive25.com
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
