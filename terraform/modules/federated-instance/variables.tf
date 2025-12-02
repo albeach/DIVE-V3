@@ -44,6 +44,13 @@ variable "client_id" {
   default     = "dive-v3-client-broker"
 }
 
+variable "client_secret" {
+  description = "OIDC client secret from GCP Secret Manager. If null, Keycloak will generate one (NOT RECOMMENDED - causes drift)."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 # Federation partners - other DIVE instances this instance federates with
 variable "federation_partners" {
   description = "Map of partner instances for IdP federation"

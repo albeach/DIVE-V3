@@ -147,6 +147,11 @@ resource "keycloak_openid_client" "broker_client" {
   direct_access_grants_enabled = true # Required for custom login & OTP flows (see below)
   service_accounts_enabled     = true
 
+  # CLIENT SECRET from GCP Secret Manager
+  # CRITICAL: This ensures Terraform uses the same secret as Docker Compose
+  # Without this, Keycloak generates a random secret that doesn't match GCP
+  client_secret = var.client_secret
+
   # URLs - include both localhost (dev) and Cloudflare (prod)
   root_url = var.app_url
   base_url = var.app_url

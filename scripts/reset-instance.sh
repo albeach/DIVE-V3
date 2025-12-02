@@ -204,25 +204,15 @@ if [[ "$SKIP_TF" == "false" ]]; then
     echo ""
     echo -e "${BLUE}[5/6]${NC} Applying Terraform configuration..."
     
-    # Set TF variables based on instance
-    case $INSTANCE in
-        USA)
-            export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD_USA"
-            export TF_VAR_keycloak_client_secret="$KEYCLOAK_CLIENT_SECRET_USA"
-            ;;
-        FRA)
-            export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD_FRA"
-            export TF_VAR_keycloak_client_secret="$KEYCLOAK_CLIENT_SECRET_FRA"
-            ;;
-        GBR)
-            export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD_GBR"
-            export TF_VAR_keycloak_client_secret="$KEYCLOAK_CLIENT_SECRET_GBR"
-            ;;
-        DEU)
-            export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD_DEU"
-            export TF_VAR_keycloak_client_secret="$KEYCLOAK_CLIENT_SECRET_DEU"
-            ;;
-    esac
+    # TF_VAR_* variables are now auto-exported by sync-gcp-secrets.sh
+    # Verify they are set (the sync script already set these correctly)
+    if [[ -z "${TF_VAR_keycloak_admin_password:-}" || -z "${TF_VAR_client_secret:-}" ]]; then
+        echo -e "${RED}[ERROR]${NC} Terraform variables not set. sync-gcp-secrets.sh should have set them."
+        echo "  TF_VAR_keycloak_admin_password: ${TF_VAR_keycloak_admin_password:-(not set)}"
+        echo "  TF_VAR_client_secret: ${TF_VAR_client_secret:-(not set)}"
+        exit 1
+    fi
+    echo -e "  ${GREEN}✓${NC} Terraform variables verified (from GCP secrets)"
     
     # CRITICAL: Select the correct Terraform workspace!
     # The instance_code comes from terraform.workspace, so we must select the right one
