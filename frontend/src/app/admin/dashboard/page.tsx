@@ -26,8 +26,9 @@ import ComplianceOverview from '@/components/admin/dashboard/compliance-overview
 import RealTimeActivity from '@/components/admin/dashboard/realtime-activity';
 import ResourceAnalytics from '@/components/admin/dashboard/resource-analytics';
 import DemoScenarioManager from '@/components/admin/demo-scenario-manager';
+import FederationDashboard from '@/components/admin/federation-dashboard';
 
-type TabView = 'overview' | 'authz' | 'security' | 'threats' | 'performance' | 'compliance' | 'realtime' | 'resources';
+type TabView = 'overview' | 'federation' | 'authz' | 'security' | 'threats' | 'performance' | 'compliance' | 'realtime' | 'resources';
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -72,6 +73,7 @@ export default function AdminDashboard() {
 
     const tabs = [
         { id: 'overview', label: '📊 Overview', icon: '📊', description: 'System-wide metrics' },
+        { id: 'federation', label: '🌍 Federation', icon: '🌍', description: 'Multi-instance status' },
         { id: 'authz', label: '🔐 Authorization', icon: '🔐', description: 'Access decisions & patterns' },
         { id: 'security', label: '🛡️ Security', icon: '🛡️', description: 'Security posture' },
         { id: 'threats', label: '⚠️ Threats', icon: '⚠️', description: 'Threat intelligence' },
@@ -188,6 +190,9 @@ export default function AdminDashboard() {
                                 refreshTrigger={lastRefresh}
                             />
                         </>
+                    )}
+                    {activeTab === 'federation' && (
+                        <FederationDashboard />
                     )}
                     {activeTab === 'authz' && (
                         <AuthorizationAnalytics 
