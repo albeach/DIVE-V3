@@ -326,6 +326,8 @@ services:
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-deu:8443
       KEYCLOAK_ISSUER: https://deu-idp.prosecurity.biz/realms/dive-v3-broker
+      # CRITICAL: Backend URL for server-side API proxy (inside Docker network)
+      BACKEND_URL: https://backend-deu:4000
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXTAUTH_URL: https://deu-app.prosecurity.biz
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_DEU:?Run source ./scripts/sync-gcp-secrets.sh deu}
