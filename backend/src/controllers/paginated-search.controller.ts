@@ -593,6 +593,21 @@ export const paginatedSearchHandler = async (
       const facetPipeline = [
         // Match ABAC-constrained documents (user can access)
         { $match: abacFilter.$and.length > 0 ? abacFilter : {} },
+        // Add computed fields for ZTDF compatibility
+        { $addFields: {
+          _computedReleasabilityTo: {
+            $ifNull: [
+              '$ztdf.policy.securityLabel.releasabilityTo',
+              '$releasabilityTo'
+            ]
+          },
+          _computedCOI: {
+            $ifNull: [
+              '$ztdf.policy.securityLabel.COI',
+              '$COI'
+            ]
+          }
+        }},
         // Facet stage
         {
           $facet: {
@@ -605,14 +620,16 @@ export const paginatedSearchHandler = async (
               { $sort: { count: -1 } }
             ],
             countries: [
-              { $unwind: { path: '$releasabilityTo', preserveNullAndEmptyArrays: false } },
-              { $group: { _id: '$releasabilityTo', count: { $sum: 1 } } },
+              { $unwind: { path: '$_computedReleasabilityTo', preserveNullAndEmptyArrays: false } },
+              { $match: { _computedReleasabilityTo: { $ne: null, $exists: true } } },
+              { $group: { _id: '$_computedReleasabilityTo', count: { $sum: 1 } } },
               { $sort: { count: -1 } },
               { $limit: 20 }
             ],
             cois: [
-              { $unwind: { path: '$COI', preserveNullAndEmptyArrays: false } },
-              { $group: { _id: '$COI', count: { $sum: 1 } } },
+              { $unwind: { path: '$_computedCOI', preserveNullAndEmptyArrays: false } },
+              { $match: { _computedCOI: { $ne: null, $exists: true } } },
+              { $group: { _id: '$_computedCOI', count: { $sum: 1 } } },
               { $sort: { count: -1 } }
             ],
             instances: [
@@ -803,6 +820,21 @@ export const getFacetsHandler = async (
     const collection = db.collection(COLLECTION_NAME);
 
     const facetPipeline = [
+      // Add computed fields for ZTDF compatibility
+      { $addFields: {
+        _computedReleasabilityTo: {
+          $ifNull: [
+            '$ztdf.policy.securityLabel.releasabilityTo',
+            '$releasabilityTo'
+          ]
+        },
+        _computedCOI: {
+          $ifNull: [
+            '$ztdf.policy.securityLabel.COI',
+            '$COI'
+          ]
+        }
+      }},
       {
         $facet: {
           classifications: [
@@ -814,14 +846,16 @@ export const getFacetsHandler = async (
             { $sort: { count: -1 } }
           ],
           countries: [
-            { $unwind: { path: '$releasabilityTo', preserveNullAndEmptyArrays: false } },
-            { $group: { _id: '$releasabilityTo', count: { $sum: 1 } } },
+            { $unwind: { path: '$_computedReleasabilityTo', preserveNullAndEmptyArrays: false } },
+            { $match: { _computedReleasabilityTo: { $ne: null, $exists: true } } },
+            { $group: { _id: '$_computedReleasabilityTo', count: { $sum: 1 } } },
             { $sort: { count: -1 } },
             { $limit: 20 }
           ],
           cois: [
-            { $unwind: { path: '$COI', preserveNullAndEmptyArrays: false } },
-            { $group: { _id: '$COI', count: { $sum: 1 } } },
+            { $unwind: { path: '$_computedCOI', preserveNullAndEmptyArrays: false } },
+            { $match: { _computedCOI: { $ne: null, $exists: true } } },
+            { $group: { _id: '$_computedCOI', count: { $sum: 1 } } },
             { $sort: { count: -1 } }
           ],
           instances: [

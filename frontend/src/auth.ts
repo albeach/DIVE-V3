@@ -598,6 +598,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     } else if (Array.isArray(payload.roles)) {
                                         roles = payload.roles;
                                     }
+
+                                    // Debug logging for role extraction
+                                    console.log('[DIVE Session] Role extraction:', {
+                                        hasRealmAccess: !!payload.realm_access,
+                                        realmAccessRoles: payload.realm_access?.roles,
+                                        directRoles: payload.roles,
+                                        extractedRoles: roles,
+                                        userUniqueID: payload.uniqueID || payload.sub
+                                    });
+
                                     session.user.roles = roles;
 
                                     // ============================================

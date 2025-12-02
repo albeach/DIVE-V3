@@ -254,7 +254,9 @@ export function useInfiniteScroll<T = any>({
         sort: currentSort,
         cursor: isInitial ? undefined : cursorRef.current || undefined,
         limit: pageSize,
-        includeFacets: isInitial && includeFacets,
+        // Always include facets when requested, not just on initial load
+        // This ensures facets update when filters change
+        includeFacets: includeFacets && isInitial,
         federated,
         signal: abortControllerRef.current.signal,
       });
@@ -414,7 +416,13 @@ export function useInfiniteScroll<T = any>({
   useEffect(() => {
     // Only refresh if already fetched AND enabled
     if (hasFetched && enabled) {
-      console.log('[useInfiniteScroll] Filters/sort changed, refreshing');
+      console.log('[useInfiniteScroll] Filters/sort changed, refreshing with facets');
+      // Reset cursor when filters change to start fresh
+      cursorRef.current = null;
+      // Reset items to show loading state
+      setItems([]);
+      setIsLoading(true);
+      // Fetch with facets included to update filter counts
       fetchData(true, filters, sort);
     }
   }, [filters, sort]); // eslint-disable-line react-hooks/exhaustive-deps

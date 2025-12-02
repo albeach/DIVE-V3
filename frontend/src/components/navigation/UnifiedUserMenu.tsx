@@ -29,6 +29,7 @@ import { useInstanceTheme } from '@/components/ui/theme-provider';
 
 interface IdentityUser {
     uniqueID?: string | null;
+    email?: string | null;
     clearance?: string | null;
     countryOfAffiliation?: string | null;
     acpCOI?: string[] | null;
@@ -53,7 +54,18 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const [copied, setCopied] = useState(false);
     const [otpConfigured, setOtpConfigured] = useState<boolean | null>(null);
 
-    const isSuperAdmin = user?.roles?.includes('super_admin') || false;
+    const isSuperAdmin = (() => {
+        const hasRole = user?.roles?.includes('super_admin') || false;
+        // Debug logging (remove in production)
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[UnifiedUserMenu] Admin check:', {
+                hasRole,
+                roles: user?.roles,
+                user: user?.uniqueID || user?.email
+            });
+        }
+        return hasRole;
+    })();
 
     const decoded = useMemo(() => {
         if (!session?.idToken) return null as null | Record<string, any>;

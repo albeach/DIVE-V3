@@ -72,7 +72,18 @@ export default function Navigation({ user }: INavigationProps) {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     // PHASE 3: Memoize isSuperAdmin check for performance
-    const isSuperAdmin = useMemo(() => user?.roles?.includes('super_admin') || false, [user?.roles]);
+    const isSuperAdmin = useMemo(() => {
+        const hasRole = user?.roles?.includes('super_admin') || false;
+        // Debug logging (remove in production)
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[Navigation] Admin check:', {
+                hasRole,
+                roles: user?.roles,
+                user: user?.uniqueID || user?.email
+            });
+        }
+        return hasRole;
+    }, [user?.roles]);
 
     // PHASE 3: Memoize isActive function
     const isActive = useCallback((href: string) => {

@@ -127,9 +127,13 @@ class KeycloakAdminService {
             this.client.setConfig({ realmName: originalRealm });
 
             logger.error('Failed to list identity providers', {
-                error: error instanceof Error ? error.message : 'Unknown error'
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                keycloakUrl: process.env.KEYCLOAK_URL,
+                keycloakRealm: process.env.KEYCLOAK_REALM,
+                originalRealm
             });
-            throw new Error('Failed to retrieve identity providers');
+            throw new Error(`Failed to retrieve identity providers: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
 
         // Switch back to original realm
