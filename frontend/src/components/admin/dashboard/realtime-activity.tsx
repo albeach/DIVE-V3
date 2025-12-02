@@ -29,13 +29,28 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
     const [loading, setLoading] = useState(true);
     const [filterOutcome, setFilterOutcome] = useState<'all' | 'ALLOW' | 'DENY'>('all');
     const [filterEventType, setFilterEventType] = useState<string>('all');
+    const [isLive, setIsLive] = useState(true);
+    const [newLogsCount, setNewLogsCount] = useState(0);
+
+    // Auto-refresh every 2 seconds when live mode is on
+    useEffect(() => {
+        if (!isLive) return;
+        
+        const interval = setInterval(() => {
+            fetchData(true); // Pass true to indicate auto-refresh
+        }, 2000);
+
+        return () => clearInterval(interval);
+    }, [isLive]);
 
     useEffect(() => {
         fetchData();
     }, [refreshTrigger]);
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (isAutoRefresh = false) => {
+        if (!isAutoRefresh) {
+            setLoading(true);
+        }
         try {
             // Use server API route (secure!)
             const res = await fetch(`/api/admin/logs?limit=100`);
@@ -44,13 +59,30 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
             if (contentType && contentType.includes('application/json')) {
                 const data = await res.json();
                 if (data.success && data.data.logs) {
-                    setLogs(data.data.logs);
+                    const newLogs = data.data.logs;
+                    
+                    // Detect new logs (compare by timestamp)
+                    if (isAutoRefresh && logs.length > 0) {
+                        const lastTimestamp = logs[0]?.timestamp;
+                        const newCount = newLogs.filter((log: ILogEntry) => 
+                            new Date(log.timestamp) > new Date(lastTimestamp)
+                        ).length;
+                        
+                        if (newCount > 0) {
+                            setNewLogsCount(newCount);
+                            setTimeout(() => setNewLogsCount(0), 3000);
+                        }
+                    }
+                    
+                    setLogs(newLogs);
                 }
             }
         } catch (error) {
             console.error('Failed to fetch logs:', error);
         } finally {
-            setLoading(false);
+            if (!isAutoRefresh) {
+                setLoading(false);
+            }
         }
     };
 
@@ -158,21 +190,45 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
             {/* Activity Feed */}
             <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl font-bold text-slate-900">📡 Live Activity Feed</h2>
-                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold animate-pulse">
-                        ● LIVE
-                    </span>
+                    <div className="flex items-center space-x-3">
+                        <h2 className="text-2xl font-bold text-slate-900">📡 Live Activity Feed</h2>
+                        {isLive && (
+                            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold animate-pulse flex items-center space-x-1">
+                                <span className="w-2 h-2 bg-green-600 rounded-full animate-ping"></span>
+                                <span>LIVE</span>
+                            </span>
+                        )}
+                        {newLogsCount > 0 && (
+                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold animate-bounce">
+                                +{newLogsCount} new
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setIsLive(!isLive)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                            isLive 
+                                ? 'bg-green-600 text-white hover:bg-green-700' 
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                    >
+                        {isLive ? '⏸️ Pause' : '▶️ Resume'}
+                    </button>
                 </div>
 
                 <div className="space-y-2 max-h-[600px] overflow-y-auto">
                     {filteredLogs.length > 0 ? (
-                        filteredLogs.map((log, idx) => (
+                        filteredLogs.map((log, idx) => {
+                            const isNew = idx < newLogsCount && isLive;
+                            return (
                             <div 
-                                key={idx} 
+                                key={`${log.timestamp}-${idx}`}
                                 className={`p-4 rounded-lg border transition-all hover:shadow-md ${
                                     log.outcome === 'ALLOW' 
                                         ? 'bg-green-50 border-green-200 hover:bg-green-100' 
                                         : 'bg-red-50 border-red-200 hover:bg-red-100'
+                                } ${
+                                    isNew ? 'animate-pulse border-2 border-blue-400 shadow-lg' : ''
                                 }`}
                             >
                                 <div className="flex items-start justify-between">

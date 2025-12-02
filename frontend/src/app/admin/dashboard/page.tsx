@@ -25,6 +25,7 @@ import PerformanceMetrics from '@/components/admin/dashboard/performance-metrics
 import ComplianceOverview from '@/components/admin/dashboard/compliance-overview';
 import RealTimeActivity from '@/components/admin/dashboard/realtime-activity';
 import ResourceAnalytics from '@/components/admin/dashboard/resource-analytics';
+import DemoScenarioManager from '@/components/admin/demo-scenario-manager';
 
 type TabView = 'overview' | 'authz' | 'security' | 'threats' | 'performance' | 'compliance' | 'realtime' | 'resources';
 
@@ -173,13 +174,20 @@ export default function AdminDashboard() {
                     </nav>
                 </div>
 
+                {/* Demo Scenario Manager - Always visible */}
+                <div className="mb-6">
+                    <DemoScenarioManager />
+                </div>
+
                 {/* Content Area */}
                 <div className="pb-8">
                     {activeTab === 'overview' && (
-                        <SystemOverviewSection 
-                            dateRange={dateRange} 
-                            refreshTrigger={lastRefresh}
-                        />
+                        <>
+                            <SystemOverviewSection 
+                                dateRange={dateRange} 
+                                refreshTrigger={lastRefresh}
+                            />
+                        </>
                     )}
                     {activeTab === 'authz' && (
                         <AuthorizationAnalytics 
