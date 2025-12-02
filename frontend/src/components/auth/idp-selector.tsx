@@ -567,7 +567,8 @@ export function IdpSelector() {
                 <button
                   onClick={() => {
                     closeEasterEgg();
-                    handleIdpClick({ alias: 'dive-v3-broker', displayName: 'Super Admin', protocol: 'oidc', enabled: true });
+                    // Direct login to broker realm (no IdP hint = direct realm login)
+                    handleDirectLogin();
                   }}
                   className="group relative w-full p-6 border-2 border-[#00ff41] bg-gradient-to-br from-[#00ff41]/10 to-cyan-500/10 rounded-xl hover:border-cyan-400 hover:shadow-[0_0_40px_rgba(0,255,65,0.8)] transition-all duration-300 hover:scale-[1.02] overflow-hidden"
                 >
