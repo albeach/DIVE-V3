@@ -219,25 +219,40 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Get the signing key from JWKS (pass token for realm detection)
         const publicKey = await getSigningKey(decoded.header, token);
 
-        // Multi-realm: Accept tokens from both dive-v3-broker AND dive-v3-broker
-        // Docker networking: Accept both internal (keycloak:8080) AND external (localhost:8081) URLs
-        // HTTPS Support: Accept HTTPS issuers on port 8443 (production setup)
-        // Custom Domain: Accept kas.js.usa.divedeeper.internal:8443 (KC_HOSTNAME) - Nov 6, 2025 fix
-        // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
-        // USA IdP Domain: Accept usa-idp.dive25.com (Nov 29, 2025)
+        // Multi-realm: Accept tokens from all federated partner Keycloak instances
+        // Each KAS must accept JWTs from ALL coalition partners for cross-instance access
+        // 
+        // CRITICAL: Federation requires accepting JWTs from ANY partner IdP
+        // A GBR user accessing FRA resources presents a GBR-issued JWT to FRA KAS
+        //
+        // Valid issuers include:
+        // 1. Local instance Keycloak (process.env.KEYCLOAK_URL)
+        // 2. All coalition partner public IdPs (dive25.com domain)
+        // 3. DEU uses prosecurity.biz domain
+        // 4. Legacy/dev issuers for backward compatibility
         const validIssuers: [string, ...string[]] = [
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Internal: dive-v3-broker
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,   // Internal: dive-v3-broker
-            'http://localhost:8081/realms/dive-v3-broker',          // External HTTP: dive-v3-broker
-            'http://localhost:8081/realms/dive-v3-broker',         // External HTTP: dive-v3-broker
-            'https://localhost:8443/realms/dive-v3-broker',         // External HTTPS: dive-v3-broker
-            'https://localhost:8443/realms/dive-v3-broker',        // External HTTPS: dive-v3-broker
-            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',   // Custom domain: dive-v3-broker
-            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker
-            'https://dev-auth.dive25.com/realms/dive-v3-broker',    // Cloudflare Tunnel: dive-v3-broker
-            'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker
-            'https://usa-idp.dive25.com:8443/realms/dive-v3-broker', // USA IdP domain with port
-            'https://usa-idp.dive25.com/realms/dive-v3-broker',      // USA IdP via Cloudflare (no port)
+            // Local instance (dynamic based on deployment)
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,
+            
+            // === COALITION PARTNER IdPs (Cloudflare Tunnels) ===
+            // USA
+            'https://usa-idp.dive25.com/realms/dive-v3-broker',
+            'https://usa-idp.dive25.com:8443/realms/dive-v3-broker',
+            // FRA
+            'https://fra-idp.dive25.com/realms/dive-v3-broker',
+            'https://fra-idp.dive25.com:8443/realms/dive-v3-broker',
+            // GBR
+            'https://gbr-idp.dive25.com/realms/dive-v3-broker',
+            'https://gbr-idp.dive25.com:8443/realms/dive-v3-broker',
+            // DEU (uses prosecurity.biz domain)
+            'https://deu-idp.prosecurity.biz/realms/dive-v3-broker',
+            'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker',
+            
+            // === LEGACY/DEV ISSUERS ===
+            'http://localhost:8081/realms/dive-v3-broker',
+            'https://localhost:8443/realms/dive-v3-broker',
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',
+            'https://dev-auth.dive25.com/realms/dive-v3-broker',
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
