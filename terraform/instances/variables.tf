@@ -61,10 +61,25 @@ variable "client_secret" {
     - NextAuth "Configuration" errors
     - Token validation failures
     - State drift between resets
+    
+    REQUIRED: Run 'source ./scripts/sync-gcp-secrets.sh <instance>' before terraform apply!
   EOT
   type        = string
   sensitive   = true
-  default     = null  # Keycloak will generate if not set (NOT RECOMMENDED)
+  # NO DEFAULT - forces explicit setting to prevent drift
+  # If you see "variable not set" error, run: source ./scripts/sync-gcp-secrets.sh <instance>
+
+  validation {
+    condition     = var.client_secret != null && length(var.client_secret) > 10
+    error_message = <<-EOT
+      client_secret is REQUIRED to prevent secret drift!
+      
+      Run this first:
+        source ./scripts/sync-gcp-secrets.sh <instance>
+        
+      This will set TF_VAR_client_secret from GCP Secret Manager.
+    EOT
+  }
 }
 
 # Test users
