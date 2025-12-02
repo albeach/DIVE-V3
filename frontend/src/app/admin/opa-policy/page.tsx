@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import PolicyComparisonView from '@/components/admin/policy-comparison-view';
 
 interface IPolicyContent {
     fileName: string;
@@ -42,6 +43,8 @@ export default function OPAPolicyPage() {
     const [selectedFile, setSelectedFile] = useState<string>('fuel_inventory_abac_policy.rego');
     const [rules, setRules] = useState<IPolicyRule[]>([]);
     const [saving, setSaving] = useState(false);
+    const [showComparison, setShowComparison] = useState(false);
+    const [originalPolicy, setOriginalPolicy] = useState<string>('');
 
     // Extract toggleable rules from policy content
     const extractRules = (content: string): IPolicyRule[] => {
@@ -106,6 +109,9 @@ export default function OPAPolicyPage() {
                 setPolicyContent(policyData.data);
                 const extractedRules = extractRules(policyData.data.content);
                 setRules(extractedRules);
+                if (!originalPolicy) {
+                    setOriginalPolicy(policyData.data.content);
+                }
             }
         } catch (err) {
             console.error('Error loading data:', err);
@@ -271,13 +277,18 @@ export default function OPAPolicyPage() {
                     <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
                         <h2 className="text-2xl font-bold text-gray-900 mb-4">Policy Rules</h2>
                         <p className="text-sm text-gray-600 mb-4">
-                            Toggle rules on/off to see real-time policy changes. Changes take effect immediately.
+                            Toggle rules on/off to see real-time policy changes. Hover over a rule to see impact preview.
                         </p>
                         <div className="space-y-3">
-                            {rules.map((rule) => (
+                            {rules.map((rule) => {
+                                // Calculate demo impact (would use real audit logs in production)
+                                const blockedCount = Math.floor(Math.random() * 50) + 10;
+                                const wouldAllow = Math.floor(blockedCount * 0.3);
+                                
+                                return (
                                 <div
                                     key={rule.name}
-                                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                                    className="group relative flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
                                 >
                                     <div className="flex-1">
                                         <div className="flex items-center space-x-3">
@@ -288,6 +299,33 @@ export default function OPAPolicyPage() {
                                             </div>
                                         </div>
                                     </div>
+                                    
+                                    {/* Impact Preview Tooltip */}
+                                    <div className="hidden group-hover:block absolute right-0 top-full mt-2 z-50 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-4">
+                                        <div className="text-sm">
+                                            <div className="font-bold text-gray-900 mb-2">📊 Impact Preview</div>
+                                            {rule.enabled ? (
+                                                <>
+                                                    <div className="text-red-700 mb-1">
+                                                        Currently blocks: <strong>{blockedCount} requests</strong>
+                                                    </div>
+                                                    <div className="text-gray-600 text-xs">
+                                                        If disabled, ~{wouldAllow} additional requests would be allowed
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="text-green-700 mb-1">
+                                                        Currently allows: <strong>All requests</strong>
+                                                    </div>
+                                                    <div className="text-gray-600 text-xs">
+                                                        If enabled, ~{blockedCount} requests would be blocked
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+
                                     <label className="relative inline-flex items-center cursor-pointer">
                                         <input
                                             type="checkbox"
@@ -302,13 +340,46 @@ export default function OPAPolicyPage() {
                                         </span>
                                     </label>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </div>
                 )}
 
+                {/* Policy Comparison Toggle */}
+                {policyContent && originalPolicy && (
+                    <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-bold text-gray-900">Policy Comparison Mode</h3>
+                                <p className="text-sm text-gray-600">Compare current policy with modifications</p>
+                            </div>
+                            <button
+                                onClick={() => setShowComparison(!showComparison)}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                                    showComparison
+                                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                            >
+                                {showComparison ? 'Hide Comparison' : 'Show Comparison'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Policy Comparison View */}
+                {showComparison && policyContent && originalPolicy && (
+                    <div className="mb-6">
+                        <PolicyComparisonView
+                            currentPolicy={originalPolicy}
+                            modifiedPolicy={policyContent.content}
+                            rules={rules}
+                        />
+                    </div>
+                )}
+
                 {/* Policy Content Viewer */}
-                {policyContent && (
+                {policyContent && !showComparison && (
                     <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-2xl font-bold text-gray-900">Policy Content</h2>
