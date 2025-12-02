@@ -334,12 +334,44 @@ export const INDUSTRY_USERS = {
 /**
  * Consolidated Test Users Object
  * Use in tests: import { TEST_USERS } from '../fixtures/test-users';
+ * 
+ * Access patterns:
+ * - TEST_USERS.USA.LEVEL_3 (SECRET)
+ * - TEST_USERS.USA.SECRET (alias for LEVEL_3)
  */
 export const TEST_USERS = {
-  USA: USA_USERS,
-  FRA: FRA_USERS,
-  DEU: DEU_USERS,
-  GBR: GBR_USERS,
+  USA: {
+    ...USA_USERS,
+    // Aliases for backward compatibility
+    UNCLASS: USA_USERS.LEVEL_1,
+    CONFIDENTIAL: USA_USERS.LEVEL_2,
+    SECRET: USA_USERS.LEVEL_3,
+    TOP_SECRET: USA_USERS.LEVEL_4,
+  },
+  FRA: {
+    ...FRA_USERS,
+    // Aliases for backward compatibility
+    UNCLASS: FRA_USERS.LEVEL_1,
+    CONFIDENTIAL: FRA_USERS.LEVEL_2,
+    SECRET: FRA_USERS.LEVEL_3,
+    TOP_SECRET: FRA_USERS.LEVEL_4,
+  },
+  DEU: {
+    ...DEU_USERS,
+    // Aliases for backward compatibility
+    UNCLASS: DEU_USERS.LEVEL_1,
+    CONFIDENTIAL: DEU_USERS.LEVEL_2,
+    SECRET: DEU_USERS.LEVEL_3,
+    TOP_SECRET: DEU_USERS.LEVEL_4,
+  },
+  GBR: {
+    ...GBR_USERS,
+    // Aliases for backward compatibility
+    UNCLASS: GBR_USERS.LEVEL_1,
+    CONFIDENTIAL: GBR_USERS.LEVEL_2,
+    SECRET: GBR_USERS.LEVEL_3,
+    TOP_SECRET: GBR_USERS.LEVEL_4,
+  },
   INDUSTRY: INDUSTRY_USERS,
 } as const;
 

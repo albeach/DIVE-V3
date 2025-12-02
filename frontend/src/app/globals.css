@@ -1155,6 +1155,47 @@ body {
     }
 }
 
+/* ============================================ */
+/* 2025 Modern Mobile Header Animations */
+/* ============================================ */
+
+/* Gradient shift animation for text */
+@keyframes gradient-shift {
+
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+/* Shimmer effect for modern UI */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Underline expand animation */
+@keyframes underline-expand {
+    0% {
+        transform: scaleX(0);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scaleX(1);
+        opacity: 0.6;
+    }
+}
+
 /* Reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
 
@@ -1164,5 +1205,17 @@ body {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+    }
+
+    /* Disable complex animations for reduced motion */
+    @keyframes gradient-shift,
+    @keyframes shimmer,
+    @keyframes underline-expand {
+
+        from,
+        to {
+            transform: none;
+            opacity: 1;
+        }
     }
 }

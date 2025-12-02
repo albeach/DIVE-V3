@@ -137,9 +137,11 @@ async function fillKeycloakLogin(page: Page, user: TestUser): Promise<void> {
   // Fill username
   await usernameInput.fill(user.username);
   
-  // Fill password
-  const passwordInput = page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.PASSWORD_INPUT)
-    .or(page.getByLabel(/password/i));
+  // Fill password - use input[type="password"] to avoid matching toggle button
+  const passwordInput = page.locator('input[type="password"]')
+    .or(page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.PASSWORD_INPUT))
+    .or(page.getByLabel(/password/i).filter({ has: page.locator('input[type="password"]') }))
+    .first();
   
   await passwordInput.fill(user.password);
   

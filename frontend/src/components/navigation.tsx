@@ -204,6 +204,66 @@ export default function Navigation({ user }: INavigationProps) {
                                 </div>
                             </Link>
 
+                            {/* Mobile Header Text - DIVE ICAM (2025 Modern Design Pattern) */}
+                            <div className="lg:hidden flex items-center ml-2 animate-fade-in">
+                                <div className="relative group">
+                                    {/* Animated gradient glow effect - subtle pulse */}
+                                    <div 
+                                        className="absolute -inset-1 rounded-lg opacity-20 blur-lg pointer-events-none"
+                                        style={{ 
+                                            background: 'var(--instance-banner-bg)',
+                                            animation: 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                                        }}
+                                    />
+                                    
+                                    {/* Shimmer overlay effect on hover */}
+                                    <div 
+                                        className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-30 transition-opacity duration-700 pointer-events-none overflow-hidden"
+                                        style={{
+                                            background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.5) 50%, transparent 100%)',
+                                            backgroundSize: '200% 100%',
+                                            animation: 'shimmer 3s ease-in-out infinite'
+                                        }}
+                                    />
+                                    
+                                    {/* Main text with animated gradient */}
+                                    <span 
+                                        className="relative text-xl font-black tracking-tight inline-block"
+                                        style={{ 
+                                            background: 'var(--instance-banner-bg)',
+                                            backgroundSize: '200% 100%',
+                                            WebkitBackgroundClip: 'text',
+                                            WebkitTextFillColor: 'transparent',
+                                            backgroundClip: 'text',
+                                            animation: 'gradient-shift 4s ease infinite',
+                                            filter: 'drop-shadow(0 2px 8px rgba(var(--instance-primary-rgb, 68, 151, 172), 0.25))'
+                                        }}
+                                    >
+                                        DIVE ICAM
+                                    </span>
+                                    
+                                    {/* Animated underline accent - expands on load */}
+                                    <div 
+                                        className="absolute -bottom-0.5 left-0 right-0 h-[2px] rounded-full"
+                                        style={{ 
+                                            background: 'var(--instance-banner-bg)',
+                                            transform: 'scaleX(0)',
+                                            transformOrigin: 'left',
+                                            animation: 'underline-expand 1.2s cubic-bezier(0.4, 0, 0.2, 1) 0.3s forwards'
+                                        }}
+                                    />
+                                    
+                                    {/* Secondary glow ring for depth */}
+                                    <div 
+                                        className="absolute -inset-2 rounded-lg opacity-10 blur-xl pointer-events-none"
+                                        style={{ 
+                                            background: 'var(--instance-banner-bg)',
+                                            animation: 'pulse 4s ease-in-out infinite'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
                             {/* Desktop Navigation - Responsive with short labels at lg, full at xl */}
                             <div className="hidden lg:flex lg:gap-0.5 xl:gap-1 lg:items-center">
                                 {navItems.map((item, index) => {
