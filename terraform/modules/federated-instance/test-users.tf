@@ -105,23 +105,30 @@ resource "keycloak_user" "pilot_users" {
     temporary = false
   }
 
-  attributes = {
-    # Core DIVE attributes
-    clearance            = each.value.clearance
-    countryOfAffiliation = var.instance_code
-    uniqueID             = "testuser-${lower(var.instance_code)}-${each.key}"
+  # Core attributes + conditional COI (only set if non-empty)
+  # FIX: Don't set acpCOI at all for empty arrays - prevents "[]" string bug
+  attributes = merge(
+    {
+      # Core DIVE attributes
+      clearance            = each.value.clearance
+      countryOfAffiliation = var.instance_code
+      uniqueID             = "testuser-${lower(var.instance_code)}-${each.key}"
 
-    # Extended attributes
-    userType         = "military"
-    organization     = "${var.instance_name} Defense"
-    organizationType = each.value.organization_type # ACP-240 Section 4.2
-    acpCOI           = jsonencode(each.value.coi)
+      # Extended attributes
+      userType         = "military"
+      organization     = "${var.instance_name} Defense"
+      organizationType = each.value.organization_type # ACP-240 Section 4.2
 
-    # Pilot metadata
-    pilot_user      = "true"
-    clearance_level = each.key
-    created_by      = "terraform"
-  }
+      # Pilot metadata
+      pilot_user      = "true"
+      clearance_level = each.key
+      created_by      = "terraform"
+    },
+    # Only include acpCOI if user has COI tags (prevents empty "[]" string in token)
+    length(each.value.coi) > 0 ? {
+      acpCOI = join("##", each.value.coi)
+    } : {}
+  )
 
   lifecycle {
     ignore_changes = [initial_password]
@@ -153,24 +160,31 @@ resource "keycloak_user" "industry_partner" {
     temporary = false
   }
 
-  attributes = {
-    # Core DIVE attributes
-    clearance            = local.this_industry_partner.clearance
-    countryOfAffiliation = var.instance_code
-    uniqueID             = "contractor.${local.this_industry_partner.company_short}@${local.this_industry_partner.email_domain}"
+  # Core attributes + conditional COI (only set if non-empty)
+  # FIX: Don't set acpCOI at all for empty arrays - prevents "[]" string bug
+  attributes = merge(
+    {
+      # Core DIVE attributes
+      clearance            = local.this_industry_partner.clearance
+      countryOfAffiliation = var.instance_code
+      uniqueID             = "contractor.${local.this_industry_partner.company_short}@${local.this_industry_partner.email_domain}"
 
-    # Industry-specific attributes (Primary Endorser Model)
-    organizationType = "INDUSTRY"
-    organization     = local.this_industry_partner.company_name
-    primaryEndorser  = var.instance_code # This country endorses this contractor
-    userType         = "contractor"
-    acpCOI           = jsonencode(local.this_industry_partner.coi)
+      # Industry-specific attributes (Primary Endorser Model)
+      organizationType = "INDUSTRY"
+      organization     = local.this_industry_partner.company_name
+      primaryEndorser  = var.instance_code # This country endorses this contractor
+      userType         = "contractor"
 
-    # Pilot metadata
-    pilot_user    = "true"
-    industry_user = "true"
-    created_by    = "terraform"
-  }
+      # Pilot metadata
+      pilot_user    = "true"
+      industry_user = "true"
+      created_by    = "terraform"
+    },
+    # Only include acpCOI if user has COI tags (prevents empty "[]" string in token)
+    length(local.this_industry_partner.coi) > 0 ? {
+      acpCOI = join("##", local.this_industry_partner.coi)
+    } : {}
+  )
 
   lifecycle {
     ignore_changes = [initial_password]

@@ -207,15 +207,31 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     }
   }
 
-  # Communities of Interest (JSON array)
+  # Communities of Interest (multi-valued for coalition access)
+  # Users may belong to multiple COIs: NATO, FVEY, NATO-COSMIC, EU-RESTRICTED, etc.
   attribute {
     name         = "acpCOI"
     display_name = "Communities of Interest"
     group        = "dive-attributes"
 
+    # Allow multiple COI values (0 to 10 values)
+    multi_valued = true
+
+    annotations = {
+      "inputType" = "multiselect"
+    }
+
     permissions {
       view = ["admin"]
       edit = ["admin"]
+    }
+
+    validator {
+      name = "length"
+      config = {
+        min = "0"  # COI is optional
+        max = "50" # Max COI name length
+      }
     }
   }
 
