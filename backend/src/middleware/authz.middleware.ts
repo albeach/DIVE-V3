@@ -538,7 +538,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
  * @param acr - ACR claim from JWT (string or number)
  * @returns Numeric AAL level (0 = AAL1, 1 = AAL2, 2 = AAL3)
  */
-function normalizeACR(acr: string | number | undefined): number {
+export function normalizeACR(acr: string | number | undefined): number {
     if (acr === undefined || acr === null) {
         logger.debug('ACR not provided, defaulting to AAL1');
         return 0;  // Default: AAL1
@@ -587,7 +587,7 @@ function normalizeACR(acr: string | number | undefined): number {
  * @param amr - AMR claim from JWT (array or JSON string)
  * @returns Array of authentication methods
  */
-function normalizeAMR(amr: string | string[] | undefined): string[] {
+export function normalizeAMR(amr: string | string[] | undefined): string[] {
     if (amr === undefined || amr === null) {
         logger.debug('AMR not provided, defaulting to password-only');
         return ['pwd'];  // Default: password only

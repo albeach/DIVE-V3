@@ -127,16 +127,29 @@ public class ConfigureOTPRequiredAction implements RequiredActionProvider {
             return;
         }
         
-        // Validate OTP code using Keycloak's TimeBasedOTP utility
-        OTPPolicy policy = context.getRealm().getOTPPolicy();
-        TimeBasedOTP totp = new TimeBasedOTP(
-            policy.getAlgorithm(),
-            policy.getDigits(),
-            policy.getPeriod(),
-            policy.getLookAheadWindow()
-        );
+        // ============================================
+        // DEMO MODE: Accept "123456" as valid code
+        // ============================================
+        boolean demoMode = "true".equalsIgnoreCase(System.getenv("DEMO_MODE")) || 
+                          "demo".equalsIgnoreCase(System.getenv("NODE_ENV"));
+        final String DEMO_OTP_CODE = "123456";
         
-        boolean valid = totp.validateTOTP(otpCode, secret.getBytes(StandardCharsets.UTF_8));
+        boolean valid = false;
+        if (demoMode && DEMO_OTP_CODE.equals(otpCode)) {
+            System.out.println("[DIVE Required Action] DEMO MODE: Accepting override OTP code 123456");
+            valid = true;
+        } else {
+            // Validate OTP code using Keycloak's TimeBasedOTP utility
+            OTPPolicy policy = context.getRealm().getOTPPolicy();
+            TimeBasedOTP totp = new TimeBasedOTP(
+                policy.getAlgorithm(),
+                policy.getDigits(),
+                policy.getPeriod(),
+                policy.getLookAheadWindow()
+            );
+            
+            valid = totp.validateTOTP(otpCode, secret.getBytes(StandardCharsets.UTF_8));
+        }
         
         System.out.println("[DIVE Required Action] OTP validation result: " + valid);
         

@@ -48,10 +48,20 @@
         "migrate-uuids": "tsx src/scripts/migrate-uniqueids-to-uuid.ts",
         "fix-webauthn-rpid": "tsx src/scripts/fix-webauthn-rpid.ts",
         "fix-webauthn-warnings": "tsx src/scripts/fix-webauthn-warnings.ts",
+        "quick-fix-acr": "tsx src/scripts/quick-fix-acr-aal3.ts",
+        "emergency-set-acr": "tsx src/scripts/emergency-set-acr-aal3.ts",
+        "debug-webauthn": "tsx src/scripts/debug-webauthn-passkey.ts",
+        "delete-webauthn": "tsx src/scripts/delete-and-fix-webauthn.ts",
+        "fix-webauthn-lookup": "tsx src/scripts/fix-webauthn-server-side-lookup.ts",
+        "check-webauthn": "tsx src/scripts/check-and-clean-webauthn-credentials.ts",
         "verify-webauthn": "tsx src/scripts/verify-webauthn-config.ts",
         "verify-both-policies": "tsx src/scripts/verify-both-webauthn-policies.ts",
         "check-webauthn-comprehensive": "tsx src/scripts/comprehensive-webauthn-check.ts",
-        "clear-sessions": "tsx src/scripts/clear-keycloak-sessions.ts"
+        "clear-sessions": "tsx src/scripts/clear-keycloak-sessions.ts",
+        "check-webauthn-credentials": "tsx src/scripts/check-and-clean-webauthn-credentials.ts",
+        "setup-demo-users": "tsx src/scripts/setup-demo-users.ts",
+        "test-demo-users": "tsx src/scripts/test-demo-users.ts",
+        "get-demo-otp": "tsx src/scripts/get-demo-otp-code.ts"
     },
     "keywords": [
         "dive",

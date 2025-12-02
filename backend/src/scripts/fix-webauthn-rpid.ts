@@ -48,17 +48,20 @@ const REALMS = [
   'dive-v3-broker',
 ];
 
-// WebAuthn Policy configuration (AAL3 compliant + Passkeys compatible)
-// CRITICAL FIX: userVerification set to 'preferred' instead of 'required'
-// Based on Stack Overflow reports, 'required' causes NotAllowedError/timeout on many devices (especially iPhones)
-// 'preferred' allows the authenticator to decide, which improves compatibility
+// WebAuthn Policy configuration (AAL3 compliant + YubiKey compatible)
+// CRITICAL FIXES:
+// 1. userVerification set to 'preferred' instead of 'required' - improves compatibility
+// 2. requireResidentKey set to 'No' - YubiKeys don't support discoverable credentials (resident keys)
+//    They use server-side credential storage instead
+// Based on Stack Overflow reports, 'required' causes NotAllowedError/timeout on many devices
+// YubiKey compatibility: https://developers.yubico.com/WebAuthn/WebAuthn_Developer_Guide/Resident_Keys.html
 const WEBAUTHN_POLICY = {
   rpEntityName: 'DIVE V3 Coalition Platform',
   rpId: RP_ID,
   signatureAlgorithms: ['ES256', 'RS256'],
   attestationConveyancePreference: 'none',
   authenticatorAttachment: '', // Empty = allow both platform (TouchID/FaceID) and cross-platform (Yubikey)
-  requireResidentKey: 'Yes', // CRITICAL: MUST be "Yes" for Passkeys cross-device authentication!
+  requireResidentKey: 'No', // CRITICAL: Set to "No" for YubiKey compatibility (YubiKeys use server-side storage, not resident keys)
   userVerificationRequirement: 'preferred', // CRITICAL FIX: 'preferred' instead of 'required' for cross-device compatibility!
   createTimeout: 300,
   avoidSameAuthenticatorRegister: false,
@@ -128,7 +131,7 @@ async function configureWebAuthnPolicy(
         webAuthnPolicyCreateTimeout: WEBAUTHN_POLICY.createTimeout,
         webAuthnPolicyAvoidSameAuthenticatorRegister: WEBAUTHN_POLICY.avoidSameAuthenticatorRegister,
         webAuthnPolicyAcceptableAaguids: WEBAUTHN_POLICY.acceptableAaguids,
-        
+
         // WebAuthn Passwordless Policy (SAME SETTINGS!)
         webAuthnPolicyPasswordlessRpEntityName: WEBAUTHN_POLICY.rpEntityName,
         webAuthnPolicyPasswordlessRpId: WEBAUTHN_POLICY.rpId,
