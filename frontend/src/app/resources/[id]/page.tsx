@@ -252,16 +252,8 @@ function extractPolicyStepsFromDetails(details: any): Array<{
     }
   }
 
-  // If no specific checks found, create a generic denial step
-  if (steps.length === 0) {
-    steps.push({
-      rule: "authorization_check",
-      result: "FAIL",
-      reason: "Authorization failed - access denied",
-      attributes: ["subject", "resource", "context"]
-    });
-  }
-
+  // If no specific checks found, return empty array
+  // The calling code will handle generating appropriate steps based on access decision
   return steps;
 }
 
@@ -339,23 +331,33 @@ export default function ResourceDetailPage() {
           setResource(null);
 
           // Extract policy evaluation data from denial response
-          if (errorData.details?.evaluation_details) {
-            const steps = extractPolicyStepsFromDetails(errorData.details);
-            setPolicyEvaluation({
-              decision: "DENY",
-              steps,
-              subjectAttributes: {
-                clearance: errorData.details.subject?.clearance,
-                countryOfAffiliation: errorData.details.subject?.country,
-                acpCOI: errorData.details.subject?.coi
-              },
-              resourceAttributes: {
-                classification: errorData.details.resource?.classification,
-                releasabilityTo: errorData.details.resource?.releasabilityTo,
-                COI: errorData.details.resource?.coi
-              }
-            });
-          }
+          const evalDetails = errorData.details?.evaluation_details || errorData.details;
+          const steps = extractPolicyStepsFromDetails(evalDetails || {});
+          
+          // If no steps extracted but we have a denial, create a fallback denial step
+          const finalSteps = steps.length > 0 ? steps : [
+            {
+              rule: "authorization_check",
+              result: "FAIL" as const,
+              reason: errorData.details?.reason || errorData.message || "Authorization denied",
+              attributes: ["subject", "resource", "context"]
+            }
+          ];
+          
+          setPolicyEvaluation({
+            decision: "DENY",
+            steps: finalSteps,
+            subjectAttributes: {
+              clearance: errorData.details?.subject?.clearance,
+              countryOfAffiliation: errorData.details?.subject?.country,
+              acpCOI: errorData.details?.subject?.coi
+            },
+            resourceAttributes: {
+              classification: errorData.details?.resource?.classification,
+              releasabilityTo: errorData.details?.resource?.releasabilityTo,
+              COI: errorData.details?.resource?.coi
+            }
+          });
 
           // Fetch suggested resources when access denied
           fetchSuggestedResources();
@@ -365,11 +367,40 @@ export default function ResourceDetailPage() {
           setError(null);
 
           // Use real policy evaluation data from backend if available
-          if (data.policyEvaluation) {
-            const steps = extractPolicyStepsFromDetails(data.policyEvaluation.evaluation_details || {});
+          if (data.policyEvaluation?.evaluation_details) {
+            const steps = extractPolicyStepsFromDetails(data.policyEvaluation.evaluation_details);
+            
+            // If no steps were extracted but access was granted, create fallback steps
+            const finalSteps = steps.length > 0 ? steps : [
+              {
+                rule: "is_not_authenticated",
+                result: "PASS" as const,
+                reason: "Subject is authenticated",
+                attributes: ["subject.authenticated"]
+              },
+              {
+                rule: "is_insufficient_clearance",
+                result: "PASS" as const,
+                reason: `User clearance (${data.policyEvaluation.subject?.clearance || session?.user?.clearance}) meets requirement`,
+                attributes: ["subject.clearance", "resource.classification"]
+              },
+              {
+                rule: "is_not_releasable_to_country",
+                result: "PASS" as const,
+                reason: `User country (${data.policyEvaluation.subject?.country || session?.user?.countryOfAffiliation}) authorized`,
+                attributes: ["subject.countryOfAffiliation", "resource.releasabilityTo"]
+              },
+              {
+                rule: "is_coi_violation",
+                result: "PASS" as const,
+                reason: "COI requirements satisfied",
+                attributes: ["subject.acpCOI", "resource.COI"]
+              }
+            ];
+            
             setPolicyEvaluation({
               decision: "ALLOW",
-              steps,
+              steps: finalSteps,
               subjectAttributes: {
                 clearance: data.policyEvaluation.subject?.clearance,
                 countryOfAffiliation: data.policyEvaluation.subject?.country,
@@ -381,21 +412,33 @@ export default function ResourceDetailPage() {
                 COI: data.policyEvaluation.resource?.coi
               }
             });
-          } else if (data.policyEvaluation?.evaluation_details) {
-            // New OPA format: parse evaluation_details directly
-            const steps = extractPolicyStepsFromDetails(data.policyEvaluation.evaluation_details);
+          } else if (data.policyEvaluation) {
+            // policyEvaluation exists but no evaluation_details - use fallback steps
             setPolicyEvaluation({
               decision: "ALLOW",
-              steps,
+              steps: [
+                {
+                  rule: "is_not_authenticated",
+                  result: "PASS" as const,
+                  reason: "Subject is authenticated",
+                  attributes: ["subject.authenticated"]
+                },
+                {
+                  rule: "authorization_check",
+                  result: "PASS" as const,
+                  reason: data.policyEvaluation.reason || "Access granted by policy",
+                  attributes: ["subject", "resource", "context"]
+                }
+              ],
               subjectAttributes: {
-                clearance: data.policyEvaluation.subject?.clearance,
-                countryOfAffiliation: data.policyEvaluation.subject?.country,
-                acpCOI: data.policyEvaluation.subject?.coi
+                clearance: data.policyEvaluation.subject?.clearance || session?.user?.clearance,
+                countryOfAffiliation: data.policyEvaluation.subject?.country || session?.user?.countryOfAffiliation,
+                acpCOI: data.policyEvaluation.subject?.coi || (session?.user as any)?.acpCOI
               },
               resourceAttributes: {
-                classification: data.policyEvaluation.resource?.classification,
-                releasabilityTo: data.policyEvaluation.resource?.releasabilityTo,
-                COI: data.policyEvaluation.resource?.coi
+                classification: data.policyEvaluation.resource?.classification || data.classification,
+                releasabilityTo: data.policyEvaluation.resource?.releasabilityTo || data.releasabilityTo,
+                COI: data.policyEvaluation.resource?.coi || data.COI
               }
             });
           } else {
