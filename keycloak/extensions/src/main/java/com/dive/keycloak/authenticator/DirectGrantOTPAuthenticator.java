@@ -341,8 +341,24 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         System.out.println("[DIVE SPI] OTP Policy - Digits: " + context.getRealm().getOTPPolicy().getDigits());
         System.out.println("[DIVE SPI] OTP Policy - Period: " + context.getRealm().getOTPPolicy().getPeriod());
         
-        // Use the decoded secret from the credential model
-        boolean valid = totp.validateTOTP(otpCode, validationModel.getOTPSecretData().getValue().getBytes(StandardCharsets.UTF_8));
+        // ============================================
+        // DEMO MODE: Accept "123456" as valid code
+        // ============================================
+        // For demo/presentation purposes, allow code "123456" to work
+        // This bypasses normal TOTP validation for convenience
+        boolean demoMode = "true".equalsIgnoreCase(System.getenv("DEMO_MODE")) || 
+                          "demo".equalsIgnoreCase(System.getenv("NODE_ENV"));
+        final String DEMO_OTP_CODE = "123456";
+        
+        boolean valid = false;
+        if (demoMode && DEMO_OTP_CODE.equals(otpCode)) {
+            System.out.println("[DIVE SPI] DEMO MODE: Accepting override OTP code 123456");
+            valid = true;
+        } else {
+            // Use the decoded secret from the credential model
+            valid = totp.validateTOTP(otpCode, validationModel.getOTPSecretData().getValue().getBytes(StandardCharsets.UTF_8));
+        }
+        
         System.out.println("[DIVE SPI] OTP validation result: " + valid);
         
         if (!valid) {
@@ -411,9 +427,22 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
             return;
         }
         
-        // Validate OTP using Keycloak's built-in validator
-        boolean valid = otpProvider.isValid(context.getRealm(), user, 
-            new UserCredentialModel(null, OTPCredentialModel.TYPE, otpCode));
+        // ============================================
+        // DEMO MODE: Accept "123456" as valid code
+        // ============================================
+        boolean demoMode = "true".equalsIgnoreCase(System.getenv("DEMO_MODE")) || 
+                          "demo".equalsIgnoreCase(System.getenv("NODE_ENV"));
+        final String DEMO_OTP_CODE = "123456";
+        
+        boolean valid = false;
+        if (demoMode && DEMO_OTP_CODE.equals(otpCode)) {
+            System.out.println("[DIVE SPI] DEMO MODE: Accepting override OTP code 123456");
+            valid = true;
+        } else {
+            // Validate OTP using Keycloak's built-in validator
+            valid = otpProvider.isValid(context.getRealm(), user, 
+                new UserCredentialModel(null, OTPCredentialModel.TYPE, otpCode));
+        }
         
         System.out.println("[DIVE SPI] OTP validation result: " + valid);
         

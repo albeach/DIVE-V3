@@ -275,7 +275,8 @@ export const otpVerifyHandler = async (
 
 /**
  * POST /api/auth/otp/status
- * Check if user has OTP configured
+ * Check if user has MFA configured (OTP or WebAuthn)
+ * Returns: { hasOTP, hasWebAuthn, hasMFA }
  */
 export const otpStatusHandler = async (
     req: Request,
@@ -324,20 +325,22 @@ export const otpStatusHandler = async (
 
         const userId = usersResponse.data[0].id;
 
-        // Check OTP status
-        const hasOTP = await otpService.hasOTPConfigured(userId, realmName);
+        // Check MFA status (OTP and WebAuthn)
+        const mfaStatus = await otpService.getMFAStatus(userId, realmName);
 
-        logger.info('OTP status checked', {
+        logger.info('MFA status checked', {
             requestId,
             username,
             realmName,
-            hasOTP
+            ...mfaStatus
         });
 
         res.status(200).json({
             success: true,
             data: {
-                hasOTP,
+                hasOTP: mfaStatus.hasOTP,
+                hasWebAuthn: mfaStatus.hasWebAuthn,
+                hasMFA: mfaStatus.hasMFA,
                 username,
                 realmName
             }

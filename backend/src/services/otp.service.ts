@@ -113,6 +113,25 @@ export class OTPService {
                 };
             }
 
+            // ============================================
+            // DEMO MODE: Accept "123456" as valid code
+            // ============================================
+            // For demo/presentation purposes, allow code "123456" to work
+            // This bypasses normal TOTP validation for convenience
+            const DEMO_MODE = process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'demo';
+            const DEMO_OTP_CODE = '123456';
+            
+            if (DEMO_MODE && token === DEMO_OTP_CODE) {
+                logger.info('OTP code verified (DEMO MODE - using override code)', {
+                    code: token,
+                    warning: 'Demo mode enabled - using predictable OTP code'
+                });
+                return {
+                    valid: true,
+                    message: 'OTP code is valid (demo mode)'
+                };
+            }
+
             // Verify TOTP code
             // window=1 allows for ±30 seconds clock skew (recommended)
             // CRITICAL: Use SHA256 to match Keycloak's OTP policy
@@ -384,6 +403,63 @@ export class OTPService {
             });
             return false;
         }
+    }
+
+    /**
+     * Check if user has WebAuthn/passkey configured
+     * @param userId User ID
+     * @param realmName Realm name
+     * @returns True if WebAuthn is configured
+     */
+    async hasWebAuthnConfigured(userId: string, realmName: string): Promise<boolean> {
+        try {
+            const adminToken = await this.getAdminToken();
+
+            const credentialsUrl = `${this.keycloakUrl}/admin/realms/${realmName}/users/${userId}/credentials`;
+
+            const response = await axios.get(credentialsUrl, {
+                headers: { 'Authorization': `Bearer ${adminToken}` }
+            });
+
+            // Check if any credential is of type 'webauthn'
+            const hasWebAuthn = response.data.some((cred: any) => 
+                cred.type === 'webauthn' || cred.type === 'webauthn-passwordless'
+            );
+
+            logger.info('Checked WebAuthn configuration status', {
+                userId,
+                realmName,
+                hasWebAuthn
+            });
+
+            return hasWebAuthn;
+        } catch (error: any) {
+            logger.error('Failed to check WebAuthn configuration', {
+                userId,
+                realmName,
+                error: error.message
+            });
+            return false;
+        }
+    }
+
+    /**
+     * Check MFA status (OTP or WebAuthn)
+     * @param userId User ID
+     * @param realmName Realm name
+     * @returns Object with OTP and WebAuthn status
+     */
+    async getMFAStatus(userId: string, realmName: string): Promise<{ hasOTP: boolean; hasWebAuthn: boolean; hasMFA: boolean }> {
+        const [hasOTP, hasWebAuthn] = await Promise.all([
+            this.hasOTPConfigured(userId, realmName),
+            this.hasWebAuthnConfigured(userId, realmName)
+        ]);
+
+        return {
+            hasOTP,
+            hasWebAuthn,
+            hasMFA: hasOTP || hasWebAuthn
+        };
     }
 
     /**

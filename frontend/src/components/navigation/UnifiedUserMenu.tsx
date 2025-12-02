@@ -53,6 +53,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const [activeTab, setActiveTab] = useState<'profile' | 'actions' | 'admin'>('actions');
     const [copied, setCopied] = useState(false);
     const [otpConfigured, setOtpConfigured] = useState<boolean | null>(null);
+    const [webAuthnConfigured, setWebAuthnConfigured] = useState<boolean | null>(null);
 
     const isSuperAdmin = (() => {
         const hasRole = user?.roles?.includes('super_admin') || 
@@ -86,32 +87,121 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const amr: string | null = Array.isArray(user?.amr) 
         ? user!.amr.join(' + ') 
         : (Array.isArray(decoded?.amr) ? decoded!.amr.join(' + ') : decoded?.amr || null);
-
-    // Check OTP status when profile tab is active
-    useEffect(() => {
-        if (activeTab === 'profile' && otpConfigured === null && user?.uniqueID) {
-            // Extract IdP alias from session if available
-            const idpAlias = decoded?.idpAlias || decoded?.iss?.split('/').pop() || 'us-idp';
-            const username = user.uniqueID.split('@')[0] || user.uniqueID;
-
-            fetch('/api/auth/otp/status', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ idpAlias, username }),
-                credentials: 'include',
-            })
-                .then(res => res.ok ? res.json() : null)
-                .then(data => {
-                    if (data?.hasOTP !== undefined) {
-                        setOtpConfigured(data.hasOTP);
-                    }
-                })
-                .catch(() => {
-                    // Silently fail - OTP status is optional
-                    setOtpConfigured(false);
-                });
+    
+    // Convert ACR to readable AAL level (0 → AAL1, 1 → AAL2, 2 → AAL3)
+    const getAALDisplay = (acrValue: string | null): string => {
+        if (!acrValue) return 'N/A';
+        const acrNum = parseInt(acrValue, 10);
+        if (isNaN(acrNum)) {
+            // Handle string formats like "aal1", "aal2", "aal3"
+            const acrLower = acrValue.toLowerCase();
+            if (acrLower.includes('aal3') || acrLower.includes('gold') || acrLower === '3' || acrLower === '2') {
+                return 'AAL3';
+            }
+            if (acrLower.includes('aal2') || acrLower.includes('silver') || acrLower === '1') {
+                return 'AAL2';
+            }
+            if (acrLower.includes('aal1') || acrLower.includes('bronze') || acrLower === '0') {
+                return 'AAL1';
+            }
+            return acrValue.toUpperCase();
         }
-    }, [activeTab, otpConfigured, user?.uniqueID, decoded]);
+        // Numeric format: 0 = AAL1, 1 = AAL2, 2 = AAL3
+        if (acrNum === 2) return 'AAL3';
+        if (acrNum === 1) return 'AAL2';
+        if (acrNum === 0) return 'AAL1';
+        return `AAL${acrNum + 1}`; // Fallback for other numeric values
+    };
+    
+    // Check if user has MFA configured (OTP or WebAuthn)
+    const hasMFA = (): boolean | null => {
+        // If both are null, we're still checking
+        if (otpConfigured === null && webAuthnConfigured === null) {
+            // Fallback: Check AMR directly from token (immediate, no API wait)
+            const amrArray = Array.isArray(user?.amr) ? user.amr : 
+                            (Array.isArray(decoded?.amr) ? decoded.amr : 
+                            (decoded?.amr ? [decoded.amr] : []));
+            const hasWebAuthnInAMR = amrArray.some((m: string) => 
+                m.toLowerCase().includes('hwk') || 
+                m.toLowerCase().includes('webauthn') || 
+                m.toLowerCase().includes('passkey')
+            );
+            const hasOTPInAMR = amrArray.some((m: string) => 
+                m.toLowerCase().includes('otp') || 
+                m.toLowerCase().includes('totp')
+            );
+            // If AMR shows MFA, return true immediately (don't wait for API)
+            if (hasWebAuthnInAMR || hasOTPInAMR) {
+                return true;
+            }
+            return null; // Still checking via API
+        }
+        // Use configured status (from API or AMR)
+        return (otpConfigured === true) || (webAuthnConfigured === true);
+    };
+
+    // Check MFA status (OTP and WebAuthn) when profile tab is active
+    useEffect(() => {
+        if (activeTab === 'profile' && (otpConfigured === null || webAuthnConfigured === null) && user?.uniqueID) {
+            // First, check AMR from token immediately (no API call needed)
+            const amrArray = Array.isArray(user?.amr) ? user.amr : 
+                            (Array.isArray(decoded?.amr) ? decoded.amr : 
+                            (decoded?.amr ? [decoded.amr] : []));
+            const hasWebAuthnInAMR = amrArray.some((m: string) => 
+                m.toLowerCase().includes('hwk') || 
+                m.toLowerCase().includes('webauthn') || 
+                m.toLowerCase().includes('passkey')
+            );
+            const hasOTPInAMR = amrArray.some((m: string) => 
+                m.toLowerCase().includes('otp') || 
+                m.toLowerCase().includes('totp')
+            );
+
+            // Set initial state from AMR (immediate, no waiting)
+            if (hasWebAuthnInAMR && webAuthnConfigured === null) {
+                setWebAuthnConfigured(true);
+            }
+            if (hasOTPInAMR && otpConfigured === null) {
+                setOtpConfigured(true);
+            }
+
+            // Then fetch detailed status from API (for users who haven't logged in with MFA yet)
+            // Only fetch if we don't have definitive answer from AMR
+            if ((!hasWebAuthnInAMR && !hasOTPInAMR) || (otpConfigured === null || webAuthnConfigured === null)) {
+                const idpAlias = decoded?.idpAlias || decoded?.iss?.split('/').pop() || 'us-idp';
+                const username = user.uniqueID.split('@')[0] || user.uniqueID;
+
+                fetch('/api/auth/otp/status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ idpAlias, username }),
+                    credentials: 'include',
+                })
+                    .then(res => res.ok ? res.json() : null)
+                    .then(data => {
+                        if (data?.data) {
+                            // Update with API response (more accurate than AMR for configured credentials)
+                            if (data.data.hasOTP !== undefined) {
+                                setOtpConfigured(data.data.hasOTP);
+                            }
+                            if (data.data.hasWebAuthn !== undefined) {
+                                setWebAuthnConfigured(data.data.hasWebAuthn);
+                            }
+                        }
+                    })
+                    .catch(() => {
+                        // Silently fail - MFA status is optional
+                        // Keep AMR-based values if API fails
+                        if (otpConfigured === null) {
+                            setOtpConfigured(hasOTPInAMR);
+                        }
+                        if (webAuthnConfigured === null) {
+                            setWebAuthnConfigured(hasWebAuthnInAMR);
+                        }
+                    });
+            }
+        }
+    }, [activeTab, otpConfigured, webAuthnConfigured, user?.uniqueID, decoded]);
 
     // Quick action items - streamlined
     const quickActions = [
@@ -307,19 +397,20 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                 <CompactClaim 
                                     icon={Shield} 
                                     label="AAL" 
-                                    value={acr?.toUpperCase() || 'N/A'} 
+                                    value={getAALDisplay(acr)} 
+                                    highlight={acr === '2' || acr === '3'} // Highlight AAL3
                                 />
                                 <CompactClaim 
                                     icon={Lock} 
                                     label="MFA" 
                                     value={
-                                        otpConfigured === null 
+                                        hasMFA() === null 
                                             ? 'Checking...' 
-                                            : otpConfigured 
+                                            : hasMFA() 
                                                 ? '✅ Configured' 
                                                 : '❌ Not Set'
                                     }
-                                    highlight={otpConfigured === true}
+                                    highlight={hasMFA() === true}
                                 />
                                 <CompactClaim 
                                     icon={Clock} 

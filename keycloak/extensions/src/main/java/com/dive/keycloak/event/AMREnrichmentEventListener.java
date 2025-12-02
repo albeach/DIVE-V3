@@ -8,8 +8,6 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
-import org.keycloak.models.AuthenticatedClientSessionModel;
-import org.keycloak.sessions.AuthenticationSessionModel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,9 +18,15 @@ import java.util.List;
  * Keycloak 26 Issue: Browser flow sets AMR=["pwd"] but doesn't append "otp" when OTP validates
  * 
  * Solution: Event listener that enriches AMR after successful LOGIN
- * - Checks if user has OTP credential
- * - If OTP validated, updates AMR to ["pwd","otp"]
- * - Sets AUTH_METHODS_REF session note for protocol mappers
+ * - Checks if user has WebAuthn/passkey credential (AAL3 - highest priority)
+ * - Checks if user has OTP credential (AAL2)
+ * - Updates AMR and ACR based on configured credentials
+ * - Sets AUTH_METHODS_REF and ACR session notes for protocol mappers
+ * 
+ * AAL Levels (NIST SP 800-63B):
+ * - AAL1 (0): Password only
+ * - AAL2 (1): Password + OTP/MFA
+ * - AAL3 (2): Password + WebAuthn/passkey (hardware cryptographic authenticator)
  * 
  * Best Practice: Event-driven, no modification to authentication flows
  */
@@ -77,16 +81,26 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             // Password is always required for authentication
             amrMethods.add("pwd");
             
-            // Check if user has OTP configured
+            // Check if user has WebAuthn/passkey configured (AAL3 - highest priority)
+            boolean hasWebAuthn = user.credentialManager()
+                .getStoredCredentialsByTypeStream("webauthn")
+                .findFirst()
+                .isPresent();
+            
+            // Check if user has OTP configured (AAL2)
             boolean hasOTP = user.credentialManager()
                 .getStoredCredentialsByTypeStream("otp")
                 .findFirst()
                 .isPresent();
             
-            if (hasOTP) {
+            if (hasWebAuthn) {
+                // User has WebAuthn/passkey credential - AAL3 (hardware cryptographic authenticator)
+                amrMethods.add("hwk");  // Hardware key
+                System.out.println("[DIVE AMR] User has WebAuthn credential - adding 'hwk' to AMR (AAL3)");
+            } else if (hasOTP) {
                 // User has OTP credential configured - they must use it for authentication
                 amrMethods.add("otp");
-                System.out.println("[DIVE AMR] User has OTP credential - adding 'otp' to AMR");
+                System.out.println("[DIVE AMR] User has OTP credential - adding 'otp' to AMR (AAL2)");
             }
 
             // Build AMR JSON array string
@@ -94,7 +108,14 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             
             // Calculate ACR based on AMR factors (NIST SP 800-63B)
             // AAL1 (0) = single factor, AAL2 (1) = two factor, AAL3 (2) = hardware token
-            String acr = hasOTP ? "1" : "0";  // 1 = AAL2 (MFA), 0 = AAL1 (password only)
+            String acr;
+            if (hasWebAuthn) {
+                acr = "2";  // AAL3 - Hardware cryptographic authenticator (passkey)
+            } else if (hasOTP) {
+                acr = "1";  // AAL2 - Multi-factor authentication (password + OTP)
+            } else {
+                acr = "0";  // AAL1 - Single factor (password only)
+            }
             
             System.out.println("[DIVE AMR] Setting AUTH_METHODS_REF: " + amrJson);
             System.out.println("[DIVE AMR] Setting ACR: " + acr + " (AAL" + (Integer.parseInt(acr) + 1) + ")");
