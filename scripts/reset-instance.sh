@@ -224,8 +224,22 @@ if [[ "$SKIP_TF" == "false" ]]; then
             ;;
     esac
     
-    # Initialize and apply
+    # CRITICAL: Select the correct Terraform workspace!
+    # The instance_code comes from terraform.workspace, so we must select the right one
+    echo -e "  Selecting Terraform workspace: ${INSTANCE_LOWER}"
     terraform -chdir=terraform/instances init -reconfigure
+    terraform -chdir=terraform/instances workspace select "$INSTANCE_LOWER" || \
+        terraform -chdir=terraform/instances workspace new "$INSTANCE_LOWER"
+    
+    # Verify workspace
+    CURRENT_WS=$(terraform -chdir=terraform/instances workspace show)
+    if [[ "$CURRENT_WS" != "$INSTANCE_LOWER" ]]; then
+        echo -e "${RED}[ERROR]${NC} Workspace mismatch! Expected: $INSTANCE_LOWER, Got: $CURRENT_WS"
+        exit 1
+    fi
+    echo -e "  Workspace verified: ${GREEN}$CURRENT_WS${NC}"
+    
+    # Apply Terraform
     terraform -chdir=terraform/instances apply -var-file="$TFVARS_FILE" -auto-approve
     
     echo -e "${GREEN}✓${NC} Terraform applied"
