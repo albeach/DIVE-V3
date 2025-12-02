@@ -78,22 +78,48 @@ const getRealmFromToken = (token: string): string => {
 };
 
 /**
- * Get signing key from JWKS with multi-realm support
+ * Get signing key from JWKS with FEDERATION support
  * Uses direct JWKS fetch with caching
  * 
- * Multi-Realm Migration (Oct 21, 2025):
- * - Dynamically determines JWKS URL based on token issuer
- * - Supports both dive-v3-broker and dive-v3-broker realms
- * - Caches keys per kid (realm-independent caching)
+ * CRITICAL FIX (Dec 2, 2025):
+ * For cross-instance federation, the JWKS must be fetched from the TOKEN'S ISSUER,
+ * not the local Keycloak. A GBR-issued JWT needs GBR Keycloak's public key!
+ * 
+ * Flow:
+ * 1. Extract issuer URL from JWT's `iss` claim
+ * 2. Fetch JWKS from issuer's /protocol/openid-connect/certs endpoint
+ * 3. Verify signature with issuer's public key
  */
 const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<string> => {
     const requestId = `kas-jwks-${Date.now()}`;
 
-    // Determine which realm to fetch JWKS from
+    // CRITICAL: For federation, we must fetch JWKS from the TOKEN'S issuer, not local Keycloak
+    let issuerJwksUri: string | null = null;
+    
+    if (token) {
+        try {
+            const decoded = jwt.decode(token, { complete: true }) as jwt.Jwt | null;
+            const payload = decoded?.payload as jwt.JwtPayload;
+            if (payload?.iss) {
+                // The issuer is the Keycloak realm URL, append JWKS path
+                // e.g., https://gbr-idp.dive25.com/realms/dive-v3-broker -> https://gbr-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs
+                issuerJwksUri = `${payload.iss}/protocol/openid-connect/certs`;
+                kasLogger.debug('Using issuer JWKS for federation', { issuer: payload.iss, jwksUri: issuerJwksUri });
+            }
+        } catch (err) {
+            kasLogger.warn('Failed to extract issuer from token, falling back to local JWKS', { error: (err as Error).message });
+        }
+    }
+
+    // Determine which realm to fetch JWKS from (fallback for local tokens)
     const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
 
-    // Try multiple JWKS URLs (Docker internal, HTTP external, HTTPS external)
+    // Try JWKS URLs in priority order:
+    // 1. Issuer's JWKS (for federated tokens) - CRITICAL for cross-instance!
+    // 2. Local Keycloak internal (Docker network)
+    // 3. Local Keycloak external (localhost)
     const jwksUris = [
+        ...(issuerJwksUri ? [issuerJwksUri] : []),  // Priority: issuer's JWKS
         `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal
         `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External HTTP
         `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // External HTTPS
