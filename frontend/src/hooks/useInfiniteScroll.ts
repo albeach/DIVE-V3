@@ -90,6 +90,8 @@ export interface UseInfiniteScrollOptions<T> {
   threshold?: number;
   /** Root margin for intersection observer */
   rootMargin?: string;
+  /** Whether the hook is enabled (use to wait for auth) - default true */
+  enabled?: boolean;
 }
 
 export interface UseInfiniteScrollReturn<T> {
@@ -188,11 +190,12 @@ export function useInfiniteScroll<T = any>({
   autoLoad = true,
   threshold = 0.1,
   rootMargin = '200px',
+  enabled = true,
 }: UseInfiniteScrollOptions<T> = {}): UseInfiniteScrollReturn<T> {
   // State
   const [items, setItems] = useState<T[]>([]);
   const [facets, setFacets] = useState<IFacets | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Always start as loading
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -200,6 +203,9 @@ export function useInfiniteScroll<T = any>({
   const [filters, setFiltersState] = useState<ISearchFilters>(initialFilters);
   const [sort, setSortState] = useState<ISortOptions>(initialSort);
   const [timing, setTiming] = useState<{ searchMs: number; facetMs: number; totalMs: number } | null>(null);
+  
+  // Track if we've successfully fetched data at least once
+  const [hasFetched, setHasFetched] = useState(false);
 
   // Refs
   const cursorRef = useRef<string | null>(null);
@@ -207,7 +213,6 @@ export function useInfiniteScroll<T = any>({
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelNodeRef = useRef<HTMLElement | null>(null);
   const loadingRef = useRef(false);
-  const hasInitializedRef = useRef(false);
 
   // ========================================
   // Fetch Data
@@ -218,8 +223,13 @@ export function useInfiniteScroll<T = any>({
     currentFilters: ISearchFilters = filters,
     currentSort: ISortOptions = sort
   ) => {
+    console.log('[useInfiniteScroll] fetchData called:', { isInitial, loadingRef: loadingRef.current });
+    
     // Prevent concurrent requests
-    if (loadingRef.current) return;
+    if (loadingRef.current) {
+      console.log('[useInfiniteScroll] Already loading, skipping');
+      return;
+    }
     loadingRef.current = true;
 
     // Cancel previous request
@@ -238,6 +248,7 @@ export function useInfiniteScroll<T = any>({
     setError(null);
 
     try {
+      console.log('[useInfiniteScroll] Fetching data...');
       const response = await fetchFn({
         filters: currentFilters,
         sort: currentSort,
@@ -246,6 +257,11 @@ export function useInfiniteScroll<T = any>({
         includeFacets: isInitial && includeFacets,
         federated,
         signal: abortControllerRef.current.signal,
+      });
+
+      console.log('[useInfiniteScroll] Fetch success:', { 
+        resultCount: response.results?.length, 
+        totalCount: response.pagination?.totalCount 
       });
 
       // Update state
@@ -265,12 +281,14 @@ export function useInfiniteScroll<T = any>({
       setTiming(response.timing);
 
     } catch (err) {
+      console.error('[useInfiniteScroll] Fetch error:', err);
       if (err instanceof Error && err.name === 'AbortError') {
         // Request was cancelled, ignore
         return;
       }
       setError(err instanceof Error ? err.message : 'Failed to load resources');
     } finally {
+      console.log('[useInfiniteScroll] Fetch complete, setting isLoading=false');
       setIsLoading(false);
       setIsLoadingMore(false);
       loadingRef.current = false;
@@ -324,8 +342,9 @@ export function useInfiniteScroll<T = any>({
     setError(null);
     setHasMore(false);
     setTotalCount(0);
+    setHasFetched(false);
+    setIsLoading(true);
     cursorRef.current = null;
-    hasInitializedRef.current = false;
   }, [initialFilters, initialSort]);
 
   // ========================================
@@ -360,22 +379,42 @@ export function useInfiniteScroll<T = any>({
   }, [autoLoad, hasMore, isLoadingMore, isLoading, loadMore, threshold, rootMargin]);
 
   // ========================================
-  // Initial Load
+  // Initial Load (only when enabled)
   // ========================================
 
   useEffect(() => {
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      fetchData(true);
+    console.log('[useInfiniteScroll] Initial load effect:', { enabled, hasFetched });
+    
+    // Don't fetch until enabled (e.g., waiting for auth)
+    if (!enabled) {
+      console.log('[useInfiniteScroll] Not enabled, skipping fetch');
+      return;
     }
-  }, [fetchData]);
+    
+    // Only fetch if we haven't fetched yet
+    if (!hasFetched) {
+      console.log('[useInfiniteScroll] Triggering initial fetch');
+      setIsLoading(true);
+      
+      // Use a small delay to ensure state is settled
+      const timer = setTimeout(() => {
+        fetchData(true).then(() => {
+          setHasFetched(true);
+        });
+      }, 0);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [enabled, hasFetched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ========================================
   // Refresh on Filter/Sort Change
   // ========================================
 
   useEffect(() => {
-    if (hasInitializedRef.current) {
+    // Only refresh if already fetched AND enabled
+    if (hasFetched && enabled) {
+      console.log('[useInfiniteScroll] Filters/sort changed, refreshing');
       fetchData(true, filters, sort);
     }
   }, [filters, sort]); // eslint-disable-line react-hooks/exhaustive-deps

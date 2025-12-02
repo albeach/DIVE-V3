@@ -169,109 +169,89 @@ export default function AdvancedResourceCard({
 
   // Grid View (Default - Most detailed)
   if (viewMode === 'grid') {
+    // Check if multi-KAS (more than 1 KAO)
+    const hasMultiKas = resource.encrypted && (resource.kaoCount || 0) > 1;
+    
     return (
       <article 
         className="block group h-full cursor-pointer"
         data-resource-id={resource.resourceId}
       >
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
-          {/* Header with Classification Badge + Instance Badge */}
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-                <span className="mr-1">{classificationEmojis[resource.classification]}</span>
-                {resource.classification.replace('_', ' ')}
-              </div>
-              {/* Instance Origin Badge - shown for federated resources */}
-              {resource.originRealm && (
-                <div 
-                  className={`flex-shrink-0 px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
-                  title={`Source: ${resource.originRealm} instance`}
-                >
-                  <span className="mr-1">{instanceFlags[resource.originRealm] || '🌐'}</span>
-                  {resource.originRealm}
-                </div>
-              )}
+          {/* Row 1: Classification + Multi-KAS (if applicable) + Origin */}
+          <div className="flex items-center gap-2 mb-2">
+            {/* Classification Badge */}
+            <div className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
+              <span className="mr-1">{classificationEmojis[resource.classification]}</span>
+              {resource.classification.replace('_', ' ')}
             </div>
-            {resource.encrypted && (
-              <div className="flex-shrink-0 px-2.5 py-1 rounded-md text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
-                <svg className="w-3 h-3 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-                KAS
+            
+            {/* Multi-KAS Badge - Only show if more than 1 KAO */}
+            {hasMultiKas && (
+              <div className="flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm">
+                🔐 {resource.kaoCount} KAS
               </div>
             )}
+            
+            {/* Origin/Instance Badge */}
+            {resource.originRealm && (
+              <div 
+                className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
+                title={`Source: ${resource.originRealm} instance`}
+              >
+                {instanceFlags[resource.originRealm] || '🌐'} {resource.originRealm}
+              </div>
+            )}
+          </div>
+
+          {/* Row 2: COI badges */}
+          {resource.COI && resource.COI.length > 0 && (
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-xs font-semibold text-gray-500">COI:</span>
+              <div className="flex flex-wrap gap-1">
+                {resource.COI.map(coi => (
+                  <span key={coi} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold border border-purple-200">
+                    {coi}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Row 3: REL TO countries */}
+          <div className="flex items-center gap-1.5 mb-4">
+            <span className="text-xs font-semibold text-gray-500">REL TO:</span>
+            <div className="flex flex-wrap gap-1">
+              {resource.releasabilityTo.slice(0, 6).map(country => (
+                <span key={country} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold border border-blue-200">
+                  {country}
+                </span>
+              ))}
+              {resource.releasabilityTo.length > 6 && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold">
+                  +{resource.releasabilityTo.length - 6}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Title */}
-          <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-3 line-clamp-2">
+          <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-2 line-clamp-2">
             {resource.title}
           </h3>
 
-          {/* Resource ID - Truncated to fit on one line */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-4 max-w-full">
-            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-            </svg>
-            <span className="font-mono truncate text-[10px]" title={resource.resourceId}>
-              {resource.resourceId.length > 24 ? resource.resourceId.slice(0, 24) + '...' : resource.resourceId}
-            </span>
-          </div>
-
-          {/* Metadata Grid */}
-          <div className="space-y-3 mb-4 flex-1">
-            {/* Countries */}
-            <div>
-              <div className="text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Releasability
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {resource.releasabilityTo.slice(0, 6).map(country => (
-                  <span key={country} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold border border-blue-200">
-                    {country}
-                  </span>
-                ))}
-                {resource.releasabilityTo.length > 6 && (
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold">
-                    +{resource.releasabilityTo.length - 6}
-                  </span>
-                )}
-              </div>
+          {/* Resource ID + Date */}
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-4 flex-1">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+              <span className="font-mono truncate text-[11px]" title={resource.resourceId}>
+                {resource.resourceId.length > 24 ? resource.resourceId.slice(0, 24) + '...' : resource.resourceId}
+              </span>
             </div>
-
-            {/* COI */}
-            {resource.COI && resource.COI.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  Communities
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {resource.COI.map(coi => (
-                    <span key={coi} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold border border-purple-200">
-                      {coi}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Creation Date */}
             {resource.creationDate && (
-              <div>
-                <div className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  Created
-                </div>
-                <div className="text-xs text-gray-700 font-medium">{formatDate(resource.creationDate)}</div>
-              </div>
+              <span className="font-medium text-[11px]">{formatDate(resource.creationDate)}</span>
             )}
           </div>
 
@@ -296,12 +276,7 @@ export default function AdvancedResourceCard({
                 title="Open document (Enter)"
               >
                 Open
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
               </button>
@@ -314,86 +289,90 @@ export default function AdvancedResourceCard({
 
   // List View (Horizontal layout)
   if (viewMode === 'list') {
+    // Check if multi-KAS (more than 1 KAO)
+    const hasMultiKas = resource.encrypted && (resource.kaoCount || 0) > 1;
+    
     return (
       <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-xl hover:border-blue-400 transition-all duration-200 hover:-translate-y-0.5">
           <div className="flex items-center justify-between gap-4">
-            {/* Left: Classification + Instance + Title */}
+            {/* Left: Badge Row + Title */}
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <div className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-                  <span className="mr-1">{classificationEmojis[resource.classification]}</span>
-                  {resource.classification.replace('_', ' ')}
+              {/* Row 1: Classification + Multi-KAS + Origin */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Classification */}
+                <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${classColors.bg} ${classColors.text} ${classColors.border}`}>
+                  {classificationEmojis[resource.classification]} {resource.classification.replace('_', ' ')}
                 </div>
-                {/* Instance Badge */}
+                
+                {/* Multi-KAS Badge - Only if > 1 KAO */}
+                {hasMultiKas && (
+                  <div className="px-2 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
+                    🔐 {resource.kaoCount} KAS
+                  </div>
+                )}
+                
+                {/* Origin Instance */}
                 {resource.originRealm && (
                   <div 
-                    className={`flex-shrink-0 px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
+                    className={`px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
                     title={`Source: ${resource.originRealm}`}
                   >
-                    <span>{instanceFlags[resource.originRealm] || '🌐'}</span>
+                    {instanceFlags[resource.originRealm] || '🌐'} {resource.originRealm}
                   </div>
                 )}
               </div>
+              
+              {/* Title + ID */}
               <div className="flex-1 min-w-0">
-                <h3 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate mb-1">
+                <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
                   {resource.title}
                 </h3>
-                <p className="text-[10px] text-gray-500 font-mono truncate max-w-[200px]" title={resource.resourceId}>
-                  {resource.resourceId.length > 28 ? resource.resourceId.slice(0, 28) + '...' : resource.resourceId}
+                <p className="text-[10px] text-gray-400 font-mono truncate" title={resource.resourceId}>
+                  {resource.resourceId.length > 32 ? resource.resourceId.slice(0, 32) + '...' : resource.resourceId}
                 </p>
               </div>
             </div>
 
-            {/* Center: Metadata */}
-            <div className="hidden lg:flex items-center gap-6 flex-shrink-0">
-              {/* Countries */}
-              <div className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="flex gap-1">
-                  {resource.releasabilityTo.slice(0, 3).map(country => (
-                    <span key={country} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold">
-                      {country}
+            {/* Right: COI + REL TO + Date + Access + Open */}
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {/* COI badges */}
+              {resource.COI && resource.COI.length > 0 && (
+                <div className="hidden lg:flex items-center gap-1">
+                  <span className="text-[10px] text-gray-500 font-semibold">COI:</span>
+                  {resource.COI.slice(0, 2).map(coi => (
+                    <span key={coi} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-semibold border border-purple-200">
+                      {coi}
                     </span>
                   ))}
-                  {resource.releasabilityTo.length > 3 && (
-                    <span className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-semibold">
-                      +{resource.releasabilityTo.length - 3}
-                    </span>
+                  {resource.COI.length > 2 && (
+                    <span className="text-[10px] text-gray-500">+{resource.COI.length - 2}</span>
                   )}
                 </div>
+              )}
+              
+              {/* REL TO countries */}
+              <div className="hidden md:flex items-center gap-1">
+                <span className="text-[10px] text-gray-500 font-semibold">REL:</span>
+                {resource.releasabilityTo.slice(0, 3).map(country => (
+                  <span key={country} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold border border-blue-200">
+                    {country}
+                  </span>
+                ))}
+                {resource.releasabilityTo.length > 3 && (
+                  <span className="text-[10px] text-gray-500">+{resource.releasabilityTo.length - 3}</span>
+                )}
               </div>
-
-              {/* COI */}
-              {resource.COI && resource.COI.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <span className="text-xs text-gray-600">{resource.COI.length}</span>
-                </div>
-              )}
-
-              {/* Encrypted Badge */}
-              {resource.encrypted && (
-                <div className="px-2 py-1 rounded-md text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
-                  🔐 KAS
-                </div>
-              )}
-
+              
               {/* Date */}
               {resource.creationDate && (
-                <div className="text-xs text-gray-500">
+                <span className="hidden xl:inline-block text-xs text-gray-500">
                   {formatDate(resource.creationDate)}
-                </div>
+                </span>
               )}
-            </div>
-
-            {/* Right: Access Indicator + Open Button */}
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <div className={`hidden md:flex items-center gap-1.5 text-xs font-semibold ${
+              
+              {/* Access Indicator */}
+              <div className={`flex items-center gap-1.5 text-xs font-semibold ${
                 accessIndicator.status === 'likely' ? 'text-green-700' :
                 accessIndicator.status === 'possible' ? 'text-yellow-700' :
                 'text-red-700'
@@ -404,9 +383,11 @@ export default function AdvancedResourceCard({
                   'bg-red-500'
                 }`} />
               </div>
+              
+              {/* Open Button */}
               <button
                 onClick={handleOpenResource}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
                 title="Open document"
               >
                 Open
@@ -422,13 +403,17 @@ export default function AdvancedResourceCard({
   }
 
   // Compact View (Minimal, table-like)
+  // Check if multi-KAS (more than 1 KAO)
+  const hasMultiKasCompact = resource.encrypted && (resource.kaoCount || 0) > 1;
+  
   return (
     <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
       <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition-all duration-150">
         <div className="flex items-center justify-between gap-3">
-          {/* Classification Icon + Instance Flag */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <span className="text-xl">{classificationEmojis[resource.classification]}</span>
+          {/* Left: Classification + Multi-KAS + Origin - icons only */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="text-lg" title={resource.classification}>{classificationEmojis[resource.classification]}</span>
+            {hasMultiKasCompact && <span className="text-sm" title={`${resource.kaoCount} KAS`}>🔐</span>}
             {resource.originRealm && (
               <span className="text-sm" title={`Source: ${resource.originRealm}`}>
                 {instanceFlags[resource.originRealm] || '🌐'}
@@ -443,19 +428,34 @@ export default function AdvancedResourceCard({
             </h3>
           </div>
 
-          {/* Quick Badges + Open Button */}
+          {/* Right: COI + REL + Access + Open Button */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="hidden sm:inline-block text-[10px] text-gray-500 font-mono truncate max-w-[150px]" title={resource.resourceId}>
-              {resource.resourceId.length > 20 ? resource.resourceId.slice(0, 20) + '...' : resource.resourceId}
-            </span>
-            {resource.encrypted && (
-              <span className="text-sm">🔐</span>
-            )}
-            {resource.releasabilityTo.length > 0 && (
-              <span className="hidden md:inline-block px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-semibold">
-                {resource.releasabilityTo.length}
+            {/* COI count */}
+            {resource.COI && resource.COI.length > 0 && (
+              <span className="hidden md:inline-block px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-semibold">
+                COI:{resource.COI.length}
               </span>
             )}
+            
+            {/* REL TO Countries */}
+            <div className="hidden sm:flex items-center gap-1">
+              {resource.releasabilityTo.slice(0, 3).map(country => (
+                <span key={country} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+                  {country}
+                </span>
+              ))}
+              {resource.releasabilityTo.length > 3 && (
+                <span className="text-[10px] text-gray-400">+{resource.releasabilityTo.length - 3}</span>
+              )}
+            </div>
+            
+            {/* Access dot */}
+            <div className={`w-2 h-2 rounded-full ${
+              accessIndicator.status === 'likely' ? 'bg-green-500' :
+              accessIndicator.status === 'possible' ? 'bg-yellow-500' :
+              'bg-red-500'
+            }`} />
+            
             <button
               onClick={handleOpenResource}
               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"

@@ -80,6 +80,7 @@ export interface NavMegaMenuItem {
 
 export interface NavItem {
     name: string;
+    shortName?: string;  // Optional shorter label for responsive display
     href: string;
     icon: LucideIcon;
     description: string;
@@ -88,10 +89,12 @@ export interface NavItem {
 }
 
 // PHASE 1.3: Consolidated navigation items (6→4 items) to fit 1024px viewport
-// Width calculation: 4 items × ~110px = 440px + logo (280px) + user menu (200px) = 920px → Fits comfortably!
+// PHASE 2: Added shortName for responsive display at lg breakpoint
+// Width calculation: 4 items × ~80px = 320px + logo (200px) + user menu (80px) = 600px → Fits comfortably!
 export const navItems: NavItem[] = [
     {
         name: 'Dashboard',
+        shortName: 'Home',  // Shorter label for lg breakpoint
         href: '/dashboard',
         icon: LayoutDashboard,
         description: 'Overview and quick stats',
@@ -99,6 +102,7 @@ export const navItems: NavItem[] = [
     },
     {
         name: 'Documents',
+        shortName: 'Docs',  // Shorter label for lg breakpoint
         href: '/resources',
         icon: FileText,
         description: 'Classified resource library',
@@ -115,6 +119,7 @@ export const navItems: NavItem[] = [
             {
                 category: 'Actions',
                 items: [
+                    { name: 'My Activity', href: '/activity', icon: Clock },
                     { name: 'Request Access', href: '/resources/request', icon: Unlock },
                 ]
             }
@@ -122,6 +127,7 @@ export const navItems: NavItem[] = [
     },
     {
         name: 'Upload',
+        shortName: 'Upload',  // Same - already short
         href: '/upload',
         icon: ArrowUpCircle,
         description: 'Upload classified documents',
@@ -129,6 +135,7 @@ export const navItems: NavItem[] = [
     },
     {
         name: 'Policy Tools',
+        shortName: 'Policies',  // Shorter label for lg breakpoint
         href: '/policies',
         icon: Settings,
         description: 'Authorization policies and compliance',

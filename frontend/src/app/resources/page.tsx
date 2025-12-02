@@ -10,7 +10,7 @@
 
 'use client';
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
@@ -108,7 +108,12 @@ export default function ResourcesPage() {
     encryptionStatus: '',
   });
 
-  // Infinite Scroll
+  // Infinite Scroll - only enabled when session is authenticated
+  const isSessionReady = status === 'authenticated';
+  
+  // Debug logging
+  console.log('[ResourcesPage] Render:', { status, isSessionReady, hasSession: !!session });
+  
   const {
     items: resources,
     facets,
@@ -134,17 +139,9 @@ export default function ResourcesPage() {
     includeFacets: true,
     federated: federatedMode,
     autoLoad: true,
+    // KEY FIX: Only enable fetching when session is authenticated
+    enabled: isSessionReady,
   });
-
-  // Session-aware load
-  const hasLoadedRef = useRef(false);
-  useEffect(() => {
-    if (status === 'authenticated' && !hasLoadedRef.current) {
-      hasLoadedRef.current = true;
-      const timer = setTimeout(() => refresh(), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [status, refresh]);
 
   // Keyboard Navigation
   const [navState, navActions] = useKeyboardNavigation({
@@ -360,6 +357,7 @@ export default function ResourcesPage() {
       </div>
 
       {/* Bento Dashboard - Now in main content */}
+      {(() => { console.log('[ResourcesPage] Dashboard render:', { isLoading, resourcesLength: resources.length, totalCount }); return null; })()}
       {isLoading && resources.length === 0 ? (
         <BentoDashboardSkeleton />
       ) : (

@@ -1,9 +1,12 @@
 /**
  * Premium Navigation Component - 2025 Design Evolution (Phase 2 Complete)
  * 
- * Brand Colors:
- * - Primary: #4497ac (Teal Blue)
- * - Accent: #90d56a (Lime Green)
+ * 🎨 COUNTRY-SPECIFIC THEMING
+ * Now uses CSS variables from InstanceThemeProvider for country-specific colors:
+ * - var(--instance-primary): Primary color from instance theme
+ * - var(--instance-secondary): Secondary color  
+ * - var(--instance-accent): Accent color
+ * - var(--instance-banner-bg): Gradient background
  * 
  * Features:
  * - ✅ Radix UI DropdownMenu for accessible mega menus
@@ -13,6 +16,7 @@
  * - ✅ Smooth animations with staggered effects
  * - ✅ WCAG 2.1 AA compliant (85%+ coverage)
  * - ✅ Responsive (1024px+ desktop, <1024px mobile)
+ * - ✅ Instance-specific theming (USA, FRA, DEU, GBR, etc.)
  */
 
 'use client';
@@ -41,6 +45,8 @@ import { SearchBox } from '@/components/navigation/SearchBox';
 import { SkipNavigation } from '@/components/navigation/SkipNavigation';
 import { ScreenReaderAnnouncer } from '@/components/navigation/ScreenReaderAnnouncer';
 import { navItems, adminItems, getNationalClearance, getCountryName } from '@/components/navigation/nav-config';
+import { useInstanceTheme } from '@/components/ui/theme-provider';
+import { InstanceFlag } from '@/components/ui/instance-hero-badge';
 
 interface INavigationProps {
     user?: {
@@ -56,6 +62,7 @@ interface INavigationProps {
 export default function Navigation({ user }: INavigationProps) {
     const pathname = usePathname();
     const { isOpen: identityOpenGlobal, open: openIdentity, close: closeIdentity } = useIdentityDrawer();
+    const { instanceCode, instanceName, theme } = useInstanceTheme();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
     // PHASE 1.2: Removed unused 'identityOpen' state - now using unified user menu
@@ -126,49 +133,66 @@ export default function Navigation({ user }: INavigationProps) {
             {/* PHASE 3: Screen Reader Announcer (Accessibility) */}
             <ScreenReaderAnnouncer />
 
-            {/* Premium Glassmorphism Navbar */}
+            {/* Premium Glassmorphism Navbar - Instance-Themed */}
             <nav 
-                className="sticky top-0 z-50 backdrop-blur-xl bg-white/90 border-b border-white/20 shadow-lg shadow-[#4497ac]/5"
+                className="sticky top-0 z-50 backdrop-blur-xl bg-white/90 border-b border-white/20 shadow-lg"
+                style={{ boxShadow: '0 4px 6px -1px rgba(var(--instance-primary-rgb, 68, 151, 172), 0.1)' }}
                 role="navigation"
                 aria-label="Main navigation"
             >
-                {/* Top accent line with animated gradient */}
-                <div className="h-1 bg-gradient-to-r from-[#4497ac] via-[#90d56a] to-[#4497ac] bg-[length:200%_100%] animate-gradient" />
+                {/* Top accent line with instance gradient */}
+                <div 
+                    className="h-1 bg-[length:200%_100%] animate-gradient"
+                    style={{ background: 'var(--instance-banner-bg)' }}
+                />
                 
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-20">
-                        {/* Left: Logo + Nav */}
-                        <div className="flex items-center gap-8">
-                            {/* Enhanced Logo with micro-interaction */}
+                        {/* Left: Logo + Instance Flag + Nav */}
+                        <div className="flex items-center gap-4 xl:gap-6">
+                            {/* Compact Logo with instance theming */}
                             <Link 
                                 href="/dashboard" 
-                                className="group flex items-center gap-3 transform transition-all duration-300 hover:scale-105"
+                                className="group flex items-center gap-2 transform transition-all duration-300 hover:scale-105"
                                 aria-label="DIVE V3 Home"
                             >
                                 <div className="relative">
-                                    {/* Animated glow effect */}
-                                    <div className="absolute inset-0 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-xl opacity-0 group-hover:opacity-30 blur-xl transition-all duration-500" />
+                                    {/* Animated glow effect - instance themed */}
+                                    <div 
+                                        className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-30 blur-xl transition-all duration-500"
+                                        style={{ background: 'var(--instance-banner-bg)' }}
+                                    />
                                     
-                                    {/* Logo container with enhanced shadow */}
-                                    <div className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-[#4497ac] via-[#5ca3b5] to-[#90d56a] flex items-center justify-center shadow-lg shadow-[#4497ac]/30 transform group-hover:rotate-6 transition-all duration-500">
-                                        <span className="text-2xl font-black text-white drop-shadow-lg">D</span>
+                                    {/* Logo container with instance gradient - smaller on lg */}
+                                    <div 
+                                        className="relative w-10 h-10 xl:w-11 xl:h-11 rounded-xl flex items-center justify-center shadow-lg transform group-hover:rotate-6 transition-all duration-500"
+                                        style={{ 
+                                            background: 'var(--instance-banner-bg)',
+                                            boxShadow: '0 4px 6px -1px rgba(var(--instance-primary-rgb, 0, 0, 0), 0.3)'
+                                        }}
+                                    >
+                                        <span className="text-xl xl:text-2xl font-black text-white drop-shadow-lg">D</span>
                                         {/* Subtle shine effect */}
                                         <div className="absolute inset-0 rounded-xl bg-gradient-to-tr from-white/0 via-white/20 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                     </div>
                                 </div>
                                 
-                                <div className="hidden xl:block">
-                                    <div className="text-xl font-black bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
-                                        DIVE V3
-                                    </div>
-                                    <div className="text-[10px] font-semibold text-gray-500 tracking-wide uppercase">
-                                        Coalition ICAM
-                                    </div>
+                                {/* Instance Flag Badge - compact on lg, expanded on xl */}
+                                <div 
+                                    className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs font-semibold"
+                                    style={{ 
+                                        backgroundColor: 'rgba(var(--instance-primary-rgb, 0, 0, 0), 0.08)',
+                                        borderColor: 'rgba(var(--instance-primary-rgb, 0, 0, 0), 0.2)',
+                                        color: 'var(--instance-primary)'
+                                    }}
+                                >
+                                    <InstanceFlag size={16} />
+                                    <span className="hidden xl:inline">{instanceCode}</span>
                                 </div>
                             </Link>
 
-                            {/* Desktop Navigation - Enhanced with Radix UI DropdownMenu */}
-                            <div className="hidden lg:flex lg:gap-1 lg:items-center">
+                            {/* Desktop Navigation - Responsive with short labels at lg, full at xl */}
+                            <div className="hidden lg:flex lg:gap-0.5 xl:gap-1 lg:items-center">
                                 {navItems.map((item, index) => {
                                     const active = isActive(item.href);
                                     const hasMenu = item.hasMegaMenu;
@@ -177,40 +201,63 @@ export default function Navigation({ user }: INavigationProps) {
                                         <DropdownMenu.Root key={item.href}>
                                             <DropdownMenu.Trigger asChild>
                                                 <button
-                                                    className="group relative px-4 py-2.5 rounded-xl transition-all duration-300 outline-none focus:ring-2 focus:ring-[#4497ac]/50 focus:ring-offset-2"
+                                                    className="group relative px-2.5 xl:px-3.5 py-2 xl:py-2.5 rounded-xl transition-all duration-300 outline-none focus:ring-2 focus:ring-offset-2"
+                                                    style={{ 
+                                                        animationDelay: `${index * 50}ms`,
+                                                        '--tw-ring-color': 'rgba(var(--instance-primary-rgb, 68, 151, 172), 0.5)'
+                                                    } as React.CSSProperties}
                                                     aria-label={`${item.name} menu`}
-                                                    style={{ animationDelay: `${index * 50}ms` }}
                                                     onMouseEnter={() => setHoveredNavItem(item.name)}
                                                     onMouseLeave={() => setHoveredNavItem(null)}
                                                 >
-                                                    {/* Enhanced hover background with gradient */}
-                                                    <div className={`absolute inset-0 rounded-xl transition-all duration-300 ${
-                                                        active 
-                                                            ? 'bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 shadow-sm' 
-                                                            : 'bg-gray-50/0 group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
-                                                    }`} />
+                                                    {/* Enhanced hover background with instance gradient */}
+                                                    <div 
+                                                        className={`absolute inset-0 rounded-xl transition-all duration-300 ${
+                                                            active 
+                                                                ? 'shadow-sm' 
+                                                                : 'bg-gray-50/0 group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
+                                                        }`}
+                                                        style={active ? { 
+                                                            background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))'
+                                                        } : undefined}
+                                                    />
                                                     
-                                                    {/* Content with enhanced spacing */}
-                                                    <div className="relative flex items-center gap-2.5">
-                                                        <item.icon className={`w-5 h-5 transition-all duration-300 ${
-                                                            active 
-                                                                ? 'scale-110 drop-shadow-md text-[#4497ac]' 
-                                                                : 'text-gray-600 group-hover:scale-110 group-hover:drop-shadow-sm group-hover:text-[#4497ac]'
-                                                        }`} strokeWidth={2.5} />
-                                                        <span className={`font-bold text-sm transition-all duration-300 ${
-                                                            active 
-                                                                ? 'bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent'
-                                                                : 'text-gray-700 group-hover:text-gray-900'
-                                                        }`}>
-                                                            {item.name}
+                                                    {/* Content - responsive sizing */}
+                                                    <div className="relative flex items-center gap-1.5 xl:gap-2">
+                                                        <item.icon 
+                                                            className={`w-4 h-4 xl:w-5 xl:h-5 transition-all duration-300 ${
+                                                                active 
+                                                                    ? 'scale-110 drop-shadow-md' 
+                                                                    : 'text-gray-600 group-hover:scale-110 group-hover:drop-shadow-sm'
+                                                            }`}
+                                                            style={active || undefined ? { color: 'var(--instance-primary)' } : undefined}
+                                                            strokeWidth={2.5} 
+                                                        />
+                                                        {/* Short name at lg, full name at xl */}
+                                                        <span 
+                                                            className={`font-bold text-xs xl:text-sm transition-all duration-300 ${
+                                                                active 
+                                                                    ? 'bg-clip-text text-transparent'
+                                                                    : 'text-gray-700 group-hover:text-gray-900'
+                                                            }`}
+                                                            style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
+                                                        >
+                                                            <span className="xl:hidden">{item.shortName || item.name}</span>
+                                                            <span className="hidden xl:inline">{item.name}</span>
                                                         </span>
                                                         
-                                                        <ChevronDown className="w-3.5 h-3.5 text-gray-500 transition-transform duration-300 group-data-[state=open]:rotate-180" strokeWidth={2.5} />
+                                                        <ChevronDown className="w-3 h-3 xl:w-3.5 xl:h-3.5 text-gray-500 transition-transform duration-300 group-data-[state=open]:rotate-180" strokeWidth={2.5} />
                                                     </div>
                                                     
-                                                    {/* Active indicator with glow */}
+                                                    {/* Active indicator with instance glow */}
                                                     {active && (
-                                                        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full shadow-lg shadow-[#4497ac]/50 animate-pulse" />
+                                                        <div 
+                                                            className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full animate-pulse"
+                                                            style={{ 
+                                                                background: 'var(--instance-banner-bg)',
+                                                                boxShadow: '0 4px 6px -1px rgba(var(--instance-primary-rgb), 0.5)'
+                                                            }}
+                                                        />
                                                     )}
                                                     
                                                     {/* Tooltip on hover */}
@@ -230,13 +277,19 @@ export default function Navigation({ user }: INavigationProps) {
                                                     align="start"
                                                     collisionPadding={16}
                                                 >
-                                                    {/* Glow effect */}
-                                                    <div className="absolute -inset-2 bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 rounded-2xl opacity-50 blur-2xl -z-10" />
+                                                    {/* Glow effect - instance themed */}
+                                                    <div 
+                                                        className="absolute -inset-2 rounded-2xl opacity-50 blur-2xl -z-10"
+                                                        style={{ background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.2), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.2))' }}
+                                                    />
                                                     
-                                                    {/* Header with gradient */}
-                                                    <div className="relative px-6 py-4 bg-gradient-to-r from-[#4497ac]/5 to-[#90d56a]/5 border-b border-gray-200">
+                                                    {/* Header with instance gradient */}
+                                                    <div 
+                                                        className="relative px-6 py-4 border-b border-gray-200"
+                                                        style={{ background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.05), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.05))' }}
+                                                    >
                                                         <div className="flex items-center gap-3">
-                                                            <item.icon className="w-6 h-6 text-[#4497ac]" strokeWidth={2.5} />
+                                                            <item.icon className="w-6 h-6" style={{ color: 'var(--instance-primary)' }} strokeWidth={2.5} />
                                                             <div>
                                                                 <h3 className="font-bold text-gray-900 text-base">{item.name}</h3>
                                                                 <p className="text-xs text-gray-600">{item.description}</p>
@@ -259,13 +312,13 @@ export default function Navigation({ user }: INavigationProps) {
                                                                     {category.items.map((subItem) => {
                                                                         const IconComponent = subItem.icon;
                                                                         return (
-                                                                            <DropdownMenu.Item key={subItem.href} asChild>
+                                                                                <DropdownMenu.Item key={subItem.href} asChild>
                                                                                 <Link
                                                                                     href={subItem.href}
-                                                                                    className="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gradient-to-r hover:from-[#4497ac]/5 hover:to-[#90d56a]/5 transition-all duration-200 outline-none focus:bg-gradient-to-r focus:from-[#4497ac]/10 focus:to-[#90d56a]/10"
+                                                                                    className="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 outline-none hover:bg-[rgba(var(--instance-primary-rgb),0.05)] focus:bg-[rgba(var(--instance-primary-rgb),0.1)]"
                                                                                 >
                                                                                     <IconComponent 
-                                                                                        className="w-5 h-5 text-gray-500 group-hover:text-[#4497ac] transition-colors duration-200"
+                                                                                        className="w-5 h-5 text-gray-500 transition-colors duration-200 group-hover:text-[var(--instance-primary)]"
                                                                                         strokeWidth={2.5}
                                                                                     />
                                                                                     <div className="flex-1">
@@ -286,7 +339,7 @@ export default function Navigation({ user }: INavigationProps) {
                                             </DropdownMenu.Portal>
                                         </DropdownMenu.Root>
                                     ) : (
-                                        // Regular link (no mega menu)
+                                        // Regular link (no mega menu) - instance themed, responsive
                                         <div
                                             key={item.href}
                                             style={{ animationDelay: `${index * 50}ms` }}
@@ -295,35 +348,56 @@ export default function Navigation({ user }: INavigationProps) {
                                         >
                                             <Link
                                                 href={item.href}
-                                                className="group relative px-4 py-2.5 rounded-xl transition-all duration-300 block outline-none focus:ring-2 focus:ring-[#4497ac]/50 focus:ring-offset-2"
+                                                className="group relative px-2.5 xl:px-3.5 py-2 xl:py-2.5 rounded-xl transition-all duration-300 block outline-none focus:ring-2 focus:ring-offset-2"
+                                                style={{ '--tw-ring-color': 'rgba(var(--instance-primary-rgb, 68, 151, 172), 0.5)' } as React.CSSProperties}
                                                 aria-current={active ? 'page' : undefined}
                                             >
-                                                {/* Enhanced hover background with gradient */}
-                                                <div className={`absolute inset-0 rounded-xl transition-all duration-300 ${
-                                                    active 
-                                                        ? 'bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 shadow-sm' 
-                                                        : 'bg-gray-50/0 group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
-                                                }`} />
+                                                {/* Enhanced hover background with instance gradient */}
+                                                <div 
+                                                    className={`absolute inset-0 rounded-xl transition-all duration-300 ${
+                                                        active 
+                                                            ? 'shadow-sm' 
+                                                            : 'bg-gray-50/0 group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
+                                                    }`}
+                                                    style={active ? { 
+                                                        background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))'
+                                                    } : undefined}
+                                                />
                                                 
-                                                {/* Content with enhanced spacing */}
-                                                <div className="relative flex items-center gap-2.5">
-                                                    <item.icon className={`w-5 h-5 transition-all duration-300 ${
-                                                        active 
-                                                            ? 'scale-110 drop-shadow-md text-[#4497ac]' 
-                                                            : 'text-gray-600 group-hover:scale-110 group-hover:drop-shadow-sm group-hover:text-[#4497ac]'
-                                                    }`} strokeWidth={2.5} />
-                                                    <span className={`font-bold text-sm transition-all duration-300 ${
-                                                        active 
-                                                            ? 'bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent'
-                                                            : 'text-gray-700 group-hover:text-gray-900'
-                                                    }`}>
-                                                        {item.name}
+                                                {/* Content - responsive sizing */}
+                                                <div className="relative flex items-center gap-1.5 xl:gap-2">
+                                                    <item.icon 
+                                                        className={`w-4 h-4 xl:w-5 xl:h-5 transition-all duration-300 ${
+                                                            active 
+                                                                ? 'scale-110 drop-shadow-md' 
+                                                                : 'text-gray-600 group-hover:scale-110 group-hover:drop-shadow-sm'
+                                                        }`}
+                                                        style={active ? { color: 'var(--instance-primary)' } : undefined}
+                                                        strokeWidth={2.5} 
+                                                    />
+                                                    {/* Short name at lg, full name at xl */}
+                                                    <span 
+                                                        className={`font-bold text-xs xl:text-sm transition-all duration-300 ${
+                                                            active 
+                                                                ? 'bg-clip-text text-transparent'
+                                                                : 'text-gray-700 group-hover:text-gray-900'
+                                                        }`}
+                                                        style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
+                                                    >
+                                                        <span className="xl:hidden">{item.shortName || item.name}</span>
+                                                        <span className="hidden xl:inline">{item.name}</span>
                                                     </span>
                                                 </div>
                                                 
-                                                {/* Active indicator with glow */}
+                                                {/* Active indicator with instance glow */}
                                                 {active && (
-                                                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full shadow-lg shadow-[#4497ac]/50 animate-pulse" />
+                                                    <div 
+                                                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full animate-pulse"
+                                                        style={{ 
+                                                            background: 'var(--instance-banner-bg)',
+                                                            boxShadow: '0 4px 6px -1px rgba(var(--instance-primary-rgb), 0.5)'
+                                                        }}
+                                                    />
                                                 )}
                                                 
                                                 {/* Tooltip on hover */}
@@ -346,69 +420,84 @@ export default function Navigation({ user }: INavigationProps) {
                     {/* Right: User Menu Only - 2025 Pattern */}
                     <div className="flex items-center gap-3">
 
-                            {/* Unified User + Admin Dropdown - 2025 Modern Design */}
+                            {/* Unified User + Admin Dropdown - Responsive: Avatar-only at lg, full at xl */}
                             {/* PHASE 3: Redesigned with glassmorphism, spatial depth, and micro-interactions */}
                             <div ref={dropdownRef} className="hidden lg:block relative">
                                 <button
                                     type="button"
                                     onClick={() => setAdminDropdownOpen(!adminDropdownOpen)}
-                                    className="group relative flex items-center gap-2.5 px-3 py-2 rounded-full
+                                    className="group relative flex items-center gap-1.5 xl:gap-2.5 p-1.5 xl:px-3 xl:py-2 rounded-full
                                                bg-gradient-to-br from-white/80 via-white/90 to-gray-50/80
                                                backdrop-blur-md border border-white/60
-                                               shadow-[0_2px_8px_rgba(68,151,172,0.08),0_0_1px_rgba(68,151,172,0.12)]
-                                               hover:shadow-[0_4px_16px_rgba(68,151,172,0.16),0_0_2px_rgba(68,151,172,0.2)]
-                                               hover:border-[#4497ac]/20 hover:-translate-y-0.5
+                                               hover:-translate-y-0.5
                                                active:translate-y-0
                                                transition-all duration-300 ease-out
-                                               focus:outline-none focus:ring-2 focus:ring-[#4497ac]/40 focus:ring-offset-2"
+                                               focus:outline-none focus:ring-2 focus:ring-offset-2"
+                                    style={{
+                                        boxShadow: '0 2px 8px rgba(var(--instance-primary-rgb, 68, 151, 172), 0.08), 0 0 1px rgba(var(--instance-primary-rgb, 68, 151, 172), 0.12)',
+                                        '--tw-ring-color': 'rgba(var(--instance-primary-rgb, 68, 151, 172), 0.4)'
+                                    } as React.CSSProperties}
                                     aria-expanded={adminDropdownOpen}
                                     aria-haspopup="true"
                                     aria-label="User menu"
+                                    title={`${getPseudonymFromUser(user as any)} • ${getNationalClearance(user?.clearance, user?.countryOfAffiliation)} • ${user?.countryOfAffiliation || 'USA'}`}
                                 >
-                                    {/* Modern Avatar with Clearance-Based Color */}
+                                    {/* Modern Avatar with Instance-Themed Color */}
                                     <div className="relative flex-shrink-0">
-                                        {/* Subtle glow effect on hover */}
-                                        <div className="absolute -inset-1 bg-gradient-to-br from-[#4497ac]/20 to-[#90d56a]/20 rounded-full opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-500" />
+                                        {/* Subtle glow effect on hover - instance themed */}
+                                        <div 
+                                            className="absolute -inset-1 rounded-full opacity-0 group-hover:opacity-100 blur-md transition-opacity duration-500 pointer-events-none"
+                                            style={{ background: 'linear-gradient(135deg, rgba(var(--instance-primary-rgb), 0.2), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.2))' }}
+                                        />
                                         
-                                        {/* Avatar container with depth */}
-                                        <div className="relative w-8 h-8 rounded-full bg-gradient-to-br from-[#4497ac] via-[#5ca3b5] to-[#90d56a] 
-                                                      flex items-center justify-center
-                                                      shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_2px_4px_rgba(0,0,0,0.1)]
-                                                      group-hover:scale-110 transition-transform duration-300">
+                                        {/* Avatar container with instance gradient - with clearance indicator ring */}
+                                        <div 
+                                            className="relative w-8 h-8 xl:w-8 xl:h-8 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform duration-300"
+                                            style={{
+                                                background: 'var(--instance-banner-bg)',
+                                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 2px 4px rgba(0,0,0,0.1)'
+                                            }}
+                                        >
                                             <span className="text-xs font-black text-white drop-shadow-sm">
                                                 {(getPseudonymFromUser(user as any) || 'U').charAt(0).toUpperCase()}
                                             </span>
                                         </div>
                                         
-                                        {/* Modern status indicator with pulse */}
+                                        {/* Clearance indicator dot - always visible */}
                                         <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5">
-                                            <div className="absolute inset-0 bg-[#90d56a] rounded-full border border-white shadow-sm" />
-                                            <div className="absolute inset-0 bg-[#90d56a] rounded-full animate-ping opacity-40" />
+                                            <div 
+                                                className="absolute inset-0 rounded-full border border-white shadow-sm"
+                                                style={{ backgroundColor: 'var(--instance-accent, #90d56a)' }}
+                                            />
+                                            <div 
+                                                className="absolute inset-0 rounded-full animate-ping opacity-40"
+                                                style={{ backgroundColor: 'var(--instance-accent, #90d56a)' }}
+                                            />
                                         </div>
                                     </div>
                                     
-                                    {/* User Info - Compact & Modern */}
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span className="text-sm font-semibold text-gray-900 truncate max-w-[100px]">
+                                    {/* User Info - Hidden at lg, visible at xl */}
+                                    <div className="hidden xl:flex items-center gap-2 min-w-0">
+                                        <span className="text-sm font-semibold text-gray-900 truncate max-w-[80px]">
                                             {getPseudonymFromUser(user as any)}
                                         </span>
                                         <span 
-                                            className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold
-                                                     bg-gradient-to-br from-[#4497ac]/10 to-[#90d56a]/10 
-                                                     text-[#4497ac] border border-[#4497ac]/20
-                                                     shadow-sm group-hover:shadow-md transition-shadow"
-                                            title={`${getNationalClearance(user?.clearance, user?.countryOfAffiliation)} • ${user?.countryOfAffiliation || 'USA'}${Array.isArray(user?.acpCOI) && user.acpCOI.length > 0 ? ' • ' + user.acpCOI.join(', ') : ''}`}
+                                            className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold shadow-sm group-hover:shadow-md transition-shadow"
+                                            style={{
+                                                background: 'linear-gradient(135deg, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
+                                                color: 'var(--instance-primary)',
+                                                borderWidth: '1px',
+                                                borderColor: 'rgba(var(--instance-primary-rgb), 0.2)'
+                                            }}
                                         >
                                             {abbreviateClearance(user?.clearance)}
                                         </span>
                                     </div>
                                     
-                                    {/* Modern Chevron with smooth rotation */}
+                                    {/* Modern Chevron - hidden at lg, visible at xl */}
                                     <ChevronDown 
-                                        className={`w-4 h-4 text-gray-500 flex-shrink-0
-                                                   group-hover:text-[#4497ac]
-                                                   transition-all duration-300 ease-out
-                                                   ${adminDropdownOpen ? 'rotate-180 text-[#4497ac]' : ''}`}
+                                        className={`hidden xl:block w-4 h-4 text-gray-500 flex-shrink-0 transition-all duration-300 ease-out ${adminDropdownOpen ? 'rotate-180' : ''}`}
+                                        style={adminDropdownOpen ? { color: 'var(--instance-primary)' } : undefined}
                                         strokeWidth={2.5}
                                     />
                                 </button>
@@ -428,20 +517,23 @@ export default function Navigation({ user }: INavigationProps) {
                             {/* Sign Out Icon Button - Visible in Desktop Nav */}
                             <SignOutIconButton />
 
-                            {/* Mobile Menu Button - Enhanced */}
+                            {/* Mobile Menu Button - Enhanced with Instance Theme */}
                             <button
                                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                                 className="lg:hidden relative p-2.5 rounded-xl hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50 active:scale-95 transition-all duration-200 group"
                                 aria-label="Toggle menu"
                                 aria-expanded={mobileMenuOpen}
                             >
-                                {/* Animated background */}
-                                <div className="absolute inset-0 bg-gradient-to-r from-[#4497ac]/5 to-[#90d56a]/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                {/* Animated background - instance themed */}
+                                <div 
+                                    className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                    style={{ background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.05), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.05))' }}
+                                />
                                 
                                 {mobileMenuOpen ? (
-                                    <X className="relative w-6 h-6 text-gray-700 group-hover:text-[#4497ac] transition-colors duration-200" strokeWidth={2.5} />
+                                    <X className="relative w-6 h-6 text-gray-700 transition-colors duration-200 group-hover:text-[var(--instance-primary)]" strokeWidth={2.5} />
                                 ) : (
-                                    <Menu className="relative w-6 h-6 text-gray-700 group-hover:text-[#4497ac] transition-colors duration-200" strokeWidth={2.5} />
+                                    <Menu className="relative w-6 h-6 text-gray-700 transition-colors duration-200 group-hover:text-[var(--instance-primary)]" strokeWidth={2.5} />
                                 )}
                             </button>
                         </div>
@@ -472,22 +564,41 @@ export default function Navigation({ user }: INavigationProps) {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="px-4 py-6 space-y-2 max-w-lg mx-auto">
-                            {/* Mobile User Info Card - Enhanced */}
-                            <div className="mb-5 p-5 rounded-2xl bg-gradient-to-br from-[#4497ac]/5 via-white to-[#90d56a]/5 border border-[#4497ac]/10 shadow-sm">
+                            {/* Mobile User Info Card - Instance Themed */}
+                            <div 
+                                className="mb-5 p-5 rounded-2xl shadow-sm"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(var(--instance-primary-rgb), 0.05), white 50%, rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.05))',
+                                    borderWidth: '1px',
+                                    borderColor: 'rgba(var(--instance-primary-rgb), 0.1)'
+                                }}
+                            >
                                 <div className="flex items-center gap-4 mb-4">
                                     <div className="relative">
-                                        {/* Ring decoration */}
-                                        <div className="absolute -inset-1 bg-gradient-to-r from-[#4497ac] to-[#90d56a] rounded-full blur-md opacity-30 animate-pulse" />
+                                        {/* Ring decoration - instance themed */}
+                                        <div 
+                                            className="absolute -inset-1 rounded-full blur-md opacity-30 animate-pulse pointer-events-none"
+                                            style={{ background: 'var(--instance-banner-bg)' }}
+                                        />
                                         
-                                        <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-[#4497ac] via-[#5ca3b5] to-[#90d56a] flex items-center justify-center shadow-lg">
+                                        <div 
+                                            className="relative w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
+                                            style={{ background: 'var(--instance-banner-bg)' }}
+                                        >
                                             <span className="text-2xl font-black text-white drop-shadow-md">
                                                 {(getPseudonymFromUser(user as any) || 'U').charAt(0).toUpperCase()}
                                             </span>
                                         </div>
                                         
-                                        {/* Online indicator */}
-                                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-[#90d56a] border-3 border-white rounded-full shadow-lg">
-                                            <div className="absolute inset-0 bg-[#90d56a] rounded-full animate-ping opacity-75" />
+                                        {/* Online indicator - instance accent */}
+                                        <div 
+                                            className="absolute -bottom-1 -right-1 w-5 h-5 border-3 border-white rounded-full shadow-lg"
+                                            style={{ backgroundColor: 'var(--instance-accent, #90d56a)' }}
+                                        >
+                                            <div 
+                                                className="absolute inset-0 rounded-full animate-ping opacity-75"
+                                                style={{ backgroundColor: 'var(--instance-accent, #90d56a)' }}
+                                            />
                                         </div>
                                     </div>
                                     
@@ -497,7 +608,16 @@ export default function Navigation({ user }: INavigationProps) {
                                         </p>
                                         <div className="flex flex-col gap-1.5">
                                             <div className="flex items-center gap-2">
-                                                <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-gradient-to-r from-[#4497ac]/20 to-[#90d56a]/20 text-[#4497ac] border border-[#4497ac]/30 shadow-sm" title={`${getNationalClearance(user?.clearance, user?.countryOfAffiliation)} (${getCountryName(user?.countryOfAffiliation)})`}>
+                                                <span 
+                                                    className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold shadow-sm"
+                                                    style={{
+                                                        background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.2), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.2))',
+                                                        color: 'var(--instance-primary)',
+                                                        borderWidth: '1px',
+                                                        borderColor: 'rgba(var(--instance-primary-rgb), 0.3)'
+                                                    }}
+                                                    title={`${getNationalClearance(user?.clearance, user?.countryOfAffiliation)} (${getCountryName(user?.countryOfAffiliation)})`}
+                                                >
                                                     {getNationalClearance(user?.clearance, user?.countryOfAffiliation)}
                                                 </span>
                                                 <span className="text-xs font-semibold text-gray-600 px-2 py-0.5 bg-gray-100 rounded-md">
@@ -524,7 +644,7 @@ export default function Navigation({ user }: INavigationProps) {
                                 <SecureLogoutButton />
                             </div>
 
-                            {/* Navigation Items with staggered animation */}
+                            {/* Navigation Items with staggered animation - Instance Themed */}
                             <div className="space-y-1">
                                 {navItems.map((item, idx) => {
                                     const active = isActive(item.href);
@@ -536,22 +656,36 @@ export default function Navigation({ user }: INavigationProps) {
                                             className="group block relative px-4 py-4 rounded-xl transition-all duration-200 animate-fade-in-up"
                                             style={{ animationDelay: `${idx * 50}ms` }}
                                         >
-                                            <div className={`absolute inset-0 rounded-xl transition-all duration-200 ${
-                                                active
-                                                    ? 'bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 shadow-sm border border-[#4497ac]/20'
-                                                    : 'group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
-                                            }`} />
+                                            <div 
+                                                className={`absolute inset-0 rounded-xl transition-all duration-200 ${
+                                                    active
+                                                        ? 'shadow-sm'
+                                                        : 'group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
+                                                }`}
+                                                style={active ? {
+                                                    background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
+                                                    borderWidth: '1px',
+                                                    borderColor: 'rgba(var(--instance-primary-rgb), 0.2)'
+                                                } : undefined}
+                                            />
                                             
                                             <div className="relative flex items-center gap-3.5">
-                                                <item.icon className={`w-6 h-6 transition-all duration-200 ${
-                                                    active ? 'scale-110 drop-shadow-sm text-[#4497ac]' : 'text-gray-600 group-hover:scale-110 group-hover:text-[#4497ac]'
-                                                }`} strokeWidth={2.5} />
+                                                <item.icon 
+                                                    className={`w-6 h-6 transition-all duration-200 ${
+                                                        active ? 'scale-110 drop-shadow-sm' : 'text-gray-600 group-hover:scale-110'
+                                                    }`}
+                                                    style={active ? { color: 'var(--instance-primary)' } : undefined}
+                                                    strokeWidth={2.5} 
+                                                />
                                                 <div className="flex-1">
-                                                    <span className={`font-bold text-base block ${
-                                                        active 
-                                                            ? 'bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent'
-                                                            : 'text-gray-700 group-hover:text-gray-900'
-                                                    }`}>
+                                                    <span 
+                                                        className={`font-bold text-base block ${
+                                                            active 
+                                                                ? 'bg-clip-text text-transparent'
+                                                                : 'text-gray-700 group-hover:text-gray-900'
+                                                        }`}
+                                                        style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
+                                                    >
                                                         {item.name}
                                                     </span>
                                                     <p className="text-[10px] text-gray-500 mt-0.5">{item.description}</p>
@@ -567,21 +701,34 @@ export default function Navigation({ user }: INavigationProps) {
                                             </div>
                                             
                                             {active && (
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-gradient-to-br from-[#4497ac] to-[#90d56a] rounded-full shadow-lg animate-pulse" />
+                                                <div 
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full shadow-lg animate-pulse"
+                                                    style={{ background: 'var(--instance-banner-bg)' }}
+                                                />
                                             )}
                                         </Link>
                                     );
                                 })}
                             </div>
 
-                            {/* Admin Section in Mobile - Enhanced */}
+                            {/* Admin Section in Mobile - Instance Themed */}
                             {isSuperAdmin && (
                                 <>
                                     <div className="my-6 flex items-center gap-3">
                                         <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
-                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 border border-[#4497ac]/20">
-                                            <User className="w-3.5 h-3.5 text-[#4497ac]" strokeWidth={2.5} />
-                                            <span className="text-xs font-black uppercase tracking-wider bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent">
+                                        <div 
+                                            className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+                                            style={{
+                                                background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
+                                                borderWidth: '1px',
+                                                borderColor: 'rgba(var(--instance-primary-rgb), 0.2)'
+                                            }}
+                                        >
+                                            <User className="w-3.5 h-3.5" style={{ color: 'var(--instance-primary)' }} strokeWidth={2.5} />
+                                            <span 
+                                                className="text-xs font-black uppercase tracking-wider bg-clip-text text-transparent"
+                                                style={{ backgroundImage: 'var(--instance-banner-bg)' }}
+                                            >
                                                 Admin Portal
                                             </span>
                                         </div>
@@ -599,31 +746,44 @@ export default function Navigation({ user }: INavigationProps) {
                                                     className="group block relative px-4 py-4 rounded-xl transition-all duration-200 animate-fade-in-up"
                                                     style={{ animationDelay: `${(navItems.length + idx) * 50}ms` }}
                                                 >
-                                                    <div className={`absolute inset-0 rounded-xl transition-all duration-200 ${
-                                                        active
-                                                            ? 'bg-gradient-to-r from-[#4497ac]/10 to-[#90d56a]/10 shadow-sm border border-[#4497ac]/20'
-                                                            : 'group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
-                                                    }`} />
+                                                    <div 
+                                                        className={`absolute inset-0 rounded-xl transition-all duration-200 ${
+                                                            active
+                                                                ? 'shadow-sm'
+                                                                : 'group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
+                                                        }`}
+                                                        style={active ? {
+                                                            background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
+                                                            borderWidth: '1px',
+                                                            borderColor: 'rgba(var(--instance-primary-rgb), 0.2)'
+                                                        } : undefined}
+                                                    />
                                                     
                                                     <div className="relative flex items-center gap-3.5">
-                                                        <item.icon className={`w-6 h-6 transition-all duration-200 ${
-                                                            active ? 'scale-110 drop-shadow-sm text-[#4497ac]' : 'text-gray-600 group-hover:scale-110 group-hover:text-[#4497ac]'
-                                                        }`} strokeWidth={2.5} />
+                                                        <item.icon 
+                                                            className={`w-6 h-6 transition-all duration-200 ${
+                                                                active ? 'scale-110 drop-shadow-sm' : 'text-gray-600 group-hover:scale-110'
+                                                            }`}
+                                                            style={active ? { color: 'var(--instance-primary)' } : undefined}
+                                                            strokeWidth={2.5}
+                                                        />
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-2">
-                                                                <span className={`font-bold text-base ${
-                                                                    active 
-                                                                        ? 'bg-gradient-to-r from-[#4497ac] to-[#90d56a] bg-clip-text text-transparent'
-                                                                        : 'text-gray-700 group-hover:text-gray-900'
-                                                                }`}>
+                                                                <span 
+                                                                    className={`font-bold text-base ${
+                                                                        active 
+                                                                            ? 'bg-clip-text text-transparent'
+                                                                            : 'text-gray-700 group-hover:text-gray-900'
+                                                                    }`}
+                                                                    style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
+                                                                >
                                                                     {item.name}
                                                                 </span>
                                                                 {item.badge && (
-                                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold shadow-md ${
-                                                                        item.badge === 'New'
-                                                                            ? 'bg-gradient-to-r from-[#90d56a] to-emerald-400 text-white'
-                                                                            : 'bg-gradient-to-r from-[#4497ac] to-cyan-500 text-white'
-                                                                    } animate-pulse`}>
+                                                                    <span 
+                                                                        className="px-2 py-1 rounded-full text-xs font-bold shadow-md text-white animate-pulse"
+                                                                        style={{ background: item.badge === 'New' ? 'var(--instance-accent, #90d56a)' : 'var(--instance-primary)' }}
+                                                                    >
                                                                         {item.badge}
                                                                     </span>
                                                                 )}
@@ -641,7 +801,10 @@ export default function Navigation({ user }: INavigationProps) {
                                                     </div>
                                                     
                                                     {active && (
-                                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-gradient-to-br from-[#4497ac] to-[#90d56a] rounded-full shadow-lg animate-pulse" />
+                                                        <div 
+                                                            className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full shadow-lg animate-pulse"
+                                                            style={{ background: 'var(--instance-banner-bg)' }}
+                                                        />
                                                     )}
                                                 </Link>
                                             );
@@ -716,7 +879,7 @@ const SignOutIconButton = memo(function SignOutIconButton() {
             type="button"
             onClick={handleLogout}
             disabled={isLoggingOut}
-            className="hidden lg:flex relative p-2 rounded-xl 
+            className="hidden lg:flex relative p-1.5 xl:p-2 rounded-xl 
                        bg-gradient-to-br from-gray-50 to-gray-100/80
                        border border-gray-200/60
                        shadow-sm hover:shadow-md
@@ -730,13 +893,13 @@ const SignOutIconButton = memo(function SignOutIconButton() {
             title="Sign Out"
         >
             {isLoggingOut ? (
-                <svg className="w-5 h-5 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 xl:w-5 xl:h-5 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
             ) : (
                 <LogOut 
-                    className="w-5 h-5 text-gray-500 group-hover:text-red-600 transition-colors duration-200" 
+                    className="w-4 h-4 xl:w-5 xl:h-5 text-gray-500 group-hover:text-red-600 transition-colors duration-200" 
                     strokeWidth={2.5} 
                 />
             )}

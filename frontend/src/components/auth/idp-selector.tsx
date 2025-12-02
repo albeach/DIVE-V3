@@ -156,14 +156,51 @@ export function IdpSelector() {
     }
   };
 
+  /**
+   * Handle IdP click - Routes to appropriate authentication flow
+   * 
+   * For CROSS-BORDER FEDERATION:
+   * - If user clicks a partner nation (e.g., DEU on FRA instance)
+   * - Redirect to that nation's instance URL for authentication
+   * - After auth, they can request cross-border access back to FRA resources
+   * 
+   * For LOCAL federation (same instance):
+   * - Use kc_idp_hint to trigger Keycloak broker flow
+   */
   const handleIdpClick = async (idp: IdPOption) => {
-    // Option 3: Custom Keycloak Theme - Use NextAuth signIn with kc_idp_hint
-    // This ensures state cookie is properly set before redirecting to Keycloak
+    // Extract country code from alias (e.g., 'usa-realm-broker' -> 'usa')
+    const aliasLower = idp.alias.toLowerCase();
+    let targetCountry: string | null = null;
+    
+    // Parse country code from various alias formats
+    if (aliasLower.includes('usa') || aliasLower.includes('us-')) targetCountry = 'usa';
+    else if (aliasLower.includes('fra') || aliasLower.includes('france')) targetCountry = 'fra';
+    else if (aliasLower.includes('deu') || aliasLower.includes('germany')) targetCountry = 'deu';
+    else if (aliasLower.includes('gbr') || aliasLower.includes('uk')) targetCountry = 'gbr';
+    else if (aliasLower.includes('can') || aliasLower.includes('canada')) targetCountry = 'can';
+    
+    // Check if this is a cross-border request (different from current instance)
+    const currentInstance = instanceCode.toLowerCase();
+    
+    if (targetCountry && targetCountry !== currentInstance) {
+      // CROSS-BORDER: Redirect to partner nation's instance
+      // URL pattern: https://{country}-app.dive25.com
+      const partnerUrl = `https://${targetCountry}-app.dive25.com`;
+      console.log(`[IdP Selector] Cross-border redirect: ${currentInstance} -> ${targetCountry}`);
+      console.log(`[IdP Selector] Redirecting to: ${partnerUrl}`);
+      
+      // Redirect to partner nation's landing page
+      // User will authenticate there and can then access cross-border resources
+      window.location.href = partnerUrl;
+      return;
+    }
+    
+    // LOCAL: Use NextAuth signIn with kc_idp_hint for same-instance federation
     const { signIn } = await import('next-auth/react');
     await signIn('keycloak', {
       callbackUrl: '/dashboard',
     }, {
-      kc_idp_hint: idp.alias,  // Trigger federation to specific national realm
+      kc_idp_hint: idp.alias,
     });
   };
 
