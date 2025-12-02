@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
 import ResultsComparator from './ResultsComparator';
 
 interface IPolicy {
@@ -178,7 +179,9 @@ export default function EvaluateTab() {
 
   const fetchPolicies = async () => {
     try {
-      const response = await fetch('/api/policies-lab/list');
+      const response = await fetch('/api/policies-lab/list', {
+        credentials: 'include', // Required for session cookies to be sent
+      });
       if (!response.ok) throw new Error('Failed to fetch policies');
       const data = await response.json();
       setPolicies(data.policies || []);
@@ -187,9 +190,17 @@ export default function EvaluateTab() {
     }
   };
 
-  const loadPreset = (presetKey: keyof typeof PRESETS) => {
+  const loadPreset = (presetKey: keyof typeof PRESETS, showToast: boolean = true) => {
     const preset = PRESETS[presetKey];
     const input = preset.input;
+
+    // Auto-select first policy if none selected
+    if (!selectedPolicyId && policies.length > 0) {
+      setSelectedPolicyId(policies[0].policyId);
+      if (showToast) {
+        toast.success(`📝 Policy auto-selected: ${policies[0].metadata.name}`);
+      }
+    }
 
     // Subject
     setUniqueID(input.subject.uniqueID);
@@ -214,6 +225,66 @@ export default function EvaluateTab() {
     setCurrentTime(new Date().toISOString().slice(0, 16));
     setSourceIP('10.0.0.1');
     setDeviceCompliant(true);
+
+    if (showToast) {
+      toast.success(`Preset loaded: ${preset.name}`);
+    }
+  };
+
+  const handleQuickDemo = async () => {
+    if (policies.length === 0) {
+      toast.error('No policies available', {
+        description: 'Please upload a policy first or load sample policies',
+      });
+      return;
+    }
+
+    // Auto-select first policy
+    setSelectedPolicyId(policies[0].policyId);
+    toast.info('🚀 Quick Demo Started', {
+      description: `Evaluating ${policies[0].metadata.name} with clearance match preset`,
+    });
+
+    // Load preset (without toast to avoid spam)
+    loadPreset('clearance_match_allow', false);
+
+    // Auto-evaluate after brief delay
+    setTimeout(async () => {
+      await handleEvaluate();
+    }, 500);
+  };
+
+  const handleCopyInputJSON = () => {
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const unifiedInput: IUnifiedInput = {
+      subject: {
+        uniqueID,
+        clearance,
+        countryOfAffiliation: country,
+        ...(acpCOI.length > 0 && { acpCOI }),
+        authenticated,
+        aal
+      },
+      action,
+      resource: {
+        resourceId,
+        classification: resourceClassification,
+        releasabilityTo,
+        ...(resourceCOI.length > 0 && { COI: resourceCOI }),
+        encrypted,
+        ...(creationDate && { creationDate: new Date(creationDate).toISOString() })
+      },
+      context: {
+        currentTime: new Date(currentTime).toISOString(),
+        ...(sourceIP && { sourceIP }),
+        requestId,
+        deviceCompliant
+      }
+    };
+
+    navigator.clipboard.writeText(JSON.stringify(unifiedInput, null, 2));
+    toast.success('✅ Input JSON copied to clipboard');
   };
 
   const handleEvaluate = async () => {
@@ -260,6 +331,7 @@ export default function EvaluateTab() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Required for session cookies to be sent
         body: JSON.stringify({ unified: unifiedInput }),
       });
 
@@ -270,8 +342,15 @@ export default function EvaluateTab() {
 
       const data = await response.json();
       setResult(data);
+      toast.success('✅ Evaluation complete', {
+        description: `Decision: ${data.decision.toUpperCase()}`,
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Evaluation failed');
+      const errorMessage = err instanceof Error ? err.message : 'Evaluation failed';
+      setError(errorMessage);
+      toast.error('Evaluation failed', {
+        description: errorMessage,
+      });
     } finally {
       setLoading(false);
     }
@@ -293,6 +372,24 @@ export default function EvaluateTab() {
 
   return (
     <div className="space-y-6">
+      {/* Quick Demo Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Policy Evaluation</h3>
+          <p className="text-sm text-gray-600">Test policies with custom inputs or use quick presets</p>
+        </div>
+        <button
+          onClick={handleQuickDemo}
+          disabled={loading || policies.length === 0}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          🚀 Quick Demo
+        </button>
+      </div>
+
       {/* Policy Selector */}
       <div>
         <label htmlFor="policy-selector" className="block text-sm font-medium text-gray-700 mb-2">
@@ -574,8 +671,18 @@ export default function EvaluateTab() {
         </div>
       </div>
 
-      {/* Evaluate Button */}
-      <div className="flex justify-center">
+      {/* Action Buttons */}
+      <div className="flex justify-center gap-4">
+        <button
+          onClick={handleCopyInputJSON}
+          disabled={!selectedPolicyId}
+          className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          Copy Input JSON
+        </button>
         <button
           onClick={handleEvaluate}
           disabled={loading || !selectedPolicyId}

@@ -4,7 +4,7 @@ import axios from 'axios';
 import NodeCache from 'node-cache';
 import jwkToPem from 'jwk-to-pem';
 import { logger } from '../utils/logger';
-import { getResourceById, getResourceByIdFederated } from '../services/resource.service';
+import { getResourceByIdFederated } from '../services/resource.service';
 import { isTokenBlacklisted, areUserTokensRevoked } from '../services/token-blacklist.service';
 import { validateSPToken } from './sp-auth.middleware';
 import { IRequestWithSP } from '../types/sp-federation.types';

@@ -20,6 +20,7 @@ import {
     BookOpen,
     FlaskConical,
     Building2,
+    FileEdit,
     LucideIcon
 } from 'lucide-react';
 
@@ -145,6 +146,7 @@ export const navItems: NavItem[] = [
                 category: 'Policy Management',
                 items: [
                     { name: 'Browse Policies', href: '/policies', icon: ScrollText },
+                    { name: 'Policy Editor', href: '/policies/editor', icon: FileEdit },
                     { name: 'Policy Lab', href: '/policies/lab', icon: FlaskConical },
                 ]
             },

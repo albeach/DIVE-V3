@@ -43,6 +43,7 @@ import {
   Sparkles,
   Server,
   AlertCircle,
+  TrendingUp,
 } from 'lucide-react';
 
 // Phase 2: Import search syntax parser
@@ -150,10 +151,42 @@ export default function CommandPaletteSearch({
   const [serverResults, setServerResults] = useState<IResource[]>([]);
   const [parsedQuery, setParsedQuery] = useState<IParsedQuery | null>(null);
   
+  // Popular searches state
+  const [popularSearches, setPopularSearches] = useState<Array<{ query: string; count: number }>>([]);
+  const [loadingPopular, setLoadingPopular] = useState(false);
+  
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Fetch popular searches
+  useEffect(() => {
+    async function fetchPopularSearches() {
+      if (!isOpen) return;
+      
+      setLoadingPopular(true);
+      try {
+        const response = await fetch('/api/analytics/search/popular?limit=5&days=7', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.popularSearches && Array.isArray(data.popularSearches)) {
+            setPopularSearches(data.popularSearches);
+          }
+        }
+      } catch (error) {
+        console.debug('Failed to fetch popular searches:', error);
+      } finally {
+        setLoadingPopular(false);
+      }
+    }
+
+    if (isOpen) {
+      fetchPopularSearches();
+    }
+  }, [isOpen]);
 
   // Mount check for portal
   useEffect(() => {
@@ -358,7 +391,7 @@ export default function CommandPaletteSearch({
       return results;
     }
 
-    // No query - show pinned, recent, and quick actions
+    // No query - show pinned, popular, recent, and quick actions
     if (!queryLower) {
       // Phase 2: Pinned searches first
       pinnedSearches.slice(0, 3).forEach((search, idx) => {
@@ -378,10 +411,33 @@ export default function CommandPaletteSearch({
         });
       });
 
+      // Popular searches (if available)
+      if (popularSearches.length > 0) {
+        popularSearches.forEach((item, idx) => {
+          // Don't duplicate pinned or recent searches
+          if (pinnedSearches.includes(item.query) || recentSearches.includes(item.query)) return;
+          
+          results.push({
+            id: `popular-${idx}`,
+            type: 'recent',
+            title: item.query,
+            subtitle: `Popular • ${item.count} searches`,
+            icon: <TrendingUp className="w-4 h-4 text-orange-500" />,
+            isPinned: false,
+            action: () => {
+              setQuery(item.query);
+              onSearch(item.query);
+              saveToRecent(item.query);
+              setIsOpen(false);
+            },
+          });
+        });
+      }
+
       // Recent searches
       recentSearches.slice(0, 5).forEach((search, idx) => {
-        // Don't duplicate pinned searches
-        if (pinnedSearches.includes(search)) return;
+        // Don't duplicate pinned or popular searches
+        if (pinnedSearches.includes(search) || popularSearches.some(p => p.query === search)) return;
         
         results.push({
           id: `recent-${idx}`,

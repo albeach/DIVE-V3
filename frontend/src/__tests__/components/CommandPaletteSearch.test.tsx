@@ -16,7 +16,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { CommandPaletteSearch, DocumentSearchTrigger } from '@/components/resources/command-palette-search';
+import CommandPaletteSearch, { DocumentSearchTrigger } from '@/components/resources/command-palette-search';
 
 // Mock framer-motion
 jest.mock('framer-motion', () => ({

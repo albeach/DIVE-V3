@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
 
 interface IPolicyUpload {
   policyId: string;
@@ -34,10 +35,13 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
   const fetchPolicies = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/policies-lab/list');
+      const response = await fetch('/api/policies-lab/list', {
+        credentials: 'include', // Required for session cookies to be sent
+      });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch policies');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to fetch policies');
       }
 
       const data = await response.json();
@@ -57,16 +61,20 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
     try {
       const response = await fetch(`/api/policies-lab/${policyId}`, {
         method: 'DELETE',
+        credentials: 'include', // Required for session cookies to be sent
       });
 
       if (!response.ok) {
         throw new Error('Failed to delete policy');
       }
 
+      toast.success('Policy deleted successfully');
       // Refresh list
       fetchPolicies();
     } catch (err) {
-      alert('Error deleting policy: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      toast.error('Failed to delete policy', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
     }
   };
 
@@ -92,6 +100,32 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
     );
   }
 
+  const handleLoadSamples = async () => {
+    try {
+      const response = await fetch('/api/policies-lab/load-samples', {
+        method: 'POST',
+        credentials: 'include', // Required for session cookies to be sent
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to load sample policies');
+      }
+
+      const data = await response.json();
+      toast.success(`✅ Loaded ${data.count} sample policies`, {
+        description: data.policies?.join(', ') || '',
+      });
+      
+      // Refresh list
+      fetchPolicies();
+    } catch (err) {
+      toast.error('Failed to load sample policies', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  };
+
   if (policies.length === 0) {
     return (
       <div className="text-center py-12">
@@ -110,10 +144,21 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
         </svg>
         <h3 className="mt-2 text-sm font-medium text-gray-900">No policies yet</h3>
         <p className="mt-1 text-sm text-gray-500">
-          Get started by uploading your first Rego or XACML policy.
+          Get started by uploading your first Rego or XACML policy, or load sample policies to explore.
         </p>
-        <p className="mt-2 text-xs text-gray-400">
-          Tip: Sample policies are available in <code className="bg-gray-100 px-1">policies/uploads/samples/</code>
+        <div className="mt-6">
+          <button
+            onClick={handleLoadSamples}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            📦 Load Sample Policies
+          </button>
+        </div>
+        <p className="mt-4 text-xs text-gray-400">
+          Sample policies include: Clearance Policy (Rego), Releasability Policy (Rego), and XACML Clearance Policy
         </p>
       </div>
     );

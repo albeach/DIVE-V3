@@ -32,7 +32,9 @@ export default function XACMLViewer({ policyId, source }: XACMLViewerProps) {
   const fetchPolicy = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/policies-lab/${policyId}`);
+      const response = await fetch(`/api/policies-lab/${policyId}`, {
+        credentials: 'include', // Required for session cookies to be sent
+      });
       
       if (!response.ok) {
         throw new Error('Failed to fetch policy');

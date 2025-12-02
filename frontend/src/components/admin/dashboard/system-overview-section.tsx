@@ -30,6 +30,13 @@ interface ISystemHealth {
     uptime: number;
 }
 
+interface IBlacklistStats {
+    totalBlacklistedTokens: number;
+    totalRevokedUsers: number;
+    instance: string;
+    redisUrl: string;
+}
+
 interface Props {
     dateRange: '24h' | '7d' | '30d' | '90d';
     refreshTrigger: Date;
@@ -39,6 +46,7 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
     const { data: session } = useSession();
     const [stats, setStats] = useState<ISystemStats | null>(null);
     const [health, setHealth] = useState<ISystemHealth | null>(null);
+    const [blacklistStats, setBlacklistStats] = useState<IBlacklistStats | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -68,6 +76,18 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
                 }
             } catch (healthError) {
                 console.warn('Health endpoint not available:', healthError);
+            }
+
+            // Fetch blacklist stats (optional endpoint)
+            try {
+                const blacklistRes = await fetch(`/api/blacklist/stats`);
+                const blacklistContentType = blacklistRes.headers.get('content-type');
+                if (blacklistRes.ok && blacklistContentType && blacklistContentType.includes('application/json')) {
+                    const blacklistData = await blacklistRes.json();
+                    setBlacklistStats(blacklistData);
+                }
+            } catch (blacklistError) {
+                console.warn('Blacklist stats endpoint not available:', blacklistError);
             }
         } catch (error) {
             console.error('Failed to fetch system data:', error);
@@ -144,6 +164,30 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
                     </div>
                 </div>
             </div>
+
+            {/* Blacklist Statistics */}
+            {blacklistStats && (
+                <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                    <h2 className="text-2xl font-bold text-slate-900 mb-4">🔒 Token Blacklist Statistics</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+                            <p className="text-sm text-purple-700 font-medium mb-1">Active Blacklisted Tokens</p>
+                            <p className="text-2xl font-bold text-purple-900">{blacklistStats.totalBlacklistedTokens.toLocaleString()}</p>
+                            <p className="text-xs text-purple-600 mt-1">Currently revoked</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+                            <p className="text-sm text-red-700 font-medium mb-1">Revoked Users</p>
+                            <p className="text-2xl font-bold text-red-900">{blacklistStats.totalRevokedUsers.toLocaleString()}</p>
+                            <p className="text-xs text-red-600 mt-1">Users with revoked tokens</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                            <p className="text-sm text-blue-700 font-medium mb-1">Instance</p>
+                            <p className="text-xl font-bold text-blue-900">{blacklistStats.instance}</p>
+                            <p className="text-xs text-blue-600 mt-1">Current instance</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Service Health Grid */}
             {health && (

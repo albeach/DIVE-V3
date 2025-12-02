@@ -14,7 +14,8 @@ import {
     evaluatePolicyById,
     getPolicyMetadata,
     deletePolicy,
-    listUserPolicies
+    listUserPolicies,
+    loadSamplePolicies
 } from '../controllers/policies-lab.controller';
 import { authenticateJWT } from '../middleware/authz.middleware';
 
@@ -114,6 +115,16 @@ router.delete(
     '/:id',
     authenticateJWT,
     deletePolicy
+);
+
+/**
+ * POST /api/policies-lab/load-samples
+ * Load sample policies into user's account
+ */
+router.post(
+    '/load-samples',
+    authenticateJWT,
+    loadSamplePolicies
 );
 
 export default router;

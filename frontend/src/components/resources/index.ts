@@ -38,8 +38,8 @@ export { default as ContentViewer } from './content-viewer';
 // - Pinned/starred searches
 // - Syntax help (type ? for help)
 // NOTE: ⌘K is reserved for global CommandPalette in /navigation/
-export { 
-  default as CommandPaletteSearch, 
+export {
+  default as CommandPaletteSearch,
   DocumentSearchTrigger,
   CommandPaletteSearchTrigger // Legacy alias
 } from './command-palette-search';
@@ -87,10 +87,10 @@ export { default as ResourceComparisonView } from './resource-comparison-view';
 export { default as DateRangePicker, DateRangeDisplay } from './date-range-picker';
 export type { DateRange } from './date-range-picker';
 
-export { 
-  default as BookmarksPanel, 
-  BookmarkButton, 
-  BookmarksTrigger 
+export {
+  default as BookmarksPanel,
+  BookmarkButton,
+  BookmarksTrigger
 } from './bookmarks-panel';
 
 export {
@@ -109,15 +109,15 @@ export {
 // ============================================
 
 // Bento Grid Dashboard - Striking visual header with stats
-export { 
-  default as BentoDashboard, 
-  BentoDashboardSkeleton 
+export {
+  default as BentoDashboard,
+  BentoDashboardSkeleton
 } from './bento-dashboard';
 
 // Animated Resource Card - Micro-interactions with Framer Motion
-export { 
-  default as AnimatedResourceCard, 
-  AnimatedResourceGrid 
+export {
+  default as AnimatedResourceCard,
+  AnimatedResourceGrid
 } from './animated-card';
 
 // Empty & Error States - Beautiful illustrations
@@ -132,8 +132,8 @@ export {
 } from './empty-states';
 
 // Mobile Resource Drawer - Mobile-first bottom sheet
-export { 
-  default as MobileResourceDrawer, 
-  useSwipeToOpen 
+export {
+  default as MobileResourceDrawer,
+  useSwipeToOpen
 } from './mobile-resource-drawer';
 

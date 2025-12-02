@@ -58,7 +58,15 @@ interface ISecurityPosture {
     tls13AdoptionRate: number;
 }
 
-type ViewMode = 'overview' | 'risk' | 'compliance' | 'performance';
+interface IZeroResultQuery {
+    queryHash: string;
+    queryLength: number;
+    searchCount: number;
+    lastSearched: string;
+    avgLatencyMs: number;
+}
+
+type ViewMode = 'overview' | 'risk' | 'compliance' | 'performance' | 'content-gaps';
 
 export default function IdPGovernanceDashboard() {
     const router = useRouter();
@@ -70,6 +78,7 @@ export default function IdPGovernanceDashboard() {
     const [slaMetrics, setSlaMetrics] = useState<ISLAMetrics | null>(null);
     const [authzMetrics, setAuthzMetrics] = useState<IAuthzMetrics | null>(null);
     const [securityPosture, setSecurityPosture] = useState<ISecurityPosture | null>(null);
+    const [zeroResultQueries, setZeroResultQueries] = useState<IZeroResultQuery[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
@@ -85,12 +94,13 @@ export default function IdPGovernanceDashboard() {
             setError(null);
 
             // Use server API routes (secure! No client-side tokens!)
-            const [risk, compliance, sla, authz, posture] = await Promise.all([
+            const [risk, compliance, sla, authz, posture, zeroResults] = await Promise.all([
                 fetch(`/api/admin/analytics/risk-distribution`).then(res => res.json()),
                 fetch(`/api/admin/analytics/compliance-trends`).then(res => res.json()),
                 fetch(`/api/admin/analytics/sla-metrics`).then(res => res.json()),
                 fetch(`/api/admin/analytics/authz-metrics`).then(res => res.json()),
                 fetch(`/api/admin/analytics/security-posture`).then(res => res.json()),
+                fetch(`/api/analytics/search/zero-results?limit=20&days=7`).then(res => res.ok ? res.json() : { zeroResultQueries: [] }).catch(() => ({ zeroResultQueries: [] })),
             ]);
 
             setRiskDistribution(risk);
@@ -98,6 +108,9 @@ export default function IdPGovernanceDashboard() {
             setSlaMetrics(sla);
             setAuthzMetrics(authz);
             setSecurityPosture(posture);
+            if (zeroResults.zeroResultQueries) {
+                setZeroResultQueries(zeroResults.zeroResultQueries);
+            }
             setLastUpdated(new Date());
         } catch (err) {
             console.error('Error fetching analytics:', err);
@@ -230,7 +243,7 @@ export default function IdPGovernanceDashboard() {
                                 Last updated: {lastUpdated.toLocaleString()} • Auto-refreshes every 5 minutes when enabled
                             </p>
                             <div className="flex space-x-2">
-                                {(['overview', 'risk', 'compliance', 'performance'] as ViewMode[]).map((mode) => (
+                                {(['overview', 'risk', 'compliance', 'performance', 'content-gaps'] as ViewMode[]).map((mode) => (
                                     <button
                                         key={mode}
                                         onClick={() => setViewMode(mode)}
@@ -240,7 +253,7 @@ export default function IdPGovernanceDashboard() {
                                                 : 'bg-white/50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 hover:bg-white/80 dark:hover:bg-gray-700/80'
                                         }`}
                                     >
-                                        {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                                        {mode === 'content-gaps' ? 'Content Gaps' : mode.charAt(0).toUpperCase() + mode.slice(1)}
                                     </button>
                                 ))}
                             </div>
@@ -674,6 +687,105 @@ export default function IdPGovernanceDashboard() {
                                         </div>
                                     )}
                                 </>
+                            )}
+
+                            {/* Content Gaps View */}
+                            {viewMode === 'content-gaps' && (
+                                <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-8 border border-gray-200 dark:border-gray-700 shadow-xl">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div>
+                                            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                                                📊 Content Gap Analysis
+                                            </h3>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                                Queries that returned zero results - potential content gaps to address
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => router.push('/upload')}
+                                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium shadow-lg"
+                                        >
+                                            📤 Upload Content
+                                        </button>
+                                    </div>
+
+                                    {zeroResultQueries.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <div className="text-6xl mb-4">✅</div>
+                                            <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                No Zero-Result Queries
+                                            </p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                All recent searches returned results. Great job!
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                                <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+                                                    <p className="text-sm text-red-700 dark:text-red-400 mb-1">Total Zero-Result Queries</p>
+                                                    <p className="text-2xl font-bold text-red-900 dark:text-red-300">
+                                                        {zeroResultQueries.length}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                                                    <p className="text-sm text-blue-700 dark:text-blue-400 mb-1">Total Searches</p>
+                                                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
+                                                        {zeroResultQueries.reduce((sum, q) => sum + q.searchCount, 0)}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+                                                    <p className="text-sm text-purple-700 dark:text-purple-400 mb-1">Avg Query Length</p>
+                                                    <p className="text-2xl font-bold text-purple-900 dark:text-purple-300">
+                                                        {zeroResultQueries.length > 0 
+                                                            ? Math.round(zeroResultQueries.reduce((sum, q) => sum + q.queryLength, 0) / zeroResultQueries.length)
+                                                            : 0
+                                                        } chars
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                {zeroResultQueries.map((query, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                                    >
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-3 mb-1">
+                                                                <span className="text-sm font-mono text-gray-400 dark:text-gray-500">
+                                                                    #{idx + 1}
+                                                                </span>
+                                                                <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                    Query (hashed for privacy)
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                                                <span>Length: {query.queryLength} chars</span>
+                                                                <span>•</span>
+                                                                <span>Searched {query.searchCount} time{query.searchCount !== 1 ? 's' : ''}</span>
+                                                                <span>•</span>
+                                                                <span>Last: {new Date(query.lastSearched).toLocaleDateString()}</span>
+                                                                {query.avgLatencyMs > 0 && (
+                                                                    <>
+                                                                        <span>•</span>
+                                                                        <span>Avg latency: {query.avgLatencyMs.toFixed(0)}ms</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => router.push('/upload')}
+                                                            className="ml-4 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                                                        >
+                                                            Upload →
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             )}
 
                             {/* Info Card */}
