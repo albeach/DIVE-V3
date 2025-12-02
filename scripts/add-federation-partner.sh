@@ -82,6 +82,33 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+# Get Keycloak admin password from GCP Secret Manager
+get_keycloak_admin_password() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    local secret_name="dive-v3-keycloak-${instance_lower}"
+    
+    # Use gcloud to fetch secret from GCP Secret Manager
+    local password
+    password=$(gcloud secrets versions access latest \
+        --secret="${secret_name}" \
+        --project="dive25" 2>/dev/null)
+    
+    if [[ -z "$password" ]]; then
+        log_error "Failed to fetch Keycloak admin password from GCP Secret Manager"
+        log_error "Secret name: ${secret_name}"
+        log_error "Project: dive25"
+        log_error ""
+        log_error "Ensure:"
+        log_error "  1. gcloud is authenticated: gcloud auth login"
+        log_error "  2. Secret exists: gcloud secrets list --project=dive25 --filter=\"name:${secret_name}\""
+        log_error "  3. You have access: gcloud secrets versions access latest --secret=${secret_name} --project=dive25"
+        return 1
+    fi
+    
+    echo "$password"
+}
+
 # Get Keycloak admin token for an instance
 get_admin_token() {
     local instance=$1
@@ -95,12 +122,22 @@ get_admin_token() {
         keycloak_url="https://${instance_lower}-idp.dive25.com"
     fi
     
+    # Get admin password from GCP Secret Manager
+    local password
+    password=$(get_keycloak_admin_password "$instance")
+    
+    if [[ $? -ne 0 ]] || [[ -z "$password" ]]; then
+        log_error "Could not retrieve admin password for ${instance}"
+        return 1
+    fi
+    
+    # Get admin token using password from GCP
     curl -sf -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "grant_type=password" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
-        -d "password=DivePilot2025!" \
+        -d "password=${password}" \
         --insecure 2>/dev/null | jq -r '.access_token'
 }
 
@@ -118,6 +155,77 @@ idp_exists() {
     [[ "$response" == "200" ]]
 }
 
+# Validate Keycloak connectivity
+validate_keycloak_connectivity() {
+    local instance=$1
+    local instance_lower=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    
+    local keycloak_url
+    if [[ "$instance" == "DEU" ]]; then
+        keycloak_url="https://${instance_lower}-idp.prosecurity.biz"
+    else
+        keycloak_url="https://${instance_lower}-idp.dive25.com"
+    fi
+    
+    log_info "Validating Keycloak connectivity for ${instance}..."
+    
+    # Test health endpoint
+    local health_status=$(curl -sf -w "%{http_code}" -o /dev/null \
+        "${keycloak_url}/health/ready" \
+        --insecure 2>/dev/null || echo "000")
+    
+    if [[ "$health_status" != "200" ]]; then
+        log_warning "Keycloak health check failed for ${instance} (status: ${health_status})"
+        log_info "This may be normal if Keycloak is starting up. Continuing..."
+    else
+        log_success "Keycloak is reachable for ${instance}"
+    fi
+    
+    # Test admin API accessibility
+    local token=$(get_admin_token "$instance")
+    if [[ -z "$token" || "$token" == "null" ]]; then
+        log_error "Cannot obtain admin token for ${instance}"
+        return 1
+    fi
+    
+    # Test realm exists
+    local realm_check=$(curl -sf -w "%{http_code}" -o /dev/null \
+        "${keycloak_url}/admin/realms/${REALM}" \
+        -H "Authorization: Bearer ${token}" \
+        --insecure 2>/dev/null || echo "000")
+    
+    if [[ "$realm_check" != "200" ]]; then
+        log_error "Realm '${REALM}' not found or not accessible on ${instance}"
+        return 1
+    fi
+    
+    log_success "Keycloak validation passed for ${instance}"
+    return 0
+}
+
+# Retry function for Keycloak API calls
+retry_keycloak_api() {
+    local max_attempts=3
+    local attempt=1
+    local delay=2
+    
+    while [[ $attempt -le $max_attempts ]]; do
+        if [[ $attempt -gt 1 ]]; then
+            log_info "Retry attempt ${attempt}/${max_attempts}..."
+            sleep $delay
+            delay=$((delay * 2)) # Exponential backoff
+        fi
+        
+        if "$@"; then
+            return 0
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    return 1
+}
+
 # Create OIDC IdP broker
 create_idp_broker() {
     local source_url=$1
@@ -129,6 +237,8 @@ create_idp_broker() {
     local idp_alias="${target_lower}-federation"
     local display_name="${INSTANCE_NAMES[$target]} Federation"
     
+    log_info "Creating IdP broker: ${idp_alias} (${source_url} → ${target_url})"
+    
     # Check if already exists
     if idp_exists "$source_url" "$source_token" "$idp_alias"; then
         log_warning "IdP broker '$idp_alias' already exists, updating..."
@@ -139,23 +249,70 @@ create_idp_broker() {
         local endpoint="${source_url}/admin/realms/${REALM}/identity-provider/instances"
     fi
     
-    # Get client secret from target instance
-    local target_token=$(get_admin_token "$target")
-    local client_internal_id=$(curl -sf "${target_url}/admin/realms/${REALM}/clients?clientId=${CLIENT_ID}" \
-        -H "Authorization: Bearer ${target_token}" \
-        --insecure 2>/dev/null | jq -r '.[0].id // empty')
-    
+    # Get client secret from target instance with retry logic
+    log_info "Retrieving client secret from ${target}..."
+    local target_token=""
     local client_secret=""
-    if [[ -n "$client_internal_id" ]]; then
+    
+    if retry_keycloak_api get_admin_token "$target"; then
+        target_token=$(get_admin_token "$target")
+    else
+        log_error "Failed to get admin token for ${target} after retries"
+        return 1
+    fi
+    
+    if [[ -z "$target_token" || "$target_token" == "null" ]]; then
+        log_error "Invalid admin token for ${target}"
+        return 1
+    fi
+    
+    # Get client ID with retry
+    local client_internal_id=""
+    for attempt in 1 2 3; do
+        client_internal_id=$(curl -sf "${target_url}/admin/realms/${REALM}/clients?clientId=${CLIENT_ID}" \
+            -H "Authorization: Bearer ${target_token}" \
+            --insecure 2>/dev/null | jq -r '.[0].id // empty')
+        
+        if [[ -n "$client_internal_id" ]]; then
+            break
+        fi
+        
+        if [[ $attempt -lt 3 ]]; then
+            log_warning "Client lookup failed, retrying... (attempt ${attempt}/3)"
+            sleep 2
+        fi
+    done
+    
+    if [[ -z "$client_internal_id" ]]; then
+        log_error "Client '${CLIENT_ID}' not found in ${target} Keycloak"
+        log_info "Ensure the client exists in realm '${REALM}' on ${target}"
+        return 1
+    fi
+    
+    # Get client secret with retry
+    for attempt in 1 2 3; do
         client_secret=$(curl -sf "${target_url}/admin/realms/${REALM}/clients/${client_internal_id}/client-secret" \
             -H "Authorization: Bearer ${target_token}" \
             --insecure 2>/dev/null | jq -r '.value // empty')
-    fi
+        
+        if [[ -n "$client_secret" ]]; then
+            break
+        fi
+        
+        if [[ $attempt -lt 3 ]]; then
+            log_warning "Client secret retrieval failed, retrying... (attempt ${attempt}/3)"
+            sleep 2
+        fi
+    done
     
     if [[ -z "$client_secret" ]]; then
-        log_warning "Could not get client secret from ${target}, using placeholder"
-        client_secret="placeholder"
+        log_error "Could not retrieve client secret from ${target}"
+        log_info "Client ID: ${CLIENT_ID}"
+        log_info "Client Internal ID: ${client_internal_id}"
+        return 1
     fi
+    
+    log_success "Retrieved client secret from ${target}"
     
     # Create/update IdP configuration
     local idp_config=$(cat <<EOF
@@ -191,22 +348,66 @@ EOF
     
     if [[ "$DRY_RUN" == "true" ]]; then
         log_info "[DRY RUN] Would create IdP broker: $idp_alias"
+        log_info "[DRY RUN] Configuration:"
+        echo "$idp_config" | jq '.' 2>/dev/null || echo "$idp_config"
         return 0
     fi
     
-    local response=$(curl -sf -X "$method" "$endpoint" \
-        -H "Authorization: Bearer ${source_token}" \
-        -H "Content-Type: application/json" \
-        -d "$idp_config" \
-        --insecure 2>&1)
+    # Create IdP with retry logic
+    local http_code=""
+    local response_body=""
     
-    if [[ $? -eq 0 ]]; then
-        log_success "Created IdP broker: $idp_alias"
-        return 0
-    else
-        log_error "Failed to create IdP broker: $response"
-        return 1
+    for attempt in 1 2 3; do
+        if [[ $attempt -gt 1 ]]; then
+            log_info "Retrying IdP creation... (attempt ${attempt}/3)"
+            sleep 2
+        fi
+        
+        # Make API call and capture both status code and response
+        local curl_output=$(curl -sf -w "\n%{http_code}" -X "$method" "$endpoint" \
+            -H "Authorization: Bearer ${source_token}" \
+            -H "Content-Type: application/json" \
+            -d "$idp_config" \
+            --insecure 2>&1)
+        
+        http_code=$(echo "$curl_output" | tail -n1)
+        response_body=$(echo "$curl_output" | sed '$d')
+        
+        # Success codes: 201 (created) or 204 (updated)
+        if [[ "$http_code" == "201" || "$http_code" == "204" || "$http_code" == "200" ]]; then
+            log_success "Created IdP broker: $idp_alias (HTTP ${http_code})"
+            return 0
+        fi
+        
+        # 409 Conflict means it already exists (might be race condition)
+        if [[ "$http_code" == "409" ]]; then
+            log_warning "IdP already exists (HTTP 409), verifying..."
+            if idp_exists "$source_url" "$source_token" "$idp_alias"; then
+                log_success "IdP broker already exists: $idp_alias"
+                return 0
+            fi
+        fi
+        
+        # Log error but continue to retry
+        if [[ $attempt -lt 3 ]]; then
+            log_warning "IdP creation failed (HTTP ${http_code}), will retry..."
+            if [[ -n "$response_body" ]]; then
+                echo "$response_body" | jq '.' 2>/dev/null || echo "$response_body" | head -5
+            fi
+        fi
+    done
+    
+    # All retries failed
+    log_error "Failed to create IdP broker after 3 attempts"
+    log_error "HTTP Status: ${http_code}"
+    if [[ -n "$response_body" ]]; then
+        log_error "Response:"
+        echo "$response_body" | jq '.' 2>/dev/null || echo "$response_body"
     fi
+    log_error "Endpoint: ${endpoint}"
+    log_error "Method: ${method}"
+    
+    return 1
 }
 
 # Create attribute mappers for an IdP
@@ -377,7 +578,27 @@ else
     TARGET_URL="https://${TARGET_LOWER}-idp.dive25.com"
 fi
 
-# Step 1: Get admin tokens
+# Step 1: Validate Keycloak connectivity
+log_info "Validating Keycloak connectivity..."
+if ! validate_keycloak_connectivity "$SOURCE"; then
+    log_error "Keycloak validation failed for ${SOURCE}"
+    log_info "Troubleshooting:"
+    log_info "  1. Ensure Keycloak is running: docker-compose ps"
+    log_info "  2. Check Keycloak URL: ${SOURCE_URL}"
+    log_info "  3. Verify GCP Secret Manager access: gcloud secrets versions access latest --secret=dive-v3-keycloak-${SOURCE_LOWER} --project=dive25"
+    exit 1
+fi
+
+if ! validate_keycloak_connectivity "$TARGET"; then
+    log_error "Keycloak validation failed for ${TARGET}"
+    log_info "Troubleshooting:"
+    log_info "  1. Ensure Keycloak is running: docker-compose ps"
+    log_info "  2. Check Keycloak URL: ${TARGET_URL}"
+    log_info "  3. Verify GCP Secret Manager access: gcloud secrets versions access latest --secret=dive-v3-keycloak-${TARGET_LOWER} --project=dive25"
+    exit 1
+fi
+
+# Step 2: Get admin tokens
 log_info "Obtaining admin tokens..."
 SOURCE_TOKEN=$(get_admin_token "$SOURCE")
 TARGET_TOKEN=$(get_admin_token "$TARGET")
@@ -385,6 +606,7 @@ TARGET_TOKEN=$(get_admin_token "$TARGET")
 if [[ -z "$SOURCE_TOKEN" || "$SOURCE_TOKEN" == "null" ]]; then
     log_error "Could not obtain admin token for ${SOURCE}"
     log_info "Make sure ${SOURCE} Keycloak is running at ${SOURCE_URL}"
+    log_info "Verify GCP Secret Manager access: gcloud secrets versions access latest --secret=dive-v3-keycloak-${SOURCE_LOWER} --project=dive25"
     exit 1
 fi
 log_success "Obtained token for ${SOURCE}"
@@ -392,25 +614,108 @@ log_success "Obtained token for ${SOURCE}"
 if [[ -z "$TARGET_TOKEN" || "$TARGET_TOKEN" == "null" ]]; then
     log_error "Could not obtain admin token for ${TARGET}"
     log_info "Make sure ${TARGET} Keycloak is running at ${TARGET_URL}"
+    log_info "Verify GCP Secret Manager access: gcloud secrets versions access latest --secret=dive-v3-keycloak-${TARGET_LOWER} --project=dive25"
     exit 1
 fi
 log_success "Obtained token for ${TARGET}"
 
-# Step 2: Create IdP broker on SOURCE pointing to TARGET
+# Step 3: Create IdP broker on SOURCE pointing to TARGET
 echo ""
 log_info "Creating federation: ${SOURCE} → ${TARGET}"
-create_idp_broker "$SOURCE_URL" "$SOURCE_TOKEN" "$TARGET" "$TARGET_URL"
-create_attribute_mappers "$SOURCE_URL" "$SOURCE_TOKEN" "${TARGET_LOWER}-federation"
+if ! create_idp_broker "$SOURCE_URL" "$SOURCE_TOKEN" "$TARGET" "$TARGET_URL"; then
+    log_error "Failed to create IdP broker on ${SOURCE}"
+    exit 1
+fi
 
-# Step 3: Create IdP broker on TARGET pointing to SOURCE (if bidirectional)
+if ! create_attribute_mappers "$SOURCE_URL" "$SOURCE_TOKEN" "${TARGET_LOWER}-federation"; then
+    log_warning "Failed to create some attribute mappers on ${SOURCE} (continuing...)"
+fi
+
+# Step 4: Create IdP broker on TARGET pointing to SOURCE (if bidirectional)
 if [[ "$ONE_WAY" != "true" ]]; then
     echo ""
     log_info "Creating federation: ${TARGET} → ${SOURCE}"
-    create_idp_broker "$TARGET_URL" "$TARGET_TOKEN" "$SOURCE" "$SOURCE_URL"
-    create_attribute_mappers "$TARGET_URL" "$TARGET_TOKEN" "${SOURCE_LOWER}-federation"
+    if ! create_idp_broker "$TARGET_URL" "$TARGET_TOKEN" "$SOURCE" "$SOURCE_URL"; then
+        log_error "Failed to create IdP broker on ${TARGET}"
+        log_warning "Federation is partially configured: ${SOURCE} → ${TARGET} exists, but ${TARGET} → ${SOURCE} failed"
+        exit 1
+    fi
+    
+    if ! create_attribute_mappers "$TARGET_URL" "$TARGET_TOKEN" "${SOURCE_LOWER}-federation"; then
+        log_warning "Failed to create some attribute mappers on ${TARGET} (continuing...)"
+    fi
 fi
 
-# Step 4: Test federation
+# Step 4: Update federation registry
+echo ""
+log_info "Updating federation registry..."
+
+if [[ "$DRY_RUN" != "true" ]]; then
+    # Use Python script to update registry (more reliable than bash JSON manipulation)
+    if command -v python3 &> /dev/null; then
+        python3 << EOF
+import json
+import sys
+from pathlib import Path
+
+registry_path = Path(__file__).parent.parent / 'config' / 'federation-registry.json'
+
+try:
+    with open(registry_path, 'r') as f:
+        registry = json.load(f)
+    
+    source = '${SOURCE_LOWER}'
+    target = '${TARGET_LOWER}'
+    
+    # Ensure federation matrix exists
+    if 'federation' not in registry:
+        registry['federation'] = {}
+    if 'matrix' not in registry['federation']:
+        registry['federation']['matrix'] = {}
+    
+    # Add source → target link
+    if source not in registry['federation']['matrix']:
+        registry['federation']['matrix'][source] = []
+    if target not in registry['federation']['matrix'][source]:
+        registry['federation']['matrix'][source].append(target)
+    
+    # Add target → source link if bidirectional
+    if '${ONE_WAY}' != 'true':
+        if target not in registry['federation']['matrix']:
+            registry['federation']['matrix'][target] = []
+        if source not in registry['federation']['matrix'][target]:
+            registry['federation']['matrix'][target].append(source)
+    
+    # Update metadata timestamp
+    if 'metadata' in registry:
+        from datetime import datetime
+        registry['metadata']['lastUpdated'] = datetime.utcnow().isoformat() + 'Z'
+    
+    # Write back
+    with open(registry_path, 'w') as f:
+        json.dump(registry, f, indent=2)
+        f.write('\n')
+    
+    print(f"Updated federation registry: {source} ↔ {target}")
+    sys.exit(0)
+except Exception as e:
+    print(f"Failed to update federation registry: {e}", file=sys.stderr)
+    sys.exit(1)
+EOF
+        if [[ $? -eq 0 ]]; then
+            log_success "Federation registry updated"
+        else
+            log_warning "Failed to update federation registry (non-critical)"
+        fi
+    else
+        log_warning "Python3 not available - skipping registry update"
+        log_info "Please manually update config/federation-registry.json"
+    fi
+else
+    log_info "[DRY RUN] Would update federation registry"
+fi
+
+# Step 5: Test federation
 echo ""
 test_federation "$SOURCE" "$TARGET"
 if [[ "$ONE_WAY" != "true" ]]; then

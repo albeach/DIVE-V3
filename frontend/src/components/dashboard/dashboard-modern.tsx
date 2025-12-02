@@ -343,7 +343,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
       </div>
 
       {/* User-Specific Insights (if authenticated stats available) */}
-      {dashboardDetails && (dashboardDetails.topDenyReasons?.length > 0 || Object.keys(dashboardDetails.decisionsByCountry || {}).length > 0) && (
+      {dashboardDetails && ((dashboardDetails.topDenyReasons?.length ?? 0) > 0 || Object.keys(dashboardDetails.decisionsByCountry || {}).length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top Deny Reasons */}
           {dashboardDetails.topDenyReasons && dashboardDetails.topDenyReasons.length > 0 && (

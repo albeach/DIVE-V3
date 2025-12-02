@@ -4,6 +4,8 @@
 # Standardized healthchecks and restart policies (P0 hardening - Nov 30, 2025)
 # =============================================================================
 
+name: fra
+
 services:
   # =============================================================================
   # INFRASTRUCTURE SERVICES

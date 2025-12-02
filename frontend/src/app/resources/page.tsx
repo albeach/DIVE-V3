@@ -111,9 +111,6 @@ export default function ResourcesPage() {
   // Infinite Scroll - only enabled when session is authenticated
   const isSessionReady = status === 'authenticated';
   
-  // Debug logging
-  console.log('[ResourcesPage] Render:', { status, isSessionReady, hasSession: !!session });
-  
   const {
     items: resources,
     facets,
@@ -270,6 +267,19 @@ export default function ResourcesPage() {
     (selectedFilters.encryptionStatus ? 1 : 0)
   ), [selectedFilters]);
 
+  // Compute classification breakdown from facets (all filtered results)
+  // This ensures the Bento box reflects the current filter state accurately
+  // Using facets instead of resources array because resources only contains paginated results
+  const classificationBreakdown = useMemo(() => {
+    const breakdown = {
+      UNCLASSIFIED: facets?.classifications?.find(c => c.value === 'UNCLASSIFIED')?.count || 0,
+      CONFIDENTIAL: facets?.classifications?.find(c => c.value === 'CONFIDENTIAL')?.count || 0,
+      SECRET: facets?.classifications?.find(c => c.value === 'SECRET')?.count || 0,
+      TOP_SECRET: facets?.classifications?.find(c => c.value === 'TOP_SECRET')?.count || 0,
+    };
+    return breakdown;
+  }, [facets]);
+
   // Auth Check
   useEffect(() => {
     if (status !== 'loading' && !session) router.push('/login');
@@ -357,19 +367,13 @@ export default function ResourcesPage() {
       </div>
 
       {/* Bento Dashboard - Now in main content */}
-      {(() => { console.log('[ResourcesPage] Dashboard render:', { isLoading, resourcesLength: resources.length, totalCount }); return null; })()}
       {isLoading && resources.length === 0 ? (
         <BentoDashboardSkeleton />
       ) : (
         <BentoDashboard
           totalDocuments={totalCount}
           encryptedCount={resources.filter(r => r.encrypted).length}
-          classificationBreakdown={{
-            UNCLASSIFIED: facets?.classifications?.find(c => c.value === 'UNCLASSIFIED')?.count || 0,
-            CONFIDENTIAL: facets?.classifications?.find(c => c.value === 'CONFIDENTIAL')?.count || 0,
-            SECRET: facets?.classifications?.find(c => c.value === 'SECRET')?.count || 0,
-            TOP_SECRET: facets?.classifications?.find(c => c.value === 'TOP_SECRET')?.count || 0,
-          }}
+          classificationBreakdown={classificationBreakdown}
           activeInstances={federatedMode ? selectedInstances : [CURRENT_INSTANCE]}
           federatedMode={federatedMode}
           timing={timing || undefined}
@@ -405,9 +409,13 @@ export default function ResourcesPage() {
                   label: i, 
                   count: facets?.instances?.find(f => f.value === i)?.count || 0 
                 })),
-                encryptionStatus: [
-                  { value: 'encrypted', label: 'Encrypted (ZTDF)', count: resources.filter(r => r.encrypted).length },
-                  { value: 'unencrypted', label: 'Unencrypted', count: resources.filter(r => !r.encrypted).length },
+                encryptionStatus: facets?.encryptionStatus?.map(e => ({
+                  value: e.value,
+                  label: e.value === 'encrypted' ? 'Encrypted (ZTDF)' : 'Unencrypted',
+                  count: e.count,
+                })) || [
+                  { value: 'encrypted', label: 'Encrypted (ZTDF)', count: 0 },
+                  { value: 'unencrypted', label: 'Unencrypted', count: 0 },
                 ],
               }}
               selectedFilters={selectedFilters}
@@ -544,8 +552,16 @@ export default function ResourcesPage() {
           })),
           countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
           cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
-          instances: FEDERATION_INSTANCES.map(i => ({ value: i, label: i, count: 0 })),
-          encryptionStatus: [
+          instances: FEDERATION_INSTANCES.map(i => ({ 
+            value: i, 
+            label: i, 
+            count: facets?.instances?.find(f => f.value === i)?.count || 0 
+          })),
+          encryptionStatus: facets?.encryptionStatus?.map(e => ({
+            value: e.value,
+            label: e.value === 'encrypted' ? 'Encrypted' : 'Unencrypted',
+            count: e.count,
+          })) || [
             { value: 'encrypted', label: 'Encrypted', count: 0 },
             { value: 'unencrypted', label: 'Unencrypted', count: 0 },
           ],

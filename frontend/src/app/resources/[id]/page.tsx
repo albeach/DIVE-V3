@@ -363,6 +363,19 @@ export default function ResourceDetailPage() {
           fetchSuggestedResources();
         } else {
           const data = await response.json();
+          
+          // Transform ZTDF data from nested structure to flattened format for UI
+          if (data.ztdf && typeof data.ztdf === 'object') {
+            data.ztdf = {
+              version: data.ztdf.manifest?.version || 'N/A',
+              objectType: data.ztdf.manifest?.objectType || 'N/A',
+              contentType: data.ztdf.manifest?.contentType || 'N/A',
+              policyVersion: data.ztdf.policy?.policyVersion || 'N/A',
+              encryptionAlgorithm: data.ztdf.payload?.encryptionAlgorithm || 'N/A',
+              kaoCount: data.ztdf.payload?.keyAccessObjects?.length || 0,
+            };
+          }
+          
           setResource(data);
           setError(null);
 
@@ -866,7 +879,7 @@ export default function ResourceDetailPage() {
                       {/* Modern Content Viewer */}
                       <ContentViewer
                         content={decryptedContent}
-                        contentType={resource.ztdf?.contentType || 'text/plain'}
+                        contentType={resource.ztdf?.contentType || (resource as any).ztdf?.manifest?.contentType || 'text/plain'}
                         title={resource.title}
                         resourceId={resource.resourceId}
                         classification={resource.classification}

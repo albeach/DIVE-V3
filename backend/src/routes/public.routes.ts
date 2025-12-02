@@ -51,7 +51,10 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
     } catch (error) {
         logger.error('Failed to list public IdPs', {
             requestId,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            keycloakUrl: process.env.KEYCLOAK_URL,
+            keycloakRealm: process.env.KEYCLOAK_REALM
         });
 
         res.status(500).json({

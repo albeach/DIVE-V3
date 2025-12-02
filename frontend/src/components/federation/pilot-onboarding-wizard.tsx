@@ -6,9 +6,12 @@
  * Streamlined 3-step wizard for partner onboarding during pilot demos.
  * Demonstrates the frictionless approach to federation while
  * acknowledging STANAGs and ACP-240 compliance requirements.
+ * 
+ * P0 Fix (Jan 2025): Now actually creates IdP in Keycloak via backend API
  */
 
 import React, { useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { getFlagComponent } from '../ui/flags';
 
 interface OnboardingStep {
@@ -58,6 +61,7 @@ export default function PilotOnboardingWizard({
   onCancel,
   className = '',
 }: PilotOnboardingWizardProps) {
+  const { data: session } = useSession();
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedPartner, setSelectedPartner] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -70,6 +74,7 @@ export default function PilotOnboardingWizard({
     autoMapAttributes: true,
   });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const handleQuickAdd = (partnerCode: string) => {
     setSelectedPartner(partnerCode);
@@ -89,17 +94,113 @@ export default function PilotOnboardingWizard({
   
   const handleComplete = async () => {
     setIsProcessing(true);
+    setError(null);
     
-    // Simulate processing delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    console.log('[Pilot] Onboarding completed:', {
-      partner: selectedPartner || formData.countryCode,
-      formData,
-    });
-    
-    setIsProcessing(false);
-    onComplete?.(selectedPartner || formData.countryCode);
+    try {
+      // Validate session and token
+      if (!session) {
+        throw new Error('Authentication required. Please log in.');
+      }
+      
+      const token = (session as any)?.accessToken;
+      if (!token) {
+        throw new Error('No access token available. Please log out and log in again.');
+      }
+      
+      // Validate required fields
+      if (!formData.countryCode || !formData.discoveryUrl) {
+        throw new Error('Please complete all required fields.');
+      }
+      
+      // Parse discovery URL to extract issuer
+      let issuer: string;
+      let authorizationUrl: string;
+      let tokenUrl: string;
+      let userInfoUrl: string;
+      let jwksUrl: string;
+      
+      if (formData.federationType === 'oidc') {
+        // Extract issuer from discovery URL
+        issuer = formData.discoveryUrl.replace('/.well-known/openid-configuration', '').replace('/.well-known/openid-configuration/', '');
+        authorizationUrl = `${issuer}/protocol/openid-connect/auth`;
+        tokenUrl = `${issuer}/protocol/openid-connect/token`;
+        userInfoUrl = `${issuer}/protocol/openid-connect/userinfo`;
+        jwksUrl = `${issuer}/protocol/openid-connect/certs`;
+      } else {
+        // SAML - would need metadata URL parsing (simplified for now)
+        throw new Error('SAML federation not yet supported in pilot wizard. Use full onboarding wizard.');
+      }
+      
+      // Build OIDC configuration
+      const oidcConfig = {
+        issuer,
+        authorizationUrl,
+        tokenUrl,
+        userInfoUrl,
+        jwksUrl,
+        clientId: formData.clientId || `dive-v3-client-${formData.countryCode.toLowerCase()}`,
+        clientSecret: '', // Will be set via federation secret sync
+        validateSignature: true,
+        defaultScopes: 'openid profile email'
+      };
+      
+      // Create attribute mappings if auto-map is enabled
+      const attributeMappings = formData.autoMapAttributes ? {
+        uniqueID: { claim: 'uniqueID', userAttribute: 'uniqueID' },
+        clearance: { claim: 'clearance', userAttribute: 'clearance' },
+        countryOfAffiliation: { claim: 'countryOfAffiliation', userAttribute: 'countryOfAffiliation' },
+        acpCOI: { claim: 'acpCOI', userAttribute: 'acpCOI' }
+      } : {
+        uniqueID: { claim: 'sub', userAttribute: 'uniqueID' },
+        clearance: { claim: 'clearance', userAttribute: 'clearance' },
+        countryOfAffiliation: { claim: 'countryOfAffiliation', userAttribute: 'countryOfAffiliation' },
+        acpCOI: { claim: 'acpCOI', userAttribute: 'acpCOI' }
+      };
+      
+      // Build request body matching backend API format
+      const requestBody = {
+        alias: `${formData.countryCode.toLowerCase()}-federation`,
+        displayName: `${formData.organizationName || formData.countryCode} Federation`,
+        description: `Federation partner: ${formData.organizationName || formData.countryCode}`,
+        protocol: formData.federationType,
+        config: oidcConfig,
+        attributeMappings
+      };
+      
+      console.log('[Pilot] Creating federation partner:', {
+        alias: requestBody.alias,
+        displayName: requestBody.displayName,
+        protocol: requestBody.protocol
+      });
+      
+      // Call backend API
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const response = await fetch(`${backendUrl}/api/admin/idps`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(errorData.message || `Failed to create federation partner: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('[Pilot] Federation partner created successfully:', result);
+      
+      setIsProcessing(false);
+      onComplete?.(selectedPartner || formData.countryCode);
+      
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to onboard federation partner';
+      console.error('[Pilot] Onboarding failed:', err);
+      setError(errorMessage);
+      setIsProcessing(false);
+    }
   };
   
   const renderStepIndicator = () => (
@@ -370,6 +471,18 @@ export default function PilotOnboardingWizard({
             Note: Full compliance validation deferred for pilot demonstration
           </p>
         </div>
+        
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 text-red-800">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium">Error</span>
+            </div>
+            <p className="text-sm text-red-700 mt-2">{error}</p>
+          </div>
+        )}
         
         {isProcessing && (
           <div className="flex items-center justify-center gap-3 py-4">

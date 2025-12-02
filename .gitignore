@@ -169,6 +169,12 @@ terraform/tfplan*
 # Root doc/test archive
 docs/archive/
 
+# Documentation files (keep local only)
+docs/*.md
+!docs/README.md
+docs/**/*.md
+!docs/**/README.md
+
 # One-off scripts and test payloads
 test-download-simple.js
 test-opa-decision.json
