@@ -256,7 +256,8 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
                                     </div>
                                 </div>
                             </div>
-                        ))
+                            );
+                        })
                     ) : (
                         <div className="text-center py-12">
                             <p className="text-slate-500">No events match the selected filters</p>
