@@ -546,15 +546,53 @@ export const paginatedSearchHandler = async (
     if (includeFacets) {
       const facetStart = Date.now();
       
-      // Build facet aggregation pipeline
-      const facetPipeline = [
-        // Match base filter (without pagination cursor)
-        { $match: query && query.trim() ? {
+      // Build ABAC-constrained base filter for facets
+      // This ensures facet counts only include documents the user can access
+      // But does NOT include user-selected filters (so they can see all options)
+      const abacFilter: any = { $and: [] };
+      
+      // ABAC: Clearance filter
+      abacFilter.$and.push({
+        $or: [
+          { classification: { $in: allowedClassifications } },
+          { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
+          { 
+            $and: [
+              { classification: { $exists: false } },
+              { 'ztdf.policy.securityLabel.classification': { $exists: false } }
+            ]
+          }
+        ]
+      });
+      
+      // ABAC: Releasability filter
+      if (userCountry) {
+        abacFilter.$and.push({
+          $or: [
+            { releasabilityTo: userCountry },
+            { releasabilityTo: 'NATO' },
+            { releasabilityTo: 'FVEY' },
+            { 'ztdf.policy.securityLabel.releasabilityTo': userCountry },
+            { 'ztdf.policy.securityLabel.releasabilityTo': 'NATO' },
+            { 'ztdf.policy.securityLabel.releasabilityTo': 'FVEY' },
+          ]
+        });
+      }
+      
+      // Add text query if present
+      if (query && query.trim()) {
+        abacFilter.$and.push({
           $or: [
             { title: { $regex: query.trim(), $options: 'i' } },
             { resourceId: { $regex: query.trim(), $options: 'i' } },
           ]
-        } : {} },
+        });
+      }
+      
+      // Build facet aggregation pipeline with ABAC filter
+      const facetPipeline = [
+        // Match ABAC-constrained documents (user can access)
+        { $match: abacFilter.$and.length > 0 ? abacFilter : {} },
         // Facet stage
         {
           $facet: {
