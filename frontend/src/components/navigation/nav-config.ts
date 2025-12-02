@@ -220,6 +220,13 @@ export const adminItems = [
         description: 'View audit trail'
     },
     {
+        name: 'OPA Policy',
+        href: '/admin/opa-policy',
+        icon: Settings,
+        badge: 'DEMO',
+        description: 'Real-time policy editing'
+    },
+    {
         name: 'Integration Guide',
         href: '/integration/federation-vs-object',
         icon: BookOpen,

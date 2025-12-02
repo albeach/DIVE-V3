@@ -443,5 +443,40 @@ router.get('/metrics/summary', (_req: Request, res: Response) => {
     });
 });
 
+// ============================================
+// OPA Policy Management Routes
+// ============================================
+
+import {
+    getPolicyHandler,
+    updatePolicyHandler,
+    toggleRuleHandler,
+    getOPAStatusHandler
+} from '../controllers/admin-opa.controller';
+
+/**
+ * GET /api/admin/opa/status
+ * Get OPA server status
+ */
+router.get('/opa/status', getOPAStatusHandler);
+
+/**
+ * GET /api/admin/opa/policy
+ * Get current policy content
+ */
+router.get('/opa/policy', getPolicyHandler);
+
+/**
+ * POST /api/admin/opa/policy/update
+ * Update OPA policy dynamically
+ */
+router.post('/opa/policy/update', updatePolicyHandler);
+
+/**
+ * POST /api/admin/opa/policy/toggle-rule
+ * Toggle a specific policy rule on/off
+ */
+router.post('/opa/policy/toggle-rule', toggleRuleHandler);
+
 export default router;
 
