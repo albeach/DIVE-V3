@@ -672,9 +672,75 @@ export const requestKeyHandler = async (
             return;
         }
 
-        // Fetch resource
-        const resource = await getResourceById(resourceId);
+        // Fetch resource - first try local MongoDB
+        let resource = await getResourceById(resourceId);
+        
+        // Phase 4: If not found locally, check if it's a federated resource
         if (!resource) {
+            const { extractOriginFromResourceId, FEDERATION_API_URLS } = await import('../services/resource.service');
+            const originInstance = extractOriginFromResourceId(resourceId);
+            const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+            
+            if (originInstance && originInstance !== CURRENT_INSTANCE) {
+                // Proxy the key request to origin instance's backend
+                const originApiUrl = FEDERATION_API_URLS[originInstance];
+                
+                if (originApiUrl) {
+                    logger.info('Proxying key request to federated instance', {
+                        requestId,
+                        resourceId,
+                        kaoId,
+                        originInstance,
+                        currentInstance: CURRENT_INSTANCE,
+                    });
+                    
+                    try {
+                        const axios = (await import('axios')).default;
+                        const fedResponse = await axios.post(
+                            `${originApiUrl}/api/resources/request-key`,
+                            { resourceId, kaoId },
+                            {
+                                headers: {
+                                    'Authorization': `Bearer ${bearerToken}`,
+                                    'Content-Type': 'application/json',
+                                    'X-Federated-From': CURRENT_INSTANCE,
+                                    'X-Request-Id': requestId,
+                                },
+                                timeout: 30000, // Longer timeout for KAS operations
+                                validateStatus: (status) => status < 500,
+                            }
+                        );
+                        
+                        logger.info('Federated key request completed', {
+                            requestId,
+                            resourceId,
+                            originInstance,
+                            status: fedResponse.status,
+                            success: fedResponse.data?.success,
+                        });
+                        
+                        // Forward response from origin instance
+                        res.status(fedResponse.status).json(fedResponse.data);
+                        return;
+                    } catch (fedError) {
+                        logger.error('Federated key request failed', {
+                            requestId,
+                            resourceId,
+                            originInstance,
+                            error: fedError instanceof Error ? fedError.message : 'Unknown',
+                        });
+                        
+                        res.status(502).json({
+                            success: false,
+                            error: 'Bad Gateway',
+                            message: `Failed to proxy key request to ${originInstance} instance`,
+                            details: fedError instanceof Error ? fedError.message : 'Unknown error',
+                        });
+                        return;
+                    }
+                }
+            }
+            
             throw new NotFoundError(`Resource ${resourceId} not found`);
         }
 
