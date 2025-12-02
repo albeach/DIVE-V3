@@ -55,7 +55,9 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const [otpConfigured, setOtpConfigured] = useState<boolean | null>(null);
 
     const isSuperAdmin = (() => {
-        const hasRole = user?.roles?.includes('super_admin') || false;
+        const hasRole = user?.roles?.includes('super_admin') || 
+                       user?.roles?.includes('admin') || 
+                       user?.roles?.includes('broker_super_admin') || false;
         // Debug logging (remove in production)
         if (process.env.NODE_ENV === 'development') {
             console.log('[UnifiedUserMenu] Admin check:', {

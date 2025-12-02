@@ -22,7 +22,9 @@ interface MobileDrawerProps {
 
 export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
     const pseudonym = getPseudonymFromUser(user);
-    const isSuperAdmin = user?.roles?.includes('super_admin') || false;
+    const isSuperAdmin = user?.roles?.includes('super_admin') || 
+                         user?.roles?.includes('admin') || 
+                         user?.roles?.includes('broker_super_admin') || false;
     const { instanceCode } = useInstanceTheme();
     
     // Clearance abbreviation

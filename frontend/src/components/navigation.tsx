@@ -73,7 +73,9 @@ export default function Navigation({ user }: INavigationProps) {
 
     // PHASE 3: Memoize isSuperAdmin check for performance
     const isSuperAdmin = useMemo(() => {
-        const hasRole = user?.roles?.includes('super_admin') || false;
+        const hasRole = user?.roles?.includes('super_admin') || 
+                       user?.roles?.includes('admin') || 
+                       user?.roles?.includes('broker_super_admin') || false;
         // Debug logging (remove in production)
         if (process.env.NODE_ENV === 'development') {
             console.log('[Navigation] Admin check:', {
