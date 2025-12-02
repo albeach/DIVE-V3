@@ -48,6 +48,25 @@ variable "idp_url" {
   type        = string
 }
 
+# OIDC Client Secret from GCP Secret Manager
+variable "client_secret" {
+  description = <<-EOT
+    OIDC client secret for the broker client.
+    Set via TF_VAR_client_secret environment variable.
+    
+    This MUST match the secret in GCP Secret Manager (dive-v3-keycloak-client-secret-{instance})
+    to ensure Docker Compose and Terraform use the same secret.
+    
+    Without this, Keycloak generates a random secret causing:
+    - NextAuth "Configuration" errors
+    - Token validation failures
+    - State drift between resets
+  EOT
+  type        = string
+  sensitive   = true
+  default     = null  # Keycloak will generate if not set (NOT RECOMMENDED)
+}
+
 # Test users
 variable "create_test_users" {
   description = "Whether to create test users"

@@ -114,6 +114,7 @@ load_instance_secrets() {
 
 # Set generic variable aliases for the specified instance
 # This ensures docker-compose can use generic names like KEYCLOAK_CLIENT_SECRET
+# AND sets TF_VAR_ prefixed variables for Terraform
 set_instance_aliases() {
     local inst="$1"
     local INST_UPPER=$(echo "$inst" | tr '[:lower:]' '[:upper:]')
@@ -124,6 +125,8 @@ set_instance_aliases() {
     
     var_name="KEYCLOAK_ADMIN_PASSWORD_$INST_UPPER"
     export KEYCLOAK_ADMIN_PASSWORD="${!var_name:-}"
+    # TERRAFORM: Export for terraform apply
+    export TF_VAR_keycloak_admin_password="${!var_name:-}"
     
     var_name="POSTGRES_PASSWORD_$INST_UPPER"
     export POSTGRES_PASSWORD="${!var_name:-}"
@@ -142,6 +145,8 @@ set_instance_aliases() {
     # This ensures each instance uses its own Keycloak client secret
     if [ -n "${!var_name:-}" ]; then
         export KEYCLOAK_CLIENT_SECRET="${!var_name}"
+        # TERRAFORM: Export for terraform apply (CRITICAL for sync with GCP)
+        export TF_VAR_client_secret="${!var_name}"
     fi
     
     var_name="REDIS_PASSWORD_$INST_UPPER"
@@ -203,7 +208,7 @@ echo ""
 # SUMMARY
 # =============================================================================
 echo "Environment variables set:"
-env | grep -E "^(MONGO_|KEYCLOAK_|POSTGRES_|AUTH_|BLACKLIST_|GRAFANA_|FEDERATION_|JWT_|NEXTAUTH_|REDIS_)" | sort | sed 's/=.*/=***/'
+env | grep -E "^(MONGO_|KEYCLOAK_|POSTGRES_|AUTH_|BLACKLIST_|GRAFANA_|FEDERATION_|JWT_|NEXTAUTH_|REDIS_|TF_VAR_)" | sort | sed 's/=.*/=***/'
 echo ""
 echo "To start Docker Compose stacks:"
 echo "  docker compose -p shared -f docker-compose.shared.yml up -d"
@@ -212,7 +217,11 @@ echo "  docker compose -p fra -f docker-compose.fra.yml up -d"
 echo "  docker compose -p gbr -f docker-compose.gbr.yml up -d"
 echo "  docker compose -p deu -f docker-compose.deu.yml up -d"
 echo ""
-echo "To use with Terraform (reads from TF_VAR_ environment variables):"
-echo "  export TF_VAR_keycloak_admin_password=\"\$KEYCLOAK_ADMIN_PASSWORD_USA\""
-echo "  terraform -chdir=terraform/instances apply -var-file=usa.tfvars"
+echo "Terraform variables auto-exported (no manual export needed!):"
+echo "  TF_VAR_keycloak_admin_password=***"
+echo "  TF_VAR_client_secret=***"
+echo ""
+echo "To use with Terraform (vars already set):"
+echo "  terraform -chdir=terraform/instances workspace select $INSTANCE"
+echo "  terraform -chdir=terraform/instances apply -var-file=$INSTANCE.tfvars"
 

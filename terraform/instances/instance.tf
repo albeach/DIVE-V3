@@ -27,8 +27,9 @@ module "instance" {
   idp_url = var.idp_url
 
   # Realm configuration
-  realm_name = "dive-v3-broker"
-  client_id  = "dive-v3-client-broker"
+  realm_name    = "dive-v3-broker"
+  client_id     = "dive-v3-client-broker"
+  client_secret = var.client_secret  # From GCP Secret Manager via TF_VAR_client_secret
 
   # Test users
   create_test_users = var.create_test_users
