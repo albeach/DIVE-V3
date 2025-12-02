@@ -7,6 +7,7 @@ import { LocaleProvider } from "@/contexts/LocaleContext";
 import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
 import { InstanceThemeProvider } from "@/components/ui/theme-provider";
+import { Toaster } from "sonner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // Create QueryClient instance (only once per component lifecycle)
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             >
               <IdentityDrawerProvider>
                 {children}
+                <Toaster position="top-right" richColors />
               </IdentityDrawerProvider>
             </SessionProvider>
           </QueryClientProvider>

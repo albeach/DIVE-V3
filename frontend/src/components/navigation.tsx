@@ -177,9 +177,9 @@ export default function Navigation({ user }: INavigationProps) {
                                     </div>
                                 </div>
                                 
-                                {/* Instance Flag Badge - compact on lg, expanded on xl */}
+                                {/* Instance Flag Badge - visible on mobile (compact) and desktop (expanded) */}
                                 <div 
-                                    className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs font-semibold"
+                                    className="flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs font-semibold"
                                     style={{ 
                                         backgroundColor: 'rgba(var(--instance-primary-rgb, 0, 0, 0), 0.08)',
                                         borderColor: 'rgba(var(--instance-primary-rgb, 0, 0, 0), 0.2)',
@@ -188,6 +188,8 @@ export default function Navigation({ user }: INavigationProps) {
                                 >
                                     <InstanceFlag size={16} />
                                     <span className="hidden xl:inline">{instanceCode}</span>
+                                    {/* Mobile: Show abbreviated instance code */}
+                                    <span className="xl:hidden font-bold">{instanceCode}</span>
                                 </div>
                             </Link>
 
@@ -555,22 +557,42 @@ export default function Navigation({ user }: INavigationProps) {
                     aria-modal="true"
                     aria-label="Mobile menu"
                 >
-                    {/* Enhanced Backdrop with blur */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/10 to-transparent backdrop-blur-sm" />
+                    {/* Enhanced Backdrop - darker for better contrast (2025 pattern) */}
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
                     
-                    {/* Menu panel with enhanced styling */}
+                    {/* Menu panel with SOLID background for legibility (2025 pattern) */}
                     <div 
-                        className="absolute top-[85px] left-0 right-0 bg-white/98 backdrop-blur-2xl border-b border-gray-200/80 shadow-2xl animate-slide-down max-h-[calc(100vh-85px)] overflow-y-auto" 
+                        className="absolute top-[85px] left-0 right-0 bg-white border-b border-gray-200 shadow-2xl animate-slide-down max-h-[calc(100vh-85px)] overflow-y-auto" 
                         onClick={(e) => e.stopPropagation()}
                     >
+                        {/* Instance Header Badge - Mobile Menu (2025 pattern) */}
+                        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between backdrop-blur-sm">
+                            <div className="flex items-center gap-2">
+                                <InstanceFlag size={20} />
+                                <span className="text-sm font-bold" style={{ color: 'var(--instance-primary)' }}>
+                                    {instanceName}
+                                </span>
+                                <span className="text-xs text-gray-500 px-2 py-0.5 bg-gray-100 rounded-md font-semibold">
+                                    {instanceCode}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="p-1.5 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors"
+                                aria-label="Close menu"
+                            >
+                                <X className="w-5 h-5 text-gray-600" strokeWidth={2.5} />
+                            </button>
+                        </div>
+                        
                         <div className="px-4 py-6 space-y-2 max-w-lg mx-auto">
-                            {/* Mobile User Info Card - Instance Themed */}
+                            {/* Mobile User Info Card - Instance Themed (2025 pattern: improved contrast) */}
                             <div 
-                                className="mb-5 p-5 rounded-2xl shadow-sm"
+                                className="mb-5 p-5 rounded-2xl shadow-md border"
                                 style={{
-                                    background: 'linear-gradient(135deg, rgba(var(--instance-primary-rgb), 0.05), white 50%, rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.05))',
+                                    background: 'linear-gradient(135deg, rgba(var(--instance-primary-rgb), 0.08), white 50%, rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.08))',
                                     borderWidth: '1px',
-                                    borderColor: 'rgba(var(--instance-primary-rgb), 0.1)'
+                                    borderColor: 'rgba(var(--instance-primary-rgb), 0.15)'
                                 }}
                             >
                                 <div className="flex items-center gap-4 mb-4">
@@ -644,8 +666,8 @@ export default function Navigation({ user }: INavigationProps) {
                                 <SecureLogoutButton />
                             </div>
 
-                            {/* Navigation Items with staggered animation - Instance Themed */}
-                            <div className="space-y-1">
+                            {/* Navigation Items with staggered animation - Instance Themed (2025 pattern: improved touch targets) */}
+                            <div className="space-y-2">
                                 {navItems.map((item, idx) => {
                                     const active = isActive(item.href);
                                     return (
@@ -653,47 +675,47 @@ export default function Navigation({ user }: INavigationProps) {
                                             key={item.href}
                                             href={item.href}
                                             onClick={() => setMobileMenuOpen(false)}
-                                            className="group block relative px-4 py-4 rounded-xl transition-all duration-200 animate-fade-in-up"
+                                            className="group block relative px-4 py-4 rounded-xl transition-all duration-200 animate-fade-in-up min-h-[56px] touch-manipulation"
                                             style={{ animationDelay: `${idx * 50}ms` }}
                                         >
                                             <div 
-                                                className={`absolute inset-0 rounded-xl transition-all duration-200 ${
+                                                className={`absolute inset-0 rounded-xl transition-all duration-200 border ${
                                                     active
-                                                        ? 'shadow-sm'
-                                                        : 'group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
+                                                        ? 'shadow-sm border-opacity-30'
+                                                        : 'group-hover:bg-gray-50 border-transparent group-active:bg-gray-100'
                                                 }`}
                                                 style={active ? {
-                                                    background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
+                                                    background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.12), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.12))',
                                                     borderWidth: '1px',
-                                                    borderColor: 'rgba(var(--instance-primary-rgb), 0.2)'
+                                                    borderColor: 'rgba(var(--instance-primary-rgb), 0.25)'
                                                 } : undefined}
                                             />
                                             
                                             <div className="relative flex items-center gap-3.5">
                                                 <item.icon 
-                                                    className={`w-6 h-6 transition-all duration-200 ${
+                                                    className={`w-6 h-6 transition-all duration-200 flex-shrink-0 ${
                                                         active ? 'scale-110 drop-shadow-sm' : 'text-gray-600 group-hover:scale-110'
                                                     }`}
                                                     style={active ? { color: 'var(--instance-primary)' } : undefined}
                                                     strokeWidth={2.5} 
                                                 />
-                                                <div className="flex-1">
+                                                <div className="flex-1 min-w-0">
                                                     <span 
-                                                        className={`font-bold text-base block ${
+                                                        className={`font-bold text-base block truncate ${
                                                             active 
                                                                 ? 'bg-clip-text text-transparent'
-                                                                : 'text-gray-700 group-hover:text-gray-900'
+                                                                : 'text-gray-900 group-hover:text-gray-950'
                                                         }`}
                                                         style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
                                                     >
                                                         {item.name}
                                                     </span>
-                                                    <p className="text-[10px] text-gray-500 mt-0.5">{item.description}</p>
+                                                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{item.description}</p>
                                                 </div>
                                                 
                                                 {/* Arrow indicator */}
                                                 <ArrowRight 
-                                                    className={`w-5 h-5 text-gray-400 transition-all duration-200 ${
+                                                    className={`w-5 h-5 text-gray-400 transition-all duration-200 flex-shrink-0 ${
                                                         active ? 'opacity-100' : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
                                                     }`}
                                                     strokeWidth={2}
@@ -735,7 +757,7 @@ export default function Navigation({ user }: INavigationProps) {
                                         <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent" />
                                     </div>
                                     
-                                    <div className="space-y-1">
+                                    <div className="space-y-2">
                                         {adminItems.map((item, idx) => {
                                             const active = isActive(item.href);
                                             return (
@@ -743,25 +765,25 @@ export default function Navigation({ user }: INavigationProps) {
                                                     key={item.href}
                                                     href={item.href}
                                                     onClick={() => setMobileMenuOpen(false)}
-                                                    className="group block relative px-4 py-4 rounded-xl transition-all duration-200 animate-fade-in-up"
+                                                    className="group block relative px-4 py-4 rounded-xl transition-all duration-200 animate-fade-in-up min-h-[56px] touch-manipulation"
                                                     style={{ animationDelay: `${(navItems.length + idx) * 50}ms` }}
                                                 >
                                                     <div 
-                                                        className={`absolute inset-0 rounded-xl transition-all duration-200 ${
+                                                        className={`absolute inset-0 rounded-xl transition-all duration-200 border ${
                                                             active
-                                                                ? 'shadow-sm'
-                                                                : 'group-hover:bg-gradient-to-r group-hover:from-gray-50 group-hover:to-gray-100/50'
+                                                                ? 'shadow-sm border-opacity-30'
+                                                                : 'group-hover:bg-gray-50 border-transparent group-active:bg-gray-100'
                                                         }`}
                                                         style={active ? {
-                                                            background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
+                                                            background: 'linear-gradient(to right, rgba(var(--instance-primary-rgb), 0.12), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.12))',
                                                             borderWidth: '1px',
-                                                            borderColor: 'rgba(var(--instance-primary-rgb), 0.2)'
+                                                            borderColor: 'rgba(var(--instance-primary-rgb), 0.25)'
                                                         } : undefined}
                                                     />
                                                     
                                                     <div className="relative flex items-center gap-3.5">
                                                         <item.icon 
-                                                            className={`w-6 h-6 transition-all duration-200 ${
+                                                            className={`w-6 h-6 transition-all duration-200 flex-shrink-0 ${
                                                                 active ? 'scale-110 drop-shadow-sm' : 'text-gray-600 group-hover:scale-110'
                                                             }`}
                                                             style={active ? { color: 'var(--instance-primary)' } : undefined}
@@ -770,10 +792,10 @@ export default function Navigation({ user }: INavigationProps) {
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-2">
                                                                 <span 
-                                                                    className={`font-bold text-base ${
+                                                                    className={`font-bold text-base truncate ${
                                                                         active 
                                                                             ? 'bg-clip-text text-transparent'
-                                                                            : 'text-gray-700 group-hover:text-gray-900'
+                                                                            : 'text-gray-900 group-hover:text-gray-950'
                                                                     }`}
                                                                     style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
                                                                 >
@@ -781,19 +803,19 @@ export default function Navigation({ user }: INavigationProps) {
                                                                 </span>
                                                                 {item.badge && (
                                                                     <span 
-                                                                        className="px-2 py-1 rounded-full text-xs font-bold shadow-md text-white animate-pulse"
+                                                                        className="px-2 py-1 rounded-full text-xs font-bold shadow-md text-white animate-pulse flex-shrink-0"
                                                                         style={{ background: item.badge === 'New' ? 'var(--instance-accent, #90d56a)' : 'var(--instance-primary)' }}
                                                                     >
                                                                         {item.badge}
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className="text-[10px] text-gray-500 mt-0.5">{item.description}</p>
+                                                            <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{item.description}</p>
                                                         </div>
                                                         
                                                         {/* Arrow indicator */}
                                                         <ArrowRight 
-                                                            className={`w-5 h-5 text-gray-400 transition-all duration-200 ${
+                                                            className={`w-5 h-5 text-gray-400 transition-all duration-200 flex-shrink-0 ${
                                                                 active ? 'opacity-100' : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
                                                             }`}
                                                             strokeWidth={2}

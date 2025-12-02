@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/page-layout";
 import Link from "next/link";
 import PolicyExplorer from "@/components/policies/PolicyExplorer";
-import PolicyEditorPanel from "@/components/policies/PolicyEditorPanel";
 import { PolicyComparison } from "@/components/policies/PolicyComparison";
 import type { IPolicyMetadata, IPolicyStats } from "@/types/policy.types";
 
@@ -72,6 +71,12 @@ export default async function PoliciesPage() {
           >
             Launch Policies Lab →
           </Link>
+          <Link
+            href="/policies/editor"
+            className="inline-flex items-center px-3 py-1 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Open Policy Editor →
+          </Link>
         </div>
       </div>
 
@@ -125,10 +130,6 @@ export default async function PoliciesPage() {
             <li>• Ready for Labs: push drafts directly from the editor</li>
           </ul>
         </div>
-      </div>
-
-      <div className="mt-10">
-        <PolicyEditorPanel />
       </div>
     </PageLayout>
   );

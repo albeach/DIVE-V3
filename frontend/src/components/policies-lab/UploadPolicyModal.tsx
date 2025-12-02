@@ -70,6 +70,7 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
 
       const response = await fetch('/api/policies-lab/upload', {
         method: 'POST',
+        credentials: 'include', // Required for session cookies to be sent
         body: formData,
       });
 

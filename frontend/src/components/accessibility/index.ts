@@ -11,10 +11,10 @@
 export { default as SkipLinks, useSkipLinkTarget } from './skip-links';
 
 // Live Region - WCAG 2.1 SC 4.1.3 (Status Messages)
-export { 
-  LiveRegionProvider, 
-  useLiveRegion, 
-  AnnounceOnMount,
-  announcements,
+export {
+    LiveRegionProvider,
+    useLiveRegion,
+    AnnounceOnMount,
+    announcements,
 } from './live-region';
 

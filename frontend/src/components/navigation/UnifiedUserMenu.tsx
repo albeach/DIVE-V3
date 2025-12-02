@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { 
@@ -51,6 +51,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const { instanceCode, theme } = useInstanceTheme();
     const [activeTab, setActiveTab] = useState<'profile' | 'actions' | 'admin'>('actions');
     const [copied, setCopied] = useState(false);
+    const [otpConfigured, setOtpConfigured] = useState<boolean | null>(null);
 
     const isSuperAdmin = user?.roles?.includes('super_admin') || false;
 
@@ -71,6 +72,32 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const amr: string | null = Array.isArray(user?.amr) 
         ? user!.amr.join(' + ') 
         : (Array.isArray(decoded?.amr) ? decoded!.amr.join(' + ') : decoded?.amr || null);
+
+    // Check OTP status when profile tab is active
+    useEffect(() => {
+        if (activeTab === 'profile' && otpConfigured === null && user?.uniqueID) {
+            // Extract IdP alias from session if available
+            const idpAlias = decoded?.idpAlias || decoded?.iss?.split('/').pop() || 'us-idp';
+            const username = user.uniqueID.split('@')[0] || user.uniqueID;
+
+            fetch('/api/auth/otp/status', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ idpAlias, username }),
+                credentials: 'include',
+            })
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    if (data?.hasOTP !== undefined) {
+                        setOtpConfigured(data.hasOTP);
+                    }
+                })
+                .catch(() => {
+                    // Silently fail - OTP status is optional
+                    setOtpConfigured(false);
+                });
+        }
+    }, [activeTab, otpConfigured, user?.uniqueID, decoded]);
 
     // Quick action items - streamlined
     const quickActions = [
@@ -267,6 +294,18 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                     icon={Shield} 
                                     label="AAL" 
                                     value={acr?.toUpperCase() || 'N/A'} 
+                                />
+                                <CompactClaim 
+                                    icon={Lock} 
+                                    label="MFA" 
+                                    value={
+                                        otpConfigured === null 
+                                            ? 'Checking...' 
+                                            : otpConfigured 
+                                                ? '✅ Configured' 
+                                                : '❌ Not Set'
+                                    }
+                                    highlight={otpConfigured === true}
                                 />
                                 <CompactClaim 
                                     icon={Clock} 

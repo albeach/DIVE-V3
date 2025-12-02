@@ -100,6 +100,11 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  const [dashboardDetails, setDashboardDetails] = useState<{
+    topDenyReasons?: Array<{ reason: string; count: number }>;
+    decisionsByCountry?: Record<string, number>;
+  } | null>(null);
+
   useEffect(() => {
     // Fetch IdPs and dashboard stats
     async function fetchData() {
@@ -113,26 +118,44 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
           setIdps(data.idps || []);
         }
 
-        // Fetch dashboard stats (public endpoint, no auth needed)
-        const statsResponse = await fetch(`${backendUrl}/api/dashboard/stats/public`);
-        if (statsResponse.ok) {
-          const statsData = await statsResponse.json();
-          if (statsData.success && statsData.stats) {
-            setQuickStats(statsData.stats);
-          } else {
-            // Fallback to defaults if API returns unexpected format
-            setQuickStats([
-              { value: '0', label: 'Documents Accessible', change: 'Loading...', trend: 'neutral' },
-              { value: '100%', label: 'Authorization Rate', change: 'No data', trend: 'neutral' },
-              { value: 'N/A', label: 'Avg Response Time', change: 'No data', trend: 'neutral' },
-            ]);
+        // Try authenticated dashboard stats first (if user is logged in)
+        let statsData: any = null;
+        if (user && session) {
+          try {
+            const statsResponse = await fetch('/api/dashboard/stats', {
+              credentials: 'include',
+              cache: 'no-store',
+            });
+            if (statsResponse.ok) {
+              statsData = await statsResponse.json();
+              if (statsData.success && statsData.details) {
+                setDashboardDetails({
+                  topDenyReasons: statsData.details.topDenyReasons,
+                  decisionsByCountry: statsData.details.decisionsByCountry,
+                });
+              }
+            }
+          } catch (authError) {
+            console.debug('Authenticated stats unavailable, falling back to public:', authError);
           }
+        }
+
+        // Fallback to public endpoint if authenticated failed or no user
+        if (!statsData) {
+          const statsResponse = await fetch(`${backendUrl}/api/dashboard/stats/public`);
+          if (statsResponse.ok) {
+            statsData = await statsResponse.json();
+          }
+        }
+
+        if (statsData?.success && statsData.stats) {
+          setQuickStats(statsData.stats);
         } else {
-          // Fallback if API fails
+          // Fallback to defaults if API returns unexpected format
           setQuickStats([
-            { value: '0', label: 'Documents Accessible', change: 'Error', trend: 'neutral' },
-            { value: '100%', label: 'Authorization Rate', change: 'Error', trend: 'neutral' },
-            { value: 'N/A', label: 'Avg Response Time', change: 'Error', trend: 'neutral' },
+            { value: '0', label: 'Documents Accessible', change: 'Loading...', trend: 'neutral' },
+            { value: '100%', label: 'Authorization Rate', change: 'No data', trend: 'neutral' },
+            { value: 'N/A', label: 'Avg Response Time', change: 'No data', trend: 'neutral' },
           ]);
         }
       } catch (error) {
@@ -153,7 +176,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
     // Update time every minute
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [user, session]);
 
   const pseudonym = getPseudonymFromUser((user || {}) as any);
   const clearanceLevel = user?.clearance || 'UNCLASSIFIED';
@@ -318,6 +341,67 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
           </div>
         ))}
       </div>
+
+      {/* User-Specific Insights (if authenticated stats available) */}
+      {dashboardDetails && (dashboardDetails.topDenyReasons?.length > 0 || Object.keys(dashboardDetails.decisionsByCountry || {}).length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top Deny Reasons */}
+          {dashboardDetails.topDenyReasons && dashboardDetails.topDenyReasons.length > 0 && (
+            <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Top Deny Reasons</h3>
+                  <p className="text-xs text-slate-500">Last 24 hours</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {dashboardDetails.topDenyReasons.slice(0, 5).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200">
+                    <span className="text-sm font-medium text-red-900 flex-1 truncate">{item.reason}</span>
+                    <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full ml-2">
+                      {item.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Decisions by Country */}
+          {dashboardDetails.decisionsByCountry && Object.keys(dashboardDetails.decisionsByCountry).length > 0 && (
+            <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                  <Globe className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Decisions by Country</h3>
+                  <p className="text-xs text-slate-500">Last 24 hours</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {Object.entries(dashboardDetails.decisionsByCountry)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 5)
+                  .map(([country, count], idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{countryFlags[country] || '🌐'}</span>
+                        <span className="text-sm font-medium text-blue-900">{countryNames[country] || country}</span>
+                      </div>
+                      <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bento Grid - Main Actions & Information */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
