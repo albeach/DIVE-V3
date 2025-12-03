@@ -1,0 +1,350 @@
+# DIVE V3 - Redis Cluster Auto-scaling Configuration
+# Phase 9: Performance Optimization & Scalability
+#
+# Provides scaling for Redis cache cluster:
+# - Horizontal scaling via Sentinel
+# - Memory-based scaling triggers
+# - Connection pool management
+#
+# Note: Redis cluster auto-scaling typically uses:
+# 1. Redis Sentinel for failover
+# 2. Redis Cluster for sharding
+# This configuration uses Sentinel mode for the decision cache.
+#
+# @version 1.0.0
+# @date 2025-12-03
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-sentinel-config
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+    app.kubernetes.io/part-of: dive-v3
+data:
+  sentinel.conf: |
+    port 26379
+    sentinel monitor dive-v3-master redis-master 6379 2
+    sentinel down-after-milliseconds dive-v3-master 5000
+    sentinel failover-timeout dive-v3-master 60000
+    sentinel parallel-syncs dive-v3-master 1
+    sentinel auth-pass dive-v3-master ${REDIS_PASSWORD}
+    
+  redis.conf: |
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    tcp-keepalive 300
+    timeout 0
+    tcp-backlog 511
+    save ""
+    appendonly no
+    lazyfree-lazy-eviction yes
+    lazyfree-lazy-expire yes
+    lazyfree-lazy-server-del yes
+    replica-lazy-flush yes
+
+---
+# Redis StatefulSet for master/replica setup
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: cache
+spec:
+  serviceName: redis
+  replicas: 3  # 1 master + 2 replicas
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      initContainers:
+        - name: config-init
+          image: redis:7-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cp /config/redis.conf /data/redis.conf
+              if [ "$(hostname)" = "redis-0" ]; then
+                echo "# Master configuration" >> /data/redis.conf
+              else
+                echo "replicaof redis-0.redis.dive-v3.svc.cluster.local 6379" >> /data/redis.conf
+              fi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: data
+              mountPath: /data
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - /data/redis.conf
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --masterauth
+            - $(REDIS_PASSWORD)
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+        # Redis Exporter for Prometheus metrics
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.55.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+            - name: REDIS_ADDR
+              value: "redis://localhost:6379"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+      volumes:
+        - name: config
+          configMap:
+            name: redis-sentinel-config
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+# Redis Sentinel StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-sentinel
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis-sentinel
+    app.kubernetes.io/component: cache
+spec:
+  serviceName: redis-sentinel
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+        app.kubernetes.io/name: redis-sentinel
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: sentinel
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-sentinel
+            - /config/sentinel.conf
+          ports:
+            - name: sentinel
+              containerPort: 26379
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: redis-sentinel-config
+
+---
+# Redis Service (headless for StatefulSet)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis
+spec:
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+    - name: metrics
+      port: 9121
+      targetPort: metrics
+  selector:
+    app: redis
+
+---
+# Redis Sentinel Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis-sentinel
+spec:
+  ports:
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+  selector:
+    app: redis-sentinel
+
+---
+# Redis Secret (placeholder - use GCP Secret Manager in production)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-secret
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis
+type: Opaque
+stringData:
+  # In production, this should come from GCP Secret Manager
+  password: "${REDIS_PASSWORD}"
+
+---
+# Redis PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-pdb
+  namespace: dive-v3
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: redis
+
+---
+# KEDA ScaledObject for Redis scaling based on metrics
+# Requires KEDA to be installed in the cluster
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: redis-scaledobject
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: redis
+spec:
+  scaleTargetRef:
+    name: redis
+  pollingInterval: 30
+  cooldownPeriod: 300
+  minReplicaCount: 3
+  maxReplicaCount: 6
+  triggers:
+    - type: redis
+      metadata:
+        address: redis-sentinel.dive-v3.svc.cluster.local:26379
+        sentinelMaster: dive-v3-master
+        listName: decision_cache_queue
+        listLength: "100"
+      authenticationRef:
+        name: redis-auth
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: redis_connected_clients
+        threshold: "100"
+        query: sum(redis_connected_clients{namespace="dive-v3"})
+
+---
+# KEDA TriggerAuthentication for Redis
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: redis-auth
+  namespace: dive-v3
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: redis-secret
+      key: password
+

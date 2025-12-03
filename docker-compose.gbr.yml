@@ -160,11 +160,21 @@ services:
       - "--log-level=info"
       - "--log-format=json"
       - "--set=decision_logs.console=true"
-      - "/policies"
+      - "/policies/base"
+      - "/policies/org"
+      - "/policies/tenant"
+      - "/policies/entrypoints"
+      - "/policies/compat"
+      - "/data/data.json"
     ports:
       - "8283:8181"
     volumes:
-      - ./policies:/policies:ro
+      - ./policies/base:/policies/base:ro
+      - ./policies/org:/policies/org:ro
+      - ./policies/tenant:/policies/tenant:ro
+      - ./policies/entrypoints:/policies/entrypoints:ro
+      - ./policies/compat:/policies/compat:ro
+      - ./policies/data:/data:ro
     networks:
       - dive-gbr-network
     healthcheck:
@@ -339,7 +349,8 @@ services:
     volumes:
       - ./frontend:/app
       - ./certs:/opt/app/certs:ro
-      - ./frontend/.env.gbr:/app/.env.local:ro
+      # CRITICAL: Do NOT mount .env.gbr - use environment variables from docker-compose.yml (GCP secrets)
+      # - ./frontend/.env.gbr:/app/.env.local:ro
       # CRITICAL: Instance-specific volumes for build isolation
       - frontend_gbr_node_modules:/app/node_modules
       - frontend_gbr_next:/app/.next

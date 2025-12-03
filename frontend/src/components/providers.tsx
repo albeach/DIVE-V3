@@ -6,6 +6,7 @@ import { useState } from "react";
 import { LocaleProvider } from "@/contexts/LocaleContext";
 import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
+import { PolicyProvider } from "@/contexts/PolicyContext";
 import { InstanceThemeProvider } from "@/components/ui/theme-provider";
 import { Toaster } from "sonner";
 
@@ -32,10 +33,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
               refetchOnWindowFocus={true}
               refetchWhenOffline={false}
             >
-              <IdentityDrawerProvider>
-                {children}
-                <Toaster position="top-right" richColors />
-              </IdentityDrawerProvider>
+              <PolicyProvider>
+                <IdentityDrawerProvider>
+                  {children}
+                  <Toaster position="top-right" richColors />
+                </IdentityDrawerProvider>
+              </PolicyProvider>
             </SessionProvider>
           </QueryClientProvider>
         </LocaleProvider>

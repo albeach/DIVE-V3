@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "Configuration for per-tenant policy bundle generation",
+  "tenants": [
+    {
+      "id": "USA",
+      "name": "United States",
+      "enabled": true,
+      "description": "U.S. DoD tenant with standard clearance hierarchy",
+      "locale": "en-US",
+      "classificationSystem": "US_STANDARD",
+      "opalScope": "dive.tenant.usa",
+      "bundleId": "dive-v3-usa"
+    },
+    {
+      "id": "FRA",
+      "name": "France",
+      "enabled": true,
+      "description": "French MoD tenant with IGI 1300 classification",
+      "locale": "fr-FR",
+      "classificationSystem": "FRENCH_STANDARD",
+      "opalScope": "dive.tenant.fra",
+      "bundleId": "dive-v3-fra"
+    },
+    {
+      "id": "GBR",
+      "name": "United Kingdom",
+      "enabled": true,
+      "description": "UK MoD tenant with GSC classification",
+      "locale": "en-GB",
+      "classificationSystem": "UK_STANDARD",
+      "opalScope": "dive.tenant.gbr",
+      "bundleId": "dive-v3-gbr"
+    },
+    {
+      "id": "DEU",
+      "name": "Germany",
+      "enabled": true,
+      "description": "German Bundeswehr tenant with VS classification",
+      "locale": "de-DE",
+      "classificationSystem": "GERMAN_STANDARD",
+      "opalScope": "dive.tenant.deu",
+      "bundleId": "dive-v3-deu"
+    }
+  ],
+  "bundleOptions": {
+    "outputDir": "dist/bundles",
+    "includeBase": true,
+    "includeOrg": true,
+    "includeEntrypoints": true,
+    "includeData": true,
+    "compression": "gzip",
+    "signingEnabled": false,
+    "signingKeyPath": null,
+    "manifestVersion": "1.0",
+    "revisionFormat": "timestamp"
+  },
+  "basePolicies": [
+    "policies/base/clearance/clearance.rego",
+    "policies/base/coi/registry.rego",
+    "policies/base/country/iso3166.rego",
+    "policies/base/time/utils.rego"
+  ],
+  "orgPolicies": [
+    "policies/org/nato/classification.rego",
+    "policies/org/nato/acp240.rego"
+  ],
+  "sharedEntrypoints": [
+    "policies/entrypoints/authz.rego",
+    "policies/compat/v1_shim.rego"
+  ],
+  "dataSourceDir": "backend/data/opal",
+  "isolation": {
+    "namespacePrefix": "dive.tenant",
+    "scopeFiltering": true,
+    "dataPathPrefix": "tenant_data",
+    "crossTenantDeny": true
+  },
+  "verification": {
+    "runTestsAfterBuild": true,
+    "validateManifest": true,
+    "maxBuildTimeSeconds": 30
+  }
+}
+

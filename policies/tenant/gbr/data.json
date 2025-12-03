@@ -1,0 +1,75 @@
+{
+  "$schema": "../../data/schemas/tenant_data.schema.json",
+  "_metadata": {
+    "tenant_id": "GBR",
+    "version": "1.0.0",
+    "lastUpdated": "2025-12-03T00:00:00.000Z",
+    "description": "UK tenant-specific OPAL data for policy decisions",
+    "classification_system": "UK_STANDARD",
+    "compliance": ["GSC Policy", "NCSC", "ACP-240"]
+  },
+  "tenant_id": "GBR",
+  "tenant_config": {
+    "code": "GBR",
+    "name": "United Kingdom",
+    "locale": "en-GB",
+    "mfa_required_above": "UNCLASSIFIED",
+    "max_session_hours": 8,
+    "default_coi": ["GBR-US", "FVEY", "NATO"],
+    "aal_requirements": {
+      "UNCLASSIFIED": 1,
+      "CONFIDENTIAL": 2,
+      "SECRET": 2,
+      "TOP_SECRET": 3
+    },
+    "allow_industry_access": true,
+    "industry_max_classification": "SECRET"
+  },
+  "trusted_issuers": {
+    "https://gbr-idp.dive25.com/realms/dive-v3-broker": {
+      "tenant": "GBR",
+      "name": "UK Keycloak",
+      "country": "GBR",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://sso.mod.uk": {
+      "tenant": "GBR",
+      "name": "UK MoD SSO",
+      "country": "GBR",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://sso.gchq.gov.uk": {
+      "tenant": "GBR",
+      "name": "GCHQ SSO",
+      "country": "GBR",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    }
+  },
+  "federation_partners": ["USA", "CAN", "AUS", "NZL", "FRA", "DEU"],
+  "coi_memberships": ["GBR-US", "FVEY", "NATO", "NATO-COSMIC", "AUKUS"],
+  "classification_equivalency": {
+    "UNCLASSIFIED": "NATO_UNCLASSIFIED",
+    "OFFICIAL": "NATO_RESTRICTED",
+    "OFFICIAL-SENSITIVE": "NATO_RESTRICTED",
+    "SECRET": "NATO_SECRET",
+    "TOP SECRET": "COSMIC_TOP_SECRET",
+    "TOP_SECRET": "COSMIC_TOP_SECRET"
+  },
+  "access_policies": {
+    "require_mfa_for_secret": true,
+    "require_hardware_token_for_ts": true,
+    "allow_vpn_access": true,
+    "session_absolute_timeout_hours": 8,
+    "session_idle_timeout_minutes": 20
+  }
+}
+

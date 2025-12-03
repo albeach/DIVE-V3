@@ -1,0 +1,146 @@
+{
+  "$schema": "./schemas/trusted_issuers.schema.json",
+  "_metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-12-03T01:11:27.148Z",
+    "description": "OPAL-managed trusted issuer registry for DIVE V3",
+    "compliance": [
+      "ACP-240",
+      "ADatP-5663"
+    ],
+    "managedBy": "opal-data-publisher"
+  },
+  "trusted_issuers": {
+    "https://usa-idp.dive25.com/realms/dive-v3-broker": {
+      "tenant": "USA",
+      "name": "USA Keycloak",
+      "country": "USA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL",
+      "jwks_uri": "https://usa-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs"
+    },
+    "https://login.disa.mil": {
+      "tenant": "USA",
+      "name": "DoD CAC",
+      "country": "USA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL",
+      "jwks_uri": "https://login.disa.mil/.well-known/jwks.json"
+    },
+    "https://sso.army.mil": {
+      "tenant": "USA",
+      "name": "US Army SSO",
+      "country": "USA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://fra-idp.dive25.com/realms/dive-v3-broker": {
+      "tenant": "FRA",
+      "name": "France Keycloak",
+      "country": "FRA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL",
+      "jwks_uri": "https://fra-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs"
+    },
+    "https://authentification.defense.gouv.fr": {
+      "tenant": "FRA",
+      "name": "French MoD SSO",
+      "country": "FRA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "saml",
+      "federation_class": "NATIONAL"
+    },
+    "https://gbr-idp.dive25.com/realms/dive-v3-broker": {
+      "tenant": "GBR",
+      "name": "UK Keycloak",
+      "country": "GBR",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL",
+      "jwks_uri": "https://gbr-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs"
+    },
+    "https://sso.mod.uk": {
+      "tenant": "GBR",
+      "name": "UK MoD SSO",
+      "country": "GBR",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://deu-idp.prosecurity.biz/realms/dive-v3-broker": {
+      "tenant": "DEU",
+      "name": "Germany Keycloak",
+      "country": "DEU",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL",
+      "jwks_uri": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker/protocol/openid-connect/certs"
+    },
+    "https://sso.bundeswehr.de": {
+      "tenant": "DEU",
+      "name": "Bundeswehr SSO",
+      "country": "DEU",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "http://localhost:8443/realms/dive-v3-broker": {
+      "tenant": "USA",
+      "name": "Local Dev Keycloak",
+      "country": "USA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8443/realms/dive-v3-broker": {
+      "tenant": "USA",
+      "name": "Local Dev Keycloak (HTTPS)",
+      "country": "USA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://test-issuer.example.com": {
+      "tenant": "USA",
+      "name": "Test Issuer",
+      "country": "USA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://new-issuer.example.com": {
+      "tenant": "USA",
+      "name": "Test Issuer",
+      "country": "USA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://jpn-idp.example.com": {
+      "tenant": "JPN",
+      "name": "Japan Defense IdP",
+      "country": "JPN",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "saml",
+      "federation_class": "NATIONAL"
+    }
+  }
+}

@@ -1,0 +1,239 @@
+#
+# Promtail Configuration for DIVE V3
+# Phase 8: Observability & Alerting
+#
+# Promtail ships logs from application containers to Loki.
+# Parses JSON logs and extracts labels for querying.
+#
+# Labels extracted:
+# - level: Log severity (info, warn, error)
+# - service: Application service name
+# - instance: Tenant instance (usa, fra, gbr, deu)
+# - correlationId: Request correlation ID
+# - eventType: Audit event type (for audit logs)
+#
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    tenant_id: dive-v3
+    batchwait: 1s
+    batchsize: 1048576  # 1MB
+    timeout: 10s
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+
+scrape_configs:
+  # ============================================
+  # Backend Application Logs
+  # ============================================
+  - job_name: dive-v3-backend
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: backend
+          service: dive-v3-backend
+          __path__: /var/log/dive-v3/backend/*.log
+
+    pipeline_stages:
+      # Parse JSON logs
+      - json:
+          expressions:
+            level: level
+            message: message
+            timestamp: timestamp
+            requestId: requestId
+            correlationId: correlationId
+            service: service
+            instance: instance
+            userId: uniqueID
+            resourceId: resourceId
+            decision: decision
+
+      # Extract labels from JSON fields
+      - labels:
+          level:
+          service:
+          instance:
+          correlationId:
+
+      # Parse timestamp
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+            - "2006-01-02T15:04:05.000Z07:00"
+
+      # Add tenant label from instance
+      - template:
+          source: tenant
+          template: '{{ .instance }}'
+
+      - labels:
+          tenant:
+
+  # ============================================
+  # Audit Logs (Separate for Compliance)
+  # ============================================
+  - job_name: dive-v3-audit
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: audit
+          service: dive-v3-audit
+          __path__: /var/log/dive-v3/audit/*.log
+
+    pipeline_stages:
+      # Parse JSON audit logs
+      - json:
+          expressions:
+            level: level
+            timestamp: timestamp
+            eventType: eventType
+            subject_uniqueID: subject.uniqueID
+            subject_country: subject.countryOfAffiliation
+            resource_id: resource.resourceId
+            resource_class: resource.classification
+            decision_allow: decision.allow
+            decision_reason: decision.reason
+            correlationId: context.correlationId
+            policyVersion: policyVersion
+            latencyMs: latencyMs
+            environment: environment
+
+      # Extract labels
+      - labels:
+          eventType:
+          subject_country:
+          resource_class:
+          decision_allow:
+          correlationId:
+          environment:
+
+      # Parse timestamp
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+      # Categorize decisions
+      - template:
+          source: decision_category
+          template: '{{ if eq .decision_allow "true" }}allow{{ else }}deny{{ end }}'
+
+      - labels:
+          decision_category:
+
+  # ============================================
+  # OPA Decision Logs
+  # ============================================
+  - job_name: opa-decisions
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: opa
+          service: opa
+          __path__: /var/log/opa/*.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            decision_id: decision_id
+            path: path
+            input_tenant: input.subject.tenant
+            result_allow: result.allow
+            result_reason: result.reason
+            timestamp: timestamp
+
+      - labels:
+          input_tenant:
+          path:
+
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+  # ============================================
+  # KAS Logs
+  # ============================================
+  - job_name: kas
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: kas
+          service: kas
+          __path__: /var/log/kas/*.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            message: message
+            timestamp: timestamp
+            operation: operation
+            resourceId: resourceId
+            decision: decision
+
+      - labels:
+          level:
+          operation:
+          decision:
+
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+  # ============================================
+  # Docker Container Logs
+  # ============================================
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["com.dive-v3.logs=true"]
+
+    relabel_configs:
+      # Keep only DIVE V3 containers
+      - source_labels: ['__meta_docker_container_name']
+        regex: '.*dive-v3.*'
+        action: keep
+
+      # Set job label from container name
+      - source_labels: ['__meta_docker_container_name']
+        target_label: container_name
+
+      # Set instance label from environment variable
+      - source_labels: ['__meta_docker_container_label_instance']
+        target_label: instance
+
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            message: msg
+            timestamp: time
+
+      - labels:
+          level:
+
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+          fallback_formats:
+            - RFC3339
+

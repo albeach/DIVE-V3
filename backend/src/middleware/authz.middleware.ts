@@ -9,12 +9,21 @@ import { isTokenBlacklisted, areUserTokensRevoked } from '../services/token-blac
 import { validateSPToken } from './sp-auth.middleware';
 import { IRequestWithSP } from '../types/sp-federation.types';
 import { opaCircuitBreaker, keycloakCircuitBreaker } from '../utils/circuit-breaker';
+import { decisionCacheService } from '../services/decision-cache.service';
+import { auditService } from '../services/audit.service';
 
 // ============================================
 // PEP (Policy Enforcement Point) Middleware
 // ============================================
-// Week 2: Integrate OPA for ABAC authorization
+// Phase 5: Unified PEP using dive.authz entrypoint
 // Pattern: Validate JWT → Extract attributes → Fetch resource → Call OPA → Enforce decision
+// 
+// Key Changes in Phase 5:
+// 1. Uses dive.authz endpoint (instead of dive.authorization)
+// 2. Tenant-aware context injection for multi-tenant isolation
+// 3. Classification-based TTL for decision caching
+// 4. Structured audit logging via auditService
+// 5. OPAL integration for cache invalidation
 
 // ============================================
 // Week 4: Dependency Injection for Testability
@@ -40,9 +49,6 @@ export const initializeJwtService = (service?: IJwtService): void => {
     jwtService = service || jwt;
 };
 
-// Decision cache (60s TTL)
-const decisionCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
-
 // JWKS cache (1 hour TTL) - cache fetched public keys
 const jwksCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
@@ -51,13 +57,40 @@ const jwksCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
  * @internal
  */
 export const clearAuthzCaches = (): void => {
-    decisionCache.flushAll();
+    decisionCacheService.reset();
     jwksCache.flushAll();
 };
 
-// OPA endpoint
+// OPA endpoint - Phase 5: Use unified dive.authz entrypoint
+// Supports backward compatibility via v1_shim.rego if using dive.authorization
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
-const OPA_DECISION_ENDPOINT = `${OPA_URL}/v1/data/dive/authorization`;
+const USE_UNIFIED_ENDPOINT = process.env.OPA_USE_UNIFIED_ENDPOINT !== 'false';
+const OPA_DECISION_ENDPOINT = USE_UNIFIED_ENDPOINT
+    ? `${OPA_URL}/v1/data/dive/authz/decision`
+    : `${OPA_URL}/v1/data/dive/authorization`;
+
+/**
+ * Extract tenant from token issuer or request context
+ * Used for multi-tenant policy isolation
+ */
+const extractTenant = (token: IKeycloakToken, req: Request): string | undefined => {
+    // Try to extract from issuer URL (e.g., /realms/dive-v3-usa)
+    const issuer = (token as any)?.iss;
+    if (issuer) {
+        const realmMatch = issuer.match(/\/realms\/dive-v3-([a-z]{3})/i);
+        if (realmMatch) {
+            return realmMatch[1].toUpperCase();
+        }
+    }
+    
+    // Fallback to country of affiliation
+    if (token.countryOfAffiliation) {
+        return token.countryOfAffiliation.toUpperCase();
+    }
+    
+    // Fallback to request header or default
+    return (req.headers['x-tenant'] as string)?.toUpperCase() || 'USA';
+};
 
 /**
  * Interface for JWT payload (Keycloak token)
@@ -90,6 +123,7 @@ interface IKeycloakToken {
  * Interface for OPA input
  * ACP-240 Section 4.3 Enhancement: Added original classification fields
  * Gap #4: Added dutyOrg and orgUnit for organization-based policies
+ * Phase 5: Added tenant and issuer for multi-tenant policy isolation
  */
 interface IOPAInput {
     input: {
@@ -103,6 +137,7 @@ interface IOPAInput {
             acpCOI?: string[];
             dutyOrg?: string;                      // Gap #4: Organization (e.g., US_ARMY, FR_DEFENSE_MINISTRY)
             orgUnit?: string;                      // Gap #4: Organizational Unit (e.g., CYBER_DEFENSE, INTELLIGENCE)
+            issuer?: string;                       // Phase 5: Token issuer for federation trust
         };
         action: {
             operation: string;
@@ -128,6 +163,8 @@ interface IOPAInput {
             acr?: string;                          // Authentication Context Class Reference (AAL level)
             amr?: string[];                        // Authentication Methods Reference (MFA factors)
             auth_time?: number;                    // Time of authentication (Unix timestamp)
+            // Phase 5: Multi-tenant context
+            tenant?: string;                       // Tenant ID (USA, FRA, GBR, DEU)
         };
     };
 }
@@ -1553,22 +1590,36 @@ export const authzMiddleware = async (
         }
 
         // ============================================
-        // Step 4: Check decision cache
+        // Step 4: Check decision cache (Phase 5: Classification-based TTL)
         // ============================================
+        
+        // Phase 5: Extract tenant for multi-tenant cache isolation
+        const tenant = decodedToken ? extractTenant(decodedToken, req) : undefined;
+        
+        // Phase 5: Use new decision cache service with tenant isolation
+        const cacheKey = decisionCacheService.generateCacheKey({
+            uniqueID,
+            resourceId,
+            clearance,
+            countryOfAffiliation,
+            tenant
+        });
+        const cachedDecisionEntry = decisionCacheService.get(cacheKey);
 
-        const cacheKey = `${uniqueID}:${resourceId}:${clearance}:${countryOfAffiliation}`;
-        const cachedDecision = decisionCache.get<IOPADecision>(cacheKey);
-
-        if (cachedDecision) {
+        if (cachedDecisionEntry) {
+            const cachedDecision = cachedDecisionEntry.result;
             logger.debug('Using cached authorization decision', {
                 requestId,
                 uniqueID,
                 resourceId,
+                cacheAge: Date.now() - cachedDecisionEntry.cachedAt,
+                ttl: cachedDecisionEntry.ttl,
+                tenant
             });
 
-            if (!cachedDecision.result.allow) {
+            if (!cachedDecision.allow) {
                 const latencyMs = Date.now() - startTime;
-                logDecision(requestId, uniqueID, resourceId, false, cachedDecision.result.reason, latencyMs);
+                logDecision(requestId, uniqueID, resourceId, false, cachedDecision.reason, latencyMs);
 
                 // Extract resource metadata for error response
                 const isZTDF = resource && 'ztdf' in resource;
@@ -1584,7 +1635,7 @@ export const authzMiddleware = async (
 
                 // Get user-friendly error message
                 const userFriendly = getUserFriendlyDenialMessage(
-                    cachedDecision.result.reason,
+                    cachedDecision.reason,
                     {
                         classification,
                         releasabilityTo,
@@ -1598,14 +1649,42 @@ export const authzMiddleware = async (
                     }
                 );
 
+                // Phase 5: Audit logging for cached deny
+                auditService.logAccessDeny({
+                    subject: {
+                        uniqueID,
+                        clearance,
+                        countryOfAffiliation,
+                        acpCOI,
+                        tenant
+                    },
+                    resource: {
+                        resourceId: resource.resourceId,
+                        classification,
+                        releasabilityTo,
+                        COI
+                    },
+                    decision: {
+                        allow: false,
+                        reason: cachedDecision.reason,
+                        evaluationDetails: cachedDecision.evaluation_details as Record<string, unknown>
+                    },
+                    context: {
+                        correlationId: requestId,
+                        requestId,
+                        sourceIP: req.ip || req.socket.remoteAddress
+                    },
+                    latencyMs
+                });
+
                 res.status(403).json({
                     error: 'Forbidden',
                     message: userFriendly.message,
                     guidance: userFriendly.guidance,
                     // Keep technical details for debugging
-                    technical_reason: cachedDecision.result.reason,
+                    technical_reason: cachedDecision.reason,
                     details: {
-                        ...(cachedDecision.result.evaluation_details || {}),
+                        ...(cachedDecision.evaluation_details || {}),
                         subject: {
                             uniqueID,
                             clearance,
@@ -1618,7 +1697,8 @@ export const authzMiddleware = async (
                             classification,
                             releasabilityTo,
                             coi: COI
-                        }
+                        },
+                        cached: true
                     },
                 });
                 return;
@@ -1734,6 +1814,11 @@ export const authzMiddleware = async (
         const normalizedAMR = decodedToken ? normalizeAMR(decodedToken.amr) : ['sp_auth'];
         const acrForOPA = String(normalizedAAL); // OPA expects string format
 
+        // Phase 5: Extract issuer for federation trust validation
+        const tokenIssuer = decodedToken 
+            ? (jwtService.decode(authHeader.substring(7), { complete: true }) as any)?.payload?.iss
+            : undefined;
+
         const opaInput: IOPAInput = {
             input: {
                 subject: {
@@ -1746,6 +1831,7 @@ export const authzMiddleware = async (
                     acpCOI,
                     dutyOrg: tokenData?.dutyOrg,      // Gap #4: Organization attribute
                     orgUnit: tokenData?.orgUnit,      // Gap #4: Organizational unit
+                    issuer: tokenIssuer,             // Phase 5: Issuer for federation trust
                 },
                 action: {
                     operation: 'view',
@@ -1771,6 +1857,8 @@ export const authzMiddleware = async (
                     acr: acrForOPA,              // Normalized to string ("0", "1", "2")
                     amr: normalizedAMR,          // Normalized to array (["pwd"], ["pwd","otp"])
                     auth_time: decodedToken?.auth_time, // Time of authentication
+                    // Phase 5: Multi-tenant context
+                    tenant,                      // Tenant ID for policy isolation
                 },
             },
         };
@@ -1841,13 +1929,18 @@ export const authzMiddleware = async (
         }
 
         // ============================================
-        // Step 7: Cache decision
+        // Step 7: Cache decision (Phase 5: Classification-based TTL)
         // ============================================
 
-        decisionCache.set(cacheKey, opaDecision);
+        decisionCacheService.set(
+            cacheKey,
+            opaDecision.result,
+            classification,
+            tenant
+        );
 
         // ============================================
-        // Step 8: Log decision (ACP-240 compliance)
+        // Step 8: Log decision (ACP-240 compliance - Phase 5 Enhanced)
         // ============================================
 
         const latencyMs = Date.now() - startTime;
@@ -1860,23 +1953,67 @@ export const authzMiddleware = async (
             latencyMs
         );
 
-        // ACP-240: Log DECRYPT event on successful access
+        // Phase 5: Structured audit logging via auditService
         if (opaDecision.result.allow) {
-            const { logDecryptEvent } = await import('../utils/acp240-logger');
-            logDecryptEvent({
-                requestId,
-                subject: uniqueID,
-                resourceId,
-                classification: classification || 'UNCLASSIFIED',
-                releasabilityTo: releasabilityTo || [],
-                subjectAttributes: {
+            // Log access grant
+            auditService.logAccessGrant({
+                subject: {
+                    uniqueID,
                     clearance,
+                    clearanceOriginal: tokenData?.clearanceOriginal,
+                    clearanceCountry: tokenData?.clearanceCountry,
                     countryOfAffiliation,
-                    acpCOI
+                    acpCOI,
+                    tenant,
+                    issuer: tokenIssuer
                 },
-                reason: opaDecision.result.reason,
+                resource: {
+                    resourceId: resource.resourceId,
+                    classification,
+                    originalClassification,
+                    originalCountry,
+                    releasabilityTo,
+                    COI,
+                    encrypted
+                },
+                decision: {
+                    allow: true,
+                    reason: opaDecision.result.reason,
+                    obligations: opaDecision.result.obligations,
+                    evaluationDetails: opaDecision.result.evaluation_details as Record<string, unknown>
+                },
+                context: {
+                    correlationId: requestId,
+                    requestId,
+                    sourceIP: req.ip || req.socket.remoteAddress,
+                    acr: acrForOPA,
+                    amr: normalizedAMR
+                },
                 latencyMs
             });
+
+            // ACP-240: Log DECRYPT event if resource is encrypted
+            if (encrypted) {
+                auditService.logDecrypt({
+                    subject: {
+                        uniqueID,
+                        clearance,
+                        countryOfAffiliation,
+                        acpCOI,
+                        tenant
+                    },
+                    resource: {
+                        resourceId: resource.resourceId,
+                        classification,
+                        encrypted: true
+                    },
+                    context: {
+                        correlationId: requestId,
+                        requestId
+                    },
+                    latencyMs
+                });
+            }
         }
 
         // ============================================
@@ -1884,27 +2021,38 @@ export const authzMiddleware = async (
         // ============================================
 
         if (!opaDecision.result.allow) {
-            // ACP-240: Log ACCESS_DENIED event
-            const { logAccessDeniedEvent } = await import('../utils/acp240-logger');
-            logAccessDeniedEvent({
-                requestId,
-                subject: uniqueID,
-                resourceId,
-                reason: opaDecision.result.reason,
-                subjectAttributes: {
+            // Phase 5: ACP-240 compliant audit logging via auditService
+            auditService.logAccessDeny({
+                subject: {
+                    uniqueID,
                     clearance,
+                    clearanceOriginal: tokenData?.clearanceOriginal,
+                    clearanceCountry: tokenData?.clearanceCountry,
                     countryOfAffiliation,
-                    acpCOI
+                    acpCOI,
+                    tenant,
+                    issuer: tokenIssuer
                 },
-                resourceAttributes: {
+                resource: {
+                    resourceId: resource.resourceId,
                     classification,
+                    originalClassification,
+                    originalCountry,
                     releasabilityTo,
-                    COI
+                    COI,
+                    encrypted
                 },
-                policyEvaluation: {
+                decision: {
                     allow: false,
                     reason: opaDecision.result.reason,
-                    evaluation_details: opaDecision.result.evaluation_details
+                    evaluationDetails: opaDecision.result.evaluation_details as Record<string, unknown>
+                },
+                context: {
+                    correlationId: requestId,
+                    requestId,
+                    sourceIP: req.ip || req.socket.remoteAddress,
+                    acr: acrForOPA,
+                    amr: normalizedAMR
                 },
                 latencyMs: Date.now() - startTime
             });
