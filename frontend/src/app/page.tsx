@@ -11,7 +11,19 @@ import {
 } from "@/components/ui/instance-hero-badge";
 
 export default async function Home() {
-  const session = await auth();
+  // Add timeout wrapper for auth() to prevent hanging
+  let session;
+  try {
+    const authPromise = auth();
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Auth timeout')), 5000)
+    );
+    session = await Promise.race([authPromise, timeoutPromise]) as Awaited<ReturnType<typeof auth>>;
+  } catch (error) {
+    // If auth fails or times out, continue without session (show login page)
+    console.warn('[Home] Auth check failed, showing login page:', error instanceof Error ? error.message : 'Unknown error');
+    session = null;
+  }
   
   // If already logged in, redirect to dashboard
   if (session?.user) {

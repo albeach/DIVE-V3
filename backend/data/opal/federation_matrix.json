@@ -1,0 +1,195 @@
+{
+  "$schema": "./schemas/federation_matrix.schema.json",
+  "_metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-12-03T01:11:27.148Z",
+    "description": "OPAL-managed federation partner matrix for DIVE V3",
+    "compliance": [
+      "ACP-240",
+      "ADatP-5663"
+    ],
+    "managedBy": "opal-data-publisher",
+    "trustModel": "bilateral"
+  },
+  "federation_matrix": {
+    "USA": [
+      "FRA",
+      "GBR",
+      "DEU",
+      "CAN",
+      "AUS"
+    ],
+    "FRA": [
+      "USA",
+      "GBR",
+      "DEU"
+    ],
+    "GBR": [
+      "USA",
+      "FRA",
+      "DEU"
+    ],
+    "DEU": [
+      "USA",
+      "FRA",
+      "GBR"
+    ],
+    "CAN": [
+      "USA"
+    ],
+    "AUS": [
+      "USA"
+    ],
+    "NZL": [],
+    "JPN": [],
+    "BRA": []
+  },
+  "federation_details": {
+    "USA": {
+      "partners": {
+        "FRA": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "FVEY"
+          ],
+          "attributeMapping": "standard"
+        },
+        "GBR": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "TOP_SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "FVEY",
+            "AUKUS"
+          ],
+          "attributeMapping": "standard"
+        },
+        "DEU": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC"
+          ],
+          "attributeMapping": "standard"
+        }
+      }
+    },
+    "FRA": {
+      "partners": {
+        "USA": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "FRA-US"
+          ],
+          "attributeMapping": "french_to_nato"
+        },
+        "GBR": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC"
+          ],
+          "attributeMapping": "standard"
+        },
+        "DEU": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "EU-RESTRICTED"
+          ],
+          "attributeMapping": "standard"
+        }
+      }
+    },
+    "GBR": {
+      "partners": {
+        "USA": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "TOP_SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "FVEY",
+            "AUKUS",
+            "GBR-US"
+          ],
+          "attributeMapping": "standard"
+        },
+        "FRA": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC"
+          ],
+          "attributeMapping": "standard"
+        },
+        "DEU": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC"
+          ],
+          "attributeMapping": "standard"
+        }
+      }
+    },
+    "DEU": {
+      "partners": {
+        "USA": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "DEU-US"
+          ],
+          "attributeMapping": "german_to_nato"
+        },
+        "FRA": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC",
+            "EU-RESTRICTED"
+          ],
+          "attributeMapping": "standard"
+        },
+        "GBR": {
+          "enabled": true,
+          "trustLevel": "bilateral",
+          "maxClassification": "SECRET",
+          "allowedCOI": [
+            "NATO",
+            "NATO-COSMIC"
+          ],
+          "attributeMapping": "standard"
+        }
+      }
+    }
+  }
+}

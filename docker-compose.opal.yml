@@ -1,0 +1,206 @@
+# OPAL (Open Policy Administration Layer) Integration
+# Version: 1.0.0
+# Purpose: Dynamic policy and data management for DIVE V3
+#
+# OPAL Architecture:
+# - OPAL Server: Central hub for policy/data distribution
+# - OPAL Client: Runs alongside OPA, receives updates
+# - Git Policy Source: Policies from local policies/ directory
+# - Data Sources: MongoDB, config files, backend API
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.opal.yml up -d
+#
+# References:
+#   - OPAL Documentation: https://docs.opal.ac/
+#   - DIVE V3 Policy Spec: docs/PHASE-2-IMPLEMENTATION-PROMPT.md
+
+version: '3.8'
+
+networks:
+  dive-network:
+    external: true
+    name: dive-v3_dive-network
+
+volumes:
+  opal_data:
+
+services:
+  # =============================================================================
+  # OPAL Server
+  # =============================================================================
+  # Central hub that:
+  # 1. Tracks connected OPA instances via OPAL Clients
+  # 2. Detects policy changes (Git polling)
+  # 3. Broadcasts data updates to all clients
+  # 4. Provides admin API for manual triggers
+  
+  opal-server:
+    image: permitio/opal-server:0.7.6
+    container_name: dive-v3-opal-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # Server Configuration
+      OPAL_BROADCAST_URI: http://opal-server:7002
+      OPAL_DATA_CONFIG_SOURCES: '{"config": {"entries": [{"url": "http://opal-server:7002/policy-data", "topics": ["policy_data"], "dst_path": "/"}]}}'
+      
+      # Policy Source: Local filesystem (Git in production)
+      # For local dev, policies are mounted as volume and watched for changes
+      OPAL_POLICY_REPO_URL: ""
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30
+      OPAL_POLICY_REPO_MAIN_BRANCH: main
+      
+      # Static data files (mounted from policies/data/)
+      OPAL_INLINE_OPA_CONFIG: "true"
+      
+      # Logging
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: json
+      
+      # Server ports
+      UVICORN_PORT: 7002
+      UVICORN_HOST: 0.0.0.0
+      
+      # Authentication (optional - secure in production)
+      # OPAL_AUTH_PUBLIC_KEY:
+      # OPAL_AUTH_PRIVATE_KEY:
+      
+      # Data update channels
+      OPAL_DATA_TOPICS_DEFAULT: "policy_data"
+      
+      # Health check configuration
+      OPAL_STATISTICS_ENABLED: "true"
+    ports:
+      - "7002:7002"  # OPAL Server API & broadcast
+    networks:
+      - dive-network
+    volumes:
+      # Mount policies for file watching (local development)
+      - ./policies:/policies:ro
+      # Mount static data files
+      - ./policies/data:/policy-data:ro
+      # OPAL server data persistence
+      - opal_data:/opal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7002/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      - opa
+
+  # =============================================================================
+  # OPAL Client (replaces standalone OPA)
+  # =============================================================================
+  # Runs OPA embedded with OPAL client sidecar that:
+  # 1. Receives policy updates from OPAL Server
+  # 2. Receives data updates (trusted_issuers, federation, COI)
+  # 3. Keeps OPA data store in sync
+  
+  opal-client:
+    image: permitio/opal-client:0.7.6
+    container_name: dive-v3-opal-client
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # Connect to OPAL Server
+      OPAL_SERVER_URL: http://opal-server:7002
+      
+      # OPA Configuration (embedded)
+      OPAL_INLINE_OPA_ENABLED: "true"
+      OPAL_INLINE_OPA_CONFIG: |
+        {
+          "addr": "0.0.0.0:8181",
+          "log_level": "info",
+          "log_format": "json",
+          "decision_logs": {
+            "console": true
+          }
+        }
+      
+      # Data fetching configuration
+      OPAL_DATA_TOPICS: "policy_data"
+      OPAL_DEFAULT_UPDATE_CALLBACKS: '{"callbacks": []}'
+      
+      # Logging
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: json
+      
+      # Client identification
+      OPAL_CLIENT_TOKEN: ""
+      
+      # Static data configuration
+      # This tells OPAL client where to load initial data from
+      OPAL_DATA_UPDATER_ENABLED: "true"
+      
+      # Scope restriction for multi-tenant (optional)
+      # OPAL_SCOPE_ID: usa
+    ports:
+      - "8181:8181"  # OPA API
+      - "7000:7000"  # OPAL Client API
+    networks:
+      - dive-network
+    volumes:
+      # Mount policies for local development
+      - ./policies:/policies:ro
+      # Mount static data files
+      - ./policies/data:/policy-data:ro
+    depends_on:
+      opal-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # =============================================================================
+  # OPAL Data Publisher (Backend Service Extension)
+  # =============================================================================
+  # This service publishes data updates to OPAL when MongoDB changes.
+  # In production, this would be part of the backend service.
+  # For Phase 2, we run it as a separate container for isolation.
+  
+  opal-data-publisher:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: dive-v3-opal-data-publisher
+    restart: unless-stopped
+    stop_grace_period: 10s
+    environment:
+      NODE_ENV: development
+      # MongoDB connection for change stream watching
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongo:27017?authSource=admin
+      MONGODB_DATABASE: dive-v3
+      # OPAL Server URL for publishing updates
+      OPAL_SERVER_URL: http://opal-server:7002
+      # Data topics to publish
+      OPAL_DATA_TOPICS: "policy_data"
+      # Enable publisher mode
+      OPAL_PUBLISHER_MODE: "true"
+      # Log level
+      LOG_LEVEL: info
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    networks:
+      - dive-network
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./config:/app/config:ro
+      - ./policies/data:/app/policies/data:rw
+    depends_on:
+      opal-server:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    command: ["npm", "run", "opal-publisher"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+

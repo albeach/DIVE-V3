@@ -159,11 +159,21 @@ services:
       - "--log-level=info"
       - "--log-format=json"
       - "--set=decision_logs.console=true"
-      - "/policies"
+      - "/policies/base"
+      - "/policies/org"
+      - "/policies/tenant"
+      - "/policies/entrypoints"
+      - "/policies/compat"
+      - "/data/data.json"
     ports:
       - "8182:8181"
     volumes:
-      - ./policies:/policies:ro
+      - ./policies/base:/policies/base:ro
+      - ./policies/org:/policies/org:ro
+      - ./policies/tenant:/policies/tenant:ro
+      - ./policies/entrypoints:/policies/entrypoints:ro
+      - ./policies/compat:/policies/compat:ro
+      - ./policies/data:/data:ro
     networks:
       dive-fra-network:
         aliases:
@@ -350,7 +360,8 @@ services:
     volumes:
       - ./frontend:/app
       - ./certs:/opt/app/certs:ro
-      - ./frontend/.env.fra:/app/.env.local:ro
+      # CRITICAL: Do NOT mount .env.fra - use environment variables from docker-compose.yml (GCP secrets)
+      # - ./frontend/.env.fra:/app/.env.local:ro
       # CRITICAL: Instance-specific volumes for build isolation
       - frontend_fra_node_modules:/app/node_modules
       - frontend_fra_next:/app/.next

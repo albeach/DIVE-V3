@@ -37,7 +37,7 @@ const IS_DOCKER = process.env.CONTAINER === 'docker' || fs.existsSync('/.dockere
 // Resolve paths differently for Docker vs local execution
 const BACKEND_ROOT = IS_DOCKER ? '/app' : path.resolve(__dirname, '../..');
 const PROJECT_ROOT = IS_DOCKER ? '/app' : path.resolve(__dirname, '../../..');
-const FEDERATION_REGISTRY_PATH = IS_DOCKER 
+const FEDERATION_REGISTRY_PATH = IS_DOCKER
     ? '/app/config/federation-registry.json'
     : path.join(PROJECT_ROOT, 'config/federation-registry.json');
 const KAS_REGISTRY_PATH = IS_DOCKER
@@ -354,10 +354,10 @@ function loadCheckpoint(instanceCode: string, seedBatchId: string): ISeedCheckpo
 
 function findIncompleteCheckpoint(instanceCode: string): ISeedCheckpoint | null {
     if (!fs.existsSync(CHECKPOINT_DIR)) return null;
-    
+
     const files = fs.readdirSync(CHECKPOINT_DIR)
         .filter(f => f.startsWith(`${instanceCode}-`) && f.endsWith('.checkpoint.json'));
-    
+
     for (const file of files.sort().reverse()) {
         try {
             const checkpoint = JSON.parse(fs.readFileSync(path.join(CHECKPOINT_DIR, file), 'utf-8')) as ISeedCheckpoint;
@@ -448,7 +448,7 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
             return { uri, user, password };
         }
     }
-    
+
     // Determine host: use 'mongo' inside Docker, 'localhost' otherwise
     const isDocker = process.env.CONTAINER === 'docker' || process.env.HOSTNAME?.startsWith('dive-v3');
     const defaultHost = isDocker ? 'mongo' : 'localhost';
@@ -456,32 +456,32 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
     const port = config.services.mongodb.externalPort;
     const database = config.mongodb.database;
     const user = config.mongodb.user;
-    
+
     // Get password from GCP Secret Manager or fallback to environment variable
     const password = await getMongoDBPassword(instanceCode);
-    
+
     // URI without credentials - auth passed separately to MongoClient
     const uri = `mongodb://${host}:${port}/${database}`;
-    
+
     // Debug logging
     console.log(`   MongoDB URI: ${uri}?authSource=admin`);
     console.log(`   Auth User: ${user}, Password length: ${password.length} chars`);
-    
+
     return { uri, user, password };
 }
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
     const servers: IKASServer[] = [];
     const localKas = kasRegistry.kasServers.find(k => k.countryCode === instanceCode);
-    
+
     if (localKas) {
         servers.push(localKas);
     }
-    
+
     // Add trusted partner KAS servers
     const trustMatrix = kasRegistry.federationTrust.trustMatrix;
     const localKasId = localKas?.kasId;
-    
+
     if (localKasId && trustMatrix[localKasId]) {
         for (const partnerKasId of trustMatrix[localKasId]) {
             const partnerKas = kasRegistry.kasServers.find(k => k.kasId === partnerKasId);
@@ -490,7 +490,7 @@ function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: strin
             }
         }
     }
-    
+
     return servers;
 }
 
@@ -924,14 +924,14 @@ function random<T>(arr: T[]): T {
 function weightedRandom<T>(items: T[], weights: number[]): T {
     const totalWeight = weights.reduce((a, b) => a + b, 0);
     let random = Math.random() * totalWeight;
-    
+
     for (let i = 0; i < items.length; i++) {
         if (random < weights[i]) {
             return items[i];
         }
         random -= weights[i];
     }
-    
+
     return items[items.length - 1];
 }
 
@@ -948,7 +948,7 @@ function selectClassification(): ClassificationLevel {
 function selectCOITemplate(instanceCode: string): ICOITemplate {
     const affinity = INSTANCE_COUNTRY_AFFILIATIONS[instanceCode];
     const weightMultiplier = affinity?.weightMultiplier || 1.0;
-    
+
     const weights = COI_TEMPLATES.map(t => {
         // Boost weight for templates with instance affinity
         if (t.instanceAffinity?.includes(instanceCode)) {
@@ -956,7 +956,7 @@ function selectCOITemplate(instanceCode: string): ICOITemplate {
         }
         return t.weight;
     });
-    
+
     return weightedRandom(COI_TEMPLATES, weights);
 }
 
@@ -976,16 +976,16 @@ async function createZTDFDocument(
     if (!validateCountryCode(instanceCode)) {
         throw new Error(`Invalid ISO 3166-1 alpha-3 instance code: ${instanceCode}. Must be 3 uppercase letters (e.g., USA, FRA, GBR, DEU).`);
     }
-    
+
     // Resource ID format: doc-<ISO3166-3>-<batchId>-<sequence>
     // Example: doc-USA-abc12345-00001
     const resourceId = `doc-${instanceCode}-${seedBatchId}-${index.toString().padStart(5, '0')}`;
     const classification = selectClassification();
-    
+
     // Use instance-weighted COI template selection
     const template = selectCOITemplate(instanceCode);
     const { coi: COI, coiOperator, releasabilityTo, caveats, industryAllowed } = template;
-    
+
     // Validate all country codes in releasabilityTo are valid ISO 3166-1 alpha-3
     const countryValidation = validateCountryCodes(releasabilityTo);
     if (!countryValidation.valid) {
@@ -1197,7 +1197,7 @@ async function seedInstance(
     const startTime = Date.now();
     const seedBatchId = `seed-${Date.now()}`;
     const config = getInstanceConfig(federationRegistry, instanceCode);
-    
+
     // Get MongoDB connection details from GCP Secret Manager or environment
     const gcpAvailable = await isGCPSecretsAvailable();
     const mongoConnection = await getMongoDBConnection(config, instanceCode);
@@ -1223,7 +1223,7 @@ async function seedInstance(
     if (!validateCountryCode(instanceCode)) {
         throw new Error(`Invalid ISO 3166-1 alpha-3 instance code: ${instanceCode}. Valid codes: ${Object.keys(ISO_3166_1_ALPHA_3).join(', ')}`);
     }
-    
+
     console.log(`   ✅ Instance Code ${instanceCode} validated (ISO 3166-1 alpha-3: ${ISO_3166_1_ALPHA_3[instanceCode]})\n`);
 
     if (options.dryRun) {
@@ -1234,25 +1234,25 @@ async function seedInstance(
             console.log(`   Preferred COIs: ${affinity.preferredCOIs.join(', ')}`);
             console.log(`   Weight Multiplier: ${affinity.weightMultiplier}x\n`);
         }
-        
+
         // Simulate distribution with instance-weighted COI selection
         for (let i = 0; i < options.count; i++) {
             const classification = selectClassification();
             const template = selectCOITemplate(instanceCode); // Instance-weighted selection
-            
+
             distribution.byClassification[classification] = (distribution.byClassification[classification] || 0) + 1;
-            
+
             const coiKey = template.coi.length > 0 ? template.coi[0] : 'NO_COI';
             distribution.byCOI[coiKey] = (distribution.byCOI[coiKey] || 0) + 1;
-            
+
             const kaoCount = template.coi.length > 1 ? template.coi.length : (Math.random() < 0.5 ? 1 : (Math.random() < 0.67 ? 2 : 3));
             distribution.byKASCount[kaoCount.toString()] = (distribution.byKASCount[kaoCount.toString()] || 0) + 1;
-            
+
             distribution.byIndustryAccess[template.industryAllowed.toString()]++;
         }
-        
+
         showDistributionSummary(distribution, options.count);
-        
+
         return {
             instanceCode,
             instanceName: config.name,
@@ -1321,7 +1321,7 @@ async function seedInstance(
         let successfulBatches = 0;
         let failedAttempts = 0;
         const MAX_RETRY_ATTEMPTS = 3;
-        
+
         for (let batch = 0; batch < totalBatches; batch++) {
             const batchStart = batch * options.batchSize;
             const batchEnd = Math.min(batchStart + options.batchSize, options.count);
@@ -1335,18 +1335,18 @@ async function seedInstance(
                 }
 
                 const batchDocs = await Promise.all(batchPromises);
-                
+
                 // Update distribution counters
                 for (const doc of batchDocs) {
                     const classification = doc.legacy.classification;
                     distribution.byClassification[classification] = (distribution.byClassification[classification] || 0) + 1;
-                    
+
                     const coiKey = doc.legacy.COI.length > 0 ? doc.legacy.COI[0] : 'NO_COI';
                     distribution.byCOI[coiKey] = (distribution.byCOI[coiKey] || 0) + 1;
-                    
+
                     const kaoCount = doc.ztdf.payload.keyAccessObjects.length.toString();
                     distribution.byKASCount[kaoCount] = (distribution.byKASCount[kaoCount] || 0) + 1;
-                    
+
                     distribution.byIndustryAccess[doc.legacy.releasableToIndustry?.toString() || 'false']++;
                 }
 
@@ -1382,19 +1382,19 @@ async function seedInstance(
 
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
                 const docsPerSec = ((batchEnd) / (Date.now() - startTime) * 1000).toFixed(1);
-                
+
                 if (options.verbose) {
                     console.log(`   ✅ Batch ${batch + 1}/${totalBatches}: ${batchEnd - batchStart} docs (${batchStart + 1}-${batchEnd}) | ${elapsed}s | ${docsPerSec} docs/s`);
                 } else {
-                    process.stdout.write(`\r   ✅ Progress: ${batchEnd}/${options.count} (${Math.round(batchEnd/options.count*100)}%)`);
+                    process.stdout.write(`\r   ✅ Progress: ${batchEnd}/${options.count} (${Math.round(batchEnd / options.count * 100)}%)`);
                 }
-                
+
                 failedAttempts = 0; // Reset failed attempts on success
-                
+
             } catch (batchError) {
                 failedAttempts++;
                 console.error(`\n   ❌ Batch ${batch + 1} failed: ${batchError}`);
-                
+
                 if (failedAttempts >= MAX_RETRY_ATTEMPTS) {
                     checkpoint.status = 'failed';
                     checkpoint.error = `Failed at batch ${batch + 1}: ${batchError}`;
@@ -1402,7 +1402,7 @@ async function seedInstance(
                     saveCheckpoint(checkpoint);
                     throw new Error(`Seeding failed after ${MAX_RETRY_ATTEMPTS} consecutive batch failures. Checkpoint saved for recovery.`);
                 }
-                
+
                 // Retry the same batch
                 batch--;
                 await new Promise(r => setTimeout(r, 2000));
@@ -1440,7 +1440,7 @@ async function seedInstance(
         const manifestPath = path.join(SEED_LOG_DIR, `seed-manifest-${instanceCode.toLowerCase()}-${seedBatchId}.json`);
         fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
         console.log(`📋 Manifest saved: ${manifestPath}\n`);
-        
+
         // Clean up checkpoint after successful completion
         deleteCheckpoint(instanceCode, seedBatchId);
         console.log(`🗑️  Checkpoint cleaned up\n`);
@@ -1548,16 +1548,16 @@ async function main() {
     console.log('\n╔══════════════════════════════════════════════════════════════════╗');
     console.log('║                       SEEDING COMPLETE                            ║');
     console.log('╠══════════════════════════════════════════════════════════════════╣');
-    
+
     let totalDocs = 0;
     let totalTime = 0;
-    
+
     for (const manifest of manifests) {
         totalDocs += manifest.totalDocuments;
         totalTime += manifest.duration_ms;
         console.log(`║  ${manifest.instanceCode.padEnd(4)} (${manifest.instanceName.padEnd(20)}): ${manifest.totalDocuments.toString().padStart(6)} docs in ${(manifest.duration_ms / 1000).toFixed(1)}s`);
     }
-    
+
     console.log('╠══════════════════════════════════════════════════════════════════╣');
     console.log(`║  Total: ${totalDocs.toString().padStart(6)} documents in ${(totalTime / 1000).toFixed(1)}s`);
     console.log('╚══════════════════════════════════════════════════════════════════╝\n');

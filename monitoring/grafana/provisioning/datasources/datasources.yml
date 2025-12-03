@@ -24,4 +24,18 @@ datasources:
     jsonData:
       implementation: prometheus
 
+  # Phase 8: Loki for log aggregation
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: prometheus
+          matcherRegex: "correlationId=([a-zA-Z0-9-]+)"
+          name: correlationId
+          url: '$${__value.raw}'
+
 

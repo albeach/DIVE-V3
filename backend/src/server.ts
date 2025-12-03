@@ -31,6 +31,7 @@ import kasRoutes from './routes/kas.routes';  // KAS proxy routes for ZTDF key a
 import federatedQueryRoutes from './routes/federated-query.routes';  // Phase 3: Direct MongoDB federation
 import analyticsRoutes from './routes/analytics.routes';  // Phase 2: Search analytics
 import { metricsService } from './services/metrics.service';  // Phase 3 GAP-004: Prometheus metrics
+import metricsRoutes from './routes/metrics.routes';  // Phase 8: Enhanced Prometheus metrics
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
@@ -107,11 +108,8 @@ app.use((req, _res, next) => {
 // Routes
 // ============================================
 
-// Phase 3 GAP-004: Public metrics endpoint for Prometheus (no auth required)
-app.get('/metrics', (_req, res) => {
-  res.setHeader('Content-Type', 'text/plain; version=0.0.4');
-  res.send(metricsService.exportPrometheus());
-});
+// Phase 8: Enhanced Prometheus metrics routes (no auth required)
+app.use('/metrics', metricsRoutes);
 
 app.use('/health', healthRoutes);
 app.use('/api', publicRoutes);  // Public routes (no auth required)

@@ -61,7 +61,11 @@
         "check-webauthn-credentials": "tsx src/scripts/check-and-clean-webauthn-credentials.ts",
         "setup-demo-users": "tsx src/scripts/setup-demo-users.ts",
         "test-demo-users": "tsx src/scripts/test-demo-users.ts",
-        "get-demo-otp": "tsx src/scripts/get-demo-otp-code.ts"
+        "get-demo-otp": "tsx src/scripts/get-demo-otp-code.ts",
+        "opal-publisher": "tsx src/scripts/opal-publisher.ts",
+        "opal:sync": "tsx src/scripts/opal-publisher.ts -- --sync",
+        "opal:watch": "tsx src/scripts/opal-publisher.ts -- --watch",
+        "opal:health": "tsx src/scripts/opal-publisher.ts -- --health"
     },
     "keywords": [
         "dive",
@@ -95,6 +99,7 @@
         "mongodb": "^6.3.0",
         "node-cache": "^5.1.2",
         "node-forge": "^1.3.1",
+        "prom-client": "^15.1.3",
         "qrcode": "^1.5.3",
         "speakeasy": "^2.0.0",
         "uuid": "^11.1.0",

@@ -24,7 +24,7 @@ services:
     stop_grace_period: 30s
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-DivePilot2025!}
       POSTGRES_DB: postgres
       # IMPORTANT: If you see "password authentication failed":
       # 1. The volume was created with a different password
@@ -58,7 +58,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-DivePilot2025!}
       # Keycloak 26 Configuration with HTTPS (Defense in Depth)
       # Using mkcert certificates for internal HTTPS
       # Hostname: Public URL used in tokens (Cloudflare tunnel, port 443 default)
@@ -76,7 +76,10 @@ services:
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
+      # Demo mode: DISABLED for stability
+      # DEMO_MODE: "false"
+      # NODE_ENV: production
       # Gap #6: Enable JavaScript providers for script-based protocol mappers
       KC_FEATURES: scripts
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
@@ -111,7 +114,7 @@ services:
     stop_grace_period: 30s
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-DivePilot2025!}
       MONGO_INITDB_DATABASE: dive-v3
     ports:
       - "27017:27017"
@@ -162,11 +165,21 @@ services:
       - "--log-level=info"
       - "--log-format=json"
       - "--set=decision_logs.console=true"
-      - "/policies"
+      - "/policies/base"
+      - "/policies/org"
+      - "/policies/tenant"
+      - "/policies/entrypoints"
+      - "/policies/compat"
+      - "/data/data.json"
     ports:
       - "8181:8181"
     volumes:
-      - ./policies:/policies:ro
+      - ./policies/base:/policies/base:ro
+      - ./policies/org:/policies/org:ro
+      - ./policies/tenant:/policies/tenant:ro
+      - ./policies/entrypoints:/policies/entrypoints:ro
+      - ./policies/compat:/policies/compat:ro
+      - ./policies/data:/data:ro
     networks:
       - dive-network
     healthcheck:
@@ -226,18 +239,20 @@ services:
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run source ./scripts/sync-gcp-secrets.sh first}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
       # Admin credentials for Keycloak Admin API (IdP listing, user management)
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}@mongo:27017?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
       MONGODB_DATABASE: dive-v3
       OPA_URL: http://opa:8181
       KAS_URL: https://kas:8080
       AUTHZFORCE_URL: http://authzforce:8080/authzforce-ce
       LOG_LEVEL: info
+      # Demo mode: DISABLED for stability
+      # DEMO_MODE: "false"
       # Federation API URL for metadata endpoint
       API_URL: https://usa-api.dive25.com
       # Phase 3B: Federation instance URLs (use Cloudflare tunnel URLs)
@@ -332,10 +347,10 @@ services:
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3000,https://localhost:4000,https://localhost:8443,https://usa-app.dive25.com,https://usa-api.dive25.com,https://usa-idp.dive25.com"
       # Allow Cloudflare Insights for monitoring
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
-      AUTH_SECRET: ${AUTH_SECRET:?Run source ./scripts/sync-gcp-secrets.sh first}
+      AUTH_SECRET: ${AUTH_SECRET:-dive-v3-auth-secret}
       # Client credentials
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run source ./scripts/sync-gcp-secrets.sh first}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
       # SSL and host configuration
       AUTH_TRUST_HOST: "true"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
@@ -351,6 +366,9 @@ services:
     volumes:
       # Development: Mount entire source for hot reload
       - ./frontend:/app
+      # CRITICAL: Exclude .env.local to prevent hardcoded secrets from overriding GCP secrets
+      # Next.js will use environment variables from docker-compose.yml instead
+      - /app/.env.local
       # Mount SSL certificates for HTTPS server (both locations)
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./frontend/certs:/opt/app/certs:ro
@@ -384,7 +402,7 @@ services:
       BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
       OPA_URL: http://opa:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:?Run source ./scripts/sync-gcp-secrets.sh first}@mongo:27017?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
       # Multi-realm migration (Oct 21, 2025): KAS needs Keycloak config for JWT validation

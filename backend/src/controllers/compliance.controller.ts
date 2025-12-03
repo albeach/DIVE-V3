@@ -2,12 +2,21 @@
  * Compliance Controller
  *
  * Exposes ACP-240 compliance status, Multi-KAS architecture,
- * COI keys, classification equivalency, and X.509 PKI status
+ * COI keys, classification equivalency, X.509 PKI status,
+ * policy drift detection, test coverage, and SLA metrics.
+ *
+ * Phase 6 additions:
+ * - GET /api/compliance/policy-drift - Policy drift status
+ * - GET /api/compliance/test-coverage - Test coverage metrics
+ * - GET /api/compliance/decision-metrics - Decision statistics
+ * - GET /api/compliance/sla-metrics - SLA compliance tracking
+ * - GET /api/compliance/overview - Complete compliance overview
  *
  * Purpose: Provide data for compliance dashboard UI/UX
  */
 
 import { Request, Response } from "express";
+import { complianceMetricsService } from "../services/compliance-metrics.service";
 import { logger } from "../utils/logger";
 // import { coiKeyRegistry } from "../services/coi-key-registry"; // Not currently used
 // import { getEquivalencyTable } from "../utils/classification-equivalency"; // Not currently used
@@ -824,5 +833,135 @@ export async function getNistAssurance(
     } catch (error) {
         logger.error("Error fetching NIST assurance", { error });
         res.status(500).json({ error: "Failed to fetch NIST assurance" });
+    }
+}
+
+// ============================================
+// PHASE 6: CONTINUOUS COMPLIANCE AUTOMATION
+// ============================================
+
+/**
+ * GET /api/compliance/policy-drift
+ *
+ * Returns current policy drift detection status
+ */
+export async function getPolicyDriftStatus(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const driftStatus = await complianceMetricsService.getPolicyDriftStatus();
+        res.json(driftStatus);
+    } catch (error) {
+        logger.error("Error fetching policy drift status", { error });
+        res.status(500).json({ error: "Failed to fetch policy drift status" });
+    }
+}
+
+/**
+ * GET /api/compliance/test-coverage
+ *
+ * Returns policy test coverage metrics
+ */
+export async function getTestCoverageMetrics(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const metrics = await complianceMetricsService.getTestCoverageMetrics();
+        res.json(metrics);
+    } catch (error) {
+        logger.error("Error fetching test coverage metrics", { error });
+        res.status(500).json({ error: "Failed to fetch test coverage metrics" });
+    }
+}
+
+/**
+ * GET /api/compliance/decision-metrics
+ *
+ * Returns authorization decision statistics
+ */
+export async function getDecisionMetrics(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const metrics = await complianceMetricsService.getDecisionMetrics();
+        res.json(metrics);
+    } catch (error) {
+        logger.error("Error fetching decision metrics", { error });
+        res.status(500).json({ error: "Failed to fetch decision metrics" });
+    }
+}
+
+/**
+ * GET /api/compliance/sla-metrics
+ *
+ * Returns SLA compliance tracking metrics
+ */
+export async function getSLAMetrics(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const metrics = await complianceMetricsService.getSLAMetrics();
+        res.json(metrics);
+    } catch (error) {
+        logger.error("Error fetching SLA metrics", { error });
+        res.status(500).json({ error: "Failed to fetch SLA metrics" });
+    }
+}
+
+/**
+ * GET /api/compliance/overview
+ *
+ * Returns complete compliance overview with all metrics
+ */
+export async function getComplianceOverview(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const overview = await complianceMetricsService.getComplianceOverview();
+        res.json(overview);
+    } catch (error) {
+        logger.error("Error fetching compliance overview", { error });
+        res.status(500).json({ error: "Failed to fetch compliance overview" });
+    }
+}
+
+/**
+ * GET /api/compliance/cache-stats
+ *
+ * Returns decision cache statistics
+ */
+export async function getCacheStats(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const stats = complianceMetricsService.getCacheStats();
+        res.json(stats);
+    } catch (error) {
+        logger.error("Error fetching cache stats", { error });
+        res.status(500).json({ error: "Failed to fetch cache stats" });
+    }
+}
+
+/**
+ * GET /api/compliance/audit-stats
+ *
+ * Returns audit logging statistics
+ */
+export async function getAuditStats(
+    _req: Request,
+    res: Response,
+): Promise<void> {
+    try {
+        const stats = complianceMetricsService.getAuditStats();
+        res.json(stats);
+    } catch (error) {
+        logger.error("Error fetching audit stats", { error });
+        res.status(500).json({ error: "Failed to fetch audit stats" });
     }
 }
