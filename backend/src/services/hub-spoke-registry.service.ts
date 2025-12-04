@@ -6,6 +6,7 @@
  * 
  * Features:
  * - Spoke registration with certificate-based identity
+ * - X.509 certificate validation and fingerprint tracking
  * - Spoke authorization/revocation
  * - Policy scope assignment per spoke
  * - Health monitoring of spokes
@@ -13,16 +14,19 @@
  * 
  * Security:
  * - mTLS for spoke communication
+ * - X.509 certificate validation (TLS, algorithm strength)
  * - JWT tokens with limited scope
  * - Bilateral trust establishment
  * 
- * @version 1.0.0
+ * @version 1.1.0
  * @date 2025-12-04
  */
 
 import crypto from 'crypto';
+import { X509Certificate } from 'crypto';
 import { logger } from '../utils/logger';
 import { opalClient } from './opal-client';
+import { idpValidationService } from './idp-validation.service';
 
 // ============================================
 // TYPES
@@ -40,11 +44,19 @@ export interface ISpokeRegistration {
   // Certificate/Auth
   publicKey?: string;
   certificateFingerprint?: string;
+  certificatePEM?: string;  // Full certificate for mTLS
+  certificateSubject?: string;
+  certificateIssuer?: string;
+  certificateNotBefore?: Date;
+  certificateNotAfter?: Date;
+  certificateValidationResult?: ICertificateValidation;
   
   // Authorization
   status: 'pending' | 'approved' | 'suspended' | 'revoked';
   approvedAt?: Date;
   approvedBy?: string;
+  suspendedReason?: string;
+  revokedReason?: string;
   
   // Policy Scope
   allowedPolicyScopes: string[];  // Which tenant data they can receive
@@ -59,6 +71,27 @@ export interface ISpokeRegistration {
   // Trust
   trustLevel: 'development' | 'partner' | 'bilateral' | 'national';
   maxClassificationAllowed: string;
+  
+  // Rate Limiting
+  rateLimit: {
+    requestsPerMinute: number;
+    burstSize: number;
+  };
+  
+  // Audit
+  auditRetentionDays: number;
+  lastAuditSync?: Date;
+}
+
+export interface ICertificateValidation {
+  valid: boolean;
+  fingerprint: string;
+  algorithm: string;
+  tlsVersion?: string;
+  tlsScore?: number;
+  warnings: string[];
+  errors: string[];
+  validatedAt: Date;
 }
 
 export interface ISpokeToken {
@@ -87,8 +120,10 @@ export interface IRegistrationRequest {
   apiUrl: string;
   idpUrl: string;
   publicKey?: string;
+  certificatePEM?: string;  // X.509 certificate for mTLS
   requestedScopes: string[];
   contactEmail: string;
+  validateEndpoints?: boolean;  // Whether to validate IdP endpoints
 }
 
 export interface IHubStatistics {
@@ -159,7 +194,7 @@ class SpokeStore {
 
 class HubSpokeRegistryService {
   private store: SpokeStore;
-  private hubSecret: string;
+  private readonly hubSecret: string;
   private tokenValidityMs: number;
 
   constructor() {
@@ -168,6 +203,13 @@ class HubSpokeRegistryService {
     this.tokenValidityMs = parseInt(process.env.SPOKE_TOKEN_VALIDITY_MS || '86400000', 10); // 24h
     
     logger.info('Hub-Spoke Registry Service initialized');
+  }
+
+  /**
+   * Get hub signing secret (for JWT signing in future)
+   */
+  getHubSecret(): string {
+    return this.hubSecret;
   }
 
   // ============================================
@@ -187,6 +229,75 @@ class HubSpokeRegistryService {
 
     const spokeId = this.generateSpokeId(request.instanceCode);
     
+    // Validate X.509 certificate if provided
+    let certValidation: ICertificateValidation | undefined;
+    let certSubject: string | undefined;
+    let certIssuer: string | undefined;
+    let certNotBefore: Date | undefined;
+    let certNotAfter: Date | undefined;
+    let certFingerprint: string | undefined;
+    
+    if (request.certificatePEM) {
+      certValidation = await this.validateCertificate(request.certificatePEM);
+      
+      if (!certValidation.valid && certValidation.errors.length > 0) {
+        logger.warn('Spoke certificate validation failed', {
+          instanceCode: request.instanceCode,
+          errors: certValidation.errors
+        });
+        // We don't reject - just log warning. Admin can decide during approval.
+      }
+      
+      // Extract certificate details
+      try {
+        const certDetails = this.extractCertificateDetails(request.certificatePEM);
+        certSubject = certDetails.subject;
+        certIssuer = certDetails.issuer;
+        certNotBefore = certDetails.validFrom;
+        certNotAfter = certDetails.validTo;
+        certFingerprint = certValidation.fingerprint;
+      } catch (err) {
+        logger.warn('Failed to extract certificate details', {
+          error: err instanceof Error ? err.message : 'Unknown error'
+        });
+      }
+    }
+    
+    // Validate IdP endpoint if requested
+    if (request.validateEndpoints !== false) {
+      try {
+        const tlsResult = await idpValidationService.validateTLS(request.idpUrl);
+        if (!tlsResult.pass) {
+          logger.warn('Spoke IdP TLS validation failed', {
+            instanceCode: request.instanceCode,
+            idpUrl: request.idpUrl,
+            errors: tlsResult.errors
+          });
+        }
+        
+        // Store TLS validation in cert validation
+        if (!certValidation) {
+          certValidation = {
+            valid: tlsResult.pass,
+            fingerprint: '',
+            algorithm: '',
+            tlsVersion: tlsResult.version,
+            tlsScore: tlsResult.score,
+            warnings: tlsResult.warnings,
+            errors: tlsResult.errors,
+            validatedAt: new Date()
+          };
+        } else {
+          certValidation.tlsVersion = tlsResult.version;
+          certValidation.tlsScore = tlsResult.score;
+        }
+      } catch (err) {
+        logger.warn('Failed to validate spoke IdP endpoint', {
+          error: err instanceof Error ? err.message : 'Unknown error'
+        });
+      }
+    }
+    
     const spoke: ISpokeRegistration = {
       spokeId,
       instanceCode: request.instanceCode.toUpperCase(),
@@ -196,6 +307,13 @@ class HubSpokeRegistryService {
       apiUrl: request.apiUrl,
       idpUrl: request.idpUrl,
       publicKey: request.publicKey,
+      certificatePEM: request.certificatePEM,
+      certificateFingerprint: certFingerprint,
+      certificateSubject: certSubject,
+      certificateIssuer: certIssuer,
+      certificateNotBefore: certNotBefore,
+      certificateNotAfter: certNotAfter,
+      certificateValidationResult: certValidation,
       
       status: 'pending',
       
@@ -207,7 +325,16 @@ class HubSpokeRegistryService {
       heartbeatIntervalMs: 30000, // 30 seconds
       
       trustLevel: 'development',
-      maxClassificationAllowed: 'UNCLASSIFIED'
+      maxClassificationAllowed: 'UNCLASSIFIED',
+      
+      // Default rate limits
+      rateLimit: {
+        requestsPerMinute: 60,
+        burstSize: 10
+      },
+      
+      // Default audit retention
+      auditRetentionDays: 90
     };
 
     await this.store.save(spoke);
@@ -217,10 +344,102 @@ class HubSpokeRegistryService {
       instanceCode: spoke.instanceCode,
       name: spoke.name,
       requestedScopes: request.requestedScopes,
-      contactEmail: request.contactEmail
+      contactEmail: request.contactEmail,
+      certificateProvided: !!request.certificatePEM,
+      certValidation: certValidation?.valid
     });
 
     return spoke;
+  }
+  
+  /**
+   * Validate an X.509 certificate
+   */
+  async validateCertificate(certificatePEM: string): Promise<ICertificateValidation> {
+    const result: ICertificateValidation = {
+      valid: false,
+      fingerprint: '',
+      algorithm: '',
+      warnings: [],
+      errors: [],
+      validatedAt: new Date()
+    };
+    
+    try {
+      // Parse the certificate
+      const cert = new X509Certificate(certificatePEM);
+      
+      // Calculate fingerprint
+      result.fingerprint = crypto
+        .createHash('sha256')
+        .update(Buffer.from(certificatePEM))
+        .digest('hex')
+        .toUpperCase();
+      
+      // Get public key algorithm
+      const pubKey = cert.publicKey;
+      result.algorithm = pubKey.asymmetricKeyType || 'unknown';
+      
+      // Check validity dates
+      const now = new Date();
+      const validFrom = new Date(cert.validFrom);
+      const validTo = new Date(cert.validTo);
+      
+      if (now < validFrom) {
+        result.errors.push(`Certificate not yet valid (valid from: ${validFrom.toISOString()})`);
+      }
+      
+      if (now > validTo) {
+        result.errors.push(`Certificate has expired (expired: ${validTo.toISOString()})`);
+      }
+      
+      // Warn if expiring soon (30 days)
+      const daysUntilExpiry = (validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysUntilExpiry > 0 && daysUntilExpiry < 30) {
+        result.warnings.push(`Certificate expires in ${Math.floor(daysUntilExpiry)} days`);
+      }
+      
+      // Check key size
+      if (result.algorithm === 'rsa') {
+        const keyDetails = pubKey.export({ type: 'spki', format: 'der' });
+        // RSA key size approximation from DER length
+        if (keyDetails.length < 270) {
+          result.warnings.push('RSA key size may be less than 2048 bits');
+        }
+      }
+      
+      // Check for self-signed
+      if (cert.issuer === cert.subject) {
+        result.warnings.push('Certificate is self-signed');
+      }
+      
+      result.valid = result.errors.length === 0;
+      
+    } catch (error) {
+      result.errors.push(`Certificate parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      result.valid = false;
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Extract details from X.509 certificate
+   */
+  private extractCertificateDetails(certificatePEM: string): {
+    subject: string;
+    issuer: string;
+    validFrom: Date;
+    validTo: Date;
+  } {
+    const cert = new X509Certificate(certificatePEM);
+    
+    return {
+      subject: cert.subject,
+      issuer: cert.issuer,
+      validFrom: new Date(cert.validFrom),
+      validTo: new Date(cert.validTo)
+    };
   }
 
   /**

@@ -171,7 +171,7 @@ check_certs() {
 }
 
 cmd_validate() {
-    print_header
+        print_header
     echo -e "${BOLD}Validating DIVE V3 Configuration...${NC}"
     echo ""
     
@@ -301,8 +301,8 @@ load_gcp_secrets() {
 
 load_local_defaults() {
     log_warn "Using local development defaults (NOT for production!)"
-    export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-DivePilot2025!}"
-    export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}"
+        export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-DivePilot2025!}"
+        export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}"
     export MONGO_PASSWORD="${MONGO_PASSWORD:-DivePilot2025!}"
     export AUTH_SECRET="${AUTH_SECRET:-local-dev-secret-not-for-production}"
     export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}"
@@ -388,7 +388,7 @@ cmd_secrets() {
 # =============================================================================
 
 cmd_up() {
-    print_header
+        print_header
     check_docker || exit 1
     check_certs || exit 1
     load_secrets
@@ -406,7 +406,7 @@ cmd_up() {
     fi
     
     log_success "Stack started"
-    echo ""
+        echo ""
     echo "  Frontend: https://localhost:3000"
     echo "  Backend:  https://localhost:4000"
     echo "  Keycloak: https://localhost:8443"
@@ -494,7 +494,7 @@ cmd_status() {
     echo -e "${BOLD}Local Containers:${NC}"
     docker ps --filter "name=dive" --format "  {{.Names}}: {{.Status}}" 2>/dev/null | head -15 || echo "  No containers running"
     
-    echo ""
+        echo ""
     echo -e "${BOLD}Remote Endpoints:${NC}"
     for endpoint in "usa-app.dive25.com" "usa-api.dive25.com" "usa-idp.dive25.com"; do
         local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$endpoint" 2>/dev/null || echo "000")
@@ -505,7 +505,7 @@ cmd_status() {
         fi
     done
     
-    echo ""
+        echo ""
     echo -e "${BOLD}Environment:${NC}"
     echo "  Mode:     $ENVIRONMENT"
     echo "  Instance: $INSTANCE"
@@ -515,8 +515,8 @@ cmd_status() {
 cmd_health() {
     print_header
     echo -e "${BOLD}Service Health Checks:${NC}"
-    echo ""
-    
+        echo ""
+        
     local services=("frontend:3000" "backend:4000" "keycloak:8443" "postgres:5432" "mongo:27017" "redis:6379" "opa:8181")
     
     for svc in "${services[@]}"; do
@@ -674,15 +674,15 @@ cmd_deploy() {
         # Check if Keycloak is ready
         if curl -kfs --max-time 3 "https://localhost:8443/health" >/dev/null 2>&1; then
             log_success "Keycloak is healthy!"
-            break
-        fi
-    done
-    
+                break
+            fi
+        done
+        
     log_step "Step 8: Applying Terraform configuration..."
-    cd terraform/pilot
+        cd terraform/pilot
     [ ! -d ".terraform" ] && terraform init
     terraform apply -var-file="${INSTANCE}.tfvars" -auto-approve
-    cd ../..
+        cd ../..
     
     log_step "Step 9: Seeding database..."
     cmd_seed "$INSTANCE" || log_warn "Seeding may have issues (check logs)"
@@ -690,9 +690,9 @@ cmd_deploy() {
     log_step "Step 10: Verifying deployment..."
     cmd_health
     
-    echo ""
+        echo ""
     log_success "Deployment complete!"
-    echo ""
+        echo ""
     echo "  Frontend: https://localhost:3000"
     echo "  Backend:  https://localhost:4000"
     echo "  Keycloak: https://localhost:8443"
@@ -809,11 +809,11 @@ cmd_terraform() {
     
     cd "terraform/${tf_dir}"
     
-    if [ ! -d ".terraform" ]; then
+        if [ ! -d ".terraform" ]; then
         log_info "Initializing Terraform..."
-        terraform init
-    fi
-    
+            terraform init
+        fi
+        
     case "$action" in
         plan)
             terraform plan -var-file="${INSTANCE}.tfvars"
@@ -1131,11 +1131,396 @@ cmd_hub() {
 }
 
 # =============================================================================
+# SPOKE COMMANDS (For distributed instances)
+# =============================================================================
+
+cmd_spoke() {
+    local action="${1:-help}"
+    shift || true
+    
+    case "$action" in
+        init)
+            spoke_init "$@"
+            ;;
+        register)
+            spoke_register "$@"
+            ;;
+        status)
+            spoke_status
+            ;;
+        sync)
+            spoke_sync
+            ;;
+        heartbeat)
+            spoke_heartbeat
+            ;;
+        *)
+            echo -e "${BOLD}Spoke Commands (for distributed instances):${NC}"
+            echo ""
+            echo "  init <code> <name>   Initialize a new spoke instance"
+            echo "  register             Register this spoke with the hub"
+            echo "  status               Show spoke federation status"
+            echo "  sync                 Force policy sync from hub"
+            echo "  heartbeat            Send heartbeat to hub"
+            echo ""
+            echo "Examples:"
+            echo "  ./dive spoke init NZL 'New Zealand Defence'"
+            echo "  ./dive spoke register"
+            echo "  ./dive spoke sync"
+            ;;
+    esac
+}
+
+spoke_init() {
+    local instance_code="${1:-}"
+    local instance_name="${2:-}"
+    
+    if [ -z "$instance_code" ] || [ -z "$instance_name" ]; then
+        log_error "Usage: ./dive spoke init <CODE> <NAME>"
+        echo ""
+        echo "Example: ./dive spoke init NZL 'New Zealand Defence Force'"
+        return 1
+    fi
+    
+    # Validate code is 3 letters
+    if [ ${#instance_code} -ne 3 ]; then
+        log_error "Instance code must be exactly 3 characters (ISO 3166-1 alpha-3)"
+        return 1
+    fi
+    
+    local code_upper=$(upper "$instance_code")
+    
+    echo -e "${BOLD}Initializing DIVE V3 Spoke Instance:${NC} $code_upper"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would create spoke configuration for: $code_upper"
+        log_dry "  Name: $instance_name"
+        log_dry "  Code: $code_upper"
+        log_dry ""
+        log_dry "Would create:"
+        log_dry "  - instances/$code_upper/docker-compose.yml"
+        log_dry "  - instances/$code_upper/config.json"
+        log_dry "  - instances/$code_upper/.env"
+        return 0
+    fi
+    
+    local spoke_dir="instances/${code_upper,,}"
+    
+    # Create directory structure
+    log_step "Creating instance directory: $spoke_dir"
+    mkdir -p "$spoke_dir"
+    
+    # Generate unique IDs
+    local spoke_id="spoke-${code_upper,,}-$(openssl rand -hex 4)"
+    local client_secret=$(openssl rand -base64 32 | tr -d '/+=')
+    
+    # Create config.json
+    log_step "Creating spoke configuration"
+    cat > "$spoke_dir/config.json" << EOF
+{
+  "spokeId": "$spoke_id",
+  "instanceCode": "$code_upper",
+  "name": "$instance_name",
+  "description": "DIVE V3 Spoke Instance for $instance_name",
+  "baseUrl": "https://${code_upper,,}-app.dive25.com",
+  "apiUrl": "https://${code_upper,,}-api.dive25.com",
+  "idpUrl": "https://${code_upper,,}-idp.dive25.com",
+  "hubUrl": "https://hub.dive25.com",
+  "status": "unregistered",
+  "requestedScopes": [
+    "policy:base",
+    "data:federation_matrix",
+    "data:trusted_issuers"
+  ],
+  "createdAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+    
+    # Create docker-compose.yml from template
+    log_step "Creating Docker Compose configuration"
+    cat > "$spoke_dir/docker-compose.yml" << EOF
+# DIVE V3 Spoke Instance: $code_upper ($instance_name)
+# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
+      POSTGRES_DB: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.4
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: \${POSTGRES_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HOSTNAME: ${code_upper,,}-idp.dive25.com
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    command: start --optimized
+    ports:
+      - "8443:8443"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:7-jammy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: \${MONGO_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  opa:
+    image: openpolicyagent/opa:0.68.0
+    command: run --server --addr :8181
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  opal-client:
+    image: permitio/opal-client:latest
+    environment:
+      OPAL_SERVER_URL: \${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_CLIENT_TOKEN: \${SPOKE_OPAL_TOKEN}
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_OPA_URL: http://opa:8181
+      OPAL_SUBSCRIPTION_ID: $spoke_id
+    depends_on:
+      - opa
+
+  backend:
+    image: us-central1-docker.pkg.dev/dive25/dive-v3/backend:latest
+    environment:
+      PORT: "4000"
+      INSTANCE_CODE: "$code_upper"
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: dive-v3-broker
+      OPA_URL: http://opa:8181
+      MONGODB_URL: mongodb://admin:\${MONGO_PASSWORD}@mongo:27017/dive-v3?authSource=admin
+      HUB_URL: \${HUB_URL:-https://hub.dive25.com}
+      SPOKE_ID: "$spoke_id"
+    ports:
+      - "4000:4000"
+    depends_on:
+      - keycloak
+      - mongo
+      - opa
+
+  frontend:
+    image: us-central1-docker.pkg.dev/dive25/dive-v3/frontend:latest
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: https://${code_upper,,}-api.dive25.com
+      NEXT_PUBLIC_INSTANCE: "$code_upper"
+      AUTH_KEYCLOAK_ISSUER: https://${code_upper,,}-idp.dive25.com/realms/dive-v3-broker
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  mongo_data:
+EOF
+
+    # Create .env template
+    log_step "Creating environment template"
+    cat > "$spoke_dir/.env.template" << EOF
+# DIVE V3 Spoke: $code_upper
+# Copy this to .env and fill in the values
+
+# Database Passwords (use GCP Secret Manager in production)
+POSTGRES_PASSWORD=
+MONGO_PASSWORD=
+
+# Keycloak Admin
+KEYCLOAK_ADMIN_PASSWORD=
+
+# Hub Connection
+HUB_URL=https://hub.dive25.com
+HUB_OPAL_URL=https://hub.dive25.com:7002
+
+# Spoke Token (received after registration approval)
+SPOKE_OPAL_TOKEN=
+EOF
+
+    echo ""
+    log_success "Spoke instance initialized: $code_upper"
+    echo ""
+    echo -e "${BOLD}Next Steps:${NC}"
+    echo "  1. Copy .env.template to .env and fill in passwords"
+    echo "  2. Register with hub: ./dive spoke register"
+    echo "  3. Wait for hub admin approval"
+    echo "  4. Start services: cd $spoke_dir && docker compose up -d"
+    echo ""
+    echo -e "${BOLD}Files Created:${NC}"
+    echo "  - $spoke_dir/config.json"
+    echo "  - $spoke_dir/docker-compose.yml"
+    echo "  - $spoke_dir/.env.template"
+}
+
+spoke_register() {
+    local config_file="instances/$(echo $INSTANCE | tr '[:upper:]' '[:lower:]')/config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        log_error "Spoke not initialized. Run: ./dive spoke init <CODE> <NAME>"
+        return 1
+    fi
+    
+    local spoke_config=$(cat "$config_file")
+    local hub_url=$(echo "$spoke_config" | grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    
+    log_step "Registering spoke with hub: $hub_url"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would POST to: $hub_url/api/federation/register"
+        log_dry "Request body:"
+        log_dry "  $(echo "$spoke_config" | head -c 200)..."
+        return 0
+    fi
+    
+    local response=$(curl -s -X POST "$hub_url/api/federation/register" \
+        -H "Content-Type: application/json" \
+        -d "$spoke_config" 2>&1)
+    
+    if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        log_success "Registration request submitted!"
+        echo ""
+        echo "Response: $response"
+        echo ""
+        echo -e "${YELLOW}⏳ Waiting for hub admin approval...${NC}"
+        echo "   Once approved, you'll receive a token to add to your .env file"
+    else
+        log_error "Registration failed"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+spoke_status() {
+    echo -e "${BOLD}Spoke Federation Status:${NC}"
+    echo ""
+    
+    local config_file="instances/$(echo $INSTANCE | tr '[:upper:]' '[:lower:]')/config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        echo "  Status: Not initialized"
+        echo ""
+        echo "  Run: ./dive spoke init <CODE> <NAME>"
+        return 0
+    fi
+    
+    local config=$(cat "$config_file")
+    local spoke_id=$(echo "$config" | grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    local instance_code=$(echo "$config" | grep -o '"instanceCode"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    local status=$(echo "$config" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    local hub_url=$(echo "$config" | grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    
+    echo "  Spoke ID:      $spoke_id"
+    echo "  Instance Code: $instance_code"
+    echo "  Status:        $status"
+    echo "  Hub URL:       $hub_url"
+    echo ""
+    
+    # Check OPAL client connection
+    echo "  OPAL Client:"
+    local opal_health=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:7000/health 2>/dev/null || echo 'offline')
+    echo "    Health:      $opal_health"
+    
+    # Check policy version
+    echo ""
+    echo "  Policy:"
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would query OPA for policy version"
+    else
+        local opa_data=$(curl -s http://localhost:8181/v1/data/dive/tenant/base/metadata 2>/dev/null || echo '{}')
+        echo "    $opa_data" | head -c 100
+    fi
+}
+
+spoke_sync() {
+    log_step "Forcing policy sync from hub..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would trigger OPAL client to pull latest policies"
+        return 0
+    fi
+    
+    # Trigger OPAL client to refresh
+    curl -X POST http://localhost:7000/policy-refresh 2>/dev/null && {
+        log_success "Policy refresh triggered"
+    } || {
+        log_warn "OPAL client not running or refresh endpoint not available"
+    }
+}
+
+spoke_heartbeat() {
+    local config_file="instances/$(echo $INSTANCE | tr '[:upper:]' '[:lower:]')/config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        log_error "Spoke not initialized"
+        return 1
+    fi
+    
+    local config=$(cat "$config_file")
+    local spoke_id=$(echo "$config" | grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    local hub_url=$(echo "$config" | grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    
+    log_step "Sending heartbeat to hub..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would POST to: $hub_url/api/federation/heartbeat"
+        return 0
+    fi
+    
+    # Get OPA health
+    local opa_healthy="true"
+    curl -s http://localhost:8181/health >/dev/null 2>&1 || opa_healthy="false"
+    
+    # Get policy version
+    local policy_version=$(curl -s http://localhost:8181/v1/data/dive/tenant/base/metadata 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+    
+    local response=$(curl -s -X POST "$hub_url/api/federation/heartbeat" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${SPOKE_TOKEN:-}" \
+        -d "{
+            \"spokeId\": \"$spoke_id\",
+            \"opaHealthy\": $opa_healthy,
+            \"policyVersion\": \"$policy_version\"
+        }" 2>&1)
+    
+    echo "Response: $response"
+}
+
+# =============================================================================
 # INFO & HELP
 # =============================================================================
 
 cmd_info() {
-    print_header
+        print_header
     
     echo -e "${BOLD}Environment:${NC}"
     echo "  DIVE_ROOT:     $DIVE_ROOT"
@@ -1144,7 +1529,7 @@ cmd_info() {
     echo "  GCP_PROJECT:   $GCP_PROJECT"
     echo "  PILOT_VM:      $PILOT_VM"
     echo "  PILOT_ZONE:    $PILOT_ZONE"
-    echo ""
+        echo ""
     
     echo -e "${BOLD}Docker:${NC}"
     if check_docker 2>/dev/null; then
@@ -1225,14 +1610,15 @@ cmd_help() {
     echo "  pilot reset         Reset pilot VM to clean state"
     echo "  pilot deploy        Full deployment to pilot VM"
     echo ""
-    echo -e "${BOLD}Federation Commands (Distributed Architecture):${NC}"
-    echo "  federation status       Show federation status"
-    echo "  federation register     Register instance with hub"
-    echo "  federation sync-policies Pull latest policies from hub"
-    echo "  federation sync-idps    Sync IdP metadata from hub"
+    echo -e "${BOLD}Distributed Federation (Hub-Spoke):${NC}"
     echo "  hub start               Start hub services (central)"
     echo "  hub status              Show hub service status"
-    echo "  hub push-policy         Push policy update to all instances"
+    echo "  hub push-policy         Push policy update to all spokes"
+    echo "  spoke init <code>       Initialize new spoke instance"
+    echo "  spoke register          Register spoke with hub"
+    echo "  spoke status            Show spoke federation status"
+    echo "  spoke sync              Force policy sync from hub"
+    echo "  federation status       Show overall federation status"
     echo ""
     echo -e "${BOLD}Other Commands:${NC}"
     echo "  info                Show environment info"
@@ -1281,8 +1667,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             break
-            ;;
-    esac
+        ;;
+esac
 done
 
 # Main command dispatch
@@ -1322,6 +1708,7 @@ case "$COMMAND" in
     # Federation
     federation|fed) cmd_federation "$@" ;;
     hub)            cmd_hub "$@" ;;
+    spoke)          cmd_spoke "$@" ;;
     
     # Info
     info)       cmd_info "$@" ;;
