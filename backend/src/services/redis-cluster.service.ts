@@ -19,7 +19,8 @@
  * @date 2025-12-03
  */
 
-import Redis, { Cluster, RedisOptions, SentinelAddress } from 'ioredis';
+import Redis, { RedisOptions, SentinelAddress } from 'ioredis';
+// import { Cluster } from 'ioredis'; // Unused import
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger';
 
@@ -554,11 +555,11 @@ class RedisClusterService extends EventEmitter {
       const replicationInfo = await this.client.info('replication');
       const replicationLines = replicationInfo.split('\r\n');
       
-      let isMaster = false;
+      // Check if this node is the master
       for (const line of replicationLines) {
         const [key, value] = line.split(':');
         if (key === 'role' && value === 'master') {
-          isMaster = true;
+          // This node is the master
           health.master = {
             host: 'localhost',
             port: 6379,
@@ -690,4 +691,5 @@ class RedisClusterService extends EventEmitter {
 export const redisClusterService = new RedisClusterService();
 
 export default RedisClusterService;
+
 

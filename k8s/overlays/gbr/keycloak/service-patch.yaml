@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 Keycloak - GBR Service Patch
+# NOTE: Kustomize patches must use base resource names, not modified names
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+spec:
+  selector:
+    app: keycloak
+

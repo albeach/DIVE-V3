@@ -1,0 +1,298 @@
+version: '3.8'
+
+name: dive-pilot
+
+networks:
+  dive-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+  frontend_node_modules:
+  frontend_next:
+
+services:
+  # =============================================================================
+  # CORE INFRASTRUCTURE
+  # =============================================================================
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: dive-pilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-DivePilot2025!}
+      POSTGRES_DB: keycloak_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+      - dive-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongo:
+    image: mongo:7.0
+    container_name: dive-pilot-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-DivePilot2025!}
+      MONGO_INITDB_DATABASE: dive-v3
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - dive-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: dive-pilot-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - dive-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # IDENTITY & POLICY
+  # =============================================================================
+
+  keycloak:
+    build:
+      context: ./keycloak
+      dockerfile: Dockerfile
+    container_name: dive-pilot-keycloak
+    restart: unless-stopped
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-DivePilot2025!}
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_STRICT: false
+      KC_HTTP_ENABLED: true
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: 8443
+      KC_PROXY_HEADERS: xforwarded
+      # Admin User
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
+      # Features
+      KC_FEATURES: scripts
+      KC_LOG_LEVEL: INFO
+    command: start-dev --import-realm --https-port=8443
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8443:8443" # HTTPS
+      - "8081:8080" # HTTP Management
+    networks:
+      - dive-network
+    volumes:
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: dive-pilot-opa
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "--set=decision_logs.console=true"
+      - "/policies/base"
+      - "/policies/org"
+      - "/policies/tenant"
+      - "/policies/entrypoints"
+      - "/policies/compat"
+      - "/policies/data/data.json"
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies:ro
+    networks:
+      - dive-network
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # APPLICATION SERVICES
+  # =============================================================================
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: dive-pilot-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      # Service URLs (Internal Docker Network)
+      # Use HTTPS for Keycloak (port 8443) - matches frontend configuration
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
+      OPA_URL: http://opa:8181
+      REDIS_URL: redis://redis:6379
+      # External URLs
+      API_URL: https://localhost:4000
+      NEXT_PUBLIC_BASE_URL: https://localhost:3000
+      # Secrets
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
+      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
+      # Security
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      SSL_CERT_PATH: /app/certs
+    ports:
+      - "4000:4000"
+    depends_on:
+      - keycloak
+      - mongo
+      - opa
+      - redis
+    networks:
+      - dive-network
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/certs:/app/certs:ro
+      - ./policies:/app/policies:ro
+      - ./config:/app/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-kfs", "https://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: dive-pilot-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      HOSTNAME: "0.0.0.0"
+      # Client Side URLs (Browser Access)
+      NEXT_PUBLIC_API_URL: https://localhost:4000
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      # Server Side URLs (Docker Network)
+      BACKEND_URL: https://backend:4000
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
+      # Database (CRITICAL: Required for NextAuth adapter)
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-DivePilot2025!}@postgres:5432/dive_v3_app
+      # Auth
+      NEXTAUTH_URL: https://localhost:3000
+      AUTH_SECRET: ${AUTH_SECRET:-dive-v3-auth-secret}
+      # Auth.js standard environment variables (per https://authjs.dev/getting-started/providers/keycloak)
+      AUTH_KEYCLOAK_ID: dive-v3-client-broker
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
+      # Legacy variables (for backward compatibility)
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
+      AUTH_TRUST_HOST: "true"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      CERT_PATH: /certs
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+      - keycloak
+      - postgres
+    networks:
+      - dive-network
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+      - ./frontend/certs:/certs:ro
+    healthcheck:
+      # Relaxed healthcheck for Next.js Dev Mode
+      test: ["CMD", "curl", "-kfsI", "--max-time", "5", "https://localhost:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 120s
+
+  # =============================================================================
+  # OPTIONAL / STRETCH SERVICES
+  # =============================================================================
+
+  kas:
+    build:
+      context: ./kas
+      dockerfile: Dockerfile.dev
+    container_name: dive-pilot-kas
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      KAS_PORT: 8080
+      HTTPS_ENABLED: "true"
+      OPA_URL: http://opa:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - opa
+      - mongo
+    networks:
+      - dive-network
+    volumes:
+      - ./kas/src:/app/src
+      - ./kas/certs:/opt/app/certs:ro
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: dive-pilot-tunnel
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+    networks:
+      - dive-network
+

@@ -1,0 +1,20 @@
+# =============================================================================
+# DIVE V3 OPA - FRA Deployment Patch
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opa-fra
+  namespace: dive-v3-fra
+spec:
+  selector:
+    matchLabels:
+      app: opa-fra
+  template:
+    metadata:
+      labels:
+        app: opa-fra
+        app.kubernetes.io/instance: fra
+
+

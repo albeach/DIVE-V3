@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 OPA - GBR Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa-gbr
+  namespace: dive-v3-gbr
+spec:
+  selector:
+    app: opa-gbr
+

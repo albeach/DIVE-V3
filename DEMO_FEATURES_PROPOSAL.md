@@ -145,3 +145,5 @@
 - **Gradient backgrounds** for different decision types
 - **Smooth transitions** between states
 
+
+

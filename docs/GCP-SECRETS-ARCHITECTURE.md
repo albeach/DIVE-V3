@@ -204,3 +204,5 @@ The `gcp-secrets.ts` utility is for **fallback only**. Application code should u
 - [Docker Compose Environment Variables](https://docs.docker.com/compose/environment-variables/)
 - Project conventions: `.cursorrules` (search for "SECRETS MANAGEMENT")
 
+
+

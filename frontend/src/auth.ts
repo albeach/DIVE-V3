@@ -68,7 +68,7 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
  * FIX (Nov 6, 2025): Use internal KEYCLOAK_URL for server-side calls
  */
 async function refreshAccessToken(account: any) {
-    const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`;
+    const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
     const currentTime = Math.floor(Date.now() / 1000);
     const timeUntilExpiry = (account.expires_at || 0) - currentTime;
 
@@ -76,7 +76,7 @@ async function refreshAccessToken(account: any) {
         console.log('[DIVE] Token Refresh Request', {
             userId: account.userId,
             keycloakUrl: process.env.KEYCLOAK_URL,
-            realm: process.env.KEYCLOAK_REALM,
+            realm: process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
             refreshUrl,
             currentTime: new Date(currentTime * 1000).toISOString(),
             expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
@@ -172,10 +172,12 @@ async function refreshAccessToken(account: any) {
 const getAuthCookieDomain = (): string | undefined => {
     const authUrl = process.env.NEXTAUTH_URL;
 
-    // DEVELOPMENT: Localhost or IP - use exact domain match
+    // DEVELOPMENT: Localhost or IP - use exact domain match (undefined = browser default)
+    // CRITICAL: Don't set domain for localhost - browsers handle this automatically
+    // Setting domain: 'localhost' can break cookie handling in some browsers
     if (!authUrl || authUrl.includes('localhost') || authUrl.includes('127.0.0.1') || authUrl.includes('3000')) {
-        console.log('[DIVE] Cookie domain: localhost/IP detected - using exact match');
-        return undefined;  // Use exact domain match (no wildcard)
+        console.log('[DIVE] Cookie domain: localhost/IP detected - using exact match (undefined)');
+        return undefined;  // Use exact domain match (no wildcard) - browser handles localhost automatically
     }
 
     // PRODUCTION: Custom domain - use wildcard for subdomains
@@ -250,24 +252,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     providers: [
         Keycloak({
-            clientId: process.env.KEYCLOAK_CLIENT_ID as string,
-            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET as string,
-            // CRITICAL: issuer must match KC_HOSTNAME for token validation
-            issuer: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
+            // Auth.js standard configuration (per https://authjs.dev/getting-started/providers/keycloak)
+            // Uses AUTH_KEYCLOAK_ID, AUTH_KEYCLOAK_SECRET, AUTH_KEYCLOAK_ISSUER from environment
+            // Auth.js automatically discovers endpoints via OIDC discovery from issuer
             authorization: {
-                // Client-side: Use public URL for browser redirects
-                url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email offline_access",
-                    // REMOVED prompt: "login" - was causing random logouts
-                    // The "already authenticated as different user" error should be handled
-                    // by signing out first before signing in as a different user
                 }
             },
-            // Server-side: Use internal Docker network for token exchange
-            // FIX (Nov 6): Use internal keycloak:8443 for server-to-server calls
-            token: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/token`,
-            userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
             checks: ["pkce", "state"],  // Best practice: Enable security checks
             allowDangerousEmailAccountLinking: true,
             // FIX (Nov 7): Profile callback to handle remote IdPs without email
@@ -734,9 +726,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.state`,
             options: {
                 httpOnly: true,
+                // CRITICAL FIX: For localhost HTTPS, 'lax' should work for redirects
+                // But if cookies aren't being sent, try 'none' with secure: true
+                // 'lax' allows cookies on top-level navigations (GET redirects)
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
+                // CRITICAL FIX: Don't set domain for localhost - browser handles this automatically
+                // Setting domain explicitly can break cookie handling
                 domain: AUTH_COOKIE_DOMAIN,
                 maxAge: 60 * 15, // 15 minutes
             },
@@ -825,7 +822,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // ============================================
             if (refreshToken || accessToken) {
                 const keycloakUrl = process.env.KEYCLOAK_URL;
-                const realm = process.env.KEYCLOAK_REALM;
+                const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM;
                 const clientId = process.env.KEYCLOAK_CLIENT_ID;
                 const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
 

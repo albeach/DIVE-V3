@@ -1,0 +1,19 @@
+# =============================================================================
+# DIVE V3 Frontend - GBR ConfigMap Patch
+# =============================================================================
+# Patches frontend ConfigMap with GBR-specific values
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: dive-v3-gbr
+data:
+  nextauth_url: "https://gbr-app.dive25.com"
+  api_url: "https://gbr-api.dive25.com"
+  keycloak_url: "https://gbr-idp.dive25.com"
+  keycloak_realm: "dive-v3-broker-gbr"
+  keycloak_client_id: "dive-v3-client-broker"
+  keycloak_issuer: "https://keycloak.dive-v3-gbr.svc.cluster.local:8443/realms/dive-v3-broker-gbr"
+

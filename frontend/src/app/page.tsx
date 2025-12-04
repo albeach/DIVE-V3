@@ -26,7 +26,7 @@ export default async function Home() {
   }
   
   // If already logged in, redirect to dashboard
-  if (session?.user) {
+  if (session && 'user' in session && session.user) {
     redirect("/dashboard");
   }
 

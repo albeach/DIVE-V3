@@ -101,12 +101,9 @@ class HttpConnectionPool extends EventEmitter {
   private agent: http.Agent | https.Agent;
   private config: IHttpPoolConfig;
   private stats: IPoolStats;
-  private isHttps: boolean;
 
   constructor(config: Partial<IHttpPoolConfig> = {}, isHttps: boolean = false) {
     super();
-    
-    this.isHttps = isHttps;
     this.config = {
       minConnections: 5,
       maxConnections: 50,
@@ -248,7 +245,8 @@ class ResourcePool<T> extends EventEmitter {
   constructor(config: IResourcePoolConfig<T>) {
     super();
     
-    this.config = {
+    // Set defaults, then override with provided config
+    const defaults: Partial<IPoolConfig> = {
       minConnections: 2,
       maxConnections: 10,
       idleTimeout: 60000,
@@ -259,8 +257,12 @@ class ResourcePool<T> extends EventEmitter {
       adaptivePooling: false,
       scaleUpThreshold: 5,
       scaleDownThreshold: 2,
-      ...config,
     };
+    
+    this.config = {
+      ...defaults,
+      ...config,
+    } as IResourcePoolConfig<T>;
 
     this.stats = {
       totalConnections: 0,
@@ -653,4 +655,5 @@ export const connectionPoolService = new ConnectionPoolService();
 export { HttpConnectionPool, ResourcePool };
 
 export default ConnectionPoolService;
+
 

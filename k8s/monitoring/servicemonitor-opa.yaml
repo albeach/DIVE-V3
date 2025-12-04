@@ -1,0 +1,30 @@
+# =============================================================================
+# DIVE V3 - OPA ServiceMonitor
+# =============================================================================
+# Prometheus ServiceMonitor for OPA metrics
+# =============================================================================
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dive-v3-opa
+  namespace: dive-v3
+  labels:
+    app: opa
+    app.kubernetes.io/name: dive-v3-opa
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  selector:
+    matchLabels:
+      app: opa
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      scheme: http
+  namespaceSelector:
+    matchNames:
+      - dive-v3
+
+

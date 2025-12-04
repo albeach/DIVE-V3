@@ -210,3 +210,8 @@ gcp/
 # Terraform generated files
 *.plan
 *.tfplan
+
+# ============================================
+# Terraform Service Account Keys (CRITICAL - DO NOT COMMIT)
+# ============================================
+.terraform-keys/

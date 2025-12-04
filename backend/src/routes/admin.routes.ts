@@ -39,6 +39,14 @@ import {
     uploadMiddleware
 } from '../controllers/admin.controller';
 import {
+    listUsersHandler,
+    getUserHandler,
+    createUserHandler,
+    updateUserHandler,
+    deleteUserHandler,
+    resetPasswordHandler
+} from '../controllers/admin-users.controller';
+import {
     validateOIDCDiscoveryHandler,
     validateSAMLMetadataHandler,
     parseOIDCMetadataHandler,
@@ -69,6 +77,46 @@ const router = Router();
 // Apply admin authentication to all routes
 // ============================================
 router.use(adminAuthMiddleware);
+
+// ============================================
+// User Management Routes
+// ============================================
+
+/**
+ * GET /api/admin/users
+ * List users
+ */
+router.get('/users', listUsersHandler);
+
+/**
+ * GET /api/admin/users/:id
+ * Get user details
+ */
+router.get('/users/:id', getUserHandler);
+
+/**
+ * POST /api/admin/users
+ * Create user
+ */
+router.post('/users', createUserHandler);
+
+/**
+ * PUT /api/admin/users/:id
+ * Update user
+ */
+router.put('/users/:id', updateUserHandler);
+
+/**
+ * DELETE /api/admin/users/:id
+ * Delete user
+ */
+router.delete('/users/:id', deleteUserHandler);
+
+/**
+ * POST /api/admin/users/:id/reset-password
+ * Reset user password
+ */
+router.post('/users/:id/reset-password', resetPasswordHandler);
 
 // ============================================
 // Identity Provider Management Routes

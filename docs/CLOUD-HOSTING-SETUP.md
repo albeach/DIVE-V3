@@ -159,3 +159,5 @@ git push  # Auto-deploys to Cloudflare Pages
 For enterprise features (more monitors, SMS alerts, SLA reports), Better Uptime paid plans start at $20/month.
 
 
+
+

@@ -1,0 +1,22 @@
+# =============================================================================
+# DIVE V3 - GCP Managed SSL Certificate
+# =============================================================================
+# GCP Managed SSL Certificate for automatic SSL/TLS certificate provisioning
+# Best practice: Let GCP manage certificates automatically (Let's Encrypt)
+# =============================================================================
+
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: dive-v3-ssl-cert
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: dive-v3-ssl-cert
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  domains:
+    - app.dive25.com
+    - api.dive25.com
+    - idp.dive25.com
+
+

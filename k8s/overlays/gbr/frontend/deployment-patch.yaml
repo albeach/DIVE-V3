@@ -1,0 +1,36 @@
+# =============================================================================
+# DIVE V3 Frontend - GBR Deployment Patch
+# =============================================================================
+# Patches frontend Deployment with GBR-specific configuration
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dive-v3-gbr
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/instance: gbr
+    spec:
+      serviceAccountName: frontend
+      containers:
+        - name: frontend
+          env:
+            - name: INSTANCE_CODE
+              value: "GBR"
+            - name: INSTANCE_NAME
+              value: "United Kingdom"
+            - name: NEXT_PUBLIC_INSTANCE
+              value: "GBR"
+            - name: NEXT_PUBLIC_INSTANCE_NAME
+              value: "United Kingdom"
+            - name: NEXT_PUBLIC_LOCALE
+              value: "en-GB"
+

@@ -714,14 +714,144 @@ class KeycloakAdminService {
     /**
      * List all users in realm
      */
-    async listUsers(max: number = 100): Promise<any[]> {
+    async listUsers(max: number = 100, first: number = 0, search: string = ''): Promise<{ users: any[], total: number }> {
         await this.ensureAuthenticated();
 
         try {
-            const users = await this.client.users.find({ max });
-            return users;
+            const query: any = { max, first };
+            if (search) {
+                query.search = search;
+            }
+
+            const users = await this.client.users.find(query);
+            const count = await this.client.users.count(search ? { search } : {});
+
+            return { users, total: count };
         } catch (error) {
             logger.error('Failed to list users', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Get user by ID
+     */
+    async getUserById(userId: string): Promise<any> {
+        await this.ensureAuthenticated();
+
+        try {
+            const user = await this.client.users.findOne({ id: userId });
+            if (!user) {
+                throw new Error(`User ${userId} not found`);
+            }
+            return user;
+        } catch (error) {
+            logger.error('Failed to get user by ID', {
+                userId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Create User
+     */
+    async createUser(userData: any): Promise<string> {
+        await this.ensureAuthenticated();
+
+        try {
+            const user = await this.client.users.create({
+                username: userData.username,
+                email: userData.email,
+                enabled: userData.enabled !== false,
+                emailVerified: userData.emailVerified !== false,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                attributes: userData.attributes,
+                credentials: userData.password ? [{
+                    type: 'password',
+                    value: userData.password,
+                    temporary: userData.temporaryPassword !== false
+                }] : undefined
+            });
+
+            logger.info('Created user', { userId: user.id, username: userData.username });
+            return user.id;
+        } catch (error) {
+            logger.error('Failed to create user', {
+                username: userData.username,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Update User
+     */
+    async updateUser(userId: string, userData: any): Promise<void> {
+        await this.ensureAuthenticated();
+
+        try {
+            await this.client.users.update({ id: userId }, {
+                email: userData.email,
+                enabled: userData.enabled,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                attributes: userData.attributes,
+                emailVerified: userData.emailVerified
+            });
+
+            logger.info('Updated user', { userId });
+        } catch (error) {
+            logger.error('Failed to update user', {
+                userId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Delete User
+     */
+    async deleteUser(userId: string): Promise<void> {
+        await this.ensureAuthenticated();
+
+        try {
+            await this.client.users.del({ id: userId });
+            logger.info('Deleted user', { userId });
+        } catch (error) {
+            logger.error('Failed to delete user', {
+                userId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Reset Password
+     */
+    async resetPassword(userId: string, password: string, temporary: boolean = true): Promise<void> {
+        await this.ensureAuthenticated();
+
+        try {
+            await this.client.users.resetPassword({
+                id: userId,
+                credential: {
+                    type: 'password',
+                    value: password,
+                    temporary
+                }
+            });
+            logger.info('Reset password for user', { userId, temporary });
+        } catch (error) {
+            logger.error('Failed to reset password', {
+                userId,
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
             throw error;

@@ -16,14 +16,14 @@
  * @date 2025-12-03
  */
 
-import client, {
+import {
   Counter,
   Gauge,
   Histogram,
-  Summary,
   Registry,
   collectDefaultMetrics
 } from 'prom-client';
+// import client, { Summary } from 'prom-client'; // Unused imports
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -64,45 +64,45 @@ class PrometheusMetricsService {
   private readonly prefix = 'dive_v3';
   
   // Authorization Metrics
-  private authorizationLatency: Histogram;
-  private authorizationDecisions: Counter;
-  private authorizationDecisionsByReason: Counter;
-  private activeAuthorizationRequests: Gauge;
+  private authorizationLatency!: Histogram;
+  private authorizationDecisions!: Counter;
+  private authorizationDecisionsByReason!: Counter;
+  private activeAuthorizationRequests!: Gauge;
   
   // Cache Metrics
-  private cacheOperations: Counter;
-  private cacheHitRate: Gauge;
-  private cacheSize: Gauge;
-  private cacheEvictions: Counter;
+  private cacheOperations!: Counter;
+  private cacheHitRate!: Gauge;
+  private cacheSize!: Gauge;
+  private cacheEvictions!: Counter;
   
   // Federation Metrics
-  private federationLogins: Counter;
-  private federationLatency: Histogram;
-  private federatedSessions: Gauge;
+  private federationLogins!: Counter;
+  private federationLatency!: Histogram;
+  private federatedSessions!: Gauge;
   
   // Policy Metrics
-  private policyEvaluations: Counter;
-  private policyEvaluationLatency: Histogram;
-  private policyVersions: Gauge;
+  private policyEvaluations!: Counter;
+  private policyEvaluationLatency!: Histogram;
+  private policyVersions!: Gauge;
   
   // KAS Metrics
-  private kasKeyOperations: Counter;
-  private kasLatency: Histogram;
+  private kasKeyOperations!: Counter;
+  private kasLatency!: Histogram;
   
   // Audit Metrics
-  private auditEntriesLogged: Counter;
-  private auditLogLatency: Histogram;
+  private auditEntriesLogged!: Counter;
+  private auditLogLatency!: Histogram;
   
   // Compliance Metrics
-  private complianceChecksPassed: Counter;
-  private complianceChecksFailed: Counter;
-  private driftDetections: Counter;
+  private complianceChecksPassed!: Counter;
+  private complianceChecksFailed!: Counter;
+  private driftDetections!: Counter;
   
   // Health Metrics
-  private serviceHealth: Gauge;
-  private opaHealth: Gauge;
-  private redisHealth: Gauge;
-  private mongoHealth: Gauge;
+  private serviceHealth!: Gauge;
+  private opaHealth!: Gauge;
+  private redisHealth!: Gauge;
+  private mongoHealth!: Gauge;
   
   constructor() {
     // Create a custom registry
@@ -739,4 +739,5 @@ class PrometheusMetricsService {
 export const prometheusMetrics = new PrometheusMetricsService();
 
 export default PrometheusMetricsService;
+
 

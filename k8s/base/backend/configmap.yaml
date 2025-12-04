@@ -1,0 +1,18 @@
+# =============================================================================
+# DIVE V3 Backend - ConfigMap
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: dive-v3
+data:
+  keycloak_url: "https://keycloak.dive-v3.svc.cluster.local:8443"
+  keycloak_realm: "dive-v3-broker"
+  opa_url: "http://opa.dive-v3.svc.cluster.local:8181"
+
+

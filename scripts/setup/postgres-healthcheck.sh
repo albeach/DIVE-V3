@@ -19,3 +19,5 @@ PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "${POSTGRES_USER:-postgres}" -d postgr
 
 exit 0
 
+
+

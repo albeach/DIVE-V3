@@ -240,3 +240,5 @@ After all stacks are started, you should have:
    docker ps --format "table {{.Names}}\t{{.Status}}"
    ```
 
+
+

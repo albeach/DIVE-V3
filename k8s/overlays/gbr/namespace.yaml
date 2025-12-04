@@ -1,0 +1,17 @@
+# =============================================================================
+# DIVE V3 - GBR Namespace Patch
+# =============================================================================
+# Patches base namespace with GBR-specific configuration
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dive-v3-gbr
+  labels:
+    app.kubernetes.io/instance: gbr
+    app.kubernetes.io/part-of: dive-v3
+    app.kubernetes.io/managed-by: argocd
+    instance: gbr
+    country: GBR
+

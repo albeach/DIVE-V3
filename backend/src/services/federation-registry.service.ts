@@ -60,8 +60,6 @@ interface IRegistryUpdateResult {
 // CONFIGURATION
 // ============================================
 
-const REGISTRY_FILE_PATH = path.join(process.cwd(), '..', 'config', 'federation-registry.json');
-const REGISTRY_SCHEMA_PATH = path.join(process.cwd(), '..', 'config', 'federation-registry.schema.json');
 const BACKUP_DIR = path.join(process.cwd(), '..', 'backups', 'federation-registry');
 
 // ============================================
@@ -71,7 +69,7 @@ const BACKUP_DIR = path.join(process.cwd(), '..', 'backups', 'federation-registr
 class FederationRegistryService {
     private registry: IFederationRegistry | null = null;
     private registryPath: string | undefined;
-    private schemaPath: string;
+    // private schemaPath: string; // Unused - removed to fix TypeScript error
 
     constructor() {
         // Try multiple paths for registry file
@@ -92,10 +90,10 @@ class FederationRegistryService {
             logger.warn('Federation registry file not found, registry updates will be disabled', {
                 searchedPaths: possiblePaths
             });
-            // Set a default schema path when registry file is not found
-            this.schemaPath = path.join(process.cwd(), 'config', 'federation-registry.schema.json');
+            // Schema path removed - not currently used
+            // this.schemaPath = path.join(process.cwd(), 'config', 'federation-registry.schema.json');
         } else {
-            this.schemaPath = path.join(path.dirname(this.registryPath), 'federation-registry.schema.json');
+            // this.schemaPath = path.join(path.dirname(this.registryPath), 'federation-registry.schema.json');
         }
     }
 

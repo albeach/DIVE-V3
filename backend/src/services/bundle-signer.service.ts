@@ -106,7 +106,6 @@ const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || 'dive25';
 
 class BundleSignerService {
   private signingKey: ISigningKey | null = null;
-  private keyPath: string | null = null;
   private initialized: boolean = false;
 
   constructor() {
@@ -243,7 +242,6 @@ class BundleSignerService {
       keySize: DEFAULT_KEY_SIZE,
     };
 
-    this.keyPath = privateKeyPath;
     logger.info('Loaded signing key from file', { keyPath: privateKeyPath, keyId });
   }
 
@@ -266,8 +264,6 @@ class BundleSignerService {
     
     // Save public key
     fs.writeFileSync(publicKeyPath, this.signingKey.publicKey, { mode: 0o644 });
-
-    this.keyPath = privateKeyPath;
     logger.info('Saved signing key to file', { privateKeyPath, publicKeyPath });
   }
 
@@ -554,4 +550,5 @@ class BundleSignerService {
 export const bundleSignerService = new BundleSignerService();
 
 export default BundleSignerService;
+
 

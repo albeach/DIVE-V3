@@ -1,0 +1,55 @@
+# =============================================================================
+# DIVE V3 - ArgoCD Application Configuration
+# =============================================================================
+# GitOps Application definition for DIVE V3
+# Syncs from Git repository to Kubernetes cluster
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dive-v3
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: dive-v3
+    app.kubernetes.io/part-of: dive-v3
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/aubreybeach/DIVE-V3.git
+    targetRevision: main
+    path: k8s/base
+    # Use Kustomize for configuration management
+    kustomize:
+      # No overlays for now - using base configuration
+      # Overlays can be added later for dev/staging/prod
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dive-v3
+  
+  syncPolicy:
+    # Automated sync - sync when Git changes are detected
+    automated:
+      prune: true  # Delete resources removed from Git
+      selfHeal: true  # Automatically sync if cluster state drifts
+      allowEmpty: false  # Don't sync if source is empty
+    
+    # Sync options
+    syncOptions:
+      - CreateNamespace=true  # Create namespace if it doesn't exist
+      - PrunePropagationPolicy=foreground  # Wait for resources to be deleted
+      - PruneLast=true  # Prune resources last during sync
+    
+    # Retry configuration
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+

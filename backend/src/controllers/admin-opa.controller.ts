@@ -139,7 +139,7 @@ export const updatePolicyHandler = async (
 
         // Update policy in OPA via REST API
         // OPA supports PUT /v1/policies/{id} to update policies dynamically
-        const policyPath = policyId.replace(/\./g, '/');
+        // const policyPath = policyId.replace(/\./g, '/'); // Unused - policy path conversion
         const updateUrl = `${OPA_URL}/v1/policies/${policyId}`;
 
         try {
@@ -184,7 +184,7 @@ export const updatePolicyHandler = async (
 
             // Alternative: Use OPA's data API to inject policy rules
             // This is a workaround for bundle mode
-            const dataUrl = `${OPA_URL}/v1/data/${policyPath}`;
+            // const dataUrl = `${OPA_URL}/v1/data/${policyPath}`;
             
             // For demo purposes, we'll update the file and trigger a reload
             // In production, you'd want to use OPA's bundle API or restart the container

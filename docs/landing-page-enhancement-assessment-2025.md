@@ -655,3 +655,5 @@ The current landing page provides a solid foundation with modern design patterns
 - [Fluid Typography](https://css-tricks.com/snippets/css/fluid-typography/)
 - [Intersection Observer API](https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API)
 
+
+

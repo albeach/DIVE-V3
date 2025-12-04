@@ -133,3 +133,5 @@ docker exec dive-v3-frontend sh -c 'env | grep DATABASE_URL'
 
 **Best Practice:** Use Docker Compose environment variables (from GCP secrets) and exclude `.env.local` files from volume mounts in production/containerized environments.
 
+
+

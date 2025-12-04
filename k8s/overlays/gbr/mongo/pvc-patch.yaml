@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 MongoDB - GBR PVC Patch
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data-gbr
+  namespace: dive-v3-gbr
+  labels:
+    app.kubernetes.io/instance: gbr
+

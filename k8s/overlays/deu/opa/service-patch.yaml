@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 OPA - DEU Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: opa-deu
+  namespace: dive-v3-deu
+spec:
+  selector:
+    app: opa-deu
+

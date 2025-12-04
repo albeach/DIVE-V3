@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 PostgreSQL - GBR Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: dive-v3-gbr
+spec:
+  selector:
+    app: postgres
+

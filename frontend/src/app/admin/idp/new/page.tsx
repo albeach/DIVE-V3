@@ -848,6 +848,7 @@ export default function NewIdPWizard() {
                                 config={formData.samlConfig}
                                 onChange={(config) => setFormData({ ...formData, samlConfig: config })}
                                 errors={errors}
+                                accessToken={(session as any)?.accessToken}
                             />
                         )}
 
