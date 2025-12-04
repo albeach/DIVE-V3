@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 Redis - DEU Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: dive-v3-deu
+spec:
+  selector:
+    app: redis
+

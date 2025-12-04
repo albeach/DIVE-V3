@@ -1,0 +1,21 @@
+# =============================================================================
+# DIVE V3 MongoDB - Persistent Volume Claim
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: mongo
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard-rwo
+
+

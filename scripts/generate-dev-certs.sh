@@ -142,6 +142,30 @@ cd "$CERT_DIR"
 # Build the mkcert command with all hostnames
 mkcert -cert-file certificate.pem -key-file key.pem "${UNIQUE_HOSTNAMES[@]}"
 
+# Copy certificates to all service directories
+echo -e "${YELLOW}[5/4] Distributing certificates to services...${NC}"
+
+# Define target directories relative to project root
+TARGET_DIRS=(
+    "backend/certs"
+    "frontend/certs"
+    "kas/certs"
+)
+
+for dir in "${TARGET_DIRS[@]}"; do
+    target_path="$PROJECT_ROOT/$dir"
+    if [[ -d "$target_path" ]]; then
+        echo "  Copying to $dir..."
+        cp "$CERT_DIR/certificate.pem" "$target_path/certificate.pem"
+        cp "$CERT_DIR/key.pem" "$target_path/key.pem"
+    else
+        echo "  Creating directory $dir..."
+        mkdir -p "$target_path"
+        cp "$CERT_DIR/certificate.pem" "$target_path/certificate.pem"
+        cp "$CERT_DIR/key.pem" "$target_path/key.pem"
+    fi
+done
+
 # Verify the certificate
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"

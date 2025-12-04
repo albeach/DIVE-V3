@@ -12,7 +12,7 @@ import React, { useState } from 'react';
 interface IPolicyRule {
     name: string;
     enabled: boolean;
-    lineNumber: number;
+    lineNumber?: number; // Make optional to match other definition
 }
 
 interface Props {
@@ -119,4 +119,5 @@ export default function PolicyComparisonView({ currentPolicy, modifiedPolicy, ru
         </div>
     );
 }
+
 

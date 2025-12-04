@@ -30,7 +30,6 @@ import seedStatusRoutes from './routes/seed-status.routes';  // Seed status moni
 import kasRoutes from './routes/kas.routes';  // KAS proxy routes for ZTDF key access
 import federatedQueryRoutes from './routes/federated-query.routes';  // Phase 3: Direct MongoDB federation
 import analyticsRoutes from './routes/analytics.routes';  // Phase 2: Search analytics
-import { metricsService } from './services/metrics.service';  // Phase 3 GAP-004: Prometheus metrics
 import metricsRoutes from './routes/metrics.routes';  // Phase 8: Enhanced Prometheus metrics
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
@@ -155,13 +154,13 @@ app.use(errorHandler);
 // ============================================
 // Server Startup
 // ============================================
+// Server initialization logic (moved to startServer callback to avoid duplicate startup)
 
-// Only start server if not in test environment AND not imported by https-server
-// This allows https-server.ts to import app without starting HTTP server
-const isImported = require.main !== module;
-
-if (process.env.NODE_ENV !== 'test' && !isImported) {
-  app.listen(PORT, async () => {
+// ============================================
+// Start Server (HTTP or HTTPS)
+// ============================================
+function startServer() {
+  const serverCallback = async () => {
     logger.info('DIVE V3 Backend API started', {
       port: PORT,
       env: process.env.NODE_ENV,
@@ -235,13 +234,8 @@ if (process.env.NODE_ENV !== 'test' && !isImported) {
       });
       // Non-fatal: policy drift detection disabled
     }
-  });
-}
+  };
 
-// ============================================
-// Start Server (HTTP or HTTPS)
-// ============================================
-function startServer() {
   if (HTTPS_ENABLED) {
     try {
       const certPath = process.env.CERT_PATH || '/opt/app/certs';
@@ -250,35 +244,19 @@ function startServer() {
         cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
       };
 
-      https.createServer(httpsOptions, app).listen(PORT, () => {
-        logger.info(`🔒 Backend API started with HTTPS`, {
-          port: PORT,
-          environment: process.env.NODE_ENV || 'development',
-          httpsEnabled: true,
-          certPath
-        });
-      });
+      https.createServer(httpsOptions, app).listen(PORT, serverCallback);
+      logger.info(`🔒 Starting HTTPS server on port ${PORT}`);
     } catch (error) {
       logger.error('Failed to start HTTPS server, falling back to HTTP', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       // Fallback to HTTP if certificates are missing
-      app.listen(PORT, () => {
-        logger.warn(`⚠️  Backend API started with HTTP (HTTPS failed)`, {
-          port: PORT,
-          environment: process.env.NODE_ENV || 'development',
-          httpsEnabled: false
-        });
-      });
+      app.listen(PORT, serverCallback);
+      logger.warn(`⚠️  Starting HTTP server (HTTPS failed) on port ${PORT}`);
     }
   } else {
-    app.listen(PORT, () => {
-      logger.info(`Backend API started with HTTP`, {
-        port: PORT,
-        environment: process.env.NODE_ENV || 'development',
-        httpsEnabled: false
-      });
-    });
+    app.listen(PORT, serverCallback);
+    logger.info(`Starting HTTP server on port ${PORT}`);
   }
 }
 

@@ -1,0 +1,22 @@
+# =============================================================================
+# DIVE V3 Frontend - ConfigMap
+# =============================================================================
+# Non-sensitive configuration for frontend
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dive-v3
+data:
+  nextauth_url: "https://app.dive25.com"
+  api_url: "https://api.dive25.com"
+  keycloak_url: "https://auth.dive25.com"
+  keycloak_realm: "dive-v3-broker"
+  keycloak_client_id: "dive-v3-client-broker"
+
+

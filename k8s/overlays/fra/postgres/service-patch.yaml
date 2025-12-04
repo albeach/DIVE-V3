@@ -1,0 +1,14 @@
+# =============================================================================
+# DIVE V3 PostgreSQL - FRA Service Patch
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: dive-v3-fra
+spec:
+  selector:
+    app: postgres
+
+

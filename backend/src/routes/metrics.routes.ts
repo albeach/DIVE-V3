@@ -82,25 +82,25 @@ router.get('/json', async (_req: Request, res: Response, next: NextFunction) => 
  * GET /metrics/health
  * Aggregated health status for all services
  */
-router.get('/health', async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/health', async (_req: Request, res: Response, _next: NextFunction) => {
   try {
     // Import health service dynamically to avoid circular dependencies
     const { healthService } = await import('../services/health.service');
-    const healthStatus = await healthService.checkHealth();
+    const healthStatus = await healthService.detailedHealthCheck();
     
     // Update Prometheus health metrics
-    prometheusMetrics.setServiceHealth('backend', healthStatus.backend?.healthy ?? true);
+    prometheusMetrics.setServiceHealth('backend', healthStatus.services.mongodb?.status === 'up');
     prometheusMetrics.setOPAHealth(
       process.env.INSTANCE_NAME || 'usa',
-      healthStatus.opa?.healthy ?? false
+      healthStatus.services.opa?.status === 'up'
     );
     prometheusMetrics.setRedisHealth(
       'primary',
-      healthStatus.redis?.healthy ?? false
+      healthStatus.services.cache?.status === 'up'
     );
     prometheusMetrics.setMongoHealth(
       process.env.INSTANCE_NAME || 'usa',
-      healthStatus.mongodb?.healthy ?? false
+      healthStatus.services.mongodb?.status === 'up'
     );
     
     const overallHealthy = Object.values(healthStatus).every(
@@ -211,10 +211,11 @@ router.post('/reset', async (req: Request, res: Response, next: NextFunction) =>
   try {
     // Only allow reset in non-production environments
     if (process.env.NODE_ENV === 'production') {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         error: 'Metrics reset not allowed in production'
       });
+      return;
     }
     
     prometheusMetrics.resetMetrics();
@@ -237,4 +238,5 @@ router.post('/reset', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 export default router;
+
 

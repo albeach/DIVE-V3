@@ -27,8 +27,7 @@ import { EventEmitter } from 'events';
 import * as http from 'http';
 import * as https from 'https';
 import { logger } from '../utils/logger';
-import { decisionCacheService, ICachedDecision } from './decision-cache.service';
-import { auditService } from './audit.service';
+import { decisionCacheService } from './decision-cache.service';
 
 // ============================================
 // TYPES
@@ -414,14 +413,9 @@ class DecisionBatchService extends EventEmitter {
     this.emit('batch_completed', batchResult);
 
     // Audit log
-    auditService.logBatchDecision({
-      batchId,
-      totalItems: items.length,
-      successCount,
-      errorCount: items.length - successCount,
-      cacheHits,
-      latencyMs: totalLatencyMs,
-    });
+    // Note: Individual decisions are logged during processing
+    // Batch summary logging can be added to audit service if needed
+    // For now, batch processing is logged via individual decision logs
 
     logger.debug('Batch completed', {
       batchId,
@@ -596,4 +590,5 @@ class DecisionBatchService extends EventEmitter {
 export const decisionBatchService = new DecisionBatchService();
 
 export default DecisionBatchService;
+
 

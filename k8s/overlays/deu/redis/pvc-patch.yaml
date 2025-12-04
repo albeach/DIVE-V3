@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 Redis - DEU PVC Patch
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-deu
+  namespace: dive-v3-deu
+  labels:
+    app.kubernetes.io/instance: deu
+

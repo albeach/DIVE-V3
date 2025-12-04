@@ -1,0 +1,133 @@
+# =============================================================================
+# DIVE V3 Keycloak - Kubernetes Deployment
+# =============================================================================
+# Keycloak Identity Provider deployment
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: identity-provider
+    app.kubernetes.io/part-of: dive-v3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+        app.kubernetes.io/name: keycloak
+    spec:
+      serviceAccountName: keycloak
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: keycloak
+          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-keycloak:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            - name: management
+              containerPort: 9000
+              protocol: TCP
+          env:
+            - name: KC_DB
+              value: "postgres"
+            - name: KC_DB_URL_HOST
+              value: "postgres.dive-v3.svc.cluster.local"
+            - name: KC_DB_URL_DATABASE
+              value: "dive_v3_app"
+            - name: KC_DB_USERNAME
+              value: "postgres"
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: password
+            - name: KC_HOSTNAME
+              value: "keycloak.dive-v3.svc.cluster.local"
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HTTPS_ENABLED
+              value: "true"
+            - name: KC_HTTPS_CERTIFICATE_FILE
+              value: "/opt/keycloak/certs/certificate.pem"
+            - name: KC_HTTPS_CERTIFICATE_KEY_FILE
+              value: "/opt/keycloak/certs/key.pem"
+            - name: KC_HTTPS_PORT
+              value: "8443"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
+            - name: KEYCLOAK_ADMIN
+              value: "admin"
+            - name: KEYCLOAK_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-admin
+                  key: password
+            - name: KC_FEATURES
+              value: "scripts"
+            - name: KC_LOG_LEVEL
+              value: "INFO"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+          command:
+            - "/opt/keycloak/bin/kc.sh"
+            - "start-dev"
+            - "--import-realm"
+            - "--https-port=8443"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 9000
+              scheme: HTTPS
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 9000
+              scheme: HTTPS
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: keycloak-certs
+              mountPath: /opt/keycloak/certs
+              readOnly: true
+            - name: keycloak-themes
+              mountPath: /opt/keycloak/themes
+              readOnly: true
+      volumes:
+        - name: keycloak-certs
+          secret:
+            secretName: keycloak-certs
+        - name: keycloak-themes
+          configMap:
+            name: keycloak-themes
+

@@ -571,3 +571,5 @@ function ResourceCard({ resource }: { resource: IFederatedResource }) {
 export default FederatedResourceSearch;
 
 
+
+

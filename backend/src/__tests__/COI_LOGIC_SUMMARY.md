@@ -211,3 +211,5 @@ check_coi_tag_match(user_coi, resource_coi, operator) := true if {
 5. Run full test suite
 6. Audit database for EUCOM resources
 
+
+

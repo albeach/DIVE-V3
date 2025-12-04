@@ -178,7 +178,7 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
 
                     <div className="ml-auto flex items-center space-x-2">
                         <button
-                            onClick={fetchData}
+                            onClick={() => fetchData()}
                             className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all"
                         >
                             🔄 Refresh

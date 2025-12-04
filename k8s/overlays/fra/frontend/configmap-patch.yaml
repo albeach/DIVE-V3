@@ -1,0 +1,20 @@
+# =============================================================================
+# DIVE V3 Frontend - FRA ConfigMap Patch
+# =============================================================================
+# Patches frontend ConfigMap with FRA-specific values
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: dive-v3-fra
+data:
+  nextauth_url: "https://fra-app.dive25.com"
+  api_url: "https://fra-api.dive25.com"
+  keycloak_url: "https://fra-idp.dive25.com"
+  keycloak_realm: "dive-v3-broker-fra"
+  keycloak_client_id: "dive-v3-client-broker"
+  keycloak_issuer: "https://keycloak.dive-v3-fra.svc.cluster.local:8443/realms/dive-v3-broker-fra"
+
+

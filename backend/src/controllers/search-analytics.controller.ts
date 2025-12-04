@@ -13,7 +13,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { MongoClient, Db, Collection } from 'mongodb';
+import { MongoClient, Collection } from 'mongodb';
+// import { Db } from 'mongodb'; // Unused import
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { logger } from '../utils/logger';
 
@@ -84,7 +85,7 @@ interface ISearchMetrics {
 // ============================================
 
 const COLLECTION_NAME = 'search_analytics';
-const MAX_STORED_EVENTS = 100000; // Rotate oldest events
+// const MAX_STORED_EVENTS = 100000; // Rotate oldest events - Unused constant
 const RETENTION_DAYS = 90;
 
 // ============================================
@@ -158,7 +159,7 @@ function getInstanceFromRequest(req: Request): string {
 export const trackSearchEventHandler = async (
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
   
@@ -544,5 +545,6 @@ export const cleanupAnalyticsHandler = async (
     next(error);
   }
 };
+
 
 

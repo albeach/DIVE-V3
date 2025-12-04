@@ -1,0 +1,168 @@
+# =============================================================================
+# DIVE V3 - Build and Push Container Images
+# =============================================================================
+# Automatically builds and pushes Docker images to GCR/Artifact Registry
+# when code changes are pushed to main branch.
+#
+# Triggers:
+#   - Push to main branch (any path)
+#   - Changes to frontend/, backend/, keycloak/, kas/ directories
+#
+# Outputs:
+#   - Images pushed to: gcr.io/dive25/dive-v3-{service}:{sha}
+#   - Images also tagged as: gcr.io/dive25/dive-v3-{service}:latest
+# =============================================================================
+
+name: Build and Push Container Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'keycloak/**'
+      - 'kas/**'
+      - '.github/workflows/build-images.yml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to build (leave empty for all)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - frontend
+          - backend
+          - keycloak
+          - kas
+
+env:
+  GCP_PROJECT_ID: dive25
+  GCP_REGION: us-east4
+  REGISTRY: us-east4-docker.pkg.dev/dive25/dive-v3-repo
+  IMAGE_PREFIX: dive-v3
+
+jobs:
+  build-images:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+          platforms: linux/amd64,linux/arm64
+      
+      - name: Extract Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend
+            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend
+            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak
+            ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and Push Frontend
+        if: ${{ inputs.service == '' || inputs.service == 'frontend' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.dive25.com
+            NEXT_PUBLIC_BACKEND_URL=https://api.dive25.com
+            NEXT_PUBLIC_BASE_URL=https://app.dive25.com
+            NEXT_PUBLIC_KEYCLOAK_URL=https://auth.dive25.com
+            NEXT_PUBLIC_KEYCLOAK_REALM=dive-v3-broker
+            NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=dive-v3-client-broker
+            NEXT_PUBLIC_APP_NAME=DIVE V3
+            NEXT_PUBLIC_INSTANCE=USA
+            NEXT_PUBLIC_INSTANCE_NAME=United States
+            NEXT_PUBLIC_LOCALE=en-US
+      
+      - name: Build and Push Backend
+        if: ${{ inputs.service == '' || inputs.service == 'backend' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build and Push Keycloak
+        if: ${{ inputs.service == '' || inputs.service == 'keycloak' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./keycloak
+          file: ./keycloak/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build and Push KAS
+        if: ${{ inputs.service == '' || inputs.service == 'kas' }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ./kas
+          file: ./kas/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }},${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Image Summary
+        run: |
+          echo "## 🐳 Container Images Built" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Image | Tag |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Keycloak | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| KAS | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platforms:** linux/amd64, linux/arm64 (multi-platform)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Images are ready for deployment to Kubernetes!" >> $GITHUB_STEP_SUMMARY
+

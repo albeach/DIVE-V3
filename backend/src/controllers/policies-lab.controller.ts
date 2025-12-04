@@ -40,8 +40,8 @@ import {
 } from '../utils/policy-lab-fs.utils';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as crypto from 'crypto';
-import { validateRego, validateXACML } from '../services/policy-validation.service';
+// import * as crypto from 'crypto'; // Unused import
+// Duplicate import removed - already imported above
 
 // ============================================================================
 // Configuration

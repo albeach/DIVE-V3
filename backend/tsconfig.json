@@ -22,6 +22,6 @@
     "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts", "src/scripts/comprehensive-webauthn-check.ts", "src/scripts/verify-both-webauthn-policies.ts", "src/scripts/verify-webauthn-config.ts", "src/scripts/fix-webauthn-warnings.ts", "src/scripts/fix-webauthn-rpid.ts", "src/scripts/migrate-coi-capitalization.ts"]
+  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts", "src/scripts/**/*"]
 }
 

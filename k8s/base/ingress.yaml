@@ -1,0 +1,82 @@
+# =============================================================================
+# DIVE V3 - Ingress Configuration
+# =============================================================================
+# GKE Ingress for external access to DIVE V3 services
+# Uses Google Cloud Load Balancer (best practice for GKE)
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dive-v3-ingress
+  namespace: dive-v3
+  labels:
+    app.kubernetes.io/name: dive-v3-ingress
+    app.kubernetes.io/part-of: dive-v3
+  annotations:
+    # Use GKE Ingress (Google Cloud Load Balancer)
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "dive-v3-ingress-ip"
+    # GCP Managed SSL Certificate (best practice)
+    networking.gke.io/managed-certificates: "dive-v3-ssl-cert"
+    # SSL redirect - redirect HTTP to HTTPS
+    kubernetes.io/ingress.allow-http: "false"  # HTTPS only (best practice)
+    # Backend configuration
+    cloud.google.com/backend-config: '{"default": "dive-v3-backend-config"}'
+spec:
+  rules:
+    # Frontend (main application)
+    - host: app.dive25.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    
+    # Backend API
+    - host: api.dive25.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+    
+    # Keycloak IdP
+    - host: idp.dive25.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+
+---
+# BackendConfig for health checks and timeout configuration
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: dive-v3-backend-config
+  namespace: dive-v3
+spec:
+  timeoutSec: 300
+  connectionDraining:
+    drainingTimeoutSec: 60
+  healthCheck:
+    checkIntervalSec: 10
+    timeoutSec: 5
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+    type: HTTP
+    requestPath: /health
+

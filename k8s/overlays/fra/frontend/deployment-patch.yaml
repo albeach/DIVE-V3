@@ -1,0 +1,37 @@
+# =============================================================================
+# DIVE V3 Frontend - FRA Deployment Patch
+# =============================================================================
+# Patches frontend Deployment with FRA-specific configuration
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dive-v3-fra
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/instance: fra
+    spec:
+      serviceAccountName: frontend
+      containers:
+        - name: frontend
+          env:
+            - name: INSTANCE_CODE
+              value: "FRA"
+            - name: INSTANCE_NAME
+              value: "France"
+            - name: NEXT_PUBLIC_INSTANCE
+              value: "FRA"
+            - name: NEXT_PUBLIC_INSTANCE_NAME
+              value: "France"
+            - name: NEXT_PUBLIC_LOCALE
+              value: "fr-FR"
+
+

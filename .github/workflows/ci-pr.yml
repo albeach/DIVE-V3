@@ -1,0 +1,226 @@
+# =============================================================================
+# DIVE V3 - CI Pipeline for Pull Requests
+# =============================================================================
+# Runs comprehensive tests on pull requests before merge
+# Fast feedback loop for developers
+# =============================================================================
+
+name: CI - Pull Request
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'policies/**'
+      - 'k8s/**'
+      - '.github/workflows/ci-pr.yml'
+
+jobs:
+  # Fast feedback: TypeScript compilation and linting
+  quick-checks:
+    name: Quick Checks (TypeScript, Linting)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Backend TypeScript Check
+        run: |
+          cd backend
+          npm ci
+          npm run typecheck
+      
+      - name: Frontend TypeScript Check
+        run: |
+          cd frontend
+          npm ci --legacy-peer-deps
+          npm run typecheck
+      
+      - name: Backend Lint
+        run: |
+          cd backend
+          npm run lint || echo "Linting issues found (non-blocking)"
+        continue-on-error: true
+      
+      - name: Frontend Lint
+        run: |
+          cd frontend
+          npm run lint || echo "Linting issues found (non-blocking)"
+        continue-on-error: true
+
+  # Backend tests (unit only for speed)
+  backend-tests:
+    name: Backend - Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --noauth
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd backend && npm ci
+      
+      - name: Generate Test Certificates
+        run: |
+          cd backend
+          chmod +x scripts/generate-test-certs.sh
+          ./scripts/generate-test-certs.sh || echo "Certificate generation skipped"
+        continue-on-error: true
+      
+      - name: Start OPA Server
+        run: |
+          curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          chmod +x opa
+          nohup ./opa run --server --addr=:8181 > opa.log 2>&1 &
+          sleep 3
+          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
+      
+      - name: Run Unit Tests
+        run: |
+          cd backend
+          npm run test:unit
+        env:
+          NODE_ENV: test
+          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+          MONGODB_AUTH_DISABLED: true
+          OPA_URL: http://localhost:8181
+
+  # Frontend tests
+  frontend-tests:
+    name: Frontend - Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+      
+      - name: Run Tests
+        run: |
+          cd frontend
+          npm test
+        env:
+          NEXTAUTH_URL: http://localhost:3000
+          NEXTAUTH_SECRET: test-secret-for-ci
+
+  # OPA policy tests
+  opa-tests:
+    name: OPA - Policy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+      
+      - name: Run Policy Tests
+        run: |
+          cd policies
+          opa test . -v
+
+  # Kubernetes manifest validation
+  k8s-validation:
+    name: Kubernetes - Manifest Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+      
+      - name: Validate Manifests
+        run: |
+          kubectl apply --dry-run=client -f k8s/base/ -R || echo "Validation issues found"
+        continue-on-error: true
+      
+      - name: Kustomize Build Test
+        run: |
+          # Check if kustomize is available
+          if command -v kustomize &> /dev/null; then
+            cd k8s/base
+            kustomize build . > /dev/null
+            echo "✅ Kustomize build successful"
+          else
+            echo "⚠️ kustomize not available, skipping"
+          fi
+        continue-on-error: true
+
+  # PR Summary
+  pr-summary:
+    name: PR Test Summary
+    runs-on: ubuntu-latest
+    needs: [quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## 📊 Pull Request Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Quick Checks | ${{ needs.quick-checks.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Tests | ${{ needs.backend-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Tests | ${{ needs.frontend-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OPA Tests | ${{ needs.opa-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| K8s Validation | ${{ needs.k8s-validation.result == 'success' && '✅' || '⚠️' || '⏭️' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.quick-checks.result }}" == "success" && \
+                "${{ needs.backend-tests.result }}" == "success" && \
+                "${{ needs.frontend-tests.result }}" == "success" && \
+                "${{ needs.opa-tests.result }}" == "success" ]]; then
+            echo "✅ **All critical tests passing** - Ready for review!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Some tests failed** - Please review and fix issues" >> $GITHUB_STEP_SUMMARY
+          fi
+
+

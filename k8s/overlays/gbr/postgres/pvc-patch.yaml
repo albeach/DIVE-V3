@@ -1,0 +1,12 @@
+# =============================================================================
+# DIVE V3 PostgreSQL - GBR PVC Patch
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-gbr
+  namespace: dive-v3-gbr
+  labels:
+    app.kubernetes.io/instance: gbr
+

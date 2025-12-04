@@ -29,6 +29,7 @@
         "@radix-ui/react-visually-hidden": "^1.2.4",
         "@tanstack/react-query": "^5.90.5",
         "axios": "^1.7.0",
+        "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "date-fns": "^3.6.0",
         "drizzle-orm": "^0.33.0",
@@ -52,6 +53,7 @@
         "recharts": "^3.2.1",
         "sonner": "^2.0.7",
         "spdy": "^4.0.2",
+        "tailwind-merge": "^3.4.0",
         "zod": "^4.1.12"
     },
     "devDependencies": {

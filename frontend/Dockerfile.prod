@@ -44,8 +44,13 @@ ENV NEXT_PUBLIC_LOCALE=$NEXT_PUBLIC_LOCALE
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build the application
+# Build the application with standalone output
+# This creates .next/standalone directory with server.js
 RUN npm run build
+
+# Verify standalone output was created
+RUN ls -la /app/.next/standalone/ || echo "ERROR: Standalone output not found"
+RUN test -f /app/.next/standalone/server.js || echo "ERROR: server.js not found in standalone output"
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -64,8 +69,17 @@ RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 
 # Set up for standalone output
+# Next.js standalone creates .next/standalone with the entire app structure
+# The standalone directory contains server.js at its root
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+# Copy static files separately (standalone doesn't include static assets)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Copy public assets
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Copy entrypoint script (must be after standalone copy to ensure correct permissions)
+COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Copy certificates for HTTPS (optional, mount at runtime if needed)
 # COPY --from=builder /app/certs ./certs
@@ -77,7 +91,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run in production mode
-CMD ["node", "server.js"]
+# Run entrypoint script
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 

@@ -1,0 +1,13 @@
+# =============================================================================
+# DIVE V3 Frontend - DEU Service Patch
+# NOTE: Kustomize patches must use base resource names, not modified names
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+

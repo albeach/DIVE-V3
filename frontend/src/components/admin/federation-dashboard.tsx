@@ -102,7 +102,7 @@ export default function FederationDashboard() {
                     }).catch(() => null);
 
                     // For demo, simulate health based on instance
-                    const health = instance.type === 'remote' && Math.random() > 0.8 
+                    const health: 'healthy' | 'degraded' | 'down' = instance.type === 'remote' && Math.random() > 0.8 
                         ? 'degraded' 
                         : 'healthy';
 
@@ -233,4 +233,5 @@ export default function FederationDashboard() {
         </div>
     );
 }
+
 

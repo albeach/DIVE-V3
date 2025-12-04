@@ -1,0 +1,5 @@
+# This file excludes the base namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dive-v3

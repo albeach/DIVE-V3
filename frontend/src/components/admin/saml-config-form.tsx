@@ -13,10 +13,12 @@ interface ISAMLConfigFormProps {
     config: ISAMLConfig;
     onChange: (config: ISAMLConfig) => void;
     errors?: Record<string, string>;
+    accessToken?: string;  // For backend validation
 }
 
-export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLConfigFormProps) {
+export default function SAMLConfigForm({ config, onChange, errors = {}, accessToken }: ISAMLConfigFormProps) {
     const [localErrors, setLocalErrors] = React.useState<Record<string, string>>({});
+    const [validationStatus, setValidationStatus] = React.useState<Record<string, 'validating' | 'valid' | 'invalid' | null>>({});
 
     const validateURL = (url: string): string | null => {
         if (!url) return null;
@@ -32,17 +34,52 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
         }
     };
 
+    // Upload SAML metadata XML file
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !accessToken) return;
+
+        try {
+            const text = await file.text();
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/idps/parse/saml-metadata`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({ metadataXml: text })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.formData) {
+                // Auto-populate form with parsed data
+                onChange({
+                    ...config,
+                    ...result.formData
+                });
+                setValidationStatus(prev => ({ ...prev, entityId: 'valid', singleSignOnServiceUrl: 'valid' }));
+            } else {
+                setLocalErrors(prev => ({ ...prev, file: result.error || 'Failed to parse metadata' }));
+            }
+        } catch (error) {
+            setLocalErrors(prev => ({ ...prev, file: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` }));
+        }
+    };
+
     const handleChange = (field: keyof ISAMLConfig, value: string) => {
         // Validate URLs in real-time
         if (field === 'singleSignOnServiceUrl' || field === 'singleLogoutServiceUrl') {
             const error = validateURL(value);
             if (error) {
                 setLocalErrors(prev => ({ ...prev, [field]: error }));
+                setValidationStatus(prev => ({ ...prev, [field]: 'invalid' }));
             } else {
                 setLocalErrors(prev => {
                     const { [field]: removed, ...rest } = prev;
                     return rest;
                 });
+                setValidationStatus(prev => ({ ...prev, [field]: 'valid' }));
             }
         }
 
@@ -60,6 +97,33 @@ export default function SAMLConfigForm({ config, onChange, errors = {} }: ISAMLC
                     Configure SAML 2.0 settings for this identity provider.
                 </p>
             </div>
+
+            {/* Upload Metadata File */}
+            {accessToken && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <label className="block text-sm font-semibold text-blue-900 mb-2">
+                        📄 Quick Setup: Upload SAML Metadata XML
+                    </label>
+                    <p className="text-xs text-blue-700 mb-3">
+                        Upload your IdP's SAML metadata XML file to auto-populate all fields.
+                    </p>
+                    <input
+                        type="file"
+                        accept=".xml,application/xml,text/xml"
+                        onChange={handleFileUpload}
+                        className="block w-full text-sm text-blue-900
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-semibold
+                            file:bg-blue-600 file:text-white
+                            hover:file:bg-blue-700
+                            file:cursor-pointer cursor-pointer"
+                    />
+                    {localErrors.file && (
+                        <p className="mt-2 text-sm text-red-600">{localErrors.file}</p>
+                    )}
+                </div>
+            )}
 
             {/* Entity ID */}
             <div>
