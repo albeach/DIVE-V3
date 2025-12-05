@@ -45,8 +45,20 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
 fi
 
 # Set defaults
-PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+
+# Keycloak container name
+KC_CONTAINER="dive-v3-keycloak-${CODE_LOWER}"
+
+# Internal URL for API calls (via Docker network)
+KEYCLOAK_INTERNAL_URL="https://localhost:8443"
+PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
+
+# Helper function to call Keycloak API via Docker exec
+kc_curl() {
+    docker exec "$KC_CONTAINER" curl -sk "$@" 2>/dev/null
+}
+
 CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
 FRONTEND_URL="${FRONTEND_URL:-https://${CODE_LOWER}-app.dive25.com}"
 
@@ -56,7 +68,7 @@ echo "║         DIVE V3 Spoke Keycloak Initialization                ║"
 echo "║                Instance: ${CODE_UPPER}                                    ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
-log_info "Keycloak URL: ${PUBLIC_KEYCLOAK_URL}"
+log_info "Keycloak URL: ${KEYCLOAK_INTERNAL_URL}"
 log_info "Realm: ${REALM_NAME}"
 log_info "Client: ${CLIENT_ID}"
 echo ""
@@ -66,14 +78,17 @@ echo ""
 # =============================================================================
 log_step "Authenticating with Keycloak Admin API..."
 
-TOKEN=$(curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+# Use Docker exec to call Keycloak API (bypasses network issues)
+TOKEN=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/realms/master/protocol/openid-connect/token" \
     -d "client_id=admin-cli" \
     -d "username=admin" \
     -d "password=${ADMIN_PASSWORD}" \
-    -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+    -d "grant_type=password" | jq -r '.access_token')
 
 if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
-    log_error "Failed to get admin token. Check Keycloak URL and credentials."
+    log_error "Failed to get admin token. Check Keycloak credentials."
+    log_info "Trying to verify Keycloak is running..."
+    docker ps --filter "name=${KC_CONTAINER}" --format '{{.Names}}: {{.Status}}'
     exit 1
 fi
 log_success "Admin authentication successful"
@@ -83,13 +98,13 @@ log_success "Admin authentication successful"
 # =============================================================================
 log_step "Creating realm: ${REALM_NAME}..."
 
-REALM_EXISTS=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-    "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}" 2>/dev/null | jq -r '.realm // empty')
+REALM_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" 2>/dev/null | jq -r '.realm // empty')
 
 if [[ -n "$REALM_EXISTS" ]]; then
     log_warn "Realm already exists, skipping creation"
 else
-    curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms" \
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{
@@ -115,12 +130,12 @@ fi
 log_step "Creating OAuth scopes..."
 
 for SCOPE in openid profile email; do
-    SCOPE_EXISTS=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-        "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/client-scopes" 2>/dev/null | \
+    SCOPE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/client-scopes" 2>/dev/null | \
         jq -r ".[] | select(.name==\"${SCOPE}\") | .name")
     
     if [[ -z "$SCOPE_EXISTS" ]]; then
-        curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/client-scopes" \
+        kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/client-scopes" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{
@@ -142,8 +157,8 @@ done
 # =============================================================================
 log_step "Creating OAuth client: ${CLIENT_ID}..."
 
-CLIENT_EXISTS=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-    "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" 2>/dev/null | \
+CLIENT_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" 2>/dev/null | \
     jq -r '.[0].id // empty')
 
 if [[ -n "$CLIENT_EXISTS" ]]; then
@@ -151,7 +166,7 @@ if [[ -n "$CLIENT_EXISTS" ]]; then
     CLIENT_UUID="$CLIENT_EXISTS"
 else
     # Create client
-    curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{
@@ -179,8 +194,8 @@ else
         }" 2>/dev/null
     
     # Get client UUID
-    CLIENT_UUID=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-        "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" 2>/dev/null | \
+    CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" 2>/dev/null | \
         jq -r '.[0].id')
     
     log_success "Client created: ${CLIENT_ID}"
@@ -192,12 +207,12 @@ fi
 log_step "Assigning default scopes to client..."
 
 for SCOPE in openid profile email; do
-    SCOPE_ID=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-        "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/client-scopes" 2>/dev/null | \
+    SCOPE_ID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/client-scopes" 2>/dev/null | \
         jq -r ".[] | select(.name==\"${SCOPE}\") | .id")
     
     if [[ -n "$SCOPE_ID" ]]; then
-        curl -sk -X PUT "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/default-client-scopes/${SCOPE_ID}" \
+        kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/default-client-scopes/${SCOPE_ID}" \
             -H "Authorization: Bearer $TOKEN" 2>/dev/null
     fi
 done
@@ -209,7 +224,7 @@ log_success "Default scopes assigned"
 log_step "Creating DIVE attribute mappers..."
 
 # Clearance mapper
-curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{
@@ -227,7 +242,7 @@ curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CL
     }' 2>/dev/null || true
 
 # Country mapper
-curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{
@@ -245,7 +260,7 @@ curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CL
     }' 2>/dev/null || true
 
 # UniqueID mapper
-curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{
@@ -263,7 +278,7 @@ curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CL
     }' 2>/dev/null || true
 
 # COI mapper
-curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d '{

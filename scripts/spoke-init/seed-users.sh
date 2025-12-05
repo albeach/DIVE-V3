@@ -42,8 +42,17 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
     source "${INSTANCE_DIR}/.env"
 fi
 
-PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+
+# Keycloak container and internal URL
+KC_CONTAINER="dive-v3-keycloak-${CODE_LOWER}"
+KEYCLOAK_INTERNAL_URL="https://localhost:8443"
+PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
+
+# Helper function to call Keycloak API via Docker exec
+kc_curl() {
+    docker exec "$KC_CONTAINER" curl -sk "$@" 2>/dev/null
+}
 
 # Country-specific settings
 declare -A COUNTRY_NAMES=(
@@ -67,7 +76,7 @@ echo ""
 # =============================================================================
 log_step "Authenticating with Keycloak..."
 
-TOKEN=$(curl -sk -X POST "${PUBLIC_KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+TOKEN=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/realms/master/protocol/openid-connect/token" \
     -d "client_id=admin-cli" \
     -d "username=admin" \
     -d "password=${ADMIN_PASSWORD}" \
@@ -109,8 +118,8 @@ for USER_DEF in "${USERS[@]}"; do
     IFS='|' read -r USERNAME FIRST LAST EMAIL CLEARANCE COI <<< "$USER_DEF"
     
     # Check if user exists
-    USER_EXISTS=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-        "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${USERNAME}" 2>/dev/null | \
+    USER_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${USERNAME}" 2>/dev/null | \
         jq -r '.[0].id // empty')
     
     if [[ -n "$USER_EXISTS" ]]; then
@@ -130,8 +139,8 @@ for USER_DEF in "${USERS[@]}"; do
     ATTRS="${ATTRS}}"
     
     # Create user
-    HTTP_CODE=$(curl -sk -w "%{http_code}" -o /dev/null -X POST \
-        "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
+    HTTP_CODE=$(kc_curl -w "%{http_code}" -o /dev/null -X POST \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{
@@ -146,12 +155,12 @@ for USER_DEF in "${USERS[@]}"; do
     
     if [[ "$HTTP_CODE" == "201" ]]; then
         # Get user ID
-        USER_ID=$(curl -sk -H "Authorization: Bearer $TOKEN" \
-            "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${USERNAME}" 2>/dev/null | \
+        USER_ID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${USERNAME}" 2>/dev/null | \
             jq -r '.[0].id')
         
         # Set password
-        curl -sk -X PUT "${PUBLIC_KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/reset-password" \
+        kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"type\": \"password\", \"value\": \"${PASSWORD}\", \"temporary\": false}" 2>/dev/null
