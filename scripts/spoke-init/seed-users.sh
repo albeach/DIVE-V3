@@ -44,14 +44,14 @@ fi
 
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
 
-# Keycloak container and internal URL
-KC_CONTAINER="dive-v3-keycloak-${CODE_LOWER}"
-KEYCLOAK_INTERNAL_URL="https://localhost:8443"
+# Use backend container for API calls (has curl, on same network)
+API_CONTAINER="dive-v3-backend-${CODE_LOWER}"
+KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
 PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
 
-# Helper function to call Keycloak API via Docker exec
+# Helper function to call Keycloak API via Docker exec (uses backend container)
 kc_curl() {
-    docker exec "$KC_CONTAINER" curl -sk "$@" 2>/dev/null
+    docker exec "$API_CONTAINER" curl -sk "$@" 2>/dev/null
 }
 
 # Country-specific settings
