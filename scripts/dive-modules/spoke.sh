@@ -920,16 +920,27 @@ services:
     container_name: dive-v3-backend-${code_lower}
     environment:
       NODE_ENV: development
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       PORT: "4000"
       INSTANCE_CODE: $code_upper
       INSTANCE_NAME: "$instance_name"
       SPOKE_ID: $spoke_id
       SPOKE_MODE: "true"
+      # MongoDB (with alias for compatibility)
       MONGODB_URI: mongodb://admin:\${MONGO_PASSWORD}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
+      MONGODB_URL: mongodb://admin:\${MONGO_PASSWORD}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
       REDIS_URL: redis://redis-${code_lower}:6379
+      # Keycloak
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-${code_lower}
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD}
+      # OPA
       OPA_URL: http://opa-${code_lower}:8181
+      # CORS
+      NEXT_PUBLIC_BASE_URL: $base_url
+      FEDERATION_ALLOWED_ORIGINS: $base_url,$api_url,$idp_url
+      # Hub federation
       HUB_URL: \${HUB_URL:-https://hub.dive25.com}
       SPOKE_TOKEN: \${SPOKE_OPAL_TOKEN}
       SPOKE_CONFIG_PATH: /app/config/config.json
@@ -968,21 +979,33 @@ services:
     container_name: dive-v3-frontend-${code_lower}
     environment:
       NODE_ENV: development
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXT_PUBLIC_INSTANCE: $code_upper
       NEXT_PUBLIC_INSTANCE_NAME: "$instance_name"
       NEXT_PUBLIC_API_URL: $api_url
       NEXT_PUBLIC_KEYCLOAK_URL: $idp_url
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-${code_lower}
+      NEXT_PUBLIC_BACKEND_URL: $api_url
       NEXTAUTH_URL: $base_url
       NEXTAUTH_SECRET: \${AUTH_SECRET}
+      # Database for NextAuth sessions
+      DATABASE_URL: postgres://keycloak:\${POSTGRES_PASSWORD}@postgres-${code_lower}:5432/keycloak
+      # Keycloak OAuth config (internal URL)
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_REALM: dive-v3-broker-${code_lower}
+      KEYCLOAK_CLIENT_ID: dive-v3-client-${code_lower}
       KEYCLOAK_CLIENT_SECRET: \${KEYCLOAK_CLIENT_SECRET}
+      # NextAuth v5 Keycloak provider
+      AUTH_KEYCLOAK_ID: dive-v3-client-${code_lower}
+      AUTH_KEYCLOAK_SECRET: \${KEYCLOAK_CLIENT_SECRET}
+      AUTH_KEYCLOAK_ISSUER: $idp_url/realms/dive-v3-broker-${code_lower}
     ports:
       - "3000:3000"
     volumes:
       - ../../frontend/src:/app/src:ro
       - ../../frontend/public:/app/public:ro
+      - ../../frontend/server.js:/app/server.js:ro
+      - ./certs:/opt/app/certs:ro
     depends_on:
       backend-${code_lower}:
         condition: service_healthy
@@ -1772,6 +1795,36 @@ spoke_up() {
     if [ $? -eq 0 ]; then
         echo ""
         log_success "Spoke services started"
+        echo ""
+        
+        # Check if initialization has been done
+        local init_marker="${spoke_dir}/.initialized"
+        if [ ! -f "$init_marker" ]; then
+            echo ""
+            echo -e "${CYAN}Running post-deployment initialization...${NC}"
+            echo ""
+            
+            # Run initialization scripts
+            local init_script="${DIVE_ROOT}/scripts/spoke-init/init-all.sh"
+            if [ -f "$init_script" ]; then
+                cd "${DIVE_ROOT}"
+                bash "$init_script" "$(upper "$instance_code")"
+                
+                if [ $? -eq 0 ]; then
+                    # Mark as initialized
+                    touch "$init_marker"
+                    log_success "Spoke fully initialized!"
+                else
+                    log_warn "Initialization had some issues. You can re-run with:"
+                    echo "  ./scripts/spoke-init/init-all.sh $(upper "$instance_code")"
+                fi
+            else
+                log_warn "Initialization scripts not found. Manual setup may be required."
+            fi
+        else
+            log_info "Spoke already initialized (skipping post-deployment setup)"
+        fi
+        
         echo ""
         echo "  View logs:    ./dive spoke logs"
         echo "  Check health: ./dive spoke health"

@@ -340,16 +340,6 @@ export function IdpSelector() {
     );
   }
 
-  if (idps.length === 0) {
-    return (
-      <div className="text-center py-12 px-6 bg-gray-50 rounded-xl border-2 border-gray-200">
-        <div className="text-4xl mb-4">🔒</div>
-        <p className="text-gray-700 font-semibold mb-2">No identity providers are currently available.</p>
-        <p className="text-sm text-gray-500">Please contact your administrator.</p>
-      </div>
-    );
-  }
-
   // Direct login handler (for local users - no federation)
   const handleDirectLogin = async () => {
     const { signIn } = await import('next-auth/react');
@@ -361,7 +351,7 @@ export function IdpSelector() {
 
   return (
     <>
-      {/* Direct Login for Local Users */}
+      {/* Direct Login for Local Users - ALWAYS shown, even without IdPs */}
       <div className="mb-6">
         <button
           onClick={handleDirectLogin}
@@ -397,11 +387,17 @@ export function IdpSelector() {
       </div>
 
       {/* Federation Partners - for users from other countries */}
-      {idps.length > 0 && (
+      {idps.length > 0 ? (
         <div className="mb-4">
           <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
             Or federate from partner nation
           </h3>
+        </div>
+      ) : (
+        <div className="text-center py-6 px-4 bg-gray-50 rounded-xl border border-gray-200 mt-4">
+          <p className="text-sm text-gray-500">
+            No federation partners configured. Use direct login above.
+          </p>
         </div>
       )}
 
