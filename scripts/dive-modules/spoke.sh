@@ -254,9 +254,9 @@ spoke_setup_wizard() {
     
     print_header
     echo -e "${BOLD}🚀 DIVE V3 Spoke Setup Wizard${NC}"
-    echo ""
+        echo ""
     echo "This wizard will guide you through setting up a new DIVE V3 spoke."
-    echo ""
+        echo ""
     
     # Step 1: Basic Information
     if [ -z "$instance_code" ]; then
@@ -265,7 +265,7 @@ spoke_setup_wizard() {
         read -p "  Enter 3-letter instance code (e.g., NZL, HOM): " instance_code
         if [ -z "$instance_code" ]; then
             log_error "Instance code is required"
-            return 1
+        return 1
         fi
     fi
     
@@ -465,9 +465,9 @@ spoke_setup_wizard() {
     echo "  Tunnel:       $([ "$setup_tunnel" = true ] && echo "Configured" || echo "Not configured")"
     echo ""
     read -p "  Proceed with setup? (yes/no): " confirm
-    if [ "$confirm" != "yes" ]; then
-        log_info "Cancelled"
-        return 1
+        if [ "$confirm" != "yes" ]; then
+            log_info "Cancelled"
+            return 1
     fi
     
     # Now call spoke_init with all the collected information
@@ -571,7 +571,7 @@ _spoke_init_internal() {
   }
 }
 EOF
-
+    
     # Create .env file (not template - ready to use!)
     log_step "Creating environment configuration"
     cat > "$spoke_dir/.env" << EOF
@@ -1005,6 +1005,7 @@ services:
       - ../../frontend/src:/app/src:ro
       - ../../frontend/public:/app/public:ro
       - ../../frontend/server.js:/app/server.js:ro
+      - ../../frontend/tsconfig.json:/app/tsconfig.json:ro
       - ./certs:/opt/app/certs:ro
     depends_on:
       backend-${code_lower}:
@@ -1084,13 +1085,13 @@ _spoke_init_legacy() {
     
     if [ -z "$instance_code" ] || [ -z "$instance_name" ]; then
         log_error "Usage: ./dive spoke init <CODE> <NAME>"
-        echo ""
+    echo ""
         echo "Example: ./dive spoke init NZL 'New Zealand Defence Force'"
-        echo ""
+    echo ""
         echo "Arguments:"
         echo "  CODE    3-letter country code (ISO 3166-1 alpha-3)"
         echo "  NAME    Human-readable instance name"
-        echo ""
+    echo ""
         echo "For interactive setup wizard, run: ./dive spoke init"
         return 1
     fi
