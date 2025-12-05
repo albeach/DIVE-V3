@@ -35,6 +35,12 @@ CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
 MONGODB_CONTAINER="dive-v3-mongodb-${CODE_LOWER}"
 DB_NAME="dive-v3-${CODE_LOWER}"
 
+# Load .env for credentials
+INSTANCE_DIR="instances/${CODE_LOWER}"
+if [[ -f "${INSTANCE_DIR}/.env" ]]; then
+    source "${INSTANCE_DIR}/.env"
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║         DIVE V3 Spoke Resource Seeding                       ║"
@@ -204,8 +210,18 @@ sed -i.bak "s/DBNAME/${DB_NAME}/g" "$MONGO_SCRIPT"
 sed -i.bak "s/CODE_UPPER/${CODE_UPPER}/g" "$MONGO_SCRIPT"
 rm -f "${MONGO_SCRIPT}.bak"
 
-# Execute the script
-docker exec -i "$MONGODB_CONTAINER" mongosh --quiet < "$MONGO_SCRIPT" 2>/dev/null
+# Get MongoDB credentials from .env
+MONGO_USER="${MONGO_USER:-admin}"
+MONGO_PASS="${MONGO_PASSWORD:-}"
+
+if [[ -z "$MONGO_PASS" ]]; then
+    log_warn "MONGO_PASSWORD not set, trying without auth"
+    docker exec -i "$MONGODB_CONTAINER" mongosh --quiet "${DB_NAME}" < "$MONGO_SCRIPT" 2>/dev/null
+else
+    # Execute with authentication
+    docker exec -i "$MONGODB_CONTAINER" mongosh --quiet \
+        "mongodb://${MONGO_USER}:${MONGO_PASS}@localhost:27017/${DB_NAME}?authSource=admin" < "$MONGO_SCRIPT" 2>/dev/null
+fi
 
 # Cleanup
 rm -f "$MONGO_SCRIPT"
