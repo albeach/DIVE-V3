@@ -2,7 +2,7 @@
   "$schema": "./schemas/tenant_configs.schema.json",
   "_metadata": {
     "version": "1.0.0",
-    "lastUpdated": "2025-12-03T01:11:27.147Z",
+    "lastUpdated": "2025-12-05T04:09:38.720Z",
     "description": "OPAL-managed per-tenant configuration for DIVE V3",
     "compliance": [
       "ACP-240",

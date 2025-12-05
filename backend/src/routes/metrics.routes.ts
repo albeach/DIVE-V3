@@ -204,6 +204,35 @@ router.get('/federation', async (_req: Request, res: Response, next: NextFunctio
 });
 
 /**
+ * GET /metrics/opal
+ * OPAL policy distribution metrics for dashboards
+ */
+router.get('/opal', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const metricsJson = await prometheusMetrics.getMetricsJSON();
+    
+    // Filter to OPAL and policy-related metrics
+    const opalMetrics = (metricsJson as any[]).filter((m: any) =>
+      m.name.includes('opal') ||
+      m.name.includes('bundle') ||
+      m.name.includes('spoke') ||
+      m.name.includes('sp_clients') ||
+      m.name.includes('opa_test')
+    );
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      instance: process.env.INSTANCE_NAME || 'usa',
+      metrics: opalMetrics
+    });
+  } catch (error) {
+    logger.error('Failed to get OPAL metrics', { error });
+    next(error);
+  }
+});
+
+/**
  * POST /metrics/reset
  * Reset all metrics (admin only, for testing)
  */

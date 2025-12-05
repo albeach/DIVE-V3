@@ -60,8 +60,7 @@ has_sufficient_clearance(subject_clearance, resource_classification) if {
 # GUARDRAIL VIOLATIONS
 # =============================================================================
 # These produce violations if spokes try to bypass guardrails
-
-default guardrail_violations := []
+# guardrail_violations is a set that collects all policy violations
 
 # Violation: Session duration exceeds maximum
 guardrail_violations contains violation if {
@@ -141,7 +140,7 @@ guardrails_enforced if {
 }
 
 # =============================================================================
-# METADATA
+# POLICY INFO
 # =============================================================================
 
 metadata := {

@@ -105,7 +105,8 @@
         "speakeasy": "^2.0.0",
         "uuid": "^11.1.0",
         "winston": "^3.11.0",
-        "xml2js": "^0.6.2"
+        "xml2js": "^0.6.2",
+        "zod": "^4.1.12"
     },
     "devDependencies": {
         "@types/compression": "^1.8.1",

@@ -26,8 +26,12 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { hubSpokeRegistry, IRegistrationRequest } from '../services/hub-spoke-registry.service';
 import { policySyncService } from '../services/policy-sync.service';
 import { idpValidationService } from '../services/idp-validation.service';
+import { SPManagementService } from '../services/sp-management.service';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
+
+// Initialize SP Management Service
+const spManagement = new SPManagementService();
 
 const router = Router();
 
@@ -60,6 +64,50 @@ const heartbeatSchema = z.object({
   opaHealthy: z.boolean().optional(),
   opalClientConnected: z.boolean().optional(),
   latencyMs: z.number().optional()
+});
+
+// SP Client Registration Schema
+const spRegistrationSchema = z.object({
+  name: z.string().min(3).max(100),
+  description: z.string().optional(),
+  organizationType: z.enum(['government', 'military', 'defense_contractor', 'research', 'other']),
+  country: z.string().length(3).toUpperCase(),
+  technicalContact: z.object({
+    name: z.string().optional(),
+    email: z.string().email()
+  }),
+  clientType: z.enum(['confidential', 'public']).default('confidential'),
+  redirectUris: z.array(z.string().url()).min(1),
+  postLogoutRedirectUris: z.array(z.string().url()).optional(),
+  jwksUri: z.string().url().optional().nullable(),
+  tokenEndpointAuthMethod: z.enum([
+    'client_secret_basic',
+    'client_secret_post',
+    'private_key_jwt',
+    'none'
+  ]).default('client_secret_basic'),
+  requirePKCE: z.boolean().default(true),
+  allowedScopes: z.array(z.string()).min(1),
+  allowedGrantTypes: z.array(z.enum([
+    'authorization_code',
+    'refresh_token',
+    'client_credentials'
+  ])).default(['authorization_code', 'refresh_token']),
+  attributeRequirements: z.object({
+    clearance: z.object({
+      required: z.boolean(),
+      allowedValues: z.array(z.string()).optional()
+    }).optional(),
+    countryOfAffiliation: z.object({
+      required: z.boolean()
+    }).optional()
+  }).optional(),
+  maxClassification: z.enum(['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET']).default('UNCLASSIFIED'),
+  rateLimit: z.object({
+    requestsPerMinute: z.number().default(60),
+    burstSize: z.number().default(10),
+    quotaPerDay: z.number().default(10000)
+  }).optional()
 });
 
 // ============================================
@@ -175,6 +223,276 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     
     res.status(500).json({
       error: 'Registration failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================
+// SP CLIENT ENDPOINTS (Pilot Mode)
+// ============================================
+
+/**
+ * POST /api/federation/sp/register
+ * Register a new SP Client (OAuth/OIDC client)
+ * This is for partners who want to integrate with DIVE without deploying a full spoke
+ */
+router.post('/sp/register', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const parsed = spRegistrationSchema.safeParse(req.body);
+    
+    if (!parsed.success) {
+      res.status(400).json({ 
+        error: 'Validation failed', 
+        details: parsed.error.issues 
+      });
+      return;
+    }
+    
+    logger.info('Processing SP Client registration', {
+      name: parsed.data.name,
+      country: parsed.data.country,
+      organizationType: parsed.data.organizationType
+    });
+    
+    // Register the SP using SPManagementService
+    // Map organization type to expected enum values
+    const orgTypeMap: Record<string, 'GOVERNMENT' | 'MILITARY' | 'CONTRACTOR' | 'ACADEMIC'> = {
+      'government': 'GOVERNMENT',
+      'military': 'MILITARY',
+      'defense_contractor': 'CONTRACTOR',
+      'research': 'ACADEMIC',
+      'other': 'CONTRACTOR'
+    };
+    
+    // Map token auth method to expected enum values
+    const authMethodMap: Record<string, 'client_secret_basic' | 'client_secret_post' | 'private_key_jwt'> = {
+      'client_secret_basic': 'client_secret_basic',
+      'client_secret_post': 'client_secret_post',
+      'private_key_jwt': 'private_key_jwt',
+      'none': 'client_secret_basic'
+    };
+    
+    const sp = await spManagement.registerSP({
+      name: parsed.data.name,
+      description: parsed.data.description || `SP Client for ${parsed.data.name}`,
+      organizationType: orgTypeMap[parsed.data.organizationType] || 'GOVERNMENT',
+      country: parsed.data.country,
+      technicalContact: {
+        name: parsed.data.technicalContact.name || 'Admin',
+        email: parsed.data.technicalContact.email,
+        phone: ''
+      },
+      clientType: parsed.data.clientType,
+      redirectUris: parsed.data.redirectUris,
+      postLogoutRedirectUris: parsed.data.postLogoutRedirectUris,
+      jwksUri: parsed.data.jwksUri || undefined,
+      tokenEndpointAuthMethod: authMethodMap[parsed.data.tokenEndpointAuthMethod] || 'client_secret_basic',
+      requirePKCE: parsed.data.requirePKCE,
+      allowedScopes: parsed.data.allowedScopes,
+      allowedGrantTypes: parsed.data.allowedGrantTypes,
+      attributeRequirements: {
+        clearance: parsed.data.attributeRequirements?.clearance?.required ?? true,
+        country: parsed.data.attributeRequirements?.countryOfAffiliation?.required ?? true
+      },
+      rateLimit: parsed.data.rateLimit
+    });
+    
+    logger.info('SP Client registered successfully', {
+      spId: sp.spId,
+      clientId: sp.clientId,
+      name: sp.name,
+      country: sp.country,
+      status: sp.status
+    });
+    
+    res.status(201).json({
+      success: true,
+      sp: {
+        spId: sp.spId,
+        clientId: sp.clientId,
+        clientSecret: sp.clientSecret, // Only returned on initial registration
+        name: sp.name,
+        country: sp.country,
+        status: sp.status,
+        message: sp.status === 'PENDING' 
+          ? 'Registration pending approval. You will be notified when approved.'
+          : 'Registration successful.'
+      },
+      endpoints: {
+        issuer: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker`,
+        authorization: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/auth`,
+        token: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/token`,
+        userinfo: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/userinfo`,
+        jwks: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/certs`
+      }
+    });
+    
+  } catch (error) {
+    logger.error('SP Client registration failed', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(500).json({
+      error: 'Registration failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/federation/sp/:spId
+ * Get SP Client details
+ */
+router.get('/sp/:spId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const sp = await spManagement.getById(req.params.spId);
+    
+    if (!sp) {
+      res.status(404).json({ error: 'SP not found' });
+      return;
+    }
+    
+    // Don't return client secret
+    const { clientSecret, ...safesp } = sp as any;
+    
+    res.json({
+      sp: safesp
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get SP details' });
+  }
+});
+
+/**
+ * GET /api/federation/sp
+ * List SP Clients (admin)
+ */
+router.get('/sp', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await spManagement.listSPs({
+      status: req.query.status as string | undefined,
+      country: req.query.country as string | undefined,
+      organizationType: req.query.organizationType as string | undefined,
+      search: req.query.search as string | undefined,
+      page: req.query.page ? parseInt(req.query.page as string, 10) : undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined
+    });
+    
+    res.json(result);
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list SPs' });
+  }
+});
+
+/**
+ * POST /api/federation/sp/:spId/approve
+ * Approve a pending SP Client
+ */
+router.post('/sp/:spId/approve', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const approvedBy = (req as any).user?.uniqueID || 'admin';
+    const sp = await spManagement.approveSP(req.params.spId, true, undefined, approvedBy);
+    
+    if (!sp) {
+      res.status(404).json({ error: 'SP not found' });
+      return;
+    }
+    
+    logger.info('SP Client approved', {
+      spId: sp.spId,
+      name: sp.name,
+      approvedBy
+    });
+    
+    res.json({
+      success: true,
+      sp: {
+        spId: sp.spId,
+        clientId: sp.clientId,
+        name: sp.name,
+        status: sp.status
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      error: 'Approval failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/federation/sp/:spId/suspend
+ * Suspend an SP Client
+ */
+router.post('/sp/:spId/suspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { reason } = req.body;
+    const suspendedBy = (req as any).user?.uniqueID || 'admin';
+    
+    const sp = await spManagement.suspendSP(req.params.spId, reason || 'No reason provided', suspendedBy);
+    
+    if (!sp) {
+      res.status(404).json({ error: 'SP not found' });
+      return;
+    }
+    
+    logger.warn('SP Client suspended', {
+      spId: sp.spId,
+      name: sp.name,
+      reason,
+      suspendedBy
+    });
+    
+    res.json({
+      success: true,
+      sp: {
+        spId: sp.spId,
+        clientId: sp.clientId,
+        name: sp.name,
+        status: sp.status
+      },
+      message: 'SP Client suspended. OAuth client disabled in Keycloak.'
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      error: 'Suspension failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/federation/sp/:spId/regenerate-secret
+ * Regenerate client secret for an SP
+ */
+router.post('/sp/:spId/regenerate-secret', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await spManagement.regenerateClientSecret(req.params.spId);
+    
+    if (!result) {
+      res.status(404).json({ error: 'SP not found or is public client' });
+      return;
+    }
+    
+    logger.info('SP Client secret regenerated', {
+      spId: req.params.spId
+    });
+    
+    res.json({
+      success: true,
+      clientSecret: result.clientSecret,
+      message: 'New client secret generated. Previous secret is now invalid.'
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      error: 'Secret regeneration failed',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -494,7 +812,7 @@ router.post('/spokes/:spokeId/token', requireAdmin, async (req: Request, res: Re
  */
 router.post('/policy/push', requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { layers, priority = 'normal', description, spokeId } = req.body;
+    const { layers, priority = 'normal', description } = req.body;
     
     if (!layers || !Array.isArray(layers) || layers.length === 0) {
       res.status(400).json({ error: 'Layers array is required' });

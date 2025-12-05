@@ -137,10 +137,26 @@ export interface IHubStatistics {
 }
 
 // ============================================
-// IN-MEMORY STORE (Replace with MongoDB in production)
+// STORE INTERFACE
 // ============================================
 
-class SpokeStore {
+interface ISpokeStore {
+  save(spoke: ISpokeRegistration): Promise<void>;
+  findById(spokeId: string): Promise<ISpokeRegistration | null>;
+  findByInstanceCode(code: string): Promise<ISpokeRegistration | null>;
+  findAll(): Promise<ISpokeRegistration[]>;
+  findByStatus(status: ISpokeRegistration['status']): Promise<ISpokeRegistration[]>;
+  delete(spokeId: string): Promise<boolean>;
+  saveToken(token: ISpokeToken): Promise<void>;
+  findToken(token: string): Promise<ISpokeToken | null>;
+  revokeTokensForSpoke(spokeId: string): Promise<void>;
+}
+
+// ============================================
+// IN-MEMORY STORE (For testing and development)
+// ============================================
+
+class InMemorySpokeStore implements ISpokeStore {
   private spokes: Map<string, ISpokeRegistration> = new Map();
   private tokens: Map<string, ISpokeToken> = new Map();
 
@@ -189,20 +205,117 @@ class SpokeStore {
 }
 
 // ============================================
+// MONGODB STORE ADAPTER
+// ============================================
+
+class MongoDBSpokeStoreAdapter implements ISpokeStore {
+  private mongoStore: import('../models/federation-spoke.model').MongoSpokeStore | null = null;
+  private initPromise: Promise<void> | null = null;
+  
+  private async ensureInitialized(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.initialize();
+    }
+    await this.initPromise;
+  }
+  
+  private async initialize(): Promise<void> {
+    try {
+      const { mongoSpokeStore } = await import('../models/federation-spoke.model');
+      this.mongoStore = mongoSpokeStore;
+      await this.mongoStore.initialize();
+      logger.info('MongoDB Spoke Store adapter initialized');
+    } catch (error) {
+      logger.error('Failed to initialize MongoDB adapter, falling back to in-memory', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+  
+  async save(spoke: ISpokeRegistration): Promise<void> {
+    await this.ensureInitialized();
+    await this.mongoStore!.save(spoke);
+  }
+
+  async findById(spokeId: string): Promise<ISpokeRegistration | null> {
+    await this.ensureInitialized();
+    return this.mongoStore!.findById(spokeId);
+  }
+
+  async findByInstanceCode(code: string): Promise<ISpokeRegistration | null> {
+    await this.ensureInitialized();
+    return this.mongoStore!.findByInstanceCode(code);
+  }
+
+  async findAll(): Promise<ISpokeRegistration[]> {
+    await this.ensureInitialized();
+    return this.mongoStore!.findAll();
+  }
+
+  async findByStatus(status: ISpokeRegistration['status']): Promise<ISpokeRegistration[]> {
+    await this.ensureInitialized();
+    return this.mongoStore!.findByStatus(status);
+  }
+
+  async delete(spokeId: string): Promise<boolean> {
+    await this.ensureInitialized();
+    return this.mongoStore!.delete(spokeId);
+  }
+
+  async saveToken(token: ISpokeToken): Promise<void> {
+    await this.ensureInitialized();
+    await this.mongoStore!.saveToken(token);
+  }
+
+  async findToken(tokenString: string): Promise<ISpokeToken | null> {
+    await this.ensureInitialized();
+    return this.mongoStore!.findToken(tokenString);
+  }
+
+  async revokeTokensForSpoke(spokeId: string): Promise<void> {
+    await this.ensureInitialized();
+    await this.mongoStore!.revokeTokensForSpoke(spokeId);
+  }
+}
+
+// ============================================
+// STORE FACTORY
+// ============================================
+
+function createSpokeStore(): ISpokeStore {
+  // Use MongoDB in production, in-memory for tests
+  const useMemory = process.env.NODE_ENV === 'test' || 
+                    process.env.SPOKE_STORE === 'memory' ||
+                    !process.env.MONGODB_URL;
+  
+  if (useMemory) {
+    logger.info('Using in-memory spoke store');
+    return new InMemorySpokeStore();
+  }
+  
+  logger.info('Using MongoDB spoke store');
+  return new MongoDBSpokeStoreAdapter();
+}
+
+// ============================================
 // HUB-SPOKE REGISTRY SERVICE
 // ============================================
 
 class HubSpokeRegistryService {
-  private store: SpokeStore;
+  private store: ISpokeStore;
   private readonly hubSecret: string;
   private tokenValidityMs: number;
 
-  constructor() {
-    this.store = new SpokeStore();
+  constructor(store?: ISpokeStore) {
+    // Allow injecting a store for testing
+    this.store = store || createSpokeStore();
     this.hubSecret = process.env.HUB_SPOKE_SECRET || crypto.randomBytes(32).toString('hex');
     this.tokenValidityMs = parseInt(process.env.SPOKE_TOKEN_VALIDITY_MS || '86400000', 10); // 24h
     
-    logger.info('Hub-Spoke Registry Service initialized');
+    logger.info('Hub-Spoke Registry Service initialized', {
+      storeType: this.store.constructor.name
+    });
   }
 
   /**

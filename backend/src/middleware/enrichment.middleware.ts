@@ -27,40 +27,149 @@ import { logger } from '../utils/logger';
 /**
  * Email domain to country mapping
  * ISO 3166-1 alpha-3 country codes
+ * 
+ * Phase 3: Extended with comprehensive multi-IdP support
+ * - Government/Military domains for all coalition partners
+ * - Major defense contractors by headquarters country
  */
 const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
-    // United States
+    // ============================================
+    // United States - Government/Military
+    // ============================================
     'mil': 'USA',
     'army.mil': 'USA',
     'navy.mil': 'USA',
     'af.mil': 'USA',
     'marines.mil': 'USA',
     'uscg.mil': 'USA',
+    'spaceforce.mil': 'USA',
     'pentagon.mil': 'USA',
+    'disa.mil': 'USA',
+    'nsa.mil': 'USA',
+    'dia.mil': 'USA',
+    'state.gov': 'USA',
+    'defense.gov': 'USA',
 
-    // France
+    // ============================================
+    // France - Government/Military
+    // ============================================
     'gouv.fr': 'FRA',
     'defense.gouv.fr': 'FRA',
     'intradef.gouv.fr': 'FRA',
+    'interieur.gouv.fr': 'FRA',
+    'ssi.gouv.fr': 'FRA',
+    'dgse.gouv.fr': 'FRA',
+    'gendarmerie.interieur.gouv.fr': 'FRA',
 
-    // Canada
+    // ============================================
+    // Canada - Government/Military
+    // ============================================
     'gc.ca': 'CAN',
+    'canada.ca': 'CAN',
     'forces.gc.ca': 'CAN',
     'dnd-mdn.gc.ca': 'CAN',
+    'rcmp-grc.gc.ca': 'CAN',
+    'cse-cst.gc.ca': 'CAN',
 
-    // United Kingdom
+    // ============================================
+    // United Kingdom - Government/Military
+    // ============================================
     'mod.uk': 'GBR',
-    'ministry-of-defence.uk': 'GBR',
+    'gov.uk': 'GBR',
+    'mil.uk': 'GBR',
+    'gchq.gov.uk': 'GBR',
+    'mi5.gov.uk': 'GBR',
+    'mi6.gov.uk': 'GBR',
+    'royal-navy.mod.uk': 'GBR',
+    'army.mod.uk': 'GBR',
+    'raf.mod.uk': 'GBR',
 
-    // Germany (if needed)
+    // ============================================
+    // Germany - Government/Military
+    // ============================================
     'bundeswehr.org': 'DEU',
+    'bundeswehr.de': 'DEU',
+    'bund.de': 'DEU',
+    'bmi.bund.de': 'DEU',
+    'bmvg.bund.de': 'DEU',
+    'bnd.bund.de': 'DEU',
 
-    // Industry contractors (U.S. based)
+    // ============================================
+    // Australia - Government/Military
+    // ============================================
+    'defence.gov.au': 'AUS',
+    'gov.au': 'AUS',
+    'asd.gov.au': 'AUS',
+
+    // ============================================
+    // New Zealand - Government/Military
+    // ============================================
+    'govt.nz': 'NZL',
+    'nzdf.mil.nz': 'NZL',
+
+    // ============================================
+    // NATO
+    // ============================================
+    'nato.int': 'NATO',
+
+    // ============================================
+    // Industry Contractors - USA Headquartered
+    // ============================================
+    'lockheedmartin.com': 'USA',
     'lockheed.com': 'USA',
     'northropgrumman.com': 'USA',
     'raytheon.com': 'USA',
+    'rtx.com': 'USA',
     'boeing.com': 'USA',
     'l3harris.com': 'USA',
+    'gd.com': 'USA',
+    'general-dynamics.com': 'USA',
+    'leidos.com': 'USA',
+    'saic.com': 'USA',
+    'booz.com': 'USA',
+    'caci.com': 'USA',
+    'mantech.com': 'USA',
+    'parsons.com': 'USA',
+    'peraton.com': 'USA',
+
+    // ============================================
+    // Industry Contractors - UK Headquartered
+    // ============================================
+    'bae.com': 'GBR',
+    'baesystems.com': 'GBR',
+    'rolls-royce.com': 'GBR',
+    'qinetiq.com': 'GBR',
+    'babcockinternational.com': 'GBR',
+
+    // ============================================
+    // Industry Contractors - France Headquartered
+    // ============================================
+    'thalesgroup.com': 'FRA',
+    'safrangroup.com': 'FRA',
+    'naval-group.com': 'FRA',
+    'mbda-systems.com': 'FRA',
+    'dfrancaise.com': 'FRA',
+
+    // ============================================
+    // Industry Contractors - Germany Headquartered
+    // ============================================
+    'rheinmetall.com': 'DEU',
+    'airbus.com': 'DEU',
+    'hensoldt.net': 'DEU',
+    'diehl.com': 'DEU',
+    'krauss-maffei.com': 'DEU',
+
+    // ============================================
+    // Industry Contractors - Italy Headquartered
+    // ============================================
+    'leonardocompany.com': 'ITA',
+    'fincantieri.com': 'ITA',
+
+    // ============================================
+    // Industry Contractors - Canada Headquartered
+    // ============================================
+    'cae.com': 'CAN',
+    'gdcanada.com': 'CAN',
 };
 
 /**

@@ -16,6 +16,7 @@ import crypto from 'crypto';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
+const SP_REALM_NAME = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
 
 export class SPManagementService {
   private db: Db | null = null;
@@ -238,7 +239,7 @@ export class SPManagementService {
     // Delete client from Keycloak
     try {
       const kcAdmin = await this.initializeKeycloak();
-      kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+      kcAdmin.setConfig({ realmName: SP_REALM_NAME });
       await kcAdmin.clients.del({ id: sp.clientId });
     } catch (error) {
       logger.warn('Failed to delete client from Keycloak', {
@@ -300,7 +301,7 @@ export class SPManagementService {
     // Update in Keycloak
     try {
       const kcAdmin = await this.initializeKeycloak();
-      kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+      kcAdmin.setConfig({ realmName: SP_REALM_NAME });
       await kcAdmin.clients.update(
         { id: sp.clientId },
         { secret: newSecret }
@@ -367,7 +368,7 @@ export class SPManagementService {
     }
     
     // Enable client in Keycloak
-    kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+    kcAdmin.setConfig({ realmName: SP_REALM_NAME });
     await kcAdmin.clients.update(
       { id: sp.clientId },
       { enabled: true }
@@ -406,7 +407,7 @@ export class SPManagementService {
     }
     
     // Disable client in Keycloak
-    kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+    kcAdmin.setConfig({ realmName: SP_REALM_NAME });
     await kcAdmin.clients.update(
       { id: sp.clientId },
       { enabled: false }
@@ -509,7 +510,7 @@ export class SPManagementService {
     const kcAdmin = await this.initializeKeycloak();
     
     // Ensure external SP realm exists
-    kcAdmin.setConfig({ realmName: 'dive-v3-external-sp' });
+    kcAdmin.setConfig({ realmName: SP_REALM_NAME });
     
     const clientId = `sp-${request.country.toLowerCase()}-${Date.now()}`;
     const clientSecret = request.clientType === 'confidential' ? generateSecureSecret() : undefined;

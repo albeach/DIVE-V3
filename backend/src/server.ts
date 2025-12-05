@@ -31,6 +31,7 @@ import kasRoutes from './routes/kas.routes';  // KAS proxy routes for ZTDF key a
 import federatedQueryRoutes from './routes/federated-query.routes';  // Phase 3: Direct MongoDB federation
 import analyticsRoutes from './routes/analytics.routes';  // Phase 2: Search analytics
 import metricsRoutes from './routes/metrics.routes';  // Phase 8: Enhanced Prometheus metrics
+import opalRoutes from './routes/opal.routes';  // Phase 2: OPAL policy distribution
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
@@ -128,6 +129,7 @@ app.use('/api/resources', seedStatusRoutes);  // Seed status monitoring (appende
 app.use('/api/resources', federatedQueryRoutes);  // Phase 3: Direct MongoDB federation queries
 app.use('/api/analytics', analyticsRoutes);  // Phase 2: Search analytics tracking
 app.use('/api/kas', kasRoutes);  // KAS proxy routes for ZTDF key access (matches KAO URLs)
+app.use('/api/opal', opalRoutes);  // Phase 2: OPAL policy distribution and bundle management
 
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server

@@ -77,13 +77,23 @@
     },
     "https://deu-idp.prosecurity.biz/realms/dive-v3-broker": {
       "tenant": "DEU",
-      "name": "Germany Keycloak",
+      "name": "Germany Keycloak (Production)",
       "country": "DEU",
       "trust_level": "HIGH",
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "NATIONAL",
       "jwks_uri": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker/protocol/openid-connect/certs"
+    },
+    "https://deu-idp.dive25.com/realms/dive-v3-broker": {
+      "tenant": "DEU",
+      "name": "Germany Keycloak (Testing)",
+      "country": "DEU",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL",
+      "jwks_uri": "https://deu-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs"
     },
     "https://sso.bundeswehr.de": {
       "tenant": "DEU",
@@ -114,6 +124,3 @@
     }
   }
 }
-
-
-

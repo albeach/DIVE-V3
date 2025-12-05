@@ -104,6 +104,21 @@ class PrometheusMetricsService {
   private redisHealth!: Gauge;
   private mongoHealth!: Gauge;
   
+  // OPAL Policy Distribution Metrics (Phase 2)
+  private opalConnectedClients!: Gauge;
+  private policyBundleSize!: Gauge;
+  private policyBundleSigned!: Gauge;
+  private policyVersionCount!: Gauge;
+  private policyBundleBuilds!: Counter;
+  private policyBundlePublishes!: Counter;
+  private policyBundleBuildDuration!: Histogram;
+  private spokeSyncStatus!: Gauge;
+  private spClientsTotal!: Gauge;
+  private spClientsByStatus!: Gauge;
+  private opaTestsTotal!: Gauge;
+  private opaTestsPassed!: Gauge;
+  private opaTestsFailed!: Gauge;
+  
   constructor() {
     // Create a custom registry
     this.registry = new Registry();
@@ -127,6 +142,7 @@ class PrometheusMetricsService {
     this.initializeAuditMetrics();
     this.initializeComplianceMetrics();
     this.initializeHealthMetrics();
+    this.initializeOPALMetrics();
     
     logger.info('Prometheus metrics service initialized', {
       prefix: this.prefix,
@@ -354,6 +370,103 @@ class PrometheusMetricsService {
       name: `${this.prefix}_mongodb_health`,
       help: 'MongoDB service health status',
       labelNames: ['replica_set'],
+      registers: [this.registry]
+    });
+  }
+  
+  private initializeOPALMetrics(): void {
+    // OPAL connected clients gauge
+    this.opalConnectedClients = new Gauge({
+      name: `${this.prefix}_opal_connected_clients`,
+      help: 'Number of connected OPAL clients',
+      registers: [this.registry]
+    });
+    
+    // Policy bundle size gauge
+    this.policyBundleSize = new Gauge({
+      name: `${this.prefix}_policy_bundle_size_bytes`,
+      help: 'Current policy bundle size in bytes',
+      registers: [this.registry]
+    });
+    
+    // Policy bundle signed gauge
+    this.policyBundleSigned = new Gauge({
+      name: `${this.prefix}_policy_bundle_signed`,
+      help: 'Whether current bundle is signed (1=signed, 0=unsigned)',
+      registers: [this.registry]
+    });
+    
+    // Policy version count in MongoDB
+    this.policyVersionCount = new Gauge({
+      name: `${this.prefix}_policy_version_count`,
+      help: 'Number of policy versions stored in MongoDB',
+      registers: [this.registry]
+    });
+    
+    // Policy bundle builds counter
+    this.policyBundleBuilds = new Counter({
+      name: `${this.prefix}_policy_bundle_builds_total`,
+      help: 'Total policy bundle builds',
+      labelNames: ['signed'],
+      registers: [this.registry]
+    });
+    
+    // Policy bundle publishes counter
+    this.policyBundlePublishes = new Counter({
+      name: `${this.prefix}_policy_bundle_publishes_total`,
+      help: 'Total policy bundle publishes to OPAL',
+      registers: [this.registry]
+    });
+    
+    // Policy bundle build duration histogram
+    this.policyBundleBuildDuration = new Histogram({
+      name: `${this.prefix}_policy_bundle_build_duration_seconds`,
+      help: 'Policy bundle build duration in seconds',
+      buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+      registers: [this.registry]
+    });
+    
+    // Spoke sync status gauge
+    this.spokeSyncStatus = new Gauge({
+      name: `${this.prefix}_spoke_sync_status`,
+      help: 'Spoke policy sync status (by status type)',
+      labelNames: ['status'],
+      registers: [this.registry]
+    });
+    
+    // SP clients total gauge
+    this.spClientsTotal = new Gauge({
+      name: `${this.prefix}_sp_clients_total`,
+      help: 'Total number of registered SP clients',
+      registers: [this.registry]
+    });
+    
+    // SP clients by status gauge
+    this.spClientsByStatus = new Gauge({
+      name: `${this.prefix}_sp_clients_by_status`,
+      help: 'SP clients by status',
+      labelNames: ['status'],
+      registers: [this.registry]
+    });
+    
+    // OPA tests total gauge
+    this.opaTestsTotal = new Gauge({
+      name: `${this.prefix}_opa_test_total`,
+      help: 'Total number of OPA policy tests',
+      registers: [this.registry]
+    });
+    
+    // OPA tests passed gauge
+    this.opaTestsPassed = new Gauge({
+      name: `${this.prefix}_opa_test_passed`,
+      help: 'Number of OPA policy tests passed',
+      registers: [this.registry]
+    });
+    
+    // OPA tests failed gauge
+    this.opaTestsFailed = new Gauge({
+      name: `${this.prefix}_opa_test_failed`,
+      help: 'Number of OPA policy tests failed',
       registers: [this.registry]
     });
   }
@@ -689,6 +802,91 @@ class PrometheusMetricsService {
    */
   setMongoHealth(replicaSet: string, healthy: boolean): void {
     this.mongoHealth.set({ replica_set: replicaSet }, healthy ? 1 : 0);
+  }
+  
+  // ============================================
+  // OPAL METRIC METHODS (Phase 2)
+  // ============================================
+  
+  /**
+   * Update OPAL connected clients count
+   */
+  setOPALConnectedClients(count: number): void {
+    this.opalConnectedClients.set(count);
+  }
+  
+  /**
+   * Update policy bundle metrics
+   */
+  setPolicyBundleMetrics(params: {
+    size: number;
+    signed: boolean;
+    versionCount?: number;
+  }): void {
+    this.policyBundleSize.set(params.size);
+    this.policyBundleSigned.set(params.signed ? 1 : 0);
+    if (params.versionCount !== undefined) {
+      this.policyVersionCount.set(params.versionCount);
+    }
+  }
+  
+  /**
+   * Record a policy bundle build
+   */
+  recordPolicyBundleBuild(params: {
+    signed: boolean;
+    durationMs: number;
+  }): void {
+    this.policyBundleBuilds.inc({ signed: String(params.signed) });
+    this.policyBundleBuildDuration.observe(params.durationMs / 1000);
+  }
+  
+  /**
+   * Record a policy bundle publish
+   */
+  recordPolicyBundlePublish(): void {
+    this.policyBundlePublishes.inc();
+  }
+  
+  /**
+   * Update spoke sync status metrics
+   */
+  setSpokeSyncStatus(statusCounts: {
+    current: number;
+    behind: number;
+    stale: number;
+    offline: number;
+  }): void {
+    this.spokeSyncStatus.set({ status: 'current' }, statusCounts.current);
+    this.spokeSyncStatus.set({ status: 'behind' }, statusCounts.behind);
+    this.spokeSyncStatus.set({ status: 'stale' }, statusCounts.stale);
+    this.spokeSyncStatus.set({ status: 'offline' }, statusCounts.offline);
+  }
+  
+  /**
+   * Update SP client metrics
+   */
+  setSPClientMetrics(params: {
+    total: number;
+    byStatus: Record<string, number>;
+  }): void {
+    this.spClientsTotal.set(params.total);
+    for (const [status, count] of Object.entries(params.byStatus)) {
+      this.spClientsByStatus.set({ status }, count);
+    }
+  }
+  
+  /**
+   * Update OPA test metrics
+   */
+  setOPATestMetrics(params: {
+    total: number;
+    passed: number;
+    failed: number;
+  }): void {
+    this.opaTestsTotal.set(params.total);
+    this.opaTestsPassed.set(params.passed);
+    this.opaTestsFailed.set(params.failed);
   }
   
   // ============================================
