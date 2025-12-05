@@ -24,3 +24,4 @@ variable "keycloak_admin_password" {
 
 
 
+

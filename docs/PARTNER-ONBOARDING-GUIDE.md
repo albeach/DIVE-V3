@@ -533,3 +533,4 @@ With N partners, there are N×(N-1) federation relationships:
 
 
 
+
