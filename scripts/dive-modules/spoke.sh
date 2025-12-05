@@ -24,68 +24,487 @@ SPOKE_CERT_BITS="${SPOKE_CERT_BITS:-4096}"
 SPOKE_CERT_DAYS="${SPOKE_CERT_DAYS:-365}"
 
 # =============================================================================
-# SPOKE INITIALIZATION
+# SPOKE INITIALIZATION (Enhanced Interactive Setup)
 # =============================================================================
 
-spoke_init() {
-    local instance_code="${1:-}"
-    local instance_name="${2:-}"
+# =============================================================================
+# CLOUDFLARE TUNNEL AUTO-SETUP
+# =============================================================================
+
+# Check if cloudflared is installed, install if not
+_ensure_cloudflared() {
+    if command -v cloudflared &> /dev/null; then
+        echo -e "  ${GREEN}✓ cloudflared is installed${NC}"
+        return 0
+    fi
     
-    if [ -z "$instance_code" ] || [ -z "$instance_name" ]; then
-        log_error "Usage: ./dive spoke init <CODE> <NAME>"
+    echo -e "  ${YELLOW}cloudflared not found. Installing...${NC}"
+    echo ""
+    
+    # Detect OS and install
+    if [ "$(uname)" = "Darwin" ]; then
+        # macOS
+        if command -v brew &> /dev/null; then
+            brew install cloudflared 2>&1 | tail -3
+        else
+            echo -e "  ${RED}Please install Homebrew first: https://brew.sh${NC}"
+            return 1
+        fi
+    elif [ -f /etc/debian_version ]; then
+        # Debian/Ubuntu
+        curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb 2>/dev/null
+        sudo dpkg -i cloudflared.deb 2>/dev/null
+        rm -f cloudflared.deb
+    elif [ -f /etc/redhat-release ]; then
+        # RHEL/CentOS
+        curl -L --output cloudflared.rpm https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-x86_64.rpm 2>/dev/null
+        sudo rpm -i cloudflared.rpm 2>/dev/null
+        rm -f cloudflared.rpm
+    else
+        # Generic Linux
+        curl -L --output /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 2>/dev/null
+        chmod +x /tmp/cloudflared
+        sudo mv /tmp/cloudflared /usr/local/bin/cloudflared
+    fi
+    
+    if command -v cloudflared &> /dev/null; then
+        echo -e "  ${GREEN}✓ cloudflared installed successfully${NC}"
+        return 0
+    else
+        echo -e "  ${RED}Failed to install cloudflared${NC}"
+        return 1
+    fi
+}
+
+# Check if user is logged in to Cloudflare
+_cloudflared_login() {
+    local creds_dir="${HOME}/.cloudflared"
+    
+    # Check if already logged in
+    if [ -f "${creds_dir}/cert.pem" ]; then
+        echo -e "  ${GREEN}✓ Already authenticated with Cloudflare${NC}"
+        return 0
+    fi
+    
+    echo ""
+    echo -e "  ${CYAN}Authenticating with Cloudflare...${NC}"
+    echo ""
+    echo "  This will open your browser to authorize access."
+    echo "  Please log in and authorize the tunnel."
+    echo ""
+    read -p "  Press Enter to open browser for authentication... "
+    
+    # Run login (opens browser)
+    cloudflared tunnel login 2>&1 | while read line; do
+        echo "    $line"
+    done
+    
+    if [ -f "${creds_dir}/cert.pem" ]; then
         echo ""
-        echo "Example: ./dive spoke init NZL 'New Zealand Defence Force'"
+        echo -e "  ${GREEN}✓ Successfully authenticated with Cloudflare${NC}"
+        return 0
+    else
+        echo -e "  ${RED}Authentication failed. Please try again.${NC}"
+        return 1
+    fi
+}
+
+# Auto-create Cloudflare tunnel
+_spoke_auto_create_tunnel() {
+    local code_lower="$1"
+    local base_url="$2"
+    local api_url="$3"
+    local idp_url="$4"
+    
+    local tunnel_name="dive-spoke-${code_lower}"
+    local creds_dir="${HOME}/.cloudflared"
+    
+    echo ""
+    echo -e "  ${CYAN}🚀 Auto-creating Cloudflare Tunnel${NC}"
+    echo ""
+    
+    # Step 1: Ensure cloudflared is installed
+    _ensure_cloudflared || return 1
+    
+    # Step 2: Ensure user is logged in
+    _cloudflared_login || return 1
+    
+    # Step 3: Check if tunnel already exists
+    echo ""
+    echo -e "  ${CYAN}Checking for existing tunnel...${NC}"
+    local existing_tunnel=$(cloudflared tunnel list 2>/dev/null | grep -w "$tunnel_name" | awk '{print $1}')
+    
+    if [ -n "$existing_tunnel" ]; then
+        echo -e "  ${YELLOW}Tunnel '$tunnel_name' already exists (ID: $existing_tunnel)${NC}"
+        read -p "  Delete and recreate? (yes/no): " recreate
+        if [ "$recreate" = "yes" ]; then
+            echo "  Deleting existing tunnel..."
+            cloudflared tunnel delete "$tunnel_name" 2>/dev/null || true
+        else
+            # Use existing tunnel
+            tunnel_id="$existing_tunnel"
+            echo -e "  ${GREEN}✓ Using existing tunnel${NC}"
+        fi
+    fi
+    
+    # Step 4: Create new tunnel
+    if [ -z "$tunnel_id" ]; then
         echo ""
-        echo "Arguments:"
-        echo "  CODE    3-letter country code (ISO 3166-1 alpha-3)"
-        echo "  NAME    Human-readable instance name"
+        echo -e "  ${CYAN}Creating tunnel: $tunnel_name${NC}"
+        local create_output=$(cloudflared tunnel create "$tunnel_name" 2>&1)
+        echo "    $create_output"
+        
+        # Extract tunnel ID from output
+        tunnel_id=$(echo "$create_output" | grep -oE '[a-f0-9-]{36}' | head -1)
+        
+        if [ -z "$tunnel_id" ]; then
+            echo -e "  ${RED}Failed to create tunnel${NC}"
+            return 1
+        fi
+        
+        echo -e "  ${GREEN}✓ Tunnel created: $tunnel_id${NC}"
+    fi
+    
+    # Save tunnel ID for later
+    echo "$tunnel_id" > "/tmp/dive-tunnel-${code_lower}.id"
+    
+    # Step 5: Configure DNS routes
+    echo ""
+    echo -e "  ${CYAN}Configuring DNS routes for dive25.com...${NC}"
+    
+    local hostnames=(
+        "${code_lower}-app.dive25.com"
+        "${code_lower}-api.dive25.com"
+        "${code_lower}-idp.dive25.com"
+        "${code_lower}-kas.dive25.com"
+    )
+    
+    for hostname in "${hostnames[@]}"; do
+        echo -n "    Adding $hostname... "
+        local dns_result=$(cloudflared tunnel route dns "$tunnel_name" "$hostname" 2>&1)
+        if echo "$dns_result" | grep -q "already exists\|Added"; then
+            echo -e "${GREEN}✓${NC}"
+        else
+            echo -e "${YELLOW}⚠ (may need manual setup)${NC}"
+        fi
+    done
+    
+    # Step 6: Get tunnel token
+    echo ""
+    echo -e "  ${CYAN}Generating tunnel token...${NC}"
+    
+    # The tunnel token is the credentials file content, base64 encoded
+    local creds_file="${creds_dir}/${tunnel_id}.json"
+    
+    if [ -f "$creds_file" ]; then
+        # For remotely-managed tunnels, we need to get the token differently
+        # Try to get it from the tunnel info
+        local tunnel_token=$(cloudflared tunnel token "$tunnel_name" 2>/dev/null | tail -1)
+        
+        if [ -n "$tunnel_token" ] && [ ${#tunnel_token} -gt 50 ]; then
+            echo "$tunnel_token" > "/tmp/dive-tunnel-${code_lower}.token"
+            echo -e "  ${GREEN}✓ Tunnel token generated${NC}"
+        else
+            # Fallback: use credentials file approach
+            echo -e "  ${YELLOW}Using credentials file approach...${NC}"
+            
+            # Copy credentials to spoke directory
+            local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+            mkdir -p "$spoke_dir/cloudflared"
+            cp "$creds_file" "$spoke_dir/cloudflared/credentials.json"
+            
+            echo ""
+            echo -e "  ${YELLOW}Note: This tunnel uses a credentials file instead of a token.${NC}"
+            echo "  The credentials file has been copied to your spoke directory."
+            echo ""
+            
+            # Return empty token - will use credentials file approach
+            echo "" > "/tmp/dive-tunnel-${code_lower}.token"
+            
+            # Mark that we need credentials file mode
+            echo "credentials" > "/tmp/dive-tunnel-${code_lower}.mode"
+        fi
+    else
+        echo -e "  ${RED}Credentials file not found${NC}"
+        echo "  You may need to configure the tunnel manually in the Cloudflare dashboard."
         return 1
     fi
     
-    # Validate code is 3 letters
-    if [ ${#instance_code} -ne 3 ]; then
-        log_error "Instance code must be exactly 3 characters (ISO 3166-1 alpha-3)"
-        return 1
+    echo ""
+    echo -e "  ${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${GREEN}✓ Tunnel setup complete!${NC}"
+    echo -e "  ${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Tunnel Name:  $tunnel_name"
+    echo "  Tunnel ID:    $tunnel_id"
+    echo ""
+    echo "  Hostnames configured:"
+    for hostname in "${hostnames[@]}"; do
+        echo "    • $hostname"
+    done
+    echo ""
+    
+    return 0
+}
+
+# Interactive spoke setup wizard
+spoke_setup_wizard() {
+    local instance_code="${1:-}"
+    local instance_name="${2:-}"
+    
+    print_header
+    echo -e "${BOLD}🚀 DIVE V3 Spoke Setup Wizard${NC}"
+    echo ""
+    echo "This wizard will guide you through setting up a new DIVE V3 spoke."
+    echo ""
+    
+    # Step 1: Basic Information
+    if [ -z "$instance_code" ]; then
+        echo -e "${CYAN}Step 1: Instance Information${NC}"
+        echo ""
+        read -p "  Enter 3-letter instance code (e.g., NZL, HOM): " instance_code
+        if [ -z "$instance_code" ]; then
+            log_error "Instance code is required"
+            return 1
+        fi
+    fi
+    
+    if [ -z "$instance_name" ]; then
+        local default_name="${instance_code} Instance"
+        read -p "  Enter instance name [$default_name]: " instance_name
+        instance_name="${instance_name:-$default_name}"
     fi
     
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
     
-    print_header
-    echo -e "${BOLD}Initializing DIVE V3 Spoke Instance:${NC} $code_upper"
+    echo ""
+    echo -e "  Instance Code: ${GREEN}$code_upper${NC}"
+    echo -e "  Instance Name: ${GREEN}$instance_name${NC}"
     echo ""
     
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Would create spoke configuration for: $code_upper"
-        log_dry "  Name: $instance_name"
-        log_dry "  Code: $code_upper"
-        log_dry ""
-        log_dry "Would create:"
-        log_dry "  - instances/${code_lower}/config.json"
-        log_dry "  - instances/${code_lower}/docker-compose.yml"
-        log_dry "  - instances/${code_lower}/.env.template"
-        log_dry "  - instances/${code_lower}/certs/"
-        log_dry "  - instances/${code_lower}/cache/"
-        return 0
+    # Step 2: Hostname Configuration
+    echo -e "${CYAN}Step 2: Hostname Configuration${NC}"
+    echo ""
+    echo "  How will your spoke be accessed?"
+    echo ""
+    echo "  1) Use dive25.com subdomains (${code_lower}-app.dive25.com, etc.)"
+    echo "  2) Use custom domain names"
+    echo "  3) Use IP address (local/development only)"
+    echo ""
+    read -p "  Select option [1-3]: " hostname_option
+    
+    local base_url=""
+    local api_url=""
+    local idp_url=""
+    local kas_url=""
+    local needs_tunnel=false
+    
+    case "$hostname_option" in
+        1)
+            base_url="https://${code_lower}-app.dive25.com"
+            api_url="https://${code_lower}-api.dive25.com"
+            idp_url="https://${code_lower}-idp.dive25.com"
+            kas_url="https://${code_lower}-kas.dive25.com"
+            needs_tunnel=true
+            ;;
+        2)
+            echo ""
+            read -p "  Enter base domain (e.g., myorg.com): " custom_domain
+            if [ -z "$custom_domain" ]; then
+                log_error "Domain is required"
+                return 1
+            fi
+            base_url="https://${code_lower}-app.${custom_domain}"
+            api_url="https://${code_lower}-api.${custom_domain}"
+            idp_url="https://${code_lower}-idp.${custom_domain}"
+            kas_url="https://${code_lower}-kas.${custom_domain}"
+            ;;
+        3)
+            echo ""
+            read -p "  Enter IP address or hostname: " ip_or_host
+            if [ -z "$ip_or_host" ]; then
+                ip_or_host="localhost"
+            fi
+            base_url="https://${ip_or_host}:3000"
+            api_url="https://${ip_or_host}:4000"
+            idp_url="https://${ip_or_host}:8443"
+            kas_url="https://${ip_or_host}:8080"
+            ;;
+        *)
+            log_error "Invalid option"
+            return 1
+            ;;
+    esac
+    
+    echo ""
+    echo -e "  ${CYAN}Configured Endpoints:${NC}"
+    echo "    Frontend:  $base_url"
+    echo "    Backend:   $api_url"
+    echo "    IdP:       $idp_url"
+    echo "    KAS:       $kas_url"
+    echo ""
+    
+    # Step 3: Cloudflare Tunnel (if using dive25.com)
+    local tunnel_token=""
+    local setup_tunnel=false
+    local tunnel_id=""
+    
+    if [ "$needs_tunnel" = true ]; then
+        echo -e "${CYAN}Step 3: Cloudflare Tunnel Setup${NC}"
+        echo ""
+        echo "  To make your spoke accessible at ${code_lower}-*.dive25.com,"
+        echo "  you need a Cloudflare tunnel."
+        echo ""
+        echo "  Options:"
+        echo "  1) 🚀 Auto-create tunnel (recommended - uses cloudflared CLI)"
+        echo "  2) I have a Cloudflare tunnel token (paste it now)"
+        echo "  3) Help me create a tunnel manually (opens dashboard)"
+        echo "  4) Skip tunnel setup (configure manually later)"
+        echo ""
+        read -p "  Select option [1-4]: " tunnel_option
+        
+        case "$tunnel_option" in
+            1)
+                # Auto-create tunnel using cloudflared CLI
+                _spoke_auto_create_tunnel "$code_lower" "$base_url" "$api_url" "$idp_url"
+                local tunnel_result=$?
+                if [ $tunnel_result -eq 0 ]; then
+                    # Read the generated tunnel info
+                    if [ -f "/tmp/dive-tunnel-${code_lower}.token" ]; then
+                        tunnel_token=$(cat "/tmp/dive-tunnel-${code_lower}.token")
+                        tunnel_id=$(cat "/tmp/dive-tunnel-${code_lower}.id" 2>/dev/null || echo "")
+                        setup_tunnel=true
+                        rm -f "/tmp/dive-tunnel-${code_lower}.token" "/tmp/dive-tunnel-${code_lower}.id"
+                    fi
+                fi
+                ;;
+            2)
+                echo ""
+                read -p "  Paste your Cloudflare tunnel token: " tunnel_token
+                if [ -n "$tunnel_token" ]; then
+                    setup_tunnel=true
+                    echo -e "  ${GREEN}✓ Tunnel token saved${NC}"
+                fi
+                ;;
+            3)
+                echo ""
+                echo -e "  ${YELLOW}Opening Cloudflare Zero Trust dashboard...${NC}"
+                echo ""
+                echo "  Steps to create a tunnel:"
+                echo "    1. Go to: https://one.dash.cloudflare.com"
+                echo "    2. Select 'Networks' > 'Tunnels'"
+                echo "    3. Click 'Create a tunnel'"
+                echo "    4. Name it: dive-spoke-${code_lower}"
+                echo "    5. Copy the tunnel token"
+                echo ""
+                echo "  Add these public hostnames to your tunnel:"
+                echo "    ${code_lower}-app.dive25.com → http://frontend-${code_lower}:3000"
+                echo "    ${code_lower}-api.dive25.com → https://backend-${code_lower}:4000"
+                echo "    ${code_lower}-idp.dive25.com → http://keycloak-${code_lower}:8080"
+                echo ""
+                # Try to open browser
+                if command -v xdg-open &> /dev/null; then
+                    xdg-open "https://one.dash.cloudflare.com" 2>/dev/null &
+                elif command -v open &> /dev/null; then
+                    open "https://one.dash.cloudflare.com" 2>/dev/null &
+                fi
+                read -p "  Press Enter after creating the tunnel, then paste token: " tunnel_token
+                if [ -n "$tunnel_token" ]; then
+                    setup_tunnel=true
+                fi
+                ;;
+            4)
+                echo ""
+                echo -e "  ${YELLOW}Skipping tunnel setup. You'll need to configure it later.${NC}"
+                ;;
+        esac
     fi
+    
+    # Step 4: Contact Information
+    echo ""
+    echo -e "${CYAN}Step 4: Contact Information${NC}"
+    echo ""
+    read -p "  Contact email (for Hub notifications): " contact_email
+    if [ -z "$contact_email" ]; then
+        contact_email="admin@${code_lower}.local"
+    fi
+    
+    # Step 5: Hub Configuration
+    echo ""
+    echo -e "${CYAN}Step 5: Hub Connection${NC}"
+    echo ""
+    local default_hub="https://usa-api.dive25.com"
+    read -p "  Hub URL [$default_hub]: " hub_url
+    hub_url="${hub_url:-$default_hub}"
+    
+    # Step 6: Generate Secure Passwords
+    echo ""
+    echo -e "${CYAN}Step 6: Security Configuration${NC}"
+    echo ""
+    echo "  Generating secure passwords..."
+    local postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local keycloak_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local auth_secret=$(openssl rand -base64 32)
+    local client_secret=$(openssl rand -base64 24 | tr -d '/+=')
+    echo -e "  ${GREEN}✓ Secure passwords generated${NC}"
+    
+    # Confirmation
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Configuration Summary:${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Instance:     $code_upper - $instance_name"
+    echo "  Frontend:     $base_url"
+    echo "  Backend:      $api_url"
+    echo "  IdP:          $idp_url"
+    echo "  Hub:          $hub_url"
+    echo "  Contact:      $contact_email"
+    echo "  Tunnel:       $([ "$setup_tunnel" = true ] && echo "Configured" || echo "Not configured")"
+    echo ""
+    read -p "  Proceed with setup? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        log_info "Cancelled"
+        return 1
+    fi
+    
+    # Now call spoke_init with all the collected information
+    _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$kas_url" \
+        "$hub_url" "$contact_email" "$tunnel_token" "$postgres_pass" "$mongo_pass" \
+        "$keycloak_pass" "$auth_secret" "$client_secret" "$setup_tunnel"
+}
+
+# Internal initialization function (called by wizard or directly)
+_spoke_init_internal() {
+    local instance_code="$1"
+    local instance_name="$2"
+    local base_url="$3"
+    local api_url="$4"
+    local idp_url="$5"
+    local kas_url="$6"
+    local hub_url="$7"
+    local contact_email="$8"
+    local tunnel_token="$9"
+    local postgres_pass="${10}"
+    local mongo_pass="${11}"
+    local keycloak_pass="${12}"
+    local auth_secret="${13}"
+    local client_secret="${14}"
+    local setup_tunnel="${15}"
+    
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
     
     ensure_dive_root
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    
-    # Check if already exists
-    if [ -f "$spoke_dir/config.json" ]; then
-        log_warn "Spoke instance already exists at: $spoke_dir"
-        read -p "  Overwrite? (yes/no): " confirm
-        if [ "$confirm" != "yes" ]; then
-            log_info "Cancelled"
-            return 1
-        fi
-    fi
     
     # Create directory structure
     log_step "Creating instance directory structure"
     mkdir -p "$spoke_dir"
     mkdir -p "$spoke_dir/certs"
+    mkdir -p "$spoke_dir/certs/crl"
     mkdir -p "$spoke_dir/cache/policies"
     mkdir -p "$spoke_dir/cache/audit"
     mkdir -p "$spoke_dir/cloudflared"
@@ -93,9 +512,11 @@ spoke_init() {
     
     # Generate unique IDs
     local spoke_id="spoke-${code_lower}-$(openssl rand -hex 4)"
-    local hub_url="${DIVE_HUB_URL:-https://hub.dive25.com}"
     
-    # Create config.json (new format)
+    # Extract hostname from IdP URL for Keycloak config
+    local idp_hostname=$(echo "$idp_url" | sed 's|https://||' | cut -d: -f1)
+    
+    # Create config.json
     log_step "Creating spoke configuration"
     cat > "$spoke_dir/config.json" << EOF
 {
@@ -106,16 +527,16 @@ spoke_init() {
     "description": "DIVE V3 Spoke Instance for $instance_name",
     "country": "$code_upper",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "$contact_email"
   },
   "endpoints": {
     "hubUrl": "$hub_url",
     "hubApiUrl": "${hub_url}/api",
     "hubOpalUrl": "${hub_url//:4000/:7002}",
-    "baseUrl": "https://${code_lower}-app.dive25.com",
-    "apiUrl": "https://${code_lower}-api.dive25.com",
-    "idpUrl": "https://${code_lower}-idp.dive25.com",
-    "kasUrl": "https://${code_lower}-kas.dive25.com"
+    "baseUrl": "$base_url",
+    "apiUrl": "$api_url",
+    "idpUrl": "$idp_url",
+    "kasUrl": "$kas_url"
   },
   "certificates": {
     "certificatePath": "$spoke_dir/certs/spoke.crt",
@@ -150,11 +571,178 @@ spoke_init() {
   }
 }
 EOF
-    
-    # Create docker-compose.yml from template
-    log_step "Creating Docker Compose configuration"
-    cat > "$spoke_dir/docker-compose.yml" << EOF
+
+    # Create .env file (not template - ready to use!)
+    log_step "Creating environment configuration"
+    cat > "$spoke_dir/.env" << EOF
 # =============================================================================
+# DIVE V3 Spoke Environment Configuration: $code_upper ($instance_name)
+# =============================================================================
+# Auto-generated by spoke setup wizard
+# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# =============================================================================
+
+# Database Passwords (auto-generated secure passwords)
+POSTGRES_PASSWORD=$postgres_pass
+MONGO_PASSWORD=$mongo_pass
+
+# Keycloak Admin
+KEYCLOAK_ADMIN_PASSWORD=$keycloak_pass
+
+# Auth Secrets
+AUTH_SECRET=$auth_secret
+KEYCLOAK_CLIENT_SECRET=$client_secret
+
+# Hub Connection
+HUB_URL=$hub_url
+HUB_OPAL_URL=${hub_url//:4000/:7002}
+
+# Spoke Token (received after registration approval)
+# Will be filled in after hub admin approves registration
+SPOKE_OPAL_TOKEN=
+
+# Instance Configuration
+INSTANCE_CODE=$code_upper
+SPOKE_ID=$spoke_id
+
+# Cloudflare Tunnel (if configured)
+TUNNEL_TOKEN=$tunnel_token
+EOF
+
+    # Create Cloudflare tunnel config if token provided
+    if [ -n "$tunnel_token" ] && [ "$setup_tunnel" = true ]; then
+        log_step "Creating Cloudflare tunnel configuration"
+        
+        # Get tunnel ID if available
+        local tunnel_id_file="/tmp/dive-tunnel-${code_lower}.id"
+        local tunnel_id=""
+        if [ -f "$tunnel_id_file" ]; then
+            tunnel_id=$(cat "$tunnel_id_file")
+        fi
+        
+        cat > "$spoke_dir/cloudflared/config.yml" << EOF
+# Cloudflare Tunnel Configuration for DIVE V3 Spoke: $code_upper
+# Auto-generated by spoke setup wizard
+# Tunnel ID: ${tunnel_id:-<manually-configure>}
+
+tunnel: ${tunnel_id:-dive-spoke-${code_lower}}
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # Frontend (Next.js)
+  - hostname: ${code_lower}-app.dive25.com
+    service: http://frontend-${code_lower}:3000
+    
+  # Backend API
+  - hostname: ${code_lower}-api.dive25.com
+    service: https://backend-${code_lower}:4000
+    originRequest:
+      noTLSVerify: true
+      
+  # Keycloak IdP  
+  - hostname: ${code_lower}-idp.dive25.com
+    service: http://keycloak-${code_lower}:8080
+    
+  # KAS (Key Access Service)
+  - hostname: ${code_lower}-kas.dive25.com
+    service: http://kas-${code_lower}:8080
+    
+  # Catch-all (required)
+  - service: http_status:404
+EOF
+        
+        # Clean up temp file
+        rm -f "$tunnel_id_file" "/tmp/dive-tunnel-${code_lower}.mode"
+    fi
+
+    # Create docker-compose.yml
+    log_step "Creating Docker Compose configuration"
+    _create_spoke_docker_compose "$spoke_dir" "$code_upper" "$code_lower" "$instance_name" \
+        "$spoke_id" "$idp_hostname" "$api_url" "$base_url" "$idp_url" "$tunnel_token"
+    
+    # Generate TLS certificates
+    log_step "Generating TLS certificates"
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout "$spoke_dir/certs/key.pem" \
+        -out "$spoke_dir/certs/certificate.pem" \
+        -subj "/CN=${idp_hostname}/O=DIVE-V3/C=US" 2>/dev/null
+    chmod 644 "$spoke_dir/certs/key.pem"
+    chmod 644 "$spoke_dir/certs/certificate.pem"
+    
+    # Generate spoke mTLS certificates
+    log_step "Generating spoke mTLS certificates"
+    openssl genrsa -out "$spoke_dir/certs/spoke.key" 4096 2>/dev/null
+    openssl req -new \
+        -key "$spoke_dir/certs/spoke.key" \
+        -out "$spoke_dir/certs/spoke.csr" \
+        -subj "/C=${code_upper:0:2}/O=DIVE Federation/OU=Spoke Instances/CN=$spoke_id" 2>/dev/null
+    openssl x509 -req -days 365 \
+        -in "$spoke_dir/certs/spoke.csr" \
+        -signkey "$spoke_dir/certs/spoke.key" \
+        -out "$spoke_dir/certs/spoke.crt" 2>/dev/null
+    chmod 600 "$spoke_dir/certs/spoke.key"
+    chmod 644 "$spoke_dir/certs/spoke.crt"
+    chmod 644 "$spoke_dir/certs/spoke.csr"
+    
+    echo ""
+    log_success "Spoke instance initialized: $code_upper"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}🎉 Setup Complete!${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Instance Details:${NC}"
+    echo "  Spoke ID:        $spoke_id"
+    echo "  Instance Code:   $code_upper"
+    echo "  Name:            $instance_name"
+    echo "  Directory:       $spoke_dir"
+    echo ""
+    echo -e "${BOLD}Endpoints:${NC}"
+    echo "  Frontend:        $base_url"
+    echo "  Backend API:     $api_url"
+    echo "  Keycloak IdP:    $idp_url"
+    echo ""
+    echo -e "${BOLD}Files Created:${NC}"
+    echo "  ✓ $spoke_dir/config.json"
+    echo "  ✓ $spoke_dir/docker-compose.yml"
+    echo "  ✓ $spoke_dir/.env (ready to use!)"
+    echo "  ✓ $spoke_dir/certs/* (TLS certificates)"
+    if [ -n "$tunnel_token" ]; then
+        echo "  ✓ $spoke_dir/cloudflared/config.yml"
+    fi
+    echo ""
+    echo -e "${BOLD}Next Steps:${NC}"
+    if [ -n "$tunnel_token" ]; then
+        echo "  1. Start services:         cd $spoke_dir && docker compose up -d"
+        echo "  2. Register with hub:      ./dive --instance $code_lower spoke register"
+        echo "  3. Wait for hub approval"
+        echo "  4. Add SPOKE_OPAL_TOKEN to .env (after approval)"
+    else
+        echo "  1. Configure DNS/tunnel for your hostnames"
+        echo "  2. Start services:         cd $spoke_dir && docker compose up -d"
+        echo "  3. Register with hub:      ./dive --instance $code_lower spoke register"
+    fi
+    echo ""
+}
+
+# Helper function to create docker-compose.yml
+_create_spoke_docker_compose() {
+    local spoke_dir="$1"
+    local code_upper="$2"
+    local code_lower="$3"
+    local instance_name="$4"
+    local spoke_id="$5"
+    local idp_hostname="$6"
+    local api_url="$7"
+    local base_url="$8"
+    local idp_url="$9"
+    local tunnel_token="${10}"
+    
+    cat > "$spoke_dir/docker-compose.yml" << 'COMPOSE_HEADER'
+# =============================================================================
+COMPOSE_HEADER
+
+    cat >> "$spoke_dir/docker-compose.yml" << EOF
 # DIVE V3 Spoke Instance: $code_upper ($instance_name)
 # =============================================================================
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -243,7 +831,7 @@ services:
       KC_DB_PASSWORD: \${POSTGRES_PASSWORD}
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD}
-      KC_HOSTNAME: ${code_lower}-idp.dive25.com
+      KC_HOSTNAME: $idp_hostname
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
@@ -261,7 +849,7 @@ services:
     networks:
       - dive-${code_lower}-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -275,7 +863,7 @@ services:
     image: openpolicyagent/opa:0.68.0
     platform: linux/amd64
     container_name: dive-v3-opa-${code_lower}
-    command: run --server --addr :8181 /policies
+    command: run --server --addr :8181 /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
     ports:
       - "8181:8181"
     volumes:
@@ -284,7 +872,7 @@ services:
     networks:
       - dive-${code_lower}-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      test: ["CMD", "/opa", "eval", "true"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -300,7 +888,6 @@ services:
       OPAL_OPA_URL: http://opa-${code_lower}:8181
       OPAL_SUBSCRIPTION_ID: $spoke_id
       OPAL_LOG_LEVEL: INFO
-      # Resilience settings
       OPAL_KEEP_ALIVE_TIMEOUT: 60
       OPAL_RECONNECT_INTERVAL: 5
       OPAL_RECONNECT_MAX_INTERVAL: 300
@@ -319,6 +906,8 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    profiles:
+      - federation  # Only start when federated with Hub
 
   # ==========================================================================
   # BACKEND API
@@ -336,18 +925,13 @@ services:
       INSTANCE_NAME: "$instance_name"
       SPOKE_ID: $spoke_id
       SPOKE_MODE: "true"
-      # Database
       MONGODB_URI: mongodb://admin:\${MONGO_PASSWORD}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
       REDIS_URL: redis://redis-${code_lower}:6379
-      # Keycloak
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker
-      # OPA
       OPA_URL: http://opa-${code_lower}:8181
-      # Hub
       HUB_URL: \${HUB_URL:-https://hub.dive25.com}
       SPOKE_TOKEN: \${SPOKE_OPAL_TOKEN}
-      # Paths
       SPOKE_CONFIG_PATH: /app/config/config.json
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
       DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
@@ -356,6 +940,7 @@ services:
     volumes:
       - ../../backend/src:/app/src:ro
       - ./certs:/app/certs:ro
+      - ./certs:/opt/keycloak/certs:ro
       - ./config.json:/app/config/config.json:ro
       - ./cache:/app/cache
     depends_on:
@@ -366,7 +951,7 @@ services:
     networks:
       - dive-${code_lower}-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      test: ["CMD", "curl", "-sf", "https://localhost:4000/health", "-k"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -385,9 +970,9 @@ services:
       NODE_ENV: development
       NEXT_PUBLIC_INSTANCE: $code_upper
       NEXT_PUBLIC_INSTANCE_NAME: "$instance_name"
-      NEXT_PUBLIC_API_URL: https://${code_lower}-api.dive25.com
-      NEXT_PUBLIC_KEYCLOAK_URL: https://${code_lower}-idp.dive25.com
-      NEXTAUTH_URL: https://${code_lower}-app.dive25.com
+      NEXT_PUBLIC_API_URL: $api_url
+      NEXT_PUBLIC_KEYCLOAK_URL: $idp_url
+      NEXTAUTH_URL: $base_url
       NEXTAUTH_SECRET: \${AUTH_SECRET}
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker
@@ -406,62 +991,121 @@ services:
     restart: unless-stopped
 EOF
 
-    # Create .env template
-    log_step "Creating environment template"
-    cat > "$spoke_dir/.env.template" << EOF
-# =============================================================================
-# DIVE V3 Spoke Environment Configuration: $code_upper
-# =============================================================================
-# Copy this to .env and fill in the values
-# For production, use GCP Secret Manager instead of .env files
-# =============================================================================
+    # Add Cloudflare tunnel service if configured
+    local tunnel_mode="${11:-token}"  # Default to token mode
+    
+    if [ -n "$tunnel_token" ]; then
+        cat >> "$spoke_dir/docker-compose.yml" << EOF
 
-# Database Passwords
-POSTGRES_PASSWORD=
-MONGO_PASSWORD=
+  # ==========================================================================
+  # CLOUDFLARE TUNNEL
+  # ==========================================================================
 
-# Keycloak Admin
-KEYCLOAK_ADMIN_PASSWORD=
-
-# Auth
-AUTH_SECRET=
-KEYCLOAK_CLIENT_SECRET=
-
-# Hub Connection
-HUB_URL=https://hub.dive25.com
-HUB_OPAL_URL=https://hub.dive25.com:7002
-
-# Spoke Token (received after registration approval)
-# Do NOT commit this to git!
-SPOKE_OPAL_TOKEN=
-
-# Instance Configuration
-INSTANCE_CODE=$code_upper
-SPOKE_ID=$spoke_id
+  cloudflared-${code_lower}:
+    image: cloudflare/cloudflared:latest
+    container_name: dive-v3-tunnel-${code_lower}
 EOF
+        
+        # Check if we have a credentials file (auto-created tunnel) or token
+        if [ -f "$spoke_dir/cloudflared/credentials.json" ]; then
+            # Credentials file mode (locally-managed tunnel)
+            cat >> "$spoke_dir/docker-compose.yml" << EOF
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
+EOF
+        else
+            # Token mode (remotely-managed tunnel)
+            cat >> "$spoke_dir/docker-compose.yml" << EOF
+    command: tunnel --no-autoupdate run --token \${TUNNEL_TOKEN}
+    environment:
+      TUNNEL_TOKEN: \${TUNNEL_TOKEN}
+EOF
+        fi
+        
+        cat >> "$spoke_dir/docker-compose.yml" << EOF
+    networks:
+      - dive-${code_lower}-network
+    restart: unless-stopped
+EOF
+    fi
+}
 
+# Original spoke_init (backward compatible, calls wizard or direct)
+spoke_init() {
+    local instance_code="${1:-}"
+    local instance_name="${2:-}"
+    
+    # If both arguments provided, use direct (non-interactive) mode
+    if [ -n "$instance_code" ] && [ -n "$instance_name" ]; then
+        # Check for --wizard flag
+        if [ "${3:-}" = "--wizard" ] || [ "${3:-}" = "-w" ]; then
+            spoke_setup_wizard "$instance_code" "$instance_name"
+            return $?
+        fi
+        
+        # Direct initialization (legacy mode)
+        _spoke_init_legacy "$instance_code" "$instance_name"
+        return $?
+    fi
+    
+    # No arguments or partial - launch wizard
+    spoke_setup_wizard "$instance_code" "$instance_name"
+}
+
+# Legacy spoke_init for backward compatibility
+_spoke_init_legacy() {
+    local instance_code="${1:-}"
+    local instance_name="${2:-}"
+    
+    if [ -z "$instance_code" ] || [ -z "$instance_name" ]; then
+        log_error "Usage: ./dive spoke init <CODE> <NAME>"
+        echo ""
+        echo "Example: ./dive spoke init NZL 'New Zealand Defence Force'"
+        echo ""
+        echo "Arguments:"
+        echo "  CODE    3-letter country code (ISO 3166-1 alpha-3)"
+        echo "  NAME    Human-readable instance name"
+        echo ""
+        echo "For interactive setup wizard, run: ./dive spoke init"
+        return 1
+    fi
+    
+    # Validate code is 3 letters
+    if [ ${#instance_code} -ne 3 ]; then
+        log_error "Instance code must be exactly 3 characters (ISO 3166-1 alpha-3)"
+        return 1
+    fi
+    
+    # Use default values and call internal init
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    local hub_url="${DIVE_HUB_URL:-https://hub.dive25.com}"
+    
+    # Generate default hostnames
+    local base_url="https://${code_lower}-app.dive25.com"
+    local api_url="https://${code_lower}-api.dive25.com"
+    local idp_url="https://${code_lower}-idp.dive25.com"
+    local kas_url="https://${code_lower}-kas.dive25.com"
+    
+    # Generate secure passwords
+    local postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local keycloak_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    local auth_secret=$(openssl rand -base64 32)
+    local client_secret=$(openssl rand -base64 24 | tr -d '/+=')
+    
+    print_header
+    echo -e "${BOLD}Initializing DIVE V3 Spoke Instance:${NC} $code_upper"
     echo ""
-    log_success "Spoke instance initialized: $code_upper"
+    echo -e "${YELLOW}Tip: For interactive setup with hostname and tunnel configuration,${NC}"
+    echo -e "${YELLOW}     run: ./dive spoke init (without arguments)${NC}"
     echo ""
-    echo -e "${BOLD}Instance Details:${NC}"
-    echo "  Spoke ID:        $spoke_id"
-    echo "  Instance Code:   $code_upper"
-    echo "  Name:            $instance_name"
-    echo "  Directory:       $spoke_dir"
-    echo ""
-    echo -e "${BOLD}Next Steps:${NC}"
-    echo "  1. Generate certificates:  ./dive spoke generate-certs"
-    echo "  2. Fill in .env:           cp $spoke_dir/.env.template $spoke_dir/.env"
-    echo "  3. Edit configuration:     Edit $spoke_dir/config.json (set contactEmail)"
-    echo "  4. Register with hub:      ./dive spoke register"
-    echo "  5. Wait for hub approval"
-    echo "  6. Start services:         ./dive spoke up"
-    echo ""
-    echo -e "${BOLD}Files Created:${NC}"
-    echo "  - $spoke_dir/config.json"
-    echo "  - $spoke_dir/docker-compose.yml"
-    echo "  - $spoke_dir/.env.template"
-    echo ""
+    
+    # Call internal init
+    _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$kas_url" \
+        "$hub_url" "" "" "$postgres_pass" "$mongo_pass" "$keycloak_pass" "$auth_secret" "$client_secret" "false"
 }
 
 # =============================================================================
@@ -1625,6 +2269,7 @@ module_spoke() {
     
     case "$action" in
         init)           spoke_init "$@" ;;
+        setup|wizard)   spoke_setup_wizard "$@" ;;
         generate-certs) spoke_generate_certs "$@" ;;
         gen-certs)      spoke_generate_certs "$@" ;;
         rotate-certs)   spoke_rotate_certs "$@" ;;
@@ -1655,8 +2300,19 @@ module_spoke_help() {
         echo ""
     fi
     
-    echo -e "${CYAN}Initialization:${NC}"
-    echo "  init <code> <name>     Initialize a new spoke instance"
+    echo -e "${CYAN}Setup & Initialization:${NC}"
+    echo "  init                   Interactive setup wizard (recommended)"
+    echo "  init <code> <name>     Quick initialization with defaults"
+    echo "  setup / wizard         Launch interactive setup wizard"
+    echo ""
+    echo -e "${DIM}  The wizard helps you configure:${NC}"
+    echo -e "${DIM}    • Hostnames (dive25.com, custom domain, or IP)${NC}"
+    echo -e "${DIM}    • Cloudflare tunnel (optional auto-setup)${NC}"
+    echo -e "${DIM}    • Secure password generation${NC}"
+    echo -e "${DIM}    • TLS certificates${NC}"
+    echo ""
+    
+    echo -e "${CYAN}Certificates:${NC}"
     echo "  generate-certs         Generate X.509 certificates for mTLS"
     echo "  rotate-certs           Rotate existing certificates (with backup)"
     echo ""
@@ -1693,22 +2349,28 @@ module_spoke_help() {
     echo "  audit-status           Show audit queue status and metrics"
     echo ""
     
-    echo -e "${BOLD}Quick Start:${NC}"
-    echo "  1. ./dive spoke init NZL 'New Zealand Defence'"
-    echo "  2. ./dive spoke generate-certs"
-    echo "  3. Edit instances/nzl/config.json (set contactEmail)"
-    echo "  4. cp instances/nzl/.env.template instances/nzl/.env"
-    echo "  5. Edit instances/nzl/.env (set passwords)"
-    echo "  6. ./dive spoke register"
-    echo "  7. Wait for Hub admin approval"
-    echo "  8. Add SPOKE_OPAL_TOKEN to .env"
-    echo "  9. ./dive spoke up"
+    echo -e "${BOLD}Quick Start (Interactive):${NC}"
+    echo -e "  ${GREEN}./dive spoke init${NC}           # Launch setup wizard"
     echo ""
     
-    echo -e "${BOLD}Resilience Examples:${NC}"
-    echo "  ./dive spoke failover status"
-    echo "  ./dive spoke maintenance enter 'Scheduled upgrade'"
-    echo "  ./dive spoke audit-status"
+    echo -e "${BOLD}Quick Start (Non-Interactive):${NC}"
+    echo "  1. ./dive spoke init NZL 'New Zealand Defence'"
+    echo "  2. Edit instances/nzl/.env (auto-generated with passwords)"
+    echo "  3. ./dive spoke up"
+    echo "  4. ./dive --instance nzl spoke register"
+    echo "  5. Wait for Hub admin approval"
+    echo "  6. Add SPOKE_OPAL_TOKEN to .env"
+    echo ""
+    
+    echo -e "${BOLD}Cloudflare Tunnel Setup:${NC}"
+    echo "  The setup wizard can auto-configure Cloudflare tunnels."
+    echo "  This makes your spoke accessible at <code>-*.dive25.com"
+    echo ""
+    echo "  Manual setup:"
+    echo "    1. Create tunnel at https://one.dash.cloudflare.com"
+    echo "    2. Copy tunnel token"
+    echo "    3. Add to .env: TUNNEL_TOKEN=<token>"
+    echo "    4. Restart: ./dive spoke down && ./dive spoke up"
     echo ""
     
     echo -e "${BOLD}Environment Variables:${NC}"
