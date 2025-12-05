@@ -1,0 +1,200 @@
+#!/bin/bash
+# =============================================================================
+# DIVE V3 CLI - Modular Unified Management Script
+# =============================================================================
+# Usage:
+#   ./dive [options] [command] [subcommand] [args...]
+#
+# Global Options:
+#   --env local|gcp|pilot    Set environment (default: local)
+#   --instance usa|fra|deu   Set instance (default: usa)
+#   --dry-run                Show what would be done without executing
+#   --verbose                Show detailed output
+#   --quiet                  Suppress non-essential output
+#
+# Examples:
+#   ./dive up                      # Start locally with defaults
+#   ./dive --dry-run deploy        # Preview full deployment
+#   ./dive --env gcp up            # Start with GCP secrets
+#   ./dive pilot up                # Start on remote pilot VM
+# =============================================================================
+
+set -e
+
+# Project root
+DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export DIVE_ROOT
+
+# Modules directory
+MODULES_DIR="${DIVE_ROOT}/scripts/dive-modules"
+
+# =============================================================================
+# LOAD COMMON MODULE
+# =============================================================================
+
+if [ -f "${MODULES_DIR}/common.sh" ]; then
+    source "${MODULES_DIR}/common.sh"
+    export DIVE_COMMON_LOADED=1
+else
+    echo "ERROR: Common module not found at ${MODULES_DIR}/common.sh"
+    echo "Please ensure the dive-modules directory exists."
+    exit 1
+fi
+
+# =============================================================================
+# ARGUMENT PARSING
+# =============================================================================
+
+# Parse global options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --env)
+            ENVIRONMENT="$2"
+            shift 2
+            ;;
+        --instance)
+            INSTANCE="$2"
+            shift 2
+            ;;
+        --dry-run|-n)
+            DRY_RUN=true
+            shift
+            ;;
+        --verbose|-v)
+            VERBOSE=true
+            shift
+            ;;
+        --quiet|-q)
+            QUIET=true
+            shift
+            ;;
+        -h|--help)
+            source "${MODULES_DIR}/help.sh"
+            cmd_help
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# =============================================================================
+# MAIN COMMAND DISPATCH
+# =============================================================================
+
+COMMAND="${1:-help}"
+shift || true
+
+cd "$DIVE_ROOT"
+
+case "$COMMAND" in
+    # Core commands (core.sh)
+    up|down|restart|logs|ps|exec)
+        source "${MODULES_DIR}/core.sh"
+        case "$COMMAND" in
+            up)      cmd_up "$@" ;;
+            down)    cmd_down "$@" ;;
+            restart) cmd_restart "$@" ;;
+            logs)    cmd_logs "$@" ;;
+            ps)      cmd_ps "$@" ;;
+            exec)    cmd_exec "$@" ;;
+        esac
+        ;;
+    
+    # Status commands (status.sh)
+    status|health|validate|info)
+        source "${MODULES_DIR}/status.sh"
+        case "$COMMAND" in
+            status)   cmd_status "$@" ;;
+            health)   cmd_health "$@" ;;
+            validate) cmd_validate "$@" ;;
+            info)     cmd_info "$@" ;;
+        esac
+        ;;
+    
+    # Deployment commands (deploy.sh)
+    deploy|reset|clean|nuke)
+        source "${MODULES_DIR}/deploy.sh"
+        case "$COMMAND" in
+            deploy) cmd_deploy "$@" ;;
+            reset)  cmd_reset "$@" ;;
+            clean)  cmd_reset "$@" ;;
+            nuke)   cmd_nuke ;;
+        esac
+        ;;
+    
+    # Database commands (db.sh)
+    seed|backup|restore)
+        source "${MODULES_DIR}/db.sh"
+        case "$COMMAND" in
+            seed)    cmd_seed "$@" ;;
+            backup)  cmd_backup ;;
+            restore) cmd_restore "$@" ;;
+        esac
+        ;;
+    
+    # Terraform commands (terraform.sh)
+    tf|terraform)
+        source "${MODULES_DIR}/terraform.sh"
+        module_terraform "$@"
+        ;;
+    
+    # Secrets commands (secrets.sh)
+    secrets)
+        source "${MODULES_DIR}/secrets.sh"
+        module_secrets "$@"
+        ;;
+    
+    # Pilot VM commands (pilot.sh)
+    pilot)
+        source "${MODULES_DIR}/pilot.sh"
+        module_pilot "$@"
+        ;;
+    
+    # Federation commands (federation.sh)
+    federation|fed)
+        source "${MODULES_DIR}/federation.sh"
+        module_federation "$@"
+        ;;
+    
+    # Hub commands (federation.sh)
+    hub)
+        source "${MODULES_DIR}/federation.sh"
+        module_hub "$@"
+        ;;
+    
+    # Spoke commands (spoke.sh)
+    spoke)
+        source "${MODULES_DIR}/spoke.sh"
+        module_spoke "$@"
+        ;;
+    
+    # SP Client commands (sp.sh)
+    sp)
+        source "${MODULES_DIR}/sp.sh"
+        module_sp "$@"
+        ;;
+    
+    # Policy commands (policy.sh)
+    policy)
+        source "${MODULES_DIR}/policy.sh"
+        module_policy "$@"
+        ;;
+    
+    # Help
+    help|--help|-h)
+        source "${MODULES_DIR}/help.sh"
+        cmd_help
+        ;;
+    
+    # Unknown command
+    *)
+        log_error "Unknown command: $COMMAND"
+        echo ""
+        echo "Run './dive help' for usage information."
+        exit 1
+        ;;
+esac
+
+

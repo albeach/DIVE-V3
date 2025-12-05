@@ -467,3 +467,4 @@ cd policies && ../bin/opa test fuel_inventory_abac_policy.rego tests/fuel_invent
 
 
 
+

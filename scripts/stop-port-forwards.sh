@@ -8,3 +8,4 @@ pkill -f "kubectl port-forward" || echo "No port forwards running"
 echo "✅ Port forwards stopped"
 
 
+

@@ -2,6 +2,10 @@
 # DIVE V3 Git Ignore
 # ============================================
 
+# Root-level markdown files (local notes/status docs)
+/*.md
+!README.md
+
 # Environment files
 .env
 .env.local
