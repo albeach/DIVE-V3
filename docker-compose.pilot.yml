@@ -98,6 +98,9 @@ services:
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
       KC_PROXY_HEADERS: xforwarded
+      # Health & Metrics (REQUIRED for health checks in Keycloak 26.x)
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
       # Admin User
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
@@ -117,11 +120,12 @@ services:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:8080/health/ready || exit 1"]
+      # Keycloak 26.x serves health/metrics on management interface (port 9000)
+      test: ["CMD-SHELL", "curl -kfs https://localhost:9000/health/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   opa:
     image: openpolicyagent/opa:latest
