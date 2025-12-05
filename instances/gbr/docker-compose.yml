@@ -17,6 +17,8 @@ volumes:
   gbr_redis_data:
   gbr_frontend_modules:
   gbr_frontend_next:
+  gbr_opa_cache:
+  gbr_opal_cache:
 
 services:
   # ============================================================================
@@ -134,6 +136,7 @@ services:
       - "8184:8181"
     volumes:
       - ../../policies:/policies:ro
+      - gbr_opa_cache:/var/opa/cache
     networks:
       - dive-gbr-network
     healthcheck:
@@ -141,6 +144,46 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # OPAL Client - Policy Sync from Hub
+  opal-client-gbr:
+    image: permitio/opal-client:latest
+    container_name: dive-v3-opal-client-gbr
+    environment:
+      # Hub OPAL Server connection
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      # Local OPA connection
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_OPA_URL: http://opa-gbr:8181
+      # Spoke identification
+      OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-gbr-default}
+      # Logging
+      OPAL_LOG_LEVEL: ${OPAL_LOG_LEVEL:-INFO}
+      # Resilience settings
+      OPAL_KEEP_ALIVE_TIMEOUT: "60"
+      OPAL_RECONNECT_INTERVAL: "5"
+      OPAL_RECONNECT_MAX_INTERVAL: "300"
+      OPAL_POLICY_REFRESH_INTERVAL: "60"
+      # Policy store
+      OPAL_POLICY_STORE_TYPE: "OPA"
+      OPAL_POLICY_STORE_URL: http://opa-gbr:8181
+      # Data topics to subscribe
+      OPAL_DATA_TOPICS: policy:base,policy:gbr,data:federation_matrix,data:trusted_issuers
+    volumes:
+      - gbr_opal_cache:/var/opal/cache
+      - ./certs:/var/opal/certs:ro
+    depends_on:
+      opa-gbr:
+        condition: service_healthy
+    networks:
+      - dive-gbr-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
   # ============================================================================
   # KEY ACCESS SERVICE

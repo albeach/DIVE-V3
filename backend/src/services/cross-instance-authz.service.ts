@@ -19,6 +19,7 @@ import https from 'https';
 import crypto from 'crypto';
 import NodeCache from 'node-cache';
 import { logger } from '../utils/logger';
+import { spokeTokenExchange, ITokenIntrospectionResult, IBilateralTrust } from './spoke-token-exchange.service';
 
 // ============================================
 // Types
@@ -69,6 +70,13 @@ export interface ICrossInstanceAuthzResult {
             originalClearance: string;
             translatedClearance: string;
             clearanceMapping: string;
+        };
+        bilateralTrust?: {
+            sourceInstance: string;
+            targetInstance: string;
+            trustLevel: string;
+            maxClassification: string;
+            allowedScopes: string[];
         };
         cacheHit: boolean;
     };
@@ -818,8 +826,206 @@ export class CrossInstanceAuthzService {
             misses: stats.misses,
         };
     }
+    
+    // ============================================
+    // BILATERAL TRUST INTEGRATION
+    // ============================================
+    
+    /**
+     * Evaluate access with bilateral trust verification via token exchange service
+     * Uses the token exchange service to verify trust between instances before authorization
+     */
+    async evaluateAccessWithBilateralTrust(request: ICrossInstanceAuthzRequest): Promise<ICrossInstanceAuthzResult> {
+        const startTime = Date.now();
+        const auditTrail: ICrossInstanceAuditEntry[] = [];
+        
+        // Step 1: Verify bilateral trust using token exchange service
+        const sourceInstance = request.subject.originInstance || this.localInstanceId;
+        const targetInstance = request.resource.instanceId;
+        
+        auditTrail.push({
+            timestamp: new Date().toISOString(),
+            instanceId: sourceInstance,
+            action: 'bilateral_trust_check',
+            outcome: 'allow',
+            details: `Checking trust from ${sourceInstance} to ${targetInstance}`,
+        });
+        
+        const bilateralTrust = await spokeTokenExchange.verifyBilateralTrust(
+            sourceInstance.toUpperCase(),
+            targetInstance.toUpperCase()
+        );
+        
+        if (!bilateralTrust) {
+            logger.warn('Cross-instance access denied: no bilateral trust', {
+                requestId: request.requestId,
+                sourceInstance,
+                targetInstance,
+            });
+            
+            auditTrail.push({
+                timestamp: new Date().toISOString(),
+                instanceId: sourceInstance,
+                action: 'bilateral_trust_denied',
+                outcome: 'deny',
+                details: `No bilateral trust between ${sourceInstance} and ${targetInstance}`,
+            });
+            
+            return {
+                allow: false,
+                reason: `No bilateral trust between ${sourceInstance} and ${targetInstance}`,
+                evaluationDetails: {
+                    localDecision: { allow: false, reason: 'Bilateral trust check failed' },
+                    cacheHit: false,
+                },
+                executionTimeMs: Date.now() - startTime,
+                auditTrail,
+            };
+        }
+        
+        // Step 2: Check classification against trust level
+        const resourceClassification = getClassificationLevel(request.resource.classification);
+        const maxAllowedClassification = getClassificationLevel(bilateralTrust.maxClassification);
+        
+        if (resourceClassification > maxAllowedClassification) {
+            logger.warn('Cross-instance access denied: classification exceeds trust', {
+                requestId: request.requestId,
+                resourceClassification: request.resource.classification,
+                maxAllowed: bilateralTrust.maxClassification,
+            });
+            
+            auditTrail.push({
+                timestamp: new Date().toISOString(),
+                instanceId: targetInstance,
+                action: 'classification_check_failed',
+                outcome: 'deny',
+                details: `Resource ${request.resource.classification} exceeds max ${bilateralTrust.maxClassification}`,
+            });
+            
+            return {
+                allow: false,
+                reason: `Resource classification ${request.resource.classification} exceeds bilateral trust limit ${bilateralTrust.maxClassification}`,
+                evaluationDetails: {
+                    localDecision: { allow: false, reason: 'Classification exceeds trust level' },
+                    cacheHit: false,
+                },
+                executionTimeMs: Date.now() - startTime,
+                auditTrail,
+            };
+        }
+        
+        auditTrail.push({
+            timestamp: new Date().toISOString(),
+            instanceId: sourceInstance,
+            action: 'bilateral_trust_verified',
+            outcome: 'allow',
+            details: `Trust level: ${bilateralTrust.trustLevel}, max classification: ${bilateralTrust.maxClassification}`,
+        });
+        
+        // Step 3: Validate token if bearer token provided
+        if (request.bearerToken) {
+            const tokenValidation = await this.validateCrossInstanceToken(
+                request.bearerToken,
+                sourceInstance,
+                targetInstance,
+                request.requestId
+            );
+            
+            auditTrail.push({
+                timestamp: new Date().toISOString(),
+                instanceId: sourceInstance,
+                action: 'token_validation',
+                outcome: tokenValidation.active ? 'allow' : 'deny',
+                details: tokenValidation.error || 'Token validated successfully',
+            });
+            
+            if (!tokenValidation.active) {
+                return {
+                    allow: false,
+                    reason: `Token validation failed: ${tokenValidation.error}`,
+                    evaluationDetails: {
+                        localDecision: { allow: false, reason: 'Token validation failed' },
+                        cacheHit: false,
+                    },
+                    executionTimeMs: Date.now() - startTime,
+                    auditTrail,
+                };
+            }
+        }
+        
+        // Step 4: Proceed with standard evaluation
+        const result = await this.evaluateAccess(request);
+        
+        // Merge audit trails
+        return {
+            ...result,
+            evaluationDetails: {
+                ...result.evaluationDetails,
+                bilateralTrust: {
+                    sourceInstance,
+                    targetInstance,
+                    trustLevel: bilateralTrust.trustLevel,
+                    maxClassification: bilateralTrust.maxClassification,
+                    allowedScopes: bilateralTrust.allowedScopes,
+                },
+            },
+            auditTrail: [...auditTrail, ...result.auditTrail],
+        };
+    }
+    
+    /**
+     * Validate a token for cross-instance access using token exchange service
+     */
+    private async validateCrossInstanceToken(
+        token: string,
+        sourceInstance: string,
+        targetInstance: string,
+        requestId: string
+    ): Promise<ITokenIntrospectionResult> {
+        try {
+            return await spokeTokenExchange.introspectToken({
+                token,
+                originInstance: sourceInstance,
+                requestingInstance: targetInstance,
+                requestId,
+            });
+        } catch (error) {
+            logger.error('Cross-instance token validation error', {
+                requestId,
+                sourceInstance,
+                targetInstance,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            
+            return {
+                active: false,
+                originInstance: sourceInstance,
+                validatedAt: new Date(),
+                trustVerified: false,
+                error: error instanceof Error ? error.message : 'Token validation failed',
+                cacheHit: false,
+                latencyMs: 0,
+            };
+        }
+    }
+    
+    /**
+     * Get bilateral trusts for the local instance
+     */
+    getBilateralTrusts(): IBilateralTrust[] {
+        return spokeTokenExchange.getBilateralTrusts(this.localInstanceId.toUpperCase());
+    }
+    
+    /**
+     * Check if bilateral trust exists between two instances
+     */
+    async hasBilateralTrust(sourceInstance: string, targetInstance: string): Promise<boolean> {
+        const trust = await spokeTokenExchange.verifyBilateralTrust(sourceInstance, targetInstance);
+        return trust !== null;
+    }
 }
 
 // Export singleton instance
 export const crossInstanceAuthzService = new CrossInstanceAuthzService();
+
 

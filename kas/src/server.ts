@@ -68,7 +68,7 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
     // Update DEK cache size metric
     updateDEKCacheSize(dekCache.keys().length);
-    
+
     res.json({
         status: 'healthy',
         service: 'dive-v3-kas',
@@ -93,7 +93,7 @@ app.get('/health', (req, res) => {
 app.get('/metrics', (req, res) => {
     // Update cache size before export
     updateDEKCacheSize(dekCache.keys().length);
-    
+
     res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     res.send(getPrometheusMetrics());
 });
@@ -348,7 +348,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
 
             // Extract decision from OPA response
             opaDecision = opaResponse.data.result?.decision || opaResponse.data.result;
-            
+
             // Record OPA evaluation time
             recordOPAEvaluation(Date.now() - opaStartTime);
 
@@ -398,12 +398,12 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 resourceId: keyRequest.resourceId,
                 reason: opaDecision.reason
             });
-            
+
             // Record metrics for denied request
             const clearancePass = opaDecision.evaluation_details?.checks?.clearance_sufficient;
             const countryPass = opaDecision.evaluation_details?.checks?.country_releasable;
             const coiPass = opaDecision.evaluation_details?.checks?.coi_satisfied;
-            
+
             recordKeyRequest({
                 outcome: 'denied',
                 durationMs: Date.now() - startTime,
@@ -552,7 +552,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
         const clearancePass = opaDecision.evaluation_details?.checks?.clearance_sufficient;
         const countryPass = opaDecision.evaluation_details?.checks?.country_releasable;
         const coiPass = opaDecision.evaluation_details?.checks?.coi_satisfied;
-        
+
         recordKeyRequest({
             outcome: 'success',
             durationMs: Date.now() - startTime,
@@ -603,7 +603,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
             error: error instanceof Error ? error.message : 'Unknown error',
             stack: error instanceof Error ? error.stack : undefined
         });
-        
+
         // Record error metrics
         recordKeyRequest({
             outcome: 'error',
@@ -635,7 +635,7 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
     try {
         // Import federation service dynamically to avoid circular deps
         const { kasFederationService } = await import('./services/kas-federation.service');
-        
+
         const {
             resourceId,
             kaoId,
@@ -655,7 +655,7 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
                 originKasId: originKasId || 'unknown',
                 targetKasId: targetKasId || 'unknown',
             });
-            
+
             res.status(400).json({
                 success: false,
                 error: 'Bad Request',
@@ -681,9 +681,9 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
         });
 
         // Record federation metrics
-        const federationOutcome = response.success ? 'success' : 
+        const federationOutcome = response.success ? 'success' :
             response.error?.includes('Validation') ? 'denied' : 'error';
-        
+
         recordFederationRequest({
             outcome: federationOutcome as 'success' | 'denied' | 'error',
             durationMs: Date.now() - startTime,
@@ -691,9 +691,9 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
             targetKasId,
         });
 
-        const statusCode = response.success ? 200 : 
-            response.error === 'Federation Validation Failed' ? 403 : 
-            response.error === 'Target KAS Not Found' ? 404 : 503;
+        const statusCode = response.success ? 200 :
+            response.error === 'Federation Validation Failed' ? 403 :
+                response.error === 'Target KAS Not Found' ? 404 : 503;
 
         res.status(statusCode).json(response);
 
@@ -702,7 +702,7 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
             requestId,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
-        
+
         // Record federation error
         recordFederationRequest({
             outcome: 'error',
@@ -750,7 +750,7 @@ app.get('/federation/registry', async (req: Request, res: Response) => {
     try {
         const { kasRegistry } = await import('./utils/kas-federation');
         const allKAS = kasRegistry.listAll();
-        
+
         // Return sanitized list (no auth configs)
         const sanitizedList = allKAS.map(kas => ({
             kasId: kas.kasId,
@@ -761,7 +761,7 @@ app.get('/federation/registry', async (req: Request, res: Response) => {
             supportedCOIs: kas.supportedCOIs,
             metadata: kas.metadata
         }));
-        
+
         res.json({
             status: 'ok',
             timestamp: new Date().toISOString(),

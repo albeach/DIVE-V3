@@ -255,3 +255,4 @@ echo "   Run: gcloud secrets create dive-v3-bundle-signing-key --project=dive25"
 echo "        gcloud secrets versions add dive-v3-bundle-signing-key --data-file=$BUNDLE_CERTS_DIR/bundle-signing.key"
 echo ""
 
+

@@ -172,3 +172,4 @@ module_pilot_help() {
     echo "  deploy        Full deployment to pilot VM"
 }
 
+

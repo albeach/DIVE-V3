@@ -85,3 +85,4 @@ echo "Note: DNS propagation may take a few minutes."
 echo "SSL certificate provisioning will begin once DNS is propagated."
 
 
+

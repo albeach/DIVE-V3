@@ -12,7 +12,7 @@
  * @date 2025-12-05
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 
 // ============================================
 // Mock Setup
@@ -290,7 +290,8 @@ describe('CrossInstanceAuthzService', () => {
                 'SECRET': 'SECRET',
             };
             
-            expect(service.translateClearance('secret', mapping)).toBe('secret');
+            // Implementation converts input to uppercase for lookup and returns mapped value
+            expect(service.translateClearance('secret', mapping)).toBe('SECRET');
             expect(service.translateClearance('SECRET', mapping)).toBe('SECRET');
         });
     });
@@ -680,4 +681,5 @@ describe('Error Handling', () => {
 
 // Export for test runner
 export {};
+
 
