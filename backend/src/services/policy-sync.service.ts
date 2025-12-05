@@ -17,6 +17,7 @@ import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { opalClient } from './opal-client';
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
+import { policyVersionStore } from '../models/policy-version.model';
 
 // ============================================
 // TYPES
@@ -104,15 +105,80 @@ const HUB_GUARDRAILS = {
 
 class PolicySyncService {
   private currentVersion: IPolicyVersion;
-  private spokeSyncStatus: Map<string, ISpokeSync> = new Map();
+  private spokeSyncStatus: Map<string, ISpokeSync> = new Map(); // In-memory cache, backed by MongoDB
   private pendingUpdates: Map<string, IPolicyUpdate> = new Map();
   private updateHistory: IPolicyUpdate[] = [];
+  private useMongoDb: boolean;
+  private initialized = false;
 
   constructor() {
     this.currentVersion = this.initializeVersion();
+    // Enable MongoDB persistence unless explicitly disabled
+    this.useMongoDb = process.env.POLICY_SYNC_STORE !== 'memory';
+    
     logger.info('Policy Sync Service initialized', {
-      version: this.currentVersion.version
+      version: this.currentVersion.version,
+      persistence: this.useMongoDb ? 'mongodb' : 'memory'
     });
+
+    // Initialize MongoDB store asynchronously
+    if (this.useMongoDb) {
+      this.initializeStore().catch(err => {
+        logger.error('Failed to initialize MongoDB store for policy sync', {
+          error: err instanceof Error ? err.message : 'Unknown error'
+        });
+      });
+    }
+  }
+
+  /**
+   * Initialize MongoDB store and load latest version
+   */
+  private async initializeStore(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      await policyVersionStore.initialize();
+      
+      // Load latest version from MongoDB if available
+      const latestVersion = await policyVersionStore.getLatestVersion();
+      if (latestVersion) {
+        this.currentVersion = {
+          version: latestVersion.version,
+          timestamp: latestVersion.timestamp,
+          hash: latestVersion.hash,
+          layers: latestVersion.layers
+        };
+        logger.info('Loaded latest policy version from MongoDB', {
+          version: this.currentVersion.version
+        });
+      }
+      
+      // Load sync status cache
+      const syncStatuses = await policyVersionStore.getAllSyncStatus();
+      for (const status of syncStatuses) {
+        this.spokeSyncStatus.set(status.spokeId, {
+          spokeId: status.spokeId,
+          instanceCode: status.instanceCode,
+          lastSyncTime: status.lastSyncTime,
+          currentVersion: status.currentVersion,
+          status: status.status,
+          pendingUpdates: status.pendingUpdates,
+          lastAckTime: status.lastAckTime
+        });
+      }
+      
+      this.initialized = true;
+      logger.info('Policy sync MongoDB store initialized', {
+        cachedStatuses: this.spokeSyncStatus.size
+      });
+    } catch (error) {
+      logger.error('Failed to initialize policy sync store', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Fall back to in-memory only
+      this.useMongoDb = false;
+    }
   }
 
   // ============================================
@@ -179,13 +245,27 @@ class PolicySyncService {
       lastAckTime: isCurrentVersion ? now : this.spokeSyncStatus.get(spokeId)?.lastAckTime
     };
 
+    // Update in-memory cache
     this.spokeSyncStatus.set(spokeId, syncStatus);
+
+    // Persist to MongoDB
+    if (this.useMongoDb) {
+      try {
+        await policyVersionStore.saveSyncStatus(syncStatus);
+      } catch (error) {
+        logger.warn('Failed to persist sync status to MongoDB', {
+          spokeId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
 
     logger.debug('Spoke sync recorded', {
       spokeId,
       instanceCode: spoke.instanceCode,
       version: reportedVersion,
-      status: syncStatus.status
+      status: syncStatus.status,
+      persisted: this.useMongoDb
     });
 
     return syncStatus;
@@ -294,9 +374,24 @@ class PolicySyncService {
       }
     }
 
-    // Store update
+    // Store update in memory
     this.pendingUpdates.set(update.updateId, update);
     this.updateHistory.push(update);
+
+    // Persist version to MongoDB
+    if (this.useMongoDb) {
+      try {
+        await policyVersionStore.saveVersion(this.currentVersion, {
+          releasedBy: 'system',
+          description: options.description
+        });
+      } catch (error) {
+        logger.warn('Failed to persist policy version to MongoDB', {
+          version: newVersion,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
 
     // Push via OPAL
     if (opalClient.isOPALEnabled()) {
@@ -308,7 +403,8 @@ class PolicySyncService {
       version: newVersion,
       priority: options.priority,
       layers: options.layers,
-      requireAck: update.requireAck
+      requireAck: update.requireAck,
+      persisted: this.useMongoDb
     });
 
     // For critical updates, track ACKs

@@ -66,6 +66,7 @@ allow if {
 	acp240.check_authentication_strength_sufficient
 	acp240.check_mfa_verified
 	acp240.check_industry_access_allowed
+	acp240.check_industry_clearance_cap_ok  # Phase 3: Industry clearance cap enforcement
 	
 	# COI coherence (set rule - must be empty)
 	count(acp240.is_coi_coherence_violation) == 0
@@ -135,6 +136,8 @@ reason := "Access granted - all conditions satisfied" if {
 } else := msg if {
 	msg := acp240.is_industry_access_blocked
 } else := msg if {
+	msg := acp240.is_industry_clearance_exceeded  # Phase 3: Industry clearance cap
+} else := msg if {
 	# COI coherence violations
 	count(acp240.is_coi_coherence_violation) > 0
 	violations := acp240.is_coi_coherence_violation
@@ -184,6 +187,7 @@ evaluation_details := {
 		"authentication_strength_sufficient": acp240.check_authentication_strength_sufficient,
 		"mfa_verified": acp240.check_mfa_verified,
 		"industry_access_allowed": acp240.check_industry_access_allowed,
+		"industry_clearance_cap_ok": acp240.check_industry_clearance_cap_ok,  # Phase 3
 		"coi_coherence_violations": count(acp240.is_coi_coherence_violation),
 		"federation_trusted": federation_trusted,
 	},
@@ -264,6 +268,8 @@ is_authentication_strength_insufficient := acp240.is_authentication_strength_ins
 is_mfa_not_verified := acp240.is_mfa_not_verified
 
 is_industry_access_blocked := acp240.is_industry_access_blocked
+
+is_industry_clearance_exceeded := acp240.is_industry_clearance_exceeded  # Phase 3
 
 is_coi_coherence_violation := acp240.is_coi_coherence_violation
 

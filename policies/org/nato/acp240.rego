@@ -395,6 +395,76 @@ check_industry_access_allowed if {
 } else := false
 
 # ============================================
+# ACP-240 Section 4.9: Industry Clearance Cap
+# ============================================
+# Phase 3: Enforces per-tenant maximum classification for industry users.
+# Industry users may have government clearances but are capped based on
+# their country of affiliation's policy for industry access.
+#
+# This implements the DIVE V3 requirement that industry users cannot
+# access resources above their tenant's industry_max_classification level.
+
+# Clearance level hierarchy (higher number = higher clearance)
+clearance_hierarchy := {
+	"UNCLASSIFIED": 0,
+	"RESTRICTED": 1,
+	"CONFIDENTIAL": 2,
+	"SECRET": 3,
+	"TOP_SECRET": 4,
+}
+
+# Get numeric clearance level
+get_clearance_level(clearance) := level if {
+	level := clearance_hierarchy[clearance]
+} else := 0
+
+# Look up industry max classification for a tenant
+# Uses imported tenant_configs data
+get_industry_max_classification(tenant_code) := max_class if {
+	data.tenant_configs
+	tenant_cfg := data.tenant_configs[tenant_code]
+	max_class := tenant_cfg.industry_max_classification
+} else := max_class if {
+	# Fallback: check tenant-specific data files
+	data.tenant_config
+	max_class := data.tenant_config.industry_max_classification
+} else := "CONFIDENTIAL" # Default cap for industry if not configured
+
+# Check if industry user exceeds clearance cap
+is_industry_clearance_exceeded := msg if {
+	# Only applies to industry users
+	resolved_org_type == "INDUSTRY"
+	
+	# Get user's country
+	user_country := input.subject.countryOfAffiliation
+	
+	# Get industry max classification for this tenant
+	max_class := get_industry_max_classification(user_country)
+	
+	# Get resource classification
+	resource_class := input.resource.classification
+	
+	# Get numeric levels
+	resource_level := get_clearance_level(resource_class)
+	max_level := get_clearance_level(max_class)
+	
+	# Check if resource exceeds industry cap
+	resource_level > max_level
+	
+	msg := sprintf("Industry clearance cap exceeded: resource=%s (%d) > tenant %s max=%s (%d)", [
+		resource_class,
+		resource_level,
+		user_country,
+		max_class,
+		max_level,
+	])
+}
+
+check_industry_clearance_cap_ok if {
+	not is_industry_clearance_exceeded
+} else := false
+
+# ============================================
 # COI Coherence Checks (Advanced)
 # ============================================
 # Validates COI assignment coherence per ACP-240.

@@ -199,6 +199,15 @@ export function normalizeUSAOIDCAttributes(
 /**
  * Generic attribute normalizer
  * Routes to IdP-specific normalizers based on identity provider alias
+ * 
+ * Phase 3: Extended with comprehensive multi-IdP support
+ * - Spain SAML (test fixture)
+ * - USA OIDC (test fixture)
+ * - France SAML (production)
+ * - Canada OIDC (production)
+ * - Germany OIDC (production)
+ * - UK OIDC (production)
+ * - Industry OIDC (production)
  */
 export function normalizeExternalIdPAttributes(
     idpAlias: string,
@@ -206,86 +215,430 @@ export function normalizeExternalIdPAttributes(
 ): Partial<NormalizedDIVEAttributes> {
     logger.info('Normalizing external IdP attributes', { idpAlias, attributes });
 
-    switch (idpAlias.toLowerCase()) {
-        case 'spain-external':
-        case 'spain-saml':
-        case 'esp-idp':
-            return normalizeSpanishSAMLAttributes(attributes);
+    const alias = idpAlias.toLowerCase();
 
-        case 'usa-external':
-        case 'usa-oidc':
-        case 'us-dod':
-            return normalizeUSAOIDCAttributes(attributes);
-
-        // France, Canada, Industry use similar patterns
-        case 'france-idp':
-        case 'fra-saml':
-            return normalizeFrenchAttributes(attributes);
-
-        case 'canada-idp':
-        case 'can-oidc':
-            return normalizeCanadianAttributes(attributes);
-
-        default:
-            logger.warn('Unknown IdP alias, using generic normalization', { idpAlias });
-            return genericNormalization(attributes);
+    // Spain SAML IdP (test fixture)
+    if (alias.includes('spain') || alias.includes('esp')) {
+        return normalizeSpanishSAMLAttributes(attributes);
     }
+
+    // USA OIDC IdP (test fixture and production)
+    if (alias.includes('usa') || alias.includes('us-dod') || alias.includes('us-oidc')) {
+        return normalizeUSAOIDCAttributes(attributes);
+    }
+
+    // France SAML IdP (production)
+    if (alias.includes('france') || alias.includes('fra')) {
+        return normalizeFrenchAttributes(attributes);
+    }
+
+    // Canada OIDC IdP (production)
+    if (alias.includes('canada') || alias.includes('can')) {
+        return normalizeCanadianAttributes(attributes);
+    }
+
+    // Germany OIDC IdP (production)
+    if (alias.includes('germany') || alias.includes('deu') || alias.includes('bundeswehr')) {
+        return normalizeGermanAttributes(attributes);
+    }
+
+    // UK OIDC IdP (production)
+    if (alias.includes('uk') || alias.includes('gbr') || alias.includes('britain')) {
+        return normalizeUKAttributes(attributes);
+    }
+
+    // Industry IdP (production)
+    if (alias.includes('industry') || alias.includes('contractor')) {
+        return normalizeIndustryAttributes(attributes);
+    }
+
+    // Default: generic normalization
+    logger.warn('Unknown IdP alias, using generic normalization', { idpAlias });
+    return genericNormalization(attributes);
 }
 
 /**
- * French attribute normalization (similar to Spanish)
+ * German attribute normalization
+ * 
+ * German clearance levels (VSA):
+ * - STRENG GEHEIM → TOP_SECRET
+ * - GEHEIM / VS-GEHEIM → SECRET
+ * - VERTRAULICH / VS-VERTRAULICH → CONFIDENTIAL
+ * - VS-NUR FÜR DEN DIENSTGEBRAUCH → RESTRICTED
+ * - OFFEN → UNCLASSIFIED
  */
-function normalizeFrenchAttributes(
+function normalizeGermanAttributes(
     attributes: ExternalIdPAttributes
 ): Partial<NormalizedDIVEAttributes> {
-    const FRENCH_CLEARANCE_MAP: Record<string, NormalizedDIVEAttributes['clearance']> = {
-        'TRES-SECRET-DEFENSE': 'TOP_SECRET',
-        'SECRET-DEFENSE': 'SECRET',
-        'CONFIDENTIEL-DEFENSE': 'CONFIDENTIAL',
-        'DIFFUSION-RESTREINTE': 'UNCLASSIFIED',
+    const GERMAN_CLEARANCE_MAP: Record<string, NormalizedDIVEAttributes['clearance']> = {
+        'STRENG_GEHEIM': 'TOP_SECRET',
+        'STRENG GEHEIM': 'TOP_SECRET',
+        'GEHEIM': 'SECRET',
+        'VS-GEHEIM': 'SECRET',
+        'VS_GEHEIM': 'SECRET',
+        'VERTRAULICH': 'CONFIDENTIAL',
+        'VS-VERTRAULICH': 'CONFIDENTIAL',
+        'VS_VERTRAULICH': 'CONFIDENTIAL',
+        'VS-NUR_FÜR_DEN_DIENSTGEBRAUCH': 'UNCLASSIFIED',
+        'VS-NFD': 'UNCLASSIFIED',
+        'OFFEN': 'UNCLASSIFIED',
     };
 
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
-    normalized.uniqueID = getFirstValue(attributes.uid) || getFirstValue(attributes.mail);
+    normalized.uniqueID = 
+        getFirstValue(attributes.uniqueID) || 
+        getFirstValue(attributes.email) ||
+        getFirstValue(attributes.preferred_username);
 
-    const clearance = getFirstValue(attributes.niveauHabilitation);
+    const clearance = 
+        getFirstValue(attributes.clearance) || 
+        getFirstValue(attributes.sicherheitsstufe);
+        
     if (clearance) {
-        normalized.clearance = FRENCH_CLEARANCE_MAP[clearance] || 'UNCLASSIFIED';
+        const normalizedClearance = clearance.toUpperCase().trim();
+        normalized.clearance = GERMAN_CLEARANCE_MAP[normalizedClearance] || 'UNCLASSIFIED';
     }
 
-    normalized.countryOfAffiliation = 'FRA';
+    normalized.countryOfAffiliation = 'DEU';
 
-    const coi = attributes.groupeInteret;
+    const acpCOI = attributes.acpCOI || attributes.interessengruppe;
+    if (acpCOI) {
+        normalized.acpCOI = Array.isArray(acpCOI) ? acpCOI : [acpCOI];
+    }
+
+    normalized.organization = getFirstValue(attributes.organization) || getFirstValue(attributes.organisation);
+
+    logger.info('Normalized German attributes', { original: attributes, normalized });
+
+    return normalized;
+}
+
+/**
+ * UK attribute normalization
+ * 
+ * UK clearance levels (GPMS):
+ * - TOP SECRET → TOP_SECRET
+ * - SECRET → SECRET
+ * - OFFICIAL-SENSITIVE → CONFIDENTIAL
+ * - OFFICIAL → UNCLASSIFIED
+ */
+function normalizeUKAttributes(
+    attributes: ExternalIdPAttributes
+): Partial<NormalizedDIVEAttributes> {
+    const UK_CLEARANCE_MAP: Record<string, NormalizedDIVEAttributes['clearance']> = {
+        'TOP_SECRET': 'TOP_SECRET',
+        'TOP SECRET': 'TOP_SECRET',
+        'SECRET': 'SECRET',
+        'OFFICIAL-SENSITIVE': 'CONFIDENTIAL',
+        'OFFICIAL_SENSITIVE': 'CONFIDENTIAL',
+        'OFFICIAL': 'UNCLASSIFIED',
+    };
+
+    const normalized: Partial<NormalizedDIVEAttributes> = {};
+
+    normalized.uniqueID = 
+        getFirstValue(attributes.uniqueID) || 
+        getFirstValue(attributes.email) ||
+        getFirstValue(attributes.preferred_username);
+
+    const clearance = getFirstValue(attributes.clearance) || getFirstValue(attributes.securityClearance);
+    if (clearance) {
+        const normalizedClearance = clearance.toUpperCase().trim();
+        normalized.clearance = UK_CLEARANCE_MAP[normalizedClearance] || 'UNCLASSIFIED';
+    }
+
+    normalized.countryOfAffiliation = 'GBR';
+
+    const acpCOI = attributes.acpCOI || attributes.communityOfInterest;
+    if (acpCOI) {
+        normalized.acpCOI = Array.isArray(acpCOI) ? acpCOI : [acpCOI];
+    }
+
+    normalized.organization = getFirstValue(attributes.organization) || getFirstValue(attributes.organisation);
+
+    logger.info('Normalized UK attributes', { original: attributes, normalized });
+
+    return normalized;
+}
+
+/**
+ * Industry IdP attribute normalization
+ * 
+ * Industry clearance levels:
+ * - HIGHLY_SENSITIVE → TOP_SECRET (but will be capped by policy)
+ * - SENSITIVE → SECRET
+ * - CONFIDENTIAL → CONFIDENTIAL
+ * - INTERNAL → RESTRICTED
+ * - PUBLIC → UNCLASSIFIED
+ * 
+ * Note: Industry users are subject to clearance caps per tenant policy
+ */
+function normalizeIndustryAttributes(
+    attributes: ExternalIdPAttributes
+): Partial<NormalizedDIVEAttributes> {
+    const INDUSTRY_CLEARANCE_MAP: Record<string, NormalizedDIVEAttributes['clearance']> = {
+        'HIGHLY_SENSITIVE': 'TOP_SECRET',
+        'HIGHLY SENSITIVE': 'TOP_SECRET',
+        'SENSITIVE': 'SECRET',
+        'CONFIDENTIAL': 'CONFIDENTIAL',
+        'INTERNAL': 'UNCLASSIFIED',
+        'PUBLIC': 'UNCLASSIFIED',
+        // Standard US clearances for industry users with government clearance
+        'TOP_SECRET': 'TOP_SECRET',
+        'SECRET': 'SECRET',
+        'UNCLASSIFIED': 'UNCLASSIFIED',
+    };
+
+    const normalized: Partial<NormalizedDIVEAttributes> = {};
+
+    normalized.uniqueID = 
+        getFirstValue(attributes.uniqueID) || 
+        getFirstValue(attributes.email) ||
+        getFirstValue(attributes.preferred_username);
+
+    const clearance = getFirstValue(attributes.clearance) || getFirstValue(attributes.securityLevel);
+    if (clearance) {
+        const normalizedClearance = clearance.toUpperCase().trim();
+        const mappedClearance = INDUSTRY_CLEARANCE_MAP[normalizedClearance];
+        normalized.clearance = mappedClearance || 'UNCLASSIFIED';
+    }
+
+    // Industry users: infer country from organization or email domain
+    normalized.countryOfAffiliation = getFirstValue(attributes.countryOfAffiliation);
+    // Country will be enriched later if missing based on email domain
+
+    const acpCOI = attributes.acpCOI || attributes.programs;
+    if (acpCOI) {
+        normalized.acpCOI = Array.isArray(acpCOI) ? acpCOI : [acpCOI];
+    }
+
+    normalized.organization = getFirstValue(attributes.organization) || getFirstValue(attributes.company);
+
+    // Mark as industry organization type
+    if (attributes.organizationType) {
+        // Pass through organization type if provided
+    }
+
+    logger.info('Normalized Industry attributes', { original: attributes, normalized });
+
+    return normalized;
+}
+
+/**
+ * French attribute normalization (IGI 1300 security classification)
+ * 
+ * French clearance levels (IGI 1300):
+ * - TRES SECRET DEFENSE (TSD) → TOP_SECRET
+ * - SECRET DEFENSE (SD) → SECRET  
+ * - CONFIDENTIEL DEFENSE (CD) → CONFIDENTIAL
+ * - DIFFUSION RESTREINTE (DR) → RESTRICTED
+ * - NON PROTEGE (NP) → UNCLASSIFIED
+ * 
+ * Phase 3: Enhanced to handle all French clearance formats with/without accents
+ */
+function normalizeFrenchAttributes(
+    attributes: ExternalIdPAttributes
+): Partial<NormalizedDIVEAttributes> {
+    // Comprehensive French clearance mapping (handles various formats)
+    const FRENCH_CLEARANCE_MAP: Record<string, NormalizedDIVEAttributes['clearance']> = {
+        // TRES SECRET DEFENSE variants
+        'TRES_SECRET_DEFENSE': 'TOP_SECRET',
+        'TRES-SECRET-DEFENSE': 'TOP_SECRET',
+        'TRÈS_SECRET_DÉFENSE': 'TOP_SECRET',
+        'TRÈS SECRET DÉFENSE': 'TOP_SECRET',
+        'TSD': 'TOP_SECRET',
+        
+        // SECRET DEFENSE variants
+        'SECRET_DEFENSE': 'SECRET',
+        'SECRET-DEFENSE': 'SECRET',
+        'SECRET_DÉFENSE': 'SECRET',
+        'SECRET DÉFENSE': 'SECRET',
+        'SD': 'SECRET',
+        
+        // CONFIDENTIEL DEFENSE variants
+        'CONFIDENTIEL_DEFENSE': 'CONFIDENTIAL',
+        'CONFIDENTIEL-DEFENSE': 'CONFIDENTIAL',
+        'CONFIDENTIEL_DÉFENSE': 'CONFIDENTIAL',
+        'CONFIDENTIEL DÉFENSE': 'CONFIDENTIAL',
+        'CD': 'CONFIDENTIAL',
+        
+        // DIFFUSION RESTREINTE variants (maps to RESTRICTED, but we use UNCLASSIFIED as fallback)
+        'DIFFUSION_RESTREINTE': 'UNCLASSIFIED',
+        'DIFFUSION-RESTREINTE': 'UNCLASSIFIED',
+        'DR': 'UNCLASSIFIED',
+        
+        // NON PROTEGE variants
+        'NON_PROTEGE': 'UNCLASSIFIED',
+        'NON-PROTEGE': 'UNCLASSIFIED',
+        'NON_PROTÉGÉ': 'UNCLASSIFIED',
+        'NON PROTÉGÉ': 'UNCLASSIFIED',
+        'NP': 'UNCLASSIFIED',
+    };
+
+    const normalized: Partial<NormalizedDIVEAttributes> = {};
+
+    // UniqueID: Try multiple French attribute names
+    normalized.uniqueID = 
+        getFirstValue(attributes.uid) || 
+        getFirstValue(attributes.mail) ||
+        getFirstValue(attributes.email) ||
+        getFirstValue(attributes.identifiantUnique);
+
+    // Clearance: Try multiple French attribute names and normalize
+    const clearance = 
+        getFirstValue(attributes.niveauHabilitation) ||
+        getFirstValue(attributes.niveauSecret) ||
+        getFirstValue(attributes.clearance);
+        
+    if (clearance) {
+        const normalizedClearance = clearance.toUpperCase().trim();
+        normalized.clearance = FRENCH_CLEARANCE_MAP[normalizedClearance] || 'UNCLASSIFIED';
+        
+        logger.info('Normalized French clearance', {
+            original: clearance,
+            normalized: normalized.clearance,
+        });
+    }
+
+    // Country: Always FRA for French IdP
+    normalized.countryOfAffiliation = 
+        getFirstValue(attributes.paysAffiliation) ||
+        getFirstValue(attributes.pays) ||
+        'FRA';
+    
+    // Normalize country code
+    if (normalized.countryOfAffiliation) {
+        normalized.countryOfAffiliation = COUNTRY_CODE_MAP[normalized.countryOfAffiliation] || normalized.countryOfAffiliation;
+    }
+
+    // COI tags: Try multiple French attribute names
+    const coi = 
+        attributes.groupeInteret || 
+        attributes.acpCOI ||
+        attributes.communauteInteret;
+        
     if (coi) {
         normalized.acpCOI = Array.isArray(coi) ? coi : [coi];
     }
+
+    // Organization
+    normalized.organization = 
+        getFirstValue(attributes.organisation) ||
+        getFirstValue(attributes.organization);
+
+    // Rank
+    normalized.rank = 
+        getFirstValue(attributes.grade) ||
+        getFirstValue(attributes.rank);
+
+    logger.info('Normalized French SAML attributes', {
+        original: attributes,
+        normalized,
+    });
 
     return normalized;
 }
 
 /**
  * Canadian attribute normalization
+ * 
+ * Canadian clearance levels (PSCP):
+ * - TOP SECRET → TOP_SECRET
+ * - SECRET → SECRET
+ * - CONFIDENTIAL → CONFIDENTIAL
+ * - PROTECTED B → CONFIDENTIAL (Canadian designation)
+ * - PROTECTED A → RESTRICTED
+ * - UNCLASSIFIED → UNCLASSIFIED
+ * 
+ * Phase 3: Enhanced to handle Canadian-specific PROTECTED designations
  */
 function normalizeCanadianAttributes(
     attributes: ExternalIdPAttributes
 ): Partial<NormalizedDIVEAttributes> {
-    // Canada uses similar clearance levels to USA
+    // Canadian clearance mapping (handles PROTECTED designations)
+    const CANADIAN_CLEARANCE_MAP: Record<string, NormalizedDIVEAttributes['clearance']> = {
+        // Standard clearances (same as US)
+        'TOP_SECRET': 'TOP_SECRET',
+        'TOP SECRET': 'TOP_SECRET',
+        'TS': 'TOP_SECRET',
+        'SECRET': 'SECRET',
+        'S': 'SECRET',
+        'CONFIDENTIAL': 'CONFIDENTIAL',
+        'C': 'CONFIDENTIAL',
+        'UNCLASSIFIED': 'UNCLASSIFIED',
+        'U': 'UNCLASSIFIED',
+        
+        // Canadian PROTECTED designations
+        'PROTECTED_C': 'SECRET',
+        'PROTECTED C': 'SECRET',
+        'PROTECTED_B': 'CONFIDENTIAL',
+        'PROTECTED B': 'CONFIDENTIAL',
+        'PROTECTED_A': 'UNCLASSIFIED',
+        'PROTECTED A': 'UNCLASSIFIED',
+    };
+
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
-    normalized.uniqueID = getFirstValue(attributes.uniqueID) || getFirstValue(attributes.email);
+    // UniqueID: Try multiple attribute names
+    normalized.uniqueID = 
+        getFirstValue(attributes.uniqueID) || 
+        getFirstValue(attributes.email) ||
+        getFirstValue(attributes.preferred_username) ||
+        getFirstValue(attributes.sub);
 
-    const clearance = getFirstValue(attributes.clearance);
-    if (clearance && isValidClearance(clearance)) {
-        normalized.clearance = clearance as NormalizedDIVEAttributes['clearance'];
+    // Clearance: Normalize Canadian-specific designations
+    const clearance = getFirstValue(attributes.clearance) || getFirstValue(attributes.securityLevel);
+    if (clearance) {
+        const normalizedClearance = clearance.toUpperCase().trim();
+        const mappedClearance = CANADIAN_CLEARANCE_MAP[normalizedClearance];
+        
+        if (mappedClearance) {
+            normalized.clearance = mappedClearance;
+        } else if (isValidClearance(clearance)) {
+            normalized.clearance = clearance as NormalizedDIVEAttributes['clearance'];
+        }
+        
+        logger.info('Normalized Canadian clearance', {
+            original: clearance,
+            normalized: normalized.clearance,
+        });
     }
 
-    normalized.countryOfAffiliation = 'CAN';
+    // Country: Always CAN for Canadian IdP, but allow override
+    normalized.countryOfAffiliation = 
+        getFirstValue(attributes.countryOfAffiliation) ||
+        getFirstValue(attributes.country) ||
+        'CAN';
+    
+    // Normalize country code
+    if (normalized.countryOfAffiliation) {
+        normalized.countryOfAffiliation = COUNTRY_CODE_MAP[normalized.countryOfAffiliation] || normalized.countryOfAffiliation;
+    }
 
-    const acpCOI = attributes.acpCOI;
+    // COI tags
+    const acpCOI = attributes.acpCOI || attributes.communityOfInterest;
     if (acpCOI) {
         normalized.acpCOI = Array.isArray(acpCOI) ? acpCOI : [acpCOI];
     }
+
+    // Organization
+    normalized.organization = 
+        getFirstValue(attributes.organization) ||
+        getFirstValue(attributes.organisation);
+
+    // Rank  
+    normalized.rank = 
+        getFirstValue(attributes.rank) ||
+        getFirstValue(attributes.grade);
+
+    // Unit
+    normalized.unit = getFirstValue(attributes.unit);
+
+    logger.info('Normalized Canadian OIDC attributes', {
+        original: attributes,
+        normalized,
+    });
 
     return normalized;
 }

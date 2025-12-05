@@ -545,6 +545,139 @@ app.post('/request-key', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// Federated Key Request Endpoint (Cross-Instance)
+// ============================================
+app.post('/federated/request-key', async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const requestId = req.headers['x-request-id'] as string || `kas-fed-${Date.now()}`;
+
+    kasLogger.info('Federated KAS key request received', {
+        requestId,
+        body: req.body
+    });
+
+    try {
+        // Import federation service dynamically to avoid circular deps
+        const { kasFederationService } = await import('./services/kas-federation.service');
+        
+        const {
+            resourceId,
+            kaoId,
+            wrappedKey,
+            bearerToken,
+            originKasId,
+            targetKasId,
+            subject,
+            resource,
+        } = req.body;
+
+        // Validate required fields
+        if (!resourceId || !kaoId || !bearerToken || !targetKasId || !subject) {
+            res.status(400).json({
+                success: false,
+                error: 'Bad Request',
+                denialReason: 'Missing required fields for federated request',
+                responseTimestamp: new Date().toISOString()
+            });
+            return;
+        }
+
+        // Forward to federation service
+        const response = await kasFederationService.requestKeyFromFederatedKAS({
+            resourceId,
+            kaoId,
+            wrappedKey,
+            bearerToken,
+            originKasId: originKasId || 'unknown',
+            targetKasId,
+            federationRequestId: requestId,
+            subject,
+            resource,
+            requestTimestamp: new Date().toISOString(),
+            requestId,
+        });
+
+        const statusCode = response.success ? 200 : 
+            response.error === 'Federation Validation Failed' ? 403 : 
+            response.error === 'Target KAS Not Found' ? 404 : 503;
+
+        res.status(statusCode).json(response);
+
+    } catch (error) {
+        kasLogger.error('Federated KAS request failed', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Internal Server Error',
+            denialReason: 'Federated KAS service error',
+            responseTimestamp: new Date().toISOString()
+        });
+    }
+});
+
+// ============================================
+// Federation Status Endpoint
+// ============================================
+app.get('/federation/status', async (req: Request, res: Response) => {
+    try {
+        const { kasFederationService } = await import('./services/kas-federation.service');
+        const status = await kasFederationService.getFederationStatus();
+        res.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            federation: status
+        });
+    } catch (error) {
+        kasLogger.error('Failed to get federation status', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            status: 'error',
+            error: 'Failed to get federation status'
+        });
+    }
+});
+
+// ============================================
+// KAS Registry Endpoint (List registered KAS instances)
+// ============================================
+app.get('/federation/registry', async (req: Request, res: Response) => {
+    try {
+        const { kasRegistry } = await import('./utils/kas-federation');
+        const allKAS = kasRegistry.listAll();
+        
+        // Return sanitized list (no auth configs)
+        const sanitizedList = allKAS.map(kas => ({
+            kasId: kas.kasId,
+            organization: kas.organization,
+            kasUrl: kas.kasUrl,
+            trustLevel: kas.trustLevel,
+            supportedCountries: kas.supportedCountries,
+            supportedCOIs: kas.supportedCOIs,
+            metadata: kas.metadata
+        }));
+        
+        res.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            count: sanitizedList.length,
+            kasInstances: sanitizedList
+        });
+    } catch (error) {
+        kasLogger.error('Failed to get KAS registry', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            status: 'error',
+            error: 'Failed to get KAS registry'
+        });
+    }
+});
+
+// ============================================
 // Start Server (HTTP or HTTPS)
 // ============================================
 if (HTTPS_ENABLED) {

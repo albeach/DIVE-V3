@@ -152,12 +152,14 @@ test_industry_user_gov_only_resource_deny if {
 # ============================================
 # Test 7: INDUSTRY user accessing industry-allowed resource
 # Expected: ALLOW
+# Note: USA industry_max_classification is SECRET, so SECRET resources are allowed
 # ============================================
 
 test_industry_user_industry_allowed_resource_allow if {
 	test_input := object.union(base_input, {
 		"subject": object.union(base_input.subject, {
 			"organizationType": "INDUSTRY",
+			"countryOfAffiliation": "USA", # Explicit USA country (industry max = SECRET)
 		}),
 		"resource": object.union(base_input.resource, {
 			"releasableToIndustry": true,
@@ -348,9 +350,10 @@ test_evaluation_details_industry_fields if {
 }
 
 # ============================================
-# Test 21: INDUSTRY user from DEU accessing USA/DEU releasable resource
+# Test 21: INDUSTRY user from DEU accessing USA/DEU releasable CONFIDENTIAL resource
 # Cross-country industry scenario
-# Expected: ALLOW (DEU in releasabilityTo, industry allowed)
+# Expected: ALLOW (DEU in releasabilityTo, industry allowed, resource <= DEU industry cap)
+# Note: DEU industry_max_classification is CONFIDENTIAL, so resource must be <= CONFIDENTIAL
 # ============================================
 
 test_industry_user_deu_cross_country_allow if {
@@ -358,8 +361,10 @@ test_industry_user_deu_cross_country_allow if {
 		"subject": object.union(base_input.subject, {
 			"organizationType": "INDUSTRY",
 			"countryOfAffiliation": "DEU",
+			"clearance": "CONFIDENTIAL",
 		}),
 		"resource": object.union(base_input.resource, {
+			"classification": "CONFIDENTIAL", # Must be <= DEU industry cap (CONFIDENTIAL)
 			"releasabilityTo": ["USA", "DEU"],
 			"releasableToIndustry": true,
 		}),

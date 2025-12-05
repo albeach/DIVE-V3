@@ -1,0 +1,123 @@
+#!/bin/bash
+# =============================================================================
+# DIVE V3 CLI - Help Module
+# =============================================================================
+
+# Ensure common functions are loaded
+if [ -z "$DIVE_COMMON_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    export DIVE_COMMON_LOADED=1
+fi
+
+cmd_help() {
+    print_header
+    echo "Usage: ./dive [options] [command] [subcommand] [args...]"
+    echo ""
+    echo -e "${BOLD}Global Options:${NC}"
+    echo "  --env <env>         Set environment: local, gcp, pilot (default: local)"
+    echo "  --instance <inst>   Set instance: usa, fra, deu, gbr (default: usa)"
+    echo "  --dry-run           Show what would be done without executing"
+    echo "  --verbose           Show detailed output"
+    echo "  --quiet             Suppress non-essential output"
+    echo ""
+    echo -e "${BOLD}Core Commands:${NC}"
+    echo "  up                  Start the stack"
+    echo "  down                Stop the stack"
+    echo "  restart [service]   Restart stack or specific service"
+    echo "  logs [service]      View logs (follow mode)"
+    echo "  ps                  List running containers"
+    echo "  exec <svc> [cmd]    Execute command in container"
+    echo "  status              Show overall status"
+    echo "  health              Health check all services"
+    echo ""
+    echo -e "${BOLD}Deployment Commands:${NC}"
+    echo "  deploy              Full deployment workflow"
+    echo "  validate            Validate prerequisites and configuration"
+    echo "  reset               Reset to clean state (nuke + deploy)"
+    echo "  nuke                Destroy everything (containers + volumes)"
+    echo ""
+    echo -e "${BOLD}Database Commands:${NC}"
+    echo "  seed [instance]     Seed database with test data"
+    echo "  backup              Create database backup"
+    echo "  restore <dir>       Restore from backup"
+    echo ""
+    echo -e "${BOLD}Terraform Commands:${NC}"
+    echo "  tf plan             Show Terraform plan"
+    echo "  tf apply            Apply Terraform configuration"
+    echo "  tf destroy          Destroy Terraform resources"
+    echo "  tf output           Show Terraform outputs"
+    echo ""
+    echo -e "${BOLD}Secrets Commands:${NC}"
+    echo "  secrets list        List all DIVE secrets in GCP"
+    echo "  secrets show        Show secrets for current instance"
+    echo "  secrets load        Load secrets into environment"
+    echo "  secrets verify      Verify secrets can be accessed"
+    echo "  secrets export      Export secrets as shell commands"
+    echo ""
+    echo -e "${BOLD}Remote Pilot Commands:${NC}"
+    echo "  pilot up            Start services on pilot VM"
+    echo "  pilot down          Stop services on pilot VM"
+    echo "  pilot status        Show pilot VM status"
+    echo "  pilot logs [svc]    View pilot VM logs"
+    echo "  pilot ssh           SSH into pilot VM"
+    echo "  pilot reset         Reset pilot VM to clean state"
+    echo "  pilot deploy        Full deployment to pilot VM"
+    echo ""
+    echo -e "${BOLD}SP Client Registration (Pilot Mode):${NC}"
+    echo "  sp register             Register as SP Client (OAuth/OIDC)"
+    echo "  sp status [sp-id]       Show SP registration status"
+    echo "  sp list                 List all registered SP Clients"
+    echo "  sp credentials [sp-id]  Show SP credentials"
+    echo ""
+    echo -e "${BOLD}Distributed Federation (Hub-Spoke):${NC}"
+    if [ "$PILOT_MODE" = true ]; then
+        echo -e "  ${GRAY}(Spoke commands disabled in pilot mode)${NC}"
+    fi
+    echo "  hub start               Start hub services (central)"
+    echo "  hub status              Show hub service status"
+    echo "  hub push-policy         Push policy update to all spokes"
+    echo "  spoke init <code>       Initialize new spoke instance"
+    echo "  spoke register          Register spoke with hub"
+    echo "  spoke status            Show spoke federation status"
+    echo "  spoke sync              Force policy sync from hub"
+    echo "  federation status       Show overall federation status"
+    echo ""
+    echo -e "${BOLD}Policy Commands (OPAL):${NC}"
+    echo "  policy build            Build and sign OPA policy bundle"
+    echo "  policy push             Push bundle to OPAL Server"
+    echo "  policy status           Show policy distribution status"
+    echo "  policy test             Run OPA policy tests"
+    echo "  policy version          Show current policy version"
+    echo ""
+    echo -e "${BOLD}Other Commands:${NC}"
+    echo "  info                Show environment info"
+    echo "  help                Show this help"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ./dive up                          # Start locally with defaults"
+    echo "  ./dive --dry-run deploy            # Preview full deployment"
+    echo "  ./dive --env gcp up                # Start with GCP secrets"
+    echo "  ./dive pilot up                    # Start on pilot VM"
+    echo "  ./dive pilot deploy                # Full deployment to pilot"
+    echo "  ./dive secrets verify              # Verify GCP secrets access"
+    echo "  ./dive exec backend bash           # Shell into backend container"
+    echo "  ./dive sp register                 # Register as SP Client"
+    echo "  ./dive policy build --sign         # Build signed policy bundle"
+    echo ""
+    echo -e "${BOLD}Pilot Mode:${NC}"
+    if [ "$PILOT_MODE" = true ]; then
+        echo -e "  Status: ${GREEN}Enabled${NC} (spoke deployment disabled)"
+        echo "  Partners should use: ./dive sp register"
+    else
+        echo -e "  Status: ${YELLOW}Disabled${NC} (full spoke deployment available)"
+    fi
+    echo ""
+    echo "  To toggle pilot mode:"
+    echo "    export DIVE_PILOT_MODE=true   # Enable pilot mode"
+    echo "    export DIVE_PILOT_MODE=false  # Disable pilot mode"
+}
+
+module_help() {
+    cmd_help
+}
+

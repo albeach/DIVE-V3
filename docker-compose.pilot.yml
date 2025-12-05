@@ -139,7 +139,7 @@ services:
       - "/policies/tenant"
       - "/policies/entrypoints"
       - "/policies/compat"
-      - "/policies/data/data.json"
+      - "/policies/policy_data.json"
     ports:
       - "8181:8181"
     volumes:
@@ -151,6 +151,66 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # =============================================================================
+  # OPAL - Policy Distribution (Hub-Spoke Federation)
+  # =============================================================================
+
+  opal-server:
+    build:
+      context: ./docker
+      dockerfile: opal-server.Dockerfile
+    container_name: dive-pilot-opal-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # Server Configuration
+      OPAL_BROADCAST_URI: http://opal-server:7002
+      
+      # Policy source - no git repo, local directory only
+      OPAL_POLICY_REPO_URL: ""
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 0
+      
+      # Data topics for policy data distribution
+      OPAL_DATA_TOPICS_DEFAULT: policy_data
+      
+      # Inline OPA config disabled - we use standalone OPA
+      OPAL_INLINE_OPA_CONFIG: "false"
+      
+      # Logging - use text format to avoid JSON issues
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: text
+      
+      # Server ports and workers
+      UVICORN_PORT: 7002
+      UVICORN_HOST: 0.0.0.0
+      OPAL_SERVER_WORKERS: 1
+      
+      # Statistics for monitoring
+      OPAL_STATISTICS_ENABLED: "true"
+      
+      # CORS for dashboard access
+      OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["http://localhost:3000","https://localhost:3000","http://localhost:7002"]'
+      
+      # Data configuration - fetch from backend
+      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"http://backend:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"/"}]}}'
+    ports:
+      - "7002:7002"
+    networks:
+      - dive-network
+    volumes:
+      # Mount policies for serving (read-only)
+      - ./policies:/policies:ro
+      - ./opal-data-source:/opal-data-source:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7002/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      - opa
+      - backend
 
   # =============================================================================
   # APPLICATION SERVICES
@@ -172,6 +232,8 @@ services:
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
       OPA_URL: http://opa:8181
       REDIS_URL: redis://redis:6379
+      OPAL_SERVER_URL: http://opal-server:7002
+      OPAL_DATA_TOPICS: policy_data
       # External URLs
       API_URL: https://localhost:4000
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
