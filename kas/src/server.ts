@@ -29,6 +29,15 @@ import {
     IKASAuditEvent,
     IDEKCacheEntry
 } from './types/kas.types';
+import {
+    recordKeyRequest,
+    recordFederationRequest,
+    recordOPAEvaluation,
+    recordDEKCacheOperation,
+    updateDEKCacheSize,
+    getPrometheusMetrics,
+    getMetricsJSON,
+} from './utils/kas-metrics';
 
 config({ path: '.env.local' });
 
@@ -57,6 +66,9 @@ app.use((req, res, next) => {
 // Health Check
 // ============================================
 app.get('/health', (req, res) => {
+    // Update DEK cache size metric
+    updateDEKCacheSize(dekCache.keys().length);
+    
     res.json({
         status: 'healthy',
         service: 'dive-v3-kas',
@@ -67,9 +79,29 @@ app.get('/health', (req, res) => {
             'Policy re-evaluation via OPA',
             'DEK/KEK management (mock)',
             'ACP-240 audit logging',
-            'Fail-closed enforcement'
-        ]
+            'Fail-closed enforcement',
+            'Prometheus metrics',
+            'Multi-KAS federation'
+        ],
+        dekCacheSize: dekCache.keys().length,
     });
+});
+
+// ============================================
+// Prometheus Metrics Endpoint
+// ============================================
+app.get('/metrics', (req, res) => {
+    // Update cache size before export
+    updateDEKCacheSize(dekCache.keys().length);
+    
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.send(getPrometheusMetrics());
+});
+
+// Metrics JSON endpoint (for debugging)
+app.get('/metrics/json', (req, res) => {
+    updateDEKCacheSize(dekCache.keys().length);
+    res.json(getMetricsJSON());
 });
 
 // ============================================
@@ -303,6 +335,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
         });
 
         let opaDecision: any;
+        const opaStartTime = Date.now();
         try {
             const opaResponse = await axios.post(
                 `${OPA_URL}/v1/data/dive/authorization`,
@@ -315,11 +348,15 @@ app.post('/request-key', async (req: Request, res: Response) => {
 
             // Extract decision from OPA response
             opaDecision = opaResponse.data.result?.decision || opaResponse.data.result;
+            
+            // Record OPA evaluation time
+            recordOPAEvaluation(Date.now() - opaStartTime);
 
             kasLogger.info('OPA policy re-evaluation completed', {
                 requestId,
                 allow: opaDecision.allow,
-                reason: opaDecision.reason
+                reason: opaDecision.reason,
+                opaLatencyMs: Date.now() - opaStartTime,
             });
 
         } catch (error) {
@@ -360,6 +397,20 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 uniqueID,
                 resourceId: keyRequest.resourceId,
                 reason: opaDecision.reason
+            });
+            
+            // Record metrics for denied request
+            const clearancePass = opaDecision.evaluation_details?.checks?.clearance_sufficient;
+            const countryPass = opaDecision.evaluation_details?.checks?.country_releasable;
+            const coiPass = opaDecision.evaluation_details?.checks?.coi_satisfied;
+            
+            recordKeyRequest({
+                outcome: 'denied',
+                durationMs: Date.now() - startTime,
+                kasId: 'kas-local',
+                clearanceCheck: clearancePass ? 'pass' : 'fail',
+                countryCheck: countryPass ? 'pass' : 'fail',
+                coiCheck: coiPass ? 'pass' : 'fail',
             });
 
             const auditEvent: IKASAuditEvent = {
@@ -424,6 +475,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
         let dekEntry: IDEKCacheEntry | undefined = dekCache.get(cacheKey);
 
         if (!dekEntry) {
+            // Record cache miss
+            recordDEKCacheOperation(false);
             // PILOT FIX: Use the wrappedKey provided in request (plaintext DEK in pilot)
             // In production, this would unwrap the wrappedKey using KEK/HSM
             let dek: string;
@@ -460,6 +513,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
             dekCache.set(cacheKey, dekEntry);
             kasLogger.info('DEK cached', { requestId, resourceId: keyRequest.resourceId });
         } else {
+            // Record cache hit
+            recordDEKCacheOperation(true);
             kasLogger.info('DEK retrieved from cache', { requestId, resourceId: keyRequest.resourceId });
         }
 
@@ -493,6 +548,20 @@ app.post('/request-key', async (req: Request, res: Response) => {
             latencyMs: Date.now() - startTime
         });
 
+        // Record metrics for successful request
+        const clearancePass = opaDecision.evaluation_details?.checks?.clearance_sufficient;
+        const countryPass = opaDecision.evaluation_details?.checks?.country_releasable;
+        const coiPass = opaDecision.evaluation_details?.checks?.coi_satisfied;
+        
+        recordKeyRequest({
+            outcome: 'success',
+            durationMs: Date.now() - startTime,
+            kasId: 'kas-local',
+            clearanceCheck: clearancePass ? 'pass' : 'fail',
+            countryCheck: countryPass ? 'pass' : 'fail',
+            coiCheck: coiPass ? 'pass' : 'fail',
+        });
+
         res.json({
             success: true,
             dek: dekEntry.dek,
@@ -506,9 +575,9 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 reason: opaDecision.reason,
                 timestamp: new Date().toISOString(),
                 evaluationDetails: {
-                    clearanceCheck: opaDecision.evaluation_details?.checks?.clearance_sufficient ? 'PASS' : 'FAIL',
-                    releasabilityCheck: opaDecision.evaluation_details?.checks?.country_releasable ? 'PASS' : 'FAIL',
-                    coiCheck: opaDecision.evaluation_details?.checks?.coi_satisfied ? 'PASS' : 'FAIL',
+                    clearanceCheck: clearancePass ? 'PASS' : 'FAIL',
+                    releasabilityCheck: countryPass ? 'PASS' : 'FAIL',
+                    coiCheck: coiPass ? 'PASS' : 'FAIL',
                     policyBinding: {
                         required: {
                             clearance: resource.classification,
@@ -533,6 +602,13 @@ app.post('/request-key', async (req: Request, res: Response) => {
             requestId,
             error: error instanceof Error ? error.message : 'Unknown error',
             stack: error instanceof Error ? error.stack : undefined
+        });
+        
+        // Record error metrics
+        recordKeyRequest({
+            outcome: 'error',
+            durationMs: Date.now() - startTime,
+            kasId: 'kas-local',
         });
 
         res.status(500).json({
@@ -573,6 +649,13 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
 
         // Validate required fields
         if (!resourceId || !kaoId || !bearerToken || !targetKasId || !subject) {
+            recordFederationRequest({
+                outcome: 'error',
+                durationMs: Date.now() - startTime,
+                originKasId: originKasId || 'unknown',
+                targetKasId: targetKasId || 'unknown',
+            });
+            
             res.status(400).json({
                 success: false,
                 error: 'Bad Request',
@@ -597,6 +680,17 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
             requestId,
         });
 
+        // Record federation metrics
+        const federationOutcome = response.success ? 'success' : 
+            response.error?.includes('Validation') ? 'denied' : 'error';
+        
+        recordFederationRequest({
+            outcome: federationOutcome as 'success' | 'denied' | 'error',
+            durationMs: Date.now() - startTime,
+            originKasId: originKasId || 'unknown',
+            targetKasId,
+        });
+
         const statusCode = response.success ? 200 : 
             response.error === 'Federation Validation Failed' ? 403 : 
             response.error === 'Target KAS Not Found' ? 404 : 503;
@@ -607,6 +701,14 @@ app.post('/federated/request-key', async (req: Request, res: Response) => {
         kasLogger.error('Federated KAS request failed', {
             requestId,
             error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        
+        // Record federation error
+        recordFederationRequest({
+            outcome: 'error',
+            durationMs: Date.now() - startTime,
+            originKasId: req.body?.originKasId || 'unknown',
+            targetKasId: req.body?.targetKasId || 'unknown',
         });
 
         res.status(500).json({

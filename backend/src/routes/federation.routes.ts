@@ -900,4 +900,292 @@ router.get('/health', async (_req: Request, res: Response): Promise<void> => {
   }
 });
 
+// ============================================
+// CROSS-INSTANCE AUTHORIZATION ENDPOINTS
+// ============================================
+
+// Lazy import to avoid circular dependencies
+let crossInstanceAuthzService: any = null;
+
+async function getCrossInstanceService() {
+  if (!crossInstanceAuthzService) {
+    const module = await import('../services/cross-instance-authz.service');
+    crossInstanceAuthzService = module.crossInstanceAuthzService;
+  }
+  return crossInstanceAuthzService;
+}
+
+/**
+ * POST /api/federation/evaluate-policy
+ * Evaluate policy for cross-instance resource access
+ * Called by remote instances to evaluate local policy
+ */
+router.post('/evaluate-policy', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { subject, resource, action, requestId } = req.body;
+    const federatedFrom = req.headers['x-federated-from'] as string;
+    
+    if (!subject || !resource || !action) {
+      res.status(400).json({
+        error: 'Missing required fields: subject, resource, action'
+      });
+      return;
+    }
+    
+    logger.info('Cross-instance policy evaluation request', {
+      requestId,
+      federatedFrom,
+      subjectCountry: subject.countryOfAffiliation,
+      resourceId: resource.resourceId,
+      action,
+    });
+    
+    const service = await getCrossInstanceService();
+    const result = await service.evaluateAccess({
+      subject: {
+        ...subject,
+        originInstance: federatedFrom || 'unknown',
+      },
+      resource,
+      action,
+      requestId: requestId || `fed-${Date.now()}`,
+      bearerToken: req.headers.authorization?.replace('Bearer ', '') || '',
+    });
+    
+    res.json({
+      allow: result.allow,
+      reason: result.reason,
+      evaluationDetails: result.evaluationDetails,
+      obligations: result.obligations,
+      executionTimeMs: result.executionTimeMs,
+    });
+    
+  } catch (error) {
+    logger.error('Cross-instance policy evaluation failed', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(500).json({
+      error: 'Policy evaluation failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/federation/query-resources
+ * Query resources for federated access
+ * Called by remote instances to discover resources
+ */
+router.post('/query-resources', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { query, requestId } = req.body;
+    
+    logger.info('Cross-instance resource query', {
+      requestId,
+      query,
+    });
+    
+    // Import Resource model dynamically
+    const { Resource } = await import('../models/resource.model');
+    
+    // Build MongoDB query from federation query
+    const mongoQuery: any = {};
+    
+    if (query.classification && query.classification.length > 0) {
+      mongoQuery.classification = { $in: query.classification };
+    }
+    
+    if (query.releasabilityTo && query.releasabilityTo.length > 0) {
+      mongoQuery.releasabilityTo = { $in: query.releasabilityTo };
+    }
+    
+    if (query.COI && query.COI.length > 0) {
+      mongoQuery.COI = { $in: query.COI };
+    }
+    
+    if (query.keywords && query.keywords.length > 0) {
+      mongoQuery.$or = query.keywords.map((kw: string) => ({
+        $or: [
+          { title: { $regex: kw, $options: 'i' } },
+          { resourceId: { $regex: kw, $options: 'i' } },
+        ]
+      }));
+    }
+    
+    // Limit results for federation queries
+    const resources = await Resource.find(mongoQuery)
+      .select('resourceId title classification releasabilityTo COI')
+      .limit(100)
+      .lean();
+    
+    const instanceId = process.env.INSTANCE_ID || 'local';
+    const instanceUrl = process.env.BACKEND_URL || 'https://backend:4000';
+    
+    res.json({
+      resources: resources.map(r => ({
+        resourceId: r.resourceId,
+        title: r.title,
+        classification: r.classification,
+        releasabilityTo: r.releasabilityTo,
+        COI: r.COI || [],
+        instanceId,
+        instanceUrl,
+      })),
+      count: resources.length,
+      timestamp: new Date().toISOString(),
+    });
+    
+  } catch (error) {
+    logger.error('Cross-instance resource query failed', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(500).json({
+      error: 'Resource query failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/federation/cross-instance/authorize
+ * Full cross-instance authorization flow
+ * Evaluates both local and remote policies
+ */
+router.post('/cross-instance/authorize', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { subject, resource, action, requestId } = req.body;
+    const bearerToken = req.headers.authorization?.replace('Bearer ', '') || '';
+    
+    if (!subject || !resource || !action) {
+      res.status(400).json({
+        error: 'Missing required fields: subject, resource, action'
+      });
+      return;
+    }
+    
+    logger.info('Cross-instance authorization request', {
+      requestId,
+      subjectCountry: subject.countryOfAffiliation,
+      resourceInstance: resource.instanceId,
+      action,
+    });
+    
+    const service = await getCrossInstanceService();
+    const result = await service.evaluateAccess({
+      subject: {
+        ...subject,
+        originInstance: process.env.INSTANCE_ID || 'local',
+      },
+      resource,
+      action,
+      requestId: requestId || `cross-${Date.now()}`,
+      bearerToken,
+    });
+    
+    res.json(result);
+    
+  } catch (error) {
+    logger.error('Cross-instance authorization failed', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(500).json({
+      error: 'Authorization failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/federation/cross-instance/query
+ * Query resources across all federated instances
+ */
+router.post('/cross-instance/query', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { query, subject, targetInstances, requestId } = req.body;
+    const bearerToken = req.headers.authorization?.replace('Bearer ', '') || '';
+    
+    if (!query || !subject) {
+      res.status(400).json({
+        error: 'Missing required fields: query, subject'
+      });
+      return;
+    }
+    
+    logger.info('Federated resource query request', {
+      requestId,
+      subjectCountry: subject.countryOfAffiliation,
+      targetInstances,
+      query,
+    });
+    
+    const service = await getCrossInstanceService();
+    const result = await service.queryFederatedResources({
+      query,
+      subject: {
+        ...subject,
+        originInstance: process.env.INSTANCE_ID || 'local',
+      },
+      requestId: requestId || `query-${Date.now()}`,
+      bearerToken,
+      targetInstances,
+    });
+    
+    res.json(result);
+    
+  } catch (error) {
+    logger.error('Federated resource query failed', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(500).json({
+      error: 'Query failed',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/federation/cross-instance/cache-stats
+ * Get authorization cache statistics
+ */
+router.get('/cross-instance/cache-stats', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const service = await getCrossInstanceService();
+    const stats = service.getCacheStats();
+    
+    res.json({
+      cache: stats,
+      timestamp: new Date().toISOString(),
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get cache stats' });
+  }
+});
+
+/**
+ * POST /api/federation/cross-instance/cache-clear
+ * Clear authorization cache
+ */
+router.post('/cross-instance/cache-clear', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const service = await getCrossInstanceService();
+    service.clearCache();
+    
+    logger.info('Cross-instance authorization cache cleared');
+    
+    res.json({
+      success: true,
+      message: 'Authorization cache cleared',
+      timestamp: new Date().toISOString(),
+    });
+    
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
 export default router;
