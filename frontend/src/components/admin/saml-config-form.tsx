@@ -37,16 +37,17 @@ export default function SAMLConfigForm({ config, onChange, errors = {}, accessTo
     // Upload SAML metadata XML file
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file || !accessToken) return;
+        if (!file) return;
 
         try {
             const text = await file.text();
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/idps/parse/saml-metadata`, {
+            // Use proxy route (handles auth server-side)
+            const response = await fetch(`/api/admin/idps/parse/saml-metadata`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`
                 },
+                credentials: 'include',
                 body: JSON.stringify({ metadataXml: text })
             });
 

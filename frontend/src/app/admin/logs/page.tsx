@@ -120,12 +120,9 @@ export default function AdminAuditLogsPage() {
             if (filters.startTime) params.append('startTime', filters.startTime);
             if (filters.endTime) params.append('endTime', filters.endTime);
 
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            const response = await fetch(`${backendUrl}/api/admin/logs?${params.toString()}`, {
-                headers: {
-                    'Authorization': `Bearer ${session?.accessToken}`,
-                    'Content-Type': 'application/json'
-                }
+            // Use server-side proxy route (secure - no client-side token exposure)
+            const response = await fetch(`/api/admin/logs?${params.toString()}`, {
+                cache: 'no-store',
             });
 
             if (!response.ok) {
@@ -148,12 +145,9 @@ export default function AdminAuditLogsPage() {
         if (status !== 'authenticated') return;
 
         try {
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            const response = await fetch(`${backendUrl}/api/admin/logs/stats?days=${statsDays}`, {
-                headers: {
-                    'Authorization': `Bearer ${session?.accessToken}`,
-                    'Content-Type': 'application/json'
-                }
+            // Use server-side proxy route (secure - no client-side token exposure)
+            const response = await fetch(`/api/admin/logs/stats?days=${statsDays}`, {
+                cache: 'no-store',
             });
 
             if (!response.ok) {
@@ -180,12 +174,8 @@ export default function AdminAuditLogsPage() {
             if (filters.startTime) params.append('startTime', filters.startTime);
             if (filters.endTime) params.append('endTime', filters.endTime);
 
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            const response = await fetch(`${backendUrl}/api/admin/logs/export?${params.toString()}`, {
-                headers: {
-                    'Authorization': `Bearer ${session?.accessToken}`
-                }
-            });
+            // Use server-side proxy route (secure - no client-side token exposure)
+            const response = await fetch(`/api/admin/logs/export?${params.toString()}`);
 
             if (!response.ok) {
                 throw new Error('Export failed');

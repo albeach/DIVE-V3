@@ -19,19 +19,15 @@ import React from 'react';
 // API Client
 // ============================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://localhost:4000';
+// Use Next.js API routes as proxy (no direct backend calls - security best practice)
+const API_BASE_URL = '';
 
 class IdPManagementAPI {
-    private static getHeaders(token?: string): HeadersInit {
-        const headers: HeadersInit = {
+    private static getHeaders(): HeadersInit {
+        // No Authorization header needed - proxy routes handle auth server-side
+        return {
             'Content-Type': 'application/json'
         };
-
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        return headers;
     }
 
     private static async handleResponse<T>(response: Response): Promise<T> {
@@ -50,12 +46,14 @@ class IdPManagementAPI {
     // IdP List
     // ============================================
 
-    static async listIdPs(token: string): Promise<IIdPListItem[]> {
+    static async listIdPs(): Promise<IIdPListItem[]> {
         try {
+            // Use proxy route (handles auth server-side)
             const response = await fetch(`${API_BASE_URL}/api/admin/idps`, {
                 method: 'GET',
-                headers: this.getHeaders(token),
-                credentials: 'include'
+                headers: this.getHeaders(),
+                credentials: 'include',
+                cache: 'no-store',
             });
 
             const data = await this.handleResponse<IAdminAPIResponse<{ idps: IIdPListItem[]; total: number }>>(response);
@@ -96,11 +94,12 @@ class IdPManagementAPI {
     // IdP Details
     // ============================================
 
-    static async getIdP(alias: string, token: string): Promise<any> {
+    static async getIdP(alias: string): Promise<any> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}`, {
             method: 'GET',
-            headers: this.getHeaders(token),
-            credentials: 'include'
+            headers: this.getHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
         });
 
         const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
@@ -111,10 +110,10 @@ class IdPManagementAPI {
     // Update IdP
     // ============================================
 
-    static async updateIdP(alias: string, updates: any, token: string): Promise<void> {
+    static async updateIdP(alias: string, updates: any): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}`, {
             method: 'PUT',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include',
             body: JSON.stringify(updates)
         });
@@ -126,10 +125,10 @@ class IdPManagementAPI {
     // Delete IdP
     // ============================================
 
-    static async deleteIdP(alias: string, token: string): Promise<void> {
+    static async deleteIdP(alias: string): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}`, {
             method: 'DELETE',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
@@ -140,10 +139,10 @@ class IdPManagementAPI {
     // Test IdP
     // ============================================
 
-    static async testIdP(alias: string, token: string): Promise<IIdPTestResult> {
+    static async testIdP(alias: string): Promise<IIdPTestResult> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/test`, {
             method: 'POST',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
@@ -155,21 +154,22 @@ class IdPManagementAPI {
     // MFA Configuration (Phase 1.5)
     // ============================================
 
-    static async getMFAConfig(alias: string, token: string): Promise<any> {
+    static async getMFAConfig(alias: string): Promise<any> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/mfa-config`, {
             method: 'GET',
-            headers: this.getHeaders(token),
-            credentials: 'include'
+            headers: this.getHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
         });
 
         const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
         return data.data;
     }
 
-    static async updateMFAConfig(alias: string, config: any, token: string): Promise<void> {
+    static async updateMFAConfig(alias: string, config: any): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/mfa-config`, {
             method: 'PUT',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include',
             body: JSON.stringify(config)
         });
@@ -177,10 +177,10 @@ class IdPManagementAPI {
         await this.handleResponse<IAdminAPIResponse>(response);
     }
 
-    static async testMFAFlow(alias: string, token: string): Promise<any> {
+    static async testMFAFlow(alias: string): Promise<any> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/mfa-config/test`, {
             method: 'POST',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
@@ -192,7 +192,7 @@ class IdPManagementAPI {
     // Session Management (Phase 1.6)
     // ============================================
 
-    static async getSessions(alias: string, token: string, filters?: any): Promise<any[]> {
+    static async getSessions(alias: string, filters?: any): Promise<any[]> {
         const params = new URLSearchParams();
         if (filters?.username) params.set('username', filters.username);
         if (filters?.clientId) params.set('clientId', filters.clientId);
@@ -202,39 +202,41 @@ class IdPManagementAPI {
 
         const response = await fetch(url, {
             method: 'GET',
-            headers: this.getHeaders(token),
-            credentials: 'include'
+            headers: this.getHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
         });
 
         const data = await this.handleResponse<IAdminAPIResponse<any[]>>(response);
         return data.data || [];
     }
 
-    static async revokeSession(alias: string, sessionId: string, token: string): Promise<void> {
+    static async revokeSession(alias: string, sessionId: string): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/sessions/${sessionId}`, {
             method: 'DELETE',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
         await this.handleResponse<IAdminAPIResponse>(response);
     }
 
-    static async revokeUserSessions(alias: string, username: string, token: string): Promise<void> {
+    static async revokeUserSessions(alias: string, username: string): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/users/${username}/sessions`, {
             method: 'DELETE',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
         await this.handleResponse<IAdminAPIResponse>(response);
     }
 
-    static async getSessionStats(alias: string, token: string): Promise<any> {
+    static async getSessionStats(alias: string): Promise<any> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/sessions/stats`, {
             method: 'GET',
-            headers: this.getHeaders(token),
-            credentials: 'include'
+            headers: this.getHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
         });
 
         const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
@@ -245,21 +247,22 @@ class IdPManagementAPI {
     // Theme Management (Phase 1.7)
     // ============================================
 
-    static async getTheme(alias: string, token: string): Promise<any> {
+    static async getTheme(alias: string): Promise<any> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/theme`, {
             method: 'GET',
-            headers: this.getHeaders(token),
-            credentials: 'include'
+            headers: this.getHeaders(),
+            credentials: 'include',
+            cache: 'no-store',
         });
 
         const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
         return data.data;
     }
 
-    static async updateTheme(alias: string, theme: any, token: string): Promise<void> {
+    static async updateTheme(alias: string, theme: any): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/theme`, {
             method: 'PUT',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include',
             body: JSON.stringify(theme)
         });
@@ -267,16 +270,14 @@ class IdPManagementAPI {
         await this.handleResponse<IAdminAPIResponse>(response);
     }
 
-    static async uploadThemeAsset(alias: string, file: File, type: 'background' | 'logo', token: string): Promise<string> {
+    static async uploadThemeAsset(alias: string, file: File, type: 'background' | 'logo'): Promise<string> {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('type', type);
 
+        // File upload doesn't need Content-Type header (browser sets it with boundary)
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/theme/upload`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
             credentials: 'include',
             body: formData
         });
@@ -285,20 +286,20 @@ class IdPManagementAPI {
         return data.data?.url || '';
     }
 
-    static async deleteTheme(alias: string, token: string): Promise<void> {
+    static async deleteTheme(alias: string): Promise<void> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/theme`, {
             method: 'DELETE',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
         await this.handleResponse<IAdminAPIResponse>(response);
     }
 
-    static async previewTheme(alias: string, token: string): Promise<string> {
+    static async previewTheme(alias: string): Promise<string> {
         const response = await fetch(`${API_BASE_URL}/api/admin/idps/${alias}/theme/preview`, {
             method: 'GET',
-            headers: this.getHeaders(token),
+            headers: this.getHeaders(),
             credentials: 'include'
         });
 
@@ -324,26 +325,25 @@ const QUERY_KEYS = {
 // ============================================
 
 export function useIdPs(options?: Omit<UseQueryOptions<IIdPListItem[], Error>, 'queryKey' | 'queryFn'>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
+    const { data: session, status } = useSession();
 
     // Log the query state for debugging
     React.useEffect(() => {
         console.log('[useIdPs] Hook state:', {
+            status,
             hasSession: !!session,
-            hasToken: !!token,
-            tokenLength: token?.length || 0,
             sessionUser: (session as any)?.user?.email || 'none'
         });
-    }, [session, token]);
+    }, [session, status]);
 
     return useQuery<IIdPListItem[], Error>({
         queryKey: QUERY_KEYS.idps,
         queryFn: () => {
-            console.log('[useIdPs] Fetching IdPs with token:', token?.substring(0, 20) + '...');
-            return IdPManagementAPI.listIdPs(token);
+            console.log('[useIdPs] Fetching IdPs via proxy route');
+            return IdPManagementAPI.listIdPs();
         },
-        enabled: !!token,
+        // Enable when authenticated (proxy handles token server-side)
+        enabled: status === 'authenticated',
         staleTime: 5 * 60 * 1000, // 5 minutes
         gcTime: 10 * 60 * 1000, // 10 minutes
         retry: 3,
@@ -356,13 +356,12 @@ export function useIdPs(options?: Omit<UseQueryOptions<IIdPListItem[], Error>, '
 // ============================================
 
 export function useIdP(alias: string | null, options?: Omit<UseQueryOptions<any, Error>, 'queryKey' | 'queryFn'>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
+    const { status } = useSession();
 
     return useQuery<any, Error>({
         queryKey: QUERY_KEYS.idp(alias || ''),
-        queryFn: () => IdPManagementAPI.getIdP(alias!, token),
-        enabled: !!token && !!alias,
+        queryFn: () => IdPManagementAPI.getIdP(alias!),
+        enabled: status === 'authenticated' && !!alias,
         staleTime: 2 * 60 * 1000, // 2 minutes
         retry: 2,
         ...options
@@ -374,12 +373,10 @@ export function useIdP(alias: string | null, options?: Omit<UseQueryOptions<any,
 // ============================================
 
 export function useUpdateIdP(options?: UseMutationOptions<void, Error, { alias: string; updates: any }>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
     const queryClient = useQueryClient();
 
     return useMutation<void, Error, { alias: string; updates: any }>({
-        mutationFn: ({ alias, updates }) => IdPManagementAPI.updateIdP(alias, updates, token),
+        mutationFn: ({ alias, updates }) => IdPManagementAPI.updateIdP(alias, updates),
         onSuccess: (_, variables) => {
             // Invalidate queries
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.idps });
@@ -394,12 +391,10 @@ export function useUpdateIdP(options?: UseMutationOptions<void, Error, { alias: 
 // ============================================
 
 export function useDeleteIdP(options?: UseMutationOptions<void, Error, string>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
     const queryClient = useQueryClient();
 
     return useMutation<void, Error, string>({
-        mutationFn: (alias) => IdPManagementAPI.deleteIdP(alias, token),
+        mutationFn: (alias) => IdPManagementAPI.deleteIdP(alias),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.idps });
         },
@@ -412,11 +407,8 @@ export function useDeleteIdP(options?: UseMutationOptions<void, Error, string>) 
 // ============================================
 
 export function useTestIdP(options?: UseMutationOptions<IIdPTestResult, Error, string>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
-
     return useMutation<IIdPTestResult, Error, string>({
-        mutationFn: (alias) => IdPManagementAPI.testIdP(alias, token),
+        mutationFn: (alias) => IdPManagementAPI.testIdP(alias),
         ...options
     });
 }
@@ -426,13 +418,12 @@ export function useTestIdP(options?: UseMutationOptions<IIdPTestResult, Error, s
 // ============================================
 
 export function useMFAConfig(alias: string | null, options?: Omit<UseQueryOptions<any, Error>, 'queryKey' | 'queryFn'>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
+    const { status } = useSession();
 
     return useQuery<any, Error>({
         queryKey: QUERY_KEYS.mfaConfig(alias || ''),
-        queryFn: () => IdPManagementAPI.getMFAConfig(alias!, token),
-        enabled: !!token && !!alias,
+        queryFn: () => IdPManagementAPI.getMFAConfig(alias!),
+        enabled: status === 'authenticated' && !!alias,
         staleTime: 5 * 60 * 1000,
         ...options
     });
@@ -443,12 +434,10 @@ export function useMFAConfig(alias: string | null, options?: Omit<UseQueryOption
 // ============================================
 
 export function useUpdateMFAConfig(options?: UseMutationOptions<void, Error, { alias: string; config: any }>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
     const queryClient = useQueryClient();
 
     return useMutation<void, Error, { alias: string; config: any }>({
-        mutationFn: ({ alias, config }) => IdPManagementAPI.updateMFAConfig(alias, config, token),
+        mutationFn: ({ alias, config }) => IdPManagementAPI.updateMFAConfig(alias, config),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.mfaConfig(variables.alias) });
         },
@@ -461,13 +450,12 @@ export function useUpdateMFAConfig(options?: UseMutationOptions<void, Error, { a
 // ============================================
 
 export function useSessions(alias: string | null, filters?: any, options?: Omit<UseQueryOptions<any[], Error>, 'queryKey' | 'queryFn'>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
+    const { status } = useSession();
 
     return useQuery<any[], Error>({
         queryKey: QUERY_KEYS.sessions(alias || '', filters),
-        queryFn: () => IdPManagementAPI.getSessions(alias!, token, filters),
-        enabled: !!token && !!alias,
+        queryFn: () => IdPManagementAPI.getSessions(alias!, filters),
+        enabled: status === 'authenticated' && !!alias,
         staleTime: 10 * 1000, // 10 seconds (real-time data)
         refetchInterval: 10 * 1000, // Auto-refresh every 10 seconds
         ...options
@@ -479,12 +467,10 @@ export function useSessions(alias: string | null, filters?: any, options?: Omit<
 // ============================================
 
 export function useRevokeSession(options?: UseMutationOptions<void, Error, { alias: string; sessionId: string }>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
     const queryClient = useQueryClient();
 
     return useMutation<void, Error, { alias: string; sessionId: string }>({
-        mutationFn: ({ alias, sessionId }) => IdPManagementAPI.revokeSession(alias, sessionId, token),
+        mutationFn: ({ alias, sessionId }) => IdPManagementAPI.revokeSession(alias, sessionId),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.sessions(variables.alias) });
         },
@@ -497,13 +483,12 @@ export function useRevokeSession(options?: UseMutationOptions<void, Error, { ali
 // ============================================
 
 export function useTheme(alias: string | null, options?: Omit<UseQueryOptions<any, Error>, 'queryKey' | 'queryFn'>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
+    const { status } = useSession();
 
     return useQuery<any, Error>({
         queryKey: QUERY_KEYS.theme(alias || ''),
-        queryFn: () => IdPManagementAPI.getTheme(alias!, token),
-        enabled: !!token && !!alias,
+        queryFn: () => IdPManagementAPI.getTheme(alias!),
+        enabled: status === 'authenticated' && !!alias,
         staleTime: 10 * 60 * 1000, // 10 minutes
         ...options
     });
@@ -514,12 +499,10 @@ export function useTheme(alias: string | null, options?: Omit<UseQueryOptions<an
 // ============================================
 
 export function useUpdateTheme(options?: UseMutationOptions<void, Error, { alias: string; theme: any }>) {
-    const { data: session } = useSession();
-    const token = (session as any)?.accessToken;
     const queryClient = useQueryClient();
 
     return useMutation<void, Error, { alias: string; theme: any }>({
-        mutationFn: ({ alias, theme }) => IdPManagementAPI.updateTheme(alias, theme, token),
+        mutationFn: ({ alias, theme }) => IdPManagementAPI.updateTheme(alias, theme),
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.theme(variables.alias) });
         },
