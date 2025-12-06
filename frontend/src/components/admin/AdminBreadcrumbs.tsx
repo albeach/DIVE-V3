@@ -11,7 +11,6 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRightIcon, HomeIcon } from '@heroicons/react/24/outline';
-import { useIdPManagement } from '@/contexts/IdPManagementContext';
 
 // ============================================
 // Types
@@ -29,7 +28,9 @@ interface IBreadcrumb {
 
 export default function AdminBreadcrumbs() {
     const pathname = usePathname();
-    const { selectedIdPAlias } = useIdPManagement();
+    // Note: selectedIdPAlias from IdPManagementContext is only available in IdP pages
+    // Use empty string as fallback for other admin pages
+    const selectedIdPAlias = '';
     
     // Generate breadcrumbs from pathname
     const breadcrumbs: IBreadcrumb[] = React.useMemo(() => {
