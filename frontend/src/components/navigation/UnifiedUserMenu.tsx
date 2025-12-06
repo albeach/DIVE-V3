@@ -58,6 +58,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const isSuperAdmin = (() => {
         const hasRole = user?.roles?.includes('super_admin') || 
                        user?.roles?.includes('admin') || 
+                       user?.roles?.includes('dive-admin') ||  // Spoke admin role
                        user?.roles?.includes('broker_super_admin') || false;
         // Debug logging (remove in production)
         if (process.env.NODE_ENV === 'development') {

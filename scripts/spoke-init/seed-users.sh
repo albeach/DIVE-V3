@@ -133,6 +133,37 @@ fi
 log_success "Authenticated"
 
 # =============================================================================
+# Configure User Profile (Keycloak 26+ requires this for custom attributes)
+# =============================================================================
+log_step "Configuring User Profile for DIVE attributes..."
+
+# Check if DIVE attributes are already in the profile
+EXISTING_ATTRS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/profile" | jq -r '.attributes[].name' | tr '\n' ' ')
+
+if [[ ! "$EXISTING_ATTRS" =~ "clearance" ]]; then
+    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/profile" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "attributes": [
+            {"name":"username","displayName":"${username}","validations":{"length":{"min":3,"max":255},"username-prohibited-characters":{},"up-username-not-idn-homograph":{}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+            {"name":"email","displayName":"${email}","validations":{"email":{},"length":{"max":255}},"required":{"roles":["user"]},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+            {"name":"firstName","displayName":"${firstName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"required":{"roles":["user"]},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+            {"name":"lastName","displayName":"${lastName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"required":{"roles":["user"]},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+            {"name":"clearance","displayName":"Security Clearance","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+            {"name":"countryOfAffiliation","displayName":"Country of Affiliation","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+            {"name":"uniqueID","displayName":"Unique Identifier","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+            {"name":"acpCOI","displayName":"Community of Interest","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true}
+          ],
+          "groups":[{"name":"user-metadata","displayHeader":"User metadata","displayDescription":"Attributes, which refer to user metadata"},{"name":"dive-attributes","displayHeader":"DIVE Attributes","displayDescription":"Security clearance and coalition attributes"}]
+        }' > /dev/null 2>&1
+    log_success "DIVE attributes added to User Profile"
+else
+    log_info "User Profile already configured"
+fi
+
+# =============================================================================
 # Create Roles
 # =============================================================================
 log_step "Creating roles..."
