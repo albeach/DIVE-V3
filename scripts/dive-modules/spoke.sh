@@ -930,6 +930,7 @@ services:
       # MongoDB (with alias for compatibility)
       MONGODB_URI: mongodb://admin:\${MONGO_PASSWORD}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
       MONGODB_URL: mongodb://admin:\${MONGO_PASSWORD}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
+      MONGODB_DATABASE: dive-v3-${code_lower}
       REDIS_URL: redis://redis-${code_lower}:6379
       # Keycloak
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
