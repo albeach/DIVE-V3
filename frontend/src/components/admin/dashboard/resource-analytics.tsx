@@ -34,27 +34,86 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Use server API route (secure!)
-            const res = await fetch(`/api/admin/logs/stats?days=7`);
+            // Fetch resource facets from search endpoint (provides real classification/country/COI counts)
+            const facetsRes = await fetch(`/api/resources/search/facets`, {
+                cache: 'no-store',
+            });
             
-            const contentType = res.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                const data = await res.json();
-                
-                if (data.success) {
-                    // Transform data for resource analytics
-                    // This is a placeholder - you'd typically have a dedicated endpoint
-                    setStats({
-                        totalResources: 0,
-                        byClassification: {},
-                        byCountry: {},
-                        byCOI: {},
-                        mostAccessed: []
-                    });
+            // Also fetch top denied resources from logs stats
+            const logsRes = await fetch(`/api/admin/logs/stats?days=${dateRange === '24h' ? 1 : dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90}`, {
+                cache: 'no-store',
+            });
+
+            let facetsData: any = null;
+            let logsData: any = null;
+
+            if (facetsRes.ok) {
+                const contentType = facetsRes.headers.get('content-type');
+                if (contentType?.includes('application/json')) {
+                    facetsData = await facetsRes.json();
                 }
+            }
+
+            if (logsRes.ok) {
+                const contentType = logsRes.headers.get('content-type');
+                if (contentType?.includes('application/json')) {
+                    logsData = await logsRes.json();
+                }
+            }
+
+            // Transform facets data to resource stats
+            if (facetsData?.facets) {
+                const facets = facetsData.facets;
+                
+                // Build classification counts
+                const byClassification: Record<string, number> = {};
+                facets.classifications?.forEach((c: { value: string; count: number }) => {
+                    byClassification[c.value] = c.count;
+                });
+
+                // Build country counts
+                const byCountry: Record<string, number> = {};
+                facets.countries?.forEach((c: { value: string; count: number }) => {
+                    byCountry[c.value] = c.count;
+                });
+
+                // Build COI counts
+                const byCOI: Record<string, number> = {};
+                facets.cois?.forEach((c: { value: string; count: number }) => {
+                    byCOI[c.value] = c.count;
+                });
+
+                // Calculate total from classification counts
+                const totalResources = Object.values(byClassification).reduce((sum, count) => sum + count, 0);
+
+                // Get most accessed from logs (top denied resources can indicate access patterns)
+                const mostAccessed: Array<{ resourceId: string; count: number; classification: string }> = 
+                    logsData?.data?.topDeniedResources?.map((r: { resourceId: string; count: number }) => ({
+                        resourceId: r.resourceId,
+                        count: r.count,
+                        classification: 'UNKNOWN' // Would need to join with resource data for accurate classification
+                    })) || [];
+
+                setStats({
+                    totalResources,
+                    byClassification,
+                    byCountry,
+                    byCOI,
+                    mostAccessed
+                });
+            } else {
+                // Fallback: no data available
+                setStats({
+                    totalResources: 0,
+                    byClassification: {},
+                    byCountry: {},
+                    byCOI: {},
+                    mostAccessed: []
+                });
             }
         } catch (error) {
             console.error('Failed to fetch resource stats:', error);
+            setStats(null);
         } finally {
             setLoading(false);
         }
