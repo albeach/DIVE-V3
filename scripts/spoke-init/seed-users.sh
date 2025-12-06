@@ -2,7 +2,19 @@
 # =============================================================================
 # DIVE V3 Spoke User Seeding
 # =============================================================================
-# Creates test users with proper DIVE attributes (clearance, country, COI)
+# Creates standardized test users with proper DIVE attributes and roles
+# 
+# Users Created:
+#   - testuser-{country}-1  (UNCLASSIFIED)
+#   - testuser-{country}-2  (CONFIDENTIAL)  
+#   - testuser-{country}-3  (SECRET)
+#   - testuser-{country}-4  (TOP_SECRET)
+#   - admin-{country}       (TOP_SECRET + admin role)
+#
+# Passwords:
+#   - Test users: TestUser2025!Pilot
+#   - Admin user: TestUser2025!SecureAdmin
+#
 # Usage: ./seed-users.sh <INSTANCE_CODE> [KEYCLOAK_URL] [ADMIN_PASSWORD]
 # =============================================================================
 
@@ -19,6 +31,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
 NC='\033[0m'
 
 log_info() { echo -e "${BLUE}ℹ${NC} $1"; }
@@ -42,17 +55,44 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
     source "${INSTANCE_DIR}/.env"
 fi
 
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
-
 # Use backend container for API calls (has curl, on same network)
 API_CONTAINER="dive-v3-backend-${CODE_LOWER}"
 KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
 PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
 
 # Helper function to call Keycloak API via Docker exec (uses backend container)
 kc_curl() {
     docker exec "$API_CONTAINER" curl -sk "$@" 2>/dev/null
 }
+
+# =============================================================================
+# STANDARDIZED PASSWORDS
+# =============================================================================
+TEST_USER_PASSWORD="TestUser2025!Pilot"
+ADMIN_USER_PASSWORD="TestUser2025!SecureAdmin"
+
+# =============================================================================
+# CLEARANCE LEVEL MAPPING
+# =============================================================================
+# Level 1 = UNCLASSIFIED
+# Level 2 = CONFIDENTIAL
+# Level 3 = SECRET
+# Level 4 = TOP_SECRET
+
+declare -A CLEARANCE_LEVELS=(
+    [1]="UNCLASSIFIED"
+    [2]="CONFIDENTIAL"
+    [3]="SECRET"
+    [4]="TOP_SECRET"
+)
+
+declare -A CLEARANCE_COIS=(
+    [1]=""
+    [2]=""
+    [3]="NATO"
+    [4]="NATO-COSMIC,FVEY"
+)
 
 # Country-specific settings
 declare -A COUNTRY_NAMES=(
@@ -61,14 +101,18 @@ declare -A COUNTRY_NAMES=(
     [gbr]="United Kingdom"
     [deu]="Germany"
     [can]="Canada"
+    [esp]="Spain"
+    [ita]="Italy"
+    [nld]="Netherlands"
+    [pol]="Poland"
 )
 COUNTRY_NAME="${COUNTRY_NAMES[$CODE_LOWER]:-$CODE_UPPER}"
 
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║           DIVE V3 Spoke User Seeding                         ║"
-echo "║              Instance: ${CODE_UPPER} (${COUNTRY_NAME})                      ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${MAGENTA}║           DIVE V3 Spoke User Seeding                         ║${NC}"
+echo -e "${MAGENTA}║              Instance: ${CODE_UPPER} (${COUNTRY_NAME})                      ║${NC}"
+echo -e "${MAGENTA}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # =============================================================================
@@ -80,116 +124,279 @@ TOKEN=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/realms/master/protocol/openid-
     -d "client_id=admin-cli" \
     -d "username=admin" \
     -d "password=${ADMIN_PASSWORD}" \
-    -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+    -d "grant_type=password" | jq -r '.access_token')
 
 if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
-    log_error "Failed to authenticate"
+    log_error "Failed to authenticate with Keycloak"
     exit 1
 fi
 log_success "Authenticated"
 
 # =============================================================================
-# Define Test Users
+# Create Roles
 # =============================================================================
-# Generate secure password (meets Keycloak complexity requirements)
-generate_password() {
-    echo "Dive@$(openssl rand -hex 4)$(date +%S)!"
-}
+log_step "Creating roles..."
 
-# Users for this instance with varying clearance levels
-USERS=(
-    # username|firstName|lastName|email|clearance|coi
-    "testuser-${CODE_LOWER}|Test|User|testuser@${CODE_LOWER}.dive25.com|SECRET|"
-    "analyst-${CODE_LOWER}|Intel|Analyst|analyst@${CODE_LOWER}.dive25.com|TOP_SECRET|NATO-COSMIC,FVEY"
-    "officer-${CODE_LOWER}|Staff|Officer|officer@${CODE_LOWER}.dive25.com|SECRET|NATO"
-    "admin-${CODE_LOWER}|System|Admin|admin@${CODE_LOWER}.dive25.com|TOP_SECRET|NATO-COSMIC,FVEY,FIVE_EYES"
-    "unclass-${CODE_LOWER}|Public|User|public@${CODE_LOWER}.dive25.com|UNCLASSIFIED|"
-)
+# Create admin role if not exists
+ADMIN_ROLE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" | jq -r '.name // empty')
+
+if [[ -z "$ADMIN_ROLE_EXISTS" ]]; then
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "name": "dive-admin",
+            "description": "DIVE V3 Administrator role with full access to admin console"
+        }' 2>/dev/null
+    log_success "Created role: dive-admin"
+else
+    log_info "Role exists: dive-admin"
+fi
+
+# Create user role if not exists
+USER_ROLE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-user" | jq -r '.name // empty')
+
+if [[ -z "$USER_ROLE_EXISTS" ]]; then
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "name": "dive-user",
+            "description": "DIVE V3 Standard user role"
+        }' 2>/dev/null
+    log_success "Created role: dive-user"
+else
+    log_info "Role exists: dive-user"
+fi
 
 # =============================================================================
-# Create Users
+# Create Role Mapper for Client
 # =============================================================================
-log_step "Creating test users..."
+log_step "Creating role mapper for client..."
 
-CREATED=0
-SKIPPED=0
+CLIENT_ID="dive-v3-client-${CODE_LOWER}"
+CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" | \
+    jq -r '.[0].id')
 
-for USER_DEF in "${USERS[@]}"; do
-    IFS='|' read -r USERNAME FIRST LAST EMAIL CLEARANCE COI <<< "$USER_DEF"
+if [[ -n "$CLIENT_UUID" && "$CLIENT_UUID" != "null" ]]; then
+    # Check if role mapper exists
+    MAPPER_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" | \
+        jq -r '.[] | select(.name=="realm roles") | .name')
+    
+    if [[ -z "$MAPPER_EXISTS" ]]; then
+        kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "name": "realm roles",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-realm-role-mapper",
+                "config": {
+                    "multivalued": "true",
+                    "claim.name": "roles",
+                    "id.token.claim": "true",
+                    "access.token.claim": "true",
+                    "userinfo.token.claim": "true"
+                }
+            }' 2>/dev/null
+        log_success "Created role mapper"
+    else
+        log_info "Role mapper exists"
+    fi
+fi
+
+# =============================================================================
+# Helper Function: Create User
+# =============================================================================
+create_user() {
+    local username="$1"
+    local email="$2"
+    local first_name="$3"
+    local last_name="$4"
+    local clearance="$5"
+    local coi="$6"
+    local password="$7"
+    local is_admin="$8"
     
     # Check if user exists
-    USER_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${USERNAME}" 2>/dev/null | \
+    local user_exists=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${username}" | \
         jq -r '.[0].id // empty')
     
-    if [[ -n "$USER_EXISTS" ]]; then
-        log_info "User exists: ${USERNAME}"
-        ((SKIPPED++))
-        continue
+    if [[ -n "$user_exists" ]]; then
+        log_info "User exists: ${username}"
+        return 0
     fi
-    
-    # Generate password
-    PASSWORD=$(generate_password)
     
     # Build attributes JSON
-    ATTRS="{\"clearance\": [\"${CLEARANCE}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${USERNAME}-001\"]"
-    if [[ -n "$COI" ]]; then
-        ATTRS="${ATTRS}, \"acpCOI\": [\"${COI}\"]"
+    local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"]"
+    if [[ -n "$coi" ]]; then
+        attrs="${attrs}, \"acpCOI\": [\"${coi}\"]"
     fi
-    ATTRS="${ATTRS}}"
+    attrs="${attrs}}"
     
     # Create user
-    HTTP_CODE=$(kc_curl -w "%{http_code}" -o /dev/null -X POST \
+    local http_code=$(kc_curl -w "%{http_code}" -o /dev/null -X POST \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{
-            \"username\": \"${USERNAME}\",
-            \"email\": \"${EMAIL}\",
+            \"username\": \"${username}\",
+            \"email\": \"${email}\",
             \"emailVerified\": true,
             \"enabled\": true,
-            \"firstName\": \"${FIRST}\",
-            \"lastName\": \"${LAST}\",
-            \"attributes\": ${ATTRS}
-        }" 2>/dev/null)
+            \"firstName\": \"${first_name}\",
+            \"lastName\": \"${last_name}\",
+            \"attributes\": ${attrs}
+        }")
     
-    if [[ "$HTTP_CODE" == "201" ]]; then
+    if [[ "$http_code" == "201" || "$http_code" == "409" ]]; then
         # Get user ID
-        USER_ID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${USERNAME}" 2>/dev/null | \
+        local user_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${username}" | \
             jq -r '.[0].id')
         
         # Set password
-        kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${USER_ID}/reset-password" \
+        kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"type\": \"password\", \"value\": \"${PASSWORD}\", \"temporary\": false}" 2>/dev/null
+            -d "{\"type\": \"password\", \"value\": \"${password}\", \"temporary\": false}"
         
-        log_success "Created: ${USERNAME} (password: ${PASSWORD})"
-        ((CREATED++))
+        # Assign dive-user role
+        local user_role_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-user" | jq -r '.id')
+        
+        if [[ -n "$user_role_id" && "$user_role_id" != "null" ]]; then
+            kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "[{\"id\": \"${user_role_id}\", \"name\": \"dive-user\"}]"
+        fi
+        
+        # Assign dive-admin role if admin
+        if [[ "$is_admin" == "true" ]]; then
+            local admin_role_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+                "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" | jq -r '.id')
+            
+            if [[ -n "$admin_role_id" && "$admin_role_id" != "null" ]]; then
+                kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d "[{\"id\": \"${admin_role_id}\", \"name\": \"dive-admin\"}]"
+            fi
+        fi
+        
+        if [[ "$is_admin" == "true" ]]; then
+            log_success "Created admin: ${username} (${clearance})"
+        else
+            log_success "Created: ${username} (${clearance})"
+        fi
+        return 0
     else
-        log_warn "Failed to create: ${USERNAME} (HTTP ${HTTP_CODE})"
+        log_warn "Failed to create: ${username} (HTTP ${http_code})"
+        return 1
     fi
+}
+
+# =============================================================================
+# Create Test Users (Levels 1-4)
+# =============================================================================
+log_step "Creating test users..."
+
+echo ""
+echo "  Creating testuser-${CODE_LOWER}-{1-4} with clearance levels:"
+echo ""
+
+for level in 1 2 3 4; do
+    username="testuser-${CODE_LOWER}-${level}"
+    email="${username}@${CODE_LOWER}.dive25.com"
+    clearance="${CLEARANCE_LEVELS[$level]}"
+    coi="${CLEARANCE_COIS[$level]}"
+    
+    # Determine first/last name based on level
+    case $level in
+        1) first_name="Unclassified"; last_name="User" ;;
+        2) first_name="Confidential"; last_name="Analyst" ;;
+        3) first_name="Secret"; last_name="Officer" ;;
+        4) first_name="TopSecret"; last_name="Director" ;;
+    esac
+    
+    create_user "$username" "$email" "$first_name" "$last_name" "$clearance" "$coi" "$TEST_USER_PASSWORD" "false"
 done
+
+# =============================================================================
+# Create Admin User
+# =============================================================================
+echo ""
+log_step "Creating admin user..."
+
+admin_username="admin-${CODE_LOWER}"
+admin_email="admin@${CODE_LOWER}.dive25.com"
+
+create_user "$admin_username" "$admin_email" "Administrator" "${COUNTRY_NAME}" "TOP_SECRET" "NATO-COSMIC,FVEY,FIVE_EYES" "$ADMIN_USER_PASSWORD" "true"
 
 # =============================================================================
 # Summary
 # =============================================================================
 echo ""
-echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║                  User Seeding Complete                       ║"
-echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║  Created: ${CREATED} users                                           ║"
-echo "║  Skipped: ${SKIPPED} users (already existed)                         ║"
-echo "║                                                              ║"
-echo "║  Available Test Users:                                       ║"
-echo "║    - testuser-${CODE_LOWER}   (SECRET)                              ║"
-echo "║    - analyst-${CODE_LOWER}    (TOP_SECRET, NATO-COSMIC/FVEY)        ║"
-echo "║    - officer-${CODE_LOWER}    (SECRET, NATO)                        ║"
-echo "║    - admin-${CODE_LOWER}      (TOP_SECRET, full COI)                ║"
-echo "║    - unclass-${CODE_LOWER}    (UNCLASSIFIED)                        ║"
-echo "╚══════════════════════════════════════════════════════════════╝"
+echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║                  User Seeding Complete                       ║${NC}"
+echo -e "${GREEN}╠══════════════════════════════════════════════════════════════╣${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}║  Test Users Created:                                         ║${NC}"
+echo -e "${GREEN}║    Username                    Clearance      Password       ║${NC}"
+echo -e "${GREEN}║    ─────────────────────────────────────────────────────     ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-1              UNCLASSIFIED   TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-2              CONFIDENTIAL   TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-3              SECRET         TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-4              TOP_SECRET     TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}║  Admin User Created:                                         ║${NC}"
+echo -e "${GREEN}║    admin-${CODE_LOWER}                   TOP_SECRET     TestUser2025!SecureAdmin ║${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}║  Roles Assigned:                                             ║${NC}"
+echo -e "${GREEN}║    - All users: dive-user                                    ║${NC}"
+echo -e "${GREEN}║    - Admin: dive-user + dive-admin                           ║${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-log_info "Next: Run ./scripts/spoke-init/seed-resources.sh ${INSTANCE_CODE}"
+# Save credentials to a file for reference
+CREDS_FILE="${INSTANCE_DIR}/test-credentials.txt"
+if [[ -d "${INSTANCE_DIR}" ]]; then
+    cat > "$CREDS_FILE" << EOF
+# =============================================================================
+# DIVE V3 ${CODE_UPPER} Instance - Test Credentials
+# Generated: $(date)
+# =============================================================================
 
+## Test Users (Password: TestUser2025!Pilot)
+
+| Username | Clearance | COI |
+|----------|-----------|-----|
+| testuser-${CODE_LOWER}-1 | UNCLASSIFIED | - |
+| testuser-${CODE_LOWER}-2 | CONFIDENTIAL | - |
+| testuser-${CODE_LOWER}-3 | SECRET | NATO |
+| testuser-${CODE_LOWER}-4 | TOP_SECRET | NATO-COSMIC, FVEY |
+
+## Admin User (Password: TestUser2025!SecureAdmin)
+
+| Username | Clearance | Role |
+|----------|-----------|------|
+| admin-${CODE_LOWER} | TOP_SECRET | dive-admin |
+
+## Keycloak Admin Console
+
+URL: https://${CODE_LOWER}-idp.dive25.com/admin
+Username: admin
+Password: (see .env file KEYCLOAK_ADMIN_PASSWORD)
+
+EOF
+    log_info "Credentials saved to: ${CREDS_FILE}"
+fi
+
+log_info "Next: Run ./scripts/spoke-init/seed-resources.sh ${INSTANCE_CODE}"
