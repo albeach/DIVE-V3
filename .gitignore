@@ -111,11 +111,15 @@ temp-ref/
 secrets/
 .secrets/
 
-# EXCEPT mkcert development certificates (safe to commit)
-!keycloak/certs/*.pem
-!frontend/certs/*.pem
-!backend/certs/*.pem
-!kas/certs/*.pem
+# Ignore all PEM/keys/certs (do not track real certs)
+*.pem
+*.key
+*.p12
+*.pfx
+# Ignore backup/self-signed certificate copies
+keycloak/certs/*.bak*
+keycloak/certs/*certificate.pem.bak*
+keycloak/certs/*key.pem.bak*
 
 # OPA bundles
 bundle.tar.gz

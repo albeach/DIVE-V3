@@ -19,7 +19,7 @@ cmd_up() {
     print_header
     check_docker || exit 1
     check_certs || exit 1
-    load_secrets
+    load_secrets || exit 1
     
     log_step "Starting DIVE V3 Stack..."
     

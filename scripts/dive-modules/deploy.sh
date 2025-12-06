@@ -17,6 +17,14 @@ fi
 
 cmd_deploy() {
     local target="${1:-local}"
+    # Align ENVIRONMENT with target unless explicitly set
+    if [ -z "$ENVIRONMENT" ]; then
+        ENVIRONMENT="$target"
+    fi
+    # Require explicit instance for terraform tfvars selection
+    if [ -z "$INSTANCE" ]; then
+        INSTANCE="usa"
+    fi
     
     print_header
     echo -e "${BOLD}Full Deployment Workflow${NC}"
@@ -72,20 +80,38 @@ cmd_deploy() {
     
     log_step "Step 2: Loading secrets..."
     load_secrets || { log_error "Failed to load secrets"; return 1; }
+    # Fail fast if any critical secret is empty in non-local env
+    if [[ "$ENVIRONMENT" != "local" && "$ENVIRONMENT" != "dev" ]]; then
+        local missing=0
+        for v in POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET; do
+            if [ -z "${!v}" ]; then
+                log_error "Missing required secret: $v"
+                missing=$((missing+1))
+            fi
+        done
+        if [ $missing -gt 0 ]; then
+            return 1
+        fi
+    fi
     
     log_step "Step 3: Checking SSL certificates..."
     check_certs || { log_error "Certificate generation failed"; return 1; }
     
+    # Choose compose file based on target/pilot/local
+    local COMPOSE_FILE="docker-compose.yml"
+    if [ "$target" = "pilot" ]; then
+        COMPOSE_FILE="docker-compose.pilot.yml"
+    fi
+    
     log_step "Step 4: Stopping existing containers..."
-    docker compose -f docker-compose.yml down -v 2>/dev/null || true
-    docker compose -f docker-compose.pilot.yml down -v 2>/dev/null || true
+    docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
     
     log_step "Step 5: Removing old volumes..."
     docker volume rm dive-v3_postgres_data dive-v3_mongo_data dive-v3_redis_data 2>/dev/null || true
     docker volume rm dive-pilot_postgres_data dive-pilot_mongo_data dive-pilot_redis_data 2>/dev/null || true
     
     log_step "Step 6: Starting infrastructure services..."
-    docker compose -f docker-compose.yml up -d
+    docker compose -f "$COMPOSE_FILE" up -d
     
     log_step "Step 7: Waiting for services (90s)..."
     local wait_time=0
@@ -104,7 +130,14 @@ cmd_deploy() {
     log_step "Step 8: Applying Terraform configuration..."
     cd "${DIVE_ROOT}/terraform/pilot"
     [ ! -d ".terraform" ] && terraform init
-    terraform apply -var-file="${INSTANCE}.tfvars" -auto-approve
+    # Ensure Keycloak admin credentials are available to the provider
+    export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
+    export KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
+    if [ -z "$KEYCLOAK_PASSWORD" ]; then
+        log_error "KEYCLOAK_PASSWORD is empty; aborting terraform apply"
+        return 1
+    fi
+    terraform apply -var-file="${target}.tfvars" -auto-approve
     cd "${DIVE_ROOT}"
     
     log_step "Step 9: Seeding database..."
@@ -182,7 +215,7 @@ module_deploy_help() {
     echo -e "${BOLD}Deployment Commands:${NC}"
     echo "  deploy              Full deployment workflow"
     echo "  reset               Reset to clean state (nuke + deploy)"
-    echo "  nuke                Destroy everything (containers + volumes)"
+    echo "  nuke                Destroy everything (containers + volumes) [alias: ./dive nuke]"
 }
 
 

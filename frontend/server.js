@@ -29,7 +29,9 @@ try {
     key: fs.readFileSync(path.join(certPath, process.env.KEY_FILE || 'key.pem')),
     cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
     spdy: {
-      protocols: ['h2', 'http/1.1'], // Support both HTTP/2 and HTTP/1.1
+      // HTTP/2 in dev can trigger ERR_HTTP2_PROTOCOL_ERROR with some browsers/proxies
+      // Fall back to HTTP/1.1 for stability while keeping TLS for NextAuth.
+      protocols: ['http/1.1'],
       plain: false, // Use TLS (not plain TCP)
     },
   };
