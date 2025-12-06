@@ -132,8 +132,9 @@ REALM_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" 2>/dev/null | jq -r '.realm // empty')
 
 if [[ -n "$REALM_EXISTS" ]]; then
-    log_warn "Realm already exists, updating theme and display name..."
-    # Update the theme and display name on existing realm
+    log_warn "Realm already exists, updating theme, display name, and frontend URL..."
+    # Update the theme, display name, and frontendUrl on existing realm
+    # CRITICAL: frontendUrl controls the issuer claim in tokens
     kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
@@ -142,10 +143,15 @@ if [[ -n "$REALM_EXISTS" ]]; then
             \"loginTheme\": \"${THEME_NAME}\",
             \"accountTheme\": \"${THEME_NAME}\",
             \"adminTheme\": \"keycloak.v2\",
-            \"emailTheme\": \"keycloak\"
+            \"emailTheme\": \"keycloak\",
+            \"attributes\": {
+                \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\"
+            }
         }" 2>/dev/null
-    log_success "Updated: displayName='${REALM_DISPLAY_NAME}', theme='${THEME_NAME}'"
+    log_success "Updated: displayName='${REALM_DISPLAY_NAME}', theme='${THEME_NAME}', frontendUrl='${PUBLIC_KEYCLOAK_URL}'"
 else
+    # CRITICAL: Set frontendUrl to ensure correct issuer in tokens
+    # Without this, tokens may include internal port (8443) instead of public URL
     kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
@@ -165,9 +171,12 @@ else
             \"bruteForceProtected\": true,
             \"accessTokenLifespan\": 900,
             \"ssoSessionMaxLifespan\": 28800,
-            \"offlineSessionMaxLifespan\": 2592000
+            \"offlineSessionMaxLifespan\": 2592000,
+            \"attributes\": {
+                \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\"
+            }
         }" 2>/dev/null
-    log_success "Realm created: ${REALM_NAME} (${COUNTRY_FULL_NAME}) with theme: ${THEME_NAME}"
+    log_success "Realm created: ${REALM_NAME} (${COUNTRY_FULL_NAME}) with theme: ${THEME_NAME}, frontendUrl: ${PUBLIC_KEYCLOAK_URL}"
 fi
 
 # =============================================================================
