@@ -1006,6 +1006,9 @@ services:
       - ../../frontend/public:/app/public:ro
       - ../../frontend/server.js:/app/server.js:ro
       - ../../frontend/tsconfig.json:/app/tsconfig.json:ro
+      - ../../frontend/tailwind.config.ts:/app/tailwind.config.ts:ro
+      - ../../frontend/postcss.config.mjs:/app/postcss.config.mjs:ro
+      - ../../frontend/next.config.ts:/app/next.config.ts:ro
       - ./certs:/opt/app/certs:ro
     depends_on:
       backend-${code_lower}:
