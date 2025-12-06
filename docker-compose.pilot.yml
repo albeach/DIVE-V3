@@ -114,6 +114,7 @@ services:
     ports:
       - "8443:8443" # HTTPS
       - "8081:8080" # HTTP Management
+      - "9000:9000" # Keycloak management/health
     networks:
       - dive-network
     volumes:
@@ -135,6 +136,8 @@ services:
       - "run"
       - "--server"
       - "--addr=0.0.0.0:8181"
+      - "--tls-cert-file=/certs/certificate.pem"
+      - "--tls-private-key-file=/certs/key.pem"
       - "--log-level=info"
       - "--log-format=json"
       - "--set=decision_logs.console=true"
@@ -148,10 +151,11 @@ services:
       - "8181:8181"
     volumes:
       - ./policies:/policies:ro
+      - ./keycloak/certs:/certs:ro
     networks:
       - dive-network
     healthcheck:
-      test: ["CMD", "/opa", "version"]
+      test: ["CMD", "/opa", "health", "--addr=https://localhost:8181", "--skip-verify"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -169,7 +173,7 @@ services:
     stop_grace_period: 30s
     environment:
       # Server Configuration
-      OPAL_BROADCAST_URI: http://opal-server:7002
+      OPAL_BROADCAST_URI: https://opal-server:7002
       
       # Policy source - no git repo, local directory only
       OPAL_POLICY_REPO_URL: ""
@@ -189,6 +193,8 @@ services:
       UVICORN_PORT: 7002
       UVICORN_HOST: 0.0.0.0
       OPAL_SERVER_WORKERS: 1
+      UVICORN_SSL_CERTFILE: /certs/certificate.pem
+      UVICORN_SSL_KEYFILE: /certs/key.pem
       
       # Statistics for monitoring
       OPAL_STATISTICS_ENABLED: "true"
@@ -206,8 +212,17 @@ services:
       # Mount policies for serving (read-only)
       - ./policies:/policies:ro
       - ./opal-data-source:/opal-data-source:ro
+      - ./keycloak/certs:/certs:ro
+    entrypoint: ["/bin/sh","-c"]
+    command:
+      - |
+        uvicorn opal_server.main:app \
+          --host 0.0.0.0 \
+          --port 7002 \
+          --ssl-certfile /certs/certificate.pem \
+          --ssl-keyfile /certs/key.pem
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7002/healthcheck"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -234,9 +249,9 @@ services:
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
-      OPA_URL: http://opa:8181
+      OPA_URL: https://opa:8181
       REDIS_URL: redis://redis:6379
-      OPAL_SERVER_URL: http://opal-server:7002
+      OPAL_SERVER_URL: https://opal-server:7002
       OPAL_DATA_TOPICS: policy_data
       # External URLs
       API_URL: https://localhost:4000
@@ -284,7 +299,8 @@ services:
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       # Server Side URLs (Docker Network)
       BACKEND_URL: https://backend:4000
-      KEYCLOAK_URL: https://keycloak:8443
+      # Use localhost so issuer matches discovery; extra_hosts maps localhost to host-gateway.
+      KEYCLOAK_URL: https://localhost:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
       # Database (CRITICAL: Required for NextAuth adapter)
@@ -295,6 +311,8 @@ services:
       # Auth.js standard environment variables (per https://authjs.dev/getting-started/providers/keycloak)
       AUTH_KEYCLOAK_ID: dive-v3-client-broker
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
+      # Use internal service name for server-side OIDC discovery to avoid ECONNREFUSED from inside container.
+      # KC_HOSTNAME is set to localhost so discovery still returns public https://localhost:8443 endpoints for the browser redirect.
       AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
       # Legacy variables (for backward compatibility)
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
@@ -315,6 +333,10 @@ services:
       - frontend_node_modules:/app/node_modules
       - frontend_next:/app/.next
       - ./frontend/certs:/certs:ro
+    # Allow container to reach Keycloak via host-published 8443 using hostname localhost
+    # so Auth.js issuer (https://localhost:8443) matches discovery output.
+    extra_hosts:
+      - "localhost:host-gateway"
     healthcheck:
       # Relaxed healthcheck for Next.js Dev Mode
       test: ["CMD", "curl", "-kfsI", "--max-time", "5", "https://localhost:3000/"]

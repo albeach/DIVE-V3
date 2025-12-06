@@ -78,7 +78,7 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
  */
 router.post('/public/sp-registration', async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
-    
+
     try {
         const {
             organizationName,
@@ -124,7 +124,7 @@ router.post('/public/sp-registration', async (req: Request, res: Response): Prom
         const registration = {
             registrationId,
             status: 'PENDING_APPROVAL',
-            
+
             // Organization details
             organization: {
                 name: organizationName,

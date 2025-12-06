@@ -11,7 +11,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
 
@@ -280,16 +280,29 @@ export default function ResourcesPage() {
     return breakdown;
   }, [facets]);
 
-  // Auth Check
-  useEffect(() => {
-    if (status !== 'loading' && !session) router.push('/login');
-  }, [status, session, router]);
-
   if (status === 'loading') {
     return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"><ResourcesPageSkeleton /></div>;
   }
 
-  if (!session) return null;
+  if (!session) {
+    return (
+      <PageLayout>
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <h2 className="text-xl font-semibold">Sign in to view resources</h2>
+          <p className="text-sm text-muted-foreground text-center max-w-md">
+            You need to be authenticated to access coalition resources.
+          </p>
+          <button
+            data-testid="sign-in-button"
+            onClick={() => signIn('keycloak', { callbackUrl: '/resources' })}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition"
+          >
+            Sign In
+          </button>
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout

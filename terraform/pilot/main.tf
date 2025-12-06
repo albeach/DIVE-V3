@@ -21,11 +21,33 @@ module "instance" {
   # Test users
   create_test_users = true
 
+  # Federation partners (real IdPs)
+  federation_partners = {
+    fra = {
+      instance_code = "FRA"
+      instance_name = "France"
+      idp_url       = "https://fra-idp.dive25.com"
+      enabled       = true
+      client_secret = "placeholder-sync-after-terraform"
+    }
+    gbr = {
+      instance_code = "GBR"
+      instance_name = "United Kingdom"
+      idp_url       = "https://gbr-idp.dive25.com"
+      enabled       = true
+      client_secret = "placeholder-sync-after-terraform"
+    }
+    deu = {
+      instance_code = "DEU"
+      instance_name = "Germany"
+      idp_url       = "https://deu-idp.dive25.com"
+      enabled       = true
+      client_secret = "placeholder-sync-after-terraform"
+    }
+  }
+
   # Theme - Use default Keycloak theme (custom theme can be added in Phase 2)
   login_theme = "keycloak"
-
-  # No federation partners for initial pilot
-  federation_partners = {}
   incoming_federation_secrets = {}
 
   # WebAuthn - localhost domain

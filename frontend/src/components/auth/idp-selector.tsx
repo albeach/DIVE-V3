@@ -145,8 +145,6 @@ export function IdpSelector() {
       // with userType: contractor attribute. OPA policies handle authorization.
       console.warn('[IdP Selector] Using fallback IdPs');
       setIdps([
-        { alias: 'usa-realm-broker', displayName: 'United States', protocol: 'oidc', enabled: true },
-        { alias: 'can-realm-broker', displayName: 'Canada', protocol: 'oidc', enabled: true },
         { alias: 'fra-realm-broker', displayName: 'France', protocol: 'oidc', enabled: true },
         { alias: 'gbr-realm-broker', displayName: 'United Kingdom', protocol: 'oidc', enabled: true },
         { alias: 'deu-realm-broker', displayName: 'Germany', protocol: 'oidc', enabled: true },
@@ -355,6 +353,7 @@ export function IdpSelector() {
       <div className="mb-6">
         <button
           onClick={handleDirectLogin}
+          data-testid="direct-login-button"
           className="w-full group p-4 border-2 border-[#009ab3] rounded-xl hover:border-[#79d85a] hover:shadow-xl transition-all duration-300 hover:-translate-y-1 text-left bg-gradient-to-br from-[#009ab3]/5 to-[#79d85a]/5"
         >
           <div className="flex items-center gap-4">
@@ -412,6 +411,7 @@ export function IdpSelector() {
           <button
             key={idp.alias}
             onClick={() => handleIdpClick(idp)}
+            data-testid={`idp-card-${idp.alias}`}
             className="group p-3 border-2 border-gray-200 rounded-xl hover:border-[#79d85a] hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 text-left bg-gradient-to-br from-white to-gray-50"
           >
             <div className="flex items-center gap-3">

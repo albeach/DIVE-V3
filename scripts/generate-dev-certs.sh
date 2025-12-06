@@ -30,11 +30,20 @@ echo -e "${CYAN}  DIVE V3 - Dynamic Certificate Generator${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
-# Check mkcert is installed
+# Check mkcert is installed (auto-install if possible)
 if ! command -v mkcert &> /dev/null; then
-    echo -e "${RED}✗ mkcert is not installed${NC}"
-    echo "  Install with: brew install mkcert && mkcert -install"
-    exit 1
+    echo -e "${YELLOW}mkcert not detected. Attempting to install...${NC}"
+    if command -v brew &> /dev/null; then
+        brew install mkcert nss >/dev/null 2>&1 || {
+            echo -e "${RED}✗ Failed to install mkcert via brew. Please install manually (brew install mkcert nss)${NC}"
+            exit 1
+        }
+    else
+        echo -e "${RED}✗ mkcert is not installed and Homebrew is not available.${NC}"
+        echo "  Install manually: https://github.com/FiloSottile/mkcert"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ mkcert installed${NC}"
 fi
 
 # Ensure mkcert CA is installed in system trust store
@@ -50,12 +59,21 @@ echo -e "${YELLOW}[2/4] Collecting hostnames from docker-compose files...${NC}"
 
 HOSTNAMES=()
 
-# Always include these base hostnames
+# Always include these base hostnames (cover host + Docker-internal)
 BASE_HOSTNAMES=(
     "localhost"
     "127.0.0.1"
     "::1"
     "host.docker.internal"
+    "backend"
+    "frontend"
+    "keycloak"
+    "opa"
+    "opal-server"
+    "redis"
+    "postgres"
+    "mongo"
+    "kas"
 )
 
 # Extract service names from all docker-compose files

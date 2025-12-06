@@ -142,20 +142,21 @@ check_terraform() {
 }
 
 check_certs() {
-    if [ ! -f "keycloak/certs/certificate.pem" ] || [ ! -f "keycloak/certs/key.pem" ]; then
-        log_warn "SSL Certificates missing"
-        if [ "$DRY_RUN" = true ]; then
-            log_dry "Would generate certificates via ./scripts/generate-dev-certs.sh"
-            return 0
-        fi
-        if [ -x "./scripts/generate-dev-certs.sh" ]; then
-            ./scripts/generate-dev-certs.sh
-        else
-            log_error "scripts/generate-dev-certs.sh not found"
-            return 1
-        fi
+    # Always regenerate mkcert certificates to cover the entire stack (frontend/backend/keycloak/kas)
+    log_step "Regenerating mkcert certificates for all services..."
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would regenerate certificates via ./scripts/generate-dev-certs.sh"
+        return 0
     fi
-    log_verbose "SSL certificates present"
+
+    if [ -x "./scripts/generate-dev-certs.sh" ]; then
+        ./scripts/generate-dev-certs.sh
+    else
+        log_error "scripts/generate-dev-certs.sh not found"
+        return 1
+    fi
+
+    log_success "mkcert certificates regenerated"
     return 0
 }
 
@@ -180,7 +181,7 @@ load_gcp_secrets() {
         return 0
     fi
     
-    check_gcloud || return 1
+    check_gcloud || { log_error "GCP authentication required for environment '$ENVIRONMENT'"; return 1; }
     
     export POSTGRES_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-postgres-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
     export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
@@ -228,7 +229,7 @@ load_secrets() {
             load_local_defaults
             ;;
         gcp|pilot|prod|staging)
-            load_gcp_secrets "$INSTANCE"
+            load_gcp_secrets "$INSTANCE" || return 1
             ;;
         *)
             log_error "Unknown environment: $ENVIRONMENT"
