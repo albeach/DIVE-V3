@@ -934,6 +934,9 @@ services:
       # Keycloak
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker-${code_lower}
+      # Issuer URLs for JWT validation (public URL without port)
+      KEYCLOAK_ISSUER: $idp_url/realms/dive-v3-broker-${code_lower}
+      TRUSTED_ISSUERS: $idp_url/realms/dive-v3-broker-${code_lower},https://keycloak-${code_lower}:8443/realms/dive-v3-broker-${code_lower}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD}
       # OPA
@@ -983,10 +986,13 @@ services:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXT_PUBLIC_INSTANCE: $code_upper
       NEXT_PUBLIC_INSTANCE_NAME: "$instance_name"
+      # Public URLs for client-side (browser) requests
       NEXT_PUBLIC_API_URL: $api_url
       NEXT_PUBLIC_KEYCLOAK_URL: $idp_url
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-${code_lower}
       NEXT_PUBLIC_BACKEND_URL: $api_url
+      # Internal URL for server-side (SSR) requests - CRITICAL for Docker networking
+      BACKEND_URL: https://backend-${code_lower}:4000
       NEXTAUTH_URL: $base_url
       NEXTAUTH_SECRET: \${AUTH_SECRET}
       # Database for NextAuth sessions
