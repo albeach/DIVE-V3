@@ -94,6 +94,21 @@ fi
 log_success "Admin authentication successful"
 
 # =============================================================================
+# Determine Theme
+# =============================================================================
+# Check if country-specific theme exists
+THEME_NAME="dive-v3-${CODE_LOWER}"
+THEME_DIR="keycloak/themes/${THEME_NAME}"
+
+if [[ -d "${THEME_DIR}" ]]; then
+    log_info "Found custom theme: ${THEME_NAME}"
+else
+    # Fall back to default dive-v3 theme
+    THEME_NAME="dive-v3"
+    log_info "Using default theme: ${THEME_NAME}"
+fi
+
+# =============================================================================
 # Create Realm (if not exists)
 # =============================================================================
 log_step "Creating realm: ${REALM_NAME}..."
@@ -102,7 +117,18 @@ REALM_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" 2>/dev/null | jq -r '.realm // empty')
 
 if [[ -n "$REALM_EXISTS" ]]; then
-    log_warn "Realm already exists, skipping creation"
+    log_warn "Realm already exists, updating theme..."
+    # Update the theme on existing realm
+    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"loginTheme\": \"${THEME_NAME}\",
+            \"accountTheme\": \"${THEME_NAME}\",
+            \"adminTheme\": \"keycloak.v2\",
+            \"emailTheme\": \"keycloak\"
+        }" 2>/dev/null
+    log_success "Theme updated to: ${THEME_NAME}"
 else
     kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
         -H "Authorization: Bearer $TOKEN" \
@@ -111,6 +137,10 @@ else
             \"realm\": \"${REALM_NAME}\",
             \"enabled\": true,
             \"displayName\": \"DIVE V3 - ${CODE_UPPER} Instance\",
+            \"loginTheme\": \"${THEME_NAME}\",
+            \"accountTheme\": \"${THEME_NAME}\",
+            \"adminTheme\": \"keycloak.v2\",
+            \"emailTheme\": \"keycloak\",
             \"registrationAllowed\": false,
             \"loginWithEmailAllowed\": true,
             \"duplicateEmailsAllowed\": false,
@@ -121,7 +151,7 @@ else
             \"ssoSessionMaxLifespan\": 28800,
             \"offlineSessionMaxLifespan\": 2592000
         }" 2>/dev/null
-    log_success "Realm created: ${REALM_NAME}"
+    log_success "Realm created: ${REALM_NAME} with theme: ${THEME_NAME}"
 fi
 
 # =============================================================================
