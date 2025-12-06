@@ -843,6 +843,7 @@ services:
       - "8080:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ../../keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres-${code_lower}:
         condition: service_healthy
