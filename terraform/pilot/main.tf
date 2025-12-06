@@ -46,8 +46,8 @@ module "instance" {
     }
   }
 
-  # Theme - Use default Keycloak theme (custom theme can be added in Phase 2)
-  login_theme = "keycloak"
+  # Theme - use USA custom theme
+  login_theme = "dive-v3-usa"
   incoming_federation_secrets = {}
 
   # WebAuthn - localhost domain

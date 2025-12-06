@@ -125,6 +125,146 @@ hub_push_policy() {
 }
 
 # =============================================================================
+# HUB BOOTSTRAP (Local/Pilot)
+# =============================================================================
+
+_hub_require_secret() {
+    local name="$1"
+    local value="${!name}"
+    if [ -z "$value" ]; then
+        log_error "Missing required secret: $name"
+        return 1
+    fi
+    return 0
+}
+
+_hub_wait_for_keycloak() {
+    local timeout="${1:-90}"
+    local elapsed=0
+    log_info "Waiting for Keycloak (up to ${timeout}s)..."
+    while [ $elapsed -lt $timeout ]; do
+        if curl -kfs --max-time 3 "https://localhost:8443/health" >/dev/null 2>&1; then
+            log_success "Keycloak is healthy"
+            return 0
+        fi
+        sleep 5
+        elapsed=$((elapsed + 5))
+        echo "  ${elapsed}s elapsed..."
+    done
+    log_warn "Keycloak health not confirmed after ${timeout}s"
+    return 1
+}
+
+_hub_apply_terraform() {
+    ensure_dive_root
+    cd "${DIVE_ROOT}/terraform/pilot"
+    [ ! -d ".terraform" ] && terraform init -input=false
+    TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}" \
+    TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}" \
+    KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}" \
+    KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}" \
+    terraform apply -input=false -auto-approve
+    cd "${DIVE_ROOT}"
+}
+
+_hub_init_nextauth_db() {
+    local compose_file="docker-compose.pilot.yml"
+    local pg_pass="${POSTGRES_PASSWORD:-DivePilot2025!}"
+    # Create DB if missing
+    docker compose -f "$compose_file" exec -T postgres \
+      psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='dive_v3_app';" | grep -q 1 || \
+      docker compose -f "$compose_file" exec -T postgres \
+      psql -U postgres -c "CREATE DATABASE dive_v3_app;"
+    # Apply drizzle SQL migrations
+    docker compose -f "$compose_file" exec -T -u 0 frontend sh -lc "
+      set -e
+      cd /app/drizzle
+      for f in \$(ls -1 *.sql 2>/dev/null | sort); do
+        PGPASSWORD=${pg_pass} psql -h postgres -U postgres -d dive_v3_app -f \"\$f\"
+      done
+    "
+}
+
+_hub_seed_data() {
+    local compose_file="docker-compose.pilot.yml"
+    log_step "Seeding sample users/resources (backend)"
+    docker compose -f "$compose_file" exec -T backend sh -lc "npm run seed:usa -- --count=100" 2>/dev/null || {
+        log_warn "Seeding failed or not available; continuing"
+    }
+}
+
+_hub_generate_local_secrets() {
+    # Generate ephemeral secrets for local/pilot if not provided
+    KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -base64 24 | tr -d '/+=')}"
+    KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-$(openssl rand -base64 16 | tr -d '/+=')}"
+    POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -base64 12 | tr -d '/+=')}"
+    AUTH_SECRET="${AUTH_SECRET:-$(openssl rand -base64 32)}"
+    export KEYCLOAK_CLIENT_SECRET KEYCLOAK_ADMIN_PASSWORD POSTGRES_PASSWORD AUTH_SECRET
+    log_info "Generated local secrets for pilot bootstrap (not persisted; set env to override)."
+}
+
+hub_bootstrap() {
+    print_header
+    echo -e "${BOLD}DIVE Hub Bootstrap (local/pilot)${NC}"
+    echo ""
+    ensure_dive_root
+
+    # Generate local secrets if not provided (dev/pilot convenience)
+    _hub_generate_local_secrets
+    _hub_require_secret KEYCLOAK_CLIENT_SECRET || return 1
+    _hub_require_secret KEYCLOAK_ADMIN_PASSWORD || return 1
+
+    # 1) Generate dev certs (local only)
+    log_step "Generating dev certificates (local)"
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "scripts/generate-dev-certs.sh"
+    else
+        if [ -x "${DIVE_ROOT}/scripts/generate-dev-certs.sh" ]; then
+            "${DIVE_ROOT}/scripts/generate-dev-certs.sh" || log_warn "Cert generation script failed (ensure mkcert installed)"
+        else
+            log_warn "generate-dev-certs.sh not found or not executable; skipping cert generation"
+        fi
+    fi
+
+    # 2) Bring up stack
+    log_step "Starting services (docker-compose.pilot.yml)"
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker compose -f docker-compose.pilot.yml up -d"
+    else
+        docker compose -f docker-compose.pilot.yml up -d
+    fi
+
+    # 3) Wait for Keycloak
+    [ "$DRY_RUN" = true ] || _hub_wait_for_keycloak 90
+
+    # 4) Terraform apply (broker realm, theme, IdPs)
+    log_step "Applying Terraform (pilot)"
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "cd terraform/pilot && terraform apply -input=false -auto-approve"
+    else
+        _hub_apply_terraform || return 1
+    fi
+
+    # 5) NextAuth DB + migrations
+    log_step "Ensuring NextAuth database and schema"
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Create DB dive_v3_app if missing via postgres container"
+        log_dry "Apply drizzle SQL files from /app/drizzle in frontend container"
+    else
+        _hub_init_nextauth_db || log_warn "DB init/migrations may need review"
+    fi
+
+    # 6) Seed sample data
+    [ "$DRY_RUN" = true ] || _hub_seed_data
+
+    log_success "Hub bootstrap complete."
+    echo ""
+    echo "  Frontend: https://localhost:3000"
+    echo "  Backend:  https://localhost:4000"
+    echo "  Keycloak: https://localhost:8443"
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -151,6 +291,7 @@ module_hub() {
         status)      hub_status ;;
         instances)   hub_instances ;;
         push-policy) hub_push_policy ;;
+        bootstrap)   hub_bootstrap ;;
         *)           module_hub_help ;;
     esac
 }
@@ -170,6 +311,7 @@ module_hub_help() {
     echo "  status        Show hub service status"
     echo "  instances     List registered instances"
     echo "  push-policy   Push policy update to all instances"
+    echo "  bootstrap     Local/pilot hub bootstrap (certs, compose up, terraform, NextAuth DB)"
 }
 
 
