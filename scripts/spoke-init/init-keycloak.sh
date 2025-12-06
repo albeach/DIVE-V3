@@ -332,7 +332,7 @@ kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${C
         }
     }' 2>/dev/null || true
 
-# COI mapper
+# COI mapper (CRITICAL: must be multivalued for users with multiple COIs)
 kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
@@ -346,7 +346,8 @@ kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${C
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true",
-            "jsonType.label": "JSON"
+            "jsonType.label": "JSON",
+            "multivalued": "true"
         }
     }' 2>/dev/null || true
 
