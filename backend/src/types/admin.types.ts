@@ -16,10 +16,23 @@ import {
 } from './risk-scoring.types';
 
 // ============================================
-// Super Admin Role Types
+// Admin Role Types
 // ============================================
 
 export const SUPER_ADMIN_ROLE = 'super_admin';
+
+/**
+ * All roles that grant admin access
+ * Must match frontend admin layout role check
+ */
+export const ADMIN_ROLES = ['super_admin', 'admin', 'dive-admin'] as const;
+
+/**
+ * Check if user has any admin role
+ */
+export const hasAdminRole = (roles: string[]): boolean => {
+    return ADMIN_ROLES.some(adminRole => roles.includes(adminRole));
+};
 
 export interface ISuperAdminUser {
     uniqueID: string;
