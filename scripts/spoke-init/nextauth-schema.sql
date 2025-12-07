@@ -61,3 +61,4 @@ BEGIN
     RAISE NOTICE 'NextAuth schema created successfully!';
 END $$;
 
+

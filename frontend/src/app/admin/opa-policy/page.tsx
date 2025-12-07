@@ -40,7 +40,8 @@ export default function OPAPolicyPage() {
     const [opaStatus, setOpaStatus] = useState<IOPAStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedFile, setSelectedFile] = useState<string>('fuel_inventory_abac_policy.rego');
+    // Default to modular entrypoint; will fallback to first available if missing
+    const [selectedFile, setSelectedFile] = useState<string>('entrypoints/authz.rego');
     const [rules, setRules] = useState<IPolicyRule[]>([]);
     const [saving, setSaving] = useState(false);
     const [showComparison, setShowComparison] = useState(false);
@@ -48,9 +49,9 @@ export default function OPAPolicyPage() {
 
     // Extract toggleable rules from policy content
     const extractRules = (content: string): IPolicyRule[] => {
-        const rulePattern = /not\s+(is_\w+)/g;
         const matches: IPolicyRule[] = [];
         const lines = content.split('\n');
+        const seenRules = new Set<string>(); // prevent duplicate keys when rendering
         
         // Common rules to show
         const knownRules: Record<string, string> = {
@@ -69,15 +70,20 @@ export default function OPAPolicyPage() {
 
         lines.forEach((line, index) => {
             const match = line.match(/not\s+(is_\w+)/);
-            if (match) {
-                const ruleName = match[1];
-                matches.push({
-                    name: ruleName,
-                    description: knownRules[ruleName] || 'Policy rule',
-                    enabled: true, // If it's in the allow rule, it's enabled
-                    lineNumber: index + 1
-                });
+            if (!match) return;
+
+            const ruleName = match[1];
+            if (seenRules.has(ruleName)) {
+                return;
             }
+            seenRules.add(ruleName);
+
+            matches.push({
+                name: ruleName,
+                description: knownRules[ruleName] || 'Policy rule',
+                enabled: true, // If it's in the allow rule, it's enabled
+                lineNumber: index + 1
+            });
         });
 
         return matches;
@@ -94,18 +100,30 @@ export default function OPAPolicyPage() {
                 fetch(`/api/admin/opa/policy?file=${selectedFile}`)
             ]);
 
-            if (!statusRes.ok || !policyRes.ok) {
-                throw new Error('Failed to load OPA data');
+            const statusData = statusRes.ok ? await statusRes.json() : null;
+            let policyData = policyRes.ok ? await policyRes.json() : null;
+
+            // If selected file is missing (404), fall back to first available policy file
+            if ((!policyRes.ok || !policyData?.success) && statusRes.ok && statusData?.success) {
+                const fallbackFile = statusData.data?.policyFiles?.[0];
+                if (fallbackFile) {
+                    setSelectedFile(fallbackFile);
+                    const fallbackRes = await fetch(`/api/admin/opa/policy?file=${fallbackFile}`);
+                    if (fallbackRes.ok) {
+                        policyData = await fallbackRes.json();
+                    }
+                }
             }
 
-            const statusData = await statusRes.json();
-            const policyData = await policyRes.json();
+            if (!statusRes.ok || !policyData || !policyData.success) {
+                throw new Error('Failed to load OPA data');
+            }
 
             if (statusData.success) {
                 setOpaStatus(statusData.data);
             }
 
-            if (policyData.success) {
+            if (policyData?.success) {
                 setPolicyContent(policyData.data);
                 const extractedRules = extractRules(policyData.data.content);
                 setRules(extractedRules);

@@ -24,6 +24,21 @@ interface IAuthenticatedRequest extends Request {
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 const POLICY_DIR = process.env.POLICY_DIR || path.join(process.cwd(), 'policies');
 
+// Recursively collect all .rego files under POLICY_DIR so nested modular layouts work
+const listRegoFiles = (dir: string): string[] => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+        if (entry.isDirectory()) {
+            files.push(...listRegoFiles(path.join(dir, entry.name)));
+        } else if (entry.isFile() && entry.name.endsWith('.rego')) {
+            // Return relative path from POLICY_DIR for frontend selection
+            files.push(path.relative(POLICY_DIR, path.join(dir, entry.name)));
+        }
+    }
+    return files;
+};
+
 /**
  * GET /api/admin/opa/policy
  * Get current OPA policy content
@@ -431,11 +446,10 @@ export const getOPAStatusHandler = async (
             opaHealthy = false;
         }
 
-        // List available policies
+        // List available policies (recursive to support modular directories)
         const policyFiles: string[] = [];
         if (fs.existsSync(POLICY_DIR)) {
-            const files = fs.readdirSync(POLICY_DIR);
-            policyFiles.push(...files.filter(f => f.endsWith('.rego')));
+            policyFiles.push(...listRegoFiles(POLICY_DIR));
         }
 
         const response: IAdminAPIResponse = {
