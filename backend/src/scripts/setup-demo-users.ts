@@ -296,17 +296,17 @@ async function createSuperAdminUser(
         console.log(`    Password set`);
 
         // Get super_admin role
-        const roles = await client.roles.find({
+        const role = await client.roles.findOneByName({
             realm: REALM,
-            roleName: 'super_admin'
+            name: 'super_admin'
         });
 
-        if (roles && roles.length > 0) {
+        if (role && role.id) {
             // Assign super_admin role
             await client.users.addRealmRoleMappings({
                 realm: REALM,
                 id: userId,
-                roles: [roles[0]]
+                roles: [role as any] // Keycloak admin client types allow RoleRepresentation here
             });
             console.log(`    Super admin role assigned`);
         } else {

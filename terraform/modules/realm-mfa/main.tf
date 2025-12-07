@@ -162,7 +162,7 @@ resource "keycloak_authentication_execution_config" "browser_webauthn_acr" {
   alias        = "WebAuthn ACR AMR - ${var.realm_display_name}"
   config = {
     acr_level = "2"   # AAL3 for hardware key
-    reference = "hwk" # AMR reference (RFC-8176: hardware key)
+    reference = "webauthn" # AMR reference; align with WebAuthn authenticator
   }
 }
 

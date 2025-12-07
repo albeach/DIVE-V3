@@ -7,6 +7,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './',
+  outputDir: '../../test-results/e2e-artifacts',
+  globalSetup: './global-setup',
   fullyParallel: false,  // Run tests sequentially for auth flows
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -162,6 +162,14 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
       view = ["admin"]
       edit = ["admin"]
     }
+
+    validator {
+      name = "length"
+      config = {
+        min = "3"
+        max = "255"
+      }
+    }
   }
 
   # User Type (military, civilian, contractor)
@@ -204,6 +212,42 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
       config = {
         options = "[\"GOV\",\"MIL\",\"INDUSTRY\"]"
       }
+    }
+  }
+
+  # Original Country-Specific Clearance (audit trail)
+  attribute {
+    name         = "clearanceOriginal"
+    display_name = "Original Clearance"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Duty Organization (from IdP)
+  attribute {
+    name         = "dutyOrg"
+    display_name = "Duty Organization"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Organizational Unit (from IdP)
+  attribute {
+    name         = "orgUnit"
+    display_name = "Organizational Unit"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
     }
   }
 
@@ -256,6 +300,14 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     permissions {
       view = ["admin"]
       edit = ["admin"]
+    }
+
+    validator {
+      name = "pattern"
+      config = {
+        "pattern"       = "^[1-4]$"
+        "error-message" = "Clearance level must be 1-4"
+      }
     }
   }
 

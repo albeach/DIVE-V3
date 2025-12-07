@@ -91,12 +91,12 @@ resource "keycloak_realm" "broker" {
   # "The ID must be the origin's effective domain"
   web_authn_policy {
     relying_party_entity_name         = "DIVE V3 Coalition Platform"
-    relying_party_id                  = var.webauthn_rp_id # MUST be "dive25.com" for *.dive25.com
+    relying_party_id                  = var.webauthn_rp_id
     signature_algorithms              = ["ES256", "RS256"]
     attestation_conveyance_preference = "direct"        # Full attestation for audit
     authenticator_attachment          = "not specified" # Allows all types (platform, cross-platform, hybrid/QR)
     require_resident_key              = "No"            # Server-side credential storage OK
-    user_verification_requirement     = "preferred"
+    user_verification_requirement     = "required"
     create_timeout                    = 60 # 60 seconds to complete
     avoid_same_authenticator_register = false
   }
@@ -120,7 +120,7 @@ resource "keycloak_realm" "broker" {
   # - User verification ensures biometric/PIN is required
   web_authn_passwordless_policy {
     relying_party_entity_name         = "DIVE V3 Coalition Platform"
-    relying_party_id                  = var.webauthn_rp_id # MUST be "dive25.com" for *.dive25.com
+    relying_party_id                  = var.webauthn_rp_id
     signature_algorithms              = ["ES256", "RS256"]
     attestation_conveyance_preference = "direct"        # Full attestation for audit
     authenticator_attachment          = "not specified" # Allows ALL types (platform, cross-platform, hybrid/QR)
@@ -197,6 +197,7 @@ resource "keycloak_openid_client" "broker_client" {
       browser_id = var.browser_flow_override_id
     }
   }
+
 }
 
 # ============================================================================
@@ -253,8 +254,8 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acp_coi" {
 
   user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
-  claim_value_type    = "String"
-  multivalued         = true
+  claim_value_type    = "JSON"
+  multivalued         = false
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true
@@ -291,6 +292,101 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "organization_type" {
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true
+}
+
+# Realm roles mapper - ensures realm_access.roles is present in tokens
+resource "keycloak_openid_user_realm_role_protocol_mapper" "realm_roles" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "realm roles"
+
+  claim_name          = "realm_access.roles"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+  multivalued         = true
+}
+
+# ACR/AMR propagation for MFA context (passkey/WebAuthn)
+# These session-note mappers ensure acr/amr/auth_time are present in ID/Access tokens
+# so the frontend/backends can enforce AAL2/AAL3 in OPA and UI.
+resource "keycloak_openid_user_session_note_protocol_mapper" "acr" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "acr"
+
+  session_note       = "acr"
+  claim_name         = "acr"
+  claim_value_type   = "String"
+  add_to_id_token    = true
+  add_to_access_token = true
+}
+
+resource "keycloak_openid_user_session_note_protocol_mapper" "amr" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "amr"
+
+  session_note       = "amr"
+  claim_name         = "amr"
+  claim_value_type   = "String"
+  add_to_id_token    = true
+  add_to_access_token = true
+}
+
+resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "auth_time"
+
+  session_note       = "auth_time"
+  claim_name         = "auth_time"
+  claim_value_type   = "String"
+  add_to_id_token    = true
+  add_to_access_token = true
+}
+
+# Built-in AMR/ACR mappers (Keycloak 26) to derive claims from authentication context
+resource "keycloak_generic_protocol_mapper" "amr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.broker_client.id
+  name            = "amr (auth methods reference)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-amr-mapper"
+
+  config = {
+    "id.token.claim"     = "true"
+    "access.token.claim" = "true"
+    "userinfo.token.claim" = "true"
+    "claim.name"         = "amr"
+  }
+}
+
+resource "keycloak_generic_protocol_mapper" "acr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.broker_client.id
+  name            = "acr (authn context)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-acr-mapper"
+
+  config = {
+    "id.token.claim"     = "true"
+    "access.token.claim" = "true"
+    "userinfo.token.claim" = "true"
+    "claim.name"         = "acr"
+  }
+}
+
+resource "keycloak_openid_client_default_scopes" "broker_client_defaults" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+
+  default_scopes = [
+    "profile",
+    "email",
+    "roles",
+    "web-origins",
+  ]
 }
 
 # ============================================================================
@@ -402,11 +498,83 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
 
   user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
-  claim_value_type    = "String"
-  multivalued         = true
+  claim_value_type    = "JSON"
+  multivalued         = false
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true
+}
+
+# ============================================================================
+# SUPER ADMIN ROLE & USER
+# ============================================================================
+
+resource "keycloak_role" "super_admin" {
+  realm_id    = keycloak_realm.broker.id
+  name        = "super_admin"
+  description = "Super admin role for DIVE V3 administrative operations"
+}
+
+# Dedicated group to keep super_admin assignment sticky across imports/restores
+resource "keycloak_group" "super_admins" {
+  realm_id = keycloak_realm.broker.id
+  name     = "super_admins"
+}
+
+resource "keycloak_group_roles" "super_admins_role" {
+  realm_id = keycloak_realm.broker.id
+  group_id = keycloak_group.super_admins.id
+  role_ids = [keycloak_role.super_admin.id]
+}
+
+locals {
+  admin_password = coalesce(var.admin_user_password, var.test_user_password)
+}
+
+resource "keycloak_user" "admin_user" {
+  realm_id = keycloak_realm.broker.id
+  username = "admin-${lower(var.instance_code)}"
+  enabled  = true
+  email    = "admin-${lower(var.instance_code)}@dive-demo.example"
+  first_name = "Admin"
+  last_name  = upper(var.instance_code)
+
+  initial_password {
+    value     = local.admin_password
+    temporary = false
+  }
+
+  attributes = {
+    uniqueID             = "admin-${lower(var.instance_code)}"
+    countryOfAffiliation = var.instance_code
+    clearance            = "TOP_SECRET"
+    organization         = "${var.instance_name} Admin"
+    organizationType     = "GOV"
+    userType             = "admin"
+    pilot_user           = "true"
+    created_by           = "terraform"
+  }
+
+  lifecycle {
+    ignore_changes = [initial_password]
+  }
+}
+
+resource "keycloak_user_roles" "admin_user_super_admin" {
+  realm_id = keycloak_realm.broker.id
+  user_id  = keycloak_user.admin_user.id
+  role_ids = [
+    keycloak_role.super_admin.id,
+  ]
+}
+
+resource "keycloak_group_memberships" "admin_user_super_admin_group" {
+  realm_id = keycloak_realm.broker.id
+  group_id = keycloak_group.super_admins.id
+
+  members = [
+    keycloak_user.admin_user.username,
+  ]
 }
 
 resource "keycloak_openid_user_attribute_protocol_mapper" "federation_organization" {

@@ -71,6 +71,25 @@ variable "create_test_users" {
   default     = true
 }
 
+variable "test_user_password" {
+  description = "Password for pilot/test users (supply via TF_VAR_test_user_password from GCP Secret Manager)"
+  type        = string
+  sensitive   = true
+  default     = null
+
+  validation {
+    condition     = var.create_test_users == false || (var.test_user_password != null && length(var.test_user_password) >= 12)
+    error_message = "test_user_password must be set (>=12 chars) when create_test_users is true."
+  }
+}
+
+variable "admin_user_password" {
+  description = "Password for admin-[INSTANCE] super_admin user (supply via TF_VAR_admin_user_password from GCP Secret Manager). Falls back to test_user_password if not set."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
 # Theme
 variable "login_theme" {
   description = "Login theme for the broker realm"

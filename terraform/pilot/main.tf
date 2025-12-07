@@ -20,6 +20,8 @@ module "instance" {
 
   # Test users
   create_test_users = true
+  test_user_password = var.test_user_password
+  admin_user_password = var.admin_user_password
 
   # Federation partners (real IdPs)
   federation_partners = {

@@ -257,7 +257,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Auth.js automatically discovers endpoints via OIDC discovery from issuer
             authorization: {
                 params: {
-                    scope: "openid profile email offline_access",
+                    // Request only online tokens locally; offline_access caused KC to reject with "Offline tokens not allowed"
+                    scope: "openid profile email",
                 }
             },
             checks: ["pkce", "state"],  // Best practice: Enable security checks

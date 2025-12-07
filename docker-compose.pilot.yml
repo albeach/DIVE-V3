@@ -246,7 +246,8 @@ services:
       PORT: 4000
       # Service URLs (Internal Docker Network)
       # Use HTTPS for Keycloak (port 8443) - matches frontend configuration
-      KEYCLOAK_URL: https://keycloak:8443
+      # Use localhost to match Keycloak hostname and issuer (pulled from GCP via ./dive)
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-https://localhost:8443}
       KEYCLOAK_REALM: dive-v3-broker
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
       OPA_URL: https://opa:8181
@@ -258,9 +259,9 @@ services:
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # Secrets
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Security
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       SSL_CERT_PATH: /app/certs
@@ -273,6 +274,8 @@ services:
       - redis
     networks:
       - dive-network
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./backend/src:/app/src
       - ./backend/certs:/app/certs:ro
@@ -299,24 +302,27 @@ services:
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       # Server Side URLs (Docker Network)
       BACKEND_URL: https://backend:4000
-      # Use localhost so issuer matches discovery; extra_hosts maps localhost to host-gateway.
+      # Use localhost to match KC_HOSTNAME and discovery URLs
       KEYCLOAK_URL: https://localhost:8443
       KEYCLOAK_REALM: dive-v3-broker
+      # Issuers (match KC hostname=localhost so discovery/tokens align)
       KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       # Database (CRITICAL: Required for NextAuth adapter)
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-DivePilot2025!}@postgres:5432/dive_v3_app
       # Auth
       NEXTAUTH_URL: https://localhost:3000
-      AUTH_SECRET: ${AUTH_SECRET:-dive-v3-auth-secret}
+      # Auth.js / NextAuth secrets (pulled from GCP via ./dive)
+      AUTH_SECRET: ${AUTH_SECRET:-${NEXTAUTH_SECRET:-dive-v3-auth-secret}}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-${AUTH_SECRET:-dive-v3-auth-secret}}
       # Auth.js standard environment variables (per https://authjs.dev/getting-started/providers/keycloak)
       AUTH_KEYCLOAK_ID: dive-v3-client-broker
-      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       # Use internal service name for server-side OIDC discovery to avoid ECONNREFUSED from inside container.
       # KC_HOSTNAME is set to localhost so discovery still returns public https://localhost:8443 endpoints for the browser redirect.
       AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
       # Legacy variables (for backward compatibility)
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}
       AUTH_TRUST_HOST: "true"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       CERT_PATH: /certs
@@ -360,6 +366,8 @@ services:
       KAS_PORT: 8080
       HTTPS_ENABLED: "true"
       OPA_URL: http://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
     ports:
@@ -372,6 +380,8 @@ services:
     volumes:
       - ./kas/src:/app/src
       - ./kas/certs:/opt/app/certs:ro
+    extra_hosts:
+      - "localhost:host-gateway"
 
   cloudflared:
     image: cloudflare/cloudflared:latest

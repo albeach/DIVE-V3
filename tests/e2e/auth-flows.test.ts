@@ -22,6 +22,7 @@
  */
 
 import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { authenticator } from 'otplib';
 
 // Test configuration
 const CONFIG = {
@@ -30,10 +31,12 @@ const CONFIG = {
     backend: process.env.BACKEND_URL || 'https://localhost:4000',
     keycloak: process.env.KEYCLOAK_URL || 'https://localhost:8443',
     keycloakMgmt: process.env.KEYCLOAK_MGMT_URL || 'https://localhost:8443',
+    opa: process.env.OPA_URL || 'https://localhost:8181',
+    opal: process.env.OPAL_URL || 'https://localhost:7002',
   },
   timeouts: {
     navigation: 60000,
-    auth: 60000,
+    auth: 90000,
     api: 10000,
   },
   testUsers: {
@@ -66,8 +69,17 @@ const CONFIG = {
   },
 };
 
+const TOTP_SECRETS: Record<string, string | undefined> = {
+  USA: process.env.TESTUSER_USA_TOTP_SECRET,
+  FRA: process.env.TESTUSER_FRA_TOTP_SECRET,
+  GBR: process.env.TESTUSER_GBR_TOTP_SECRET,
+  DEU: process.env.TESTUSER_DEU_TOTP_SECRET,
+};
+
 // Helper functions
 async function login(page: Page, user: typeof CONFIG.testUsers.usa): Promise<void> {
+  await resetSession(page);
+
   // Prefer the guarded resources page so the Sign In CTA is stable
   await page.goto(`${CONFIG.baseUrls.frontend}/resources`, {
     timeout: CONFIG.timeouts.navigation,
@@ -107,10 +119,11 @@ async function login(page: Page, user: typeof CONFIG.testUsers.usa): Promise<voi
   // Submit login form
   await page.click('input[type="submit"], button[type="submit"]');
 
-  // Wait for redirect back to frontend
-  await page.waitForURL(new RegExp(CONFIG.baseUrls.frontend.replace(/https?:\/\//, '')), {
-    timeout: CONFIG.timeouts.auth,
-  });
+  // Handle required actions (e.g., TOTP enrollment)
+  await maybeHandleRequiredActions(page, user);
+
+  // Wait for redirect back to frontend (resources page) or the Auth.js callback
+  await waitForPostAuth(page);
 }
 
 async function logout(page: Page): Promise<void> {
@@ -127,25 +140,117 @@ async function logout(page: Page): Promise<void> {
   await page.waitForURL(/\/(login|$)/, { timeout: CONFIG.timeouts.navigation });
 }
 
-async function getAuthToken(page: Page): Promise<string | null> {
-  // Get token from session storage or cookies
-  const token = await page.evaluate(() => {
-    const session = sessionStorage.getItem('next-auth.session-token') ||
-      localStorage.getItem('token');
-    if (session) return session;
+async function getSessionCookie(context: BrowserContext): Promise<string | null> {
+  const cookies = await context.cookies();
+  const sessionCookie = cookies.find(c => c.name.toLowerCase().includes('session') || c.name.toLowerCase().includes('authjs'));
+  if (!sessionCookie) return null;
+  return `${sessionCookie.name}=${sessionCookie.value}`;
+}
 
-    // Try to get from cookies
-    const cookies = document.cookie.split(';');
-    for (const cookie of cookies) {
-      const [name, value] = cookie.trim().split('=');
-      if (name.includes('session-token') || name.includes('access_token')) {
-        return value;
+async function maybeHandleRequiredActions(page: Page, user: typeof CONFIG.testUsers.usa): Promise<void> {
+  // Some themes use a multi-step wizard; advance through benign "Next"/"Continue" steps.
+  for (let i = 0; i < 5; i++) {
+    const wizardNext = page.getByRole('button', { name: /next|continue/i }).first();
+    const wizardSubmit = page.locator('button[type="submit"]').first();
+    const foundWizard =
+      (await wizardNext.isVisible({ timeout: 1000 }).catch(() => false)) ||
+      (await wizardSubmit.isVisible({ timeout: 1000 }).catch(() => false));
+    if (foundWizard) {
+      if (await wizardNext.isVisible().catch(() => false)) {
+        await wizardNext.click({ timeout: CONFIG.timeouts.auth });
+      } else if (await wizardSubmit.isVisible().catch(() => false)) {
+        await wizardSubmit.click({ timeout: CONFIG.timeouts.auth });
+      }
+      await page.waitForTimeout(750);
+    } else {
+      break;
+    }
+  }
+
+  // Detect Keycloak TOTP enrollment screen
+  const totpHeader = page.getByText(/Two-Factor Authentication Setup|Authenticator App|Configure TOTP|One-time code|Enter the 6-digit/i);
+  const totpVisible = await totpHeader.isVisible({ timeout: 3000 }).catch(() => false);
+
+  if (totpVisible) {
+    const secret = TOTP_SECRETS[user.country];
+    // Try to extract secret from the page (Keycloak shows Base32 or otpauth URI)
+    let totpSecretFromPage: string | undefined;
+    try {
+      const content = await page.content();
+      const base32Match = content.match(/[A-Z2-7]{16,}/);
+      const uriMatch = content.match(/otpauth:\/\/totp\/[^\s"']+/);
+      if (base32Match) totpSecretFromPage = base32Match[0];
+      if (!totpSecretFromPage && uriMatch) {
+        const secretParam = uriMatch[0].match(/secret=([A-Z2-7]+)/i);
+        if (secretParam && secretParam[1]) totpSecretFromPage = secretParam[1];
+      }
+    } catch {
+      // ignore
+    }
+
+    const effectiveSecret = totpSecretFromPage || secret;
+
+    if (!effectiveSecret) {
+      throw new Error(
+        `MFA required for ${user.username} (${user.country}) but no TOTP secret available. ` +
+        `Provide TESTUSER_${user.country}_TOTP_SECRET or ensure the Keycloak page exposes the secret.`
+      );
+    }
+
+    const code = authenticator.generate(effectiveSecret);
+
+    // Fill TOTP code into known field
+    const totpField = page.locator('input#totp, input[name="totp"]');
+    if (!(await totpField.first().isVisible({ timeout: 2000 }).catch(() => false))) {
+      throw new Error('Could not locate TOTP input field (#totp) on Keycloak enrollment screen.');
+    }
+    await totpField.first().fill(code);
+    console.log(`[E2E][TOTP] Filled code ${code} into #totp`);
+    try {
+      await page.screenshot({ path: 'test-results/e2e-artifacts/totp-debug.png', fullPage: true });
+    } catch {
+      // ignore screenshot failures
+    }
+
+    // Click the known submit button (Complete Setup)
+    const submit = page.locator('button#saveTOTPBtn, button:has-text("Complete Setup")').first();
+    if (await submit.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await submit.click({ timeout: CONFIG.timeouts.auth });
+    } else {
+      // Fallback to a generic continue/submit
+      const fallbackSubmit = page.getByRole('button', { name: /continue|submit|next|finish/i }).first();
+      if (await fallbackSubmit.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await fallbackSubmit.click({ timeout: CONFIG.timeouts.auth });
+      } else {
+        await page.keyboard.press('Enter');
       }
     }
-    return null;
-  });
 
-  return token;
+    // Confirm we left the TOTP screen
+    const stillOnTotp = await totpHeader.isVisible({ timeout: 2000 }).catch(() => false);
+    if (stillOnTotp) {
+      throw new Error('TOTP submission did not advance past enrollment screen.');
+    }
+  }
+}
+
+async function waitForPostAuth(page: Page): Promise<void> {
+  const targets = [/\/api\/auth\/callback\//, /\/resources(\/|$|\?)/];
+  await page.waitForURL((url) => targets.some((r) => r.test(url)), {
+    timeout: CONFIG.timeouts.auth,
+    waitUntil: 'domcontentloaded',
+  });
+  await page.waitForLoadState('networkidle', { timeout: CONFIG.timeouts.auth });
+}
+
+async function resetSession(page: Page): Promise<void> {
+  try {
+    await page.context().clearCookies();
+    await page.context().clearPermissions();
+    await page.goto('about:blank');
+  } catch {
+    // ignore
+  }
 }
 
 // =============================================================================
@@ -195,9 +300,9 @@ test.describe('DIVE V3 Authentication Flows', () => {
       await login(page, CONFIG.testUsers.usa);
       await logout(page);
 
-      // Verify session is cleared
-      const token = await getAuthToken(page);
-      expect(token).toBeFalsy();
+      // Verify session cookie is cleared
+      const sessionCookie = await getSessionCookie(page.context());
+      expect(sessionCookie).toBeFalsy();
 
       // Verify protected routes are inaccessible
       await page.goto(`${CONFIG.baseUrls.frontend}/resources`);
@@ -473,13 +578,12 @@ test.describe('API Authentication', () => {
     await login(page, CONFIG.testUsers.usa);
 
     // Get cookies from authenticated session
-    const cookies = await page.context().cookies();
-    const sessionCookie = cookies.find(c => c.name.includes('session'));
+    const sessionCookie = await getSessionCookie(page.context());
 
     if (sessionCookie) {
       const response = await request.get(`${CONFIG.baseUrls.backend}/api/resources`, {
         headers: {
-          'Cookie': `${sessionCookie.name}=${sessionCookie.value}`,
+          'Cookie': sessionCookie,
         },
       });
 
@@ -513,11 +617,38 @@ test.describe('Service Health Checks', () => {
   });
 
   test('keycloak health check', async ({ request }) => {
-    const response = await request.get(`${CONFIG.baseUrls.keycloakMgmt}/health`, {
+    const healthUrl = process.env.KEYCLOAK_HEALTH_URL || `${CONFIG.baseUrls.keycloakMgmt}/health/ready`;
+    const response = await request.get(healthUrl, {
       failOnStatusCode: false,
     });
 
     expect(response.status()).toBe(200);
+  });
+
+  test('opa health check', async ({ request }) => {
+    const response = await request.get(`${CONFIG.baseUrls.opa}/health?plugins`, {
+      failOnStatusCode: false,
+    });
+
+    expect(response.status()).toBe(200);
+  });
+
+  test('opal health check', async ({ request }) => {
+    const response = await request.get(`${CONFIG.baseUrls.opal}/healthcheck`, {
+      failOnStatusCode: false,
+    });
+
+    expect(response.status()).toBe(200);
+  });
+
+  test('policy version is available', async ({ request }) => {
+    const response = await request.get(`${CONFIG.baseUrls.backend}/health/policy-version`, {
+      failOnStatusCode: false,
+    });
+
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body).toHaveProperty('policyVersion');
   });
 });
 

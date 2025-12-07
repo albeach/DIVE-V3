@@ -187,13 +187,18 @@ load_gcp_secrets() {
     export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
     export MONGO_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-mongodb-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
     export AUTH_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-auth-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
+    export NEXTAUTH_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-nextauth-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
     export KEYCLOAK_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-client-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
     export JWT_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-jwt-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export NEXTAUTH_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-nextauth-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
     
     # Terraform variables
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
     export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
+    # Pilot/default Keycloak URL (matches KC_HOSTNAME=localhost in docker-compose)
+    export KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
+    export KEYCLOAK_ADMIN_USERNAME="${KEYCLOAK_ADMIN_USERNAME:-admin}"
+    # Align Auth.js/NextAuth secrets for frontend
+    [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     
     # Verify critical secrets
     local missing=0
