@@ -31,9 +31,13 @@ import * as https from 'https';
 import * as speakeasy from 'speakeasy';
 
 // Configuration
-const KEYCLOAK_URL_USA = process.env.KEYCLOAK_URL_USA || 'https://usa-idp.dive25.com';
-const KEYCLOAK_URL_FRA = process.env.KEYCLOAK_URL_FRA || 'https://fra-idp.dive25.com';
-const KEYCLOAK_URL_DEU = process.env.KEYCLOAK_URL_DEU || 'https://deu-idp.dive25.com';
+// Local-first defaults so the test can run against a dev Keycloak on localhost
+// without needing cloud endpoints. Override via KEYCLOAK_URL_{USA|FRA|DEU} for
+// remote environments.
+const LOCAL_KEYCLOAK = 'http://localhost:8081';
+const KEYCLOAK_URL_USA = process.env.KEYCLOAK_URL_USA || LOCAL_KEYCLOAK;
+const KEYCLOAK_URL_FRA = process.env.KEYCLOAK_URL_FRA || LOCAL_KEYCLOAK;
+const KEYCLOAK_URL_DEU = process.env.KEYCLOAK_URL_DEU || LOCAL_KEYCLOAK;
 const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || 'TestUser2025!Pilot';
 const REALM = 'dive-v3-broker';
 // Support both client IDs for testing (verified via Admin API: dive-v3-client-broker exists)
@@ -96,6 +100,8 @@ const describeIf = (condition: boolean) => condition ? describe : describe.skip;
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 const httpClient: AxiosInstance = axios.create({
     httpsAgent,
+    // Force direct connection to local Keycloak (bypass corporate/system proxies)
+    proxy: false,
     timeout: 30000,
     headers: {
         'Content-Type': 'application/x-www-form-urlencoded'

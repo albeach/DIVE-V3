@@ -95,6 +95,16 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 
     // CRITICAL: For federation, we must fetch JWKS from the TOKEN'S issuer, not local Keycloak
     let issuerJwksUri: string | null = null;
+    const rewriteToInternal = (uri: string): string => {
+        // If the issuer is localhost (from dev tokens), prefer the in-cluster Keycloak service
+        if (uri.startsWith('https://localhost:8443/realms/')) {
+            return uri.replace('https://localhost:8443', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+        }
+        if (uri.startsWith('http://localhost:8081/realms/')) {
+            return uri.replace('http://localhost:8081', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+        }
+        return uri;
+    };
     
     if (token) {
         try {
@@ -103,7 +113,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
             if (payload?.iss) {
                 // The issuer is the Keycloak realm URL, append JWKS path
                 // e.g., https://gbr-idp.dive25.com/realms/dive-v3-broker -> https://gbr-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs
-                issuerJwksUri = `${payload.iss}/protocol/openid-connect/certs`;
+                issuerJwksUri = rewriteToInternal(`${payload.iss}/protocol/openid-connect/certs`);
                 kasLogger.debug('Using issuer JWKS for federation', { issuer: payload.iss, jwksUri: issuerJwksUri });
             }
         } catch (err) {
@@ -120,10 +130,11 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     // 3. Local Keycloak external (localhost)
     const jwksUris = [
         ...(issuerJwksUri ? [issuerJwksUri] : []),  // Priority: issuer's JWKS
-        `${process.env.KEYCLOAK_URL}/realms/${realm}/protocol/openid-connect/certs`,  // Internal
-        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // External HTTP
-        `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // External HTTPS
-    ];
+        `${process.env.KEYCLOAK_URL || 'https://keycloak:8443'}/realms/${realm}/protocol/openid-connect/certs`,  // Internal service
+        `http://keycloak:8080/realms/${realm}/protocol/openid-connect/certs`,        // Internal HTTP
+        `http://localhost:8081/realms/${realm}/protocol/openid-connect/certs`,        // Host-exposed HTTP
+        `https://localhost:8443/realms/${realm}/protocol/openid-connect/certs`,       // Host-exposed HTTPS
+    ].map(rewriteToInternal);
 
     const jwksUri = jwksUris[0]; // Primary URI for logging
 

@@ -89,29 +89,22 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
         ? user!.amr.join(' + ') 
         : (Array.isArray(decoded?.amr) ? decoded!.amr.join(' + ') : decoded?.amr || null);
     
-    // Convert ACR to readable AAL level (0 → AAL1, 1 → AAL2, 2 → AAL3)
+    // Convert ACR to readable AAL level
     const getAALDisplay = (acrValue: string | null): string => {
         if (!acrValue) return 'N/A';
         const acrNum = parseInt(acrValue, 10);
         if (isNaN(acrNum)) {
             // Handle string formats like "aal1", "aal2", "aal3"
             const acrLower = acrValue.toLowerCase();
-            if (acrLower.includes('aal3') || acrLower.includes('gold') || acrLower === '3' || acrLower === '2') {
-                return 'AAL3';
-            }
-            if (acrLower.includes('aal2') || acrLower.includes('silver') || acrLower === '1') {
-                return 'AAL2';
-            }
-            if (acrLower.includes('aal1') || acrLower.includes('bronze') || acrLower === '0') {
-                return 'AAL1';
-            }
+            if (acrLower.includes('aal3') || acrLower.includes('gold') || acrLower === '3') return 'AAL3';
+            if (acrLower.includes('aal2') || acrLower.includes('silver') || acrLower === '2') return 'AAL2';
+            if (acrLower.includes('aal1') || acrLower.includes('bronze') || acrLower === '1' || acrLower === '0') return 'AAL1';
             return acrValue.toUpperCase();
         }
-        // Numeric format: 0 = AAL1, 1 = AAL2, 2 = AAL3
-        if (acrNum === 2) return 'AAL3';
-        if (acrNum === 1) return 'AAL2';
-        if (acrNum === 0) return 'AAL1';
-        return `AAL${acrNum + 1}`; // Fallback for other numeric values
+        // Numeric format: Keycloak Level 1 => acr=1 (password), Level 2 => acr=2 (OTP), Level 3 => acr=3 (WebAuthn)
+        if (acrNum >= 3) return 'AAL3';
+        if (acrNum === 2) return 'AAL2';
+        return 'AAL1'; // acr 0 or 1 -> treat as AAL1 (password/SSO)
     };
     
     // Check if user has MFA configured (OTP or WebAuthn)
@@ -135,7 +128,8 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
             if (hasWebAuthnInAMR || hasOTPInAMR) {
                 return true;
             }
-            return null; // Still checking via API
+            // No MFA factors in AMR; treat as not set rather than "Checking"
+            return false;
         }
         // Use configured status (from API or AMR)
         return (otpConfigured === true) || (webAuthnConfigured === true);

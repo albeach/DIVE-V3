@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
+import path from 'path';
 import * as jwt from 'jsonwebtoken';
 import axios from 'axios';
 import NodeCache from 'node-cache';
@@ -69,20 +71,88 @@ const OPA_DECISION_ENDPOINT = USE_UNIFIED_ENDPOINT
     ? `${OPA_URL}/v1/data/dive/authz/decision`
     : `${OPA_URL}/v1/data/dive/authorization`;
 
+// Trusted issuer → tenant lookup (shared with OPAL data)
+// We load once from the existing OPAL data file to avoid regex-based tenant guesses.
+const TRUSTED_ISSUER_PATHS = [
+    // Local dev (repo root)
+    path.join(process.cwd(), 'backend', 'data', 'opal', 'trusted_issuers.json'),
+    path.join(process.cwd(), 'data', 'opal', 'trusted_issuers.json'),
+    path.join(process.cwd(), '..', 'backend', 'data', 'opal', 'trusted_issuers.json'),
+    // Container paths (docker-compose)
+    '/app/data/opal/trusted_issuers.json',
+    '/app/backend/data/opal/trusted_issuers.json',
+];
+
+let trustedIssuerTenantMap: Record<string, string> | null = null;
+
+function loadTrustedIssuerTenantMap(): Record<string, string> {
+    if (trustedIssuerTenantMap) {
+        return trustedIssuerTenantMap;
+    }
+
+    for (const candidate of TRUSTED_ISSUER_PATHS) {
+        try {
+            const content = fs.readFileSync(candidate, 'utf-8');
+            const parsed = JSON.parse(content);
+            const issuers = parsed?.trusted_issuers;
+
+            if (issuers && typeof issuers === 'object') {
+                trustedIssuerTenantMap = Object.fromEntries(
+                    Object.entries(issuers)
+                        .filter(([, meta]) => meta && (meta as any).tenant)
+                        .map(([issuer, meta]) => [
+                            issuer.replace(/\/$/, ''),
+                            String((meta as any).tenant).toUpperCase(),
+                        ])
+                );
+
+                logger.info('Loaded trusted issuer tenant map', {
+                    path: candidate,
+                    count: Object.keys(trustedIssuerTenantMap).length,
+                });
+
+                return trustedIssuerTenantMap;
+            }
+        } catch (error) {
+            logger.debug('Failed to load trusted issuer map from path', {
+                path: candidate,
+                error: error instanceof Error ? error.message : 'unknown error',
+            });
+        }
+    }
+
+    trustedIssuerTenantMap = {};
+    logger.warn('Trusted issuer tenant map not found; falling back to regex tenant extraction');
+    return trustedIssuerTenantMap;
+}
+
 /**
  * Extract tenant from token issuer or request context
  * Used for multi-tenant policy isolation
  */
 const extractTenant = (token: IKeycloakToken, req: Request): string | undefined => {
-    // Try to extract from issuer URL (e.g., /realms/dive-v3-usa)
     const issuer = (token as any)?.iss;
+
+    // Preferred: map issuer via trusted issuers metadata (OPAL data)
+    const tenantMap = loadTrustedIssuerTenantMap();
+    const normalizedIssuer = issuer ? issuer.replace(/\/$/, '') : undefined;
+    if (normalizedIssuer && tenantMap[normalizedIssuer]) {
+        return tenantMap[normalizedIssuer];
+    }
+
+    // Fallback: legacy realm regex
     if (issuer) {
         const realmMatch = issuer.match(/\/realms\/dive-v3-([a-z]{3})/i);
         if (realmMatch) {
-            return realmMatch[1].toUpperCase();
+            const realm = realmMatch[1].toUpperCase();
+            // Broker realm should map to USA (legacy default)
+            if (realm === 'BRO') {
+                return 'USA';
+            }
+            return realm;
         }
     }
-    
+
     // Fallback to country of affiliation
     if (token.countryOfAffiliation) {
         return token.countryOfAffiliation.toUpperCase();
@@ -437,7 +507,8 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             envIssuers.unshift(process.env.KEYCLOAK_ISSUER.trim());
         }
         
-        const validIssuers: [string, ...string[]] = [
+        // Accept multiple trusted issuers (may be empty if envIssuers is empty)
+        const validIssuers: string[] = [
             // CRITICAL: Environment-configured issuers FIRST (for spoke deployments)
             ...envIssuers,
             

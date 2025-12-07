@@ -41,6 +41,7 @@ export async function GET() {
             amr: payload.amr || [],
             auth_time: payload.auth_time,
             aal_interpretation: interpretAAL(payload.acr, payload.amr),
+            note: 'Mapping: acr 0/1 → AAL1, 2 → AAL2, 3 → AAL3. AMR with 2+ factors yields AAL2 fallback.',
         };
 
         return NextResponse.json({
@@ -70,16 +71,18 @@ export async function GET() {
 }
 
 function interpretAAL(acr: any, amr: any): string {
-    const acrStr = String(acr || '0');
+    const acrStr = String(acr ?? '0');
     const amrArray = Array.isArray(amr) ? amr : [];
 
-    // Check ACR value
-    if (acrStr === '2' || acrStr === '3') return 'AAL3';
-    if (acrStr === '1') return 'AAL2';
-    
-    // Fallback: check AMR factors
+    // Numeric/string mapping aligned to Keycloak default:
+    // 1 => Level 1 (password), 2 => Level 2 (OTP), 3 => Level 3 (WebAuthn)
+    if (acrStr === '3') return 'AAL3';
+    if (acrStr === '2') return 'AAL2';
+    if (acrStr === '1' || acrStr === '0') return 'AAL1';
+
+    // Fallback: infer from AMR if multiple factors present
     if (amrArray.length >= 2) return 'AAL2 (from AMR factors)';
-    
+
     return 'AAL1 (single factor)';
 }
 

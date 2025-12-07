@@ -193,10 +193,10 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "full_coi" {
 resource "keycloak_openid_user_attribute_protocol_mapper" "full_given_name" {
   realm_id        = var.realm_id
   client_scope_id = keycloak_openid_client_scope.full_attributes.id
-  name            = "givenName-mapper"
+  name            = "firstName-mapper"
 
-  user_attribute   = "givenName"
-  claim_name       = "givenName"
+  user_attribute   = "firstName"
+  claim_name       = "firstName"
   claim_value_type = "String"
 
   add_to_id_token     = true
@@ -207,10 +207,10 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "full_given_name" {
 resource "keycloak_openid_user_attribute_protocol_mapper" "full_surname" {
   realm_id        = var.realm_id
   client_scope_id = keycloak_openid_client_scope.full_attributes.id
-  name            = "surname-mapper"
+  name            = "lastName-mapper"
 
-  user_attribute   = "surname"
-  claim_name       = "surname"
+  user_attribute   = "lastName"
+  claim_name       = "lastName"
   claim_value_type = "String"
 
   add_to_id_token     = true

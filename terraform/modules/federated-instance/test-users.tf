@@ -21,11 +21,8 @@
 # ============================================================================
 
 locals {
-  # NIST 800-63B Compliant Passwords (Phase 1 - Nov 27, 2025)
-  # Admin: 26 chars, high entropy, rotated quarterly
-  # Test users: 19 chars, memorable for demos, secure
-  admin_password = "DivePilot2025!SecureAdmin"
-  pilot_password = "TestUser2025!Pilot"
+  # NIST 800-63B Compliant Passwords (provided securely via variables/GCP)
+  pilot_password = var.test_user_password
 
   # Clearance levels mapped to numbers (1=lowest, 4=highest)
   clearance_levels = {
@@ -126,13 +123,18 @@ resource "keycloak_user" "pilot_users" {
     },
     # Only include acpCOI if user has COI tags (prevents empty "[]" string in token)
     length(each.value.coi) > 0 ? {
-      acpCOI = join("##", each.value.coi)
+      # Store as JSON string to allow claim_value_type=JSON mapper
+      acpCOI = jsonencode(each.value.coi)
     } : {}
   )
 
   lifecycle {
     ignore_changes = [initial_password]
   }
+
+  depends_on = [
+    keycloak_realm_user_profile.dive_attributes
+  ]
 }
 
 # ============================================================================
@@ -182,13 +184,17 @@ resource "keycloak_user" "industry_partner" {
     },
     # Only include acpCOI if user has COI tags (prevents empty "[]" string in token)
     length(local.this_industry_partner.coi) > 0 ? {
-      acpCOI = join("##", local.this_industry_partner.coi)
+      acpCOI = jsonencode(local.this_industry_partner.coi)
     } : {}
   )
 
   lifecycle {
     ignore_changes = [initial_password]
   }
+
+  depends_on = [
+    keycloak_realm_user_profile.dive_attributes
+  ]
 }
 
 # ============================================================================
@@ -224,7 +230,8 @@ output "pilot_user_credentials" {
   description = "Quick reference for demo credentials"
   value = var.create_test_users ? (
     local.this_industry_partner != null
-    ? "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / DiveDemo2025! | INDUSTRY: contractor.${local.this_industry_partner.company_short} / DiveDemo2025!"
-    : "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / DiveDemo2025!"
+    ? "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / ${local.pilot_password} | INDUSTRY: contractor.${local.this_industry_partner.company_short} / ${local.pilot_password}"
+    : "GOV: testuser-${lower(var.instance_code)}-{1,2,3,4} / ${local.pilot_password}"
   ) : "Test users not created"
+  sensitive = true
 }

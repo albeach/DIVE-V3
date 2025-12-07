@@ -33,6 +33,8 @@ module "instance" {
 
   # Test users
   create_test_users = var.create_test_users
+  test_user_password = var.test_user_password
+  admin_user_password = var.admin_user_password
 
   # Theme - use instance-specific if exists, otherwise default
   login_theme = lookup(local.instance_themes, upper(terraform.workspace), "dive-v3")
