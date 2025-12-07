@@ -54,3 +54,4 @@ Or run individual scripts:
 ./scripts/spoke-init/seed-resources.sh FRA
 ```
 
+

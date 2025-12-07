@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
 // Use HTTPS with mkcert for local development
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
@@ -19,23 +19,25 @@ const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhos
  */
 export async function GET(request: NextRequest) {
   try {
-    // Verify admin authentication
-    const session = await auth();
-    if (!session || !session.user) {
+    // Verify admin authentication via server-side session + DB tokens
+    const validation = await validateSession();
+    if (!validation.isValid || !validation.session?.user) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    // Check admin role (admin or super_admin)
-    const userRoles = (session.user as any).roles || [];
+    const userRoles = (validation.session.user as any).roles || [];
     if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'Admin access required' },
         { status: 403 }
       );
     }
+
+    // Fetch fresh access token from database (never trust client session)
+    const tokens = await getSessionTokens();
 
     // Extract query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -55,12 +57,12 @@ export async function GET(request: NextRequest) {
     queryParams.append('page', page.toString());
     queryParams.append('limit', limit.toString());
 
-    // Forward request to backend
+    // Forward request to backend with a valid bearer token
     const backendResponse = await fetch(
       `${BACKEND_API_URL}/api/sp-management/sps?${queryParams.toString()}`,
       {
         headers: {
-          'Authorization': `Bearer ${(session as any).accessToken}`,
+          Authorization: `Bearer ${tokens.accessToken}`,
           'Content-Type': 'application/json'
         }
       }
@@ -92,23 +94,25 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify admin authentication
-    const session = await auth();
-    if (!session || !session.user) {
+    // Verify admin authentication via server-side session + DB tokens
+    const validation = await validateSession();
+    if (!validation.isValid || !validation.session?.user) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Authentication required' },
         { status: 401 }
       );
     }
 
-    // Check admin role (admin or super_admin)
-    const userRoles = (session.user as any).roles || [];
+    const userRoles = (validation.session.user as any).roles || [];
     if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'Admin access required' },
         { status: 403 }
       );
     }
+
+    // Fetch fresh access token from database (never trust client session)
+    const tokens = await getSessionTokens();
 
     // Parse request body
     const body = await request.json();
@@ -119,7 +123,7 @@ export async function POST(request: NextRequest) {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${(session as any).accessToken}`,
+          Authorization: `Bearer ${tokens.accessToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(body)

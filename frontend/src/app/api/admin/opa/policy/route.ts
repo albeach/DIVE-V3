@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         }
 
         const { searchParams } = new URL(request.url);
-        const file = searchParams.get('file') || 'fuel_inventory_abac_policy.rego';
+        const file = searchParams.get('file') || 'entrypoints/authz.rego';
 
         const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
         const response = await fetch(`${backendUrl}/api/admin/opa/policy?file=${file}`, {
@@ -33,6 +33,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
+
 
 
 
