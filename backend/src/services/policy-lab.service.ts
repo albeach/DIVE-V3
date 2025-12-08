@@ -11,7 +11,11 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { IPolicyUpload } from '../types/policies-lab.types';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:password@localhost:27017';
+const MONGODB_URL =
+  process.env.MONGODB_URL ||
+  (process.env.MONGO_PASSWORD
+    ? `mongodb://admin:${process.env.MONGO_PASSWORD}@localhost:27017?authSource=admin`
+    : '');
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_NAME = 'policy_uploads';
 

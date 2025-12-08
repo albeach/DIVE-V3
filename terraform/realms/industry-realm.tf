@@ -12,6 +12,15 @@ resource "keycloak_realm" "dive_v3_industry" {
   display_name      = "DIVE V3 - Industry Partners"
   display_name_html = "<b>DIVE V3</b> - Authorized Contractors"
 
+  # Map ACR → LoA for step-up visibility
+  attributes = {
+    acrToLoaMap = jsonencode({
+      "urn:mace:incommon:iap:silver"   = 1
+      "urn:mace:incommon:iap:gold"     = 2
+      "urn:mace:incommon:iap:platinum" = 3
+    })
+  }
+
   # Registration settings (industry may allow self-registration)
   registration_allowed           = false # Controlled for pilot
   registration_email_as_username = false

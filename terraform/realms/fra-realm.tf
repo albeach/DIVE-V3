@@ -12,6 +12,15 @@ resource "keycloak_realm" "dive_v3_fra" {
   display_name      = "DIVE V3 - France"
   display_name_html = "<b>DIVE V3</b> - Ministère des Armées"
 
+  # Map ACR → LoA for step-up visibility
+  attributes = {
+    acrToLoaMap = jsonencode({
+      "urn:mace:incommon:iap:silver"   = 1
+      "urn:mace:incommon:iap:gold"     = 2
+      "urn:mace:incommon:iap:platinum" = 3
+    })
+  }
+
   # Registration and login settings
   registration_allowed           = false
   registration_email_as_username = false

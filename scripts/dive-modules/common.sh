@@ -166,6 +166,14 @@ check_certs() {
 
 load_gcp_secrets() {
     local instance="${1:-usa}"
+    # Normalize instance to lowercase for secret names (secrets use lowercase suffixes)
+    local inst_lc
+    inst_lc=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    # Use configured project, default to dive25 if not set
+    local project="${GCP_PROJECT:-dive25}"
+
+    # Debug: show which project/instance we will query
+    echo "[secrets-debug] project=${project} instance=${inst_lc}"
     
     log_step "Loading secrets from GCP Secret Manager ($(upper "$instance"))..."
     
@@ -183,13 +191,26 @@ load_gcp_secrets() {
     
     check_gcloud || { log_error "GCP authentication required for environment '$ENVIRONMENT'"; return 1; }
     
-    export POSTGRES_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-postgres-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export KEYCLOAK_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export MONGO_PASSWORD=$(gcloud secrets versions access latest --secret="dive-v3-mongodb-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export AUTH_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-auth-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export NEXTAUTH_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-nextauth-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export KEYCLOAK_CLIENT_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-client-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
-    export JWT_SECRET=$(gcloud secrets versions access latest --secret="dive-v3-jwt-secret-${instance}" --project="$GCP_PROJECT" 2>/dev/null || echo "")
+    fetch_secret() {
+        local name="$1"
+        local var_ref="$2"
+        local value
+        if value=$(gcloud secrets versions access latest --secret="$name" --project="$project" 2>&1); then
+            eval "$var_ref=\"\$value\""
+            echo "[secrets-debug] loaded $name (len=${#value})"
+        else
+            echo "[secrets-debug] FAILED $name -> $value"
+            eval "$var_ref=\"\""
+        fi
+    }
+
+    fetch_secret "dive-v3-postgres-${inst_lc}" POSTGRES_PASSWORD
+    fetch_secret "dive-v3-keycloak-${inst_lc}" KEYCLOAK_ADMIN_PASSWORD
+    fetch_secret "dive-v3-mongodb-${inst_lc}" MONGO_PASSWORD
+    fetch_secret "dive-v3-auth-secret-${inst_lc}" AUTH_SECRET
+    fetch_secret "dive-v3-nextauth-secret-${inst_lc}" NEXTAUTH_SECRET
+    fetch_secret "dive-v3-keycloak-client-secret-${inst_lc}" KEYCLOAK_CLIENT_SECRET
+    fetch_secret "dive-v3-jwt-secret-${inst_lc}" JWT_SECRET
     
     # Terraform variables
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
@@ -241,6 +262,39 @@ load_secrets() {
             return 1
             ;;
     esac
+}
+
+apply_env_profile() {
+    local inst_lc
+    inst_lc=$(lower "$INSTANCE")
+
+    case "$ENVIRONMENT" in
+        local|dev)
+            export KEYCLOAK_HOSTNAME="localhost"
+            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://localhost:3000}"
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}"
+            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}"
+            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://localhost:4000}"
+            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}"
+            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}"
+            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000}"
+            ;;
+        gcp|pilot|prod|staging)
+            export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${inst_lc}-idp.dive25.com}"
+            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.dive25.com}"
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker}"
+            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.dive25.com}"
+            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.dive25.com}"
+            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.dive25.com}"
+            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${inst_lc}-idp.dive25.com}"
+            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.dive25.com,https://${inst_lc}-api.dive25.com,https://${inst_lc}-idp.dive25.com}"
+            ;;
+        *)
+            log_warn "Unknown environment '$ENVIRONMENT' for env profile; skipping profile application"
+            ;;
+    esac
+
+    log_verbose "Applied env profile (${ENVIRONMENT}) for instance ${inst_lc}"
 }
 
 # Ensure DIVE_ROOT is set

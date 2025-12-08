@@ -13,9 +13,10 @@
 
 import { decisionLogService, IDecisionLog, IKeyReleaseLog } from '../services/decision-log.service';
 import { MongoClient } from 'mongodb';
+import { getTestMongoDatabase, getTestMongoUri } from './helpers/test-mongo-uri';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://admin:password@localhost:27017';
-const TEST_DB = 'dive-v3-test';
+const MONGODB_URI = getTestMongoUri();
+const TEST_DB = getTestMongoDatabase();
 
 describe('Decision Log Service', () => {
     let mongoClient: MongoClient;

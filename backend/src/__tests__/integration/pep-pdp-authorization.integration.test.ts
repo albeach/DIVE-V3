@@ -27,10 +27,18 @@ import app from '../../server';
 import { createE2EJWT } from '../helpers/mock-jwt-rs256';
 import { mockKeycloakJWKS, cleanupJWKSMock } from '../helpers/mock-jwks';
 import { mockOPAServer, cleanupOPAMock } from '../helpers/mock-opa-server';
+import { getTestMongoDatabase, getTestMongoUri } from '../helpers/test-mongo-uri';
 
 // Test configuration - Use MongoDB Memory Server
-const MONGODB_URI = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const TEST_DB = process.env.MONGODB_DATABASE || 'dive-v3-test';
+const MONGODB_URI = getTestMongoUri();
+const TEST_DB = getTestMongoDatabase();
+
+const logOnError = (response: any, label: string): void => {
+    if (response.status >= 400) {
+        // eslint-disable-next-line no-console
+        console.error(`[${label}] status=${response.status}`, response.body);
+    }
+};
 
 describe('PEP/PDP Integration Tests - Phase 3', () => {
     let mongoClient: MongoClient;
@@ -80,6 +88,7 @@ describe('PEP/PDP Integration Tests - Phase 3', () => {
                 .get('/api/resources/test-phase3-usa-secret')
                 .set('Authorization', `Bearer ${token}`);
 
+            logOnError(response, 'usa-secret');
             expect(response.status).toBe(200);
             expect(response.body.resourceId).toBe('test-phase3-usa-secret');
         });

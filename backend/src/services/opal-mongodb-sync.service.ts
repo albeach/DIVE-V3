@@ -80,8 +80,11 @@ export interface ISyncStats {
 // CONFIGURATION
 // ============================================
 
-const MONGODB_URL = process.env.MONGODB_URL || 
-  'mongodb://admin:password@localhost:27017?authSource=admin';
+const MONGODB_URL =
+  process.env.MONGODB_URL ||
+  (process.env.MONGO_PASSWORD
+    ? `mongodb://admin:${process.env.MONGO_PASSWORD}@localhost:27017?authSource=admin`
+    : '');
 const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3';
 
 const COLLECTIONS = {
@@ -125,6 +128,11 @@ class OPALMongoDBSyncService {
   async connect(): Promise<boolean> {
     if (this.client && this.db) {
       return true;
+    }
+
+    if (!MONGODB_URL) {
+      logger.error('MongoDB URL is not configured for OPAL sync');
+      return false;
     }
 
     try {

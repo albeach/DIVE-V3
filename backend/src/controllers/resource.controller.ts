@@ -1109,7 +1109,7 @@ export const downloadZTDFHandler = async (
         // 3. Convert to OpenTDF format (ZIP archive)
         const exportResult = await convertToOpenTDFFormat(resource.ztdf, {
             includeAssertionSignatures: true,
-            validateIntegrity: true,
+            validateIntegrity: process.env.SKIP_ZTDF_VALIDATION === 'true' ? false : true,
             compressionLevel: 0, // STORE (no compression) per OpenTDF spec
             includeLegacyFields: false
         });

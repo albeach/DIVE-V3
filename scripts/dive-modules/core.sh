@@ -20,6 +20,7 @@ cmd_up() {
     check_docker || exit 1
     check_certs || exit 1
     load_secrets || exit 1
+    apply_env_profile
     
     log_step "Starting DIVE V3 Stack..."
     

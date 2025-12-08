@@ -59,15 +59,17 @@ jest.mock('winston', () => {
 });
 
 // Also mock the logger utility specifically
-jest.mock('../utils/logger', () => ({
-    logger: {
+jest.mock('../utils/logger', () => {
+    const mockLogger: any = {
         info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+        warn: jest.fn((msg: any, meta: any) => console.warn(msg, meta)),
+        error: jest.fn((msg: any, meta: any) => console.error(msg, meta)),
         debug: jest.fn(),
         log: jest.fn(),
-    },
-}));
+    };
+    mockLogger.child = jest.fn(() => mockLogger);
+    return { logger: mockLogger };
+});
 
 // Global test timeout
 jest.setTimeout(10000);

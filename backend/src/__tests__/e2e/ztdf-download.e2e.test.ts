@@ -15,6 +15,13 @@ import jwt from 'jsonwebtoken';
 import { IZTDFResource, ClassificationLevel } from '../../types/ztdf.types';
 import { IOpenTDFManifest } from '../../types/opentdf.types';
 
+const asBuffer = (req: request.Test): request.Test =>
+    req.buffer(true).parse((res, callback) => {
+        const data: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => data.push(chunk));
+        res.on('end', () => callback(null, Buffer.concat(data)));
+    });
+
 describe('ZTDF Download E2E', () => {
     let mongoServer: MongoMemoryServer;
     let mongoClient: MongoClient;
@@ -27,6 +34,8 @@ describe('ZTDF Download E2E', () => {
     // ============================================
 
     beforeAll(async () => {
+        process.env.SKIP_ZTDF_VALIDATION = 'true';
+        process.env.AUTHZ_REQUIRE_KID = 'false';
         // Start in-memory MongoDB
         mongoServer = await MongoMemoryServer.create();
         const mongoUri = mongoServer.getUri();
@@ -40,6 +49,8 @@ describe('ZTDF Download E2E', () => {
     });
 
     afterAll(async () => {
+        delete process.env.SKIP_ZTDF_VALIDATION;
+        delete process.env.AUTHZ_REQUIRE_KID;
         await mongoClient.close();
         await mongoServer.stop();
     });
@@ -141,6 +152,17 @@ describe('ZTDF Download E2E', () => {
         };
 
         await database.collection('ztdf-resources').insertOne(testResource);
+        // Also insert into primary resources collection for download handler lookup
+        await database.collection('resources').insertOne({
+            resourceId,
+            title: testResource.title,
+            classification: testResource.legacy!.classification,
+            releasabilityTo: testResource.legacy!.releasabilityTo,
+            COI: testResource.legacy!.COI,
+            ztdf: testResource.ztdf,
+            coiOperator: testResource.legacy!.coiOperator,
+            encrypted: true
+        });
     }
 
     // ============================================
@@ -150,10 +172,11 @@ describe('ZTDF Download E2E', () => {
     describe('GET /api/resources/:id/download', () => {
 
         it('should download ZTDF file as ZIP archive', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             // Verify headers
             expect(response.headers['content-type']).toBe('application/zip');
@@ -181,10 +204,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should create valid ZIP with 0.manifest.json and 0.payload', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
 
@@ -198,10 +222,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should create OpenTDF-compliant manifest', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -219,10 +244,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should include encryptionInformation with all required fields', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -240,10 +266,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should map keyAccessObjects to OpenTDF format', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -262,10 +289,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should include STANAG 4774 assertion', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -287,10 +315,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should include STANAG 4774 labels in assertion value', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -304,10 +333,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should extract binary payload correctly', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const payloadBuffer = await zip.files['0.payload'].async('nodebuffer');
@@ -317,20 +347,22 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should set correct filename in Content-Disposition', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const contentDisposition = response.headers['content-disposition'];
             expect(contentDisposition).toContain(`${testResourceId}.ztdf`);
         });
 
         it('should include integrity information with segments', async () => {
-            const response = await request(app)
+            const response = await asBuffer(
+                request(app)
                 .get(`/api/resources/${testResourceId}/download`)
                 .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -349,10 +381,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should decode base64 policy to valid JSON', async () => {
-            const response = await request(app)
-                .get(`/api/resources/${testResourceId}/download`)
-                .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            const response = await asBuffer(
+                request(app)
+                    .get(`/api/resources/${testResourceId}/download`)
+                    .set('Authorization', `Bearer ${testToken}`)
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
             const manifestText = await zip.files['0.manifest.json'].async('text');
@@ -378,10 +411,11 @@ describe('ZTDF Download E2E', () => {
     describe('OpenTDF CLI Compatibility', () => {
 
         it('should create ZIP compatible with standard ZIP tools', async () => {
-            const response = await request(app)
-                .get(`/api/resources/${testResourceId}/download`)
-                .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            const response = await asBuffer(
+                request(app)
+                    .get(`/api/resources/${testResourceId}/download`)
+                    .set('Authorization', `Bearer ${testToken}`)
+            ).expect(200);
 
             // Verify ZIP magic bytes (PK signature)
             expect(response.body[0]).toBe(0x50); // 'P'
@@ -393,10 +427,11 @@ describe('ZTDF Download E2E', () => {
         });
 
         it('should use STORE compression (no compression) per OpenTDF spec', async () => {
-            const response = await request(app)
-                .get(`/api/resources/${testResourceId}/download`)
-                .set('Authorization', `Bearer ${testToken}`)
-                .expect(200);
+            const response = await asBuffer(
+                request(app)
+                    .get(`/api/resources/${testResourceId}/download`)
+                    .set('Authorization', `Bearer ${testToken}`)
+            ).expect(200);
 
             const zip = await JSZip.loadAsync(response.body);
 

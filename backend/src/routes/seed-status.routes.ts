@@ -19,7 +19,12 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // MongoDB connection
-const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://admin:password@localhost:27017';
+const MONGODB_URL =
+  process.env.MONGODB_URL ||
+  process.env.MONGODB_URI ||
+  (process.env.MONGO_PASSWORD
+    ? `mongodb://admin:${process.env.MONGO_PASSWORD}@localhost:27017?authSource=admin`
+    : '');
 const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3';
 
 let dbClient: MongoClient | null = null;

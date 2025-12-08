@@ -12,6 +12,15 @@ resource "keycloak_realm" "dive_v3_broker" {
   display_name      = "DIVE V3 - Federation Hub"
   display_name_html = "<b>DIVE V3</b> - Coalition Identity Broker"
 
+  # Map ACR → LoA for step-up visibility
+  attributes = {
+    acrToLoaMap = jsonencode({
+      "urn:mace:incommon:iap:silver"   = 1
+      "urn:mace:incommon:iap:gold"     = 2
+      "urn:mace:incommon:iap:platinum" = 3
+    })
+  }
+
   # Federation hub settings (no direct users)
   registration_allowed           = false
   registration_email_as_username = false

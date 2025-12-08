@@ -13,7 +13,9 @@ import { MongoClient } from 'mongodb';
 import crypto from 'crypto';
 
 // Use MongoDB Memory Server
-const MONGODB_URL = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
+import { getTestMongoUri } from './helpers/test-mongo-uri';
+
+const MONGODB_URL = getTestMongoUri();
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
 describe('KAS Decryption Integration Tests', () => {

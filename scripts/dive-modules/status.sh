@@ -254,6 +254,60 @@ cmd_info() {
     fi
 }
 
+cmd_diagnostics() {
+    print_header
+    echo -e "${BOLD}Diagnostics:${NC}"
+    echo ""
+    cmd_health
+    echo ""
+    echo -e "${BOLD}Host Endpoint Probes (https, 3s timeout):${NC}"
+    probe_endpoint "https://localhost:8443/health" "Keycloak"
+    probe_endpoint "https://localhost:4000/health" "Backend"
+    probe_endpoint "https://localhost:3000/" "Frontend"
+}
+
+probe_endpoint() {
+    local url="$1"
+    local name="$2"
+    if [ "$DRY_RUN" = true ]; then
+        echo -e "  ${GRAY}[dry-run] ${name}: $url${NC}"
+        return
+    fi
+    local code
+    code=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 3 "$url" || echo "000")
+    if [ "$code" = "200" ] || [ "$code" = "302" ]; then
+        echo -e "  ${GREEN}●${NC} ${name} (${code})"
+    else
+        echo -e "  ${RED}○${NC} ${name} (${code})"
+    fi
+}
+
+cmd_env_print() {
+    print_header
+    apply_env_profile
+
+    echo -e "${BOLD}Effective Environment (sanitized):${NC}"
+    echo "  ENVIRONMENT:           $ENVIRONMENT"
+    echo "  INSTANCE:              $INSTANCE"
+    echo "  GCP_PROJECT:           $GCP_PROJECT"
+    echo "  KEYCLOAK_HOSTNAME:     ${KEYCLOAK_HOSTNAME:-<unset>}"
+    echo "  KEYCLOAK_ISSUER:       ${KEYCLOAK_ISSUER:-<unset>}"
+    echo "  NEXTAUTH_URL:          ${NEXTAUTH_URL:-<unset>}"
+    echo "  NEXT_PUBLIC_API_URL:   ${NEXT_PUBLIC_API_URL:-<unset>}"
+    echo "  NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-<unset>}"
+    echo "  NEXT_PUBLIC_BASE_URL:  ${NEXT_PUBLIC_BASE_URL:-<unset>}"
+    echo "  NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-<unset>}"
+    echo "  CORS_ALLOWED_ORIGINS:  ${CORS_ALLOWED_ORIGINS:-<unset>}"
+    echo ""
+    echo -e "${BOLD}Secrets Loaded (presence only):${NC}"
+    printf "  POSTGRES_PASSWORD:        %s\n" "$([ -n \"$POSTGRES_PASSWORD\" ] && echo 'set' || echo 'unset')"
+    printf "  KEYCLOAK_ADMIN_PASSWORD:  %s\n" "$([ -n \"$KEYCLOAK_ADMIN_PASSWORD\" ] && echo 'set' || echo 'unset')"
+    printf "  MONGO_PASSWORD:           %s\n" "$([ -n \"$MONGO_PASSWORD\" ] && echo 'set' || echo 'unset')"
+    printf "  KEYCLOAK_CLIENT_SECRET:   %s\n" "$([ -n \"$KEYCLOAK_CLIENT_SECRET\" ] && echo 'set' || echo 'unset')"
+    printf "  AUTH_SECRET/NEXTAUTH:     %s\n" "$([ -n \"$AUTH_SECRET$NEXTAUTH_SECRET\" ] && echo 'set' || echo 'unset')"
+    printf "  JWT_SECRET:               %s\n" "$([ -n \"$JWT_SECRET\" ] && echo 'set' || echo 'unset')"
+}
+
 # =============================================================================
 # MODULE DISPATCH
 # =============================================================================
@@ -265,8 +319,10 @@ module_status() {
     case "$action" in
         status)   cmd_status "$@" ;;
         health)   cmd_health "$@" ;;
+        diagnostics) cmd_diagnostics "$@" ;;
         validate) cmd_validate "$@" ;;
         info)     cmd_info "$@" ;;
+        env|print) cmd_env_print "$@" ;;
         *)        module_status_help ;;
     esac
 }
@@ -275,8 +331,10 @@ module_status_help() {
     echo -e "${BOLD}Status Commands:${NC}"
     echo "  status              Show overall status"
     echo "  health              Health check all services"
+    echo "  diagnostics         Health plus host probes (KC/BE/FE)"
     echo "  validate            Validate prerequisites and configuration"
     echo "  info                Show environment info"
+    echo "  env|print           Show effective env profile (sanitized)"
 }
 
 
