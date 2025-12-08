@@ -120,9 +120,11 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             System.out.println("[DIVE AMR] Setting AUTH_METHODS_REF: " + amrJson);
             System.out.println("[DIVE AMR] Setting ACR: " + acr + " (AAL" + (Integer.parseInt(acr) + 1) + ")");
             
-            // Set session notes for protocol mappers to read
+            // Set session notes for protocol mappers to read.
+            // Keycloak’s built-in ACR storage uses AUTH_CONTEXT_CLASS_REF; keep legacy ACR for backward compatibility.
             userSession.setNote("AUTH_METHODS_REF", amrJson);
-            userSession.setNote("ACR", acr);
+            userSession.setNote("AUTH_CONTEXT_CLASS_REF", acr); // primary for oidc-usersessionmodel-note-mapper
+            userSession.setNote("ACR", acr);                    // legacy compatibility
             
             System.out.println("[DIVE AMR] AMR/ACR enrichment complete for user: " + user.getUsername() + 
                              " (session: " + userSession.getId() + ")");

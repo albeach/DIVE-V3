@@ -68,6 +68,12 @@ export function mockOPAServer(): void {
         .post('/v1/data/dive/authorization/decision')
         .reply(200, mockHandler);
 
+    // Unified authz endpoint (new path)
+    nock(opaUrl.origin)
+        .persist()
+        .post('/v1/data/dive/authz/decision')
+        .reply(200, mockHandler);
+
     // Mock policy-specific evaluation endpoints (used by policies lab tests)
     nock(opaUrl.origin)
         .persist()

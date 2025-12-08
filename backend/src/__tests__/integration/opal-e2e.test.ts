@@ -22,12 +22,15 @@ import https from 'https';
 // Skip SSL verification for local testing
 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
+const RUN_OPAL_E2E = process.env.RUN_OPAL_E2E === 'true';
 const BACKEND_URL = process.env.BACKEND_URL || 'https://localhost:4000';
 const OPAL_SERVER_URL = process.env.OPAL_SERVER_URL || 'http://localhost:7002';
 
 let api: AxiosInstance;
 
-describe('OPAL E2E Integration', () => {
+const describeOrSkip = RUN_OPAL_E2E ? describe : describe.skip;
+
+describeOrSkip('OPAL E2E Integration', () => {
   beforeAll(() => {
     api = axios.create({
       baseURL: BACKEND_URL,

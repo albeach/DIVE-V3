@@ -248,7 +248,7 @@ describe('MongoDB Config Utils', () => {
 
             it('should mask credentials in URL', () => {
                 const originalUri = process.env.MONGODB_URI;
-                process.env.MONGODB_URI = 'mongodb://admin:password123@secure-host:27017/mydb';
+                process.env.MONGODB_URI = 'mongodb://admin:example@secure-host:27017/mydb';
                 
                 logMongoDBConnection('Production');
                 
@@ -284,7 +284,7 @@ describe('MongoDB Config Utils', () => {
             });
 
             it('should mask complex password with special characters', () => {
-                process.env.MONGODB_URI = 'mongodb://admin:p@ssw0rd!@host:27017';
+                process.env.MONGODB_URI = 'mongodb://admin:Ex@mple!@host:27017';
                 
                 logMongoDBConnection('Test');
                 

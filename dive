@@ -79,6 +79,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Guard against misplaced global flags after the command
+for arg in "$@"; do
+    if [[ "$arg" == "--instance" || "$arg" == "--env" ]]; then
+        log_error "Place global flags before the command. Example: ./dive --instance usa secrets load"
+        exit 1
+    fi
+done
+
 # =============================================================================
 # MAIN COMMAND DISPATCH
 # =============================================================================
@@ -103,11 +111,12 @@ case "$COMMAND" in
         ;;
     
     # Status commands (status.sh)
-    status|health|validate|info)
+    status|health|validate|info|diagnostics)
         source "${MODULES_DIR}/status.sh"
         case "$COMMAND" in
             status)   cmd_status "$@" ;;
             health)   cmd_health "$@" ;;
+            diagnostics) cmd_diagnostics "$@" ;;
             validate) cmd_validate "$@" ;;
             info)     cmd_info "$@" ;;
         esac
@@ -180,6 +189,12 @@ case "$COMMAND" in
     policy)
         source "${MODULES_DIR}/policy.sh"
         module_policy "$@"
+        ;;
+
+    # Environment helpers (status.sh)
+    env)
+        source "${MODULES_DIR}/status.sh"
+        cmd_env_print "$@"
         ;;
     
     # Help

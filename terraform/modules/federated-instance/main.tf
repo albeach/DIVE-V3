@@ -15,6 +15,11 @@ resource "keycloak_realm" "broker" {
   # than external Cloudflare tunnel access (e.g., keycloak:8443 vs usa-idp.dive25.com)
   attributes = {
     frontendUrl = var.idp_url
+    acrToLoaMap = jsonencode({
+      "urn:mace:incommon:iap:silver"   = 1
+      "urn:mace:incommon:iap:gold"     = 2
+      "urn:mace:incommon:iap:platinum" = 3
+    })
   }
 
   # Login settings

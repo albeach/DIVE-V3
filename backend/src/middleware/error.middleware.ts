@@ -14,6 +14,7 @@ export const errorHandler = (
 ): void => {
     const requestId = req.headers['x-request-id'] as string;
     const statusCode = err.statusCode || 500;
+    const reason = (err as any).reason || (err.details && (err.details as any).reason) || err.message || 'Error';
 
   // Log error
   logger.error('Request error', {
@@ -22,13 +23,15 @@ export const errorHandler = (
     stack: err.stack,
     path: req.path,
     method: req.method,
-    statusCode
+    statusCode,
+    reason
   });
 
     // Send error response
     res.status(statusCode).json({
         error: err.name || 'Internal Server Error',
         message: err.message,
+        reason,
         ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
         ...(err.details && { details: err.details }),
         requestId

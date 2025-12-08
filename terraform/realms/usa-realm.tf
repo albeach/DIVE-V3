@@ -12,6 +12,15 @@ resource "keycloak_realm" "dive_v3_usa" {
   display_name      = "DIVE V3 - United States"
   display_name_html = "<b>DIVE V3</b> - U.S. Department of Defense"
 
+  # Map ACR → LoA for step-up visibility
+  attributes = {
+    acrToLoaMap = jsonencode({
+      "urn:mace:incommon:iap:silver"   = 1
+      "urn:mace:incommon:iap:gold"     = 2
+      "urn:mace:incommon:iap:platinum" = 3
+    })
+  }
+
   # Registration and login settings
   registration_allowed           = false # Federated IdPs only
   registration_email_as_username = false

@@ -3282,6 +3282,82 @@ body:has(.dive-policy-notice[open]) .dive-container {
     margin-bottom: 0.5rem;
 }
 
+/* Logout layouts: card treatment for readability on busy backgrounds */
+.dive-logout-confirm,
+.dive-frontchannel-logout {
+    max-width: 640px;
+    margin: 1.5rem auto;
+    padding: 2.25rem 2rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f4f6fb 100%);
+    border-radius: 24px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow: 0 30px 70px rgba(15, 23, 42, 0.22);
+    color: #0b1933;
+    text-align: center;
+}
+
+@media (max-width: 520px) {
+    .dive-logout-confirm,
+    .dive-frontchannel-logout {
+        padding: 1.75rem 1.25rem;
+        border-radius: 18px;
+    }
+}
+
+.dive-logout-confirm .dive-logout-message,
+.dive-frontchannel-logout .dive-logout-message {
+    margin-bottom: 1.75rem;
+}
+
+.dive-logout-confirm .dive-logout-text,
+.dive-frontchannel-logout .dive-logout-text {
+    color: #0b1933;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1.55;
+}
+
+.dive-logout-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 1.25rem;
+    background: #fff;
+    border-radius: 20px;
+    border: 1px solid rgba(15, 23, 42, 0.04);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+}
+
+.dive-logout-icon svg {
+    width: 44px;
+    height: 44px;
+    color: #f59e0b;
+    opacity: 1;
+}
+
+.dive-logout-actions .dive-button {
+    width: 100%;
+    justify-content: center;
+}
+
+@media (min-width: 480px) {
+    .dive-logout-actions .dive-button {
+        width: auto;
+        min-width: 190px;
+    }
+}
+
+/* Support text beneath the main message (e.g., application name) */
+.dive-logout-subtext {
+    margin: 0 auto 1.5rem;
+    max-width: 440px;
+    font-size: 0.95rem;
+    color: rgba(11, 25, 51, 0.7);
+    font-weight: 600;
+}
+
 .dive-expired-subtext {
     font-size: 0.875rem;
     color: rgba(255, 255, 255, 0.7);

@@ -1,5 +1,5 @@
 // COI Keys MongoDB Initialization Script (Direct MongoDB Insert)
-// Run inside MongoDB container with: mongosh mongodb://admin:password@localhost:27017/dive-v3?authSource=admin < init-coi-keys.js
+// Run inside MongoDB container with: mongosh "mongodb://admin:${MONGO_PASSWORD}@localhost:27017/dive-v3?authSource=admin" < init-coi-keys.js
 
 db = db.getSiblingDB('dive-v3');
 
