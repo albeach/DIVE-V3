@@ -33,6 +33,8 @@ import analyticsRoutes from './routes/analytics.routes';  // Phase 2: Search ana
 import metricsRoutes from './routes/metrics.routes';  // Phase 8: Enhanced Prometheus metrics
 import opalRoutes from './routes/opal.routes';  // Phase 2: OPAL policy distribution
 import spokeRoutes from './routes/spoke.routes';  // Phase 5: Spoke resilience operations
+import notificationRoutes from './routes/notifications.routes';
+import notificationCountRoutes from './routes/notifications-count.routes';
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
@@ -132,6 +134,8 @@ app.use('/api/analytics', analyticsRoutes);  // Phase 2: Search analytics tracki
 app.use('/api/kas', kasRoutes);  // KAS proxy routes for ZTDF key access (matches KAO URLs)
 app.use('/api/opal', opalRoutes);  // Phase 2: OPAL policy distribution and bundle management
 app.use('/api/spoke', spokeRoutes);  // Phase 5: Spoke resilience operations (failover, maintenance, audit)
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/notifications-count', notificationCountRoutes);
 
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server

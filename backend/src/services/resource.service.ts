@@ -177,6 +177,40 @@ export async function getAllResourcesLegacy(): Promise<IResource[]> {
 }
 
 /**
+ * Query resources with Mongo-style filters and return simplified shape for federation
+ */
+export async function queryResources(
+    mongoQuery: Record<string, unknown>,
+    limit: number = 100,
+    offset: number = 0,
+    options?: { projection?: Record<string, number> }
+): Promise<IResource[]> {
+    const collection = await getCollection();
+    const cursor = collection
+        .find(mongoQuery)
+        .project(options?.projection || {})
+        .skip(offset)
+        .limit(limit);
+
+    const resources = await cursor.toArray();
+
+    return resources.map(resource => {
+        if (isZTDFResource(resource)) {
+            return {
+                resourceId: resource.resourceId,
+                title: resource.title,
+                classification: resource.ztdf.policy.securityLabel.classification,
+                releasabilityTo: resource.ztdf.policy.securityLabel.releasabilityTo,
+                COI: resource.ztdf.policy.securityLabel.COI || [],
+                creationDate: resource.ztdf.policy.securityLabel.creationDate,
+                encrypted: true
+            };
+        }
+        return resource as any;
+    });
+}
+
+/**
  * Search resources with filters
  * Phase 4, Task 3.2: Federated Resource Discovery
  * 

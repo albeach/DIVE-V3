@@ -79,8 +79,12 @@ describe('Decision Replay Service', () => {
             (axios.post as jest.Mock).mockResolvedValue({
                 data: {
                     result: {
-                        decision: { allow: true, reason: 'All conditions satisfied' },
-                        decision_id: 'test-decision-id',
+                        decision: {
+                            allow: true,
+                            reason: 'All conditions satisfied',
+                            evaluation_details: { latency_ms: 12 }
+                        },
+                        decision_id: 'test-decision-id'
                     },
                 },
             });

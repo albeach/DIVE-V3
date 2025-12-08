@@ -15,7 +15,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authenticateJWT } from './authz.middleware';
 import { logger } from '../utils/logger';
-import { SUPER_ADMIN_ROLE, ADMIN_ROLES, hasAdminRole } from '../types/admin.types';
+import { ADMIN_ROLES, hasAdminRole } from '../types/admin.types';
 
 /**
  * Extended Request with user info (from authenticateJWT)

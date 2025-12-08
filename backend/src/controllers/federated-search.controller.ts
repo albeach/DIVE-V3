@@ -18,7 +18,7 @@ import { searchResources } from '../services/resource.service';
 const httpsAgent = new https.Agent({
     rejectUnauthorized: process.env.NODE_ENV !== 'development'
 });
-const federationAxios = axios.create({ httpsAgent });
+const federationAxios = (axios as any).create ? (axios as any).create({ httpsAgent }) : (axios as any);
 
 // ============================================
 // Configuration

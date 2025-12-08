@@ -8,7 +8,7 @@
  * ✅ Compact design - reduced padding and spacing
  */
 
-import { X, Star, Bell, HelpCircle, User, Users, Settings, ShieldAlert, ScrollText, FileCheck, Key, CheckSquare, BookOpen, ChevronRight, Clock, FileText, Upload, Shield } from 'lucide-react';
+import { X, LayoutGrid, FileText, Upload, Shield, Users, Settings, ShieldAlert, ScrollText, FileCheck, Key, CheckSquare, BookOpen, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
@@ -36,13 +36,11 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
         return 'U';
     };
     
-    const menuItems = [
-        { name: 'Browse Documents', href: '/resources', icon: FileText },
-        { name: 'Upload Document', href: '/upload', icon: Upload },
-        { name: 'Recent Activity', href: '/activity', icon: Clock },
-        { name: 'Saved Items', href: '/resources?filter=favorites', icon: Star },
-        { name: 'Notifications', href: '/notifications', icon: Bell },
-        { name: 'Help & Support', href: '/help', icon: HelpCircle },
+    const primaryActions = [
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutGrid },
+        { name: 'Documents', href: '/resources', icon: FileText },
+        { name: 'Upload', href: '/upload', icon: Upload },
+        ...(isSuperAdmin ? [{ name: 'Policy Tools', href: '/admin/opa-policy', icon: Shield }] : []),
     ];
     
     const adminItems = isSuperAdmin ? [
@@ -67,7 +65,7 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
             
             {/* Drawer - slides up from bottom with SOLID background */}
             <div 
-                className="fixed inset-x-0 bottom-0 z-[9999] bg-white rounded-t-3xl max-h-[85vh] overflow-hidden border-t-2 border-gray-300"
+                className="fixed inset-x-0 bottom-0 z-[9999] bg-white rounded-t-3xl max-h-[90vh] overflow-hidden border-t-2 border-gray-300"
                 style={{ 
                     boxShadow: '0 -10px 40px rgba(0, 0, 0, 0.25)'
                 }}
@@ -88,7 +86,7 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
                 </div>
                 
                 {/* Compact Header - solid background */}
-                <div className="flex items-center justify-between px-4 py-3 border-b-2 border-gray-200 bg-gray-50">
+                <div className="flex items-center justify-between px-4 py-2 border-b-2 border-gray-200 bg-gray-50">
                     <div className="flex items-center gap-3">
                         {/* Compact Avatar with Instance Flag */}
                         <div 
@@ -130,7 +128,7 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
                 {/* Scrollable Menu Content */}
                 <div 
                     className="overflow-y-auto"
-                    style={{ maxHeight: 'calc(85vh - 140px)' }}
+                    style={{ maxHeight: 'calc(90vh - 140px)' }}
                 >
                     {/* Quick Actions Section */}
                     <div className="py-2">
@@ -139,23 +137,24 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
                                 Quick Actions
                             </span>
                         </div>
-                        {menuItems.map((item) => (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                onClick={onClose}
-                                className="flex items-center gap-3 px-4 py-2.5 transition-colors active:bg-gray-50"
-                            >
-                                <item.icon 
-                                    className="w-5 h-5 text-gray-400" 
-                                    strokeWidth={2} 
-                                />
-                                <span className="flex-1 text-sm font-medium text-gray-700">
-                                    {item.name}
-                                </span>
-                                <ChevronRight className="w-4 h-4 text-gray-300" />
-                            </Link>
-                        ))}
+                        <div className="px-4 grid grid-cols-2 gap-2">
+                            {primaryActions.map((item) => (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    onClick={onClose}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 active:bg-gray-50 transition-colors"
+                                >
+                                    <item.icon 
+                                        className="w-4 h-4 text-gray-400" 
+                                        strokeWidth={2} 
+                                    />
+                                    <span className="text-[13px] font-medium text-gray-700 truncate">
+                                        {item.name}
+                                    </span>
+                                </Link>
+                            ))}
+                        </div>
                     </div>
                     
                     {/* Admin Section - Only show if admin */}
@@ -171,24 +170,25 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
                                         Admin Portal
                                     </span>
                                 </div>
-                                {adminItems.map((item) => (
-                                    <Link
-                                        key={item.href}
-                                        href={item.href}
-                                        onClick={onClose}
-                                        className="flex items-center gap-3 px-4 py-2.5 transition-colors active:bg-gray-50"
-                                    >
-                                        <item.icon 
-                                            className="w-5 h-5" 
-                                            style={{ color: 'var(--instance-primary)' }}
-                                            strokeWidth={2} 
-                                        />
-                                        <span className="flex-1 text-sm font-medium text-gray-700">
-                                            {item.name}
-                                        </span>
-                                        <ChevronRight className="w-4 h-4 text-gray-300" />
-                                    </Link>
-                                ))}
+                                <div className="px-4 grid grid-cols-2 gap-2">
+                                    {adminItems.map((item) => (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            onClick={onClose}
+                                            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 active:bg-gray-50 transition-colors"
+                                        >
+                                            <item.icon 
+                                                className="w-4 h-4" 
+                                                style={{ color: 'var(--instance-primary)' }}
+                                                strokeWidth={2} 
+                                            />
+                                            <span className="text-[13px] font-medium text-gray-700 truncate">
+                                                {item.name}
+                                            </span>
+                                        </Link>
+                                    ))}
+                                </div>
                             </div>
                         </>
                     )}
@@ -196,8 +196,8 @@ export function MobileDrawer({ onClose, user }: MobileDrawerProps) {
                 
                 {/* Fixed Footer with Sign Out - solid background */}
                 <div 
-                    className="border-t-2 border-gray-200 p-4 bg-gray-100"
-                    style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+                    className="border-t-2 border-gray-200 px-4 py-3 bg-gray-100"
+                    style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
                 >
                     <SecureLogoutButton />
                 </div>

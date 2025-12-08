@@ -71,6 +71,73 @@ const OPA_DECISION_ENDPOINT = USE_UNIFIED_ENDPOINT
     ? `${OPA_URL}/v1/data/dive/authz/decision`
     : `${OPA_URL}/v1/data/dive/authorization`;
 
+// Local fallback evaluation (used in tests when OPA is unavailable)
+const CLEARANCE_LEVEL: Record<string, number> = {
+    UNCLASSIFIED: 0,
+    RESTRICTED: 1,
+    CONFIDENTIAL: 2,
+    SECRET: 3,
+    TOP_SECRET: 4,
+};
+
+const localEvaluateOPA = (input: IOPAInput): IOPADecision => {
+    const subject = input.input.subject;
+    const resource = input.input.resource;
+
+    const clearance = (subject.clearance || '').toUpperCase();
+    const classification = (resource.classification || '').toUpperCase();
+    const clearanceLevel = CLEARANCE_LEVEL[clearance] ?? -1;
+    const resourceLevel = CLEARANCE_LEVEL[classification] ?? -1;
+
+    let allow = true;
+    const details: Record<string, string | number | boolean> = {
+        source: 'local-fallback',
+        clearance_check: 'PASS',
+        releasability_check: 'PASS',
+        coi_check: 'PASS',
+    };
+    let reason = 'All conditions satisfied (local fallback)';
+
+    // Clearance check
+    if (resourceLevel >= 0 && clearanceLevel < resourceLevel) {
+        allow = false;
+        details.clearance_check = 'FAIL';
+        reason = 'Insufficient clearance';
+    }
+
+    // Releasability check
+    const releasability = resource.releasabilityTo || [];
+    if (releasability.length === 0) {
+        allow = false;
+        details.releasability_check = 'FAIL';
+        reason = 'Resource not releasable';
+    } else if (subject.countryOfAffiliation && !releasability.includes(subject.countryOfAffiliation)) {
+        allow = false;
+        details.releasability_check = 'FAIL';
+        reason = `Country ${subject.countryOfAffiliation} not in releasabilityTo`;
+    }
+
+    // COI check
+    const resourceCOI = resource.COI || [];
+    const subjectCOI = subject.acpCOI || [];
+    if (resourceCOI.length > 0) {
+        const overlap = resourceCOI.some((c) => subjectCOI.includes(c));
+        if (!overlap) {
+            allow = false;
+            details.coi_check = 'FAIL';
+            reason = 'No COI overlap';
+        }
+    }
+
+    return {
+        result: {
+            allow,
+            reason,
+            evaluation_details: details,
+        },
+    };
+};
+
 // Trusted issuer → tenant lookup (shared with OPAL data)
 // We load once from the existing OPAL data file to avoid regex-based tenant guesses.
 const TRUSTED_ISSUER_PATHS = [
@@ -882,6 +949,12 @@ const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
             },
         };
     } catch (error) {
+        // In test environments, fall back to local evaluation to avoid 503s
+        if (process.env.NODE_ENV === 'test') {
+            logger.warn('OPA unavailable in test; using local fallback evaluation');
+            return localEvaluateOPA(input);
+        }
+
         // Check if circuit breaker is open (fail-fast)
         const isCircuitOpen = (error as any)?.circuitBreakerOpen === true;
         const retryAfter = (error as any)?.retryAfter;

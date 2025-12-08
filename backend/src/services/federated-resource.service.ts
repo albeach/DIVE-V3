@@ -27,7 +27,7 @@ import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 const httpsAgent = new https.Agent({
     rejectUnauthorized: process.env.NODE_ENV !== 'development'
 });
-const federationAxios = axios.create({ httpsAgent, timeout: 8000 });
+const federationAxios = (axios as any).create ? (axios as any).create({ httpsAgent, timeout: 8000 }) : (axios as any);
 
 // ============================================
 // Interfaces

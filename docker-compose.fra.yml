@@ -159,21 +159,11 @@ services:
       - "--log-level=info"
       - "--log-format=json"
       - "--set=decision_logs.console=true"
-      - "/policies/base"
-      - "/policies/org"
-      - "/policies/tenant"
-      - "/policies/entrypoints"
-      - "/policies/compat"
-      - "/data/data.json"
+      - "/policies"
     ports:
       - "8182:8181"
     volumes:
-      - ./policies/base:/policies/base:ro
-      - ./policies/org:/policies/org:ro
-      - ./policies/tenant:/policies/tenant:ro
-      - ./policies/entrypoints:/policies/entrypoints:ro
-      - ./policies/compat:/policies/compat:ro
-      - ./policies/data:/data:ro
+      - ./policies:/policies:ro
     networks:
       dive-fra-network:
         aliases:

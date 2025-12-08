@@ -1,16 +1,11 @@
-/**
- * OPA Policy Management Page
- * 
- * Real-time policy editing and rule toggling for demo purposes
- */
-
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import PageLayout from '@/components/layout/page-layout';
-import PolicyComparisonView from '@/components/admin/policy-comparison-view';
+import { PolicyRuleManager } from '@/components/admin/policy-rule-manager';
 
 interface IPolicyContent {
     fileName: string;
@@ -26,13 +21,6 @@ interface IOPAStatus {
     policyDir: string;
 }
 
-interface IPolicyRule {
-    name: string;
-    description: string;
-    enabled: boolean;
-    lineNumber?: number;
-}
-
 export default function OPAPolicyPage() {
     const router = useRouter();
     const { data: session, status } = useSession();
@@ -40,54 +28,9 @@ export default function OPAPolicyPage() {
     const [opaStatus, setOpaStatus] = useState<IOPAStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    // Default to modular entrypoint; will fallback to first available if missing
-    const [selectedFile, setSelectedFile] = useState<string>('entrypoints/authz.rego');
-    const [rules, setRules] = useState<IPolicyRule[]>([]);
-    const [saving, setSaving] = useState(false);
-    const [showComparison, setShowComparison] = useState(false);
-    const [originalPolicy, setOriginalPolicy] = useState<string>('');
-
-    // Extract toggleable rules from policy content
-    const extractRules = (content: string): IPolicyRule[] => {
-        const matches: IPolicyRule[] = [];
-        const lines = content.split('\n');
-        const seenRules = new Set<string>(); // prevent duplicate keys when rendering
-        
-        // Common rules to show
-        const knownRules: Record<string, string> = {
-            'is_not_authenticated': 'User authentication check',
-            'is_missing_required_attributes': 'Required attributes validation',
-            'is_insufficient_clearance': 'Clearance level check',
-            'is_not_releasable_to_country': 'Country releasability check',
-            'is_coi_violation': 'Community of Interest violation check',
-            'is_under_embargo': 'Embargo date check',
-            'is_ztdf_integrity_violation': 'ZTDF integrity validation',
-            'is_upload_not_releasable_to_uploader': 'Upload releasability check',
-            'is_authentication_strength_insufficient': 'Authentication strength check',
-            'is_mfa_not_verified': 'MFA verification check',
-            'is_industry_access_blocked': 'Industry user access restriction'
-        };
-
-        lines.forEach((line, index) => {
-            const match = line.match(/not\s+(is_\w+)/);
-            if (!match) return;
-
-            const ruleName = match[1];
-            if (seenRules.has(ruleName)) {
-                return;
-            }
-            seenRules.add(ruleName);
-
-            matches.push({
-                name: ruleName,
-                description: knownRules[ruleName] || 'Policy rule',
-                enabled: true, // If it's in the allow rule, it's enabled
-                lineNumber: index + 1
-            });
-        });
-
-        return matches;
-    };
+    const [selectedFile, setSelectedFile] = useState<string>('');
+    const [policySearchQuery, setPolicySearchQuery] = useState<string>('');
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     // Load OPA status and policy content
     const loadData = async () => {
@@ -95,40 +38,26 @@ export default function OPAPolicyPage() {
             setLoading(true);
             setError(null);
 
-            const [statusRes, policyRes] = await Promise.all([
-                fetch('/api/admin/opa/status'),
-                fetch(`/api/admin/opa/policy?file=${selectedFile}`)
-            ]);
-
+            const statusRes = await fetch('/api/admin/opa/status');
             const statusData = statusRes.ok ? await statusRes.json() : null;
-            let policyData = policyRes.ok ? await policyRes.json() : null;
 
-            // If selected file is missing (404), fall back to first available policy file
-            if ((!policyRes.ok || !policyData?.success) && statusRes.ok && statusData?.success) {
-                const fallbackFile = statusData.data?.policyFiles?.[0];
-                if (fallbackFile) {
-                    setSelectedFile(fallbackFile);
-                    const fallbackRes = await fetch(`/api/admin/opa/policy?file=${fallbackFile}`);
-                    if (fallbackRes.ok) {
-                        policyData = await fallbackRes.json();
-                    }
-                }
-            }
-
-            if (!statusRes.ok || !policyData || !policyData.success) {
-                throw new Error('Failed to load OPA data');
-            }
-
-            if (statusData.success) {
+            if (statusData?.success) {
                 setOpaStatus(statusData.data);
+                if (!selectedFile && statusData.data.policyFiles?.length > 0) {
+                    setSelectedFile(statusData.data.policyFiles[0]);
+                }
+            } else {
+                setError(statusData?.error || 'Failed to load OPA status');
             }
 
-            if (policyData?.success) {
-                setPolicyContent(policyData.data);
-                const extractedRules = extractRules(policyData.data.content);
-                setRules(extractedRules);
-                if (!originalPolicy) {
-                    setOriginalPolicy(policyData.data.content);
+            // Load selected policy if one is selected
+            if (selectedFile) {
+                const policyRes = await fetch(`/api/admin/opa/policy?file=${encodeURIComponent(selectedFile)}`);
+                if (policyRes.ok) {
+                    const policyData = await policyRes.json();
+                    if (policyData.success) {
+                        setPolicyContent(policyData.data);
+                    }
                 }
             }
         } catch (err) {
@@ -140,58 +69,99 @@ export default function OPAPolicyPage() {
     };
 
     useEffect(() => {
-        if (status === 'authenticated') {
-            loadData();
-        }
-    }, [status, selectedFile]);
-
-    // Toggle a rule
-    const toggleRule = async (ruleName: string, enabled: boolean) => {
-        try {
-            setSaving(true);
-            setError(null);
-
-            const response = await fetch('/api/admin/opa/policy/toggle-rule', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ruleName,
-                    enabled: !enabled, // Toggle to opposite
-                    file: selectedFile
-                })
-            });
-
-            const data = await response.json();
-
-            if (!data.success) {
-                throw new Error(data.message || 'Failed to toggle rule');
-            }
-
-            // Reload policy content
-            await loadData();
-        } catch (err) {
-            console.error('Error toggling rule:', err);
-            setError(err instanceof Error ? err.message : 'Failed to toggle rule');
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    // Redirect to login if not authenticated
-    useEffect(() => {
         if (status !== 'loading' && status === 'unauthenticated') {
             router.push('/auth/signin');
+        } else if (status === 'authenticated') {
+            loadData();
         }
     }, [status, router]);
 
+    useEffect(() => {
+        if (selectedFile && opaStatus) {
+            loadData();
+        }
+    }, [selectedFile]);
+
+    // Filter and categorize policies
+    const { filteredPolicies, categorizedPolicies } = useMemo(() => {
+        if (!opaStatus?.policyFiles) return { filteredPolicies: [], categorizedPolicies: {} };
+        
+        const filtered = opaStatus.policyFiles.filter(file => 
+            !policySearchQuery.trim() || 
+            file.toLowerCase().includes(policySearchQuery.toLowerCase()) ||
+            file.split('/').pop()?.toLowerCase().includes(policySearchQuery.toLowerCase())
+        );
+
+        const categorized: Record<string, string[]> = {
+            'Entrypoints': [],
+            'Base Layer': [],
+            'Organization': [],
+            'Tenant': [],
+            'Tests': [],
+            'Other': []
+        };
+
+        filtered.forEach(file => {
+            if (file.includes('entrypoints')) {
+                categorized['Entrypoints'].push(file);
+            } else if (file.includes('base/')) {
+                categorized['Base Layer'].push(file);
+            } else if (file.includes('org/')) {
+                categorized['Organization'].push(file);
+            } else if (file.includes('tenant/')) {
+                categorized['Tenant'].push(file);
+            } else if (file.includes('test') || file.includes('_test')) {
+                categorized['Tests'].push(file);
+            } else {
+                categorized['Other'].push(file);
+            }
+        });
+
+        return { filteredPolicies: filtered, categorizedPolicies: categorized };
+    }, [opaStatus?.policyFiles, policySearchQuery]);
+
+    const categoryColors: Record<string, string> = {
+        'Entrypoints': 'from-blue-500 to-indigo-600',
+        'Base Layer': 'from-purple-500 to-pink-600',
+        'Tenant': 'from-green-500 to-teal-600',
+        'Organization': 'from-orange-500 to-yellow-600',
+        'Tests': 'from-pink-500 to-red-600',
+        'Other': 'from-slate-500 to-gray-600'
+    };
+
+    const categoryIcons: Record<string, string> = {
+        'Entrypoints': '🚪',
+        'Base Layer': '🏗️',
+        'Tenant': '🏢',
+        'Organization': '🌐',
+        'Tests': '🧪',
+        'Other': '📄'
+    };
+
     if (status === 'loading' || loading) {
         return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
-                    <p className="text-gray-600 dark:text-gray-400">Loading OPA Policy Management...</p>
+            <PageLayout 
+                user={session?.user || {}}
+                breadcrumbs={[
+                    { label: 'Admin', href: '/admin/dashboard' },
+                    { label: 'OPA Policies', href: '/admin/opa-policy' }
+                ]}
+            >
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="text-center"
+                    >
+                        <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                            className="inline-block rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mb-4"
+                        />
+                        <p className="text-gray-600 dark:text-gray-400 text-lg font-medium">Loading OPA Policy Management...</p>
+                    </motion.div>
                 </div>
-            </div>
+            </PageLayout>
         );
     }
 
@@ -204,233 +174,248 @@ export default function OPAPolicyPage() {
             user={session?.user || {}}
             breadcrumbs={[
                 { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'OPA Policy', href: null }
+                { label: 'OPA Policies', href: '/admin/opa-policy' }
             ]}
         >
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-                {/* Header */}
-                <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                                🔐 OPA Policy Management
-                            </h1>
-                            <p className="mt-2 text-slate-600 text-lg">
-                                Real-time policy editing and rule toggling for demo purposes
-                            </p>
-                        </div>
-
-                        <div className="flex items-center space-x-4">
-                            <button
-                                onClick={() => router.push('/admin/dashboard')}
-                                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-                            >
-                                ← Dashboard
-                            </button>
-                            <button
-                                onClick={loadData}
-                                disabled={loading}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
-                            >
-                                🔄 Refresh
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {error && (
-                    <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
-                        <div className="flex items-center space-x-2">
-                            <span className="text-red-600 text-xl">⚠️</span>
-                            <p className="text-red-800 font-medium">{error}</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* OPA Status */}
-                {opaStatus && (
-                    <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-4">OPA Server Status</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
-                                <p className="text-sm text-blue-700 mb-1">Status</p>
-                                <p className={`text-2xl font-bold ${opaStatus.healthy ? 'text-green-600' : 'text-red-600'}`}>
-                                    {opaStatus.healthy ? '✅ Healthy' : '❌ Unavailable'}
+            <div className="min-h-[calc(100vh-12rem)] flex flex-col">
+                {/* Top Bar - Sticky */}
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="sticky top-16 sm:top-20 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm"
+                >
+                    <div className="px-4 sm:px-6 py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                    <span className="text-3xl">🔐</span>
+                                    OPA Policy Management
+                                </h1>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                    {opaStatus?.policyFiles?.length || 0} policies • {opaStatus?.healthy ? '✓ Healthy' : '✗ Unhealthy'}
                                 </p>
                             </div>
-                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-200">
-                                <p className="text-sm text-purple-700 mb-1">Version</p>
-                                <p className="text-2xl font-bold text-purple-900">{opaStatus.version}</p>
-                            </div>
-                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
-                                <p className="text-sm text-green-700 mb-1">Policy Files</p>
-                                <p className="text-2xl font-bold text-green-900">{opaStatus.policyFiles.length}</p>
+                            <div className="flex flex-wrap items-center gap-3">
+                                {opaStatus && (
+                                    <div className="flex items-center gap-4 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg w-full sm:w-auto">
+                                        <div className="text-center">
+                                            <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                                {opaStatus.policyFiles?.length || 0}
+                                            </div>
+                                            <div className="text-xs text-gray-600 dark:text-gray-400">Files</div>
+                                        </div>
+                                        <div className="w-px h-8 bg-gray-300 dark:bg-gray-600" />
+                                        <div className="text-center">
+                                            <div className={`text-lg font-bold ${opaStatus.healthy ? 'text-green-600' : 'text-red-600'}`}>
+                                                {opaStatus.version}
+                                            </div>
+                                            <div className="text-xs text-gray-600 dark:text-gray-400">Version</div>
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={loadData}
+                                        disabled={loading}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Refresh
+                                    </motion.button>
+                                    {sidebarCollapsed && (
+                                        <button
+                                            onClick={() => setSidebarCollapsed(false)}
+                                            className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg font-medium border border-gray-300 dark:border-gray-700 lg:hidden"
+                                        >
+                                            Show Policies
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                )}
+                </motion.div>
 
-                {/* Policy File Selector */}
-                {opaStatus && opaStatus.policyFiles.length > 0 && (
-                    <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Select Policy File
-                        </label>
-                        <select
-                            value={selectedFile}
-                            onChange={(e) => setSelectedFile(e.target.value)}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white font-medium text-slate-700 hover:border-blue-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                {/* Error Alert */}
+                <AnimatePresence>
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mx-6 mt-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 rounded-lg p-4"
                         >
-                            {opaStatus.policyFiles.map((file) => (
-                                <option key={file} value={file}>
-                                    {file}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                )}
+                            <div className="flex items-center justify-between">
+                                <p className="text-red-800 dark:text-red-200 font-medium">{error}</p>
+                                <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
-                {/* Rule Toggles */}
-                {rules.length > 0 && (
-                    <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-4">Policy Rules</h2>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Toggle rules on/off to see real-time policy changes. Hover over a rule to see impact preview.
-                        </p>
-                        <div className="space-y-3">
-                            {rules.map((rule) => {
-                                // Calculate demo impact (would use real audit logs in production)
-                                const blockedCount = Math.floor(Math.random() * 50) + 10;
-                                const wouldAllow = Math.floor(blockedCount * 0.3);
+                {/* Main Content - Split View */}
+                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                    {/* Left Sidebar - Policy List */}
+                    <motion.div
+                        initial={{ opacity: sidebarCollapsed ? 0 : 1 }}
+                        animate={{ opacity: sidebarCollapsed ? 0 : 1 }}
+                        className={`${
+                            sidebarCollapsed ? 'hidden lg:flex' : 'flex'
+                        } flex-shrink-0 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 overflow-hidden flex-col transition-all w-full lg:w-[320px]`}
+                    >
+                        {/* Sidebar Header */}
+                        <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="font-bold text-gray-900 dark:text-gray-100">Policies</h2>
+                                <button
+                                    onClick={() => setSidebarCollapsed(true)}
+                                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                >
+                                    <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="relative">
+                                <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Search policies..."
+                                    value={policySearchQuery}
+                                    onChange={(e) => setPolicySearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Policy List - Scrollable */}
+                        <div className="flex-1 overflow-y-auto">
+                            {Object.entries(categorizedPolicies).map(([category, files]) => {
+                                if (files.length === 0) return null;
+                                const colors = categoryColors[category] || categoryColors['Other'];
+                                const icon = categoryIcons[category] || categoryIcons['Other'];
                                 
                                 return (
-                                <div
-                                    key={rule.name}
-                                    className="group relative flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
-                                >
-                                    <div className="flex-1">
-                                        <div className="flex items-center space-x-3">
-                                            <span className="font-mono text-sm text-gray-500">#{rule.lineNumber}</span>
-                                            <div>
-                                                <p className="font-semibold text-gray-900">{rule.name}</p>
-                                                <p className="text-sm text-gray-600">{rule.description}</p>
+                                    <div key={category} className="mb-4">
+                                        <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg">{icon}</span>
+                                                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
+                                                    {category} ({files.length})
+                                                </span>
                                             </div>
                                         </div>
-                                    </div>
-                                    
-                                    {/* Impact Preview Tooltip */}
-                                    <div className="hidden group-hover:block absolute right-0 top-full mt-2 z-50 w-64 bg-white rounded-lg shadow-xl border border-gray-200 p-4">
-                                        <div className="text-sm">
-                                            <div className="font-bold text-gray-900 mb-2">📊 Impact Preview</div>
-                                            {rule.enabled ? (
-                                                <>
-                                                    <div className="text-red-700 mb-1">
-                                                        Currently blocks: <strong>{blockedCount} requests</strong>
-                                                    </div>
-                                                    <div className="text-gray-600 text-xs">
-                                                        If disabled, ~{wouldAllow} additional requests would be allowed
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <div className="text-green-700 mb-1">
-                                                        Currently allows: <strong>All requests</strong>
-                                                    </div>
-                                                    <div className="text-gray-600 text-xs">
-                                                        If enabled, ~{blockedCount} requests would be blocked
-                                                    </div>
-                                                </>
-                                            )}
+                                        <div className="space-y-1 p-2">
+                                            {files.map((file) => {
+                                                const isSelected = selectedFile === file;
+                                                return (
+                                                    <motion.button
+                                                        key={file}
+                                                        whileHover={{ x: 2 }}
+                                                        whileTap={{ scale: 0.98 }}
+                                                        onClick={() => setSelectedFile(file)}
+                                                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                                                            isSelected
+                                                                ? `bg-gradient-to-r ${colors} text-white shadow-lg`
+                                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                                        }`}
+                                                    >
+                                                        <div className="font-medium truncate">
+                                                            {file.split('/').pop() || file}
+                                                        </div>
+                                                        {isSelected && (
+                                                            <motion.div
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                className="text-xs opacity-90 mt-0.5 truncate"
+                                                            >
+                                                                {file}
+                                                            </motion.div>
+                                                        )}
+                                                    </motion.button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={rule.enabled}
-                                            onChange={() => toggleRule(rule.name, rule.enabled)}
-                                            disabled={saving}
-                                            className="sr-only peer"
-                                        />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                        <span className="ml-3 text-sm font-medium text-gray-700">
-                                            {rule.enabled ? 'Enabled' : 'Disabled'}
-                                        </span>
-                                    </label>
-                                </div>
-                            )})}
+                                );
+                            })}
                         </div>
-                    </div>
-                )}
+                    </motion.div>
 
-                {/* Policy Comparison Toggle */}
-                {policyContent && originalPolicy && (
-                    <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h3 className="font-bold text-gray-900">Policy Comparison Mode</h3>
-                                <p className="text-sm text-gray-600">Compare current policy with modifications</p>
+                    {/* Collapse Button (when sidebar is hidden on desktop) */}
+                    {sidebarCollapsed && (
+                        <motion.button
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            onClick={() => setSidebarCollapsed(false)}
+                            className="hidden lg:flex absolute left-0 top-1/2 transform -translate-y-1/2 z-40 bg-blue-600 text-white p-2 rounded-r-lg shadow-lg hover:bg-blue-700 transition-colors"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                            </svg>
+                        </motion.button>
+                    )}
+
+                    {/* Right Main Area - Rule Manager */}
+                    <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900">
+                        {policyContent ? (
+                            <div className="p-4 sm:p-6">
+                                <PolicyRuleManager
+                                    policyContent={policyContent.content}
+                                    policyFileName={policyContent.fileName}
+                                    onRuleToggle={async (ruleName: string, enabled: boolean) => {
+                                        try {
+                                            const response = await fetch('/api/admin/opa/policy/toggle-rule', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    ruleName,
+                                                    enabled,
+                                                    file: selectedFile
+                                                })
+                                            });
+                                            
+                                            if (!response.ok) {
+                                                const error = await response.json();
+                                                throw new Error(error.message || 'Failed to toggle rule');
+                                            }
+                                            
+                                            await loadData();
+                                        } catch (error) {
+                                            console.error('Failed to toggle rule:', error);
+                                            throw error;
+                                        }
+                                    }}
+                                />
                             </div>
-                            <button
-                                onClick={() => setShowComparison(!showComparison)}
-                                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                                    showComparison
-                                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                }`}
-                            >
-                                {showComparison ? 'Hide Comparison' : 'Show Comparison'}
-                            </button>
-                        </div>
-                    </div>
-                )}
-
-                {/* Policy Comparison View */}
-                {showComparison && policyContent && originalPolicy && (
-                    <div className="mb-6">
-                        <PolicyComparisonView
-                            currentPolicy={originalPolicy}
-                            modifiedPolicy={policyContent.content}
-                            rules={rules}
-                        />
-                    </div>
-                )}
-
-                {/* Policy Content Viewer */}
-                {policyContent && !showComparison && (
-                    <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-2xl font-bold text-gray-900">Policy Content</h2>
-                            <p className="text-sm text-gray-500">
-                                Last modified: {new Date(policyContent.lastModified).toLocaleString()}
-                            </p>
-                        </div>
-                        <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto">
-                            <pre className="text-sm text-gray-100 font-mono whitespace-pre-wrap">
-                                {policyContent.content}
-                            </pre>
-                        </div>
-                    </div>
-                )}
-
-                {/* Info Card */}
-                <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
-                    <div className="flex items-start space-x-4">
-                        <div className="text-4xl">ℹ️</div>
-                        <div>
-                            <h4 className="font-bold text-blue-900 mb-2">
-                                About Real-Time Policy Updates
-                            </h4>
-                            <p className="text-sm text-blue-800">
-                                This page allows you to toggle OPA policy rules in real-time for demonstration purposes. 
-                                When you toggle a rule, the policy file is updated and OPA will pick up the changes 
-                                (may require bundle reload in production). Changes are backed up automatically.
-                            </p>
-                        </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-full">
+                                <div className="text-center">
+                                    <svg className="mx-auto h-24 w-24 text-gray-300 dark:text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <h3 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">
+                                        Select a Policy
+                                    </h3>
+                                    <p className="text-gray-500 dark:text-gray-500">
+                                        Choose a policy file from the sidebar to view and manage its rules
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
         </PageLayout>
     );
 }
-

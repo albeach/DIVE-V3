@@ -198,13 +198,40 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
         }
     }, [activeTab, otpConfigured, webAuthnConfigured, user?.uniqueID, decoded]);
 
+    const [unreadCount, setUnreadCount] = useState<number>(0);
+
+    const fetchUnread = async () => {
+        try {
+            const res = await fetch('/api/notifications-count', { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (typeof data?.unreadCount === 'number') {
+                setUnreadCount(data.unreadCount);
+            }
+        } catch {
+            // ignore errors; badge is best-effort
+        }
+    };
+
+    useEffect(() => {
+        fetchUnread();
+    }, []);
+
+    useEffect(() => {
+        const handler = () => fetchUnread();
+        if (typeof window !== 'undefined') {
+            window.addEventListener('notifications-updated', handler);
+            return () => window.removeEventListener('notifications-updated', handler);
+        }
+    }, []);
+
     // Quick action items - streamlined
     const quickActions = [
         { name: 'Browse Documents', href: '/resources', icon: FileText },
         { name: 'Upload Document', href: '/upload', icon: Upload },
         { name: 'Recent Activity', href: '/activity', icon: Clock },
         { name: 'Saved Items', href: '/resources?filter=favorites', icon: Star },
-        { name: 'Notifications', href: '/notifications', icon: Bell },
+        { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount },
         { name: 'Help & Support', href: '/help', icon: HelpCircle },
     ];
 
@@ -339,24 +366,32 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                 <div className="max-h-[280px] overflow-y-auto">
                     {/* Actions Tab */}
                     {activeTab === 'actions' && (
-                        <div className="py-1">
-                            {quickActions.map((action) => (
-                                <Link
-                                    key={action.href}
-                                    href={action.href}
-                                    onClick={onClose}
-                                    className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-gray-50"
-                                >
-                                    <action.icon 
-                                        className="w-4 h-4 text-gray-400 group-hover:text-[var(--instance-primary)] transition-colors"
-                                        strokeWidth={2}
-                                    />
-                                    <span className="flex-1 text-sm font-medium text-gray-700 group-hover:text-gray-900">
-                                        {action.name}
-                                    </span>
-                                    <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400" />
-                                </Link>
-                            ))}
+                        <div className="py-2 px-3">
+                            <div className="grid grid-cols-2 gap-2">
+                                {quickActions.map((action) => (
+                                    <Link
+                                        key={action.href}
+                                        href={action.href}
+                                        onClick={onClose}
+                                        className="group flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 bg-white transition-colors"
+                                    >
+                                        <action.icon 
+                                            className="w-4 h-4 text-gray-400 group-hover:text-[var(--instance-primary)] transition-colors"
+                                            strokeWidth={2}
+                                        />
+                                        <span className="text-[13px] font-semibold text-gray-700 group-hover:text-gray-900 truncate">
+                                            {action.name}
+                                        </span>
+                                        {action.badge ? (
+                                            <span className="ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full bg-red-500 text-white text-[10px] px-1.5">
+                                                {action.badge > 99 ? '99+' : action.badge}
+                                            </span>
+                                        ) : (
+                                            <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400" />
+                                        )}
+                                    </Link>
+                                ))}
+                            </div>
                         </div>
                     )}
 

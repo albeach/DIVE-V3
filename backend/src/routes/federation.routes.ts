@@ -29,6 +29,9 @@ import { idpValidationService } from '../services/idp-validation.service';
 import { SPManagementService } from '../services/sp-management.service';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
+import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
+import { getResourcesByQuery } from '../services/resource.service';
+import crypto from 'crypto';
 
 // Initialize SP Management Service
 const spManagement = new SPManagementService();
@@ -156,6 +159,16 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
     next();
 }
 
+function hasActiveAgreement(spContext: any, classification?: string): boolean {
+    const agreements = spContext?.federationAgreements || [];
+    const now = new Date();
+    return agreements.some((ag: any) => {
+        if (ag.validUntil && new Date(ag.validUntil) < now) return false;
+        if (classification && ag.classifications && !ag.classifications.includes(classification)) return false;
+        return true;
+    });
+}
+
 // ============================================
 // PUBLIC ENDPOINTS (Spoke → Hub)
 // ============================================
@@ -227,6 +240,130 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         });
     }
 });
+
+/**
+ * GET /federation/search
+ * Federated search (SP → Hub)
+ */
+router.get(
+    '/search',
+    requireSPAuth,
+    requireSPScope('resource:search'),
+    async (req: any, res: Response): Promise<void> => {
+        const spContext = req.sp;
+        const classification = (req.query.classification as string) || undefined;
+
+        if (!hasActiveAgreement(spContext, classification)) {
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'No active federation agreement'
+            });
+            return;
+        }
+
+        const limitParam = parseInt((req.query.limit as string) || '100', 10);
+        const offset = parseInt((req.query.offset as string) || '0', 10);
+        const limit = Math.min(Math.max(limitParam, 1), 1000);
+
+        const query: any = {};
+        if (classification) {
+            query.classification = classification;
+        }
+        if (req.query.releasabilityTo) {
+            query.releasabilityTo = { $in: Array.isArray(req.query.releasabilityTo) ? req.query.releasabilityTo : [req.query.releasabilityTo] };
+        }
+        if (req.query.COI) {
+            query.COI = { $in: Array.isArray(req.query.COI) ? req.query.COI : [req.query.COI] };
+        }
+        if (req.query.keywords) {
+            const kw = Array.isArray(req.query.keywords) ? req.query.keywords : [req.query.keywords];
+            query.$text = { $search: kw.join(' ') };
+        }
+
+        const resources = await getResourcesByQuery(query, {
+            limit,
+            offset,
+            fields: {
+                resourceId: 1,
+                title: 1,
+                classification: 1,
+                releasabilityTo: 1,
+                COI: 1
+            }
+        });
+
+        // Strip content if any
+        const sanitized = resources.map((r: any) => ({
+            resourceId: r.resourceId,
+            title: r.title,
+            classification: r.classification,
+            releasabilityTo: r.releasabilityTo || [],
+            COI: r.COI || []
+        }));
+
+        res.json({
+            totalResults: sanitized.length,
+            resources: sanitized,
+            searchContext: {
+                country: spContext?.sp?.country || spContext?.country || 'UNKNOWN'
+            }
+        });
+    }
+);
+
+/**
+ * POST /federation/resources/request
+ * Request access to a federated resource
+ */
+router.post(
+    '/resources/request',
+    requireSPAuth,
+    requireSPScope('resource:read'),
+    async (req: any, res: Response): Promise<void> => {
+        const spContext = req.sp;
+        const { resourceId, justification } = req.body || {};
+
+        if (!resourceId) {
+            res.status(400).json({ error: 'Validation failed', message: 'resourceId is required' });
+            return;
+        }
+
+        const resources = await getResourcesByQuery({ resourceId }, { limit: 1 });
+        const resource = resources[0];
+
+        if (!resource) {
+            res.status(404).json({ error: 'Not Found', message: 'Resource not found' });
+            return;
+        }
+
+        const classification = resource.classification;
+        if (!hasActiveAgreement(spContext, classification)) {
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'Resource not covered by federation agreement'
+            });
+            return;
+        }
+
+        const grantId = crypto.randomUUID();
+        const grantedAt = new Date().toISOString();
+
+        res.status(200).json({
+            accessGrant: {
+                grantId,
+                resourceId,
+                grantedAt,
+                justification: justification || null
+            },
+            resource: {
+                resourceId: resource.resourceId,
+                classification: resource.classification,
+                releasabilityTo: resource.releasabilityTo || [],
+                COI: resource.COI || []
+            }
+        });
+    }
+);
 
 // ============================================
 // SP CLIENT ENDPOINTS (Pilot Mode)
@@ -986,22 +1123,19 @@ router.post('/query-resources', async (req: Request, res: Response): Promise<voi
             query,
         });
 
-        // Import Resource model dynamically
-        const { Resource } = await import('../models/resource.model');
-
         // Build MongoDB query from federation query
         const mongoQuery: any = {};
 
         if (query.classification && query.classification.length > 0) {
-            mongoQuery.classification = { $in: query.classification };
+            mongoQuery['ztdf.policy.securityLabel.classification'] = { $in: query.classification };
         }
 
         if (query.releasabilityTo && query.releasabilityTo.length > 0) {
-            mongoQuery.releasabilityTo = { $in: query.releasabilityTo };
+            mongoQuery['ztdf.policy.securityLabel.releasabilityTo'] = { $in: query.releasabilityTo };
         }
 
         if (query.COI && query.COI.length > 0) {
-            mongoQuery.COI = { $in: query.COI };
+            mongoQuery['ztdf.policy.securityLabel.COI'] = { $in: query.COI };
         }
 
         if (query.keywords && query.keywords.length > 0) {
@@ -1013,17 +1147,23 @@ router.post('/query-resources', async (req: Request, res: Response): Promise<voi
             }));
         }
 
-        // Limit results for federation queries
-        const resources = await Resource.find(mongoQuery)
-            .select('resourceId title classification releasabilityTo COI')
-            .limit(100)
-            .lean();
+        // Query resources via resource service
+        const { queryResources } = await import('../services/resource.service');
+        const resources = await queryResources(mongoQuery, 100, 0, {
+            projection: {
+                resourceId: 1,
+                title: 1,
+                'ztdf.policy.securityLabel.classification': 1,
+                'ztdf.policy.securityLabel.releasabilityTo': 1,
+                'ztdf.policy.securityLabel.COI': 1,
+            }
+        });
 
         const instanceId = process.env.INSTANCE_ID || 'local';
         const instanceUrl = process.env.BACKEND_URL || 'https://backend:4000';
 
         res.json({
-            resources: resources.map(r => ({
+            resources: resources.map((r: any) => ({
                 resourceId: r.resourceId,
                 title: r.title,
                 classification: r.classification,
@@ -1254,8 +1394,8 @@ router.post('/spokes/:spokeId/sign-csr', requireAdmin, async (req: Request, res:
         
         try {
             // Try to use Hub CA for signing
-            const caCert = await fs.readFile(caCertPath, 'utf-8');
-            const caKey = await fs.readFile(caKeyPath, 'utf-8');
+            await fs.readFile(caCertPath, 'utf-8');
+            await fs.readFile(caKeyPath, 'utf-8');
             
             // Create signed certificate using Hub CA
             // Note: For production, use a proper PKI library like node-forge or @peculiar/x509

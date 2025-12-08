@@ -13,14 +13,12 @@ import {
   BellOff,
   Check,
   CheckCheck,
-  Shield,
   ShieldCheck,
   ShieldX,
   FileText,
   Upload,
   AlertCircle,
   Info,
-  Clock,
   ChevronRight,
   Trash2,
   Settings,
@@ -42,71 +40,10 @@ interface Notification {
   type: NotificationType;
   title: string;
   message: string;
-  timestamp: Date;
+  timestamp: string | Date;
   read: boolean;
   resourceId?: string;
   actionUrl?: string;
-}
-
-// Mock notifications
-function generateMockNotifications(): Notification[] {
-  const now = new Date();
-  return [
-    {
-      id: '1',
-      type: 'access_granted',
-      title: 'Access Granted',
-      message: 'Your request to access "NATO Exercise Plan Alpha" has been approved.',
-      timestamp: new Date(now.getTime() - 1800000), // 30 mins ago
-      read: false,
-      resourceId: 'doc-123',
-      actionUrl: '/resources/doc-123'
-    },
-    {
-      id: '2',
-      type: 'document_shared',
-      title: 'Document Shared With You',
-      message: 'Cmdr. J. Smith shared "Coalition Comms Protocol" with you.',
-      timestamp: new Date(now.getTime() - 7200000), // 2 hours ago
-      read: false,
-      resourceId: 'doc-456',
-      actionUrl: '/resources/doc-456'
-    },
-    {
-      id: '3',
-      type: 'security',
-      title: 'Security Alert',
-      message: 'Unusual access pattern detected. Please verify your recent activity.',
-      timestamp: new Date(now.getTime() - 14400000), // 4 hours ago
-      read: true,
-      actionUrl: '/activity'
-    },
-    {
-      id: '4',
-      type: 'upload_complete',
-      title: 'Upload Complete',
-      message: 'Your document "Field Operations Report" has been successfully uploaded and encrypted.',
-      timestamp: new Date(now.getTime() - 86400000), // 1 day ago
-      read: true,
-      resourceId: 'doc-789'
-    },
-    {
-      id: '5',
-      type: 'access_denied',
-      title: 'Access Request Denied',
-      message: 'Your request to access "TOP SECRET briefing" was denied due to clearance level.',
-      timestamp: new Date(now.getTime() - 172800000), // 2 days ago
-      read: true
-    },
-    {
-      id: '6',
-      type: 'system',
-      title: 'System Maintenance',
-      message: 'Scheduled maintenance will occur on Dec 5th, 2025 from 02:00-04:00 UTC.',
-      timestamp: new Date(now.getTime() - 259200000), // 3 days ago
-      read: true
-    }
-  ];
 }
 
 export function NotificationsContent({ user }: NotificationsContentProps) {
@@ -114,14 +51,75 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [error, setError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [prefs, setPrefs] = useState<{ emailOptIn: boolean } | null>(null);
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setNotifications(generateMockNotifications());
-      setIsLoading(false);
-    }, 500);
-    return () => clearTimeout(timer);
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const res = await fetch('/api/notifications?limit=50', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const items: Notification[] = Array.isArray(data?.notifications)
+          ? data.notifications.map((n: any) => ({
+              ...n,
+              timestamp: n.timestamp,
+            }))
+          : [];
+        setNotifications(items);
+        setNextCursor(data?.nextCursor || null);
+        setReachedEnd(!data?.nextCursor);
+        // load preferences in parallel
+        try {
+          const prefRes = await fetch('/api/notifications/preferences/me', { cache: 'no-store' });
+          if (prefRes.ok) {
+            const prefData = await prefRes.json();
+            if (prefData?.data) {
+              setPrefs({ emailOptIn: !!prefData.data.emailOptIn });
+            }
+          }
+        } catch {
+          // ignore pref errors silently
+        }
+      } catch (err) {
+        // Fallback: keep UX usable with empty state and message
+        setNotifications([]);
+        setError('Unable to load notifications right now.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
   }, []);
+
+  const loadMore = async () => {
+    if (!nextCursor) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(`/api/notifications?limit=50&cursor=${encodeURIComponent(nextCursor)}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items: Notification[] = Array.isArray(data?.notifications)
+        ? data.notifications.map((n: any) => ({
+            ...n,
+            timestamp: n.timestamp,
+          }))
+        : [];
+      setNotifications(prev => [...prev, ...items]);
+      setNextCursor(data?.nextCursor || null);
+      setReachedEnd(!data?.nextCursor);
+    } catch (err) {
+      setError('Unable to load more notifications right now.');
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const filteredNotifications = useMemo(() => {
     if (filter === 'unread') {
@@ -132,16 +130,40 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
 
-  const markAsRead = (id: string) => {
+  const markAsRead = async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
+    }
+    try {
+      await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+    } catch {
+      // no-op; optimistic UI
+    }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
+    }
+    try {
+      await fetch('/api/notifications/read-all', { method: 'POST' });
+    } catch {
+      // no-op
+    }
   };
 
-  const deleteNotification = (id: string) => {
+  const deleteNotification = async (id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
+    }
+    try {
+      await fetch(`/api/notifications/${id}`, { method: 'DELETE' });
+    } catch {
+      // no-op
+    }
   };
 
   const getNotificationConfig = (type: NotificationType) => {
@@ -175,17 +197,57 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
     return `${days}d ago`;
   };
 
+  const toggleEmailOptIn = async () => {
+    if (prefs?.emailOptIn === undefined) return;
+    setIsSavingPrefs(true);
+    try {
+      const res = await fetch('/api/notifications/preferences/me', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailOptIn: !prefs.emailOptIn })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.data) {
+          setPrefs({ emailOptIn: !!data.data.emailOptIn });
+        }
+      }
+    } catch {
+      // swallow errors
+    } finally {
+      setIsSavingPrefs(false);
+    }
+  };
+
+  const categories = useMemo(() => {
+    const asDate = (ts: string | Date) => (ts instanceof Date ? ts : new Date(ts));
+    return {
+      today: filteredNotifications.filter(n => {
+        const diff = new Date().getTime() - asDate(n.timestamp).getTime();
+        return diff < 24 * 3600 * 1000;
+      }),
+      week: filteredNotifications.filter(n => {
+        const diff = new Date().getTime() - asDate(n.timestamp).getTime();
+        return diff >= 24 * 3600 * 1000 && diff < 7 * 24 * 3600 * 1000;
+      }),
+      older: filteredNotifications.filter(n => {
+        const diff = new Date().getTime() - asDate(n.timestamp).getTime();
+        return diff >= 7 * 24 * 3600 * 1000;
+      })
+    };
+  }, [filteredNotifications]);
+
   if (isLoading) {
     return <NotificationsSkeleton />;
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div 
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-inner"
             style={{ background: 'var(--instance-banner-bg)' }}
           >
             <Bell className="w-5 h-5 text-white" strokeWidth={2} />
@@ -198,25 +260,49 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
           </div>
         </div>
 
-        {unreadCount > 0 && (
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={markAllAsRead}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            aria-label="Notification preferences"
           >
-            <CheckCheck className="w-3.5 h-3.5" />
-            Mark all read
+            <Settings className="w-4 h-4" />
+            Preferences
           </button>
-        )}
+          <button
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+            aria-label="Notification filters"
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+          </button>
+          {unreadCount > 0 && (
+            <button
+              onClick={markAllAsRead}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-colors"
+              style={{ background: 'var(--instance-banner-bg)' }}
+              aria-label="Mark all notifications as read"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              Mark all read
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2 mb-4">
+      {error && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm">
+          {error} We’ll keep trying—refresh to retry.
+        </div>
+      )}
+
+      {/* Filter Pills */}
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setFilter('all')}
-          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+          className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
             filter === 'all' 
-              ? 'text-white' 
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              ? 'text-white border-transparent shadow-sm'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
           }`}
           style={filter === 'all' ? { background: 'var(--instance-banner-bg)' } : undefined}
         >
@@ -224,10 +310,10 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
         </button>
         <button
           onClick={() => setFilter('unread')}
-          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+          className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
             filter === 'unread' 
-              ? 'text-white' 
-              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              ? 'text-white border-transparent shadow-sm'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
           }`}
           style={filter === 'unread' ? { background: 'var(--instance-banner-bg)' } : undefined}
         >
@@ -235,84 +321,141 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
         </button>
       </div>
 
-      {/* Notifications List */}
-      {filteredNotifications.length === 0 ? (
-        <EmptyNotifications />
-      ) : (
-        <div className="space-y-2">
-          {filteredNotifications.map((notification, index) => {
-            const config = getNotificationConfig(notification.type);
-            const Icon = config.icon;
-
-            return (
-              <div
-                key={notification.id}
-                className={`group relative bg-white border rounded-xl p-4 transition-all animate-fade-in ${
-                  notification.read 
-                    ? 'border-gray-100 hover:border-gray-200' 
-                    : 'border-l-4 border-gray-200 hover:border-gray-300'
-                }`}
-                style={!notification.read ? { borderLeftColor: 'var(--instance-primary)' } : undefined}
-              >
-                <div className="flex items-start gap-3">
-                  {/* Icon */}
-                  <div className={`w-9 h-9 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>
-                    <Icon className={`w-4 h-4 ${config.color}`} strokeWidth={2} />
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className={`text-sm font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
-                          {notification.title}
-                        </h3>
-                        <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
-                          {notification.message}
-                        </p>
-                      </div>
-                      <span className="text-[10px] text-gray-400 whitespace-nowrap flex-shrink-0">
-                        {formatTime(notification.timestamp)}
-                      </span>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 mt-2">
-                      {notification.actionUrl && (
-                        <Link
-                          href={notification.actionUrl}
-                          className="inline-flex items-center gap-1 text-xs font-semibold hover:underline"
-                          style={{ color: 'var(--instance-primary)' }}
-                        >
-                          View
-                          <ChevronRight className="w-3 h-3" />
-                        </Link>
-                      )}
-                      {!notification.read && (
-                        <button
-                          onClick={() => markAsRead(notification.id)}
-                          className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
-                        >
-                          <Check className="w-3 h-3" />
-                          Mark read
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Delete button */}
-                  <button
-                    onClick={() => deleteNotification(notification.id)}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all"
-                    title="Delete notification"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+      {/* Preferences stub */}
+      <div className="rounded-2xl border border-gray-200 bg-white/80 backdrop-blur px-4 py-3 flex items-center justify-between">
+        <div className="space-y-0.5">
+          <div className="text-sm font-semibold text-gray-900">Notification Preferences</div>
+          <div className="text-xs text-gray-500">Email delivery opt-in (future use)</div>
         </div>
+        <button
+          onClick={toggleEmailOptIn}
+          disabled={prefs === null || isSavingPrefs}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+            prefs?.emailOptIn
+              ? 'border-green-500 text-green-700 bg-green-50'
+              : 'border-gray-300 text-gray-700 bg-white hover:border-gray-400'
+          } disabled:opacity-60`}
+          aria-pressed={prefs?.emailOptIn || false}
+        >
+          <span className="w-2 h-2 rounded-full" style={{ background: prefs?.emailOptIn ? '#22c55e' : '#9ca3af' }} />
+          {prefs?.emailOptIn ? 'Email opt-in enabled' : 'Email opt-in disabled'}
+          {isSavingPrefs && <span className="text-gray-400">…</span>}
+        </button>
+      </div>
+
+      {/* Sections by time */}
+      {['today', 'week', 'older'].map((bucket) => {
+        const list = (categories as any)[bucket] as Notification[];
+        if (!list || list.length === 0) {
+          return null;
+        }
+
+        const labelMap: Record<string, string> = {
+          today: 'Today',
+          week: 'Last 7 Days',
+          older: 'Older'
+        };
+
+        return (
+          <div key={bucket} className="space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--instance-banner-bg)' }} />
+              {labelMap[bucket]}
+            </div>
+
+            <div className="grid gap-2">
+              {list.map((notification) => {
+                const config = getNotificationConfig(notification.type);
+                const Icon = config.icon;
+
+                return (
+                  <div
+                    key={notification.id}
+                    className={`group relative bg-white/80 backdrop-blur border rounded-2xl p-4 transition-all hover:shadow-md ${
+                      notification.read 
+                        ? 'border-gray-100 hover:border-gray-200' 
+                        : 'border-l-4 border-gray-200 hover:border-gray-300'
+                    }`}
+                    style={!notification.read ? { borderLeftColor: 'var(--instance-primary)' } : undefined}
+                  >
+                    <div className="flex items-start gap-3">
+                      {/* Icon */}
+                      <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className={`w-5 h-5 ${config.color}`} strokeWidth={2} />
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <h3 className={`text-sm font-semibold ${notification.read ? 'text-gray-700' : 'text-gray-900'}`}>
+                              {notification.title}
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
+                              {notification.message}
+                            </p>
+                          </div>
+                          <span className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">
+                            {formatTime(notification.timestamp)}
+                          </span>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-3 mt-3">
+                          {notification.actionUrl && (
+                            <Link
+                              href={notification.actionUrl}
+                              className="inline-flex items-center gap-1 text-xs font-semibold hover:underline"
+                              style={{ color: 'var(--instance-primary)' }}
+                            >
+                              View
+                              <ChevronRight className="w-3 h-3" />
+                            </Link>
+                          )}
+                          {!notification.read && (
+                            <button
+                              onClick={() => markAsRead(notification.id)}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+                            >
+                              <Check className="w-3 h-3" />
+                              Mark read
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Delete button */}
+                      <button
+                        onClick={() => deleteNotification(notification.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all"
+                        title="Delete notification"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {filteredNotifications.length === 0 && <EmptyNotifications />}
+
+      {nextCursor && (
+        <div className="flex justify-center">
+          <button
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:border-gray-400 bg-white disabled:opacity-60"
+          >
+            {isLoadingMore ? 'Loading…' : 'Load more'}
+          </button>
+        </div>
+      )}
+      {!nextCursor && filteredNotifications.length > 0 && (
+        <div className="text-center text-xs text-gray-400">End of notifications</div>
       )}
     </div>
   );
@@ -331,6 +474,20 @@ function EmptyNotifications() {
       <p className="text-sm text-gray-500">
         You're all caught up! Check back later for updates.
       </p>
+      <div className="mt-4 flex justify-center gap-2">
+        <Link
+          href="/resources"
+          className="inline-flex items-center gap-1 px-3 py-2 text-sm font-semibold rounded-lg bg-gray-900 text-white hover:bg-gray-800 transition-colors"
+        >
+          Browse documents
+        </Link>
+        <Link
+          href="/upload"
+          className="inline-flex items-center gap-1 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-300 text-gray-800 hover:border-gray-400 transition-colors"
+        >
+          Upload
+        </Link>
+      </div>
     </div>
   );
 }
@@ -366,6 +523,7 @@ function NotificationsSkeleton() {
     </div>
   );
 }
+
 
 
 
