@@ -39,14 +39,6 @@ import {
     uploadMiddleware
 } from '../controllers/admin.controller';
 import {
-    listUsersHandler,
-    getUserHandler,
-    createUserHandler,
-    updateUserHandler,
-    deleteUserHandler,
-    resetPasswordHandler
-} from '../controllers/admin-users.controller';
-import {
     validateOIDCDiscoveryHandler,
     validateSAMLMetadataHandler,
     parseOIDCMetadataHandler,
@@ -70,6 +62,11 @@ import {
     updateCRL
 } from '../controllers/admin-certificates.controller';
 import { metricsService } from '../services/metrics.service';
+import {
+    getPolicyHandler,
+    getOPAStatusHandler,
+    toggleRuleHandler
+} from '../controllers/admin-opa.controller';
 
 const router = Router();
 
@@ -77,46 +74,6 @@ const router = Router();
 // Apply admin authentication to all routes
 // ============================================
 router.use(adminAuthMiddleware);
-
-// ============================================
-// User Management Routes
-// ============================================
-
-/**
- * GET /api/admin/users
- * List users
- */
-router.get('/users', listUsersHandler);
-
-/**
- * GET /api/admin/users/:id
- * Get user details
- */
-router.get('/users/:id', getUserHandler);
-
-/**
- * POST /api/admin/users
- * Create user
- */
-router.post('/users', createUserHandler);
-
-/**
- * PUT /api/admin/users/:id
- * Update user
- */
-router.put('/users/:id', updateUserHandler);
-
-/**
- * DELETE /api/admin/users/:id
- * Delete user
- */
-router.delete('/users/:id', deleteUserHandler);
-
-/**
- * POST /api/admin/users/:id/reset-password
- * Reset user password
- */
-router.post('/users/:id/reset-password', resetPasswordHandler);
 
 // ============================================
 // Identity Provider Management Routes
@@ -495,34 +452,21 @@ router.get('/metrics/summary', (_req: Request, res: Response) => {
 // OPA Policy Management Routes
 // ============================================
 
-import {
-    getPolicyHandler,
-    updatePolicyHandler,
-    toggleRuleHandler,
-    getOPAStatusHandler
-} from '../controllers/admin-opa.controller';
-
 /**
  * GET /api/admin/opa/status
- * Get OPA server status
+ * Get OPA server status and policy files
  */
 router.get('/opa/status', getOPAStatusHandler);
 
 /**
  * GET /api/admin/opa/policy
- * Get current policy content
+ * Get OPA policy content by file name
  */
 router.get('/opa/policy', getPolicyHandler);
 
 /**
- * POST /api/admin/opa/policy/update
- * Update OPA policy dynamically
- */
-router.post('/opa/policy/update', updatePolicyHandler);
-
-/**
  * POST /api/admin/opa/policy/toggle-rule
- * Toggle a specific policy rule on/off
+ * Toggle a policy rule on/off
  */
 router.post('/opa/policy/toggle-rule', toggleRuleHandler);
 

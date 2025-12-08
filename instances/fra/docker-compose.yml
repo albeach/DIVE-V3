@@ -31,7 +31,7 @@ services:
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
     ports:
       - "5434:5432"
     volumes:
@@ -50,7 +50,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: dive-v3-fra
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
     ports:
       - "27018:27017"
     volumes:
@@ -92,9 +92,9 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-fra:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       KC_HOSTNAME: fra-idp.dive25.com
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -229,15 +229,15 @@ services:
       INSTANCE_CODE: FRA
       INSTANCE_NAME: "France"
       # Database
-      MONGODB_URI: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@mongodb-fra:27017/dive-v3-fra?authSource=admin
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}@mongodb-fra:27017/dive-v3-fra?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}@mongodb-fra:27017/dive-v3-fra?authSource=admin
       REDIS_URL: redis://redis-fra:6379
       REDIS_HOST: redis-fra
       # Keycloak
       KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       # OPA
       OPA_URL: http://opa-fra:8181
       # CORS
@@ -290,12 +290,12 @@ services:
       NEXT_PUBLIC_KEYCLOAK_URL: https://fra-idp.dive25.com
       # NextAuth
       NEXTAUTH_URL: https://fra-app.dive25.com
-      NEXTAUTH_SECRET: dive-v3-fra-secret-key-change-in-production
+      NEXTAUTH_SECRET: ${AUTH_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       # Keycloak client (server-side)
       KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-replace-with-actual-secret}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_FRA:?Run source ./scripts/sync-gcp-secrets.sh fra}
       # Theme customization
       NEXT_PUBLIC_THEME_PRIMARY: "#002395"
       NEXT_PUBLIC_THEME_SECONDARY: "#ED2939"

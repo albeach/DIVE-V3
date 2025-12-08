@@ -19,15 +19,28 @@ export async function POST(request: Request) {
         }
 
         const body = await request.json();
+        const { ruleName, enabled, file } = body;
+
+        if (!ruleName || enabled === undefined) {
+            return NextResponse.json(
+                { error: 'Missing required fields: ruleName and enabled' },
+                { status: 400 }
+            );
+        }
 
         const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
-        const response = await fetch(`${backendUrl}/api/admin/opa/policy/toggle-rule`, {
+        const url = new URL(`${backendUrl}/api/admin/opa/policy/toggle-rule`);
+        if (file) {
+            url.searchParams.set('file', file);
+        }
+
+        const response = await fetch(url.toString(), {
             method: 'POST',
-            headers: { 
+            headers: {
                 'Authorization': `Bearer ${tokens.accessToken}`,
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify({ ruleName, enabled })
         });
 
         const data = await response.json();
@@ -37,9 +50,3 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
-
-
-
-
-
-

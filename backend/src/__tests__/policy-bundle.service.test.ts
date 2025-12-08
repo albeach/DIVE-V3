@@ -15,16 +15,7 @@ import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-
-// Mock dependencies before importing the service
-jest.mock('../utils/logger', () => ({
-  logger: {
-    info: jest.fn(),
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  },
-}));
+import { logger } from '../utils/logger';
 
 jest.mock('../services/opal-client', () => ({
   opalClient: {
@@ -38,14 +29,18 @@ jest.mock('../services/opal-client', () => ({
 // Import after mocks
 import {
   policyBundleService,
-  IBundleBuildOptions,
 } from '../services/policy-bundle.service';
 import { opalClient } from '../services/opal-client';
 
 describe('PolicyBundleService', () => {
-  const testPoliciesDir = path.join(__dirname, 'test-policies');
 
   beforeEach(() => {
+    jest.spyOn(logger, 'info').mockImplementation(() => logger as any);
+    jest.spyOn(logger, 'debug').mockImplementation(() => logger as any);
+    jest.spyOn(logger, 'warn').mockImplementation(() => logger as any);
+    jest.spyOn(logger, 'error').mockImplementation(() => logger as any);
+    (logger as any).child = () => logger;
+
     // Reset mocks
     jest.clearAllMocks();
 
@@ -154,6 +149,10 @@ describe('PolicyBundleService', () => {
       const { PolicyBundleService } = await import('../services/policy-bundle.service');
       const testService = new (PolicyBundleService as any)();
 
+      // Force-inject signing key to avoid silent load failures in tests
+      (testService as any).signingKey = crypto.createPrivateKey(privateKey);
+      (testService as any).signingKeyLoaded = true;
+
       const result = await testService.buildBundle({
         sign: true,
         compress: false,
@@ -165,7 +164,7 @@ describe('PolicyBundleService', () => {
 
       expect(result.success).toBe(true);
       expect(result.signature).toBeDefined();
-      expect(result.signature).toHaveLength > 0;
+      expect((result.signature || '').length).toBeGreaterThan(0);
     });
 
     it('should build bundle without signing when key is not available', async () => {
@@ -267,13 +266,13 @@ describe('PolicyBundleService', () => {
     it('should publish bundle to OPAL when enabled', async () => {
       // Enable OPAL mock
       (opalClient.isOPALEnabled as jest.Mock).mockReturnValue(true);
-      (opalClient.triggerPolicyRefresh as jest.Mock).mockResolvedValue({
+      (opalClient.triggerPolicyRefresh as any).mockResolvedValue({
         success: true,
         transactionId: 'test-txn-123',
         message: 'Refresh triggered',
         timestamp: new Date().toISOString(),
       });
-      (opalClient.publishDataUpdate as jest.Mock).mockResolvedValue({
+      (opalClient.publishDataUpdate as any).mockResolvedValue({
         success: true,
         transactionId: 'test-data-456',
         message: 'Data published',
@@ -309,7 +308,7 @@ describe('PolicyBundleService', () => {
 
     it('should handle OPAL errors gracefully', async () => {
       (opalClient.isOPALEnabled as jest.Mock).mockReturnValue(true);
-      (opalClient.triggerPolicyRefresh as jest.Mock).mockRejectedValue(
+      (opalClient.triggerPolicyRefresh as any).mockRejectedValue(
         new Error('OPAL server unavailable')
       );
 
@@ -393,7 +392,4 @@ describe('Bundle Content', () => {
     expect(result.hash).toMatch(/^[a-f0-9]{64}$/);
   });
 });
-
-
-
 

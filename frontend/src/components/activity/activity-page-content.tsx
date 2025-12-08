@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { useInstanceTheme } from '@/components/ui/theme-provider';
+import type { CSSProperties } from 'react';
 import { 
   Eye, 
   Download, 
@@ -22,7 +22,6 @@ import {
   ShieldX, 
   Clock, 
   FileText, 
-  Filter,
   ChevronRight,
   RefreshCw,
   Calendar,
@@ -45,6 +44,7 @@ interface ActivityPageContentProps {
 
 // Activity types
 type ActivityType = 'view' | 'download' | 'upload' | 'access_granted' | 'access_denied' | 'request_submitted';
+type TimeRange = '24h' | '7d' | '30d' | 'all';
 
 interface ActivityItem {
   id: string;
@@ -97,11 +97,11 @@ function generateMockActivities(userId: string): ActivityItem[] {
 }
 
 export function ActivityPageContent({ user }: ActivityPageContentProps) {
-  const { theme } = useInstanceTheme();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<ActivityType | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [timeRange, setTimeRange] = useState<TimeRange>('7d');
 
   // Load mock activities
   useEffect(() => {
@@ -114,14 +114,43 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
 
   // Filter activities
   const filteredActivities = useMemo(() => {
+    const now = Date.now();
+    const isWithinRange = (timestamp: Date) => {
+      const diffHours = (now - timestamp.getTime()) / 3600000;
+      switch (timeRange) {
+        case '24h':
+          return diffHours <= 24;
+        case '7d':
+          return diffHours <= 24 * 7;
+        case '30d':
+          return diffHours <= 24 * 30;
+        default:
+          return true;
+      }
+    };
+
     return activities.filter(activity => {
       const matchesFilter = filter === 'all' || activity.type === filter;
       const matchesSearch = searchQuery === '' || 
         activity.resourceTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
         activity.resourceId.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
+      const matchesRange = isWithinRange(activity.timestamp);
+      return matchesFilter && matchesSearch && matchesRange;
     });
-  }, [activities, filter, searchQuery]);
+  }, [activities, filter, searchQuery, timeRange]);
+
+  const stats = useMemo(() => {
+    const total = activities.length;
+    const decisions = activities.filter(a => a.type === 'access_granted' || a.type === 'access_denied');
+    const granted = decisions.filter(a => a.type === 'access_granted').length;
+    const denied = decisions.filter(a => a.type === 'access_denied').length;
+    const views = activities.filter(a => a.type === 'view').length;
+    const downloads = activities.filter(a => a.type === 'download').length;
+    const uploads = activities.filter(a => a.type === 'upload').length;
+    const successRate = decisions.length ? Math.round((granted / decisions.length) * 100) : 0;
+
+    return { total, granted, denied, views, downloads, uploads, successRate };
+  }, [activities]);
 
   // Group activities by date
   const groupedActivities = useMemo(() => {
@@ -148,6 +177,33 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
 
     return groups;
   }, [filteredActivities]);
+
+  const gradientBg: CSSProperties = {
+    background: 'linear-gradient(120deg, rgba(var(--instance-primary-rgb), 0.12), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.08))'
+  };
+
+  const formatRelativeTime = (date: Date) => {
+    const diff = Date.now() - date.getTime();
+    const minutes = Math.max(1, Math.round(diff / 60000));
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 48) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const insightMessage = useMemo(() => {
+    if (stats.denied === 0 && stats.granted > 0) {
+      return 'Clean slate: no denials detected in this window.';
+    }
+    if (stats.denied > stats.granted) {
+      return 'Increase review: denials outpace approvals.';
+    }
+    if (stats.successRate >= 80) {
+      return 'High signal: most access requests are succeeding.';
+    }
+    return 'Balanced traffic across views, downloads, and requests.';
+  }, [stats]);
 
   // Activity icon and color mapping
   const getActivityConfig = (type: ActivityType) => {
@@ -183,6 +239,19 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
     }
   };
 
+  const getDecisionBadge = (decision?: string) => {
+    if (!decision) return null;
+    const isAllow = decision === 'ALLOW';
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+        isAllow ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+      }`}>
+        {isAllow ? <ShieldCheck className="w-3 h-3" /> : <ShieldX className="w-3 h-3" />}
+        {isAllow ? 'Allowed' : 'Denied'}
+      </span>
+    );
+  };
+
   // Format time
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
@@ -198,64 +267,126 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
     { value: 'access_denied', label: 'Denied', icon: XCircle },
   ];
 
+  const timeRangeOptions: { value: TimeRange; label: string }[] = [
+    { value: '24h', label: '24h' },
+    { value: '7d', label: '7d' },
+    { value: '30d', label: '30d' },
+    { value: 'all', label: 'All' },
+  ];
+
   if (isLoading) {
     return <ActivitySkeleton />;
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div 
-            className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'var(--instance-banner-bg)' }}
-          >
-            <Clock className="w-5 h-5 text-white" strokeWidth={2} />
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Hero / Overview */}
+      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white">
+        <div className="absolute inset-0" style={gradientBg} />
+        <div className="relative p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm"
+                style={{ background: 'var(--instance-banner-bg)' }}
+              >
+                <Clock className="w-5 h-5 text-white" strokeWidth={2} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-bold text-gray-900">Recent Activity</h1>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-white/70 text-gray-700 border border-white/60">
+                    <Sparkles className="w-3 h-3" />
+                    Live view
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600">
+                  Trace document interactions, authorizations, and audit signals.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {user.clearance && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white/70 text-gray-800 border border-white/60">
+                  <Shield className="w-3.5 h-3.5" />
+                  {user.clearance}
+                </span>
+              )}
+              {user.countryOfAffiliation && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white/70 text-gray-800 border border-white/60">
+                  <FileText className="w-3.5 h-3.5" />
+                  {user.countryOfAffiliation}
+                </span>
+              )}
+              {user.uniqueID && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-white/70 text-gray-800 border border-white/60">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  {user.uniqueID}
+                </span>
+              )}
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Recent Activity</h1>
-            <p className="text-sm text-gray-500">Your document interactions and access history</p>
+
+          {/* KPI strip */}
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <StatCard label="Access success" value={`${stats.successRate}%`} trend={insightMessage} />
+            <StatCard label="Views / Downloads" value={`${stats.views} / ${stats.downloads}`} trend="Engagement over selected window" />
+            <StatCard label="Uploads & Denials" value={`${stats.uploads} / ${stats.denied}`} trend="Watch for spikes in denials" />
           </div>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="mb-6 space-y-3">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search activities..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-offset-1 focus:border-transparent transition-all"
-            style={{ '--tw-ring-color': 'rgba(var(--instance-primary-rgb), 0.3)' } as React.CSSProperties}
-          />
-        </div>
+      {/* Controls */}
+      <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          {/* Search */}
+          <div className="relative w-full md:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search resources or IDs"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:border-transparent transition-all"
+              style={{ '--tw-ring-color': 'rgba(var(--instance-primary-rgb), 0.28)' } as CSSProperties}
+            />
+          </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap gap-2">
-          {filterOptions.map((option) => {
-            const isActive = filter === option.value;
-            const Icon = option.icon;
-            return (
+          <div className="flex flex-wrap gap-2">
+            {timeRangeOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => setFilter(option.value)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  isActive 
-                    ? 'text-white shadow-sm' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                onClick={() => setTimeRange(option.value)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                  timeRange === option.value
+                    ? 'text-white border-transparent'
+                    : 'text-gray-600 bg-white hover:border-gray-200'
                 }`}
-                style={isActive ? { background: 'var(--instance-banner-bg)' } : undefined}
+                style={timeRange === option.value ? { background: 'var(--instance-banner-bg)' } : undefined}
               >
-                <Icon className="w-3.5 h-3.5" strokeWidth={2} />
                 {option.label}
               </button>
-            );
-          })}
+            ))}
+            {filterOptions.map((option) => {
+              const isActive = filter === option.value;
+              const Icon = option.icon;
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => setFilter(option.value)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    isActive 
+                      ? 'text-white shadow-sm' 
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
+                  }`}
+                  style={isActive ? { background: 'var(--instance-banner-bg)' } : undefined}
+                >
+                  <Icon className="w-3.5 h-3.5" strokeWidth={2} />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -274,7 +405,11 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
               </div>
 
               {/* Activity Cards */}
-              <div className="space-y-2">
+              <div className="relative pl-5">
+                <div 
+                  className="absolute left-1.5 top-0 bottom-0 w-px"
+                  style={{ background: 'linear-gradient(to bottom, rgba(var(--instance-primary-rgb),0.2), rgba(226,232,240,0.9))' }}
+                />
                 {items.map((activity, index) => {
                   const config = getActivityConfig(activity.type);
                   const Icon = config.icon;
@@ -282,42 +417,50 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
                   return (
                     <div
                       key={activity.id}
-                      className="group bg-white border border-gray-100 rounded-xl p-3 hover:border-gray-200 hover:shadow-sm transition-all animate-fade-in"
+                      className="relative group bg-white border border-gray-100 rounded-xl p-4 mb-3 hover:border-gray-200 hover:shadow-sm transition-all animate-fade-in"
                       style={{ animationDelay: `${index * 30}ms` }}
                     >
+                      <span 
+                        className={`absolute -left-[19px] top-5 w-3 h-3 rounded-full border border-white shadow ring-2 ring-white ${config.bg}`}
+                      />
                       <div className="flex items-start gap-3">
                         {/* Icon */}
-                        <div className={`w-9 h-9 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>
+                        <div className={`w-10 h-10 rounded-lg ${config.bg} flex items-center justify-center flex-shrink-0`}>
                           <Icon className={`w-4 h-4 ${config.color}`} strokeWidth={2} />
                         </div>
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
-                              {/* Action Label */}
-                              <span className={`text-xs font-semibold ${config.color}`}>
-                                {config.label}
-                              </span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`text-xs font-semibold ${config.color}`}>
+                                  {config.label}
+                                </span>
+                                {getDecisionBadge(activity.decision)}
+                              </div>
                               
                               {/* Resource Title */}
-                              <h3 className="text-sm font-medium text-gray-900 truncate mt-0.5">
+                              <h3 className="text-sm font-semibold text-gray-900 mt-0.5">
                                 {activity.resourceTitle}
                               </h3>
                               
                               {/* Meta Info */}
-                              <div className="flex items-center gap-2 mt-1">
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${getClassificationColor(activity.classification)}`}>
                                   {activity.classification.replace('_', ' ')}
                                 </span>
                                 <span className="text-[10px] text-gray-400 font-mono">
                                   {activity.resourceId}
                                 </span>
+                                <span className="text-[10px] text-gray-400">
+                                  {formatRelativeTime(activity.timestamp)}
+                                </span>
                               </div>
 
                               {/* Details (if any) */}
                               {activity.details && (
-                                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                <p className="text-xs text-gray-600 mt-2 flex items-center gap-1">
                                   <AlertCircle className="w-3 h-3" />
                                   {activity.details}
                                 </p>
@@ -325,7 +468,7 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
                             </div>
 
                             {/* Time */}
-                            <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap text-right">
                               {formatTime(activity.timestamp)}
                             </span>
                           </div>
@@ -363,13 +506,25 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
   );
 }
 
+function StatCard({ label, value, trend }: { label: string; value: string; trend: string }) {
+  return (
+    <div className="rounded-xl border border-white/70 bg-white/70 backdrop-blur p-3 shadow-sm">
+      <p className="text-xs font-semibold text-gray-600">{label}</p>
+      <div className="flex items-baseline gap-2 mt-1">
+        <span className="text-2xl font-bold text-gray-900">{value}</span>
+      </div>
+      <p className="text-xs text-gray-500 mt-1">{trend}</p>
+    </div>
+  );
+}
+
 // Empty State
 function EmptyActivityState() {
   return (
     <div className="text-center py-12">
       <div 
         className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
-        style={{ background: 'linear-gradient(to br, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))' }}
+        style={{ background: 'linear-gradient(to bottom right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))' }}
       >
         <Sparkles className="w-8 h-8" style={{ color: 'var(--instance-primary)' }} />
       </div>
@@ -438,6 +593,7 @@ function ActivitySkeleton() {
     </div>
   );
 }
+
 
 
 

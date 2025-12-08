@@ -93,7 +93,7 @@ export interface IBundlePublishResult {
 // CONSTANTS
 // ============================================
 
-const POLICIES_DIR = process.env.POLICIES_DIR || '/app/policies';
+const getPoliciesDir = () => process.env.POLICIES_DIR || '/app/policies';
 const BUNDLE_SIGNING_KEY_PATH =
   process.env.BUNDLE_SIGNING_KEY_PATH || '/app/certs/bundle-signing/bundle-signing.key';
 const BUNDLE_SIGNING_ALGORITHM = process.env.BUNDLE_SIGNING_ALGORITHM || 'RS256';
@@ -117,14 +117,14 @@ const SCOPE_DIR_MAP: Record<string, string[]> = {
 // POLICY BUNDLE SERVICE
 // ============================================
 
-class PolicyBundleService {
+export class PolicyBundleService {
   private signingKey: crypto.KeyObject | null = null;
   private signingKeyLoaded = false;
   private currentBundle: IPolicyBundle | null = null;
 
   constructor() {
     logger.info('Policy Bundle Service initialized', {
-      policiesDir: POLICIES_DIR,
+      policiesDir: getPoliciesDir(),
       signingAlgorithm: BUNDLE_SIGNING_ALGORITHM,
     });
   }
@@ -367,7 +367,7 @@ class PolicyBundleService {
 
     // Recursively collect .rego files
     for (const dir of dirsToInclude) {
-      const dirPath = path.join(POLICIES_DIR, dir);
+      const dirPath = path.join(getPoliciesDir(), dir);
       if (fs.existsSync(dirPath)) {
         await this.collectFilesRecursive(dirPath, dir, files);
       }
@@ -432,7 +432,7 @@ class PolicyBundleService {
 
     // Optionally include data files
     if (includeData) {
-      const dataPath = path.join(POLICIES_DIR, 'data');
+      const dataPath = path.join(getPoliciesDir(), 'data');
       if (fs.existsSync(dataPath)) {
         const dataFile = path.join(dataPath, 'data.json');
         if (fs.existsSync(dataFile)) {

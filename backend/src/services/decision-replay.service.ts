@@ -101,7 +101,7 @@ export class DecisionReplayService {
                     status: 'pending' as const,
                 })),
                 evaluation_details: {
-                    latency_ms: latency,
+                    latency_ms: Math.max(latency, 1),
                     policy_version: 'v3.1.0',
                     opa_decision_id: opaResult.decision_id,
                 },

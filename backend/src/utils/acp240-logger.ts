@@ -201,7 +201,8 @@ export interface IACP240AuditEvent {
  * 2. MongoDB (audit_logs collection) for dashboard queries
  */
 export function logACP240Event(event: IACP240AuditEvent): Promise<void> {
-    const authzLogger = logger.child({ service: 'acp240-audit' });
+    const authzLogger =
+        typeof logger.child === 'function' ? logger.child({ service: 'acp240-audit' }) : logger;
 
     // Write to file (synchronous)
     authzLogger.info('ACP-240 Audit Event', {

@@ -28,6 +28,11 @@ import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger';
+import {
+  logACP240Event,
+  type ACP240EventType,
+  type IACP240AuditEvent,
+} from '../utils/acp240-logger';
 
 // ============================================
 // TYPES
@@ -260,6 +265,61 @@ class AuditService {
   }
 
   /**
+   * Mirror audit entry to ACP-240 Mongo collection (audit_logs)
+   * Non-blocking: failures are logged but do not affect request flow.
+   */
+  private mirrorToACP240(entry: IAuditEntry, acp240EventType: ACP240EventType, action: string): void {
+    const event: IACP240AuditEvent = {
+      eventType: acp240EventType,
+      timestamp: entry.timestamp,
+      requestId: entry.context.requestId || entry.context.correlationId,
+      subject: entry.subject.uniqueID,
+      action,
+      resourceId: entry.resource.resourceId,
+      outcome: entry.decision.allow ? 'ALLOW' : 'DENY',
+      reason: entry.decision.reason,
+      subjectAttributes: {
+        clearance: entry.subject.clearance,
+        countryOfAffiliation: entry.subject.countryOfAffiliation,
+        acpCOI: entry.subject.acpCOI,
+        issuer: entry.subject.issuer,
+        acr: entry.context.acr,
+        amr: entry.context.amr,
+      },
+      resourceAttributes: {
+        classification: entry.resource.classification,
+        releasabilityTo: entry.resource.releasabilityTo,
+        COI: entry.resource.COI,
+        encrypted: entry.resource.encrypted,
+        original_classification: entry.resource.originalClassification,
+        original_country: entry.resource.originalCountry,
+      },
+      policyEvaluation: {
+        allow: entry.decision.allow,
+        reason: entry.decision.reason,
+        evaluation_details: entry.decision.evaluationDetails,
+        obligations: entry.decision.obligations,
+      },
+      context: {
+        sourceIP: entry.context.sourceIP,
+        deviceCompliant: entry.context.deviceCompliant,
+        currentTime: undefined,
+      },
+      latencyMs: entry.latencyMs,
+    };
+
+    // Avoid blocking the main request path; log failures for observability.
+    void logACP240Event(event).catch((error: unknown) => {
+      logger.warn('Failed to mirror audit event to ACP-240 collection', {
+        error: error instanceof Error ? error.message : 'unknown error',
+        eventType: acp240EventType,
+        resourceId: entry.resource.resourceId,
+        subject: entry.subject.uniqueID,
+      });
+    });
+  }
+
+  /**
    * Log an access grant decision
    */
   logAccessGrant(params: {
@@ -286,6 +346,7 @@ class AuditService {
     };
 
     this.log(entry);
+    this.mirrorToACP240(entry, 'DECRYPT', 'access');
   }
 
   /**
@@ -315,6 +376,7 @@ class AuditService {
     };
 
     this.log(entry);
+    this.mirrorToACP240(entry, 'ACCESS_DENIED', 'access');
 
     // Also log to main error log for alerting
     logger.warn('Access denied', {
@@ -355,6 +417,7 @@ class AuditService {
     };
 
     this.log(entry);
+    this.mirrorToACP240(entry, 'DECRYPT', 'decrypt');
   }
 
   /**
@@ -386,6 +449,7 @@ class AuditService {
     };
 
     this.log(entry);
+    this.mirrorToACP240(entry, 'DECRYPT', 'key_release');
   }
 
   /**
@@ -418,6 +482,7 @@ class AuditService {
     };
 
     this.log(entry);
+    this.mirrorToACP240(entry, 'ACCESS_DENIED', 'key_release');
 
     // Also log to main error log for security alerting
     logger.warn('Key release denied', {
@@ -459,6 +524,7 @@ class AuditService {
     };
 
     this.log(entry);
+    this.mirrorToACP240(entry, 'ACCESS_DENIED', 'policy_violation');
 
     // Alert on policy violations
     logger.error('Policy violation detected', {
@@ -611,6 +677,7 @@ class AuditService {
 export const auditService = new AuditService();
 
 export default AuditService;
+
 
 
 
