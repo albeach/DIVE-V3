@@ -553,6 +553,9 @@ resource "keycloak_user" "admin_user" {
     uniqueID             = "admin-${lower(var.instance_code)}"
     countryOfAffiliation = var.instance_code
     clearance            = "TOP_SECRET"
+    clearance_level      = "4"
+    # Keep admin aligned with L4 users for policy evaluation
+    acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
     organization         = "${var.instance_name} Admin"
     organizationType     = "GOV"
     userType             = "admin"

@@ -11,6 +11,7 @@ volumes:
   authzforce_data:
   frontend_node_modules:  # Named volume for persistent node_modules
   frontend_next:          # Named volume for persistent .next build cache
+  opal_data_tls:
 
 services:
   postgres:
@@ -43,11 +44,18 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       # Keycloak 26 Configuration with HTTPS (Defense in Depth)
       # Using mkcert certificates for internal HTTPS
       # For localhost development, use localhost hostname
-      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-usa-idp.dive25.com}
+      # Enable local admin access via localhost while preserving default host override
+      # If KEYCLOAK_HOSTNAME is not set, fall back to localhost for dev convenience
+      KC_HOSTNAME:
+      KC_HOSTNAME_URL:
+      KC_HOSTNAME_ADMIN_URL:
       KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
       KC_HTTP_ENABLED: true
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
@@ -194,9 +202,9 @@ services:
       REDIS_URL: redis://redis:6379
       # CORS configuration - Updated for Cloudflare Tunnel (usa-* naming)
       # Allows both local development and Cloudflare domains
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000,https://usa-app.dive25.com,https://usa-api.dive25.com,https://usa-idp.dive25.com}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000}
       # Frontend base URL for CORS (used by server.ts)
-      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://usa-app.dive25.com}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       # Federation mode: Allow CORS from any origin (security via JWT authentication)
       # Set to 'true' when using external IdP clients or federated deployments
       ENABLE_FEDERATION_CORS: "false"
@@ -214,6 +222,8 @@ services:
       - ./backend/src:/app/src
       - ./backend/package.json:/app/package.json:ro
       - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      # Federation registry/config
+      - ./config/federation-registry.json:/app/config/federation-registry.json:ro
       # Mount SSL certificates for HTTPS server
       - ./keycloak/certs:/opt/keycloak/certs:ro
       # CRITICAL: Mount policies directory so backend can read OPA Rego files
@@ -245,30 +255,36 @@ services:
       # DUAL-MODE CONFIGURATION: Supports both localhost AND Cloudflare tunnel access
       # Primary URLs use Cloudflare tunnel (usa-*.dive25.com)
       # CSP allows both localhost and Cloudflare domains via NEXT_PUBLIC_EXTERNAL_DOMAINS
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://usa-api.dive25.com}
-      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://usa-api.dive25.com}
-      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://usa-app.dive25.com}
+      # Local federation-in-a-box defaults (public-facing URLs)
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       # Server-side backend URL (Docker internal network)
       BACKEND_URL: https://backend:4000
       # Keycloak configuration
       KEYCLOAK_BASE_URL: https://keycloak:8443
-      KEYCLOAK_URL: ${KEYCLOAK_URL:-https://keycloak:8443}
+      # Local dev: use localhost to match Keycloak frontendUrl for issuer
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-https://localhost:8443}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dive-v3-broker}
-      # Public Keycloak URLs (browser-side - Cloudflare tunnel)
-      NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-https://usa-idp.dive25.com}
+      # Public Keycloak URLs (browser-side) align with issuer
+      NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}
       NEXT_PUBLIC_KEYCLOAK_REALM: ${NEXT_PUBLIC_KEYCLOAK_REALM:-dive-v3-broker}
-      # Keycloak Issuer (must match token issuer - use public URL)
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://usa-idp.dive25.com/realms/dive-v3-broker}
-      # NextAuth configuration - Use Cloudflare tunnel URL
-      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://usa-app.dive25.com}
-      # CSP: Allow additional domains for dual-mode (localhost + Cloudflare)
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443,https://usa-app.dive25.com,https://usa-api.dive25.com,https://usa-idp.dive25.com}"
+      # Keycloak Issuer (must match token issuer)
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
+      # NextAuth configuration - Local default
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
+      # CSP: Allow localhost domains
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
       # Allow Cloudflare Insights for monitoring
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "${NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS:-true}"
       AUTH_SECRET: ${AUTH_SECRET:?Run ./dive secrets load first}
       # Client credentials
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run ./dive secrets load first}
+      # Auth.js (NextAuth v5) provider envs
+      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run ./dive secrets load first}
+      AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
       # SSL and host configuration
       AUTH_TRUST_HOST: "true"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
@@ -281,6 +297,8 @@ services:
       - backend
     networks:
       - dive-network
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       # Development: Mount entire source for hot reload
       - ./frontend:/app
@@ -337,6 +355,124 @@ services:
       - ./kas/src:/app/src
       - ./kas/logs:/app/logs
     command: npm run dev
+
+  opal-server:
+    image: permitio/opal-server:0.9.0
+    container_name: dive-v3-opal-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      OPAL_BROADCAST_URI: https://opal-server:7002
+      OPAL_SERVER_SSL_ENABLED: "true"
+      OPAL_SERVER_SSL_CERT_PATH: /certs/server.crt
+      OPAL_SERVER_SSL_KEY_PATH: /certs/server.key
+      OPAL_SERVER_SSL_CA_PATH: /certs/ca.crt
+      OPAL_SERVER_SSL_CLIENT_AUTH: "optional"
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: json
+      UVICORN_PORT: 7002
+      UVICORN_HOST: 0.0.0.0
+      OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["https://localhost:3000","https://127.0.0.1:3000"]'
+    command:
+      - gunicorn
+      - -b
+      - 0.0.0.0:7002
+      - -k
+      - uvicorn.workers.UvicornWorker
+      - --keyfile
+      - /certs/server.key
+      - --certfile
+      - /certs/server.crt
+      - --ca-certs
+      - /certs/ca.crt
+      - opal_server.main:app
+      - -t
+      - "30"
+      - --keep-alive
+      - "5"
+    ports:
+      - "7002:7002"
+    networks:
+      - dive-network
+    volumes:
+      - ./policies:/policies:ro
+      - ./policies/data:/policy-data:ro
+      - ./certs/opal:/certs:ro
+      - opal_data_tls:/opal
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import ssl, urllib.request; ctx=ssl._create_unverified_context(); resp=urllib.request.urlopen('https://localhost:7002/healthcheck', context=ctx, timeout=5); exit(0 if resp.status==200 else 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  opal-client:
+    image: permitio/opal-client:0.9.0
+    container_name: dive-v3-opal-client
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      OPAL_SERVER_URL: https://opal-server:7002
+      OPAL_CLIENT_SSL_ENABLED: "true"
+      OPAL_CLIENT_SSL_CERT_PATH: /certs/client.crt
+      OPAL_CLIENT_SSL_KEY_PATH: /certs/client.key
+      OPAL_CLIENT_SSL_CA_PATH: /certs/ca.crt
+      OPAL_CLIENT_SSL_VERIFY: "true"
+      OPAL_CLIENT_TOKEN: ${OPAL_CLIENT_JWT_TOKEN:-}
+      OPAL_INLINE_OPA_ENABLED: "true"
+      OPAL_INLINE_OPA_CONFIG: |
+        {
+          "addr": "0.0.0.0:8181",
+          "log_level": "info",
+          "log_format": "json",
+          "decision_logs": {
+            "console": true
+          },
+          "bundles": {
+            "authz": {
+              "signing": {
+                "keyid": "bundle-signer"
+              }
+            }
+          },
+          "keys": {
+            "bundle-signer": {
+              "key": "/certs/bundle-signing.pub.pem",
+              "algorithm": "RS256"
+            }
+          }
+        }
+      OPAL_DATA_TOPICS: "policy_data"
+      OPAL_DEFAULT_UPDATE_CALLBACKS: '{"callbacks": []}'
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: json
+      OPAL_DATA_UPDATER_ENABLED: "true"
+    ports:
+      - "8211:8181"
+      - "7006:7000"
+    networks:
+      - dive-network
+    volumes:
+      - ./policies:/policies:ro
+      - ./policies/data:/policy-data:ro
+      - ./certs/opal:/certs:ro
+    depends_on:
+      opal-server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; resp=urllib.request.urlopen('http://localhost:8181/health', timeout=5); exit(0 if resp.status==200 else 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # Cloudflare Tunnel - Best practice: runs as a container with auto-restart
   # Provides persistent, reliable tunnel connectivity

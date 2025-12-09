@@ -167,3 +167,4 @@ log_info "Next: Run ./scripts/spoke-init/init-keycloak.sh ${INSTANCE_CODE}"
 
 
 
+

@@ -465,6 +465,9 @@ export default function FacetedFilters({
         [groupId]: currentValues === value ? '' : value,
       });
     }
+
+// Named export for tests and consumers
+export { FacetedFilters };
   }, [selectedFilters, onFilterChange]);
 
   // Clear all filters
@@ -527,6 +530,10 @@ export default function FacetedFilters({
     encryptionStatus: [],
   }), [userAttributes]);
 
+  // Guard against undefined counts to keep render safe during loading/tests
+  const safeFilteredCount = typeof filteredCount === 'number' ? filteredCount : 0;
+  const safeTotalCount = typeof totalCount === 'number' ? totalCount : 0;
+
   return (
     <div className={`bg-white dark:bg-gray-900 border border-gray-200/60 dark:border-gray-700/60 rounded-2xl overflow-hidden shadow-lg backdrop-blur-sm ${className}`} style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}>
       {/* Header - 2025 Modern Design */}
@@ -555,8 +562,8 @@ export default function FacetedFilters({
         
         {/* Results summary - Enhanced typography */}
         <div className="text-xs text-gray-600 dark:text-gray-400">
-          Showing <span className="font-bold text-gray-900 dark:text-gray-100">{filteredCount.toLocaleString()}</span> of{' '}
-          <span className="font-bold text-gray-900 dark:text-gray-100">{totalCount.toLocaleString()}</span> resources
+          Showing <span className="font-bold text-gray-900 dark:text-gray-100">{safeFilteredCount.toLocaleString()}</span> of{' '}
+          <span className="font-bold text-gray-900 dark:text-gray-100">{safeTotalCount.toLocaleString()}</span> resources
         </div>
       </div>
 
@@ -683,7 +690,10 @@ export function MobileFilterDrawer({ isOpen, onClose, ...props }: MobileFilterDr
             animate={{ x: 0 }}
             exit={{ x: '-100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed inset-y-0 left-0 w-80 max-w-full z-50 lg:hidden overflow-y-auto"
+          className="fixed inset-y-0 left-0 w-80 max-w-full z-50 lg:hidden overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Filters"
           >
             {/* Close button */}
             <button

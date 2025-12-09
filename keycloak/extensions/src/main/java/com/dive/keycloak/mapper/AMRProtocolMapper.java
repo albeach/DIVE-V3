@@ -70,57 +70,62 @@ public class AMRProtocolMapper extends AbstractOIDCProtocolMapper
     protected void setClaim(IDToken token, ProtocolMapperModel mappingModel,
                             UserSessionModel userSession, KeycloakSession keycloakSession,
                             ClientSessionContext clientSessionCtx) {
-        
-        UserModel user = userSession.getUser();
-        
-        // Build AMR array based on user's configured credentials
-        List<String> amrMethods = new ArrayList<>();
-        
-        // Password is always present for authenticated users
-        amrMethods.add("pwd");
-        
-        // Check if user has OTP credential configured
-        boolean hasOTP = user.credentialManager()
-            .getStoredCredentialsByTypeStream("otp")
-            .findFirst()
-            .isPresent();
-        
-        if (hasOTP) {
-            amrMethods.add("otp");
+
+        try {
+            UserModel user = userSession.getUser();
+
+            // Build AMR array based on user's configured credentials (pwd baseline; hwk if WebAuthn)
+            List<String> amrMethods = new ArrayList<>();
+
+            // Password is always present for authenticated users
+            amrMethods.add("pwd");
+
+            // Check for WebAuthn credentials (future enhancement)
+            boolean hasWebAuthn = user != null && user.credentialManager()
+                .getStoredCredentialsByTypeStream("webauthn")
+                .findFirst()
+                .isPresent();
+
+            // Elevate to OTP only when the authenticator explicitly marked success
+            boolean otpUsed = false;
+            String otpAuthUser = userSession.getNote("OTP_AUTHENTICATED");
+            if (otpAuthUser != null && otpAuthUser.equalsIgnoreCase("true")) {
+                otpUsed = true;
+                amrMethods.add("otp");
+            }
+
+            if (hasWebAuthn) {
+                amrMethods.add("hwk");  // Hardware key
+            }
+
+            // Set AMR claim as JSON array
+            token.setOtherClaims("amr", amrMethods);
+
+            // Calculate ACR based on AMR factors (NIST SP 800-63B)
+            String acr;
+            if (hasWebAuthn) {
+                acr = "2";  // AAL3 - Hardware cryptographic authenticator
+            } else if (otpUsed) {
+                acr = "1";  // AAL2 - OTP used
+            } else {
+                acr = "0";  // AAL1 - Single factor (password only)
+            }
+
+            token.setOtherClaims("acr", acr);
+
+            // Set auth_time from user session
+            if (userSession.getStarted() > 0) {
+                token.setOtherClaims("auth_time", userSession.getStarted() / 1000); // Convert ms to seconds
+            }
+
+            System.out.println("[DIVE AMR Mapper] Set claims for user: " + (user != null ? user.getUsername() : "unknown") +
+                             " | amr=" + amrMethods + " | acr=" + acr + " (AAL" + (Integer.parseInt(acr) + 1) + ")");
+        } catch (Exception e) {
+            // Fail-secure: do not break token issuance; default to AAL1
+            System.err.println("[DIVE AMR Mapper] Error computing AMR/ACR: " + e.getMessage());
+            token.setOtherClaims("amr", List.of("pwd"));
+            token.setOtherClaims("acr", "0");
         }
-        
-        // Check for WebAuthn credentials (future enhancement)
-        boolean hasWebAuthn = user.credentialManager()
-            .getStoredCredentialsByTypeStream("webauthn")
-            .findFirst()
-            .isPresent();
-        
-        if (hasWebAuthn) {
-            amrMethods.add("hwk");  // Hardware key
-        }
-        
-        // Set AMR claim as JSON array
-        token.setOtherClaims("amr", amrMethods);
-        
-        // Calculate ACR based on AMR factors (NIST SP 800-63B)
-        String acr;
-        if (hasWebAuthn) {
-            acr = "2";  // AAL3 - Hardware cryptographic authenticator
-        } else if (hasOTP) {
-            acr = "1";  // AAL2 - Multi-factor authentication
-        } else {
-            acr = "0";  // AAL1 - Single factor (password only)
-        }
-        
-        token.setOtherClaims("acr", acr);
-        
-        // Set auth_time from user session
-        if (userSession.getStarted() > 0) {
-            token.setOtherClaims("auth_time", userSession.getStarted() / 1000); // Convert ms to seconds
-        }
-        
-        System.out.println("[DIVE AMR Mapper] Set claims for user: " + user.getUsername() + 
-                         " | amr=" + amrMethods + " | acr=" + acr + " (AAL" + (Integer.parseInt(acr) + 1) + ")");
     }
 }
 

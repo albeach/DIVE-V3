@@ -53,7 +53,8 @@ module "instance" {
   # with this site" errors on subdomains like usa-idp.dive25.com.
   #
   # Priority: explicit variable > instance lookup > module default ("dive25.com")
-  webauthn_rp_id = var.webauthn_rp_id != "" ? var.webauthn_rp_id : lookup(local.instance_rp_ids, upper(terraform.workspace), "dive25.com")
+  # Default to localhost for dev; override var.webauthn_rp_id in tfvars/ENV for CF hosts
+  webauthn_rp_id = var.webauthn_rp_id != "" ? var.webauthn_rp_id : "localhost"
 
   # ============================================
   # MFA FLOW BINDING - CRITICAL FOR SECURITY

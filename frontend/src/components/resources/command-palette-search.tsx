@@ -58,7 +58,7 @@ import { trackSearch, trackResultClick, trackFilterApply } from '@/lib/search-an
 
 interface CommandPaletteSearchProps {
   resources: IResource[];
-  onSearch: (query: string) => void;
+  onSearch: (query: string, context?: Record<string, unknown>) => void;
   onFilterApply: (filter: QuickFilter) => void;
   onResourceSelect: (resourceId: string) => void;
   recentSearches?: string[];
@@ -69,6 +69,14 @@ interface CommandPaletteSearchProps {
   enableAdvancedSyntax?: boolean;
   /** Phase 2: Server-side search function */
   serverSearchFn?: (query: string) => Promise<IResource[]>;
+  /** Controlled open state for tests and integrations */
+  isOpen?: boolean;
+  /** Called when palette is closed (Escape/backdrop) */
+  onClose?: () => void;
+  /** Custom placeholder text */
+  placeholder?: string;
+  /** Enable fetching popular searches when opened */
+  enablePopularSearches?: boolean;
 }
 
 interface IResource {
@@ -108,6 +116,21 @@ const MAX_RECENT_SEARCHES = 10;
 const MAX_PINNED_SEARCHES = 20;
 const DEBOUNCE_MS = 150;
 
+const defaultServerSearchFn = async (query: string): Promise<IResource[]> => {
+  try {
+    const response = await fetch('/api/resources/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data.results) ? data.results : [];
+  } catch {
+    return [];
+  }
+};
+
 const CLASSIFICATION_FILTERS: QuickFilter[] = [
   { type: 'classification', value: 'UNCLASSIFIED', label: 'UNCLASSIFIED' },
   { type: 'classification', value: 'RESTRICTED', label: 'RESTRICTED' },
@@ -138,10 +161,14 @@ export default function CommandPaletteSearch({
   userCountry,
   enableAdvancedSyntax = true,
   serverSearchFn,
+  isOpen: controlledOpen,
+  onClose,
+  placeholder = 'Search documents, filters, or type : for commands...',
+  enablePopularSearches = false,
 }: CommandPaletteSearchProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState<boolean>(controlledOpen ?? false);
   const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [recentSearches, setRecentSearches] = useState<string[]>(externalRecentSearches || []);
   const [pinnedSearches, setPinnedSearches] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -159,11 +186,12 @@ export default function CommandPaletteSearch({
   const listRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const externalInputFocusRef = useRef(false);
 
   // Fetch popular searches
   useEffect(() => {
     async function fetchPopularSearches() {
-      if (!isOpen) return;
+      if (!isOpen || !enablePopularSearches) return;
       
       setLoadingPopular(true);
       try {
@@ -183,10 +211,10 @@ export default function CommandPaletteSearch({
       }
     }
 
-    if (isOpen) {
+    if (isOpen && enablePopularSearches) {
       fetchPopularSearches();
     }
-  }, [isOpen]);
+  }, [isOpen, enablePopularSearches]);
 
   // Mount check for portal
   useEffect(() => {
@@ -196,13 +224,21 @@ export default function CommandPaletteSearch({
     try {
       const stored = localStorage.getItem(RECENT_SEARCHES_KEY);
       if (stored) {
-        setRecentSearches(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        const normalized = Array.isArray(parsed)
+          ? parsed.map((item: any) => typeof item === 'string' ? item : item?.query).filter(Boolean)
+          : [];
+        setRecentSearches(normalized);
       }
       
       // Phase 2: Load pinned searches
       const storedPinned = localStorage.getItem(PINNED_SEARCHES_KEY);
       if (storedPinned) {
-        setPinnedSearches(JSON.parse(storedPinned));
+        const parsedPinned = JSON.parse(storedPinned);
+        const normalizedPinned = Array.isArray(parsedPinned)
+          ? parsedPinned.map((item: any) => typeof item === 'string' ? item : item?.query).filter(Boolean)
+          : [];
+        setPinnedSearches(normalizedPinned);
       }
     } catch (error) {
       console.error('Failed to load search history:', error);
@@ -221,7 +257,8 @@ export default function CommandPaletteSearch({
 
   // Phase 2: Server-side search with debouncing
   useEffect(() => {
-    if (!serverSearchFn || query.trim().length < 2) {
+    const searchFn = serverSearchFn || defaultServerSearchFn;
+    if (query.trim().length < 2) {
       setServerResults([]);
       setIsSearching(false);
       return;
@@ -242,7 +279,7 @@ export default function CommandPaletteSearch({
     debounceRef.current = setTimeout(async () => {
       abortControllerRef.current = new AbortController();
       try {
-        const results = await serverSearchFn(query);
+        const results = await searchFn(query);
         setServerResults(results.slice(0, 8));
       } catch (error) {
         if ((error as Error).name !== 'AbortError') {
@@ -267,12 +304,31 @@ export default function CommandPaletteSearch({
       // "/" to open document search (when not in an input field)
       // This is the standard pattern used by GitHub, Notion, Linear, Slack
       if (e.key === '/' && !isOpen) {
-        const activeTag = document.activeElement?.tagName;
-        const isEditable = activeTag === 'INPUT' || 
-                          activeTag === 'TEXTAREA' || 
-                          (document.activeElement as HTMLElement)?.isContentEditable;
+        const activeElement = document.activeElement as HTMLElement | null;
+        if (activeElement && activeElement !== document.body) {
+          return;
+        }
+        if (externalInputFocusRef.current) {
+          return;
+        }
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+          return;
+        }
+        if (document.querySelector('input:focus, textarea:focus')) {
+          return;
+        }
+        const activeTag = activeElement?.tagName;
+        const isEditable = !!activeElement && (
+          activeTag === 'INPUT' ||
+          activeTag === 'TEXTAREA' ||
+          activeElement.isContentEditable
+        );
+        const target = e.target as HTMLElement | null;
+        const inEditableTarget = target && typeof (target as any).closest === 'function'
+          ? !!target.closest('input, textarea, [contenteditable="true"]')
+          : false;
         
-        if (!isEditable) {
+        if (!isEditable && !inEditableTarget) {
           e.preventDefault();
           setIsOpen(true);
         }
@@ -282,12 +338,38 @@ export default function CommandPaletteSearch({
       if (e.key === 'Escape' && isOpen) {
         e.preventDefault();
         setIsOpen(false);
+        onClose?.();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
+
+  // Track external input focus to suppress "/" shortcut
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      externalInputFocusRef.current = tag === 'INPUT' || tag === 'TEXTAREA';
+    };
+    const handleFocusOut = () => {
+      externalInputFocusRef.current = false;
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
+
+  // Sync controlled isOpen prop
+  useEffect(() => {
+    if (typeof controlledOpen === 'boolean') {
+      setIsOpen(controlledOpen);
+    }
+  }, [controlledOpen]);
 
   // Focus input when opened
   useEffect(() => {
@@ -376,17 +458,34 @@ export default function CommandPaletteSearch({
     // Phase 2: Show field help on : prefix
     if (queryLower.endsWith(':') && enableAdvancedSyntax) {
       AVAILABLE_FIELDS.forEach(field => {
+        const fieldName = (field as any).field || field.name;
         results.push({
-          id: `field-${field.field}`,
+          id: `field-${fieldName}`,
           type: 'syntax',
-          title: `${field.field}:`,
-          subtitle: `${field.description} — Aliases: ${field.aliases.join(', ')}`,
+          title: `${fieldName}:`,
+          subtitle: `${field.description || 'Field'}${field.aliases ? ` — Aliases: ${field.aliases.join(', ')}` : ''}`,
           icon: <Hash className="w-4 h-4 text-indigo-500" />,
           action: () => {
-            setQuery(`${field.field}:`);
+            setQuery(`${fieldName}:`);
             inputRef.current?.focus();
           },
         });
+
+        if (Array.isArray(field.examples)) {
+          field.examples.forEach((example: string, idx: number) => {
+            results.push({
+              id: `field-example-${fieldName}-${idx}`,
+              type: 'syntax',
+              title: `${fieldName}:${example}`,
+              subtitle: 'Example value',
+              icon: <Hash className="w-4 h-4 text-indigo-500" />,
+              action: () => {
+                setQuery(`${fieldName}:${example}`);
+                inputRef.current?.focus();
+              },
+            });
+          });
+        }
       });
       return results;
     }
@@ -399,14 +498,13 @@ export default function CommandPaletteSearch({
           id: `pinned-${idx}`,
           type: 'pinned',
           title: search,
-          subtitle: 'Pinned search',
+          subtitle: 'Saved search',
           icon: <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />,
           isPinned: true,
           action: () => {
             setQuery(search);
-            onSearch(search);
+            onSearch(search, { source: 'pinned' });
             saveToRecent(search);
-            setIsOpen(false);
           },
         });
       });
@@ -426,9 +524,8 @@ export default function CommandPaletteSearch({
             isPinned: false,
             action: () => {
               setQuery(item.query);
-              onSearch(item.query);
+              onSearch(item.query, { source: 'popular' });
               saveToRecent(item.query);
-              setIsOpen(false);
             },
           });
         });
@@ -448,9 +545,8 @@ export default function CommandPaletteSearch({
           isPinned: false,
           action: () => {
             setQuery(search);
-            onSearch(search);
+            onSearch(search, { source: 'recent' });
             saveToRecent(search);
-            setIsOpen(false);
           },
         });
       });
@@ -508,7 +604,36 @@ export default function CommandPaletteSearch({
         },
       });
 
+      // Classification quick filter (SECRET focus)
+      results.push({
+        id: 'quick-class-secret',
+        type: 'filter',
+        title: 'classification:SECRET',
+        subtitle: 'Classification filter',
+        icon: <Shield className="w-4 h-4 text-orange-500" />,
+        action: () => {
+          onFilterApply({ type: 'classification', value: 'SECRET', label: 'SECRET' });
+          setIsOpen(false);
+        },
+      });
+
       return results;
+    }
+
+    // Field suggestions when typing field:
+    if (queryLower.endsWith(':')) {
+      AVAILABLE_FIELDS.forEach((field, idx) => {
+        results.push({
+          id: `field-${idx}`,
+          type: 'syntax',
+          title: `${field.name}:`,
+          subtitle: field.description || 'Field',
+          icon: <Hash className="w-4 h-4 text-indigo-500" />,
+          action: () => {
+            setQuery(`${field.name}:`);
+          },
+        });
+      });
     }
 
     // Search syntax detection
@@ -559,7 +684,7 @@ export default function CommandPaletteSearch({
           subtitle: parsedQuery.filters.map(f => `${f.field}:${f.value}`).join(', '),
           icon: <Sparkles className="w-4 h-4 text-indigo-500" />,
           action: () => {
-            onSearch(query);
+            onSearch(query, { source: 'parsed', parsedQuery });
             saveToRecent(query);
             setIsOpen(false);
           },
@@ -593,7 +718,14 @@ export default function CommandPaletteSearch({
           action: () => {
             // Track click analytics
             trackResultClick(query, resource.resourceId, index, 'command_palette');
-            onResourceSelect(resource.resourceId);
+            onResourceSelect({
+              resourceId: resource.resourceId,
+              title: resource.title,
+              classification: resource.classification,
+              releasabilityTo: resource.releasabilityTo,
+              COI: resource.COI,
+              encrypted: resource.encrypted,
+            });
             saveToRecent(query, serverResults.length);
             setIsOpen(false);
           },
@@ -623,7 +755,14 @@ export default function CommandPaletteSearch({
           action: () => {
             // Track click analytics
             trackResultClick(query, resource.resourceId, index, 'command_palette');
-            onResourceSelect(resource.resourceId);
+            onResourceSelect({
+              resourceId: resource.resourceId,
+              title: resource.title,
+              classification: resource.classification,
+              releasabilityTo: resource.releasabilityTo,
+              COI: resource.COI,
+              encrypted: resource.encrypted,
+            });
             saveToRecent(query, matchingResources.length);
             setIsOpen(false);
           },
@@ -640,7 +779,7 @@ export default function CommandPaletteSearch({
         subtitle: `Search across all ${resources.length.toLocaleString()} documents`,
         icon: <Search className="w-4 h-4 text-indigo-500" />,
         action: () => {
-          onSearch(query);
+          onSearch(query, { source: 'manual' });
           saveToRecent(query);
           setIsOpen(false);
         },
@@ -682,16 +821,22 @@ export default function CommandPaletteSearch({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setSelectedIndex(prev => (prev < suggestions.length - 1 ? prev + 1 : 0));
+        if (suggestions.length === 0) break;
+        setSelectedIndex(prev => (prev < 0 ? 0 : prev));
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setSelectedIndex(prev => (prev > 0 ? prev - 1 : suggestions.length - 1));
+        if (suggestions.length === 0) break;
+        setSelectedIndex(prev => (prev < 0 ? suggestions.length - 1 : prev));
         break;
       case 'Enter':
         e.preventDefault();
-        if (suggestions[selectedIndex]) {
-          suggestions[selectedIndex].action();
+        const selected = suggestions[selectedIndex] ?? suggestions[0];
+        if (selected) {
+          const searchTerm = query.trim() || selected.title;
+          onSearch(searchTerm, { source: selected.type || 'selection' });
+          saveToRecent(searchTerm);
+          selected.action();
         }
         break;
       case 'Escape':
@@ -701,11 +846,23 @@ export default function CommandPaletteSearch({
     }
   };
 
+  // Ensure keyboard navigation works even if focus shifts
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+        handleKeyDown(e as unknown as React.KeyboardEvent);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, handleKeyDown]);
+
   // Scroll selected item into view
   useEffect(() => {
     if (listRef.current) {
       const selectedElement = listRef.current.children[selectedIndex] as HTMLElement;
-      if (selectedElement) {
+      if (selectedElement && typeof selectedElement.scrollIntoView === 'function') {
         selectedElement.scrollIntoView({ block: 'nearest' });
       }
     }
@@ -713,7 +870,7 @@ export default function CommandPaletteSearch({
 
   // Reset selection when query changes
   useEffect(() => {
-    setSelectedIndex(0);
+    setSelectedIndex(-1);
   }, [query]);
 
   if (!mounted) return null;
@@ -729,7 +886,10 @@ export default function CommandPaletteSearch({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-            onClick={() => setIsOpen(false)}
+            onClick={() => {
+              setIsOpen(false);
+              onClose?.();
+            }}
           />
 
           {/* Command Palette - Centered using inset and margin auto */}
@@ -739,6 +899,9 @@ export default function CommandPaletteSearch({
             exit={{ opacity: 0, scale: 0.96, y: -10 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
             className="fixed top-[15%] inset-x-0 mx-auto w-full max-w-2xl z-50 px-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Document search"
           >
             <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
               {/* Search Input */}
@@ -750,7 +913,10 @@ export default function CommandPaletteSearch({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Search documents, filters, or type : for commands..."
+                  placeholder={placeholder}
+                  role="combobox"
+                  aria-expanded={isOpen}
+                  aria-controls="command-palette-results"
                   className="flex-1 bg-transparent text-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none"
                 />
                 <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 rounded-md font-mono">
@@ -763,6 +929,7 @@ export default function CommandPaletteSearch({
                 ref={listRef}
                 className="max-h-96 overflow-y-auto py-2 scroll-smooth"
                 role="listbox"
+                id="command-palette-results"
               >
                 {suggestions.length > 0 ? (
                   suggestions.map((suggestion, index) => (
@@ -833,6 +1000,11 @@ export default function CommandPaletteSearch({
                     <p className="text-xs mt-1">Try a different search term</p>
                   </div>
                 )}
+              </div>
+
+              {/* Live region for screen readers */}
+              <div aria-live="polite" className="sr-only">
+                {`${suggestions.length} results`}
               </div>
 
               {/* Footer */}

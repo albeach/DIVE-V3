@@ -313,15 +313,10 @@ export default function NewIdPWizard() {
         setErrors({});
 
         try {
-            const token = (session as any).accessToken;
-            if (!token) {
-                throw new Error('No access token available - please logout and login again');
-            }
-
+            // Submit via internal API proxy so tokens stay server-side
             console.log('[DEBUG] Starting IdP submission...', {
                 alias: formData.alias,
-                protocol: formData.protocol,
-                hasToken: !!token
+                protocol: formData.protocol
             });
 
             // Create Keycloak IdP configuration
@@ -348,11 +343,10 @@ export default function NewIdPWizard() {
 
             console.log('[DEBUG] Request body:', JSON.stringify(requestBody, null, 2));
 
-            const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/idps`, {
+            const response = await fetch('/api/admin/idps', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(requestBody)
             });

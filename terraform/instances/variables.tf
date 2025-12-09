@@ -36,16 +36,20 @@ variable "keycloak_admin_password" {
 variable "app_url" {
   description = "Frontend application URL (e.g., https://usa-app.dive25.com)"
   type        = string
+  # Default to localhost for resilient local dev; override in *.tfvars for CF/tunnel
+  default     = "https://localhost:3000"
 }
 
 variable "api_url" {
   description = "Backend API URL (e.g., https://usa-api.dive25.com)"
   type        = string
+  default     = "https://localhost:4000"
 }
 
 variable "idp_url" {
   description = "Keycloak public URL (e.g., https://usa-idp.dive25.com)"
   type        = string
+  default     = "https://localhost:8443"
 }
 
 # OIDC Client Secret from GCP Secret Manager
