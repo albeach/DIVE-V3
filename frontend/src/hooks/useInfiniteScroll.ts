@@ -225,10 +225,17 @@ export function useInfiniteScroll<T = any>({
   ) => {
     console.log('[useInfiniteScroll] fetchData called:', { isInitial, loadingRef: loadingRef.current });
     
-    // Prevent concurrent requests
+    // Prevent concurrent requests; allow hard refresh (initial=true) to preempt
     if (loadingRef.current) {
-      console.log('[useInfiniteScroll] Already loading, skipping');
-      return;
+      if (isInitial) {
+        abortControllerRef.current?.abort();
+        loadingRef.current = false;
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      } else {
+        console.log('[useInfiniteScroll] Already loading, skipping');
+        return;
+      }
     }
     loadingRef.current = true;
 
@@ -281,6 +288,9 @@ export function useInfiniteScroll<T = any>({
       setTotalCount(response.pagination.totalCount);
       cursorRef.current = response.pagination.nextCursor;
       setTiming(response.timing);
+      if (isInitial) {
+        setHasFetched(true);
+      }
 
     } catch (err) {
       console.error('[useInfiniteScroll] Fetch error:', err);
@@ -320,8 +330,11 @@ export function useInfiniteScroll<T = any>({
 
   const setFilters = useCallback((newFilters: ISearchFilters) => {
     setFiltersState(newFilters);
-    // Will trigger useEffect to refresh
-  }, []);
+    // If a request is already in-flight, restart with new filters immediately
+    if (loadingRef.current) {
+      fetchData(true, newFilters, sort);
+    }
+  }, [fetchData, sort]);
 
   // ========================================
   // Set Sort
@@ -397,15 +410,9 @@ export function useInfiniteScroll<T = any>({
     if (!hasFetched) {
       console.log('[useInfiniteScroll] Triggering initial fetch');
       setIsLoading(true);
-      
-      // Use a small delay to ensure state is settled
-      const timer = setTimeout(() => {
-        fetchData(true).then(() => {
-          setHasFetched(true);
-        });
-      }, 0);
-      
-      return () => clearTimeout(timer);
+      fetchData(true).then(() => {
+        setHasFetched(true);
+      });
     }
   }, [enabled, hasFetched]); // eslint-disable-line react-hooks/exhaustive-deps
 

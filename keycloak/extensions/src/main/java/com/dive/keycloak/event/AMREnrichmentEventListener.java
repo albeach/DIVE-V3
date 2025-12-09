@@ -42,7 +42,9 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
     public void onEvent(Event event) {
         // Process all authentication success events (browser, password grant, token exchange, etc.)
         // This ensures AMR is set regardless of how the user authenticates
+        // Include CLIENT_LOGIN for direct grant / client-credentials flows where LOGIN is not emitted
         if (event.getType() != EventType.LOGIN && 
+            event.getType() != EventType.CLIENT_LOGIN &&
             event.getType() != EventType.CODE_TO_TOKEN &&
             event.getType() != EventType.REFRESH_TOKEN &&
             event.getType() != EventType.TOKEN_EXCHANGE) {
@@ -75,7 +77,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                 return;
             }
 
-            // Build AMR array based on credentials validated
+            // Build AMR array based on credentials validated / present
             List<String> amrMethods = new ArrayList<>();
             
             // Password is always required for authentication
@@ -125,6 +127,12 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             userSession.setNote("AUTH_METHODS_REF", amrJson);
             userSession.setNote("AUTH_CONTEXT_CLASS_REF", acr); // primary for oidc-usersessionmodel-note-mapper
             userSession.setNote("ACR", acr);                    // legacy compatibility
+
+            // Also set lowercase aliases so session-note protocol mappers (acr/amr/auth_time)
+            // attached to the broker client emit claims without relying on custom mappers.
+            userSession.setNote("acr", acr);
+            userSession.setNote("amr", amrJson);
+            userSession.setNote("auth_time", String.valueOf(System.currentTimeMillis() / 1000));
             
             System.out.println("[DIVE AMR] AMR/ACR enrichment complete for user: " + user.getUsername() + 
                              " (session: " + userSession.getId() + ")");

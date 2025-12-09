@@ -24,3 +24,4 @@ router.get('/', authenticateJWT, async (req: any, res) => {
 export default router;
 
 
+

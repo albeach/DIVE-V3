@@ -1,2 +1,2 @@
-com.dive.keycloak.authenticator.DirectGrantOTPAuthenticatorFactory
+com.dive.keycloak.authenticator.DirectGrantOTPSimpleAuthenticatorFactory
 

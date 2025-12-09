@@ -21,22 +21,56 @@ cmd_status() {
     echo -e "${BOLD}Local Containers:${NC}"
     docker ps --filter "name=dive" --format "  {{.Names}}: {{.Status}}" 2>/dev/null | head -15 || echo "  No containers running"
     
-    echo ""
-    echo -e "${BOLD}Remote Endpoints:${NC}"
-    for endpoint in "usa-app.dive25.com" "usa-api.dive25.com" "usa-idp.dive25.com"; do
-        local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$endpoint" 2>/dev/null || echo "000")
-        if [ "$code" = "200" ] || [ "$code" = "302" ]; then
-            echo -e "  ${GREEN}●${NC} $endpoint (${code})"
-        else
-            echo -e "  ${RED}○${NC} $endpoint (${code})"
-        fi
-    done
+    # Only probe remote endpoints when not in local/dev, unless verbose
+    if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ] || [ "$VERBOSE" = true ]; then
+        echo ""
+        echo -e "${BOLD}Remote Endpoints:${NC}"
+        for endpoint in "usa-app.dive25.com" "usa-api.dive25.com" "usa-idp.dive25.com"; do
+            local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$endpoint" 2>/dev/null || echo "000")
+            if [ "$code" = "200" ] || [ "$code" = "302" ]; then
+                echo -e "  ${GREEN}●${NC} $endpoint (${code})"
+            else
+                echo -e "  ${RED}○${NC} $endpoint (${code})"
+            fi
+        done
+    fi
     
     echo ""
     echo -e "${BOLD}Environment:${NC}"
     echo "  Mode:     $ENVIRONMENT"
     echo "  Instance: $INSTANCE"
     echo "  Project:  $GCP_PROJECT"
+}
+
+cmd_status_brief() {
+    apply_env_profile
+    local failures=0
+
+    # Check realm
+    if probe_code "${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}" "200"; then
+        echo "realm:ok"
+    else
+        echo "realm:missing"
+        failures=$((failures+1))
+    fi
+
+    # Check backend health
+    if probe_code "${NEXT_PUBLIC_API_URL:-https://localhost:4000}/health" "200"; then
+        echo "backend:ok"
+    else
+        echo "backend:fail"
+        failures=$((failures+1))
+    fi
+
+    # Check IdP list non-empty
+    if probe_idps "${NEXT_PUBLIC_API_URL:-https://localhost:4000}/api/idps/public"; then
+        echo "idps:ok"
+    else
+        echo "idps:empty"
+        failures=$((failures+1))
+    fi
+
+    return $failures
 }
 
 cmd_health() {
@@ -116,7 +150,7 @@ cmd_health() {
                 fi
                 ;;
             opal-server)
-                if curl -fs --max-time 3 "http://localhost:$port/healthcheck" >/dev/null 2>&1; then
+                if curl -kfs --max-time 3 "https://localhost:$port/healthcheck" >/dev/null 2>&1; then
                     echo -e "${GREEN}healthy${NC}"
                 else
                     echo -e "${YELLOW}starting...${NC}"
@@ -256,14 +290,29 @@ cmd_info() {
 
 cmd_diagnostics() {
     print_header
+    apply_env_profile
+
     echo -e "${BOLD}Diagnostics:${NC}"
     echo ""
+    echo -e "${BOLD}Effective Env:${NC}"
+    echo "  ENVIRONMENT:           $ENVIRONMENT"
+    echo "  INSTANCE:              $INSTANCE"
+    echo "  KEYCLOAK_ISSUER:       ${KEYCLOAK_ISSUER:-<unset>}"
+    echo "  NEXTAUTH_URL:          ${NEXTAUTH_URL:-<unset>}"
+    echo "  NEXT_PUBLIC_API_URL:   ${NEXT_PUBLIC_API_URL:-<unset>}"
+    echo "  CORS_ALLOWED_ORIGINS:  ${CORS_ALLOWED_ORIGINS:-<unset>}"
+    echo ""
+
+    echo -e "${BOLD}Service Health:${NC}"
     cmd_health
     echo ""
-    echo -e "${BOLD}Host Endpoint Probes (https, 3s timeout):${NC}"
+
+    echo -e "${BOLD}Endpoint Probes (https, 3s timeout):${NC}"
     probe_endpoint "https://localhost:8443/health" "Keycloak"
-    probe_endpoint "https://localhost:4000/health" "Backend"
-    probe_endpoint "https://localhost:3000/" "Frontend"
+    probe_endpoint "${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}" "Broker realm"
+    probe_endpoint "${NEXT_PUBLIC_API_URL:-https://localhost:4000}/health" "Backend"
+    probe_endpoint "${NEXT_PUBLIC_API_URL:-https://localhost:4000}/api/idps/public" "IdP list"
+    probe_endpoint "${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}/" "Frontend"
 }
 
 probe_endpoint() {
@@ -280,6 +329,21 @@ probe_endpoint() {
     else
         echo -e "  ${RED}○${NC} ${name} (${code})"
     fi
+}
+
+probe_code() {
+    local url="$1"
+    local expect="${2:-200}"
+    local code
+    code=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 3 "$url" || echo "000")
+    [ "$code" = "$expect" ]
+}
+
+probe_idps() {
+    local url="$1"
+    local count
+    count=$(curl -k -s --max-time 5 "$url" 2>/dev/null | jq 'length' 2>/dev/null || echo "0")
+    [ "$count" != "0" ]
 }
 
 cmd_env_print() {
@@ -318,11 +382,13 @@ module_status() {
     
     case "$action" in
         status)   cmd_status "$@" ;;
+        brief)    cmd_status_brief "$@" ;;
         health)   cmd_health "$@" ;;
         diagnostics) cmd_diagnostics "$@" ;;
         validate) cmd_validate "$@" ;;
         info)     cmd_info "$@" ;;
         env|print) cmd_env_print "$@" ;;
+        opal)     cmd_opal_health "$@" ;;
         *)        module_status_help ;;
     esac
 }
@@ -335,6 +401,44 @@ module_status_help() {
     echo "  validate            Validate prerequisites and configuration"
     echo "  info                Show environment info"
     echo "  env|print           Show effective env profile (sanitized)"
+    echo "  opal                Quick OPAL health summary (server/client)"
+}
+
+# =============================================================================
+# OPAL QUICK HEALTH SUMMARY
+# =============================================================================
+cmd_opal_health() {
+    print_header
+    echo -e "${BOLD}OPAL Health:${NC}"
+    echo ""
+
+    local server_url="https://localhost:7002/healthcheck"
+    local client_url="http://localhost:8211/health"
+
+    probe_opal "OPAL Server" "$server_url" true
+    probe_opal "OPAL Client" "$client_url" false
+
+    echo ""
+    echo -e "${BOLD}Ports:${NC}"
+    echo "  Server: 7002 (HTTPS)"
+    echo "  Client: 8211 (health/OPA), 7006 (client API)"
+}
+
+probe_opal() {
+    local name="$1"
+    local url="$2"
+    local insecure_tls="$3"
+    local code
+    if [ "$insecure_tls" = true ]; then
+        code=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 5 "$url" || echo "000")
+    else
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$url" || echo "000")
+    fi
+    if [ "$code" = "200" ]; then
+        echo -e "  ${GREEN}●${NC} $name ($code) - $url"
+    else
+        echo -e "  ${RED}○${NC} $name ($code) - $url"
+    fi
 }
 
 

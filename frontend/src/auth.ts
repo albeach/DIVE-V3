@@ -255,6 +255,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Auth.js standard configuration (per https://authjs.dev/getting-started/providers/keycloak)
             // Uses AUTH_KEYCLOAK_ID, AUTH_KEYCLOAK_SECRET, AUTH_KEYCLOAK_ISSUER from environment
             // Auth.js automatically discovers endpoints via OIDC discovery from issuer
+            issuer: process.env.AUTH_KEYCLOAK_ISSUER ?? process.env.KEYCLOAK_ISSUER ?? 'https://localhost:8443/realms/dive-v3-broker',
             authorization: {
                 params: {
                     // Request only online tokens locally; offline_access caused KC to reject with "Offline tokens not allowed"
@@ -610,34 +611,46 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     // These are critical for AAL2/AAL3 enforcement in OPA policies
                                     // Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #1)
 
-                                    // ACR: Normalize to string format
+                                    // ACR: Normalize to string format; fallback to derive from AMR
                                     // Keycloak may return numeric (0,1,2) or string ("aal1","aal2","aal3")
+                                    let acr: string | undefined;
                                     if (payload.acr !== undefined && payload.acr !== null) {
-                                        session.user.acr = String(payload.acr);
-                                    } else {
-                                        session.user.acr = '0'; // Default to AAL1
-                                        console.log('[DIVE] ACR not present in JWT, defaulting to AAL1');
+                                        acr = String(payload.acr);
                                     }
 
                                     // AMR: Normalize to array format
                                     // Keycloak may return array ["pwd","otp"] or JSON string "[\"pwd\",\"otp\"]"
+                                    let amr: string[] = ['pwd']; // default
                                     if (payload.amr) {
                                         if (Array.isArray(payload.amr)) {
-                                            session.user.amr = payload.amr;
+                                            amr = payload.amr;
                                         } else if (typeof payload.amr === 'string') {
                                             try {
                                                 const parsed = JSON.parse(payload.amr);
-                                                session.user.amr = Array.isArray(parsed) ? parsed : [parsed];
+                                                amr = Array.isArray(parsed) ? parsed : [parsed];
                                             } catch {
-                                                session.user.amr = [payload.amr];
+                                                amr = [payload.amr];
                                             }
                                         } else {
-                                            session.user.amr = ['pwd']; // Default to password-only
+                                            amr = ['pwd'];
                                         }
                                     } else {
-                                        session.user.amr = ['pwd']; // Default to password-only
                                         console.log('[DIVE] AMR not present in JWT, defaulting to ["pwd"]');
                                     }
+                                    session.user.amr = amr;
+
+                                    // Derive AAL from ACR/AMR if ACR missing
+                                    const amrSet = new Set(amr.map((v) => String(v).toLowerCase()));
+                                    if (!acr || acr === '0' || acr === 'aal1') {
+                                        if (amrSet.has('hwk') || amrSet.has('webauthn')) {
+                                            acr = '3'; // AAL3 if hardware key present
+                                        } else if (amr.length >= 2 || amrSet.has('otp')) {
+                                            acr = '2'; // AAL2 if multiple factors or OTP
+                                        } else {
+                                            acr = '0';
+                                        }
+                                    }
+                                    session.user.acr = acr || '0';
 
                                     // auth_time: Unix timestamp of authentication event
                                     // Used for token freshness validation in OPA

@@ -53,5 +53,55 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 }
 
+/**
+ * POST /api/admin/idps
+ * Create a new Identity Provider (server-side proxy)
+ *
+ * Best practice: keep tokens server-side so client UI never needs bearer tokens.
+ * This also survives container restarts because sessions/tokens live in the DB.
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+    try {
+        const validation = await validateSession();
+        if (!validation.isValid) {
+            return NextResponse.json(
+                { error: 'Unauthorized', message: validation.error || 'Session invalid' },
+                { status: 401 }
+            );
+        }
+
+        const tokens = await getSessionTokens();
+        const body = await request.json();
+
+        const response = await fetch(`${BACKEND_URL}/api/admin/idps`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${tokens.accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+        });
+
+        // Pass through backend response (including any validation details)
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            return NextResponse.json(
+                { error: 'BackendError', message: data.message || `Backend returned ${response.status}`, data },
+                { status: response.status }
+            );
+        }
+
+        return NextResponse.json(data, { status: response.status });
+    } catch (error) {
+        console.error('[AdminIdPsAPI] POST Error:', error);
+        return NextResponse.json(
+            { error: 'InternalError', message: error instanceof Error ? error.message : 'Internal server error' },
+            { status: 500 }
+        );
+    }
+}
+
+
 
 

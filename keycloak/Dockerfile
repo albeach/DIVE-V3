@@ -56,14 +56,12 @@ RUN keytool -importcert -noprompt -trustcacerts \
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 
 # ============================================
-# v2.0.0 CHANGE: Custom SPIs REMOVED
+# v2.1.0 CHANGE: Re-enable custom SPI providers for AMR/ACR enrichment
 # ============================================
-# Custom SPI JARs have been REMOVED in favor of native Keycloak 26.4.2 features
-# All ACR/AMR tracking, conditional MFA, and OTP handling now use built-in capabilities
-# See: docs/NATIVE-KEYCLOAK-REFACTORING.md for migration details
-#
-# REMOVED LINE (v1.x):
-# COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
+# Native Keycloak mappers do not emit the enriched AMR/ACR we need for
+# coalition audit (OTP vs HWK). We restore the custom providers so the
+# listener can set session notes and emit proper claims.
+COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
 
 # ============================================
 # Certificate Trust Configuration

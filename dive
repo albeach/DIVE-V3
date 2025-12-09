@@ -111,7 +111,7 @@ case "$COMMAND" in
         ;;
     
     # Status commands (status.sh)
-    status|health|validate|info|diagnostics)
+    status|health|validate|info|diagnostics|brief)
         source "${MODULES_DIR}/status.sh"
         case "$COMMAND" in
             status)   cmd_status "$@" ;;
@@ -119,6 +119,7 @@ case "$COMMAND" in
             diagnostics) cmd_diagnostics "$@" ;;
             validate) cmd_validate "$@" ;;
             info)     cmd_info "$@" ;;
+            brief)    cmd_status_brief "$@" ;;
         esac
         ;;
     

@@ -69,7 +69,7 @@ log_dry() {
 }
 
 log_verbose() {
-    [ "$VERBOSE" = true ] && echo -e "${GRAY}  $1${NC}"
+    [ "$VERBOSE" = true ] && echo -e "${GRAY}  $1${NC}" || true
 }
 
 # Execute command (or log if dry-run)
@@ -142,7 +142,18 @@ check_terraform() {
 }
 
 check_certs() {
-    # Always regenerate mkcert certificates to cover the entire stack (frontend/backend/keycloak/kas)
+    # Ensure mkcert is installed and CA present before regen
+    if ! command -v mkcert >/dev/null 2>&1; then
+        log_error "mkcert not installed. Install mkcert and trust the local CA."
+        return 1
+    fi
+
+    local mkcert_dir="${HOME}/Library/Application Support/mkcert"
+    if [ ! -f "${mkcert_dir}/rootCA-key.pem" ] || [ ! -f "${mkcert_dir}/rootCA.pem" ]; then
+        log_error "mkcert CA not found. Run: mkcert -install"
+        return 1
+    fi
+
     log_step "Regenerating mkcert certificates for all services..."
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would regenerate certificates via ./scripts/generate-dev-certs.sh"
@@ -303,6 +314,5 @@ ensure_dive_root() {
         export DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     fi
 }
-
 
 

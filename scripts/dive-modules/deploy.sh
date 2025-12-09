@@ -180,6 +180,8 @@ cmd_nuke() {
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f docker-compose.yml down -v --remove-orphans"
         log_dry "docker compose -f docker-compose.pilot.yml down -v --remove-orphans"
+        log_dry "docker volume rm dive-v3_postgres_data dive-v3_mongo_data dive-v3_redis_data"
+        log_dry "docker volume rm dive-v3_frontend_node_modules dive-v3_frontend_next"
         log_dry "docker volume prune -f"
         return 0
     fi
@@ -189,7 +191,10 @@ cmd_nuke() {
     
     docker compose -f docker-compose.yml down -v --remove-orphans 2>/dev/null || true
     docker compose -f docker-compose.pilot.yml down -v --remove-orphans 2>/dev/null || true
+    # Explicitly remove named volumes to prevent stale credentials/config
+    docker volume rm dive-v3_postgres_data dive-v3_mongo_data dive-v3_redis_data dive-v3_frontend_node_modules dive-v3_frontend_next 2>/dev/null || true
     docker volume prune -f 2>/dev/null || true
+    log_info "Removed volumes: dive-v3_postgres_data, dive-v3_mongo_data, dive-v3_redis_data, dive-v3_frontend_node_modules, dive-v3_frontend_next (if present)"
     
     log_success "Clean slate achieved"
 }

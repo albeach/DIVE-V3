@@ -138,9 +138,9 @@ variable "simple_post_broker_otp_flow_alias" {
 # WebAuthn / Passkey Configuration
 # ============================================
 variable "webauthn_rp_id" {
-  description = "WebAuthn Relying Party ID. Must be the effective domain for production (e.g., 'dive25.com' works for all *.dive25.com subdomains). Empty string only works for localhost."
+  description = "WebAuthn Relying Party ID. Empty for localhost, override in tfvars/ENV for CF host (e.g., usa-idp.dive25.com). Must match the origin effective domain."
   type        = string
-  default     = "dive25.com"
+  default     = ""
 }
 
 # NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
