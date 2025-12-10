@@ -5,6 +5,7 @@
 # Commands: seed, backup, restore
 # =============================================================================
 
+# shellcheck source=common.sh disable=SC1091
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -19,15 +20,16 @@ cmd_seed() {
     local instance="${1:-$INSTANCE}"
     
     log_step "Seeding database for $(upper "$instance")..."
+    local backend_container="${BACKEND_CONTAINER:-$(container_name backend)}"
     
     if [ "$DRY_RUN" = true ]; then
-        log_dry "docker exec dive-pilot-backend npm run seed:$instance"
+        log_dry "docker exec ${backend_container} npm run seed:$instance"
         return 0
     fi
     
-    docker exec dive-pilot-backend npm run seed 2>/dev/null || {
+    docker exec "$backend_container" npm run seed 2>/dev/null || {
         log_warn "npm run seed failed, trying alternative..."
-        docker exec dive-pilot-backend node dist/scripts/seed-resources.js 2>/dev/null || {
+        docker exec "$backend_container" node dist/scripts/seed-resources.js 2>/dev/null || {
             log_error "Seeding failed"
             return 1
         }
@@ -38,14 +40,18 @@ cmd_seed() {
 
 cmd_backup() {
     ensure_dive_root
-    local backup_dir="${DIVE_ROOT}/backups/$(date +%Y%m%d_%H%M%S)"
+    local backup_dir
+    backup_dir="${DIVE_ROOT}/backups/$(date +%Y%m%d_%H%M%S)"
     
     log_step "Creating backup in $backup_dir..."
     
+    local postgres_container="${POSTGRES_CONTAINER:-$(container_name postgres)}"
+    local mongo_container="${MONGO_CONTAINER:-$(container_name mongo)}"
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "mkdir -p $backup_dir"
-        log_dry "docker exec dive-pilot-postgres pg_dumpall -U postgres > $backup_dir/postgres.sql"
-        log_dry "docker exec dive-pilot-mongo mongodump --archive > $backup_dir/mongo.archive"
+        log_dry "docker exec ${postgres_container} pg_dumpall -U postgres > $backup_dir/postgres.sql"
+        log_dry "docker exec ${mongo_container} mongodump --archive > $backup_dir/mongo.archive"
         return 0
     fi
     
@@ -53,11 +59,11 @@ cmd_backup() {
     
     # PostgreSQL
     log_info "Backing up PostgreSQL..."
-    docker exec dive-pilot-postgres pg_dumpall -U postgres > "$backup_dir/postgres.sql" 2>/dev/null || log_warn "PostgreSQL backup failed"
+    docker exec "$postgres_container" pg_dumpall -U postgres > "$backup_dir/postgres.sql" 2>/dev/null || log_warn "PostgreSQL backup failed"
     
     # MongoDB
     log_info "Backing up MongoDB..."
-    docker exec dive-pilot-mongo mongodump --archive="$backup_dir/mongo.archive" 2>/dev/null || log_warn "MongoDB backup failed"
+    docker exec "$mongo_container" mongodump --archive="$backup_dir/mongo.archive" 2>/dev/null || log_warn "MongoDB backup failed"
     
     log_success "Backup created: $backup_dir"
     ls -la "$backup_dir"
@@ -72,7 +78,7 @@ cmd_restore() {
         echo "Usage: ./dive restore <backup-dir>"
         echo ""
         echo "Available backups:"
-        ls -la "${DIVE_ROOT}/backups/" 2>/dev/null | tail -10
+        find "${DIVE_ROOT}/backups/" -maxdepth 1 -type d -print 2>/dev/null | sort | tail -10
         return 1
     fi
     
@@ -88,22 +94,25 @@ cmd_restore() {
     
     log_step "Restoring from $backup_dir..."
     
+    local postgres_container="${POSTGRES_CONTAINER:-$(container_name postgres)}"
+    local mongo_container="${MONGO_CONTAINER:-$(container_name mongo)}"
+
     if [ "$DRY_RUN" = true ]; then
-        log_dry "docker exec -i dive-pilot-postgres psql -U postgres < $backup_dir/postgres.sql"
-        log_dry "docker exec dive-pilot-mongo mongorestore --archive=$backup_dir/mongo.archive"
+        log_dry "docker exec -i ${postgres_container} psql -U postgres < $backup_dir/postgres.sql"
+        log_dry "docker exec ${mongo_container} mongorestore --archive=$backup_dir/mongo.archive"
         return 0
     fi
     
     # PostgreSQL
     if [ -f "$backup_dir/postgres.sql" ]; then
         log_info "Restoring PostgreSQL..."
-        docker exec -i dive-pilot-postgres psql -U postgres < "$backup_dir/postgres.sql" 2>/dev/null || log_warn "PostgreSQL restore failed"
+        docker exec -i "$postgres_container" psql -U postgres < "$backup_dir/postgres.sql" 2>/dev/null || log_warn "PostgreSQL restore failed"
     fi
     
     # MongoDB
     if [ -f "$backup_dir/mongo.archive" ]; then
         log_info "Restoring MongoDB..."
-        docker exec dive-pilot-mongo mongorestore --archive="$backup_dir/mongo.archive" --drop 2>/dev/null || log_warn "MongoDB restore failed"
+        docker exec "$mongo_container" mongorestore --archive="$backup_dir/mongo.archive" --drop 2>/dev/null || log_warn "MongoDB restore failed"
     fi
     
     log_success "Restore complete"

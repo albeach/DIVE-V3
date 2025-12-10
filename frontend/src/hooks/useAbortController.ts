@@ -55,7 +55,11 @@ export function useAbortController({
       timeoutRef.current = null;
     }
     if (controllerRef.current) {
-      controllerRef.current.abort();
+      try {
+        controllerRef.current.abort();
+      } catch (err) {
+        console.debug('[useAbortController] AbortController cleanup:', err);
+      }
       controllerRef.current = null;
     }
   }, []);
@@ -126,10 +130,14 @@ export function useAbortControllers({
       clearTimeout(timeout);
       timeoutsRef.current.delete(requestId);
     }
-    
+
     const controller = controllersRef.current.get(requestId);
     if (controller) {
-      controller.abort();
+      try {
+        controller.abort();
+      } catch (err) {
+        console.debug('[useAbortController] AbortController cleanup:', err);
+      }
       controllersRef.current.delete(requestId);
     }
   }, []);
@@ -137,8 +145,14 @@ export function useAbortControllers({
   const cleanupAll = useCallback(() => {
     timeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
     timeoutsRef.current.clear();
-    
-    controllersRef.current.forEach((controller) => controller.abort());
+
+    controllersRef.current.forEach((controller) => {
+      try {
+        controller.abort();
+      } catch (err) {
+        console.debug('[useAbortController] AbortController cleanup:', err);
+      }
+    });
     controllersRef.current.clear();
   }, []);
 
@@ -245,7 +259,11 @@ export function useDebouncedFetch<T>({
       requestTimeoutRef.current = null;
     }
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      try {
+        abortControllerRef.current.abort();
+      } catch (err) {
+        console.debug('[useDebouncedFetch] AbortController cleanup:', err);
+      }
       abortControllerRef.current = null;
     }
   }, []);

@@ -5,6 +5,7 @@
 # Commands: status, health, validate, info
 # =============================================================================
 
+# shellcheck source=common.sh disable=SC1091
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -26,7 +27,8 @@ cmd_status() {
         echo ""
         echo -e "${BOLD}Remote Endpoints:${NC}"
         for endpoint in "usa-app.dive25.com" "usa-api.dive25.com" "usa-idp.dive25.com"; do
-            local code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$endpoint" 2>/dev/null || echo "000")
+            local code
+        code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$endpoint" 2>/dev/null || echo "000")
             if [ "$code" = "200" ] || [ "$code" = "302" ]; then
                 echo -e "  ${GREEN}●${NC} $endpoint (${code})"
             else
@@ -83,7 +85,8 @@ cmd_health() {
     for svc in "${services[@]}"; do
         local name="${svc%%:*}"
         local port="${svc##*:}"
-        local container="dive-pilot-${name}"
+        local container
+        container="$(container_name "$name")"
         
         echo -n "  $name: "
         
@@ -179,22 +182,35 @@ cmd_validate() {
         ((errors++))
     fi
     
-    # gcloud
+    local require_cloud=true
+    case "$ENVIRONMENT" in
+        local|dev) require_cloud=false ;;
+    esac
+
+    # GCP CLI
     echo -n "  GCP (gcloud):  "
-    if check_gcloud 2>/dev/null; then
-        echo -e "${GREEN}✓${NC}"
+    if [ "$require_cloud" = true ]; then
+        if check_gcloud 2>/dev/null; then
+            echo -e "${GREEN}✓${NC}"
+        else
+            echo -e "${RED}✗${NC}"
+            ((errors++))
+        fi
     else
-        echo -e "${RED}✗${NC}"
-        ((errors++))
+        echo -e "${YELLOW}skipped (local/dev)${NC}"
     fi
     
     # Terraform
     echo -n "  Terraform:     "
-    if check_terraform 2>/dev/null; then
-        echo -e "${GREEN}✓${NC}"
+    if [ "$require_cloud" = true ]; then
+        if check_terraform 2>/dev/null; then
+            echo -e "${GREEN}✓${NC}"
+        else
+            echo -e "${RED}✗${NC}"
+            ((errors++))
+        fi
     else
-        echo -e "${RED}✗${NC}"
-        ((errors++))
+        echo -e "${YELLOW}skipped (local/dev)${NC}"
     fi
     
     # SSL Certs
@@ -215,16 +231,18 @@ cmd_validate() {
     
     # Terraform configs
     echo -n "  TF configs:    "
-    local tf_count=$(find terraform -name "*.tf" 2>/dev/null | wc -l | tr -d ' ')
+    local tf_count
+    tf_count=$(find terraform -name "*.tf" 2>/dev/null | wc -l | tr -d " ")
     echo -e "${GREEN}${tf_count} files${NC}"
     
     # GCP Secrets
     echo -n "  GCP Secrets:   "
-    if check_gcloud 2>/dev/null; then
-        local secret_count=$(gcloud secrets list --project="$GCP_PROJECT" --filter="name:dive-v3" --format="value(name)" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$require_cloud" = true ] && check_gcloud 2>/dev/null; then
+        local secret_count
+        secret_count=$(gcloud secrets list --project="$GCP_PROJECT" --filter="name:dive-v3" --format="value(name)" 2>/dev/null | wc -l | tr -d " ")
         echo -e "${GREEN}${secret_count} configured${NC}"
     else
-        echo -e "${YELLOW}unable to check${NC}"
+        echo -e "${YELLOW}skipped${NC}"
     fi
     
     # OPAL certificates
@@ -363,13 +381,12 @@ cmd_env_print() {
     echo "  NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-<unset>}"
     echo "  CORS_ALLOWED_ORIGINS:  ${CORS_ALLOWED_ORIGINS:-<unset>}"
     echo ""
-    echo -e "${BOLD}Secrets Loaded (presence only):${NC}"
-    printf "  POSTGRES_PASSWORD:        %s\n" "$([ -n \"$POSTGRES_PASSWORD\" ] && echo 'set' || echo 'unset')"
-    printf "  KEYCLOAK_ADMIN_PASSWORD:  %s\n" "$([ -n \"$KEYCLOAK_ADMIN_PASSWORD\" ] && echo 'set' || echo 'unset')"
-    printf "  MONGO_PASSWORD:           %s\n" "$([ -n \"$MONGO_PASSWORD\" ] && echo 'set' || echo 'unset')"
-    printf "  KEYCLOAK_CLIENT_SECRET:   %s\n" "$([ -n \"$KEYCLOAK_CLIENT_SECRET\" ] && echo 'set' || echo 'unset')"
-    printf "  AUTH_SECRET/NEXTAUTH:     %s\n" "$([ -n \"$AUTH_SECRET$NEXTAUTH_SECRET\" ] && echo 'set' || echo 'unset')"
-    printf "  JWT_SECRET:               %s\n" "$([ -n \"$JWT_SECRET\" ] && echo 'set' || echo 'unset')"
+    printf "  POSTGRES_PASSWORD:        %s\n" "$([[ -n ${POSTGRES_PASSWORD:-} ]] && echo set || echo unset)"
+    printf "  KEYCLOAK_ADMIN_PASSWORD:  %s\n" "$([[ -n ${KEYCLOAK_ADMIN_PASSWORD:-} ]] && echo set || echo unset)"
+    printf "  MONGO_PASSWORD:           %s\n" "$([[ -n ${MONGO_PASSWORD:-} ]] && echo set || echo unset)"
+    printf "  KEYCLOAK_CLIENT_SECRET:   %s\n" "$([[ -n ${KEYCLOAK_CLIENT_SECRET:-} ]] && echo set || echo unset)"
+    printf "  AUTH_SECRET/NEXTAUTH:     %s\n" "$([[ -n ${AUTH_SECRET:-}${NEXTAUTH_SECRET:-} ]] && echo set || echo unset)"
+    printf "  JWT_SECRET:               %s\n" "$([[ -n ${JWT_SECRET:-} ]] && echo set || echo unset)"
 }
 
 # =============================================================================

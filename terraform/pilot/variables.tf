@@ -4,6 +4,31 @@ variable "client_secret" {
   sensitive   = true
 }
 
+variable "fra_idp_url" {
+  description = "Federation IdP URL for FRA"
+  type        = string
+  default     = "https://fra-idp.dive25.com"
+}
+
+variable "gbr_idp_url" {
+  description = "Federation IdP URL for GBR"
+  type        = string
+  default     = "https://gbr-idp.dive25.com"
+}
+
+variable "gbr_client_secret" {
+  description = "Client secret for GBR federation client"
+  type        = string
+  sensitive   = true
+  default     = "placeholder-sync-after-terraform"
+}
+
+variable "deu_idp_url" {
+  description = "Federation IdP URL for DEU"
+  type        = string
+  default     = "https://deu-idp.dive25.com"
+}
+
 variable "keycloak_url" {
   description = "Keycloak URL"
   type        = string

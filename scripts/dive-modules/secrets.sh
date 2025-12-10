@@ -6,6 +6,7 @@
 # Manages GCP Secret Manager integration
 # =============================================================================
 
+# shellcheck source=common.sh disable=SC1091
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -56,18 +57,38 @@ secrets_verify() {
 }
 
 secrets_export() {
+    local unsafe=false
+    if [ "${1:-}" = "--unsafe" ]; then
+        unsafe=true
+        shift
+    fi
+
     local instance="${1:-$INSTANCE}"
     # Export secrets as env vars to stdout (for piping)
     load_gcp_secrets "$instance" >/dev/null 2>&1
-    echo "export POSTGRES_PASSWORD='$POSTGRES_PASSWORD'"
-    echo "export KEYCLOAK_ADMIN_PASSWORD='$KEYCLOAK_ADMIN_PASSWORD'"
-    echo "export MONGO_PASSWORD='$MONGO_PASSWORD'"
-    echo "export AUTH_SECRET='$AUTH_SECRET'"
-    echo "export KEYCLOAK_CLIENT_SECRET='$KEYCLOAK_CLIENT_SECRET'"
-    echo "export JWT_SECRET='$JWT_SECRET'"
-    echo "export NEXTAUTH_SECRET='$NEXTAUTH_SECRET'"
-    echo "export TF_VAR_keycloak_admin_password='$KEYCLOAK_ADMIN_PASSWORD'"
-    echo "export TF_VAR_client_secret='$KEYCLOAK_CLIENT_SECRET'"
+
+    redact() {
+        local value="$1"
+        if [ "$unsafe" = true ]; then
+            echo "$value"
+        else
+            echo "<redacted>"
+        fi
+    }
+
+    echo "export POSTGRES_PASSWORD='$(redact "$POSTGRES_PASSWORD")'"
+    echo "export KEYCLOAK_ADMIN_PASSWORD='$(redact "$KEYCLOAK_ADMIN_PASSWORD")'"
+    echo "export MONGO_PASSWORD='$(redact "$MONGO_PASSWORD")'"
+    echo "export AUTH_SECRET='$(redact "$AUTH_SECRET")'"
+    echo "export KEYCLOAK_CLIENT_SECRET='$(redact "$KEYCLOAK_CLIENT_SECRET")'"
+    echo "export JWT_SECRET='$(redact "$JWT_SECRET")'"
+    echo "export NEXTAUTH_SECRET='$(redact "$NEXTAUTH_SECRET")'"
+    echo "export TF_VAR_keycloak_admin_password='$(redact "$KEYCLOAK_ADMIN_PASSWORD")'"
+    echo "export TF_VAR_client_secret='$(redact "$KEYCLOAK_CLIENT_SECRET")'"
+
+    if [ "$unsafe" != true ]; then
+        log_warn "Secrets redacted. Re-run with --unsafe to print raw values."
+    fi
 }
 
 # =============================================================================

@@ -228,7 +228,11 @@ export function useInfiniteScroll<T = any>({
     // Prevent concurrent requests; allow hard refresh (initial=true) to preempt
     if (loadingRef.current) {
       if (isInitial) {
-        abortControllerRef.current?.abort();
+        try {
+          abortControllerRef.current?.abort();
+        } catch (err) {
+          console.debug('[useInfiniteScroll] AbortController cleanup during refresh:', err);
+        }
         loadingRef.current = false;
         setIsLoading(false);
         setIsLoadingMore(false);
@@ -241,7 +245,11 @@ export function useInfiniteScroll<T = any>({
 
     // Cancel previous request
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      try {
+        abortControllerRef.current.abort();
+      } catch (err) {
+        console.debug('[useInfiniteScroll] AbortController cleanup:', err);
+      }
     }
     abortControllerRef.current = new AbortController();
 
@@ -440,8 +448,13 @@ export function useInfiniteScroll<T = any>({
 
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      try {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+      } catch (err) {
+        // Ignore abort errors during cleanup - this is expected
+        console.debug('[useInfiniteScroll] AbortController cleanup:', err);
       }
       if (observerRef.current) {
         observerRef.current.disconnect();

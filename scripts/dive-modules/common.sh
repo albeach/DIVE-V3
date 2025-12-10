@@ -42,6 +42,20 @@ lower() {
     echo "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+# Resolve container name based on environment/prefix, with override support.
+container_name() {
+    local service="$1"
+    local prefix="${CONTAINER_PREFIX:-}"
+    if [ -z "$prefix" ]; then
+        if [ "$ENVIRONMENT" = "pilot" ]; then
+            prefix="dive-pilot"
+        else
+            prefix="dive-v3"
+        fi
+    fi
+    echo "${prefix}-${service}"
+}
+
 log_info() {
     [ "$QUIET" = true ] && return
     echo -e "${BLUE}ℹ ${NC}$1"
@@ -94,8 +108,10 @@ dc() {
 
 print_header() {
     [ "$QUIET" = true ] && return
-    local env_upper=$(upper "$ENVIRONMENT")
-    local inst_upper=$(upper "$INSTANCE")
+    local env_upper
+    env_upper=$(upper "$ENVIRONMENT")
+    local inst_upper
+    inst_upper=$(upper "$INSTANCE")
     local dry_flag=""
     [ "$DRY_RUN" = true ] && dry_flag=" [DRY-RUN]"
     echo -e "${CYAN}"
@@ -148,9 +164,28 @@ check_certs() {
         return 1
     fi
 
-    local mkcert_dir="${HOME}/Library/Application Support/mkcert"
-    if [ ! -f "${mkcert_dir}/rootCA-key.pem" ] || [ ! -f "${mkcert_dir}/rootCA.pem" ]; then
-        log_error "mkcert CA not found. Run: mkcert -install"
+    local caroot
+    caroot=$(mkcert -CAROOT 2>/dev/null || true)
+    if [ -z "$caroot" ]; then
+        # Fallback to default macOS path
+        caroot="${HOME}/Library/Application Support/mkcert"
+    fi
+
+    local ca_key="${caroot}/rootCA-key.pem"
+    local ca_cert="${caroot}/rootCA.pem"
+
+    if [ ! -f "$ca_key" ] || [ ! -f "$ca_cert" ]; then
+        log_warn "mkcert CA not found at ${caroot}; attempting mkcert -install..."
+        if [ "$DRY_RUN" = true ]; then
+            log_dry "Would run: mkcert -install"
+        else
+            mkcert -install || { log_error "mkcert -install failed"; return 1; }
+        fi
+    fi
+
+    # Re-evaluate after install attempt
+    if [ ! -f "$ca_key" ] || [ ! -f "$ca_cert" ]; then
+        log_error "mkcert CA still missing at ${caroot}; please run mkcert -install manually"
         return 1
     fi
 
@@ -202,41 +237,46 @@ load_gcp_secrets() {
     
     check_gcloud || { log_error "GCP authentication required for environment '$ENVIRONMENT'"; return 1; }
     
-    fetch_secret() {
-        local name="$1"
-        local var_ref="$2"
-        local value
-        if value=$(gcloud secrets versions access latest --secret="$name" --project="$project" 2>&1); then
-            eval "$var_ref=\"\$value\""
-            echo "[secrets-debug] loaded $name (len=${#value})"
-        else
-            echo "[secrets-debug] FAILED $name -> $value"
-            eval "$var_ref=\"\""
-        fi
+    # Try secrets using documented naming; fall back to legacy variants if present.
+    fetch_first_secret() {
+        local var_ref="$1"
+        shift
+        local name
+        for name in "$@"; do
+            if value=$(gcloud secrets versions access latest --secret="$name" --project="$project" 2>/dev/null); then
+                eval "$var_ref=\"\$value\""
+                echo "[secrets-debug] loaded $name (len=${#value})"
+                return 0
+            fi
+        done
+        eval "$var_ref=\"\""
+        return 1
     }
 
-    fetch_secret "dive-v3-postgres-${inst_lc}" POSTGRES_PASSWORD
-    fetch_secret "dive-v3-keycloak-${inst_lc}" KEYCLOAK_ADMIN_PASSWORD
-    fetch_secret "dive-v3-mongodb-${inst_lc}" MONGO_PASSWORD
-    fetch_secret "dive-v3-auth-secret-${inst_lc}" AUTH_SECRET
-    fetch_secret "dive-v3-nextauth-secret-${inst_lc}" NEXTAUTH_SECRET
-    fetch_secret "dive-v3-keycloak-client-secret-${inst_lc}" KEYCLOAK_CLIENT_SECRET
-    fetch_secret "dive-v3-jwt-secret-${inst_lc}" JWT_SECRET
+    fetch_first_secret POSTGRES_PASSWORD "dive-v3-postgres-${inst_lc}"
+    fetch_first_secret KEYCLOAK_ADMIN_PASSWORD "dive-v3-keycloak-${inst_lc}"
+    fetch_first_secret MONGO_PASSWORD "dive-v3-mongodb-${inst_lc}"
+    fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
+    fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
+    # Align NextAuth/JWT to AUTH secret unless explicitly provided
+    [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
+    [ -n "$AUTH_SECRET" ] && export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
     
     # Terraform variables
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
     export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
+    export TF_VAR_test_user_password="${TF_VAR_test_user_password:-$KEYCLOAK_ADMIN_PASSWORD}"
+    export TF_VAR_admin_user_password="${TF_VAR_admin_user_password:-$KEYCLOAK_ADMIN_PASSWORD}"
     # Pilot/default Keycloak URL (matches KC_HOSTNAME=localhost in docker-compose)
     export KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
     export KEYCLOAK_ADMIN_USERNAME="${KEYCLOAK_ADMIN_USERNAME:-admin}"
-    # Align Auth.js/NextAuth secrets for frontend
-    [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
-    
     # Verify critical secrets
     local missing=0
     [ -z "$POSTGRES_PASSWORD" ] && log_warn "Missing: POSTGRES_PASSWORD" && ((missing++))
     [ -z "$KEYCLOAK_ADMIN_PASSWORD" ] && log_warn "Missing: KEYCLOAK_ADMIN_PASSWORD" && ((missing++))
     [ -z "$MONGO_PASSWORD" ] && log_warn "Missing: MONGO_PASSWORD" && ((missing++))
+    [ -z "$AUTH_SECRET" ] && log_warn "Missing: AUTH_SECRET" && ((missing++))
+    [ -z "$KEYCLOAK_CLIENT_SECRET" ] && log_warn "Missing: KEYCLOAK_CLIENT_SECRET" && ((missing++))
     
     if [ $missing -gt 0 ]; then
         log_error "Failed to load $missing critical secret(s)"
@@ -248,16 +288,18 @@ load_gcp_secrets() {
 }
 
 load_local_defaults() {
-    log_warn "Using local development defaults (NOT for production!)"
-    export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-DivePilot2025!}"
-    export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}"
-    export MONGO_PASSWORD="${MONGO_PASSWORD:-DivePilot2025!}"
-    export AUTH_SECRET="${AUTH_SECRET:-local-dev-secret-not-for-production}"
-    export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-dive-v3-client-secret}"
-    export JWT_SECRET="${JWT_SECRET:-local-jwt-secret}"
-    export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-local-nextauth-secret}"
+    log_warn "Local/dev mode: using fixed defaults for reproducibility (override via env)."
+    export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-KeycloakAdminSecure123!}"
+    export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-LocalPgSecure123!}"
+    export MONGO_PASSWORD="${MONGO_PASSWORD:-LocalMongoSecure123!}"
+    export AUTH_SECRET="${AUTH_SECRET:-LocalAuthSecure123!}"
+    export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-LocalClientSecret123!}"
+    export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
+    export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
     export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
+    export TF_VAR_test_user_password="${TF_VAR_test_user_password:-KeycloakAdminSecure123!}"
+    export TF_VAR_admin_user_password="${TF_VAR_admin_user_password:-$TF_VAR_test_user_password}"
 }
 
 load_secrets() {
@@ -284,6 +326,12 @@ apply_env_profile() {
             export KEYCLOAK_HOSTNAME="localhost"
             export NEXTAUTH_URL="${NEXTAUTH_URL:-https://localhost:3000}"
             export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}"
+            # Split internal vs public URLs
+            export KEYCLOAK_URL_PUBLIC="${KEYCLOAK_URL_PUBLIC:-https://localhost:8443}"
+            export KEYCLOAK_URL_INTERNAL="${KEYCLOAK_URL_INTERNAL:-https://keycloak:8443}"
+            export KEYCLOAK_URL="${KEYCLOAK_URL_INTERNAL}"
+            export CERT_HOST_SCOPE="${CERT_HOST_SCOPE:-local_minimal}"
+            export SKIP_CERT_REGEN_IF_PRESENT="${SKIP_CERT_REGEN_IF_PRESENT:-true}"
             export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}"
             export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://localhost:4000}"
             export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}"
@@ -311,7 +359,9 @@ apply_env_profile() {
 # Ensure DIVE_ROOT is set
 ensure_dive_root() {
     if [ -z "$DIVE_ROOT" ]; then
-        export DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+        local root_path
+        root_path="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+        export DIVE_ROOT="$root_path"
     fi
 }
 

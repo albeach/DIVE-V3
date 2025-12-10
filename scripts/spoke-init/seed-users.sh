@@ -73,40 +73,46 @@ TEST_USER_PASSWORD="TestUser2025!Pilot"
 ADMIN_USER_PASSWORD="TestUser2025!SecureAdmin"
 
 # =============================================================================
-# CLEARANCE LEVEL MAPPING
+# CLEARANCE LEVEL MAPPING (POSIX-friendly)
 # =============================================================================
 # Level 1 = UNCLASSIFIED
 # Level 2 = CONFIDENTIAL
 # Level 3 = SECRET
 # Level 4 = TOP_SECRET
 
-declare -A CLEARANCE_LEVELS=(
-    [1]="UNCLASSIFIED"
-    [2]="CONFIDENTIAL"
-    [3]="SECRET"
-    [4]="TOP_SECRET"
-)
+map_clearance_level() {
+    case "$1" in
+        1) echo "UNCLASSIFIED" ;;
+        2) echo "CONFIDENTIAL" ;;
+        3) echo "SECRET" ;;
+        4) echo "TOP_SECRET" ;;
+        *) echo "UNCLASSIFIED" ;;
+    esac
+}
 
-declare -A CLEARANCE_COIS=(
-    [1]=""
-    [2]=""
-    [3]="NATO"
-    [4]="NATO-COSMIC,FVEY"
-)
+map_clearance_coi() {
+    case "$1" in
+        1) echo "" ;;
+        2) echo "" ;;
+        3) echo "NATO" ;;
+        4) echo "NATO-COSMIC,FVEY" ;;
+        *) echo "" ;;
+    esac
+}
 
-# Country-specific settings
-declare -A COUNTRY_NAMES=(
-    [usa]="United States"
-    [fra]="France"
-    [gbr]="United Kingdom"
-    [deu]="Germany"
-    [can]="Canada"
-    [esp]="Spain"
-    [ita]="Italy"
-    [nld]="Netherlands"
-    [pol]="Poland"
-)
-COUNTRY_NAME="${COUNTRY_NAMES[$CODE_LOWER]:-$CODE_UPPER}"
+# Country-specific settings (POSIX-friendly)
+case "$CODE_LOWER" in
+    usa) COUNTRY_NAME="United States" ;;
+    fra) COUNTRY_NAME="France" ;;
+    gbr) COUNTRY_NAME="United Kingdom" ;;
+    deu) COUNTRY_NAME="Germany" ;;
+    can) COUNTRY_NAME="Canada" ;;
+    esp) COUNTRY_NAME="Spain" ;;
+    ita) COUNTRY_NAME="Italy" ;;
+    nld) COUNTRY_NAME="Netherlands" ;;
+    pol) COUNTRY_NAME="Poland" ;;
+    *)   COUNTRY_NAME="$CODE_UPPER" ;;
+esac
 
 echo ""
 echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════╗${NC}"

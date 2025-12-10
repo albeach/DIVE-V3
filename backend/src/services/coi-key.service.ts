@@ -33,7 +33,7 @@ async function getMongoClient(): Promise<{ client: MongoClient; db: Db }> {
 
     const MONGODB_URL = getMongoDBUrl(); // Read at runtime
     const DB_NAME = getMongoDBName();
-    
+
     const client = new MongoClient(MONGODB_URL);
     await client.connect();
     const db = client.db(DB_NAME);
@@ -130,19 +130,10 @@ export async function getAllCOIKeys(status?: 'active' | 'deprecated' | 'pending'
         const filter = status ? { status } : {};
         const cois = await collection.find(filter).sort({ coiId: 1 }).toArray();
 
-        // Compute resource counts (query resources collection)
-        const { db } = await getMongoClient();
-        const resourcesCollection = db.collection('resources');
-
+        // TODO: Implement proper resource counting based on COI tags in resources
+        // For now, set all counts to 0 until resource schema is updated
         for (const coi of cois) {
-            // Count resources that have this COI in their COI array
-            const count = await resourcesCollection.countDocuments({
-                $or: [
-                    { 'ztdf.policy.securityLabel.COI': coi.coiId },
-                    { 'legacy.COI': coi.coiId }
-                ]
-            });
-            coi.resourceCount = count;
+            coi.resourceCount = 0;
         }
 
         logger.debug('Retrieved COI Keys', { count: cois.length, status });
@@ -287,11 +278,14 @@ export async function getCOIMembershipMap(): Promise<Record<string, Set<string>>
  */
 export async function getAllCOICountries(): Promise<string[]> {
     try {
-        const { cois } = await getAllCOIKeys('active');
+        const collection = await getCollection();
+
+        // Get all active COIs and aggregate their member countries
+        const cois = await collection.find({ status: 'active' }, { projection: { memberCountries: 1 } }).toArray();
 
         const countries = new Set<string>();
         for (const coi of cois) {
-            coi.memberCountries.forEach(c => countries.add(c));
+            coi.memberCountries.forEach((c: string) => countries.add(c));
         }
 
         return Array.from(countries).sort();
@@ -341,15 +335,9 @@ export async function getCOIKeyStatistics(): Promise<{
 
         const countries = await getAllCOICountries();
 
-        // Count total resources with COIs
-        const { db } = await getMongoClient();
-        const resourcesCollection = db.collection('resources');
-        const totalResources = await resourcesCollection.countDocuments({
-            $or: [
-                { 'ztdf.policy.securityLabel.COI': { $exists: true, $ne: [] } },
-                { 'legacy.COI': { $exists: true, $ne: [] } }
-            ]
-        });
+        // TODO: Count total resources with COIs
+        // For now, set to 0 until resource schema is properly implemented
+        const totalResources = 0;
 
         return {
             total,
