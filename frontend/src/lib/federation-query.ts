@@ -264,7 +264,11 @@ export class FederationQueryService {
     
     // Cancel previous request if any
     if (this.abortController) {
-      this.abortController.abort();
+      try {
+        this.abortController.abort();
+      } catch (err) {
+        console.debug('[FederationQuery] AbortController cleanup:', err);
+      }
     }
     this.abortController = new AbortController();
     
@@ -430,7 +434,11 @@ export class FederationQueryService {
    */
   cancel(): void {
     if (this.abortController) {
-      this.abortController.abort();
+      try {
+        this.abortController.abort();
+      } catch (err) {
+        console.debug('[FederationQuery] AbortController cleanup:', err);
+      }
       this.abortController = null;
     }
   }

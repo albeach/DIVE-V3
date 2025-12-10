@@ -329,7 +329,10 @@ export function recordKeyRequest(params: {
     countryCheck?: 'pass' | 'fail';
     coiCheck?: 'pass' | 'fail';
 }): void {
-    const labels = params.kasId ? { kas_id: params.kasId } : {};
+    const labels: Record<string, string> = {};
+    if (params.kasId) {
+        labels.kas_id = params.kasId;
+    }
     
     kasMetrics.incCounter('kas_key_requests_total', labels);
     

@@ -465,9 +465,6 @@ export default function FacetedFilters({
         [groupId]: currentValues === value ? '' : value,
       });
     }
-
-// Named export for tests and consumers
-export { FacetedFilters };
   }, [selectedFilters, onFilterChange]);
 
   // Clear all filters

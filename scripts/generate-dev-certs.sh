@@ -14,6 +14,12 @@
 
 set -e
 
+# Allow skipping certificate generation entirely
+if [[ "${SKIP_CERT_REGEN:-false}" == "true" ]]; then
+    echo -e "${YELLOW}mkcert generation skipped (SKIP_CERT_REGEN=true).${NC}"
+    exit 0
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -54,83 +60,121 @@ echo -e "${GREEN}✓ mkcert CA installed${NC}"
 # Create cert directory
 mkdir -p "$CERT_DIR"
 
-# Collect hostnames from all sources
-echo -e "${YELLOW}[2/4] Collecting hostnames from docker-compose files...${NC}"
+# Fast path: if certs exist and skipping is allowed, exit early
+if [[ "${SKIP_CERT_REGEN_IF_PRESENT:-false}" == "true" ]] && [[ -f "$CERT_DIR/certificate.pem" && -f "$CERT_DIR/key.pem" ]]; then
+    echo -e "${YELLOW}Existing certificates found and SKIP_CERT_REGEN_IF_PRESENT=true; skipping regeneration.${NC}"
+    exit 0
+fi
+
+# Collect hostnames based on scope
+echo -e "${YELLOW}[2/4] Collecting hostnames...${NC}"
 
 HOSTNAMES=()
+SCOPE="${CERT_HOST_SCOPE:-full}"
 
-# Always include these base hostnames (cover host + Docker-internal)
-BASE_HOSTNAMES=(
-    "localhost"
-    "127.0.0.1"
-    "::1"
-    "host.docker.internal"
-    "backend"
-    "frontend"
-    "keycloak"
-    "opa"
-    "opal-server"
-    "redis"
-    "postgres"
-    "mongo"
-    "kas"
-)
+if [[ "$SCOPE" == "local_minimal" ]]; then
+    # Minimal host set for local/dev
+    HOSTNAMES=(
+        "localhost"
+        "127.0.0.1"
+        "::1"
+        "host.docker.internal"
+        "backend"
+        "frontend"
+        "keycloak"
+        "kas"
+        "opa"
+        "opal-server"
+        "redis"
+        "postgres"
+        "mongo"
+        "dive-v3-backend"
+        "dive-v3-frontend"
+        "dive-v3-keycloak"
+        "dive-v3-kas"
+        "dive-v3-opa"
+        "dive-v3-redis"
+        "dive-v3-postgres"
+        "dive-v3-mongo"
+    )
+else
+    # Always include these base hostnames (cover host + Docker-internal)
+    BASE_HOSTNAMES=(
+        "localhost"
+        "127.0.0.1"
+        "::1"
+        "host.docker.internal"
+        "backend"
+        "frontend"
+        "keycloak"
+        "opa"
+        "opal-server"
+        "redis"
+        "postgres"
+        "mongo"
+        "kas"
+    )
 
-# Extract service names from all docker-compose files
-for compose_file in "$PROJECT_ROOT"/docker-compose*.yml; do
-    if [[ -f "$compose_file" ]]; then
-        echo "  Scanning: $(basename "$compose_file")"
-        
-        # Extract service names (they become Docker hostnames)
-        services=$(grep -E "^  [a-z].*:$" "$compose_file" 2>/dev/null | sed 's/://g' | sed 's/^  //' | grep -v "^#" || true)
-        
-        for service in $services; do
-            # Clean up service name
-            service=$(echo "$service" | tr -d ' ')
-            if [[ -n "$service" && ! "$service" =~ ^# ]]; then
-                HOSTNAMES+=("$service")
-            fi
-        done
-        
-        # Extract container_name values (alternate hostnames)
-        container_names=$(grep "container_name:" "$compose_file" 2>/dev/null | sed 's/.*container_name: *//' | tr -d '"' || true)
-        for name in $container_names; do
-            name=$(echo "$name" | tr -d ' ')
-            if [[ -n "$name" ]]; then
-                HOSTNAMES+=("$name")
-            fi
-        done
-    fi
-done
+    HOSTNAMES+=("${BASE_HOSTNAMES[@]}")
+
+    # Extract service names from all docker-compose files
+    for compose_file in "$PROJECT_ROOT"/docker-compose*.yml; do
+        if [[ -f "$compose_file" ]]; then
+            echo "  Scanning: $(basename "$compose_file")"
+            
+            # Extract service names (they become Docker hostnames)
+            services=$(grep -E "^  [a-z].*:$" "$compose_file" 2>/dev/null | sed 's/://g' | sed 's/^  //' | grep -v "^#" || true)
+            
+            for service in $services; do
+                # Clean up service name
+                service=$(echo "$service" | tr -d ' ')
+                if [[ -n "$service" && ! "$service" =~ ^# ]]; then
+                    HOSTNAMES+=("$service")
+                fi
+            done
+            
+            # Extract container_name values (alternate hostnames)
+            container_names=$(grep "container_name:" "$compose_file" 2>/dev/null | sed 's/.*container_name: *//' | tr -d '"' || true)
+            for name in $container_names; do
+                name=$(echo "$name" | tr -d ' ')
+                if [[ -n "$name" ]]; then
+                    HOSTNAMES+=("$name")
+                fi
+            done
+        fi
+    done
+
+    # Add common Cloudflare tunnel hostnames (ISO 3166-1 alpha-3 naming)
+    CLOUDFLARE_HOSTNAMES=(
+        # USA instance (primary)
+        "usa-app.dive25.com"
+        "usa-api.dive25.com"
+        "usa-idp.dive25.com"
+        "usa-kas.dive25.com"
+        # FRA instance
+        "fra-app.dive25.com"
+        "fra-api.dive25.com"
+        "fra-idp.dive25.com"
+        "fra-kas.dive25.com"
+        # DEU instance (future)
+        "deu-app.dive25.com"
+        "deu-api.dive25.com"
+        "deu-idp.dive25.com"
+        "deu-kas.dive25.com"
+        # Generic wildcard for any future instances
+        "*.dive25.com"
+    )
+
+    HOSTNAMES+=("${CLOUDFLARE_HOSTNAMES[@]}")
+fi
 
 # Add command-line arguments as additional hostnames
 for arg in "$@"; do
     HOSTNAMES+=("$arg")
 done
 
-# Add common Cloudflare tunnel hostnames (ISO 3166-1 alpha-3 naming)
-CLOUDFLARE_HOSTNAMES=(
-    # USA instance (primary)
-    "usa-app.dive25.com"
-    "usa-api.dive25.com"
-    "usa-idp.dive25.com"
-    "usa-kas.dive25.com"
-    # FRA instance
-    "fra-app.dive25.com"
-    "fra-api.dive25.com"
-    "fra-idp.dive25.com"
-    "fra-kas.dive25.com"
-    # DEU instance (future)
-    "deu-app.dive25.com"
-    "deu-api.dive25.com"
-    "deu-idp.dive25.com"
-    "deu-kas.dive25.com"
-    # Generic wildcard for any future instances
-    "*.dive25.com"
-)
-
 # Combine all hostnames
-ALL_HOSTNAMES=("${BASE_HOSTNAMES[@]}" "${HOSTNAMES[@]}" "${CLOUDFLARE_HOSTNAMES[@]}")
+ALL_HOSTNAMES=("${HOSTNAMES[@]}")
 
 # Remove duplicates and empty entries
 UNIQUE_HOSTNAMES=($(printf '%s\n' "${ALL_HOSTNAMES[@]}" | sort -u | grep -v '^$'))

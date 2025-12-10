@@ -28,21 +28,21 @@ module "instance" {
     fra = {
       instance_code = "FRA"
       instance_name = "France"
-      idp_url       = "https://fra-idp.dive25.com"
+      idp_url       = var.fra_idp_url
       enabled       = true
       client_secret = "placeholder-sync-after-terraform"
     }
     gbr = {
       instance_code = "GBR"
       instance_name = "United Kingdom"
-      idp_url       = "https://gbr-idp.dive25.com"
+      idp_url       = var.gbr_idp_url
       enabled       = true
-      client_secret = "placeholder-sync-after-terraform"
+      client_secret = var.gbr_client_secret
     }
     deu = {
       instance_code = "DEU"
       instance_name = "Germany"
-      idp_url       = "https://deu-idp.dive25.com"
+      idp_url       = var.deu_idp_url
       enabled       = true
       client_secret = "placeholder-sync-after-terraform"
     }

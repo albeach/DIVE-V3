@@ -224,6 +224,7 @@ services:
       - ./backend/tsconfig.json:/app/tsconfig.json:ro
       # Federation registry/config
       - ./config/federation-registry.json:/app/config/federation-registry.json:ro
+      - ./config:/app/config:ro
       # Mount SSL certificates for HTTPS server
       - ./keycloak/certs:/opt/keycloak/certs:ro
       # CRITICAL: Mount policies directory so backend can read OPA Rego files
@@ -354,6 +355,7 @@ services:
       - ./kas/certs:/opt/app/certs:ro
       - ./kas/src:/app/src
       - ./kas/logs:/app/logs
+      - ./config:/app/config:ro
     command: npm run dev
 
   opal-server:

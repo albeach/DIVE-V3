@@ -5,6 +5,7 @@
 # Commands: deploy, reset, nuke
 # =============================================================================
 
+# shellcheck source=common.sh disable=SC1091
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
@@ -69,9 +70,10 @@ cmd_deploy() {
     fi
     
     ensure_dive_root
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || exit 1
     
     # Load status module for cmd_validate
+    # shellcheck source=status.sh disable=SC1091
     source "$(dirname "${BASH_SOURCE[0]}")/status.sh"
     
     # Execute deployment
@@ -95,7 +97,11 @@ cmd_deploy() {
     fi
     
     log_step "Step 3: Checking SSL certificates..."
-    check_certs || { log_error "Certificate generation failed"; return 1; }
+    if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
+        check_certs || { log_error "Certificate generation failed"; return 1; }
+    else
+        log_verbose "Skipping mkcert for env ${ENVIRONMENT}"
+    fi
     
     # Choose compose file based on target/pilot/local
     local COMPOSE_FILE="docker-compose.yml"
@@ -128,7 +134,7 @@ cmd_deploy() {
     done
     
     log_step "Step 8: Applying Terraform configuration..."
-    cd "${DIVE_ROOT}/terraform/pilot"
+    cd "${DIVE_ROOT}/terraform/pilot" || exit 1
     [ ! -d ".terraform" ] && terraform init
     # Ensure Keycloak admin credentials are available to the provider
     export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
@@ -138,9 +144,10 @@ cmd_deploy() {
         return 1
     fi
     terraform apply -var-file="${target}.tfvars" -auto-approve
-    cd "${DIVE_ROOT}"
+    cd "${DIVE_ROOT}" || exit 1
     
     log_step "Step 9: Seeding database..."
+    # shellcheck source=db.sh disable=SC1091
     source "$(dirname "${BASH_SOURCE[0]}")/db.sh"
     cmd_seed "$INSTANCE" || log_warn "Seeding may have issues (check logs)"
     
@@ -187,7 +194,7 @@ cmd_nuke() {
     fi
     
     ensure_dive_root
-    cd "$DIVE_ROOT"
+    cd "$DIVE_ROOT" || exit 1
     
     docker compose -f docker-compose.yml down -v --remove-orphans 2>/dev/null || true
     docker compose -f docker-compose.pilot.yml down -v --remove-orphans 2>/dev/null || true

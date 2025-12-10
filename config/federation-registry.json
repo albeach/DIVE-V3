@@ -1,20 +1,4 @@
 {
-  "instances": {
-    "usa": {
-      "enabled": true,
-      "type": "local",
-      "realm": "dive-v3-broker",
-      "services": {
-        "backend": { "hostname": "localhost:4000" },
-        "keycloak": { "hostname": "localhost:8443" }
-      },
-      "mongo": {
-        "database": "dive-v3"
-      }
-    }
-  }
-}
-{
   "$schema": "./federation-registry.schema.json",
   "version": "3.1.0",
   "metadata": {
@@ -459,8 +443,8 @@
       "deployment": {
         "provider": "docker",
         "host": "localhost",
-        "domain": "dive25.com",
-        "composeFile": "docker-compose.gbr.yml",
+        "domain": "localhost",
+        "composeFile": "instances/gbr/docker-compose.yml",
         "projectName": "gbr"
       },
       "services": {
@@ -469,25 +453,25 @@
           "name": "frontend-gbr",
           "containerName": "dive-v3-frontend-gbr",
           "internalPort": 3000,
-          "externalPort": 3002,
+          "externalPort": 3003,
           "protocol": "https",
-          "hostname": "gbr-app.dive25.com"
+          "hostname": "localhost"
         },
         "backend": {
           "name": "backend-gbr",
           "containerName": "dive-v3-backend-gbr",
           "internalPort": 4000,
-          "externalPort": 4002,
+          "externalPort": 4003,
           "protocol": "https",
-          "hostname": "gbr-api.dive25.com"
+          "hostname": "localhost"
         },
         "keycloak": {
           "name": "keycloak-gbr",
           "containerName": "dive-v3-keycloak-gbr",
           "internalPort": 8443,
-          "externalPort": 8445,
+          "externalPort": 8446,
           "protocol": "https",
-          "hostname": "gbr-idp.dive25.com"
+          "hostname": "localhost"
         },
         "kas": {
           "name": "kas-gbr",

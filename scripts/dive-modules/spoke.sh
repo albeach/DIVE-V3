@@ -326,10 +326,22 @@ spoke_setup_wizard() {
             if [ -z "$ip_or_host" ]; then
                 ip_or_host="localhost"
             fi
-            base_url="https://${ip_or_host}:3000"
-            api_url="https://${ip_or_host}:4000"
-            idp_url="https://${ip_or_host}:8443"
-            kas_url="https://${ip_or_host}:8080"
+            # Prefer instance-specific ports from instances/<code>/instance.json when available
+            instance_file="instances/${code_lower}/instance.json"
+            if [ -f "$instance_file" ] && command -v jq >/dev/null 2>&1; then
+                frontend_port=$(jq -r '.ports.frontend // empty' "$instance_file")
+                backend_port=$(jq -r '.ports.backend // empty' "$instance_file")
+                keycloak_https_port=$(jq -r '.ports.keycloak_https // empty' "$instance_file")
+                kas_port=$(jq -r '.ports.kas // empty' "$instance_file")
+            fi
+            frontend_port="${frontend_port:-3000}"
+            backend_port="${backend_port:-4000}"
+            keycloak_https_port="${keycloak_https_port:-8443}"
+            kas_port="${kas_port:-8080}"
+            base_url="https://${ip_or_host}:${frontend_port}"
+            api_url="https://${ip_or_host}:${backend_port}"
+            idp_url="https://${ip_or_host}:${keycloak_https_port}"
+            kas_url="https://${ip_or_host}:${kas_port}"
             ;;
         *)
             log_error "Invalid option"
@@ -737,6 +749,31 @@ _create_spoke_docker_compose() {
     local base_url="$8"
     local idp_url="$9"
     local tunnel_token="${10}"
+
+    # Derive host/ports from provided URLs to avoid collisions across instances
+    local backend_host_port
+    backend_host_port=$(echo "$api_url" | sed -n 's@.*:\([0-9][0-9]*\).*@\1@p')
+    [ -z "$backend_host_port" ] && backend_host_port="4000"
+
+    local frontend_host_port
+    frontend_host_port=$(echo "$base_url" | sed -n 's@.*:\([0-9][0-9]*\).*@\1@p')
+    [ -z "$frontend_host_port" ] && frontend_host_port="3000"
+
+    local keycloak_host_port
+    keycloak_host_port=$(echo "$idp_url" | sed -n 's@.*:\([0-9][0-9]*\).*@\1@p')
+    [ -z "$keycloak_host_port" ] && keycloak_host_port="8443"
+    
+    # Derive hostnames (strip proto/port)
+    local app_host
+    app_host=$(echo "$base_url" | sed -n 's@https\?://\\([^/:]*\\).*@\\1@p')
+    [ -z "$app_host" ] && app_host="localhost"
+    local idp_host
+    idp_host=$(echo "$idp_url" | sed -n 's@https\?://\\([^/:]*\\).*@\\1@p')
+    [ -z "$idp_host" ] && idp_host="localhost"
+    
+    # Compose app/idp base URLs (used for Keycloak realm attributes and redirects)
+    local app_base_url="https://${app_host}:${frontend_host_port}"
+    local idp_base_url="https://${idp_host}:${keycloak_host_port}"
     
     cat > "$spoke_dir/docker-compose.yml" << 'COMPOSE_HEADER'
 # =============================================================================
@@ -760,6 +797,10 @@ volumes:
   ${code_lower}_mongodb_data:
   ${code_lower}_redis_data:
   ${code_lower}_opal_cache:
+  ${code_lower}_frontend_modules:
+  ${code_lower}_frontend_next:
+  ${code_lower}_backend_node_modules:
+  ${code_lower}_backend_logs:
 
 services:
   # ==========================================================================
@@ -839,8 +880,7 @@ services:
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_LOG_LEVEL: info
     ports:
-      - "8443:8443"
-      - "8080:8080"
+      - "${keycloak_host_port}:8443"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
@@ -919,6 +959,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.dev
     container_name: dive-v3-backend-${code_lower}
+    command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
@@ -932,12 +973,12 @@ services:
       MONGODB_URL: mongodb://admin:\${MONGO_PASSWORD}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
       MONGODB_DATABASE: dive-v3-${code_lower}
       REDIS_URL: redis://redis-${code_lower}:6379
-      # Keycloak
-      KEYCLOAK_URL: https://keycloak-${code_lower}:8443
+      # Keycloak (align issuer with public IdP URL; allow internal DNS as secondary)
+      KEYCLOAK_URL: $idp_base_url
       KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      # Issuer URLs for JWT validation (public URL without port)
-      KEYCLOAK_ISSUER: $idp_url/realms/dive-v3-broker-${code_lower}
-      TRUSTED_ISSUERS: $idp_url/realms/dive-v3-broker-${code_lower},https://keycloak-${code_lower}:8443/realms/dive-v3-broker-${code_lower}
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      KEYCLOAK_ISSUER: $idp_base_url/realms/dive-v3-broker-${code_lower}
+      TRUSTED_ISSUERS: $idp_base_url/realms/dive-v3-broker-${code_lower},https://keycloak-${code_lower}:8443/realms/dive-v3-broker-${code_lower}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD}
       # OPA
@@ -952,13 +993,16 @@ services:
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
       DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
     ports:
-      - "4000:4000"
+      - "${backend_host_port}:4000"
     volumes:
-      - ../../backend/src:/app/src:ro
-      - ./certs:/app/certs:ro
+      - ../../backend:/app
+      - ${code_lower}_backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
       - ./config.json:/app/config/config.json:ro
+      - ../../config:/app/config/shared:ro
       - ./cache:/app/cache
+      - ${code_lower}_backend_logs:/app/logs
     depends_on:
       mongodb-${code_lower}:
         condition: service_healthy
@@ -982,6 +1026,7 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile.dev
     container_name: dive-v3-frontend-${code_lower}
+    command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
     environment:
       NODE_ENV: development
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
@@ -989,7 +1034,7 @@ services:
       NEXT_PUBLIC_INSTANCE_NAME: "$instance_name"
       # Public URLs for client-side (browser) requests
       NEXT_PUBLIC_API_URL: $api_url
-      NEXT_PUBLIC_KEYCLOAK_URL: $idp_url
+      NEXT_PUBLIC_KEYCLOAK_URL: $idp_base_url
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-${code_lower}
       NEXT_PUBLIC_BACKEND_URL: $api_url
       # Internal URL for server-side (SSR) requests - CRITICAL for Docker networking
@@ -999,25 +1044,25 @@ services:
       # Database for NextAuth sessions
       DATABASE_URL: postgres://keycloak:\${POSTGRES_PASSWORD}@postgres-${code_lower}:5432/keycloak
       # Keycloak OAuth config (internal URL)
-      KEYCLOAK_URL: https://keycloak-${code_lower}:8443
+      KEYCLOAK_URL: $idp_base_url
       KEYCLOAK_REALM: dive-v3-broker-${code_lower}
       KEYCLOAK_CLIENT_ID: dive-v3-client-${code_lower}
       KEYCLOAK_CLIENT_SECRET: \${KEYCLOAK_CLIENT_SECRET}
       # NextAuth v5 Keycloak provider
       AUTH_KEYCLOAK_ID: dive-v3-client-${code_lower}
       AUTH_KEYCLOAK_SECRET: \${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ISSUER: $idp_url/realms/dive-v3-broker-${code_lower}
+      AUTH_KEYCLOAK_ISSUER: $idp_base_url/realms/dive-v3-broker-${code_lower}
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
     ports:
-      - "3000:3000"
+      - "${frontend_host_port}:3000"
     volumes:
-      - ../../frontend/src:/app/src:ro
-      - ../../frontend/public:/app/public:ro
-      - ../../frontend/server.js:/app/server.js:ro
-      - ../../frontend/tsconfig.json:/app/tsconfig.json:ro
-      - ../../frontend/tailwind.config.ts:/app/tailwind.config.ts:ro
-      - ../../frontend/postcss.config.mjs:/app/postcss.config.mjs:ro
-      - ../../frontend/next.config.ts:/app/next.config.ts:ro
+      - ../../frontend:/app
+      - ${code_lower}_frontend_modules:/app/node_modules
+      - ${code_lower}_frontend_next:/app/.next
+      - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
+    extra_hosts:
+      - "localhost:host-gateway"
     depends_on:
       backend-${code_lower}:
         condition: service_healthy
@@ -1030,7 +1075,7 @@ EOF
     local tunnel_mode="${11:-token}"  # Default to token mode
     
     if [ -n "$tunnel_token" ]; then
-        cat >> "$spoke_dir/docker-compose.yml" << EOF
+    cat >> "$spoke_dir/docker-compose.yml" << EOF
 
   # ==========================================================================
   # CLOUDFLARE TUNNEL

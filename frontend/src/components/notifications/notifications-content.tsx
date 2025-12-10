@@ -69,7 +69,7 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
         const items: Notification[] = Array.isArray(data?.notifications)
           ? data.notifications.map((n: any) => ({
               ...n,
-              timestamp: n.timestamp,
+              timestamp: n.timestamp || new Date().toISOString(), // Fallback to current time if invalid
             }))
           : [];
         setNotifications(items);
@@ -108,7 +108,7 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
       const items: Notification[] = Array.isArray(data?.notifications)
         ? data.notifications.map((n: any) => ({
             ...n,
-            timestamp: n.timestamp,
+            timestamp: n.timestamp || new Date().toISOString(), // Fallback to current time if invalid
           }))
         : [];
       setNotifications(prev => [...prev, ...items]);
@@ -185,9 +185,16 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
     }
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (timestamp: string | Date | null | undefined) => {
+    if (!timestamp) return 'Unknown time';
+
+    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Invalid date';
+
     const now = new Date();
     const diff = now.getTime() - date.getTime();
+    if (diff < 0) return 'In the future';
+
     const mins = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
@@ -220,18 +227,28 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
   };
 
   const categories = useMemo(() => {
-    const asDate = (ts: string | Date) => (ts instanceof Date ? ts : new Date(ts));
+    const asDate = (ts: string | Date) => {
+      if (!ts) return new Date(0); // Return epoch date for invalid timestamps
+      const date = ts instanceof Date ? ts : new Date(ts);
+      return isNaN(date.getTime()) ? new Date(0) : date;
+    };
+
+    const now = new Date().getTime();
+
     return {
       today: filteredNotifications.filter(n => {
-        const diff = new Date().getTime() - asDate(n.timestamp).getTime();
-        return diff < 24 * 3600 * 1000;
+        const date = asDate(n.timestamp);
+        const diff = now - date.getTime();
+        return diff >= 0 && diff < 24 * 3600 * 1000;
       }),
       week: filteredNotifications.filter(n => {
-        const diff = new Date().getTime() - asDate(n.timestamp).getTime();
+        const date = asDate(n.timestamp);
+        const diff = now - date.getTime();
         return diff >= 24 * 3600 * 1000 && diff < 7 * 24 * 3600 * 1000;
       }),
       older: filteredNotifications.filter(n => {
-        const diff = new Date().getTime() - asDate(n.timestamp).getTime();
+        const date = asDate(n.timestamp);
+        const diff = now - date.getTime();
         return diff >= 7 * 24 * 3600 * 1000;
       })
     };

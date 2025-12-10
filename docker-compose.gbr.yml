@@ -1,36 +1,25 @@
 # =============================================================================
-# DIVE V3 - GBR Instance (United Kingdom)
-# CRITICAL: Uses ports from former local DEU instance
-# Federation: USA (local), FRA (local), DEU (remote at prosecurity.biz)
-# Standardized healthchecks and restart policies (P0 hardening - Nov 30, 2025)
+# DIVE V3 - GBR Instance (United Kingdom) - Local/Dev Spoke
+# Minimal, self-contained; no GCP secret loader. Provide *_GBR envs before up.
+# Ports: FE 3002, BE 4002, KC 8445/8084, PG 5435, Mongo 27019, Redis 6381, OPA 8283, KAS 8092.
+# TLS: reuses repo certs (mkcert). URLs default to localhost for predictable local federation.
 # =============================================================================
 
-name: gbr
-
 services:
-  # =============================================================================
-  # INFRASTRUCTURE SERVICES
-  # =============================================================================
-  
-  # PostgreSQL for GBR Keycloak
   postgres-gbr:
     image: postgres:15-alpine
     container_name: dive-v3-postgres-gbr
     restart: unless-stopped
-    stop_grace_period: 30s
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}
     ports:
       - "5435:5432"
     volumes:
       - postgres_gbr_data:/var/lib/postgresql/data
-      - ./scripts/postgres-init-gbr/init-gbr-db.sh:/docker-entrypoint-initdb.d/init-gbr-db.sh
     networks:
-      dive-gbr-network:
-        aliases:
-          - postgres
+      - dive-gbr-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
@@ -38,40 +27,33 @@ services:
       retries: 5
       start_period: 10s
 
-  # Keycloak GBR Instance
-  # Uses same custom Dockerfile as USA for consistency (includes curl, SSL certs, themes)
   keycloak-gbr:
     build:
       context: ./keycloak
       dockerfile: Dockerfile
     container_name: dive-v3-keycloak-gbr
     restart: unless-stopped
-    stop_grace_period: 60s
-    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
+    command: start-dev --features=scripts --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-gbr:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
-      KC_HOSTNAME: gbr-idp.dive25.com
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?set KEYCLOAK_ADMIN_PASSWORD_GBR}
+      KC_HOSTNAME: localhost
       KC_HOSTNAME_STRICT: false
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: true
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
-      # Debug logging for authentication flow troubleshooting (AAL/MFA enforcement)
-      # Categories: authentication (flow execution), events (login events), x509 (cert auth)
-      KC_LOG_LEVEL: INFO,org.keycloak.authentication:DEBUG,org.keycloak.events:DEBUG,org.keycloak.services.x509:DEBUG,org.keycloak.protocol:DEBUG
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
-      KC_FEATURES: scripts
     ports:
-      - "8445:8443"   # HTTPS (with mkcert certs)
-      - "8084:8080"   # HTTP (internal Docker access)
-      - "9002:9000"   # HTTPS Management (health checks, metrics)
+      - "8445:8443"
+      - "8084:8080"
+      - "9002:9000"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
@@ -81,27 +63,20 @@ services:
     networks:
       - dive-gbr-network
     healthcheck:
-      # Keycloak 26+: health endpoint is on management port 9000 (HTTPS)
       test: ["CMD-SHELL", "curl -ksf https://localhost:9000/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 90s
 
-  # =============================================================================
-  # DATA SERVICES
-  # =============================================================================
-  
-  # MongoDB GBR Instance
   mongodb-gbr:
     image: mongo:7
     container_name: dive-v3-mongodb-gbr
     restart: unless-stopped
-    stop_grace_period: 30s
     environment:
-      MONGO_INITDB_DATABASE: dive-v3-gbr
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}
+      MONGO_INITDB_DATABASE: dive-v3-gbr
     ports:
       - "27019:27017"
     volumes:
@@ -115,20 +90,12 @@ services:
       retries: 5
       start_period: 10s
 
-  # Redis GBR Instance (Phase 2 GAP-005: Security Hardening)
   redis-gbr:
     image: redis:alpine
     container_name: dive-v3-redis-gbr
     restart: unless-stopped
-    stop_grace_period: 10s
     command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
-      --appendonly yes
-      --appendfsync everysec
-      --save 300 10
-      --maxmemory 128mb
-      --maxmemory-policy allkeys-lru
+      redis-server --requirepass ${REDIS_PASSWORD_GBR:?set REDIS_PASSWORD_GBR}
     ports:
       - "6381:6379"
     volumes:
@@ -142,62 +109,36 @@ services:
       retries: 5
       start_period: 5s
 
-  # =============================================================================
-  # POLICY ENGINE
-  # =============================================================================
-  
-  # OPA GBR Instance
   opa-gbr:
     image: openpolicyagent/opa:latest
-    platform: linux/amd64
     container_name: dive-v3-opa-gbr
     restart: unless-stopped
-    stop_grace_period: 10s
     command:
       - "run"
       - "--server"
       - "--addr=0.0.0.0:8181"
       - "--log-level=info"
       - "--log-format=json"
-      - "--set=decision_logs.console=true"
-      - "/policies/base"
-      - "/policies/org"
-      - "/policies/tenant"
-      - "/policies/entrypoints"
-      - "/policies/compat"
-      - "/data/data.json"
+      - "/policies"
     ports:
       - "8283:8181"
     volumes:
-      - ./policies/base:/policies/base:ro
-      - ./policies/org:/policies/org:ro
-      - ./policies/tenant:/policies/tenant:ro
-      - ./policies/entrypoints:/policies/entrypoints:ro
-      - ./policies/compat:/policies/compat:ro
-      - ./policies/data:/data:ro
+      - ./policies:/policies:ro
     networks:
       - dive-gbr-network
     healthcheck:
-      # OPA distroless image: only /opa binary available, use version check
       test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
-  # =============================================================================
-  # APPLICATION SERVICES
-  # =============================================================================
-  
-  # KAS GBR Instance
-  # Uses same Dockerfile.dev as USA for consistency (includes curl, dev mode)
   kas-gbr:
     build:
       context: ./kas
       dockerfile: Dockerfile.dev
     container_name: dive-v3-kas-gbr
     restart: unless-stopped
-    stop_grace_period: 30s
     environment:
       NODE_ENV: development
       KAS_PORT: 8080
@@ -210,7 +151,7 @@ services:
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       BACKEND_URL: https://backend-gbr:4000
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_GBR:?GCP secret required}@mongodb-gbr:27017?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}@mongodb-gbr:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-gbr
       LOG_LEVEL: info
       INSTANCE_REALM: GBR
@@ -226,7 +167,6 @@ services:
     networks:
       - dive-gbr-network
     healthcheck:
-      # Best practice: Use curl with -k for self-signed certs (HTTPS consistency)
       test: ["CMD", "curl", "-kfs", "https://localhost:8080/health"]
       interval: 30s
       timeout: 10s
@@ -234,53 +174,41 @@ services:
       start_period: 30s
     command: npm run dev
 
-  # Backend GBR Instance
-  # Uses same Dockerfile.dev as USA for consistency (includes curl)
   backend-gbr:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
     container_name: dive-v3-backend-gbr
     restart: unless-stopped
-    stop_grace_period: 30s
     environment:
       NODE_ENV: development
       PORT: 4000
       INSTANCE_REALM: GBR
-      # Updated to use full container names (Phase 4 cleanup)
-      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_GBR:?GCP secret required}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_GBR:?GCP secret required}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
       MONGODB_DATABASE: dive-v3-gbr
-      REDIS_HOST: redis-gbr
-      REDIS_PORT: 6379
-      REDIS_URL: redis://:${REDIS_PASSWORD_GBR:?GCP secret required}@redis-gbr:6379
-      # Shared blacklist Redis (Phase 2 GAP-010)
-      BLACKLIST_REDIS_URL: redis://:${BLACKLIST_REDIS_PASSWORD:?GCP secret required}@blacklist-redis:6379
-      JWT_SECRET: ${JWT_SECRET_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      REDIS_URL: redis://:${REDIS_PASSWORD_GBR:?set REDIS_PASSWORD_GBR}@redis-gbr:6379
+      JWT_SECRET: ${JWT_SECRET_GBR:?set JWT_SECRET_GBR}
       OPA_URL: http://opa-gbr:8181
       KEYCLOAK_URL: https://keycloak-gbr:8443
       KEYCLOAK_REALM: dive-v3-broker
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?set KEYCLOAK_ADMIN_PASSWORD_GBR}
       KAS_URL: https://kas-gbr:8080
-      # Federation API URL for metadata endpoint
-      API_URL: https://gbr-api.dive25.com
-      # Include all federation partner origins for cross-instance API calls
-      CORS_ORIGIN: https://gbr-app.dive25.com,https://usa-app.dive25.com,https://fra-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3002
-      FEDERATION_ALLOWED_ORIGINS: https://gbr-app.dive25.com,https://usa-app.dive25.com,https://fra-app.dive25.com,https://deu-app.prosecurity.biz,https://localhost:3002
-      NEXT_PUBLIC_BASE_URL: https://gbr-app.dive25.com
+      API_URL: https://localhost:4002
+      CORS_ORIGIN: https://localhost:3002,https://localhost:4002,https://localhost:8445
+      FEDERATION_ALLOWED_ORIGINS: https://localhost:3002,https://localhost:4002,https://localhost:8445
+      NEXT_PUBLIC_BASE_URL: https://localhost:3002
     ports:
       - "4002:4000"
     volumes:
       - ./backend:/app
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./backend/certs:/app/certs:ro
-      # Phase 3B: Federation Registry configuration
       - ./config:/app/config:ro
-      # CRITICAL: Mount policies directory for /api/policies endpoint
       - ./policies:/app/policies:ro
     depends_on:
       mongodb-gbr:
@@ -295,63 +223,50 @@ services:
         condition: service_healthy
     networks:
       - dive-gbr-network
-      - dive-shared-network  # Phase 2 GAP-010: Access to shared blacklist Redis
-      - dive-gbr-internal    # Phase 4: Connect to GBR instance services
     healthcheck:
-      # Best practice: Use curl with -k for self-signed certs (HTTPS consistency)
       test: ["CMD", "curl", "-kfs", "https://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
 
-  # Frontend GBR Instance
-  # Uses same Dockerfile.dev as USA for consistency (includes curl)
   frontend-gbr:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: dive-v3-frontend-gbr
     restart: unless-stopped
-    stop_grace_period: 30s
     environment:
       NODE_ENV: development
       PORT: 3000
-      # CRITICAL: Override Docker's HOSTNAME to bind to all interfaces
       HOSTNAME: "0.0.0.0"
-      # CRITICAL: GBR-specific URLs - DO NOT cross-contaminate
-      NEXT_PUBLIC_API_URL: https://gbr-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://gbr-api.dive25.com
-      NEXT_PUBLIC_KEYCLOAK_URL: https://gbr-idp.dive25.com
+      NEXT_PUBLIC_API_URL: https://localhost:4002
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4002
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8445
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: dive-v3-client-broker
       NEXT_PUBLIC_APP_NAME: "DIVE V3 - United Kingdom"
       NEXT_PUBLIC_INSTANCE: GBR
       NEXT_PUBLIC_INSTANCE_NAME: "United Kingdom"
       NEXT_PUBLIC_LOCALE: en-GB
-      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3002,https://localhost:4002,https://localhost:8445,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com"
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: "https://localhost:3002,https://localhost:4002,https://localhost:8445"
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_URL: https://keycloak-gbr:8443
-      KEYCLOAK_ISSUER: https://gbr-idp.dive25.com/realms/dive-v3-broker
-      # CRITICAL: Backend URL for server-side API proxy (inside Docker network)
+      KEYCLOAK_ISSUER: https://localhost:8445/realms/dive-v3-broker
       BACKEND_URL: https://backend-gbr:4000
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      NEXTAUTH_URL: https://gbr-app.dive25.com
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
-      AUTH_SECRET: ${AUTH_SECRET_GBR:?Run source ./scripts/sync-gcp-secrets.sh gbr}
+      NEXTAUTH_URL: https://localhost:3002
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?set NEXTAUTH_SECRET_GBR}
+      AUTH_SECRET: ${AUTH_SECRET_GBR:?set AUTH_SECRET_GBR}
       AUTH_TRUST_HOST: "true"
-      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_GBR:?GCP secret required}@postgres-gbr:5432/dive_v3_gbr
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}@postgres-gbr:5432/dive_v3_gbr
     ports:
       - "3002:3000"
     volumes:
       - ./frontend:/app
       - ./certs:/opt/app/certs:ro
-      # CRITICAL: Do NOT mount .env.gbr - use environment variables from docker-compose.yml (GCP secrets)
-      # - ./frontend/.env.gbr:/app/.env.local:ro
-      # CRITICAL: Instance-specific volumes for build isolation
       - frontend_gbr_node_modules:/app/node_modules
       - frontend_gbr_next:/app/.next
     depends_on:
@@ -360,63 +275,21 @@ services:
     networks:
       - dive-gbr-network
     healthcheck:
-      # P0 Fix (Dec 2025): Increased max-time from 5s to 10s to prevent false unhealthy
-      # Next.js SSR can take 5+ seconds on first render; 5s timeout caused intermittent failures
       test: ["CMD", "curl", "-kfsI", "--max-time", "10", "https://localhost:3000/"]
       interval: 30s
       timeout: 15s
       retries: 10
       start_period: 120s
 
-  # =============================================================================
-  # NETWORK TUNNEL
-  # =============================================================================
-  
-  # Cloudflare Tunnel GBR
-  cloudflared-gbr:
-    image: cloudflare/cloudflared:latest
-    container_name: dive-v3-tunnel-gbr
-    restart: unless-stopped
-    stop_grace_period: 10s
-    command: tunnel --config /etc/cloudflared/config.yml run
-    volumes:
-      - ./cloudflared/config-gbr.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared/gbr-tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
-    networks:
-      - dive-gbr-network
-    depends_on:
-      - frontend-gbr
-      - backend-gbr
-      - keycloak-gbr
-      - kas-gbr
-    healthcheck:
-      # Verify tunnel is running and metrics endpoint is accessible
-      test: ["CMD", "cloudflared", "version"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    ports:
-      - "9128:9128"  # cloudflared config-gbr.yml uses metrics: 0.0.0.0:9128
-
 volumes:
   postgres_gbr_data:
   mongodb_gbr_data:
-  # Phase 2 GAP-005: Redis persistence
   redis_gbr_data:
-  # CRITICAL: Instance-specific frontend volumes for build isolation
   frontend_gbr_node_modules:
   frontend_gbr_next:
 
 networks:
   dive-gbr-network:
     driver: bridge
-  # Shared network for cross-instance blacklist Redis (Phase 2 GAP-010)
-  dive-shared-network:
-    external: true
-    name: dive-v3-shared-network
-  # GBR instance internal network (Phase 4: services run in separate stack)
-  dive-gbr-internal:
-    external: true
-    name: dive-v3-gbr_internal
+
 

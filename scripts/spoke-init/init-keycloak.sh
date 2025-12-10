@@ -62,19 +62,19 @@ kc_curl() {
 CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
 FRONTEND_URL="${FRONTEND_URL:-https://${CODE_LOWER}-app.dive25.com}"
 
-# Map country codes to full names for Keycloak theme detection
-declare -A COUNTRY_FULL_NAMES=(
-    [usa]="United States"
-    [fra]="France"
-    [gbr]="United Kingdom"
-    [deu]="Germany"
-    [can]="Canada"
-    [esp]="Spain"
-    [ita]="Italy"
-    [nld]="Netherlands"
-    [pol]="Poland"
-)
-COUNTRY_FULL_NAME="${COUNTRY_FULL_NAMES[$CODE_LOWER]:-$CODE_UPPER}"
+# Map country codes to full names for Keycloak theme detection (POSIX-friendly)
+case "$CODE_LOWER" in
+    usa) COUNTRY_FULL_NAME="United States" ;;
+    fra) COUNTRY_FULL_NAME="France" ;;
+    gbr) COUNTRY_FULL_NAME="United Kingdom" ;;
+    deu) COUNTRY_FULL_NAME="Germany" ;;
+    can) COUNTRY_FULL_NAME="Canada" ;;
+    esp) COUNTRY_FULL_NAME="Spain" ;;
+    ita) COUNTRY_FULL_NAME="Italy" ;;
+    nld) COUNTRY_FULL_NAME="Netherlands" ;;
+    pol) COUNTRY_FULL_NAME="Poland" ;;
+    *)   COUNTRY_FULL_NAME="$CODE_UPPER" ;;
+esac
 REALM_DISPLAY_NAME="DIVE V3 - ${COUNTRY_FULL_NAME} Instance"
 
 echo ""

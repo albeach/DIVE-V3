@@ -19,6 +19,8 @@ volumes:
   gbr_frontend_next:
   gbr_opa_cache:
   gbr_opal_cache:
+  gbr_backend_node_modules:
+  gbr_backend_logs:
 
 services:
   # ============================================================================
@@ -31,9 +33,9 @@ services:
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}
     ports:
-      - "5436:5432"
+      - "5435:5432"
     volumes:
       - gbr_postgres_data:/var/lib/postgresql/data
     networks:
@@ -50,9 +52,9 @@ services:
     environment:
       MONGO_INITDB_DATABASE: dive-v3-gbr
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}
     ports:
-      - "27020:27017"
+      - "27019:27017"
     volumes:
       - gbr_mongodb_data:/data/db
     networks:
@@ -66,14 +68,16 @@ services:
   redis-gbr:
     image: redis:alpine
     container_name: dive-v3-redis-gbr
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD_GBR:?set REDIS_PASSWORD_GBR}
     ports:
-      - "6382:6379"
+      - "6381:6379"
     volumes:
       - gbr_redis_data:/data
     networks:
       - dive-gbr-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_GBR}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -92,10 +96,10 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-gbr:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_HOSTNAME: gbr-idp.dive25.com
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?set KEYCLOAK_ADMIN_PASSWORD_GBR}
+      KC_HOSTNAME: localhost
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
@@ -118,7 +122,7 @@ services:
     networks:
       - dive-gbr-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -131,16 +135,21 @@ services:
     image: openpolicyagent/opa:latest
     platform: linux/amd64
     container_name: dive-v3-opa-gbr
-    command: run --server --addr :8181 /policies
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "/policies"
     ports:
-      - "8184:8181"
+      - "8283:8181"
     volumes:
       - ../../policies:/policies:ro
-      - gbr_opa_cache:/var/opa/cache
     networks:
       - dive-gbr-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8181/health"]
+      test: ["CMD", "/opa", "version"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -198,7 +207,7 @@ services:
       NODE_ENV: development
       PORT: "8080"
       KEYCLOAK_URL: https://keycloak-gbr:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-gbr
       OPA_URL: http://opa-gbr:8181
       INSTANCE_CODE: GBR
     ports:
@@ -222,30 +231,38 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.dev
     container_name: dive-v3-backend-gbr
+    command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
       PORT: "4000"
       INSTANCE_CODE: GBR
       INSTANCE_NAME: "United Kingdom"
       # Database
-      MONGODB_URI: mongodb://admin:admin@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
-      MONGODB_URL: mongodb://admin:admin@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
-      REDIS_URL: redis://redis-gbr:6379
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_GBR:?set MONGO_PASSWORD_GBR}@mongodb-gbr:27017/dive-v3-gbr?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD_GBR:?set REDIS_PASSWORD_GBR}@redis-gbr:6379
       # Keycloak
       KEYCLOAK_URL: https://keycloak-gbr:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-gbr
+      KEYCLOAK_ISSUER: https://localhost:8446/realms/dive-v3-broker-gbr
+      TRUSTED_ISSUERS: https://localhost:8446/realms/dive-v3-broker-gbr,https://keycloak-gbr:8443/realms/dive-v3-broker-gbr,https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?set KEYCLOAK_ADMIN_PASSWORD_GBR}
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       # OPA
       OPA_URL: http://opa-gbr:8181
       # CORS
-      FEDERATION_ALLOWED_ORIGINS: https://gbr-app.dive25.com,https://localhost:3003
-      CORS_ALLOWED_ORIGINS: https://gbr-app.dive25.com,https://gbr-api.dive25.com
+      FEDERATION_ALLOWED_ORIGINS: https://localhost:3003,https://localhost:4003,https://localhost:8446,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com
+      CORS_ALLOWED_ORIGINS: https://localhost:3003,https://localhost:4003,https://localhost:8446,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com
     ports:
       - "4003:4000"
     volumes:
-      - ../../backend/src:/app/src:ro
-      - ./certs:/app/certs:ro
+      - ../../backend:/app
+      - gbr_backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../config:/app/config:ro
+      - gbr_backend_logs:/app/logs
     depends_on:
       mongodb-gbr:
         condition: service_healthy
@@ -256,7 +273,7 @@ services:
     networks:
       - dive-gbr-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -270,38 +287,50 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile.dev
     container_name: dive-v3-frontend-gbr
+    command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
     environment:
       NODE_ENV: development
       # Instance identity
       NEXT_PUBLIC_INSTANCE: GBR
       NEXT_PUBLIC_INSTANCE_NAME: "United Kingdom"
       # URLs
-      NEXT_PUBLIC_API_URL: https://gbr-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://gbr-api.dive25.com
-      NEXT_PUBLIC_BASE_URL: https://gbr-app.dive25.com
-      NEXT_PUBLIC_KEYCLOAK_URL: https://gbr-idp.dive25.com
+      NEXT_PUBLIC_API_URL: https://localhost:4003
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4003
+      NEXT_PUBLIC_BASE_URL: https://localhost:3003
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8446
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-gbr
+      BACKEND_URL: https://backend-gbr:4000
+      # NextAuth / Auth.js
+      AUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?set NEXTAUTH_SECRET_GBR}
+      AUTH_KEYCLOAK_ID: dive-v3-client-gbr
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8446/realms/dive-v3-broker-gbr
+      AUTH_TRUST_HOST: "true"
       # NextAuth
-      NEXTAUTH_URL: https://gbr-app.dive25.com
-      NEXTAUTH_SECRET: dive-v3-gbr-secret-key-change-in-production
+      NEXTAUTH_URL: https://localhost:3003
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?set NEXTAUTH_SECRET_GBR}
       # Keycloak client (server-side)
-      KEYCLOAK_URL: https://keycloak-gbr:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-replace-with-actual-secret}
+      KEYCLOAK_URL: https://localhost:8446
+      KEYCLOAK_REALM: dive-v3-broker-gbr
+      KEYCLOAK_CLIENT_ID: dive-v3-client-gbr
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://localhost:3003,https://localhost:4003,https://localhost:8446,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com
+      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       # Theme customization
       NEXT_PUBLIC_THEME_PRIMARY: "#012169"
       NEXT_PUBLIC_THEME_SECONDARY: "#C8102E"
       NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
-      # Analytics
-      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "true"
     ports:
       - "3003:3000"
     volumes:
-      - ../../frontend/src:/app/src:ro
-      - ../../frontend/public:/app/public:ro
+      - ../../frontend:/app
       - gbr_frontend_modules:/app/node_modules
       - gbr_frontend_next:/app/.next
       - ./certs:/app/certs:ro
+      - ./certs:/opt/app/certs:ro
+    extra_hosts:
+      - "localhost:host-gateway"
     depends_on:
       backend-gbr:
         condition: service_healthy
