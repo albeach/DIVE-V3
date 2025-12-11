@@ -204,11 +204,16 @@ export function IdpSelector() {
     // Trigger NextAuth signIn with kc_idp_hint
     // This sends user to LOCAL Keycloak, which handles federation if needed
     const { signIn } = await import('next-auth/react');
-    await signIn('keycloak', {
-      callbackUrl: '/dashboard',
-    }, {
-      kc_idp_hint: idpHint,
-    });
+    await signIn(
+      'keycloak',
+      {
+        // Let NextAuth handle return routing; root avoids stale state/callbacks
+        callbackUrl: '/',
+      },
+      {
+        kc_idp_hint: idpHint,
+      }
+    );
   };
 
   // 🥚 Easter egg setup
@@ -343,7 +348,7 @@ export function IdpSelector() {
     const { signIn } = await import('next-auth/react');
     // No kc_idp_hint = direct login to broker realm
     await signIn('keycloak', {
-      callbackUrl: '/dashboard',
+      callbackUrl: '/',
     });
   };
 

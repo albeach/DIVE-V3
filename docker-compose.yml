@@ -3,6 +3,9 @@ version: '3.8'
 networks:
   dive-network:
     driver: bridge
+    name: dive-v3-network
+  dive-v3-shared-network:
+    external: true
 
 volumes:
   postgres_data:
@@ -39,6 +42,8 @@ services:
       context: ./keycloak
       dockerfile: Dockerfile
     container_name: dive-v3-keycloak
+    extra_hosts:
+      - "localhost:host-gateway"
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
@@ -60,7 +65,8 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
-      KC_LOG_LEVEL: info
+      # Enable debug logging for broker troubleshooting
+      KC_LOG_LEVEL: "DEBUG,org.keycloak.broker=DEBUG,org.keycloak.broker.oidc=DEBUG,org.keycloak.events=DEBUG"
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
@@ -77,6 +83,7 @@ services:
       - "9000:9000"   # HTTPS Management (health checks, metrics)
     networks:
       - dive-network
+      - dive-v3-shared-network
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro  # mkcert certificates
     healthcheck:
@@ -173,8 +180,8 @@ services:
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-backend
     healthcheck:
-      # Zero Trust: HTTPS with mkcert CA validation
-      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem -q -O- https://localhost:4000/health || exit 1"]
+      # Use curl (installed in Dockerfile.dev) and skip cert validation for local mkcert
+      test: ["CMD-SHELL", "curl -ksf https://localhost:4000/health >/dev/null || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -244,9 +251,8 @@ services:
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-v3-frontend
     healthcheck:
-      # Zero Trust: HTTPS with mkcert CA validation
-      # Uses the rootCA.pem from mkcert to validate the self-signed certificate
-      test: ["CMD-SHELL", "wget --ca-certificate=/app/certs/rootCA.pem --spider -q https://localhost:3000/ 2>/dev/null || curl --cacert /app/certs/rootCA.pem -s -f https://localhost:3000/ > /dev/null || exit 1"]
+      # Use curl (installed in Dockerfile.dev). Frontend serves HTTPS (self-signed) in dev; skip cert validation.
+      test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 10

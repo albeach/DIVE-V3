@@ -10,7 +10,8 @@ export function LoginButton({ idpHint }: LoginButtonProps) {
   const handleSignIn = () => {
     // NextAuth v5: Use signIn() function with provider name
     // Don't use Link to /api/auth/signin - causes UnknownAction error
-    const callbackUrl = "/dashboard";
+    // Use root as callback to let NextAuth manage return path; avoids stale state
+    const callbackUrl = "/";
     const options: any = { callbackUrl };
     
     // Add kc_idp_hint for Keycloak broker IdP selection

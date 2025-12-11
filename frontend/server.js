@@ -14,7 +14,9 @@ const fs = require('fs');
 const path = require('path');
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOSTNAME || '0.0.0.0';
+// Explicitly bind to 0.0.0.0 by default. Docker sets HOSTNAME to the container ID,
+// which causes the dev server to listen only on that hostname and break localhost healthchecks.
+const hostname = process.env.BIND_HOST || process.env.HOST || '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
 const app = next({ dev, hostname, port });

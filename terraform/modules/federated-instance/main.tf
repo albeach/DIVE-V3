@@ -503,8 +503,8 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
 
   user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
-  claim_value_type    = "JSON"
-  multivalued         = false
+  claim_value_type    = "String"
+  multivalued         = true
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true

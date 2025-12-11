@@ -36,6 +36,8 @@ module "instance" {
       instance_code = "GBR"
       instance_name = "United Kingdom"
       idp_url       = var.gbr_idp_url
+      idp_internal_url = var.gbr_idp_internal_url
+      disable_trust_manager = var.gbr_disable_trust_manager
       enabled       = true
       client_secret = var.gbr_client_secret
     }
