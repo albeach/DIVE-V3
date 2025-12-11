@@ -809,7 +809,6 @@ services:
 
   postgres-${code_lower}:
     image: postgres:15-alpine
-    container_name: dive-v3-postgres-${code_lower}
     environment:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
@@ -827,7 +826,6 @@ services:
 
   mongodb-${code_lower}:
     image: mongo:7-jammy
-    container_name: dive-v3-mongodb-${code_lower}
     environment:
       MONGO_INITDB_DATABASE: dive-v3-${code_lower}
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -845,7 +843,6 @@ services:
 
   redis-${code_lower}:
     image: redis:alpine
-    container_name: dive-v3-redis-${code_lower}
     volumes:
       - ${code_lower}_redis_data:/data
     networks:
@@ -863,7 +860,6 @@ services:
 
   keycloak-${code_lower}:
     image: quay.io/keycloak/keycloak:26.0.4
-    container_name: dive-v3-keycloak-${code_lower}
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
     environment:
       KC_DB: postgres
@@ -903,7 +899,6 @@ services:
   opa-${code_lower}:
     image: openpolicyagent/opa:0.68.0
     platform: linux/amd64
-    container_name: dive-v3-opa-${code_lower}
     command: run --server --addr :8181 /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
     ports:
       - "8181:8181"
@@ -921,7 +916,6 @@ services:
 
   opal-client-${code_lower}:
     image: permitio/opal-client:latest
-    container_name: dive-v3-opal-client-${code_lower}
     environment:
       OPAL_SERVER_URL: \${HUB_OPAL_URL:-https://hub.dive25.com:7002}
       OPAL_CLIENT_TOKEN: \${SPOKE_OPAL_TOKEN}
@@ -958,7 +952,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.dev
-    container_name: dive-v3-backend-${code_lower}
     command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
@@ -1025,7 +1018,6 @@ services:
     build:
       context: ../../frontend
       dockerfile: Dockerfile.dev
-    container_name: dive-v3-frontend-${code_lower}
     command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
     environment:
       NODE_ENV: development
@@ -1042,7 +1034,9 @@ services:
       NEXTAUTH_URL: $base_url
       NEXTAUTH_SECRET: \${AUTH_SECRET}
       # Database for NextAuth sessions
-      DATABASE_URL: postgres://keycloak:\${POSTGRES_PASSWORD}@postgres-${code_lower}:5432/keycloak
+      DATABASE_URL: postgres://keycloak:\${POSTGRES_PASSWORD_${code_upper}}@postgres-${code_lower}:5432/keycloak
+      # Explicit post-logout redirect to match Keycloak allowlist
+      AUTH_POST_LOGOUT_REDIRECT: $base_url
       # Keycloak OAuth config (internal URL)
       KEYCLOAK_URL: $idp_base_url
       KEYCLOAK_REALM: dive-v3-broker-${code_lower}
@@ -1083,7 +1077,6 @@ EOF
 
   cloudflared-${code_lower}:
     image: cloudflare/cloudflared:latest
-    container_name: dive-v3-tunnel-${code_lower}
 EOF
         
         # Check if we have a credentials file (auto-created tunnel) or token
@@ -1830,6 +1823,13 @@ spoke_up() {
         return 1
     fi
     
+    # Always load secrets for the specific instance (even in local) so compose
+    # receives instance-scoped *_<CODE> variables.
+    if ! load_gcp_secrets "$instance_code"; then
+        log_warn "Falling back to local defaults for $instance_code secrets"
+        load_local_defaults
+    fi
+    
     print_header
     echo -e "${BOLD}Starting Spoke Services:${NC} $(upper "$instance_code")"
     echo ""
@@ -1845,6 +1845,10 @@ spoke_up() {
         echo "  cp $spoke_dir/.env.template $spoke_dir/.env"
         return 1
     fi
+
+    # Force compose project per spoke to avoid cross-stack collisions when a global
+    # COMPOSE_PROJECT_NAME is already exported (e.g., hub set to dive-v3).
+    export COMPOSE_PROJECT_NAME="$code_lower"
     
     cd "$spoke_dir"
     docker compose up -d
@@ -1909,6 +1913,7 @@ spoke_down() {
         return 0
     fi
     
+    export COMPOSE_PROJECT_NAME="$code_lower"
     cd "$spoke_dir"
     docker compose down
     
@@ -1928,6 +1933,7 @@ spoke_logs() {
         return 1
     fi
     
+    export COMPOSE_PROJECT_NAME="$code_lower"
     cd "$spoke_dir"
     
     if [ -n "$service" ]; then

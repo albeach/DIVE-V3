@@ -10,6 +10,8 @@ version: '3.8'
 networks:
   dive-gbr-network:
     driver: bridge
+  dive-v3-shared-network:
+    external: true
 
 volumes:
   gbr_postgres_data:
@@ -29,7 +31,6 @@ services:
   
   postgres-gbr:
     image: postgres:15-alpine
-    container_name: dive-v3-postgres-gbr
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
@@ -48,7 +49,6 @@ services:
 
   mongodb-gbr:
     image: mongo:7
-    container_name: dive-v3-mongodb-gbr
     environment:
       MONGO_INITDB_DATABASE: dive-v3-gbr
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -67,7 +67,6 @@ services:
 
   redis-gbr:
     image: redis:alpine
-    container_name: dive-v3-redis-gbr
     command: >
       redis-server --requirepass ${REDIS_PASSWORD_GBR:?set REDIS_PASSWORD_GBR}
     ports:
@@ -90,7 +89,6 @@ services:
     build:
       context: ../../keycloak
       dockerfile: Dockerfile
-    container_name: dive-v3-keycloak-gbr
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     environment:
       KC_DB: postgres
@@ -100,6 +98,8 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?set KEYCLOAK_ADMIN_PASSWORD_GBR}
       KC_HOSTNAME: localhost
+      KC_HOSTNAME_URL: https://localhost:8446
+      KC_HOSTNAME_ADMIN_URL: https://localhost:8446
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
@@ -121,6 +121,7 @@ services:
         condition: service_healthy
     networks:
       - dive-gbr-network
+      - dive-v3-shared-network
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master || exit 1"]
       interval: 30s
@@ -134,7 +135,6 @@ services:
   opa-gbr:
     image: openpolicyagent/opa:latest
     platform: linux/amd64
-    container_name: dive-v3-opa-gbr
     command:
       - "run"
       - "--server"
@@ -157,7 +157,6 @@ services:
   # OPAL Client - Policy Sync from Hub
   opal-client-gbr:
     image: permitio/opal-client:latest
-    container_name: dive-v3-opal-client-gbr
     environment:
       # Hub OPAL Server connection
       OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
@@ -202,7 +201,6 @@ services:
     build:
       context: ../../kas
       dockerfile: Dockerfile
-    container_name: dive-v3-kas-gbr
     environment:
       NODE_ENV: development
       PORT: "8080"
@@ -230,7 +228,6 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.dev
-    container_name: dive-v3-backend-gbr
     command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
@@ -286,7 +283,6 @@ services:
     build:
       context: ../../frontend
       dockerfile: Dockerfile.dev
-    container_name: dive-v3-frontend-gbr
     command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
     environment:
       NODE_ENV: development
@@ -309,11 +305,17 @@ services:
       # NextAuth
       NEXTAUTH_URL: https://localhost:3003
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?set NEXTAUTH_SECRET_GBR}
+      # NextAuth adapter DB (reuse Postgres service)
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}@postgres-gbr:5432/keycloak
       # Keycloak client (server-side)
       KEYCLOAK_URL: https://localhost:8446
       KEYCLOAK_REALM: dive-v3-broker-gbr
       KEYCLOAK_CLIENT_ID: dive-v3-client-gbr
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
+      # Explicit post-logout redirect to match Keycloak allowlist
+      AUTH_POST_LOGOUT_REDIRECT: https://localhost:3003
+      # Explicitly set redirect for auth callback to match Keycloak allowlist
+      AUTH_REDIRECT_URI: https://localhost:3003/api/auth/callback/keycloak
       NEXT_PUBLIC_EXTERNAL_DOMAINS: https://localhost:3003,https://localhost:4003,https://localhost:8446,https://gbr-app.dive25.com,https://gbr-api.dive25.com,https://gbr-idp.dive25.com
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
@@ -343,7 +345,6 @@ services:
   
   cloudflared-gbr:
     image: cloudflare/cloudflared:latest
-    container_name: dive-v3-cloudflared-gbr
     command: tunnel --config /etc/cloudflared/config.yml run
     volumes:
       - ./cloudflared:/etc/cloudflared:ro

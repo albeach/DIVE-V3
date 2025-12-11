@@ -72,7 +72,14 @@ cmd_up() {
     print_header
     check_docker || exit 1
     load_secrets || exit 1
-    ensure_required_secrets_nonlocal || exit 1
+    case "$ENVIRONMENT" in
+        local|dev)
+            ensure_required_secrets_local || exit 1
+            ;;
+        *)
+            ensure_required_secrets_nonlocal || exit 1
+            ;;
+    esac
     apply_env_profile
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
         check_certs || exit 1
@@ -145,6 +152,26 @@ ensure_required_secrets_nonlocal() {
     for v in POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET; do
         if [ -z "${!v}" ]; then
             log_error "Missing required secret for env '$ENVIRONMENT': $v"
+            missing=$((missing+1))
+        fi
+    done
+    [ $missing -eq 0 ]
+}
+
+# Fail fast in local/dev when mandatory secrets are missing (prevents 500s on /api/idps/public)
+ensure_required_secrets_local() {
+    local missing=0
+    local required_vars=(
+        POSTGRES_PASSWORD
+        KEYCLOAK_ADMIN_PASSWORD
+        MONGO_PASSWORD
+        REDIS_PASSWORD
+        KEYCLOAK_CLIENT_SECRET
+        AUTH_SECRET
+    )
+    for v in "${required_vars[@]}"; do
+        if [ -z "${!v}" ]; then
+            log_error "Missing required secret for env '$ENVIRONMENT': $v (run './dive --env local secrets load' or export $v)"
             missing=$((missing+1))
         fi
     done
@@ -616,29 +643,35 @@ cmd_exec() {
         return 1
     fi
     
-    # Map short names to container names
+    # Map short names to container names (prefer V3 naming, fall back to pilot)
     case "$container" in
-        fe|frontend) container="dive-pilot-frontend" ;;
-        be|backend)  container="dive-pilot-backend" ;;
-        kc|keycloak) container="dive-pilot-keycloak" ;;
-        pg|postgres) container="dive-pilot-postgres" ;;
-        mongo|mongodb) container="dive-pilot-mongo" ;;
-        redis)       container="dive-pilot-redis" ;;
-        opa)         container="dive-pilot-opa" ;;
-        opal|opal-server) container="dive-pilot-opal-server" ;;
+        fe|frontend) container="${FRONTEND_CONTAINER:-dive-v3-frontend}";;
+        be|backend)  container="${BACKEND_CONTAINER:-dive-v3-backend}";;
+        kc|keycloak) container="${KEYCLOAK_CONTAINER:-dive-v3-keycloak}";;
+        pg|postgres) container="${POSTGRES_CONTAINER:-dive-v3-postgres}";;
+        mongo|mongodb) container="${MONGO_CONTAINER:-dive-v3-mongo}";;
+        redis)       container="${REDIS_CONTAINER:-dive-v3-redis}";;
+        opa)         container="${OPA_CONTAINER:-dive-v3-opa}";;
+        opal|opal-server) container="${OPAL_CONTAINER:-dive-v3-opal-server}";;
     esac
+
+    # Allow non-TTY exec for non-interactive environments (e.g., CI)
+    local exec_opts=("-it")
+    if [ "${NO_TTY:-}" = "1" ] || [ -n "${CI:-}" ]; then
+        exec_opts=("-i")
+    fi
     
     if [ "$DRY_RUN" = true ]; then
         if [ "$#" -gt 0 ]; then
-            log_dry "docker exec -it $container $*"
+            log_dry "docker exec ${exec_opts[*]} $container $*"
         else
-            log_dry "docker exec -it $container bash"
+            log_dry "docker exec ${exec_opts[*]} $container bash"
         fi
     else
         if [ "$#" -gt 0 ]; then
-            docker exec -it "$container" "$@"
+            docker exec "${exec_opts[@]}" "$container" "$@"
         else
-            docker exec -it "$container" bash
+            docker exec "${exec_opts[@]}" "$container" bash
         fi
     fi
 }

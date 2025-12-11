@@ -258,6 +258,7 @@ load_gcp_secrets() {
     fetch_first_secret MONGO_PASSWORD "dive-v3-mongodb-${inst_lc}"
     fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
     fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
+    fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
     # Align NextAuth/JWT to AUTH secret unless explicitly provided
     [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     [ -n "$AUTH_SECRET" ] && export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
@@ -277,11 +278,30 @@ load_gcp_secrets() {
     [ -z "$MONGO_PASSWORD" ] && log_warn "Missing: MONGO_PASSWORD" && ((missing++))
     [ -z "$AUTH_SECRET" ] && log_warn "Missing: AUTH_SECRET" && ((missing++))
     [ -z "$KEYCLOAK_CLIENT_SECRET" ] && log_warn "Missing: KEYCLOAK_CLIENT_SECRET" && ((missing++))
+    [ -z "$REDIS_PASSWORD" ] && log_warn "Missing: REDIS_PASSWORD" && ((missing++))
     
     if [ $missing -gt 0 ]; then
         log_error "Failed to load $missing critical secret(s)"
         return 1
     fi
+
+    # Mirror base secrets into instance-scoped env vars expected by generated compose
+    local inst_uc
+    inst_uc=$(echo "$inst_lc" | tr '[:lower:]' '[:upper:]')
+    map_if_empty() {
+        local target_var="$1"
+        local source_val="$2"
+        eval "local current_val=\${$target_var:-}"
+        if [ -z "$current_val" ] && [ -n "$source_val" ]; then
+            export "$target_var=$source_val"
+        fi
+    }
+    map_if_empty "POSTGRES_PASSWORD_${inst_uc}" "$POSTGRES_PASSWORD"
+    map_if_empty "MONGO_PASSWORD_${inst_uc}" "$MONGO_PASSWORD"
+    map_if_empty "REDIS_PASSWORD_${inst_uc}" "$REDIS_PASSWORD"
+    map_if_empty "KEYCLOAK_ADMIN_PASSWORD_${inst_uc}" "$KEYCLOAK_ADMIN_PASSWORD"
+    map_if_empty "KEYCLOAK_CLIENT_SECRET_${inst_uc}" "$KEYCLOAK_CLIENT_SECRET"
+    map_if_empty "NEXTAUTH_SECRET_${inst_uc}" "$NEXTAUTH_SECRET"
     
     log_success "Secrets loaded from GCP"
     return 0

@@ -44,15 +44,31 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
     source "${INSTANCE_DIR}/.env"
 fi
 
+# Detect local dev hostname from instance.json (if present)
+IDP_HOST_FROM_INSTANCE=""
+if command -v jq >/dev/null 2>&1 && [[ -f "${INSTANCE_DIR}/instance.json" ]]; then
+    IDP_HOST_FROM_INSTANCE=$(jq -r '.hostnames.idp // empty' "${INSTANCE_DIR}/instance.json")
+fi
+
 # Set defaults
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_GBR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
 
 # Use backend container for API calls (has curl, on same network)
-API_CONTAINER="dive-v3-backend-${CODE_LOWER}"
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+API_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
+KC_CONTAINER="${PROJECT_PREFIX}-keycloak-${CODE_LOWER}-1"
 
 # Internal URL for API calls (via Docker network using Keycloak container name)
 KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
-PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
+# Default public URL:
+# - For local dev (idp host=localhost), prefer the public localhost URL (8446) so browser redirects never point
+#   to the internal hostname (keycloak-<code>).
+# - Otherwise fall back to cloud hostname
+if [[ "${IDP_HOST_FROM_INSTANCE}" == "localhost" ]]; then
+    PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://localhost:8446}"
+else
+    PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
+fi
 
 # Helper function to call Keycloak API via Docker exec (uses backend container)
 kc_curl() {
@@ -61,6 +77,9 @@ kc_curl() {
 
 CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
 FRONTEND_URL="${FRONTEND_URL:-https://${CODE_LOWER}-app.dive25.com}"
+# Derive a localhost fallback that matches the spoke's port (default 3000 if not localhost)
+FRONTEND_PORT_FROM_URL=$(echo "$FRONTEND_URL" | sed -n 's#https://localhost:\\([0-9]\\+\\).*#\\1#p')
+LOCALHOST_FALLBACK="https://localhost:${FRONTEND_PORT_FROM_URL:-3000}"
 
 # Map country codes to full names for Keycloak theme detection (POSIX-friendly)
 case "$CODE_LOWER" in
@@ -145,7 +164,8 @@ if [[ -n "$REALM_EXISTS" ]]; then
             \"adminTheme\": \"keycloak.v2\",
             \"emailTheme\": \"keycloak\",
             \"attributes\": {
-                \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\"
+                \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\",
+                \"backchannelLogoutUrl\": \"${PUBLIC_KEYCLOAK_URL}/realms/${REALM_NAME}/protocol/openid-connect/logout\"
             }
         }" 2>/dev/null
     log_success "Updated: displayName='${REALM_DISPLAY_NAME}', theme='${THEME_NAME}', frontendUrl='${PUBLIC_KEYCLOAK_URL}'"
@@ -173,7 +193,8 @@ else
             \"ssoSessionMaxLifespan\": 28800,
             \"offlineSessionMaxLifespan\": 2592000,
             \"attributes\": {
-                \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\"
+                \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\",
+                \"backchannelLogoutUrl\": \"${PUBLIC_KEYCLOAK_URL}/realms/${REALM_NAME}/protocol/openid-connect/logout\"
             }
         }" 2>/dev/null
     log_success "Realm created: ${REALM_NAME} (${COUNTRY_FULL_NAME}) with theme: ${THEME_NAME}, frontendUrl: ${PUBLIC_KEYCLOAK_URL}"
@@ -219,6 +240,40 @@ CLIENT_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
 if [[ -n "$CLIENT_EXISTS" ]]; then
     log_warn "Client already exists, updating..."
     CLIENT_UUID="$CLIENT_EXISTS"
+    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"redirectUris\": [
+                \"${FRONTEND_URL}\",
+                \"${FRONTEND_URL}/*\",
+                \"${FRONTEND_URL}/api/auth/callback/keycloak\",
+                \"${LOCALHOST_FALLBACK}\",
+                \"${LOCALHOST_FALLBACK}/*\",
+                \"${LOCALHOST_FALLBACK}/api/auth/callback/keycloak\",
+                \"https://localhost:3003\",
+                \"https://localhost:3003/*\",
+                \"https://localhost:3003/api/auth/callback/keycloak\",
+                \"http://localhost:3003\",
+                \"http://localhost:3003/*\",
+                \"http://localhost:3003/api/auth/callback/keycloak\"
+            ],
+            \"webOrigins\": [
+                \"${FRONTEND_URL}\",
+                \"${LOCALHOST_FALLBACK}\",
+                \"${LOCALHOST_FALLBACK%:*}\",
+                \"https://localhost:3003\",
+                \"http://localhost:3003\"
+            ],
+            \"attributes\": {
+                \"pkce.code.challenge.method\": \"S256\",
+                \"post.logout.redirect.uris\": \"${FRONTEND_URL} ${FRONTEND_URL}/* ${FRONTEND_URL}/api/auth/logout-callback ${LOCALHOST_FALLBACK} ${LOCALHOST_FALLBACK}/* ${LOCALHOST_FALLBACK}/api/auth/logout-callback https://localhost:3003 https://localhost:3003/* https://localhost:3003/api/auth/logout-callback http://localhost:3003 http://localhost:3003/* http://localhost:3003/api/auth/logout-callback\",
+                \"frontchannel.logout.url\": \"https://localhost:3003/api/auth/logout-callback\",
+                \"backchannel.logout.session.required\": \"true\",
+                \"backchannel.logout.revoke.offline.tokens\": \"false\"
+            },
+            \"frontchannelLogout\": true
+        }" 2>/dev/null
 else
     # Create client
     kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients" \
@@ -231,12 +286,19 @@ else
             \"clientAuthenticatorType\": \"client-secret\",
             \"secret\": \"${CLIENT_SECRET}\",
             \"redirectUris\": [
+                \"${FRONTEND_URL}\",
                 \"${FRONTEND_URL}/*\",
-                \"https://localhost:3000/*\"
+                \"${FRONTEND_URL}/api/auth/callback/keycloak\",
+                \"${LOCALHOST_FALLBACK}\",
+                \"${LOCALHOST_FALLBACK}/*\",
+                \"${LOCALHOST_FALLBACK}/api/auth/callback/keycloak\"
             ],
             \"webOrigins\": [
                 \"${FRONTEND_URL}\",
-                \"https://localhost:3000\"
+                \"${LOCALHOST_FALLBACK}\",
+                \"${LOCALHOST_FALLBACK%:*}\",
+                \"https://localhost:3003\",
+                \"http://localhost:3003\"
             ],
             \"standardFlowEnabled\": true,
             \"directAccessGrantsEnabled\": false,
@@ -244,8 +306,12 @@ else
             \"protocol\": \"openid-connect\",
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\",
-                \"post.logout.redirect.uris\": \"${FRONTEND_URL}/*\"
-            }
+                \"post.logout.redirect.uris\": \"${FRONTEND_URL} ${FRONTEND_URL}/* ${FRONTEND_URL}/api/auth/logout-callback ${LOCALHOST_FALLBACK} ${LOCALHOST_FALLBACK}/* ${LOCALHOST_FALLBACK}/api/auth/logout-callback https://localhost:3003 https://localhost:3003/* https://localhost:3003/api/auth/logout-callback http://localhost:3003 http://localhost:3003/* http://localhost:3003/api/auth/logout-callback\",
+                \"frontchannel.logout.url\": \"https://localhost:3003/api/auth/logout-callback\",
+                \"backchannel.logout.session.required\": \"true\",
+                \"backchannel.logout.revoke.offline.tokens\": \"false\"
+            },
+            \"frontchannelLogout\": true
         }" 2>/dev/null
     
     # Get client UUID
@@ -353,6 +419,161 @@ kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${C
     }' 2>/dev/null || true
 
 log_success "DIVE attribute mappers created"
+
+# =============================================================================
+# Ensure Hub Federation Client (for broker→spoke callback)
+# =============================================================================
+log_step "Ensuring federation client for hub (dive-v3-usa-federation)..."
+
+HUB_IDP_URL="${HUB_IDP_URL:-https://localhost:8443}"
+FED_CLIENT_ID="dive-v3-usa-federation"
+FED_REDIRECT_URI="${HUB_IDP_URL}/realms/dive-v3-broker/broker/${CODE_LOWER}-federation/endpoint"
+
+EXISTING_FED_CLIENT=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${FED_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
+FED_CLIENT_UUID="$EXISTING_FED_CLIENT"
+
+if [[ -n "$EXISTING_FED_CLIENT" ]]; then
+    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${EXISTING_FED_CLIENT}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"redirectUris\": [\"${FED_REDIRECT_URI}\"],
+            \"webOrigins\": [\"${HUB_IDP_URL}\"],
+            \"publicClient\": true
+        }" 2>/dev/null
+    log_info "Federation client exists: ${FED_CLIENT_ID} (updated redirects/webOrigins)"
+else
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"clientId\": \"${FED_CLIENT_ID}\",
+            \"name\": \"DIVE V3 Federation - HUB\",
+            \"enabled\": true,
+            \"publicClient\": true,
+            \"redirectUris\": [\"${FED_REDIRECT_URI}\"],
+            \"webOrigins\": [\"${HUB_IDP_URL}\"],
+            \"protocol\": \"openid-connect\",
+            \"standardFlowEnabled\": true,
+            \"directAccessGrantsEnabled\": false
+        }" 2>/dev/null
+    log_success "Federation client created: ${FED_CLIENT_ID}"
+    FED_CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${FED_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
+fi
+
+# Ensure the federation client exposes GBR attributes to the hub
+if [[ -n "$FED_CLIENT_UUID" ]]; then
+    ensure_mapper() {
+        local mapper_name="$1"
+        local user_attr="$2"
+        local claim_name="$3"
+        local multivalued="${4:-false}"
+        local json_type="${5:-String}"
+        local existing
+        existing=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" 2>/dev/null | \
+            jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty')
+        local payload
+        payload=$(cat <<EOF
+{
+  "name": "${mapper_name}",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-usermodel-attribute-mapper",
+  "config": {
+    "user.attribute": "${user_attr}",
+    "claim.name": "${claim_name}",
+    "id.token.claim": "true",
+    "access.token.claim": "true",
+    "userinfo.token.claim": "true",
+    "jsonType.label": "${json_type}",
+    "multivalued": "${multivalued}"
+  }
+}
+EOF
+)
+        if [[ -n "$existing" ]]; then
+            kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${FED_CLIENT_UUID}/protocol-mappers/models/${existing}" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "${payload}" >/dev/null 2>&1
+        else
+            kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "${payload}" >/dev/null 2>&1
+        fi
+    }
+    ensure_mapper "clearance" "clearance" "clearance" "false" "String"
+    ensure_mapper "countryOfAffiliation" "countryOfAffiliation" "countryOfAffiliation" "false" "String"
+    ensure_mapper "uniqueID" "uniqueID" "uniqueID" "false" "String"
+    ensure_mapper "acpCOI" "acpCOI" "acpCOI" "true" "String"
+fi
+
+# =============================================================================
+# Ensure USA Hub Identity Provider (so spoke can federate to hub)
+# =============================================================================
+log_step "Ensuring USA hub IdP (usa-federation) is configured..."
+
+USA_IDP_ALIAS="usa-federation"
+USA_IDP_DISPLAY="DIVE V3 - United States"
+HUB_IDP_PUBLIC_URL="${HUB_IDP_URL:-https://localhost:8443}"
+HUB_IDP_INTERNAL_URL="${HUB_IDP_INTERNAL_URL:-${HUB_IDP_PUBLIC_URL}}"
+HUB_IDP_DISABLE_TRUST="${HUB_IDP_DISABLE_TRUST:-true}"
+# Use the hub's incoming federation client for this spoke (dive-v3-<spoke>-federation)
+USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-${CODE_LOWER}-federation}"
+# Allow multiple env var fallbacks for the client secret (loaded via DIVE CLI secrets sync)
+USA_IDP_CLIENT_SECRET="${USA_IDP_CLIENT_SECRET:-${FEDERATION_CLIENT_SECRET_USA_GBR:-${FEDERATION_CLIENT_SECRET_GBR_USA:-${HUB_IDP_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-}}}}}"
+
+if [[ -z "${USA_IDP_CLIENT_SECRET}" ]]; then
+    log_warn "Hub federation client secret not set (USA_IDP_CLIENT_SECRET / FEDERATION_CLIENT_SECRET_*). Skipping IdP create/update."
+else
+    USA_IDP_PAYLOAD="{
+        \"alias\": \"${USA_IDP_ALIAS}\",
+        \"displayName\": \"${USA_IDP_DISPLAY}\",
+        \"providerId\": \"oidc\",
+        \"enabled\": true,
+        \"updateProfileFirstLoginMode\": \"off\",
+        \"storeToken\": true,
+        \"addReadTokenRoleOnCreate\": true,
+        \"trustEmail\": true,
+        \"firstBrokerLoginFlowAlias\": \"first broker login\",
+        \"config\": {
+            \"clientId\": \"${USA_IDP_CLIENT_ID}\",
+            \"clientSecret\": \"${USA_IDP_CLIENT_SECRET}\",
+            \"defaultScope\": \"openid profile email\",
+            \"authorizationUrl\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker/protocol/openid-connect/auth\",
+            \"tokenUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker/protocol/openid-connect/token\",
+            \"logoutUrl\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker/protocol/openid-connect/logout\",
+            \"userInfoUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker/protocol/openid-connect/userinfo\",
+            \"issuer\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker\",
+            \"jwksUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker/protocol/openid-connect/certs\",
+            \"validateSignature\": \"true\",
+            \"useJwksUrl\": \"true\",
+            \"backchannelSupported\": \"true\",
+            \"disable-trust-manager\": \"${HUB_IDP_DISABLE_TRUST}\",
+            \"pkceEnabled\": \"true\"
+        }
+    }"
+
+    EXISTING_USA_IDP=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}" 2>/dev/null | jq -r '.alias // empty')
+
+    if [[ -n "${EXISTING_USA_IDP}" ]]; then
+        kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "${USA_IDP_PAYLOAD}" 2>/dev/null
+        log_info "Updated existing IdP: ${USA_IDP_ALIAS}"
+    else
+        kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "${USA_IDP_PAYLOAD}" 2>/dev/null
+        log_success "Created IdP: ${USA_IDP_ALIAS}"
+    fi
+fi
 
 # =============================================================================
 # Summary

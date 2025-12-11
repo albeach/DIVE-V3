@@ -32,7 +32,12 @@ fi
 
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
-MONGODB_CONTAINER="dive-v3-mongodb-${CODE_LOWER}"
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+container_name() {
+    local service="$1"
+    echo "${PROJECT_PREFIX}-${service}-1"
+}
+MONGODB_CONTAINER="$(container_name "mongodb-${CODE_LOWER}")"
 DB_NAME="dive-v3-${CODE_LOWER}"
 
 # Load .env for credentials
@@ -40,6 +45,12 @@ INSTANCE_DIR="instances/${CODE_LOWER}"
 if [[ -f "${INSTANCE_DIR}/.env" ]]; then
     source "${INSTANCE_DIR}/.env"
 fi
+
+# Mongo connection settings (allow override via env/.env)
+MONGO_HOST="${MONGO_HOST:-mongodb-${CODE_LOWER}}"
+MONGO_PORT="${MONGO_PORT:-27017}"
+MONGO_USERNAME="${MONGO_USERNAME:-admin}"
+MONGO_PASSWORD="${MONGO_PASSWORD:-${MONGO_PASSWORD_GBR:-}}"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"

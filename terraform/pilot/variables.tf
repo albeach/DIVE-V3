@@ -16,6 +16,18 @@ variable "gbr_idp_url" {
   default     = "https://gbr-idp.dive25.com"
 }
 
+variable "gbr_idp_internal_url" {
+  description = "Internal/back-channel URL for GBR IdP (use http://keycloak-gbr:8080 for local)"
+  type        = string
+  default     = "http://keycloak-gbr:8080"
+}
+
+variable "gbr_disable_trust_manager" {
+  description = "Disable trust manager for GBR IdP (set true for local self-signed)"
+  type        = bool
+  default     = true
+}
+
 variable "gbr_client_secret" {
   description = "Client secret for GBR federation client"
   type        = string

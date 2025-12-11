@@ -38,7 +38,7 @@ import {
 // TYPES
 // ============================================
 
-export type AuditEventType = 
+export type AuditEventType =
   | 'ACCESS_GRANT'
   | 'ACCESS_DENY'
   | 'ACCESS_CHECK'

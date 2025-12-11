@@ -32,8 +32,13 @@ if [[ -z "$INSTANCE_CODE" ]]; then
 fi
 
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
-POSTGRES_CONTAINER="dive-v3-postgres-${CODE_LOWER}"
-MONGODB_CONTAINER="dive-v3-mongodb-${CODE_LOWER}"
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+container_name() {
+    local service="$1"
+    echo "${PROJECT_PREFIX}-${service}-1"
+}
+POSTGRES_CONTAINER="$(container_name "postgres-${CODE_LOWER}")"
+MONGODB_CONTAINER="$(container_name "mongodb-${CODE_LOWER}")"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -164,6 +169,7 @@ echo "╚═══════════════════════�
 echo ""
 
 log_info "Next: Run ./scripts/spoke-init/init-keycloak.sh ${INSTANCE_CODE}"
+
 
 
 

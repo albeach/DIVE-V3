@@ -16,27 +16,27 @@ console.log('🚀 DIVE V3 - Phase 1 Notifications System Test\n');
 
 // Simulate the notification types implemented in Phase 1
 const notificationExamples = [
-  {
-    type: 'access_granted',
-    title: 'Access Granted',
-    message: 'Your request to access "SECRET Document Alpha" (SECRET) has been approved.',
-    severity: 'success',
-    triggeredBy: 'Audit Service - logAccessGrant()'
-  },
-  {
-    type: 'access_denied',
-    title: 'Access Denied',
-    message: 'Access denied for "TOP_SECRET Briefing" (TOP_SECRET) due to Insufficient clearance level.',
-    severity: 'error',
-    triggeredBy: 'Audit Service - logAccessDeny()'
-  },
-  {
-    type: 'upload_complete',
-    title: 'Upload Complete',
-    message: 'Your document "Field Report.pdf" has been uploaded successfully.',
-    severity: 'success',
-    triggeredBy: 'Upload Controller - uploadFileHandler()'
-  }
+    {
+        type: 'access_granted',
+        title: 'Access Granted',
+        message: 'Your request to access "SECRET Document Alpha" (SECRET) has been approved.',
+        severity: 'success',
+        triggeredBy: 'Audit Service - logAccessGrant()'
+    },
+    {
+        type: 'access_denied',
+        title: 'Access Denied',
+        message: 'Access denied for "TOP_SECRET Briefing" (TOP_SECRET) due to Insufficient clearance level.',
+        severity: 'error',
+        triggeredBy: 'Audit Service - logAccessDeny()'
+    },
+    {
+        type: 'upload_complete',
+        title: 'Upload Complete',
+        message: 'Your document "Field Report.pdf" has been uploaded successfully.',
+        severity: 'success',
+        triggeredBy: 'Upload Controller - uploadFileHandler()'
+    }
 ];
 
 console.log('✅ PHASE 1 FEATURES IMPLEMENTED:\n');
@@ -74,11 +74,11 @@ console.log('   - Better empty state with explanation of notification triggers\n
 console.log('📋 NOTIFICATION TYPES DEMO:\n');
 
 notificationExamples.forEach((notification, index) => {
-  console.log(`${index + 1}. ${notification.title}`);
-  console.log(`   Type: ${notification.type} (${notification.severity})`);
-  console.log(`   Message: ${notification.message}`);
-  console.log(`   Triggered by: ${notification.triggeredBy}`);
-  console.log('');
+    console.log(`${index + 1}. ${notification.title}`);
+    console.log(`   Type: ${notification.type} (${notification.severity})`);
+    console.log(`   Message: ${notification.message}`);
+    console.log(`   Triggered by: ${notification.triggeredBy}`);
+    console.log('');
 });
 
 console.log('🎯 SUCCESS CRITERIA MET:\n');
@@ -98,3 +98,4 @@ console.log('- Email notifications with templates');
 console.log('- Advanced notification preferences');
 console.log('- Bulk operations and management');
 console.log('- Performance monitoring and analytics\n');
+

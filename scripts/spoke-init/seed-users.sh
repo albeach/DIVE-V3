@@ -56,10 +56,11 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
 fi
 
 # Use backend container for API calls (has curl, on same network)
-API_CONTAINER="dive-v3-backend-${CODE_LOWER}"
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+API_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
 KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
 PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_GBR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
 
 # Helper function to call Keycloak API via Docker exec (uses backend container)
 kc_curl() {
@@ -98,6 +99,48 @@ map_clearance_coi() {
         4) echo "NATO-COSMIC,FVEY" ;;
         *) echo "" ;;
     esac
+}
+
+# Explicit lookup tables for clearance/COI so attributes are never blank
+declare -A CLEARANCE_LEVELS=(
+    [1]="UNCLASSIFIED"
+    [2]="CONFIDENTIAL"
+    [3]="SECRET"
+    [4]="TOP_SECRET"
+)
+
+declare -A CLEARANCE_COIS=(
+    [1]=""
+    [2]=""
+    [3]="NATO"
+    [4]="NATO-COSMIC,FVEY"
+)
+
+# Convert comma-separated COI string into a JSON array, trimming whitespace
+build_json_array() {
+    local raw="$1"
+    if [[ -z "$raw" ]]; then
+        echo ""
+        return
+    fi
+
+    local items=()
+    IFS=',' read -ra parts <<<"$raw"
+    for part in "${parts[@]}"; do
+        local trimmed
+        trimmed="$(echo "$part" | xargs)"
+        if [[ -n "$trimmed" ]]; then
+            items+=("\"${trimmed}\"")
+        fi
+    done
+
+    if [[ ${#items[@]} -eq 0 ]]; then
+        echo ""
+    else
+        local joined
+        IFS=','; joined="${items[*]}"; unset IFS
+        echo "[${joined}]"
+    fi
 }
 
 # Country-specific settings (POSIX-friendly)
@@ -258,6 +301,8 @@ create_user() {
     local coi="$6"
     local password="$7"
     local is_admin="$8"
+    local acp_coi_json
+    acp_coi_json=$(build_json_array "$coi")
     
     # Check if user exists
     local user_exists=$(kc_curl -H "Authorization: Bearer $TOKEN" \
@@ -265,14 +310,30 @@ create_user() {
         jq -r '.[0].id // empty')
     
     if [[ -n "$user_exists" ]]; then
-        log_info "User exists: ${username}"
+        log_info "User exists: ${username} (updating attributes)"
+        # Update attributes on existing user to ensure claims are present
+        local attrs_update="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"]"
+        if [[ -n "$acp_coi_json" ]]; then
+            attrs_update="${attrs_update}, \"acpCOI\": ${acp_coi_json}"
+        fi
+        attrs_update="${attrs_update}}"
+        kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_exists}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"email\": \"${email}\",
+                \"emailVerified\": true,
+                \"firstName\": \"${first_name}\",
+                \"lastName\": \"${last_name}\",
+                \"attributes\": ${attrs_update}
+            }" >/dev/null 2>&1 || true
         return 0
     fi
     
     # Build attributes JSON
     local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"]"
-    if [[ -n "$coi" ]]; then
-        attrs="${attrs}, \"acpCOI\": [\"${coi}\"]"
+    if [[ -n "$acp_coi_json" ]]; then
+        attrs="${attrs}, \"acpCOI\": ${acp_coi_json}"
     fi
     attrs="${attrs}}"
     
@@ -352,7 +413,13 @@ for level in 1 2 3 4; do
     username="testuser-${CODE_LOWER}-${level}"
     email="${username}@${CODE_LOWER}.dive25.com"
     clearance="${CLEARANCE_LEVELS[$level]}"
+    if [[ -z "$clearance" ]]; then
+        clearance="$(map_clearance_level "$level")"
+    fi
     coi="${CLEARANCE_COIS[$level]}"
+    if [[ -z "$coi" ]]; then
+        coi="$(map_clearance_coi "$level")"
+    fi
     
     # Determine first/last name based on level
     case $level in

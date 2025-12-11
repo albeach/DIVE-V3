@@ -28,6 +28,12 @@ fi
 
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+
+container_name() {
+    local service="$1"
+    echo "${PROJECT_PREFIX}-${service}-1"
+}
 
 echo ""
 echo -e "${MAGENTA}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
@@ -59,7 +65,7 @@ MAX_WAIT=120
 WAITED=0
 
 for SERVICE in "${SERVICES[@]}"; do
-    CONTAINER="dive-v3-${SERVICE}"
+    CONTAINER="$(container_name "${SERVICE}")"
     echo -n "  Waiting for ${CONTAINER}... "
     
     while ! docker ps --format '{{.Names}} {{.Status}}' | grep -q "${CONTAINER}.*healthy"; do
@@ -142,6 +148,7 @@ echo -e "${GREEN}║    See output above for generated passwords                
 echo -e "${GREEN}║                                                                          ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
+
 
 
 
