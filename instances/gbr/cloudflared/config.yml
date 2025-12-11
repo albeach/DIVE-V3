@@ -30,7 +30,7 @@ ingress:
 
   # KAS
   - hostname: gbr-kas.dive25.com
-    service: https://kas-gbr:8080
+    service: http://kas-gbr:8080
     originRequest:
       noTLSVerify: true
 

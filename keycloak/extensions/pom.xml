@@ -75,6 +75,13 @@
             <groupId>redis.clients</groupId>
             <artifactId>jedis</artifactId>
             <version>5.0.0</version>
+            <exclusions>
+                <!-- Rely on Keycloak's SLF4J 2.x to avoid version mismatch warnings -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 

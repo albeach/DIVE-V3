@@ -3,16 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
-interface RouteParams {
-  params: {
-    id: string;
-  };
-}
-
 /**
  * POST /api/notifications/[id]/read - Mark notification as read
  */
-export async function POST(request: NextRequest, { params }: RouteParams) {
+export async function POST(request: NextRequest, context: any) {
+  const { params } = context;
   try {
     const session = await auth();
 
@@ -68,7 +63,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 /**
  * DELETE /api/notifications/[id] - Delete notification
  */
-export async function DELETE(request: NextRequest, { params }: RouteParams) {
+export async function DELETE(request: NextRequest, context: any) {
+  const { params } = context;
   try {
     const session = await auth();
 

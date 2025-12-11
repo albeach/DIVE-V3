@@ -1,0 +1,10 @@
+# Keep Docker build contexts clean and avoid macOS artifacts
+.git
+node_modules
+**/.DS_Store
+**/._*
+dist
+build
+.next
+npm-debug.log*
+yarn-error.log*

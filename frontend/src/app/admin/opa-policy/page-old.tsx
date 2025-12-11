@@ -20,6 +20,7 @@ import PageLayout from '@/components/layout/page-layout';
 import PolicyComparisonView from '@/components/admin/policy-comparison-view';
 import { PolicyExplorer } from '@/components/admin/policy-explorer';
 import { EnhancedRuleToggle } from '@/components/admin/enhanced-rule-toggle';
+import { PolicyRuleGroup } from '@/components/admin/policy-rule-group';
 import { 
     extractAllRules, 
     groupRulesByCategory, 
