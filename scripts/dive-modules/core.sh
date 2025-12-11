@@ -452,7 +452,13 @@ ensure_terraform() {
 
 apply_terraform_local() {
     case "$ENVIRONMENT" in
-        local|dev) ;;
+        local)
+            if [ "${APPLY_TF_LOCAL:-}" != "true" ]; then
+                log_step "Skipping Terraform for local env (set APPLY_TF_LOCAL=true to run)"
+                return 0
+            fi
+            ;;
+        dev) ;;
         *) return 0 ;;
     esac
 
@@ -490,6 +496,14 @@ apply_terraform_local() {
     [ -n "${TF_VAR_admin_user_password:-}" ] && var_args+=(-var "admin_user_password=${TF_VAR_admin_user_password}")
 
     wait_for_keycloak_admin || { log_error "Keycloak admin not reachable for Terraform"; return 1; }
+
+    # Ensure Terraform workdir is owned/writable by the invoking user to prevent
+    # recurring permission errors on .terraform/modules/modules.json when the CLI
+    # is run after root-created artifacts.
+    local tf_work="${tf_dir}/.terraform"
+    mkdir -p "${tf_work}/modules" || true
+    chown -R "$(id -u)":"$(id -g)" "${tf_work}" 2>/dev/null || true
+    chmod -R u+rwX "${tf_work}" 2>/dev/null || true
 
     local attempts=2
     while [ "$attempts" -gt 0 ]; do

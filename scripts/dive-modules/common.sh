@@ -259,6 +259,8 @@ load_gcp_secrets() {
     fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
     fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
     fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
+    # Make secrets available to child processes (docker compose, terraform)
+    export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
     # Align NextAuth/JWT to AUTH secret unless explicitly provided
     [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     [ -n "$AUTH_SECRET" ] && export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
@@ -312,6 +314,7 @@ load_local_defaults() {
     export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-KeycloakAdminSecure123!}"
     export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-LocalPgSecure123!}"
     export MONGO_PASSWORD="${MONGO_PASSWORD:-LocalMongoSecure123!}"
+    export REDIS_PASSWORD="${REDIS_PASSWORD:-LocalRedisSecure123!}"
     export AUTH_SECRET="${AUTH_SECRET:-LocalAuthSecure123!}"
     export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-LocalClientSecret123!}"
     export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
@@ -325,6 +328,26 @@ load_local_defaults() {
 load_secrets() {
     case "$ENVIRONMENT" in
         local|dev)
+            # Prefer GCP secrets in dev by default (can be disabled via DEV_USE_GCP_SECRETS=false).
+            # For local, only use GCP when explicitly requested.
+            local want_gcp=false
+            if [ "$ENVIRONMENT" = "dev" ]; then
+                if [ "${DEV_USE_GCP_SECRETS:-${USE_GCP_SECRETS:-true}}" = "true" ]; then
+                    want_gcp=true
+                fi
+            else
+                if [ "${USE_GCP_SECRETS:-}" = "true" ] || [ "${DEV_USE_GCP_SECRETS:-}" = "true" ]; then
+                    want_gcp=true
+                fi
+            fi
+
+            if [ "$want_gcp" = true ]; then
+                if load_gcp_secrets "$INSTANCE"; then
+                    return 0
+                else
+                    log_warn "GCP secrets load failed; falling back to local defaults for env '$ENVIRONMENT'"
+                fi
+            fi
             load_local_defaults
             ;;
         gcp|pilot|prod|staging)
@@ -341,22 +364,27 @@ apply_env_profile() {
     local inst_lc
     inst_lc=$(lower "$INSTANCE")
 
+    # Isolate docker compose projects per instance to avoid shared volumes/credentials.
+    # Respect an existing override if the caller set COMPOSE_PROJECT_NAME explicitly.
+    if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+        export COMPOSE_PROJECT_NAME="dive-v3-${inst_lc}"
+    fi
+
     case "$ENVIRONMENT" in
         local|dev)
-            export KEYCLOAK_HOSTNAME="localhost"
-            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://localhost:3000}"
-            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}"
-            # Split internal vs public URLs
-            export KEYCLOAK_URL_PUBLIC="${KEYCLOAK_URL_PUBLIC:-https://localhost:8443}"
+            # Dev defaults to tunnel hosts; local still works via overrides/env.
+            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.dive25.com}"
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker}"
+            export KEYCLOAK_URL_PUBLIC="${KEYCLOAK_URL_PUBLIC:-https://${inst_lc}-idp.dive25.com}"
             export KEYCLOAK_URL_INTERNAL="${KEYCLOAK_URL_INTERNAL:-https://keycloak:8443}"
             export KEYCLOAK_URL="${KEYCLOAK_URL_INTERNAL}"
             export CERT_HOST_SCOPE="${CERT_HOST_SCOPE:-local_minimal}"
             export SKIP_CERT_REGEN_IF_PRESENT="${SKIP_CERT_REGEN_IF_PRESENT:-true}"
-            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}"
-            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://localhost:4000}"
-            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}"
-            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}"
-            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000}"
+            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.dive25.com}"
+            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.dive25.com}"
+            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.dive25.com}"
+            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${inst_lc}-idp.dive25.com}"
+            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.dive25.com,https://${inst_lc}-api.dive25.com,https://${inst_lc}-idp.dive25.com,http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000}"
             ;;
         gcp|pilot|prod|staging)
             export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${inst_lc}-idp.dive25.com}"

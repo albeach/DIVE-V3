@@ -458,7 +458,7 @@ export default function CommandPaletteSearch({
     // Phase 2: Show field help on : prefix
     if (queryLower.endsWith(':') && enableAdvancedSyntax) {
       AVAILABLE_FIELDS.forEach(field => {
-        const fieldName = (field as any).field || field.name;
+        const fieldName = (field as any).field || (field as any).name || '';
         results.push({
           id: `field-${fieldName}`,
           type: 'syntax',
@@ -471,8 +471,9 @@ export default function CommandPaletteSearch({
           },
         });
 
-        if (Array.isArray(field.examples)) {
-          field.examples.forEach((example: string, idx: number) => {
+        const examples = (field as any).examples;
+        if (Array.isArray(examples)) {
+          examples.forEach((example: string, idx: number) => {
             results.push({
               id: `field-example-${fieldName}-${idx}`,
               type: 'syntax',
@@ -623,14 +624,15 @@ export default function CommandPaletteSearch({
     // Field suggestions when typing field:
     if (queryLower.endsWith(':')) {
       AVAILABLE_FIELDS.forEach((field, idx) => {
+        const displayName = (field as any).name || (field as any).field || 'field';
         results.push({
           id: `field-${idx}`,
           type: 'syntax',
-          title: `${field.name}:`,
+          title: `${displayName}:`,
           subtitle: field.description || 'Field',
           icon: <Hash className="w-4 h-4 text-indigo-500" />,
           action: () => {
-            setQuery(`${field.name}:`);
+            setQuery(`${displayName}:`);
           },
         });
       });
@@ -718,14 +720,7 @@ export default function CommandPaletteSearch({
           action: () => {
             // Track click analytics
             trackResultClick(query, resource.resourceId, index, 'command_palette');
-            onResourceSelect({
-              resourceId: resource.resourceId,
-              title: resource.title,
-              classification: resource.classification,
-              releasabilityTo: resource.releasabilityTo,
-              COI: resource.COI,
-              encrypted: resource.encrypted,
-            });
+            onResourceSelect(resource.resourceId as any);
             saveToRecent(query, serverResults.length);
             setIsOpen(false);
           },
@@ -755,14 +750,7 @@ export default function CommandPaletteSearch({
           action: () => {
             // Track click analytics
             trackResultClick(query, resource.resourceId, index, 'command_palette');
-            onResourceSelect({
-              resourceId: resource.resourceId,
-              title: resource.title,
-              classification: resource.classification,
-              releasabilityTo: resource.releasabilityTo,
-              COI: resource.COI,
-              encrypted: resource.encrypted,
-            });
+            onResourceSelect(resource.resourceId as any);
             saveToRecent(query, matchingResources.length);
             setIsOpen(false);
           },

@@ -31,19 +31,20 @@ export interface IRuleCategory {
 export function extractRules(content: string): IPolicyRule[] {
     const rules: IPolicyRule[] = [];
     const lines = content.split('\n');
-    
+
     // Patterns to identify different rule types
     const violationPattern = /^(is_not_\w+|is_\w+_violation|is_\w+_blocked|is_\w+_exceeded)\s*:=\s*/;
     const checkPattern = /^(check_\w+|is_\w+_valid|has_\w+)\s*:=\s*/;
     const helperPattern = /^(\w+_rank|\w+_levels|valid_\w+)\s*:=\s*/;
     const decisionPattern = /^(allow|decision|reason|obligations)\s*:=\s*/;
     const defaultPattern = /^default\s+(\w+)\s*:=\s*/;
-    
+
     // Track which rules are enabled in the allow block
-    const allowBlockMatch = content.match(/allow\s+if\s*\{([^}]+)\}/s);
+    // Match allow block without using the /s flag to stay compatible with older targets
+    const allowBlockMatch = content.match(/allow\s+if\s*\{([\s\S]*?)\}/);
     const enabledRules = new Set<string>();
     const allowRules = new Set<string>();
-    
+
     if (allowBlockMatch) {
         const allowContent = allowBlockMatch[1];
         // Find all "not ruleName" patterns
@@ -57,15 +58,15 @@ export function extractRules(content: string): IPolicyRule[] {
             allowRules.add(match[1]);
         }
     }
-    
+
     lines.forEach((line, index) => {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) return;
-        
+
         let rule: IPolicyRule | null = null;
         let type: IPolicyRule['type'] = 'helper';
         let name = '';
-        
+
         const metadata = extractRuleMetadata(lines, index);
 
         // Check for violation rules (is_not_*, is_*_violation)
@@ -154,12 +155,12 @@ export function extractRules(content: string): IPolicyRule[] {
                 };
             }
         }
-        
+
         if (rule && !rules.find(r => r.name === rule!.name)) {
             rules.push(rule);
         }
     });
-    
+
     return rules;
 }
 
@@ -234,13 +235,13 @@ function extractRuleDefinition(lines: string[], startIndex: number): string {
     let definition = lines[startIndex];
     let braceCount = (definition.match(/\{/g) || []).length - (definition.match(/\}/g) || []).length;
     let i = startIndex + 1;
-    
+
     while (i < lines.length && braceCount > 0) {
         definition += '\n' + lines[i];
         braceCount += (lines[i].match(/\{/g) || []).length - (lines[i].match(/\}/g) || []).length;
         i++;
     }
-    
+
     return definition.trim();
 }
 
@@ -251,14 +252,14 @@ function generateDescription(name: string, type: string): string {
     // Convert snake_case to Title Case
     const words = name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1));
     const title = words.join(' ');
-    
+
     if (type === 'violation') {
         if (name.startsWith('is_not_')) {
             return `Check: ${title.replace('Is Not ', '')}`;
         }
         return `Violation: ${title}`;
     }
-    
+
     return title;
 }
 
@@ -301,14 +302,14 @@ function categorizeRule(name: string): string {
  */
 export function groupRulesByCategory(rules: IPolicyRule[]): IRuleCategory[] {
     const categories: Record<string, IPolicyRule[]> = {};
-    
+
     rules.forEach(rule => {
         if (!categories[rule.category]) {
             categories[rule.category] = [];
         }
         categories[rule.category].push(rule);
     });
-    
+
     const categoryConfig: Record<string, { color: string; icon: string }> = {
         'Authentication': { color: 'from-blue-500 to-cyan-500', icon: '🔐' },
         'Clearance': { color: 'from-purple-500 to-pink-500', icon: '📊' },
@@ -323,7 +324,7 @@ export function groupRulesByCategory(rules: IPolicyRule[]): IRuleCategory[] {
         'Default': { color: 'from-gray-400 to-gray-600', icon: '⚙️' },
         'Other': { color: 'from-slate-500 to-gray-500', icon: '📋' }
     };
-    
+
     return Object.entries(categories).map(([name, rules]) => ({
         name,
         rules,

@@ -64,7 +64,8 @@ export default function AdminBreadcrumbs() {
             } else if (part === 'new') {
                 label = 'Add New IdP';
             } else if (selectedIdPAlias && part === selectedIdPAlias) {
-                label = selectedIdPAlias.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const alias = String(selectedIdPAlias || '');
+                label = alias.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
             } else {
                 // Capitalize first letter
                 label = part.charAt(0).toUpperCase() + part.slice(1);

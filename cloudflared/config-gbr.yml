@@ -32,7 +32,7 @@ ingress:
   # Hostname:       gbr-app.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-app.dive25.com
-    service: https://frontend-gbr:3000
+    service: https://host.docker.internal:3003
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -45,7 +45,7 @@ ingress:
   # Hostname:       gbr-api.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-api.dive25.com
-    service: https://backend-gbr:4000
+    service: https://host.docker.internal:4003
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -58,7 +58,7 @@ ingress:
   # Hostname:       gbr-idp.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-idp.dive25.com
-    service: https://keycloak-gbr:8443
+    service: https://host.docker.internal:8446
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -71,7 +71,7 @@ ingress:
   # Hostname:       gbr-kas.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-kas.dive25.com
-    service: http://kas-gbr:8080
+    service: http://host.docker.internal:8093
     originRequest:
       connectTimeout: 60s
       httpHostHeader: gbr-kas.dive25.com
