@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { 
   LayoutDashboard, 
   Globe2, 
@@ -16,6 +17,10 @@ import {
   ChevronDown,
   ChevronRight,
   Activity,
+  Wrench,
+  Zap,
+  FileText as Audit,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
@@ -26,9 +31,12 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
   children?: NavItem[];
+  spokeOnly?: boolean;
+  hubOnly?: boolean;
 }
 
-const navItems: NavItem[] = [
+// Hub Admin Navigation
+const hubNavItems: NavItem[] = [
   {
     title: 'Dashboard',
     href: '/admin/dashboard',
@@ -38,6 +46,7 @@ const navItems: NavItem[] = [
     title: 'Federation',
     href: '/admin/federation',
     icon: Network,
+    hubOnly: true,
     children: [
       {
         title: 'Spokes',
@@ -83,35 +92,137 @@ const navItems: NavItem[] = [
   }
 ];
 
+// Spoke Admin Navigation
+const spokeNavItems: NavItem[] = [
+  {
+    title: 'Dashboard',
+    href: '/admin/dashboard',
+    icon: LayoutDashboard
+  },
+  {
+    title: 'Spoke Admin',
+    href: '/admin/spoke',
+    icon: Server,
+    spokeOnly: true,
+    children: [
+      {
+        title: 'Status',
+        href: '/admin/spoke',
+        icon: Activity,
+      },
+      {
+        title: 'Failover',
+        href: '/admin/spoke/failover',
+        icon: Zap,
+      },
+      {
+        title: 'Maintenance',
+        href: '/admin/spoke/maintenance',
+        icon: Wrench,
+      },
+      {
+        title: 'Policies',
+        href: '/admin/spoke/policies',
+        icon: Shield,
+      },
+      {
+        title: 'Audit Queue',
+        href: '/admin/spoke/audit',
+        icon: Audit,
+      },
+    ]
+  },
+  {
+    title: 'Identity Providers',
+    href: '/admin/idp',
+    icon: Globe2
+  },
+  {
+    title: 'Users',
+    href: '/admin/users',
+    icon: Users
+  },
+  {
+    title: 'Policies',
+    href: '/admin/opa-policy',
+    icon: ShieldCheck
+  },
+  {
+    title: 'Logs',
+    href: '/admin/logs',
+    icon: FileText
+  }
+];
+
+// Check if user has hub admin roles
+function isHubAdmin(roles: string[] = []): boolean {
+  const hubRoles = ['hub-super-admin', 'hub-spoke-admin', 'dive-admin', 'admin'];
+  return roles.some(r => hubRoles.includes(r.toLowerCase()));
+}
+
+// Check if user has spoke admin roles
+function isSpokeAdmin(roles: string[] = []): boolean {
+  const spokeRoles = ['spoke-admin', 'spoke-operator'];
+  return roles.some(r => spokeRoles.includes(r.toLowerCase()));
+}
+
+// Detect if we're running on a spoke instance
+function isOnSpokeInstance(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  // NZL spoke runs on port 13000, other spokes on different ports
+  const spokePorts = ['13000', '13001', '13002', '13003'];
+  return spokePorts.includes(port) || hostname.includes('spoke') || hostname.includes('nzl');
+}
+
 export function AdminSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [pendingCount, setPendingCount] = useState(0);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
-  // Fetch pending spoke count
+  // Determine user type
+  const userRoles = (session?.user as { roles?: string[] })?.roles || [];
+  const isHub = isHubAdmin(userRoles);
+  const isSpoke = isSpokeAdmin(userRoles);
+  const onSpokeInstance = isOnSpokeInstance();
+  
+  // Use spoke nav if on spoke instance or user has spoke-only roles
+  const useSpokenNav = onSpokeInstance || (isSpoke && !isHub);
+  const navItems = useSpokenNav ? spokeNavItems : hubNavItems;
+
+  // Fetch pending spoke count (only for hub admins)
   useEffect(() => {
-    const fetchPendingCount = async () => {
-      try {
-        const response = await fetch('/api/federation/health');
-        if (response.ok) {
-          const data = await response.json();
-          setPendingCount(data.statistics?.pendingApprovals || 0);
+    if (!useSpokenNav) {
+      const fetchPendingCount = async () => {
+        try {
+          const response = await fetch('/api/federation/health');
+          if (response.ok) {
+            const data = await response.json();
+            setPendingCount(data.statistics?.pendingApprovals || 0);
+          }
+        } catch (_error) {
+          // Silently fail - this is just for the badge
         }
-      } catch (error) {
-        // Silently fail - this is just for the badge
-      }
-    };
+      };
 
-    fetchPendingCount();
-    const interval = setInterval(fetchPendingCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
+      fetchPendingCount();
+      const interval = setInterval(fetchPendingCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [useSpokenNav]);
 
-  // Auto-expand Federation if on a federation page
+  // Auto-expand Federation/Spoke Admin if on relevant page
   useEffect(() => {
     if (pathname.startsWith('/admin/federation')) {
       setExpandedItems((prev) => 
         prev.includes('Federation') ? prev : [...prev, 'Federation']
+      );
+    }
+    if (pathname.startsWith('/admin/spoke')) {
+      setExpandedItems((prev) => 
+        prev.includes('Spoke Admin') ? prev : [...prev, 'Spoke Admin']
       );
     }
   }, [pathname]);

@@ -139,6 +139,157 @@ router.post('/failover/reset', async (_req: Request, res: Response) => {
   }
 });
 
+// In-memory event stores (would be persisted to MongoDB in production)
+const failoverEvents: IFailoverEvent[] = [];
+const maintenanceHistory: IMaintenanceEvent[] = [];
+
+interface IFailoverEvent {
+  id: string;
+  timestamp: string;
+  previousState: 'CLOSED' | 'HALF_OPEN' | 'OPEN';
+  newState: 'CLOSED' | 'HALF_OPEN' | 'OPEN';
+  reason: string;
+  triggeredBy: 'automatic' | 'manual' | 'hub';
+  duration?: number;
+}
+
+interface IMaintenanceEvent {
+  id: string;
+  enteredAt: string;
+  exitedAt?: string;
+  reason: string;
+  duration?: number;
+  exitReason?: string;
+}
+
+// Track current maintenance session for history
+let currentMaintenanceSession: IMaintenanceEvent | null = null;
+
+// Subscribe to failover events
+spokeFailover.on('circuitOpened', (data) => {
+  const event: IFailoverEvent = {
+    id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: data.timestamp.toISOString(),
+    previousState: 'CLOSED',
+    newState: 'OPEN',
+    reason: `Circuit opened after ${data.failures} consecutive failures`,
+    triggeredBy: 'automatic',
+  };
+  failoverEvents.unshift(event);
+  if (failoverEvents.length > 100) failoverEvents.pop();
+});
+
+spokeFailover.on('circuitHalfOpen', (data) => {
+  const event: IFailoverEvent = {
+    id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: data.timestamp.toISOString(),
+    previousState: 'OPEN',
+    newState: 'HALF_OPEN',
+    reason: `Recovery probe initiated (attempt ${data.recoveryAttempts})`,
+    triggeredBy: 'automatic',
+  };
+  failoverEvents.unshift(event);
+  if (failoverEvents.length > 100) failoverEvents.pop();
+});
+
+spokeFailover.on('circuitClosed', (data) => {
+  const event: IFailoverEvent = {
+    id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: data.timestamp.toISOString(),
+    previousState: 'HALF_OPEN',
+    newState: 'CLOSED',
+    reason: 'Circuit recovered successfully',
+    triggeredBy: 'automatic',
+    duration: data.outageMs,
+  };
+  failoverEvents.unshift(event);
+  if (failoverEvents.length > 100) failoverEvents.pop();
+});
+
+spokeFailover.on('forceClosed', (data) => {
+  const event: IFailoverEvent = {
+    id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: data.timestamp.toISOString(),
+    previousState: spokeFailover.getCircuitState().toUpperCase() as 'CLOSED' | 'HALF_OPEN' | 'OPEN',
+    newState: 'CLOSED',
+    reason: 'Manual force close',
+    triggeredBy: 'manual',
+  };
+  failoverEvents.unshift(event);
+  if (failoverEvents.length > 100) failoverEvents.pop();
+});
+
+spokeFailover.on('forceOpened', (data) => {
+  const event: IFailoverEvent = {
+    id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: data.timestamp.toISOString(),
+    previousState: spokeFailover.getCircuitState().toUpperCase() as 'CLOSED' | 'HALF_OPEN' | 'OPEN',
+    newState: 'OPEN',
+    reason: data.reason || 'Manual force open',
+    triggeredBy: 'manual',
+  };
+  failoverEvents.unshift(event);
+  if (failoverEvents.length > 100) failoverEvents.pop();
+});
+
+spokeFailover.on('maintenanceStarted', (data) => {
+  currentMaintenanceSession = {
+    id: `maint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    enteredAt: data.timestamp.toISOString(),
+    reason: data.reason,
+  };
+});
+
+spokeFailover.on('maintenanceEnded', (data) => {
+  if (currentMaintenanceSession) {
+    const enteredAt = new Date(currentMaintenanceSession.enteredAt);
+    const exitedAt = data.timestamp;
+    currentMaintenanceSession.exitedAt = exitedAt.toISOString();
+    currentMaintenanceSession.duration = exitedAt.getTime() - enteredAt.getTime();
+    currentMaintenanceSession.exitReason = 'Manual exit';
+    maintenanceHistory.unshift(currentMaintenanceSession);
+    if (maintenanceHistory.length > 50) maintenanceHistory.pop();
+    currentMaintenanceSession = null;
+  }
+});
+
+/**
+ * GET /api/spoke/failover/events
+ * Returns failover event history
+ */
+router.get('/failover/events', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const state = req.query.state as string;
+    
+    let filteredEvents = [...failoverEvents];
+    
+    // Filter by state if provided
+    if (state && ['CLOSED', 'HALF_OPEN', 'OPEN'].includes(state.toUpperCase())) {
+      filteredEvents = filteredEvents.filter(
+        e => e.newState === state.toUpperCase() || e.previousState === state.toUpperCase()
+      );
+    }
+    
+    const paginatedEvents = filteredEvents.slice(offset, offset + limit);
+    
+    res.json({
+      success: true,
+      events: paginatedEvents,
+      total: filteredEvents.length,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    logger.error('Failed to get failover events', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get failover events'
+    });
+  }
+});
+
 // =============================================================================
 // MAINTENANCE MODE ENDPOINTS
 // =============================================================================
@@ -200,9 +351,122 @@ router.post('/maintenance/exit', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/spoke/maintenance/history
+ * Returns maintenance mode history
+ */
+router.get('/maintenance/history', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const offset = parseInt(req.query.offset as string) || 0;
+    
+    const paginatedHistory = maintenanceHistory.slice(offset, offset + limit);
+    
+    // Include current maintenance session if active
+    const currentSession = currentMaintenanceSession ? {
+      ...currentMaintenanceSession,
+      duration: Date.now() - new Date(currentMaintenanceSession.enteredAt).getTime(),
+    } : null;
+    
+    res.json({
+      success: true,
+      history: paginatedHistory,
+      currentSession,
+      total: maintenanceHistory.length,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    logger.error('Failed to get maintenance history', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get maintenance history'
+    });
+  }
+});
+
+/**
+ * GET /api/spoke/maintenance/status
+ * Returns current maintenance mode status
+ */
+router.get('/maintenance/status', async (_req: Request, res: Response) => {
+  try {
+    const isInMaintenanceMode = spokeFailover.isInMaintenanceMode();
+    const maintenanceReason = (spokeFailover as any)._maintenanceReason || '';
+    const maintenanceEnteredAt = (spokeFailover as any)._maintenanceEnteredAt || null;
+    
+    res.json({
+      success: true,
+      isInMaintenanceMode,
+      maintenanceReason,
+      maintenanceEnteredAt,
+      currentSession: currentMaintenanceSession,
+    });
+  } catch (error) {
+    logger.error('Failed to get maintenance status', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get maintenance status'
+    });
+  }
+});
+
 // =============================================================================
 // AUDIT QUEUE ENDPOINTS
 // =============================================================================
+
+// In-memory audit event history (would be persisted to MongoDB in production)
+interface IAuditHistoryEvent {
+  id: string;
+  timestamp: string;
+  type: 'sync_success' | 'sync_failed' | 'sync_partial' | 'queue_cleared' | 'queue_overflow' | 'connection_lost' | 'connection_restored';
+  eventCount?: number;
+  duration?: number;
+  bytesTransferred?: number;
+  error?: string;
+  hubResponse?: {
+    status: number;
+    message?: string;
+  };
+}
+
+const auditHistory: IAuditHistoryEvent[] = [];
+
+// Subscribe to audit queue events for history
+spokeAuditQueue.on('syncComplete', (data: { count: number; durationMs: number; bytesTransferred?: number }) => {
+  const event: IAuditHistoryEvent = {
+    id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    type: 'sync_success',
+    eventCount: data.count,
+    duration: data.durationMs,
+    bytesTransferred: data.bytesTransferred,
+  };
+  auditHistory.unshift(event);
+  if (auditHistory.length > 200) auditHistory.pop();
+});
+
+spokeAuditQueue.on('syncFailed', (data: { error: string; durationMs?: number }) => {
+  const event: IAuditHistoryEvent = {
+    id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    type: 'sync_failed',
+    error: data.error,
+    duration: data.durationMs,
+  };
+  auditHistory.unshift(event);
+  if (auditHistory.length > 200) auditHistory.pop();
+});
+
+spokeAuditQueue.on('queueCleared', () => {
+  const event: IAuditHistoryEvent = {
+    id: `audit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date().toISOString(),
+    type: 'queue_cleared',
+  };
+  auditHistory.unshift(event);
+  if (auditHistory.length > 200) auditHistory.pop();
+});
 
 /**
  * GET /api/spoke/audit/status
@@ -289,6 +553,110 @@ router.post('/audit/clear', async (req: Request, res: Response): Promise<void> =
     res.status(500).json({
       success: false,
       error: 'Failed to clear audit queue'
+    });
+  }
+});
+
+/**
+ * GET /api/spoke/audit/history
+ * Returns audit sync event history
+ */
+router.get('/audit/history', async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const typeFilter = req.query.type as string;
+    
+    let filteredHistory = [...auditHistory];
+    
+    // Filter by type if provided
+    if (typeFilter && ['sync_success', 'sync_failed', 'sync_partial', 'queue_cleared', 'queue_overflow', 'connection_lost', 'connection_restored'].includes(typeFilter)) {
+      filteredHistory = filteredHistory.filter(e => e.type === typeFilter);
+    }
+    
+    const paginatedHistory = filteredHistory.slice(offset, offset + limit);
+    
+    // Calculate summary statistics
+    const successfulSyncs = auditHistory.filter(e => e.type === 'sync_success').length;
+    const failedSyncs = auditHistory.filter(e => e.type === 'sync_failed').length;
+    const totalEventsProcessed = auditHistory
+      .filter(e => e.type === 'sync_success')
+      .reduce((sum, e) => sum + (e.eventCount || 0), 0);
+    
+    const lastSuccessfulSync = auditHistory.find(e => e.type === 'sync_success')?.timestamp;
+    const lastFailedSync = auditHistory.find(e => e.type === 'sync_failed')?.timestamp;
+    
+    res.json({
+      success: true,
+      events: paginatedHistory,
+      total: filteredHistory.length,
+      limit,
+      offset,
+      summary: {
+        totalSyncs: successfulSyncs + failedSyncs,
+        successfulSyncs,
+        failedSyncs,
+        totalEventsProcessed,
+        lastSuccessfulSync,
+        lastFailedSync,
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to get audit history', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get audit history'
+    });
+  }
+});
+
+/**
+ * GET /api/spoke/audit/export
+ * Export audit queue for backup
+ */
+router.get('/audit/export', async (req: Request, res: Response) => {
+  try {
+    const format = (req.query.format as string) || 'json';
+    const queueSize = spokeAuditQueue.getQueueSize();
+    const metrics = spokeAuditQueue.getMetrics();
+    
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      spokeId: process.env.SPOKE_ID || 'local',
+      instanceCode: process.env.INSTANCE_CODE || 'USA',
+      queueSize,
+      metrics,
+      history: auditHistory.slice(0, 100),
+    };
+    
+    if (format === 'csv') {
+      // Generate CSV from history
+      const headers = ['id', 'timestamp', 'type', 'eventCount', 'duration', 'bytesTransferred', 'error'];
+      const rows = auditHistory.map(e => [
+        e.id,
+        e.timestamp,
+        e.type,
+        e.eventCount || '',
+        e.duration || '',
+        e.bytesTransferred || '',
+        e.error || '',
+      ].join(','));
+      
+      const csv = [headers.join(','), ...rows].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=audit-export-${new Date().toISOString().split('T')[0]}.csv`);
+      res.send(csv);
+    } else {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename=audit-export-${new Date().toISOString().split('T')[0]}.json`);
+      res.json(exportData);
+    }
+  } catch (error) {
+    logger.error('Failed to export audit data', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to export audit data'
     });
   }
 });
