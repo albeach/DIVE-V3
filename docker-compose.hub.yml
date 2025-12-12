@@ -373,11 +373,13 @@ services:
     environment:
       # Use Redis as broadcast backend for pub/sub
       OPAL_BROADCAST_URI: redis://redis:6379
-      # Data-only mode - no git repository, just data distribution
-      OPAL_REPO_WATCHER_ENABLED: "false"
-      OPAL_POLICY_REPO_URL: ""
-      OPAL_POLICY_REFRESH_INTERVAL: 0
-      OPAL_POLICY_REPO_POLLING_INTERVAL: 0
+      # Git-based policy distribution - policies from GitHub repo
+      OPAL_REPO_WATCHER_ENABLED: "true"
+      OPAL_POLICY_REPO_URL: https://github.com/albeach/dive-v3-policies.git
+      OPAL_POLICY_REPO_MAIN_BRANCH: master
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30
+      # Policy paths to include (relative to repo root)
+      OPAL_POLICY_SOURCE_DIRS: base,org,tenant,entrypoints,compat
       OPAL_DATA_TOPICS_DEFAULT: policy_data
       OPAL_INLINE_OPA_CONFIG: "false"
       OPAL_LOG_LEVEL: DEBUG
@@ -390,7 +392,8 @@ services:
       OPAL_STATISTICS_ENABLED: "true"
       OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["http://localhost:3000","https://localhost:3000","http://localhost:7002"]'
       # Data source URL must be reachable by spoke clients (use external URL)
-      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"https://host.docker.internal:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"/"}]}}'
+      # IMPORTANT: dst_path must be a valid OPA data path (not "/") to avoid rego_parse_error
+      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"https://host.docker.internal:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"dive/federation"}]}}'
       # OPAL Authentication - JWT token verification for spoke clients
       OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
     ports:
