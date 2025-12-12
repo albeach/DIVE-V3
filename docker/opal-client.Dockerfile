@@ -8,14 +8,16 @@
 
 FROM permitio/opal-client:latest
 
-# Install ca-certificates package for updating trust store
+# Install ca-certificates and curl for healthcheck
 USER root
 
 # Copy the CA certificate and add to system trust store
 COPY certs/ca.crt /usr/local/share/ca-certificates/dive-hub-ca.crt
 
-# Update CA certificates
-RUN update-ca-certificates
+# Install curl for healthcheck and update CA certificates
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    update-ca-certificates
 
 # Set environment variables for Python SSL
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt

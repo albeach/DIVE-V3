@@ -1,0 +1,51 @@
+{
+  "identity": {
+    "spokeId": "spoke-nzl-2a76bd42",
+    "instanceCode": "NZL",
+    "name": "New Zealand Defence Force",
+    "description": "DIVE V3 Spoke Instance for New Zealand Defence Force",
+    "country": "NZL",
+    "organizationType": "government",
+    "contactEmail": ""
+  },
+  "endpoints": {
+    "hubUrl": "https://hub.dive25.com",
+    "hubApiUrl": "https://hub.dive25.com/api",
+    "hubOpalUrl": "https://hub.dive25.com",
+    "baseUrl": "https://nzl-app.dive25.com",
+    "apiUrl": "https://nzl-api.dive25.com",
+    "idpUrl": "https://nzl-idp.dive25.com",
+    "kasUrl": "https://nzl-kas.dive25.com"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "unregistered",
+    "requestedScopes": [
+      "policy:base",
+      "policy:nzl",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ]
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-12T07:32:45Z",
+    "lastModified": "2025-12-12T07:32:45Z",
+    "configHash": ""
+  }
+}
