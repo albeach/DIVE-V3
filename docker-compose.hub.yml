@@ -1,0 +1,269 @@
+# =============================================================================
+# DIVE V3 - Hub Stack (OPAL + Core Services)
+# =============================================================================
+# Purpose:
+#   Minimal hub footprint for policy distribution (OPAL Server) plus the
+#   supporting identity/policy services required to serve policy data.
+# Usage:
+#   ./dive hub start        # uses this compose file
+#   COMPOSE_PROJECT_NAME=custom ./dive hub start
+# Notes:
+#   - Secrets come from ./dive load_secrets (GCP or local defaults).
+#   - Certificates are expected in keycloak/certs (mkcert via ./dive up).
+#   - No spoke/partner services are included here.
+# =============================================================================
+
+name: dive-v3-hub
+
+networks:
+  hub-internal:
+    driver: bridge
+
+volumes:
+  hub_postgres_data:
+  hub_mongodb_data:
+  hub_redis_data:
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - backing store for Keycloak / NextAuth
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: keycloak_db
+    volumes:
+      - hub_postgres_data:/var/lib/postgresql/data
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MongoDB - policy/resource data backing store for backend
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7
+    container_name: ${COMPOSE_PROJECT_NAME}-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_DATABASE: dive-v3
+    volumes:
+      - hub_mongodb_data:/data/db
+    networks:
+      - hub-internal
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis - session/blacklist cache
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
+    restart: unless-stopped
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Keycloak - Identity Broker
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    platform: linux/amd64
+    container_name: ${COMPOSE_PROJECT_NAME}-keycloak
+    restart: unless-stopped
+    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: "8443"
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: scripts
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "${KEYCLOAK_HTTPS_PORT:-8443}:8443"
+      - "${KEYCLOAK_MGMT_PORT:-9000}:9000"
+    volumes:
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    networks:
+      - hub-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/master HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 'HTTP/1.1 200'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # OPA - Policy Decision Point
+  # ---------------------------------------------------------------------------
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-opa
+    restart: unless-stopped
+    command:
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --tls-cert-file=/certs/certificate.pem
+      - --tls-private-key-file=/certs/key.pem
+      - --bundle
+      - /policies
+      - --log-level=info
+    ports:
+      - "${OPA_PORT:-8181}:8181"
+      - "${OPA_METRICS_PORT:-8182}:8182"
+    volumes:
+      - ./policies:/policies:ro
+      - ./keycloak/certs:/certs:ro
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Backend API - serves policy data for OPAL and Hub admin APIs
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME}-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
+      MONGODB_DATABASE: dive-v3
+      OPA_URL: https://opa:8181
+      KEYCLOAK_URL: https://keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      REDIS_URL: redis://redis:6379
+      NEXT_PUBLIC_BASE_URL: https://localhost:3000
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      OPAL_SERVER_URL: https://opal-server:7002
+      OPAL_DATA_TOPICS: policy_data
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json:ro
+      - ./backend/tsconfig.json:/app/tsconfig.json:ro
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./policies:/app/policies:ro
+      - ./backend/certs:/app/certs:ro
+      - ./backend/logs:/app/logs
+    networks:
+      - hub-internal
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # OPAL Server - Policy distribution hub
+  # ---------------------------------------------------------------------------
+  opal-server:
+    build:
+      context: ./docker
+      dockerfile: opal-server.Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME}-opal-server
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      OPAL_BROADCAST_URI: https://opal-server:7002
+      OPAL_POLICY_REPO_URL: ""
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 0
+      OPAL_DATA_TOPICS_DEFAULT: policy_data
+      OPAL_INLINE_OPA_CONFIG: "false"
+      OPAL_LOG_LEVEL: INFO
+      OPAL_LOG_FORMAT: text
+      UVICORN_PORT: 7002
+      UVICORN_HOST: 0.0.0.0
+      OPAL_SERVER_WORKERS: 1
+      UVICORN_SSL_CERTFILE: /certs/certificate.pem
+      UVICORN_SSL_KEYFILE: /certs/key.pem
+      OPAL_STATISTICS_ENABLED: "true"
+      OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["http://localhost:3000","https://localhost:3000","http://localhost:7002"]'
+      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"http://backend:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"/"}]}}'
+    ports:
+      - "${OPAL_PORT:-7002}:7002"
+    networks:
+      - hub-internal
+    volumes:
+      - ./policies:/policies:ro
+      - ./opal-data-source:/opal-data-source:ro
+      - ./keycloak/certs:/certs:ro
+    entrypoint: ["/bin/sh","-c"]
+    command:
+      - |
+        uvicorn opal_server.main:app \
+          --host 0.0.0.0 \
+          --port 7002 \
+          --ssl-certfile /certs/certificate.pem \
+          --ssl-keyfile /certs/key.pem
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      - opa
+      - backend
+
+

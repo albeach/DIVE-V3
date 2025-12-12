@@ -1,0 +1,19 @@
+# Pilot (USA) example tfvars for terraform/pilot
+# Replace CHANGE_ME values with secrets from GCP Secret Manager via TF_VAR_*
+
+client_secret           = "CHANGE_ME"
+keycloak_admin_password = "CHANGE_ME"
+test_user_password      = "CHANGE_ME"
+admin_user_password     = "CHANGE_ME"
+
+# Federation partner IdPs (enable/adjust as needed)
+fra_idp_url = "https://fra-idp.dive25.com"
+gbr_idp_url = "https://gbr-idp.dive25.com"
+gbr_idp_internal_url = "http://keycloak-gbr:8080"
+gbr_disable_trust_manager = true
+gbr_client_secret = "placeholder-sync-after-terraform"
+deu_idp_url = "https://deu-idp.dive25.com"
+
+# Local Keycloak endpoint (self-signed)
+keycloak_url = "https://localhost:8443"
+
