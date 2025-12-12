@@ -33,6 +33,10 @@ get_instance_name() {
         ITA) echo "Italy" ;;
         NLD) echo "Netherlands" ;;
         POL) echo "Poland" ;;
+        NZL) echo "New Zealand" ;;
+        AUS) echo "Australia" ;;
+        JPN) echo "Japan" ;;
+        KOR) echo "South Korea" ;;
         *) echo "" ;;
     esac
 }
@@ -48,6 +52,10 @@ get_instance_theme() {
         ITA) echo "dive-v3-ita" ;;
         NLD) echo "dive-v3-nld" ;;
         POL) echo "dive-v3-pol" ;;
+        NZL) echo "dive-v3" ;;
+        AUS) echo "dive-v3" ;;
+        JPN) echo "dive-v3" ;;
+        KOR) echo "dive-v3" ;;
         *) echo "dive-v3" ;;
     esac
 }
