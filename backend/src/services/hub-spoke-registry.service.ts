@@ -40,7 +40,7 @@ export interface ISpokeRegistration {
   baseUrl: string;
   apiUrl: string;
   idpUrl: string;
-  
+
   // Certificate/Auth
   publicKey?: string;
   certificateFingerprint?: string;
@@ -50,34 +50,34 @@ export interface ISpokeRegistration {
   certificateNotBefore?: Date;
   certificateNotAfter?: Date;
   certificateValidationResult?: ICertificateValidation;
-  
+
   // Authorization
   status: 'pending' | 'approved' | 'suspended' | 'revoked';
   approvedAt?: Date;
   approvedBy?: string;
   suspendedReason?: string;
   revokedReason?: string;
-  
+
   // Policy Scope
   allowedPolicyScopes: string[];  // Which tenant data they can receive
   dataIsolationLevel: 'full' | 'filtered' | 'minimal';
-  
+
   // Metadata
   registeredAt: Date;
   lastHeartbeat?: Date;
   heartbeatIntervalMs: number;
   version?: string;
-  
+
   // Trust
   trustLevel: 'development' | 'partner' | 'bilateral' | 'national';
   maxClassificationAllowed: string;
-  
+
   // Rate Limiting
   rateLimit: {
     requestsPerMinute: number;
     burstSize: number;
   };
-  
+
   // Audit
   auditRetentionDays: number;
   lastAuditSync?: Date;
@@ -149,6 +149,7 @@ interface ISpokeStore {
   delete(spokeId: string): Promise<boolean>;
   saveToken(token: ISpokeToken): Promise<void>;
   findToken(token: string): Promise<ISpokeToken | null>;
+  findAllTokensBySpokeId(spokeId: string): Promise<ISpokeToken[]>;
   revokeTokensForSpoke(spokeId: string): Promise<void>;
 }
 
@@ -195,6 +196,16 @@ class InMemorySpokeStore implements ISpokeStore {
     return this.tokens.get(token) || null;
   }
 
+  async findAllTokensBySpokeId(spokeId: string): Promise<ISpokeToken[]> {
+    const result: ISpokeToken[] = [];
+    for (const token of this.tokens.values()) {
+      if (token.spokeId === spokeId) {
+        result.push(token);
+      }
+    }
+    return result;
+  }
+
   async revokeTokensForSpoke(spokeId: string): Promise<void> {
     for (const [key, token] of this.tokens.entries()) {
       if (token.spokeId === spokeId) {
@@ -211,14 +222,14 @@ class InMemorySpokeStore implements ISpokeStore {
 class MongoDBSpokeStoreAdapter implements ISpokeStore {
   private mongoStore: import('../models/federation-spoke.model').MongoSpokeStore | null = null;
   private initPromise: Promise<void> | null = null;
-  
+
   private async ensureInitialized(): Promise<void> {
     if (!this.initPromise) {
       this.initPromise = this.initialize();
     }
     await this.initPromise;
   }
-  
+
   private async initialize(): Promise<void> {
     try {
       const { mongoSpokeStore } = await import('../models/federation-spoke.model');
@@ -232,7 +243,7 @@ class MongoDBSpokeStoreAdapter implements ISpokeStore {
       throw error;
     }
   }
-  
+
   async save(spoke: ISpokeRegistration): Promise<void> {
     await this.ensureInitialized();
     await this.mongoStore!.save(spoke);
@@ -273,6 +284,11 @@ class MongoDBSpokeStoreAdapter implements ISpokeStore {
     return this.mongoStore!.findToken(tokenString);
   }
 
+  async findAllTokensBySpokeId(spokeId: string): Promise<ISpokeToken[]> {
+    await this.ensureInitialized();
+    return this.mongoStore!.findAllTokensBySpokeId(spokeId);
+  }
+
   async revokeTokensForSpoke(spokeId: string): Promise<void> {
     await this.ensureInitialized();
     await this.mongoStore!.revokeTokensForSpoke(spokeId);
@@ -285,15 +301,15 @@ class MongoDBSpokeStoreAdapter implements ISpokeStore {
 
 function createSpokeStore(): ISpokeStore {
   // Use MongoDB in production, in-memory for tests
-  const useMemory = process.env.NODE_ENV === 'test' || 
-                    process.env.SPOKE_STORE === 'memory' ||
-                    !process.env.MONGODB_URL;
-  
+  const useMemory = process.env.NODE_ENV === 'test' ||
+    process.env.SPOKE_STORE === 'memory' ||
+    !process.env.MONGODB_URL;
+
   if (useMemory) {
     logger.info('Using in-memory spoke store');
     return new InMemorySpokeStore();
   }
-  
+
   logger.info('Using MongoDB spoke store');
   return new MongoDBSpokeStoreAdapter();
 }
@@ -312,7 +328,7 @@ class HubSpokeRegistryService {
     this.store = store || createSpokeStore();
     this.hubSecret = process.env.HUB_SPOKE_SECRET || crypto.randomBytes(32).toString('hex');
     this.tokenValidityMs = parseInt(process.env.SPOKE_TOKEN_VALIDITY_MS || '86400000', 10); // 24h
-    
+
     logger.info('Hub-Spoke Registry Service initialized', {
       storeType: this.store.constructor.name
     });
@@ -341,7 +357,7 @@ class HubSpokeRegistryService {
     }
 
     const spokeId = this.generateSpokeId(request.instanceCode);
-    
+
     // Validate X.509 certificate if provided
     let certValidation: ICertificateValidation | undefined;
     let certSubject: string | undefined;
@@ -349,10 +365,10 @@ class HubSpokeRegistryService {
     let certNotBefore: Date | undefined;
     let certNotAfter: Date | undefined;
     let certFingerprint: string | undefined;
-    
+
     if (request.certificatePEM) {
       certValidation = await this.validateCertificate(request.certificatePEM);
-      
+
       if (!certValidation.valid && certValidation.errors.length > 0) {
         logger.warn('Spoke certificate validation failed', {
           instanceCode: request.instanceCode,
@@ -360,7 +376,7 @@ class HubSpokeRegistryService {
         });
         // We don't reject - just log warning. Admin can decide during approval.
       }
-      
+
       // Extract certificate details
       try {
         const certDetails = this.extractCertificateDetails(request.certificatePEM);
@@ -375,7 +391,7 @@ class HubSpokeRegistryService {
         });
       }
     }
-    
+
     // Validate IdP endpoint if requested
     if (request.validateEndpoints !== false) {
       try {
@@ -387,7 +403,7 @@ class HubSpokeRegistryService {
             errors: tlsResult.errors
           });
         }
-        
+
         // Store TLS validation in cert validation
         if (!certValidation) {
           certValidation = {
@@ -410,7 +426,7 @@ class HubSpokeRegistryService {
         });
       }
     }
-    
+
     const spoke: ISpokeRegistration = {
       spokeId,
       instanceCode: request.instanceCode.toUpperCase(),
@@ -427,31 +443,31 @@ class HubSpokeRegistryService {
       certificateNotBefore: certNotBefore,
       certificateNotAfter: certNotAfter,
       certificateValidationResult: certValidation,
-      
+
       status: 'pending',
-      
+
       // Default to minimal scope until approved
       allowedPolicyScopes: [],
       dataIsolationLevel: 'minimal',
-      
+
       registeredAt: new Date(),
       heartbeatIntervalMs: 30000, // 30 seconds
-      
+
       trustLevel: 'development',
       maxClassificationAllowed: 'UNCLASSIFIED',
-      
+
       // Default rate limits
       rateLimit: {
         requestsPerMinute: 60,
         burstSize: 10
       },
-      
+
       // Default audit retention
       auditRetentionDays: 90
     };
 
     await this.store.save(spoke);
-    
+
     logger.info('New spoke registration', {
       spokeId,
       instanceCode: spoke.instanceCode,
@@ -464,7 +480,7 @@ class HubSpokeRegistryService {
 
     return spoke;
   }
-  
+
   /**
    * Validate an X.509 certificate
    */
@@ -477,41 +493,41 @@ class HubSpokeRegistryService {
       errors: [],
       validatedAt: new Date()
     };
-    
+
     try {
       // Parse the certificate
       const cert = new X509Certificate(certificatePEM);
-      
+
       // Calculate fingerprint
       result.fingerprint = crypto
         .createHash('sha256')
         .update(Buffer.from(certificatePEM))
         .digest('hex')
         .toUpperCase();
-      
+
       // Get public key algorithm
       const pubKey = cert.publicKey;
       result.algorithm = pubKey.asymmetricKeyType || 'unknown';
-      
+
       // Check validity dates
       const now = new Date();
       const validFrom = new Date(cert.validFrom);
       const validTo = new Date(cert.validTo);
-      
+
       if (now < validFrom) {
         result.errors.push(`Certificate not yet valid (valid from: ${validFrom.toISOString()})`);
       }
-      
+
       if (now > validTo) {
         result.errors.push(`Certificate has expired (expired: ${validTo.toISOString()})`);
       }
-      
+
       // Warn if expiring soon (30 days)
       const daysUntilExpiry = (validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
       if (daysUntilExpiry > 0 && daysUntilExpiry < 30) {
         result.warnings.push(`Certificate expires in ${Math.floor(daysUntilExpiry)} days`);
       }
-      
+
       // Check key size
       if (result.algorithm === 'rsa') {
         const keyDetails = pubKey.export({ type: 'spki', format: 'der' });
@@ -520,22 +536,22 @@ class HubSpokeRegistryService {
           result.warnings.push('RSA key size may be less than 2048 bits');
         }
       }
-      
+
       // Check for self-signed
       if (cert.issuer === cert.subject) {
         result.warnings.push('Certificate is self-signed');
       }
-      
+
       result.valid = result.errors.length === 0;
-      
+
     } catch (error) {
       result.errors.push(`Certificate parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       result.valid = false;
     }
-    
+
     return result;
   }
-  
+
   /**
    * Extract details from X.509 certificate
    */
@@ -546,7 +562,7 @@ class HubSpokeRegistryService {
     validTo: Date;
   } {
     const cert = new X509Certificate(certificatePEM);
-    
+
     return {
       subject: cert.subject,
       issuer: cert.issuer,
@@ -559,7 +575,7 @@ class HubSpokeRegistryService {
    * Approve a pending spoke registration
    */
   async approveSpoke(
-    spokeId: string, 
+    spokeId: string,
     approvedBy: string,
     options: {
       allowedScopes: string[];
@@ -697,7 +713,7 @@ class HubSpokeRegistryService {
     error?: string;
   }> {
     const token = await this.store.findToken(tokenString);
-    
+
     if (!token) {
       return { valid: false, error: 'Token not found' };
     }
@@ -751,7 +767,7 @@ class HubSpokeRegistryService {
     }
 
     // In production, this would actually probe the spoke's health endpoint
-    const healthy = spoke.lastHeartbeat 
+    const healthy = spoke.lastHeartbeat
       ? (Date.now() - spoke.lastHeartbeat.getTime()) < (spoke.heartbeatIntervalMs * 3)
       : false;
 
@@ -770,7 +786,7 @@ class HubSpokeRegistryService {
   async getUnhealthySpokes(): Promise<ISpokeRegistration[]> {
     const all = await this.store.findByStatus('approved');
     const now = Date.now();
-    
+
     return all.filter(spoke => {
       if (!spoke.lastHeartbeat) return true;
       return (now - spoke.lastHeartbeat.getTime()) > (spoke.heartbeatIntervalMs * 3);
@@ -801,9 +817,27 @@ class HubSpokeRegistryService {
     return this.store.findByStatus('pending');
   }
 
+  /**
+   * Get active (non-expired) token for a spoke
+   * Returns null if no active token exists
+   */
+  async getActiveToken(spokeId: string): Promise<ISpokeToken | null> {
+    const tokens = await this.store.findAllTokensBySpokeId(spokeId);
+
+    if (!tokens || tokens.length === 0) {
+      return null;
+    }
+
+    // Find a non-expired token
+    const now = new Date();
+    const activeToken = tokens.find(t => new Date(t.expiresAt) > now);
+
+    return activeToken || null;
+  }
+
   async getStatistics(): Promise<IHubStatistics> {
     const all = await this.store.findAll();
-    
+
     return {
       totalSpokes: all.length,
       activeSpokes: all.filter(s => s.status === 'approved').length,
@@ -875,7 +909,7 @@ class HubSpokeRegistryService {
    */
   async pushPolicyUpdate(spokeId?: string): Promise<void> {
     const result = await opalClient.triggerPolicyRefresh();
-    
+
     logger.info('Policy push triggered', {
       targetSpoke: spokeId || 'all',
       success: result.success,

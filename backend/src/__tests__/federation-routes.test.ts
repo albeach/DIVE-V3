@@ -95,8 +95,7 @@ describe('Federation Routes', () => {
   beforeAll(() => {
     app = express();
     app.use(express.json());
-    // Mount routes at /federation and /api/federation to match production
-    app.use('/federation', federationRoutes);
+    // Mount routes at /api/federation (standardized path)
     app.use('/api/federation', federationRoutes);
   });
 
@@ -116,9 +115,9 @@ describe('Federation Routes', () => {
   // METADATA ENDPOINT
   // ==========================================================================
 
-  describe('GET /federation/metadata', () => {
+  describe('GET /api/federation/metadata', () => {
     it('should return federation metadata', async () => {
-      const response = await request(app).get('/federation/metadata');
+      const response = await request(app).get('/api/federation/metadata');
 
       expect(response.status).toBe(200);
       expect(response.body.entity).toBeDefined();
@@ -439,6 +438,165 @@ describe('Federation Routes', () => {
         });
 
       expect(response.status).toBe(404);
+    });
+  });
+
+  // ==========================================================================
+  // PHASE 3: REGISTRATION STATUS ENDPOINT (PUBLIC - FOR POLLING)
+  // ==========================================================================
+
+  describe('GET /api/federation/registration/:spokeId/status (Phase 3)', () => {
+    it('should return 404 for non-existent registration', async () => {
+      const response = await request(app)
+        .get('/api/federation/registration/spoke-nonexistent-xyz/status');
+
+      expect(response.status).toBe(404);
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toContain('not found');
+    });
+
+    it('should return pending status for registered but unapproved spoke', async () => {
+      // First register a spoke
+      const regResponse = await request(app)
+        .post('/api/federation/register')
+        .send({
+          instanceCode: 'AUT',
+          name: 'Austria Test Spoke',
+          baseUrl: 'https://aut.example.com',
+          apiUrl: 'https://api.aut.example.com',
+          idpUrl: 'https://idp.aut.example.com',
+          requestedScopes: ['policy:base'],
+          contactEmail: 'admin@aut.example.com',
+        });
+
+      expect(regResponse.status).toBe(201);
+      const spokeId = regResponse.body.spoke.spokeId;
+
+      // Now check status
+      const statusResponse = await request(app)
+        .get(`/api/federation/registration/${spokeId}/status`);
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.success).toBe(true);
+      expect(statusResponse.body.status).toBe('pending');
+      expect(statusResponse.body.spokeId).toBe(spokeId);
+      expect(statusResponse.body.instanceCode).toBe('AUT');
+      expect(statusResponse.body.message).toContain('pending');
+      expect(statusResponse.body.token).toBeUndefined();
+    });
+
+    it('should return approved status with token for approved spoke', async () => {
+      // First register a spoke
+      const regResponse = await request(app)
+        .post('/api/federation/register')
+        .send({
+          instanceCode: 'CHE',
+          name: 'Switzerland Test Spoke',
+          baseUrl: 'https://che.example.com',
+          apiUrl: 'https://api.che.example.com',
+          idpUrl: 'https://idp.che.example.com',
+          requestedScopes: ['policy:base'],
+          contactEmail: 'admin@che.example.com',
+        });
+
+      expect(regResponse.status).toBe(201);
+      const spokeId = regResponse.body.spoke.spokeId;
+
+      // Approve the spoke
+      const approveResponse = await request(app)
+        .post(`/api/federation/spokes/${spokeId}/approve`)
+        .set('X-Admin-Key', 'test-admin-key')
+        .send({
+          allowedScopes: ['policy:base', 'heartbeat:write'],
+          trustLevel: 'partner',
+          maxClassification: 'CONFIDENTIAL',
+          dataIsolationLevel: 'filtered',
+        });
+
+      expect(approveResponse.status).toBe(200);
+
+      // Now check status - should include token
+      const statusResponse = await request(app)
+        .get(`/api/federation/registration/${spokeId}/status`);
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.success).toBe(true);
+      expect(statusResponse.body.status).toBe('approved');
+      expect(statusResponse.body.spokeId).toBe(spokeId);
+      expect(statusResponse.body.approvedAt).toBeDefined();
+      expect(statusResponse.body.token).toBeDefined();
+      expect(statusResponse.body.token.token).toBeDefined();
+      expect(statusResponse.body.token.token.length).toBeGreaterThan(20);
+      expect(statusResponse.body.token.expiresAt).toBeDefined();
+      expect(statusResponse.body.token.scopes).toContain('policy:base');
+    });
+
+    it('should allow lookup by instance code (case-insensitive)', async () => {
+      // Register spoke with uppercase code
+      const regResponse = await request(app)
+        .post('/api/federation/register')
+        .send({
+          instanceCode: 'SWE',
+          name: 'Sweden Test Spoke',
+          baseUrl: 'https://swe.example.com',
+          apiUrl: 'https://api.swe.example.com',
+          idpUrl: 'https://idp.swe.example.com',
+          requestedScopes: ['policy:base'],
+          contactEmail: 'admin@swe.example.com',
+        });
+
+      expect(regResponse.status).toBe(201);
+
+      // Lookup by lowercase instance code
+      const statusResponse = await request(app)
+        .get('/api/federation/registration/swe/status');
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.success).toBe(true);
+      expect(statusResponse.body.instanceCode).toBe('SWE');
+    });
+
+    it('should return suspended status message', async () => {
+      // Register and approve a spoke, then suspend it
+      const regResponse = await request(app)
+        .post('/api/federation/register')
+        .send({
+          instanceCode: 'NOR',
+          name: 'Norway Test Spoke',
+          baseUrl: 'https://nor.example.com',
+          apiUrl: 'https://api.nor.example.com',
+          idpUrl: 'https://idp.nor.example.com',
+          requestedScopes: ['policy:base'],
+          contactEmail: 'admin@nor.example.com',
+        });
+
+      const spokeId = regResponse.body.spoke.spokeId;
+
+      // Approve first
+      await request(app)
+        .post(`/api/federation/spokes/${spokeId}/approve`)
+        .set('X-Admin-Key', 'test-admin-key')
+        .send({
+          allowedScopes: ['policy:base'],
+          trustLevel: 'development',
+          maxClassification: 'UNCLASSIFIED',
+          dataIsolationLevel: 'minimal',
+        });
+
+      // Now suspend
+      await request(app)
+        .post(`/api/federation/spokes/${spokeId}/suspend`)
+        .set('X-Admin-Key', 'test-admin-key')
+        .send({ reason: 'Testing suspension' });
+
+      // Check status
+      const statusResponse = await request(app)
+        .get(`/api/federation/registration/${spokeId}/status`);
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.status).toBe('suspended');
+      expect(statusResponse.body.message).toContain('suspended');
+      expect(statusResponse.body.token).toBeUndefined();
     });
   });
 });

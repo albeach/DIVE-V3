@@ -249,10 +249,18 @@ broker_realm_exists() {
     docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker >/dev/null 2>&1
 }
 
-# Bootstrap broker realm via kcadm inside the Keycloak container if missing
+# ============================================================================
+# DEPRECATED: Legacy Bootstrap Functions
+# ============================================================================
+# These functions are kept for backward compatibility but are no longer used.
+# The preferred method is Keycloak's native --import-realm with realm JSON.
+# See: keycloak/realms/dive-v3-broker.json
+# ============================================================================
+
+# Bootstrap broker realm via kcadm (DEPRECATED - use realm JSON import instead)
 bootstrap_broker_realm() {
     local realm="dive-v3-broker"
-    local keycloak_container="dive-v3-keycloak"
+    local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"
     local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
     local public_url="${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}"
@@ -261,28 +269,69 @@ bootstrap_broker_realm() {
     local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}"
     local client_secret="${KEYCLOAK_CLIENT_SECRET:-}"
     local extra_web_origins="${WEB_ORIGINS_EXTRA:-}"
+    local max_retries=3
+    local retry_delay=5
 
-    if [ -z "$admin_pass" ] || [ -z "$client_secret" ]; then
-        log_error "Missing KEYCLOAK_ADMIN_PASSWORD or KEYCLOAK_CLIENT_SECRET; cannot bootstrap realm."
+    if [ -z "$admin_pass" ]; then
+        log_error "Missing KEYCLOAK_ADMIN_PASSWORD; cannot bootstrap realm."
         return 1
+    fi
+
+    if [ -z "$client_secret" ]; then
+        log_warn "Missing KEYCLOAK_CLIENT_SECRET; generating ephemeral secret..."
+        client_secret=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+        export KEYCLOAK_CLIENT_SECRET="$client_secret"
     fi
 
     log_step "Bootstrapping Keycloak broker realm (${realm}) via kcadm..."
 
-    # Login to master realm
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 --realm master \
-        --user "$admin_user" --password "$admin_pass" >/dev/null 2>&1
+    # Step 1: Login to master realm with retries
+    local login_success=false
+    for attempt in $(seq 1 $max_retries); do
+        if docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://localhost:8080 --realm master \
+            --user "$admin_user" --password "$admin_pass" 2>/dev/null; then
+            login_success=true
+            break
+        fi
+        log_verbose "kcadm login attempt $attempt/$max_retries failed, retrying in ${retry_delay}s..."
+        sleep $retry_delay
+    done
 
-    # Create realm if not present
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create realms -s realm="$realm" -s enabled=true \
-        -s displayName="DIVE V3 Broker" \
-        -s 'loginTheme="dive-v3"' \
-        -s "attributes.frontendUrl=${public_url}" \
-        -s "attributes.adminUrl=${public_url}" \
-        --config /opt/keycloak/data/.keycloak/kcadm.config >/dev/null 2>&1 || true
+    if [ "$login_success" != "true" ]; then
+        log_error "Failed to authenticate to Keycloak after $max_retries attempts"
+        return 1
+    fi
 
-    # Build redirect URIs and web origins (support multiple local ports)
+    # Step 2: Create realm if not present (with verification)
+    local realm_exists=false
+    if docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/"$realm" >/dev/null 2>&1; then
+        realm_exists=true
+        log_verbose "Realm $realm already exists"
+    else
+        log_verbose "Creating realm $realm..."
+        if docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create realms \
+            -s realm="$realm" \
+            -s enabled=true \
+            -s displayName="DIVE V3 Broker" \
+            -s loginTheme="dive-v3" \
+            -s "attributes.frontendUrl=${public_url}" \
+            -s "attributes.adminUrl=${public_url}" 2>&1; then
+            realm_exists=true
+            log_verbose "Realm $realm created successfully"
+        else
+            log_error "Failed to create realm $realm"
+            return 1
+        fi
+    fi
+
+    # Verify realm exists
+    if ! docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/"$realm" >/dev/null 2>&1; then
+        log_error "Realm $realm verification failed after creation"
+        return 1
+    fi
+
+    # Step 3: Build redirect URIs and web origins
     local redirect_candidates=("${frontend_url}/*" "https://localhost:3000/*" "https://localhost:3003/*")
     local web_candidates=("${frontend_url}" "${api_url}" "https://localhost:3000" "https://localhost:3003" "https://localhost:4000" "https://localhost:4003")
     if [ -n "$extra_web_origins" ]; then
@@ -298,27 +347,64 @@ bootstrap_broker_realm() {
     local web_origins_json
     web_origins_json=$(json_array_unique "${web_candidates[@]}")
 
-    # Ensure client exists/updated
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create clients -r "$realm" \
-        -s clientId="$client_id" \
-        -s protocol=openid-connect \
-        -s publicClient=false \
-        -s standardFlowEnabled=true \
-        -s directAccessGrantsEnabled=false \
-        -s "redirectUris=${redirects_json}" \
-        -s "webOrigins=${web_origins_json}" \
-        -s "secret=${client_secret}" \
-        --config /opt/keycloak/data/.keycloak/kcadm.config >/dev/null 2>&1 || true
+    # Step 4: Ensure client exists (check first, create if missing, update if exists)
+    local client_uuid
+    client_uuid=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get clients -r "$realm" \
+        -q clientId="$client_id" --fields id --format csv 2>/dev/null | tail -1 | tr -d '\r"')
 
-    log_success "Broker realm ensured (dive-v3-broker)"
+    if [ -z "$client_uuid" ] || [ "$client_uuid" = "id" ]; then
+        log_verbose "Creating client $client_id..."
+        if ! docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create clients -r "$realm" \
+            -s clientId="$client_id" \
+            -s protocol=openid-connect \
+            -s publicClient=false \
+            -s standardFlowEnabled=true \
+            -s directAccessGrantsEnabled=false \
+            -s "redirectUris=${redirects_json}" \
+            -s "webOrigins=${web_origins_json}" \
+            -s "secret=${client_secret}" 2>&1; then
+            log_error "Failed to create client $client_id"
+            return 1
+        fi
+        log_verbose "Client $client_id created"
+    else
+        log_verbose "Updating existing client $client_id ($client_uuid)..."
+        docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update clients/"$client_uuid" -r "$realm" \
+            -s "redirectUris=${redirects_json}" \
+            -s "webOrigins=${web_origins_json}" \
+            -s "secret=${client_secret}" 2>/dev/null || true
+    fi
+
+    log_success "Broker realm ensured ($realm)"
+    return 0
 }
 
 ensure_broker_realm() {
-    if broker_realm_exists; then
-        log_success "Broker realm present (dive-v3-broker)"
-        return 0
-    fi
-    bootstrap_broker_realm
+    # Best Practice: Realm is imported automatically by Keycloak on startup
+    # via --import-realm flag and realm JSON templates.
+    # This function just waits for and verifies the realm exists.
+
+    log_step "Waiting for broker realm to be imported..."
+
+    local max_wait=60
+    local wait_interval=3
+    local elapsed=0
+
+    while [ $elapsed -lt $max_wait ]; do
+        if broker_realm_exists; then
+            log_success "Broker realm present (dive-v3-broker)"
+            return 0
+        fi
+        log_verbose "Realm not ready yet (${elapsed}s/${max_wait}s)..."
+        sleep $wait_interval
+        elapsed=$((elapsed + wait_interval))
+    done
+
+    # If realm still doesn't exist after waiting, Keycloak may not have imported it
+    log_error "Broker realm not found after ${max_wait}s"
+    log_error "Check Keycloak logs: docker logs dive-v3-keycloak"
+    log_error "Ensure realm JSON exists: keycloak/realms/dive-v3-broker.json"
+    return 1
 }
 
 ensure_client_https_redirects() {
@@ -522,86 +608,154 @@ apply_terraform_local() {
     return 1
 }
 
-# Ensure there is at least one IdP configured; hard-fail if empty
+# Ensure there is at least one IdP configured
+# Best Practice: IdPs are imported automatically via realm JSON
+# This function verifies they were imported correctly
 ensure_idps_present() {
     log_step "Verifying IdPs exist in broker realm..."
-    local backend_container="${BACKEND_CONTAINER:-$(container_name backend)}"
+    local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"
+    local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+
+    # Login to Keycloak
+    if ! docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user "$admin_user" --password "$admin_pass" >/dev/null 2>&1; then
+        log_warn "Failed to authenticate to Keycloak for IdP verification"
+        return 1
+    fi
+
+    # Get IdP count using kcadm
+    local idp_list
+    idp_list=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get identity-provider/instances \
+        -r dive-v3-broker --fields alias 2>/dev/null || echo "[]")
+    
     local count
-    count=$(docker exec "$backend_container" curl -sk --user "${KEYCLOAK_ADMIN_USERNAME:-admin}:${KEYCLOAK_ADMIN_PASSWORD}" \
-        -H "Content-Type: application/json" \
-        -X GET "https://keycloak:8443/admin/realms/dive-v3-broker/identity-provider/instances" | jq 'length' 2>/dev/null || echo "0")
+    count=$(echo "$idp_list" | grep -c '"alias"' 2>/dev/null || echo "0")
 
     if [ "$count" = "0" ] || [ -z "$count" ]; then
-        log_warn "No IdPs found in realm dive-v3-broker (count=$count) - bootstrapping default IdP..."
-        bootstrap_default_idp || return 1
-        count=$(docker exec "$backend_container" curl -sk --user "${KEYCLOAK_ADMIN_USERNAME:-admin}:${KEYCLOAK_ADMIN_PASSWORD}" \
-            -H "Content-Type: application/json" \
-            -X GET "https://keycloak:8443/admin/realms/dive-v3-broker/identity-provider/instances" | jq 'length' 2>/dev/null || echo "0")
-        if [ "$count" = "0" ] || [ -z "$count" ]; then
-            log_error "No IdPs found after bootstrap attempt"
-            return 1
-        fi
+        log_warn "No IdPs found in broker realm"
+        log_warn "IdPs should be defined in: keycloak/realms/dive-v3-broker.json"
+        log_warn "Continuing without IdPs (admin can add them later)"
+        # Don't fail - allow deployment to continue
+        # IdPs can be added via Keycloak admin console
+        return 0
     fi
 
     log_success "IdPs present (count=$count)"
     return 0
 }
 
-# Bootstrap a basic Keycloak OIDC IdP (self) for local flow
+# Bootstrap a default IdP for the instance (e.g., usa-idp, fra-idp)
+# RESILIENT: Creates an OIDC IdP pointing to master realm for local testing
 bootstrap_default_idp() {
     local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD}"
-    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}"
     local client_secret="${KEYCLOAK_CLIENT_SECRET}"
     local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"
-    local issuer="https://localhost:8443/realms/dive-v3-broker"
-    local redirect="https://localhost:3000/api/auth/callback/keycloak"
+    local instance_lower
+    instance_lower=$(lower "${INSTANCE:-usa}")
+    local idp_alias="${instance_lower}-idp"
+    local idp_display_name
+    
+    # Map instance codes to display names
+    case "$instance_lower" in
+        usa) idp_display_name="United States" ;;
+        fra) idp_display_name="France" ;;
+        gbr) idp_display_name="Great Britain" ;;
+        deu) idp_display_name="Germany" ;;
+        can) idp_display_name="Canada" ;;
+        nzl) idp_display_name="New Zealand" ;;
+        aus) idp_display_name="Australia" ;;
+        *) idp_display_name="$(upper "$instance_lower") Instance" ;;
+    esac
 
-    if [ -z "$admin_pass" ] || [ -z "$client_secret" ]; then
-        log_error "Cannot bootstrap IdP: missing KEYCLOAK_ADMIN_PASSWORD or KEYCLOAK_CLIENT_SECRET"
+    if [ -z "$admin_pass" ]; then
+        log_error "Cannot bootstrap IdP: missing KEYCLOAK_ADMIN_PASSWORD"
         return 1
     fi
 
-    # Create an OIDC identity provider pointing to the same realm (local loopback)
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 --realm master --user "$admin_user" --password "$admin_pass" >/dev/null 2>&1
+    log_step "Bootstrapping default IdP: ${idp_alias} (${idp_display_name})..."
 
-    # Ensure client exists (create/update)
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create clients -r dive-v3-broker \
-        -s clientId="$client_id" \
-        -s name="DIVE V3 Frontend" \
+    # Login to master realm
+    if ! docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user "$admin_user" --password "$admin_pass" 2>/dev/null; then
+        log_error "Failed to authenticate to Keycloak for IdP bootstrap"
+        return 1
+    fi
+
+    # Check if IdP already exists
+    if docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get identity-provider/instances/"$idp_alias" \
+        -r dive-v3-broker >/dev/null 2>&1; then
+        log_verbose "IdP $idp_alias already exists"
+        return 0
+    fi
+
+    # Create a client in master realm for the IdP (for local testing)
+    local idp_client_id="dive-v3-${instance_lower}-idp-client"
+    local idp_client_secret
+    idp_client_secret=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+    
+    # Create IdP client in master realm if it doesn't exist
+    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create clients -r master \
+        -s clientId="$idp_client_id" \
         -s enabled=true \
-        -s clientAuthenticatorType=client-secret \
-        -s secret="$client_secret" \
-        -s standardFlowEnabled=true \
-        -s directAccessGrantsEnabled=false \
-        -s publicClient=false \
         -s protocol=openid-connect \
-        -s 'redirectUris=["https://localhost:3000/*"]' \
-        -s 'webOrigins=["https://localhost:3000"]' >/dev/null 2>&1 || true
+        -s publicClient=false \
+        -s standardFlowEnabled=true \
+        -s "secret=${idp_client_secret}" \
+        -s 'redirectUris=["https://localhost:8443/*","https://keycloak:8443/*"]' \
+        -s 'webOrigins=["*"]' 2>/dev/null || true
 
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create identity-provider/instances \
+    # Create the identity provider in dive-v3-broker realm
+    if docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create identity-provider/instances \
         -r dive-v3-broker \
-        -s alias="kc-local" \
-        -s providerId="keycloak-oidc" \
+        -s alias="$idp_alias" \
+        -s displayName="$idp_display_name" \
+        -s providerId="oidc" \
         -s enabled=true \
         -s trustEmail=true \
-        -s storeToken=true \
-        -s addReadTokenRoleOnCreate=true \
+        -s storeToken=false \
         -s firstBrokerLoginFlowAlias="first broker login" \
-        -s 'config.useJwksUrl="true"' \
-        -s "config.issuer=${issuer}" \
-        -s "config.clientId=${client_id}" \
-        -s "config.clientSecret=${client_secret}" \
-        -s "config.defaultScope=openid profile email" >/dev/null 2>&1 || true
+        -s 'config.useJwksUrl=true' \
+        -s 'config.authorizationUrl=https://localhost:8443/realms/master/protocol/openid-connect/auth' \
+        -s 'config.tokenUrl=https://localhost:8443/realms/master/protocol/openid-connect/token' \
+        -s 'config.userInfoUrl=https://localhost:8443/realms/master/protocol/openid-connect/userinfo' \
+        -s 'config.jwksUrl=https://localhost:8443/realms/master/protocol/openid-connect/certs' \
+        -s "config.clientId=${idp_client_id}" \
+        -s "config.clientSecret=${idp_client_secret}" \
+        -s 'config.defaultScope=openid profile email' \
+        -s 'config.validateSignature=true' \
+        -s 'config.syncMode=FORCE' 2>&1; then
+        log_success "Created IdP: $idp_alias ($idp_display_name)"
+    else
+        log_error "Failed to create IdP $idp_alias"
+        return 1
+    fi
 
-    # Ensure redirect URI is allowed on the client
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update clients -r dive-v3-broker \
-        -s "redirectUris+=[\"${redirect}\",\"${redirect}*\"]" \
-        -s "webOrigins+=[\"https://localhost:3000\"]" \
-        -q "clientId=${client_id}" >/dev/null 2>&1 || true
+    # Create a test user in master realm for this IdP (for local testing)
+    local test_user="test-${instance_lower}"
+    local test_password="${TF_VAR_test_user_password:-DiveTest2025!}"
+    
+    # Check if user exists
+    if ! docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get users -r master \
+        -q username="$test_user" --fields id 2>/dev/null | grep -q '"id"'; then
+        log_verbose "Creating test user: $test_user"
+        docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create users -r master \
+            -s username="$test_user" \
+            -s email="${test_user}@dive25.com" \
+            -s firstName="Test" \
+            -s lastName="$(upper "$instance_lower")" \
+            -s enabled=true \
+            -s emailVerified=true 2>/dev/null || true
+        
+        # Set password
+        docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh set-password -r master \
+            --username "$test_user" --new-password "$test_password" 2>/dev/null || true
+        
+        log_verbose "Created test user: $test_user (password: $test_password)"
+    fi
 
-    log_info "Bootstrapped default IdP alias kc-local"
+    return 0
 }
 
 cmd_down() {

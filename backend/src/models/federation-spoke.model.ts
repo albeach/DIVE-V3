@@ -10,7 +10,7 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
-import { 
+import {
   ISpokeRegistration,
   ISpokeToken
   // ICertificateValidation - reserved for future certificate validation
@@ -40,7 +40,7 @@ export class MongoSpokeStore {
       const client = new MongoClient(MONGODB_URL);
       await client.connect();
       this.db = client.db(DB_NAME);
-      
+
       this.spokesCollection = this.db.collection<ISpokeRegistration>(COLLECTION_SPOKES);
       this.tokensCollection = this.db.collection<ISpokeToken>(COLLECTION_TOKENS);
 
@@ -90,13 +90,13 @@ export class MongoSpokeStore {
    */
   async save(spoke: ISpokeRegistration): Promise<void> {
     await this.ensureInitialized();
-    
+
     await this.spokesCollection!.updateOne(
       { spokeId: spoke.spokeId },
       { $set: spoke },
       { upsert: true }
     );
-    
+
     logger.debug('Spoke saved to MongoDB', {
       spokeId: spoke.spokeId,
       instanceCode: spoke.instanceCode
@@ -116,8 +116,8 @@ export class MongoSpokeStore {
    */
   async findByInstanceCode(code: string): Promise<ISpokeRegistration | null> {
     await this.ensureInitialized();
-    return this.spokesCollection!.findOne({ 
-      instanceCode: code.toUpperCase() 
+    return this.spokesCollection!.findOne({
+      instanceCode: code.toUpperCase()
     });
   }
 
@@ -126,8 +126,8 @@ export class MongoSpokeStore {
    */
   async findByFingerprint(fingerprint: string): Promise<ISpokeRegistration | null> {
     await this.ensureInitialized();
-    return this.spokesCollection!.findOne({ 
-      certificateFingerprint: fingerprint.toUpperCase() 
+    return this.spokesCollection!.findOne({
+      certificateFingerprint: fingerprint.toUpperCase()
     });
   }
 
@@ -181,7 +181,7 @@ export class MongoSpokeStore {
   async findUnhealthySpokes(maxHeartbeatAge: number): Promise<ISpokeRegistration[]> {
     await this.ensureInitialized();
     const cutoff = new Date(Date.now() - maxHeartbeatAge);
-    
+
     return this.spokesCollection!.find({
       status: 'approved',
       $or: [
@@ -200,7 +200,7 @@ export class MongoSpokeStore {
     byTrustLevel: Record<string, number>;
   }> {
     await this.ensureInitialized();
-    
+
     const [statusAgg, trustAgg] = await Promise.all([
       this.spokesCollection!.aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } }
@@ -209,15 +209,15 @@ export class MongoSpokeStore {
         { $group: { _id: '$trustLevel', count: { $sum: 1 } } }
       ]).toArray()
     ]);
-    
+
     const byStatus: Record<string, number> = {};
     statusAgg.forEach(s => { byStatus[s._id] = s.count; });
-    
+
     const byTrustLevel: Record<string, number> = {};
     trustAgg.forEach(t => { byTrustLevel[t._id] = t.count; });
-    
+
     const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
-    
+
     return { total, byStatus, byTrustLevel };
   }
 
@@ -230,7 +230,7 @@ export class MongoSpokeStore {
    */
   async saveToken(token: ISpokeToken): Promise<void> {
     await this.ensureInitialized();
-    
+
     await this.tokensCollection!.updateOne(
       { token: token.token },
       { $set: token },
@@ -243,10 +243,18 @@ export class MongoSpokeStore {
    */
   async findToken(tokenString: string): Promise<ISpokeToken | null> {
     await this.ensureInitialized();
-    return this.tokensCollection!.findOne({ 
+    return this.tokensCollection!.findOne({
       token: tokenString,
       expiresAt: { $gt: new Date() }
     });
+  }
+
+  /**
+   * Find all tokens for a spoke (including expired)
+   */
+  async findAllTokensBySpokeId(spokeId: string): Promise<ISpokeToken[]> {
+    await this.ensureInitialized();
+    return this.tokensCollection!.find({ spokeId }).toArray();
   }
 
   /**

@@ -168,9 +168,9 @@ case "$COMMAND" in
         module_federation "$@"
         ;;
     
-    # Hub commands (federation.sh)
+    # Hub commands (hub.sh - Phase 3 enhanced spoke management)
     hub)
-        source "${MODULES_DIR}/federation.sh"
+        source "${MODULES_DIR}/hub.sh"
         module_hub "$@"
         ;;
     
@@ -190,6 +190,37 @@ case "$COMMAND" in
     policy)
         source "${MODULES_DIR}/policy.sh"
         module_policy "$@"
+        ;;
+    
+    # Test commands (test.sh) - Phase 6
+    test)
+        source "${MODULES_DIR}/test.sh"
+        module_test "$@"
+        ;;
+    
+    # Verify commands - Phase 6
+    verify)
+        VERIFY_TARGET="${1:-help}"
+        shift || true
+        case "$VERIFY_TARGET" in
+            hub)
+                source "${MODULES_DIR}/hub.sh"
+                hub_verify "$@"
+                ;;
+            spoke)
+                source "${MODULES_DIR}/spoke.sh"
+                spoke_verify "$@"
+                ;;
+            *)
+                echo -e "${BOLD}DIVE Verify Commands (Phase 6):${NC}"
+                echo ""
+                echo "Usage:"
+                echo "  ./dive verify hub                    10-point hub verification"
+                echo "  ./dive verify spoke                  12-point spoke verification"
+                echo "  ./dive --instance <code> verify spoke   Verify specific spoke"
+                echo ""
+                ;;
+        esac
         ;;
 
     # Environment helpers (status.sh)

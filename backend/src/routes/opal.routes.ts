@@ -5,12 +5,15 @@
  *   - Policy data endpoint (for OPAL to fetch)
  *   - Bundle management endpoints
  *   - OPAL health and status
+ *   - Scoped bundle downloads (Phase 4)
+ *   - Version tracking (Phase 4)
+ *   - Bundle signature verification (Phase 4)
  *
- * @version 1.0.0
- * @date 2025-12-05
+ * @version 2.0.0
+ * @date 2025-12-11
  */
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { policyBundleService } from '../services/policy-bundle.service';
 import { opalClient } from '../services/opal-client';
@@ -20,6 +23,50 @@ import fs from 'fs';
 import path from 'path';
 
 const router = Router();
+
+// ============================================
+// MIDDLEWARE
+// ============================================
+
+/**
+ * Validate spoke token for scoped bundle downloads
+ */
+async function requireSpokeToken(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing or invalid authorization header' });
+    return;
+  }
+
+  const token = authHeader.substring(7);
+  const validation = await hubSpokeRegistry.validateToken(token);
+
+  if (!validation.valid) {
+    res.status(401).json({ error: validation.error || 'Invalid token' });
+    return;
+  }
+
+  // Attach spoke info to request
+  (req as any).spoke = validation.spoke;
+  (req as any).spokeScopes = validation.scopes;
+
+  next();
+}
+
+/**
+ * Require admin role for management endpoints
+ */
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  const adminKey = req.headers['x-admin-key'];
+
+  if (adminKey !== process.env.FEDERATION_ADMIN_KEY && process.env.NODE_ENV === 'production') {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
+  }
+
+  next();
+}
 
 // ============================================
 // POLICY DATA ENDPOINT (for OPAL Server)
@@ -204,11 +251,11 @@ router.post('/bundle/build-and-publish', async (req: Request, res: Response): Pr
       },
       publish: publishResult
         ? {
-            success: publishResult.success,
-            publishedAt: publishResult.publishedAt,
-            opalTransactionId: publishResult.opalTransactionId,
-            error: publishResult.error,
-          }
+          success: publishResult.success,
+          publishedAt: publishResult.publishedAt,
+          opalTransactionId: publishResult.opalTransactionId,
+          error: publishResult.error,
+        }
         : undefined,
     });
   } catch (error) {
@@ -386,6 +433,304 @@ router.post('/data/publish', async (req: Request, res: Response): Promise<void> 
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Publish failed',
+    });
+  }
+});
+
+// ============================================
+// PHASE 4: SCOPED BUNDLE ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/opal/version
+ * Get current policy version (public - for spokes to check)
+ */
+router.get('/version', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const version = policySyncService.getCurrentVersion();
+    const bundle = policyBundleService.getCurrentBundle();
+
+    res.json({
+      version: version.version,
+      hash: version.hash,
+      timestamp: version.timestamp,
+      layers: version.layers,
+      bundle: bundle
+        ? {
+          bundleId: bundle.bundleId,
+          signedAt: bundle.signedAt,
+          signedBy: bundle.signedBy,
+          scopes: bundle.scopes,
+          fileCount: bundle.manifest.files.length,
+        }
+        : null,
+    });
+  } catch (error) {
+    logger.error('Failed to get policy version', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      error: 'Failed to retrieve policy version',
+    });
+  }
+});
+
+/**
+ * GET /api/opal/bundle/:scope
+ * Download scoped policy bundle (requires spoke token with matching scope)
+ */
+router.get('/bundle/:scope', requireSpokeToken, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const requestedScope = req.params.scope;
+    const spoke = (req as any).spoke;
+    const spokeScopes = (req as any).spokeScopes || [];
+
+    // Normalize scope format (e.g., "usa" -> "policy:usa")
+    const normalizedScope = requestedScope.startsWith('policy:')
+      ? requestedScope
+      : `policy:${requestedScope}`;
+
+    // Check if spoke has access to this scope
+    // Base policies are always included
+    const hasAccess =
+      normalizedScope === 'policy:base' ||
+      spokeScopes.includes(normalizedScope) ||
+      spokeScopes.includes('policy:all');
+
+    if (!hasAccess) {
+      logger.warn('Spoke requested unauthorized scope', {
+        spokeId: spoke.spokeId,
+        instanceCode: spoke.instanceCode,
+        requestedScope: normalizedScope,
+        allowedScopes: spokeScopes,
+      });
+
+      res.status(403).json({
+        error: 'Access denied',
+        message: `Scope '${normalizedScope}' not in allowed scopes`,
+        allowedScopes: spokeScopes,
+      });
+      return;
+    }
+
+    logger.info('Building scoped bundle for spoke', {
+      spokeId: spoke.spokeId,
+      instanceCode: spoke.instanceCode,
+      scope: normalizedScope,
+    });
+
+    // Build bundle with requested scope
+    const buildResult = await policyBundleService.getBundleForScopes([normalizedScope]);
+
+    if (!buildResult.success) {
+      res.status(500).json({
+        success: false,
+        error: buildResult.error || 'Failed to build bundle',
+      });
+      return;
+    }
+
+    // Get the bundle
+    const bundle = policyBundleService.getCurrentBundle();
+    if (!bundle) {
+      res.status(500).json({
+        success: false,
+        error: 'Bundle not available after build',
+      });
+      return;
+    }
+
+    // Record sync
+    await policySyncService.recordSpokeSync(spoke.spokeId, buildResult.version);
+
+    res.json({
+      success: true,
+      bundleId: buildResult.bundleId,
+      version: buildResult.version,
+      hash: buildResult.hash,
+      scope: normalizedScope,
+      size: buildResult.size,
+      fileCount: buildResult.fileCount,
+      signed: !!buildResult.signature,
+      signature: buildResult.signature,
+      manifest: {
+        revision: bundle.manifest.revision,
+        roots: bundle.manifest.roots,
+        files: bundle.manifest.files.map((f) => ({
+          path: f.path,
+          hash: f.hash.substring(0, 16) + '...',
+          size: f.size,
+        })),
+      },
+      // Include base64-encoded bundle content for spoke to apply
+      bundleContent: bundle.contents.toString('base64'),
+    });
+  } catch (error) {
+    logger.error('Failed to serve scoped bundle', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      scope: req.params.scope,
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to retrieve bundle',
+    });
+  }
+});
+
+/**
+ * GET /api/opal/bundle/verify/:hash
+ * Verify bundle signature (public endpoint)
+ */
+router.get('/bundle/verify/:hash', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { hash } = req.params;
+    const bundle = policyBundleService.getCurrentBundle();
+
+    if (!bundle) {
+      res.status(404).json({
+        verified: false,
+        error: 'No bundle available',
+      });
+      return;
+    }
+
+    // Check if hash matches
+    if (bundle.hash !== hash && !bundle.hash.startsWith(hash)) {
+      res.status(404).json({
+        verified: false,
+        error: 'Bundle hash not found',
+        expectedHash: bundle.hash.substring(0, 16) + '...',
+      });
+      return;
+    }
+
+    // Verify signature
+    const publicKeyPath =
+      process.env.BUNDLE_SIGNING_PUBLIC_KEY_PATH ||
+      path.join(process.cwd(), 'certs', 'bundle-signing', 'bundle-signing.pub');
+
+    let signatureValid = false;
+    let signatureError: string | undefined;
+
+    if (bundle.signature && fs.existsSync(publicKeyPath)) {
+      const verifyResult = await policyBundleService.verifyBundleSignature(bundle, publicKeyPath);
+      signatureValid = verifyResult.valid;
+      signatureError = verifyResult.error;
+    } else if (!bundle.signature) {
+      signatureError = 'Bundle not signed';
+    } else {
+      signatureError = 'Public key not found for verification';
+    }
+
+    res.json({
+      verified: signatureValid,
+      hash: bundle.hash,
+      bundleId: bundle.bundleId,
+      version: bundle.version,
+      signedAt: bundle.signedAt,
+      signedBy: bundle.signedBy,
+      signatureValid,
+      signatureError,
+      manifest: {
+        revision: bundle.manifest.revision,
+        roots: bundle.manifest.roots,
+        fileCount: bundle.manifest.files.length,
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to verify bundle', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      hash: req.params.hash,
+    });
+
+    res.status(500).json({
+      verified: false,
+      error: error instanceof Error ? error.message : 'Verification failed',
+    });
+  }
+});
+
+/**
+ * POST /api/opal/force-sync
+ * Force sync for a specific spoke or all spokes (admin only)
+ */
+router.post('/force-sync', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { spokeId } = req.body;
+
+    logger.info('Forcing policy sync', { spokeId: spokeId || 'all' });
+
+    if (spokeId) {
+      // Force sync for specific spoke
+      const result = await policySyncService.forceFullSync(spokeId);
+      res.json({
+        success: result.success,
+        spokeId: result.spokeId,
+        version: result.version,
+        syncTime: result.syncTime,
+        error: result.error,
+      });
+    } else {
+      // Force sync for all spokes
+      const spokes = await hubSpokeRegistry.listActiveSpokes();
+      const results = await Promise.all(spokes.map((s) => policySyncService.forceFullSync(s.spokeId)));
+
+      res.json({
+        success: results.every((r) => r.success),
+        spokes: results.map((r) => ({
+          spokeId: r.spokeId,
+          success: r.success,
+          version: r.version,
+          error: r.error,
+        })),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (error) {
+    logger.error('Force sync failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Force sync failed',
+    });
+  }
+});
+
+/**
+ * GET /api/opal/sync-status
+ * Get sync status for all spokes (admin only)
+ */
+router.get('/sync-status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const allStatus = await policySyncService.getAllSpokeStatus();
+    const outOfSync = await policySyncService.getOutOfSyncSpokes();
+    const currentVersion = policySyncService.getCurrentVersion();
+
+    res.json({
+      currentVersion,
+      spokes: allStatus,
+      summary: {
+        total: allStatus.length,
+        current: allStatus.filter((s) => s.status === 'current').length,
+        behind: allStatus.filter((s) => s.status === 'behind').length,
+        stale: allStatus.filter((s) => s.status === 'stale' || s.status === 'critical_stale').length,
+        offline: allStatus.filter((s) => s.status === 'offline').length,
+      },
+      outOfSyncSpokes: outOfSync.map((s) => ({
+        spokeId: s.spokeId,
+        instanceCode: s.instanceCode,
+        currentVersion: s.currentVersion,
+        status: s.status,
+        lastSyncTime: s.lastSyncTime,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get sync status',
     });
   }
 });
