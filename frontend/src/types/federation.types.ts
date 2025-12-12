@@ -138,6 +138,108 @@ export interface ISyncStatusResponse {
     stale: number;
     offline: number;
   };
+  outOfSyncSpokes?: Array<{
+    spokeId: string;
+    instanceCode: string;
+    currentVersion?: string;
+    status: SyncStatus;
+    lastSyncTime?: string;
+  }>;
+}
+
+// =============================================================================
+// POLICY BUNDLE MANAGEMENT (Phase 4)
+// =============================================================================
+
+export interface IBundleManifest {
+  revision: string;
+  roots: string[];
+  files: Array<{
+    path: string;
+    hash: string;
+    size: number;
+  }>;
+}
+
+export interface IBundleMetadata {
+  bundleId: string;
+  version: string;
+  hash: string;
+  scopes: string[];
+  size: number;
+  signedAt?: string;
+  signedBy?: string;
+  manifest: IBundleManifest;
+}
+
+export interface IBuildOptions {
+  scopes: string[];
+  includeData?: boolean;
+  sign?: boolean;
+  compress?: boolean;
+}
+
+export interface IBuildResult {
+  success: boolean;
+  bundleId?: string;
+  version?: string;
+  hash?: string;
+  size?: number;
+  fileCount?: number;
+  signed?: boolean;
+  error?: string;
+}
+
+export interface IPublishResult {
+  success: boolean;
+  bundleId?: string;
+  version?: string;
+  publishedAt?: string;
+  opalTransactionId?: string;
+  error?: string;
+}
+
+export interface IBuildAndPublishResult {
+  build: IBuildResult;
+  publish?: IPublishResult;
+}
+
+export interface IOPALHealth {
+  healthy: boolean;
+  opalEnabled: boolean;
+  serverUrl?: string;
+  topics?: string[];
+  error?: string;
+  config?: {
+    serverUrl: string;
+    topics: string[];
+  };
+}
+
+export interface IScopeDefinition {
+  id: string;
+  label: string;
+  description: string;
+  required?: boolean;
+}
+
+export interface IForceSyncResult {
+  success: boolean;
+  spokeId?: string;
+  version?: string;
+  syncTime?: string;
+  error?: string;
+}
+
+export interface IForceSyncAllResult {
+  success: boolean;
+  spokes: Array<{
+    spokeId: string;
+    success: boolean;
+    version?: string;
+    error?: string;
+  }>;
+  timestamp: string;
 }
 
 // =============================================================================
@@ -167,6 +269,268 @@ export interface IAuditQueueStatus {
   lastSyncAttempt?: string;
   lastSyncSuccess?: string;
   pendingBytes: number;
+}
+
+// =============================================================================
+// FAILOVER EVENTS
+// =============================================================================
+
+export interface IFailoverEvent {
+  id: string;
+  timestamp: string;
+  previousState: CircuitBreakerState;
+  newState: CircuitBreakerState;
+  reason: string;
+  triggeredBy: 'automatic' | 'manual' | 'hub';
+  duration?: number;
+}
+
+export interface IFailoverEventsResponse {
+  success: boolean;
+  events: IFailoverEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// MAINTENANCE HISTORY
+// =============================================================================
+
+export interface IMaintenanceEvent {
+  id: string;
+  enteredAt: string;
+  exitedAt?: string;
+  reason: string;
+  duration?: number;
+  exitReason?: string;
+}
+
+export interface IMaintenanceHistoryResponse {
+  success: boolean;
+  history: IMaintenanceEvent[];
+  currentSession: IMaintenanceEvent | null;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// TOKEN MANAGEMENT (Phase 5)
+// =============================================================================
+
+export interface ITokenInfo {
+  tokenId?: string;
+  expiresAt: string;
+  scopes: string[];
+  status: 'valid' | 'expiring' | 'expired' | 'none';
+  daysUntilExpiry?: number;
+  hoursUntilExpiry?: number;
+  issuedAt?: string;
+  lastUsed?: string;
+}
+
+export interface ITokenRotationRequest {
+  validityDays?: number;
+  notifyAdmin?: boolean;
+  revokeExisting?: boolean;
+}
+
+export interface ITokenRotationResponse {
+  success: boolean;
+  token?: string;
+  expiresAt?: string;
+  scopes?: string[];
+  spokeId?: string;
+  error?: string;
+  isOneTimeView?: boolean;
+}
+
+// =============================================================================
+// AUDIT MANAGEMENT (Phase 5)
+// =============================================================================
+
+export type AuditEventType = 
+  | 'sync_success'
+  | 'sync_failed'
+  | 'sync_partial'
+  | 'queue_cleared'
+  | 'queue_overflow'
+  | 'connection_lost'
+  | 'connection_restored';
+
+export type AuditQueueState = 'idle' | 'syncing' | 'error' | 'blocked';
+
+export interface IAuditEvent {
+  id: string;
+  timestamp: string;
+  type: AuditEventType;
+  eventCount?: number;
+  duration?: number;
+  bytesTransferred?: number;
+  error?: string;
+  hubResponse?: {
+    status: number;
+    message?: string;
+  };
+}
+
+export interface IAuditHistoryResponse {
+  success: boolean;
+  events: IAuditEvent[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary?: {
+    totalSyncs: number;
+    successfulSyncs: number;
+    failedSyncs: number;
+    totalEventsProcessed: number;
+    lastSuccessfulSync?: string;
+    lastFailedSync?: string;
+  };
+}
+
+export interface IAuditSyncResult {
+  success: boolean;
+  eventsProcessed?: number;
+  duration?: number;
+  bytesTransferred?: number;
+  error?: string;
+  nextSyncTime?: string;
+}
+
+export interface IAuditExportOptions {
+  format: 'csv' | 'json';
+  dateFrom?: string;
+  dateTo?: string;
+  eventTypes?: AuditEventType[];
+  limit?: number;
+}
+
+// =============================================================================
+// OPAL SERVER DASHBOARD (Phase 6)
+// =============================================================================
+
+export type OPALClientStatus = 'connected' | 'synced' | 'behind' | 'stale' | 'offline';
+export type OPALTransactionType = 'publish' | 'sync' | 'refresh' | 'data_update' | 'policy_update';
+export type OPALTransactionStatus = 'success' | 'failed' | 'pending' | 'partial';
+
+/**
+ * Extended OPAL Server status with metrics
+ */
+export interface IOPALServerStatus {
+  healthy: boolean;
+  version: string;
+  uptime: number;            // seconds since server started
+  startedAt: string;         // ISO timestamp
+  policyDataEndpoint: {
+    status: 'healthy' | 'degraded' | 'down';
+    lastRequest?: string;
+    requestsPerMinute: number;
+    totalRequests: number;
+    errorRate: number;        // percentage (0-100)
+  };
+  webSocket: {
+    connected: boolean;
+    clientCount: number;
+    lastMessage?: string;
+    messagesPerMinute: number;
+  };
+  topics: string[];
+  config: {
+    serverUrl: string;
+    dataTopics: string[];
+    policyTopics: string[];
+    broadcastUri?: string;
+  };
+  stats: {
+    totalPublishes: number;
+    totalSyncs: number;
+    failedSyncs: number;
+    averageSyncDurationMs: number;
+  };
+}
+
+/**
+ * Connected OPAL client information
+ */
+export interface IOPALClient {
+  clientId: string;
+  spokeId?: string;
+  instanceCode?: string;
+  hostname?: string;
+  ipAddress?: string;
+  status: OPALClientStatus;
+  version: string;
+  connectedAt: string;
+  lastHeartbeat: string;
+  lastSync?: string;
+  currentPolicyVersion?: string;
+  subscribedTopics: string[];
+  stats: {
+    syncsReceived: number;
+    syncsFailed: number;
+    lastSyncDurationMs?: number;
+    bytesReceived: number;
+  };
+}
+
+/**
+ * OPAL transaction log entry
+ */
+export interface IOPALTransaction {
+  transactionId: string;
+  type: OPALTransactionType;
+  status: OPALTransactionStatus;
+  timestamp: string;
+  duration?: number;         // milliseconds
+  initiatedBy: 'system' | 'admin' | 'schedule' | 'api';
+  details: {
+    bundleVersion?: string;
+    bundleHash?: string;
+    affectedClients?: number;
+    successfulClients?: number;
+    failedClients?: number;
+    topics?: string[];
+    dataPath?: string;
+    error?: string;
+  };
+}
+
+/**
+ * OPAL client list response
+ */
+export interface IOPALClientListResponse {
+  success: boolean;
+  clients: IOPALClient[];
+  total: number;
+  summary: {
+    connected: number;
+    synced: number;
+    behind: number;
+    stale: number;
+    offline: number;
+  };
+  timestamp: string;
+}
+
+/**
+ * OPAL transaction log response
+ */
+export interface IOPALTransactionLogResponse {
+  success: boolean;
+  transactions: IOPALTransaction[];
+  total: number;
+  limit: number;
+  offset: number;
+  summary?: {
+    totalPublishes: number;
+    totalSyncs: number;
+    successRate: number;      // percentage (0-100)
+    lastSuccessfulSync?: string;
+    lastFailedSync?: string;
+  };
 }
 
 // =============================================================================
