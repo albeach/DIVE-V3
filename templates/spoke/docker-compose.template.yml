@@ -5,7 +5,9 @@
 # Spoke ID: {{SPOKE_ID}}
 # =============================================================================
 # 
-# This is a parameterized template. Replace placeholders before use:
+# This is a STANDALONE spoke stack - completely separate from Hub.
+# 
+# Placeholders (auto-replaced by ./dive spoke init):
 #   {{INSTANCE_CODE_UPPER}} - 3-letter uppercase code (e.g., NZL)
 #   {{INSTANCE_CODE_LOWER}} - 3-letter lowercase code (e.g., nzl)
 #   {{INSTANCE_NAME}}       - Human-readable name
@@ -14,14 +16,20 @@
 #   {{API_URL}}             - Backend API URL
 #   {{BASE_URL}}            - Frontend URL
 #   {{IDP_URL}}             - Keycloak IdP URL
-#   {{KEYCLOAK_HOST_PORT}}  - Keycloak HTTPS port (e.g., 8443)
-#   {{BACKEND_HOST_PORT}}   - Backend port (e.g., 4000)
-#   {{FRONTEND_HOST_PORT}}  - Frontend port (e.g., 3000)
+#   {{KEYCLOAK_HOST_PORT}}  - Keycloak HTTPS port (e.g., 18443)
+#   {{BACKEND_HOST_PORT}}   - Backend port (e.g., 14000)
+#   {{FRONTEND_HOST_PORT}}  - Frontend port (e.g., 13000)
+#   {{OPA_HOST_PORT}}       - OPA port (e.g., 18181)
+#   {{KAS_HOST_PORT}}       - KAS port (e.g., 18085)
 #
-# Or use: ./dive spoke init <CODE> <NAME> to generate automatically
+# Usage:
+#   cd instances/{{INSTANCE_CODE_LOWER}}
+#   docker compose --env-file .env up -d
+#
 # =============================================================================
 
-version: '3.8'
+# Project name ensures complete isolation from Hub
+name: dive-spoke-{{INSTANCE_CODE_LOWER}}
 
 networks:
   dive-{{INSTANCE_CODE_LOWER}}-network:
@@ -36,6 +44,7 @@ volumes:
   {{INSTANCE_CODE_LOWER}}_frontend_next:
   {{INSTANCE_CODE_LOWER}}_backend_node_modules:
   {{INSTANCE_CODE_LOWER}}_backend_logs:
+  {{INSTANCE_CODE_LOWER}}_kas_logs:
 
 services:
   # ==========================================================================
@@ -94,8 +103,11 @@ services:
   # ==========================================================================
 
   keycloak-{{INSTANCE_CODE_LOWER}}:
-    image: quay.io/keycloak/keycloak:26.0.4
-    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
+    build:
+      context: ../../keycloak
+      dockerfile: Dockerfile
+    entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
+    command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
@@ -109,12 +121,27 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: "8443"
       KC_LOG_LEVEL: info
+      KC_FEATURES: scripts
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      # Realm import environment variables (CRITICAL: Must match frontend secrets)
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      APP_URL: {{BASE_URL}}
+      API_URL: {{API_URL}}
+      USA_IDP_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
+      USA_IDP_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
+      INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
     ports:
       - "{{KEYCLOAK_HOST_PORT}}:8443"
+      - "{{KEYCLOAK_HTTP_PORT}}:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
+      - ../../keycloak/realms:/opt/keycloak/realm-templates:ro
     depends_on:
       postgres-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
@@ -124,7 +151,8 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
 
   # ==========================================================================
@@ -136,7 +164,7 @@ services:
     platform: linux/amd64
     command: run --server --addr :8181 /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
     ports:
-      - "8181:8181"
+      - "{{OPA_HOST_PORT}}:8181"
     volumes:
       - ../../policies:/policies:ro
       - ./cache/policies:/var/opa/cache
@@ -150,18 +178,28 @@ services:
     restart: unless-stopped
 
   opal-client-{{INSTANCE_CODE_LOWER}}:
-    image: permitio/opal-client:latest
+    build:
+      context: ../../docker
+      dockerfile: opal-client.Dockerfile
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
-      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN}
+      # Hub OPAL Server URL - from environment variable (required)
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
+      # Authentication - token and public key from Hub
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:?SPOKE_OPAL_TOKEN required - obtain from Hub}
+      OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
       OPAL_INLINE_OPA_ENABLED: "false"
       OPAL_OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
       OPAL_SUBSCRIPTION_ID: {{SPOKE_ID}}
+      # Data topics to subscribe to (must match Hub topics)
+      OPAL_DATA_TOPICS: policy_data
       OPAL_LOG_LEVEL: INFO
       OPAL_KEEP_ALIVE_TIMEOUT: 60
       OPAL_RECONNECT_INTERVAL: 5
       OPAL_RECONNECT_MAX_INTERVAL: 300
       OPAL_POLICY_REFRESH_INTERVAL: 60
+      # Local OPA policy/data store
+      OPAL_POLICY_STORE_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181/v1/policies
+      OPAL_DATA_STORE_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181/v1/data
     volumes:
       - {{INSTANCE_CODE_LOWER}}_opal_cache:/var/opal/cache
       - ./certs:/var/opal/certs:ro
@@ -170,14 +208,16 @@ services:
         condition: service_healthy
     networks:
       - dive-{{INSTANCE_CODE_LOWER}}-network
+    extra_hosts:
+      - "localhost:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
-    profiles:
-      - federation  # Only start when federated with Hub
+    # NO profiles restriction - ALWAYS start for policy sync with Hub
 
   # ==========================================================================
   # BACKEND API
@@ -242,6 +282,53 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+
+  # ==========================================================================
+  # KAS - Key Access Service
+  # ==========================================================================
+
+  kas-{{INSTANCE_CODE_LOWER}}:
+    build:
+      context: ../../kas
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      KAS_PORT: 8080
+      HTTPS_ENABLED: "true"
+      CERT_PATH: /opt/app/certs
+      KEY_FILE: key.pem
+      CERT_FILE: certificate.pem
+      BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017?authSource=admin
+      MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      LOG_LEVEL: info
+      KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
+      KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-client-{{INSTANCE_CODE_LOWER}}
+    ports:
+      - "{{KAS_HOST_PORT}}:8080"
+    depends_on:
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      mongodb-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    volumes:
+      - ./certs:/opt/app/certs:ro
+      - ../../kas/src:/app/src
+      - {{INSTANCE_CODE_LOWER}}_kas_logs:/app/logs
+      - ../../config:/app/config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: npm run dev
     restart: unless-stopped
 
   # ==========================================================================

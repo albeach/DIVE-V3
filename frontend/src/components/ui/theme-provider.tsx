@@ -149,6 +149,34 @@ const INSTANCE_THEMES: Record<string, InstanceTheme> = {
       '--instance-banner-bg': 'linear-gradient(135deg, #009246 0%, #ffffff 50%, #CE2B37 100%)',
     },
   },
+  NZL: {
+    primary_color: '#00247D',
+    secondary_color: '#CC142B',
+    accent_color: '#ffffff',
+    background_image: 'background-nzl.jpg',
+    keycloak_theme: 'dive-v3-nzl',
+    css_variables: {
+      '--instance-primary': '#00247D',
+      '--instance-secondary': '#CC142B',
+      '--instance-accent': '#ffffff',
+      '--instance-text': '#ffffff',
+      '--instance-banner-bg': 'linear-gradient(135deg, #00247D 0%, #CC142B 100%)',
+    },
+  },
+  AUS: {
+    primary_color: '#00008B',
+    secondary_color: '#FF0000',
+    accent_color: '#ffffff',
+    background_image: 'background-aus.jpg',
+    keycloak_theme: 'dive-v3-aus',
+    css_variables: {
+      '--instance-primary': '#00008B',
+      '--instance-secondary': '#FF0000',
+      '--instance-accent': '#ffffff',
+      '--instance-text': '#ffffff',
+      '--instance-banner-bg': 'linear-gradient(135deg, #00008B 0%, #FF0000 100%)',
+    },
+  },
 };
 
 const INSTANCE_NAMES: Record<string, string> = {
@@ -161,6 +189,10 @@ const INSTANCE_NAMES: Record<string, string> = {
   ESP: 'Spain',
   NLD: 'Netherlands',
   POL: 'Poland',
+  NZL: 'New Zealand',
+  AUS: 'Australia',
+  JPN: 'Japan',
+  KOR: 'South Korea',
 };
 
 const INSTANCE_LOCALES: Record<string, string> = {
@@ -173,6 +205,10 @@ const INSTANCE_LOCALES: Record<string, string> = {
   ESP: 'es',
   NLD: 'nl',
   POL: 'pl',
+  NZL: 'en',
+  AUS: 'en',
+  JPN: 'ja',
+  KOR: 'ko',
 };
 
 // Localized strings per instance
@@ -248,6 +284,26 @@ const INSTANCE_STRINGS: Record<string, LocalizedStrings> = {
     policyAuth: 'Autorizzazione basata su Policy',
     secureDoc: 'Condivisione Documenti Sicura',
   },
+  NZL: {
+    welcome: 'Welcome to New Zealand',
+    selectIdp: 'Select your Identity Provider to access the New Zealand DIVE V3 platform',
+    pilotCapabilities: 'Pilot Capabilities',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'DIVE V3 Coalition Pilot',
+    federatedAuth: 'Federated Authentication',
+    policyAuth: 'Policy-Driven Authorisation',
+    secureDoc: 'Secure Document Sharing',
+  },
+  AUS: {
+    welcome: 'Welcome to Australia',
+    selectIdp: 'Select your Identity Provider to access the Australia DIVE V3 platform',
+    pilotCapabilities: 'Pilot Capabilities',
+    poweredBy: 'Powered by Keycloak • Open Policy Agent • Next.js',
+    coalitionPilot: 'DIVE V3 Coalition Pilot',
+    federatedAuth: 'Federated Authentication',
+    policyAuth: 'Policy-Driven Authorisation',
+    secureDoc: 'Secure Document Sharing',
+  },
 };
 
 // Coalition partners for footer (which countries each instance shows)
@@ -258,6 +314,8 @@ const COALITION_PARTNERS: Record<string, string[]> = {
   GBR: ['USA', 'CAN', 'FRA', 'DEU'],
   CAN: ['USA', 'GBR', 'FRA'],
   ITA: ['FRA', 'DEU', 'ESP', 'USA'],
+  NZL: ['AUS', 'USA', 'GBR', 'CAN'],
+  AUS: ['NZL', 'USA', 'GBR', 'CAN'],
 };
 
 const DEFAULT_STRINGS: LocalizedStrings = INSTANCE_STRINGS.USA;

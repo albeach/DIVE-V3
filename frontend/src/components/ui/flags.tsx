@@ -354,6 +354,100 @@ export const NetherlandsFlag: React.FC<FlagProps> = ({ className = '', size = 32
 );
 
 /**
+ * New Zealand Flag - Union Jack canton with Southern Cross
+ */
+export const NewZealandFlag: React.FC<FlagProps> = ({ className = '', size = 32 }) => (
+  <svg
+    viewBox="0 0 48 32"
+    width={size}
+    height={size * 0.67}
+    className={`drop-shadow-md ${className}`}
+    role="img"
+    aria-label="New Zealand"
+  >
+    <defs>
+      <linearGradient id="nzlShine" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#fff" stopOpacity="0.15"/>
+        <stop offset="50%" stopColor="#fff" stopOpacity="0"/>
+        <stop offset="100%" stopColor="#000" stopOpacity="0.1"/>
+      </linearGradient>
+      <clipPath id="nzlClip">
+        <rect width="48" height="32" rx="3" ry="3"/>
+      </clipPath>
+    </defs>
+    <g clipPath="url(#nzlClip)">
+      {/* Blue background */}
+      <rect width="48" height="32" fill="#00247D"/>
+      {/* Union Jack canton */}
+      <g transform="scale(0.5)">
+        <rect width="48" height="32" fill="#00247D"/>
+        <path d="M0,0 L48,32 M48,0 L0,32" stroke="#fff" strokeWidth="6"/>
+        <path d="M0,0 L48,32 M48,0 L0,32" stroke="#CC142B" strokeWidth="4"/>
+        <path d="M24,0 V32 M0,16 H48" stroke="#fff" strokeWidth="10"/>
+        <path d="M24,0 V32 M0,16 H48" stroke="#CC142B" strokeWidth="6"/>
+      </g>
+      {/* Southern Cross stars (4 red stars with white borders) */}
+      <g fill="#CC142B" stroke="#fff" strokeWidth="0.5">
+        <polygon points="38,8 39.5,11.5 43,11.5 40.5,14 41.5,17.5 38,15 34.5,17.5 35.5,14 33,11.5 36.5,11.5" transform="scale(0.7) translate(18, 3)"/>
+        <polygon points="38,8 39.5,11.5 43,11.5 40.5,14 41.5,17.5 38,15 34.5,17.5 35.5,14 33,11.5 36.5,11.5" transform="scale(0.6) translate(25, 18)"/>
+        <polygon points="38,8 39.5,11.5 43,11.5 40.5,14 41.5,17.5 38,15 34.5,17.5 35.5,14 33,11.5 36.5,11.5" transform="scale(0.7) translate(18, 30)"/>
+        <polygon points="38,8 39.5,11.5 43,11.5 40.5,14 41.5,17.5 38,15 34.5,17.5 35.5,14 33,11.5 36.5,11.5" transform="scale(0.55) translate(30, 25)"/>
+      </g>
+      <rect width="48" height="32" fill="url(#nzlShine)"/>
+    </g>
+    <rect width="48" height="32" rx="3" ry="3" fill="none" stroke="#1a1a2e" strokeWidth="0.5" strokeOpacity="0.3"/>
+  </svg>
+);
+
+/**
+ * Australia Flag - Union Jack canton with Commonwealth Star and Southern Cross
+ */
+export const AustraliaFlag: React.FC<FlagProps> = ({ className = '', size = 32 }) => (
+  <svg
+    viewBox="0 0 48 32"
+    width={size}
+    height={size * 0.67}
+    className={`drop-shadow-md ${className}`}
+    role="img"
+    aria-label="Australia"
+  >
+    <defs>
+      <linearGradient id="ausShine" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#fff" stopOpacity="0.15"/>
+        <stop offset="50%" stopColor="#fff" stopOpacity="0"/>
+        <stop offset="100%" stopColor="#000" stopOpacity="0.1"/>
+      </linearGradient>
+      <clipPath id="ausClip">
+        <rect width="48" height="32" rx="3" ry="3"/>
+      </clipPath>
+    </defs>
+    <g clipPath="url(#ausClip)">
+      {/* Blue background */}
+      <rect width="48" height="32" fill="#00008B"/>
+      {/* Union Jack canton */}
+      <g transform="scale(0.5)">
+        <rect width="48" height="32" fill="#00247D"/>
+        <path d="M0,0 L48,32 M48,0 L0,32" stroke="#fff" strokeWidth="6"/>
+        <path d="M0,0 L48,32 M48,0 L0,32" stroke="#CC142B" strokeWidth="4"/>
+        <path d="M24,0 V32 M0,16 H48" stroke="#fff" strokeWidth="10"/>
+        <path d="M24,0 V32 M0,16 H48" stroke="#CC142B" strokeWidth="6"/>
+      </g>
+      {/* Commonwealth Star */}
+      <polygon fill="#fff" points="12,22 13.5,26 17.5,26 14.5,28.5 15.5,32 12,29.5 8.5,32 9.5,28.5 6.5,26 10.5,26" transform="scale(0.5)"/>
+      {/* Southern Cross stars */}
+      <g fill="#fff">
+        <polygon points="38,8 39.2,11 42.5,11 40,13 41,16 38,14 35,16 36,13 33.5,11 36.8,11" transform="scale(0.5) translate(32, 5)"/>
+        <polygon points="38,8 39.2,11 42.5,11 40,13 41,16 38,14 35,16 36,13 33.5,11 36.8,11" transform="scale(0.45) translate(42, 22)"/>
+        <polygon points="38,8 39.2,11 42.5,11 40,13 41,16 38,14 35,16 36,13 33.5,11 36.8,11" transform="scale(0.5) translate(32, 35)"/>
+        <polygon points="38,8 39.2,11 42.5,11 40,13 41,16 38,14 35,16 36,13 33.5,11 36.8,11" transform="scale(0.4) translate(52, 28)"/>
+      </g>
+      <rect width="48" height="32" fill="url(#ausShine)"/>
+    </g>
+    <rect width="48" height="32" rx="3" ry="3" fill="none" stroke="#1a1a2e" strokeWidth="0.5" strokeOpacity="0.3"/>
+  </svg>
+);
+
+/**
  * Industry Icon - Modern building with style
  */
 export const IndustryIcon: React.FC<FlagProps> = ({ className = '', size = 32 }) => (
@@ -458,6 +552,8 @@ export const getFlagComponent = (alias: string): React.FC<FlagProps> => {
   if (lowerAlias.includes('spain') || lowerAlias.includes('esp')) return SpainFlag;
   if (lowerAlias.includes('poland') || lowerAlias.includes('pol')) return PolandFlag;
   if (lowerAlias.includes('netherlands') || lowerAlias.includes('nld')) return NetherlandsFlag;
+  if (lowerAlias.includes('new zealand') || lowerAlias.includes('nzl') || lowerAlias.includes('nzdf')) return NewZealandFlag;
+  if (lowerAlias.includes('australia') || lowerAlias.includes('aus')) return AustraliaFlag;
   if (lowerAlias.includes('industry') || lowerAlias.includes('contractor')) return IndustryIcon;
   if (lowerAlias.includes('usa') || lowerAlias.includes('us-') || lowerAlias.includes('dod') || lowerAlias.includes('-us')) return USAFlag;
   
@@ -482,6 +578,8 @@ export const getCountryFlagComponent = (countryCode: string | null | undefined):
     case 'ESP': return SpainFlag;
     case 'POL': return PolandFlag;
     case 'NLD': return NetherlandsFlag;
+    case 'NZL': return NewZealandFlag;
+    case 'AUS': return AustraliaFlag;
     default: return DefaultGlobeIcon;
   }
 };
@@ -493,6 +591,8 @@ export const COUNTRIES = [
   { code: 'USA', name: 'United States', FlagComponent: USAFlag, region: 'FVEY' },
   { code: 'GBR', name: 'United Kingdom', FlagComponent: UKFlag, region: 'FVEY' },
   { code: 'CAN', name: 'Canada', FlagComponent: CanadaFlag, region: 'FVEY' },
+  { code: 'AUS', name: 'Australia', FlagComponent: AustraliaFlag, region: 'FVEY' },
+  { code: 'NZL', name: 'New Zealand', FlagComponent: NewZealandFlag, region: 'FVEY' },
   { code: 'FRA', name: 'France', FlagComponent: FranceFlag, region: 'NATO' },
   { code: 'DEU', name: 'Germany', FlagComponent: GermanyFlag, region: 'NATO' },
   { code: 'ESP', name: 'Spain', FlagComponent: SpainFlag, region: 'NATO' },

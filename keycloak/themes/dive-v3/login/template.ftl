@@ -75,6 +75,14 @@
             <#assign hostInstance = "NLD"><#assign hostFlag = "🇳🇱"><#assign hostCountryName = "Netherlands">
         <#elseif realm.displayName?lower_case?contains("poland") || realm.displayName?lower_case?contains("polska")>
             <#assign hostInstance = "POL"><#assign hostFlag = "🇵🇱"><#assign hostCountryName = "Poland">
+        <#elseif realm.displayName?lower_case?contains("new zealand") || realm.displayName?lower_case?contains("nzl") || realm.displayName?lower_case?contains("nzdf")>
+            <#assign hostInstance = "NZL"><#assign hostFlag = "🇳🇿"><#assign hostCountryName = "New Zealand">
+        <#elseif realm.displayName?lower_case?contains("australia") || realm.displayName?lower_case?contains("aus")>
+            <#assign hostInstance = "AUS"><#assign hostFlag = "🇦🇺"><#assign hostCountryName = "Australia">
+        <#elseif realm.displayName?lower_case?contains("japan") || realm.displayName?lower_case?contains("jpn")>
+            <#assign hostInstance = "JPN"><#assign hostFlag = "🇯🇵"><#assign hostCountryName = "Japan">
+        <#elseif realm.displayName?lower_case?contains("korea") || realm.displayName?lower_case?contains("kor")>
+            <#assign hostInstance = "KOR"><#assign hostFlag = "🇰🇷"><#assign hostCountryName = "South Korea">
         <#elseif realm.displayName?lower_case?contains("usa") || realm.displayName?lower_case?contains("united states") || realm.displayName?lower_case?contains("america")>
             <#assign hostInstance = "USA"><#assign hostFlag = "🇺🇸"><#assign hostCountryName = "United States">
         </#if>
@@ -232,21 +240,11 @@
                     <!-- Instance Identity Banner - Informative -->
                     <div class="dive-realm-banner">
                         <div class="dive-realm-flag">
-                            <#if realm.displayName?has_content && realm.displayName?contains("France")>🇫🇷
-                            <#elseif realm.displayName?has_content && realm.displayName?contains("Germany")>🇩🇪
-                            <#elseif realm.displayName?has_content && realm.displayName?contains("Canada")>🇨🇦
-                            <#elseif realm.displayName?has_content && realm.displayName?contains("United Kingdom")>🇬🇧
-                            <#elseif realm.displayName?has_content && realm.displayName?contains("Spain")>🇪🇸
-                            <#else>🇺🇸</#if>
+                            ${hostFlag}
                         </div>
                         <div class="dive-realm-info">
                             <div class="dive-realm-country">
-                                <#if realm.displayName?has_content && realm.displayName?contains("France")>FRANCE
-                                <#elseif realm.displayName?has_content && realm.displayName?contains("Germany")>GERMANY
-                                <#elseif realm.displayName?has_content && realm.displayName?contains("Canada")>CANADA
-                                <#elseif realm.displayName?has_content && realm.displayName?contains("United Kingdom")>UNITED KINGDOM
-                                <#elseif realm.displayName?has_content && realm.displayName?contains("Spain")>SPAIN
-                                <#else>USA</#if>
+                                <#if hostCountryName?has_content>${hostCountryName?upper_case}<#else>${hostInstance}</#if>
                             </div>
                             <div class="dive-realm-context">${msg("dive.banner.context")}</div>
                         </div>
