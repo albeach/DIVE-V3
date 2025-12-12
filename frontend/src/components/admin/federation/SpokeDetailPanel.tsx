@@ -9,7 +9,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -31,7 +31,9 @@ import {
   RotateCcw,
   ChevronRight,
 } from 'lucide-react';
-import { ISpoke, SpokeStatus, TrustLevel } from '@/types/federation.types';
+import { ISpoke, SpokeStatus, TrustLevel, ITokenRotationResponse } from '@/types/federation.types';
+import { TokenRotationModal } from './TokenRotationModal';
+import { TokenExpiryBadge, getTokenStatus } from './TokenExpiryBadge';
 
 interface SpokeDetailPanelProps {
   spoke: ISpoke | null;
@@ -79,6 +81,46 @@ export function SpokeDetailPanel({
 }: SpokeDetailPanelProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'health' | 'policies' | 'token'>('overview');
+  const [showTokenRotationModal, setShowTokenRotationModal] = useState(false);
+
+  const handleRotateToken = useCallback(async (validityDays: number, _notifyAdmin: boolean): Promise<ITokenRotationResponse> => {
+    if (!spoke) {
+      return { success: false, error: 'No spoke selected' };
+    }
+
+    try {
+      const response = await fetch(`/api/federation/spokes/${spoke.spokeId}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ validityDays }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        return {
+          success: true,
+          token: data.token?.token,
+          expiresAt: data.token?.expiresAt,
+          scopes: data.token?.scopes || spoke.allowedPolicyScopes,
+          spokeId: spoke.spokeId,
+          isOneTimeView: true,
+        };
+      } else {
+        return {
+          success: false,
+          error: data.error || 'Token rotation failed',
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Token rotation failed',
+      };
+    }
+  }, [spoke]);
 
   const copyToClipboard = async (value: string, field: string) => {
     await navigator.clipboard.writeText(value);
@@ -420,18 +462,52 @@ export function SpokeDetailPanel({
 
               {activeTab === 'token' && (
                 <div className="space-y-6">
-                  {/* Token Status */}
-                  <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-gray-900 dark:text-white">Token Status</span>
-                      <span className={`font-medium ${tokenStatus.color}`}>{tokenStatus.label}</span>
-                    </div>
-                    {spoke.tokenExpiresAt && (
-                      <div className="text-xs text-gray-500">
-                        Expires: {formatDate(spoke.tokenExpiresAt)}
-                      </div>
-                    )}
-                  </div>
+                  {/* Token Status Card */}
+                  <TokenExpiryBadge
+                    expiresAt={spoke.tokenExpiresAt}
+                    variant="full"
+                    spoke={spoke}
+                  />
+
+                  {/* Token Expiry Warning */}
+                  {(() => {
+                    const status = getTokenStatus(spoke.tokenExpiresAt);
+                    if (status.status === 'expiring') {
+                      return (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-amber-800 dark:text-amber-200">
+                                Token expires in {status.daysUntilExpiry} day{status.daysUntilExpiry !== 1 ? 's' : ''}
+                              </p>
+                              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                                Rotate the token soon to avoid connectivity issues.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (status.status === 'expired') {
+                      return (
+                        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                          <div className="flex items-start gap-3">
+                            <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-medium text-red-800 dark:text-red-200">
+                                Token has expired
+                              </p>
+                              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                                The spoke cannot connect to the hub. Rotate the token immediately.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {/* Token Scopes */}
                   {spoke.tokenScopes && spoke.tokenScopes.length > 0 && (
@@ -452,10 +528,10 @@ export function SpokeDetailPanel({
                     </div>
                   )}
 
-                  {/* Rotate Token */}
-                  {onRotateToken && spoke.status === 'active' && (
+                  {/* Rotate Token Button */}
+                  {spoke.status === 'active' && (
                     <button
-                      onClick={() => onRotateToken(spoke)}
+                      onClick={() => setShowTokenRotationModal(true)}
                       className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -488,6 +564,16 @@ export function SpokeDetailPanel({
               </div>
             )}
           </motion.div>
+
+          {/* Token Rotation Modal */}
+          {spoke && (
+            <TokenRotationModal
+              spoke={spoke}
+              isOpen={showTokenRotationModal}
+              onClose={() => setShowTokenRotationModal(false)}
+              onRotate={handleRotateToken}
+            />
+          )}
         </>
       )}
     </AnimatePresence>
