@@ -39,6 +39,8 @@ import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
 import { policyVersionMonitor } from './services/policy-version-monitor.service';  // Phase 4: Policy drift
+import { spokeFailover } from './services/spoke-failover.service';  // Phase 5: Circuit breaker
+import { spokeAuditQueue } from './services/spoke-audit-queue.service';  // Phase 5: Audit queue
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -140,7 +142,7 @@ app.use('/api/notifications-count', notificationCountRoutes);
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server
 app.use('/scim/v2', scimRoutes);  // SCIM 2.0 User Provisioning
-app.use('/federation', federationRoutes);  // Federation metadata and resource exchange
+app.use('/api/federation', federationRoutes);  // Hub-Spoke federation management (Phase 3-5)
 app.use('/api/sp-management', spManagementRoutes);  // SP Registry management (admin-only)
 
 // Root endpoint
@@ -241,6 +243,57 @@ function startServer() {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       // Non-fatal: policy drift detection disabled
+    }
+
+    // Phase 5: Initialize spoke failover service (circuit breaker)
+    try {
+      const spokeId = process.env.SPOKE_ID || process.env.INSTANCE_CODE || 'local';
+      const instanceCode = process.env.INSTANCE_CODE || 'USA';
+
+      logger.info('Initializing spoke failover service', { spokeId, instanceCode });
+      spokeFailover.initialize({
+        spokeId,
+        instanceCode,
+        autoFailover: process.env.AUTO_FAILOVER !== 'false',
+        maxOfflineTimeMs: parseInt(process.env.MAX_OFFLINE_TIME_MS || '86400000'), // 24 hours
+        healthCheckIntervalMs: parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '30000'), // 30s
+      });
+      spokeFailover.startMonitoring();
+      logger.info('Spoke failover service initialized and monitoring started');
+    } catch (error) {
+      logger.warn('Failed to initialize spoke failover service', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Non-fatal: failover service disabled
+    }
+
+    // Phase 5: Initialize spoke audit queue service
+    try {
+      const auditQueuePath = process.env.AUDIT_QUEUE_PATH || './data/audit-queue';
+      const spokeId = process.env.SPOKE_ID || process.env.INSTANCE_CODE || 'local';
+      const instanceCode = process.env.INSTANCE_CODE || 'USA';
+      const hubUrl = process.env.HUB_URL || 'https://hub.dive25.com';
+
+      logger.info('Initializing spoke audit queue service', {
+        queuePath: auditQueuePath,
+        spokeId,
+        instanceCode
+      });
+      await spokeAuditQueue.initialize({
+        queuePath: auditQueuePath,
+        spokeId,
+        instanceCode,
+        hubUrl,
+        maxQueueSize: parseInt(process.env.AUDIT_QUEUE_MAX_SIZE || '10000'),
+        batchSize: parseInt(process.env.AUDIT_QUEUE_BATCH_SIZE || '100'),
+      });
+      spokeAuditQueue.startAutoFlush();
+      logger.info('Spoke audit queue service initialized and auto-flush started');
+    } catch (error) {
+      logger.warn('Failed to initialize spoke audit queue service', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Non-fatal: audit queue service disabled
     }
   };
 

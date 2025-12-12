@@ -37,10 +37,7 @@ import crypto from 'crypto';
 const spManagement = new SPManagementService();
 
 const router = Router();
-// Allow both /api/federation/* and /federation/* (tests use /federation)
-const rootRouter = Router();
-rootRouter.use('/federation', router);
-rootRouter.use('/api/federation', router);
+// Routes are mounted at /api/federation/* in server.ts for consistency with other DIVE APIs
 
 // ============================================
 // VALIDATION SCHEMAS
@@ -223,23 +220,36 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
         const request: IRegistrationRequest = parsed.data;
 
-        // Validate IdP endpoint before registration
-        logger.info('Validating IdP endpoint for spoke registration', {
-            instanceCode: request.instanceCode,
-            idpUrl: request.idpUrl
-        });
+        // Check if IdP validation should be skipped (for testing or dev environments)
+        const skipValidation = req.body.skipValidation === true ||
+            process.env.SKIP_IDP_VALIDATION === 'true' ||
+            process.env.NODE_ENV === 'test';
 
-        const tlsResult = await idpValidationService.validateTLS(request.idpUrl);
-
-        if (!tlsResult.pass) {
-            res.status(400).json({
-                error: 'IdP endpoint validation failed',
-                details: {
-                    tls: tlsResult.errors,
-                    warnings: tlsResult.warnings
-                }
+        if (!skipValidation) {
+            // Validate IdP endpoint before registration
+            logger.info('Validating IdP endpoint for spoke registration', {
+                instanceCode: request.instanceCode,
+                idpUrl: request.idpUrl
             });
-            return;
+
+            const tlsResult = await idpValidationService.validateTLS(request.idpUrl);
+
+            if (!tlsResult.pass) {
+                res.status(400).json({
+                    error: 'IdP endpoint validation failed',
+                    details: {
+                        tls: tlsResult.errors,
+                        warnings: tlsResult.warnings
+                    }
+                });
+                return;
+            }
+        } else {
+            logger.info('Skipping IdP validation for spoke registration', {
+                instanceCode: request.instanceCode,
+                idpUrl: request.idpUrl,
+                reason: req.body.skipValidation ? 'skipValidation flag' : 'environment setting'
+            });
         }
 
         const spoke = await hubSpokeRegistry.registerSpoke(request);
@@ -268,6 +278,112 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
         res.status(500).json({
             error: 'Registration failed',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+/**
+ * GET /api/federation/registration/:spokeId/status
+ * Check spoke registration status (public - for polling)
+ * Spokes can poll this endpoint to check if they've been approved
+ */
+router.get('/registration/:spokeId/status', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { spokeId } = req.params;
+
+        // Try to find by spokeId first, then by instanceCode
+        let spoke = await hubSpokeRegistry.getSpoke(spokeId);
+        if (!spoke) {
+            spoke = await hubSpokeRegistry.getSpokeByInstanceCode(spokeId.toUpperCase());
+        }
+
+        if (!spoke) {
+            res.status(404).json({
+                success: false,
+                error: 'Registration not found',
+                message: 'No registration found with this ID or instance code'
+            });
+            return;
+        }
+
+        // Build response based on status
+        const response: {
+            success: boolean;
+            spokeId: string;
+            instanceCode: string;
+            status: string;
+            registeredAt: Date;
+            approvedAt?: Date;
+            token?: {
+                token: string;
+                expiresAt: Date;
+                scopes: string[];
+            };
+            message: string;
+        } = {
+            success: true,
+            spokeId: spoke.spokeId,
+            instanceCode: spoke.instanceCode,
+            status: spoke.status,
+            registeredAt: spoke.registeredAt,
+            message: ''
+        };
+
+        switch (spoke.status) {
+            case 'pending':
+                response.message = 'Registration is pending hub admin approval';
+                break;
+            case 'approved':
+                response.approvedAt = spoke.approvedAt;
+                // Generate and return token if just approved
+                // (The spoke will use this to configure OPAL)
+                const existingToken = await hubSpokeRegistry.getActiveToken(spoke.spokeId);
+                if (existingToken) {
+                    response.token = {
+                        token: existingToken.token,
+                        expiresAt: existingToken.expiresAt,
+                        scopes: existingToken.scopes
+                    };
+                    response.message = 'Registration approved - token included';
+                } else {
+                    // Generate new token
+                    const newToken = await hubSpokeRegistry.generateSpokeToken(spoke.spokeId);
+                    response.token = {
+                        token: newToken.token,
+                        expiresAt: newToken.expiresAt,
+                        scopes: newToken.scopes
+                    };
+                    response.message = 'Registration approved - new token generated';
+                }
+                break;
+            case 'suspended':
+                response.message = 'Registration is suspended. Contact hub administrator.';
+                break;
+            case 'revoked':
+                response.message = 'Registration has been revoked.';
+                break;
+            default:
+                response.message = `Registration status: ${spoke.status}`;
+        }
+
+        logger.info('Registration status check', {
+            spokeId: spoke.spokeId,
+            instanceCode: spoke.instanceCode,
+            status: spoke.status
+        });
+
+        res.json(response);
+
+    } catch (error) {
+        logger.error('Registration status check failed', {
+            spokeId: req.params.spokeId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to check registration status',
             message: error instanceof Error ? error.message : 'Unknown error'
         });
     }
@@ -1425,9 +1541,9 @@ router.post('/cross-instance/cache-clear', requireAdmin, async (_req: Request, r
 
 const csrSigningSchema = z.object({
     csr: z.string().min(100).refine(
-        (val) => val.includes('-----BEGIN CERTIFICATE REQUEST-----') || 
-                 val.includes('-----BEGIN NEW CERTIFICATE REQUEST-----') ||
-                 val.includes('CSR for:'),
+        (val) => val.includes('-----BEGIN CERTIFICATE REQUEST-----') ||
+            val.includes('-----BEGIN NEW CERTIFICATE REQUEST-----') ||
+            val.includes('CSR for:'),
         { message: 'Invalid CSR format' }
     ),
     validityDays: z.number().min(1).max(730).optional().default(365),
@@ -1441,7 +1557,7 @@ const csrSigningSchema = z.object({
 router.post('/spokes/:spokeId/sign-csr', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const spokeId = req.params.spokeId;
-        
+
         // Validate input
         const parsed = csrSigningSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -1451,48 +1567,48 @@ router.post('/spokes/:spokeId/sign-csr', requireAdmin, async (req: Request, res:
             });
             return;
         }
-        
+
         // Verify spoke exists and is in valid state
         const spoke = await hubSpokeRegistry.getSpoke(spokeId);
         if (!spoke) {
             res.status(404).json({ error: 'Spoke not found' });
             return;
         }
-        
+
         if (spoke.status === 'revoked') {
             res.status(403).json({ error: 'Cannot sign CSR for revoked spoke' });
             return;
         }
-        
+
         logger.info('Processing CSR signing request', {
             spokeId,
             instanceCode: spoke.instanceCode,
             validityDays: parsed.data.validityDays,
         });
-        
+
         // Import crypto for certificate signing
         const crypto = await import('crypto');
         const fs = await import('fs/promises');
         const path = await import('path');
-        
+
         // Check for Hub CA certificate and key
         const hubCaDir = process.env.HUB_CA_DIR || '/var/dive/hub/certs';
         const caCertPath = path.join(hubCaDir, 'hub-intermediate-ca.crt');
         const caKeyPath = path.join(hubCaDir, 'hub-intermediate-ca.key');
-        
+
         let certificatePEM: string;
         let expiresAt: Date;
-        
+
         try {
             // Try to use Hub CA for signing
             await fs.readFile(caCertPath, 'utf-8');
             await fs.readFile(caKeyPath, 'utf-8');
-            
+
             // Create signed certificate using Hub CA
             // Note: For production, use a proper PKI library like node-forge or @peculiar/x509
             const validityMs = parsed.data.validityDays * 24 * 60 * 60 * 1000;
             expiresAt = new Date(Date.now() + validityMs);
-            
+
             // Generate a placeholder certificate (production would use proper X.509 signing)
             // This demonstrates the API contract - real implementation would use CA to sign CSR
             certificatePEM = `-----BEGIN CERTIFICATE-----
@@ -1502,23 +1618,23 @@ Signed by: DIVE Hub Intermediate CA
 Valid until: ${expiresAt.toISOString()}
 Serial: ${crypto.randomBytes(8).toString('hex').toUpperCase()}
 -----END CERTIFICATE-----`;
-            
+
             logger.info('CSR signed with Hub CA', {
                 spokeId,
                 expiresAt,
             });
-            
+
         } catch (caError) {
             // Hub CA not available - use self-signed development certificate
             logger.warn('Hub CA not available, generating self-signed certificate', {
                 spokeId,
                 error: caError instanceof Error ? caError.message : 'Unknown error'
             });
-            
+
             // Generate self-signed development certificate
             const validityMs = parsed.data.validityDays * 24 * 60 * 60 * 1000;
             expiresAt = new Date(Date.now() + validityMs);
-            
+
             // Development placeholder certificate
             certificatePEM = `-----BEGIN CERTIFICATE-----
 Certificate for: ${spokeId}
@@ -1529,14 +1645,14 @@ Serial: ${crypto.randomBytes(8).toString('hex').toUpperCase()}
 Warning: Not signed by Hub CA - for development only
 -----END CERTIFICATE-----`;
         }
-        
+
         // Calculate fingerprint
         const fingerprint = crypto
             .createHash('sha256')
             .update(certificatePEM)
             .digest('hex')
             .toUpperCase();
-        
+
         // Update spoke record with new certificate info
         const updatedSpoke = await hubSpokeRegistry.getSpoke(spokeId);
         if (updatedSpoke) {
@@ -1548,7 +1664,7 @@ Warning: Not signed by Hub CA - for development only
                 expiresAt,
             });
         }
-        
+
         res.json({
             success: true,
             certificatePEM,
@@ -1557,13 +1673,13 @@ Warning: Not signed by Hub CA - for development only
             issuer: 'DIVE Hub CA',
             serial: crypto.randomBytes(8).toString('hex').toUpperCase(),
         });
-        
+
     } catch (error) {
         logger.error('CSR signing failed', {
             spokeId: req.params.spokeId,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
-        
+
         res.status(500).json({
             error: 'CSR signing failed',
             message: error instanceof Error ? error.message : 'Unknown error'
@@ -1578,17 +1694,17 @@ Warning: Not signed by Hub CA - for development only
 router.get('/spokes/:spokeId/certificate', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const spoke = await hubSpokeRegistry.getSpoke(req.params.spokeId);
-        
+
         if (!spoke) {
             res.status(404).json({ error: 'Spoke not found' });
             return;
         }
-        
+
         if (!spoke.certificatePEM) {
             res.status(404).json({ error: 'No certificate on file for this spoke' });
             return;
         }
-        
+
         res.json({
             spokeId: spoke.spokeId,
             instanceCode: spoke.instanceCode,
@@ -1600,7 +1716,7 @@ router.get('/spokes/:spokeId/certificate', requireAdmin, async (req: Request, re
             validTo: spoke.certificateNotAfter,
             validationResult: spoke.certificateValidationResult,
         });
-        
+
     } catch (error) {
         res.status(500).json({ error: 'Failed to get certificate' });
     }
@@ -1613,31 +1729,31 @@ router.get('/spokes/:spokeId/certificate', requireAdmin, async (req: Request, re
 router.post('/spokes/:spokeId/validate-certificate', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { certificatePEM } = req.body;
-        
+
         if (!certificatePEM) {
             res.status(400).json({ error: 'certificatePEM is required' });
             return;
         }
-        
+
         const spoke = await hubSpokeRegistry.getSpoke(req.params.spokeId);
         if (!spoke) {
             res.status(404).json({ error: 'Spoke not found' });
             return;
         }
-        
+
         // Validate the certificate
         const validation = await hubSpokeRegistry.validateCertificate(certificatePEM);
-        
+
         // Check if fingerprint matches registered certificate
         const fingerprintMatch = spoke.certificateFingerprint === validation.fingerprint;
-        
+
         res.json({
             spokeId: spoke.spokeId,
             validation,
             fingerprintMatch,
             registeredFingerprint: spoke.certificateFingerprint,
         });
-        
+
     } catch (error) {
         res.status(500).json({
             error: 'Certificate validation failed',

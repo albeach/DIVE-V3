@@ -73,7 +73,20 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
       # Gap #6: Enable JavaScript providers for script-based protocol mappers
       KC_FEATURES: scripts
-    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
+      # ============================================
+      # DIVE V3 Realm Import Configuration
+      # ============================================
+      # These variables are substituted into the realm JSON during import
+      APP_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
+      API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
+      USA_IDP_URL: ${USA_IDP_URL:-https://keycloak:8443}
+      USA_IDP_CLIENT_SECRET: ${USA_IDP_CLIENT_SECRET:-default-usa-idp-secret}
+      # NIST 800-63B compliant passwords (16+ chars, mixed case, digits, special)
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
+      INSTANCE_CODE: ${INSTANCE:-USA}
+    entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
+    command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     depends_on:
       postgres:
         condition: service_healthy

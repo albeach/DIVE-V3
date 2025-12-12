@@ -56,6 +56,20 @@ RUN keytool -importcert -noprompt -trustcacerts \
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
 
 # ============================================
+# DIVE V3 Realm Import (Best Practice)
+# ============================================
+# Copy realm templates for automatic import on startup
+# Environment variables are substituted at runtime
+COPY --chown=1000:1000 realms/ /opt/keycloak/realm-templates/
+COPY --chown=1000:1000 scripts/import-realm.sh /opt/keycloak/scripts/import-realm.sh
+
+# Create import directory with correct ownership BEFORE switching to user 1000
+# This ensures the keycloak user can write to it at runtime
+RUN mkdir -p /opt/keycloak/data/import && \
+    chown -R 1000:1000 /opt/keycloak/data/import && \
+    chmod +x /opt/keycloak/scripts/import-realm.sh
+
+# ============================================
 # v2.1.0 CHANGE: Re-enable custom SPI providers for AMR/ACR enrichment
 # ============================================
 # Native Keycloak mappers do not emit the enriched AMR/ACR we need for

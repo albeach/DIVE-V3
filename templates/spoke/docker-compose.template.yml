@@ -1,0 +1,310 @@
+# =============================================================================
+# DIVE V3 Spoke Instance: {{INSTANCE_CODE_UPPER}} ({{INSTANCE_NAME}})
+# =============================================================================
+# Template Generated: {{TIMESTAMP}}
+# Spoke ID: {{SPOKE_ID}}
+# =============================================================================
+# 
+# This is a parameterized template. Replace placeholders before use:
+#   {{INSTANCE_CODE_UPPER}} - 3-letter uppercase code (e.g., NZL)
+#   {{INSTANCE_CODE_LOWER}} - 3-letter lowercase code (e.g., nzl)
+#   {{INSTANCE_NAME}}       - Human-readable name
+#   {{SPOKE_ID}}            - Unique spoke identifier
+#   {{IDP_HOSTNAME}}        - Keycloak hostname
+#   {{API_URL}}             - Backend API URL
+#   {{BASE_URL}}            - Frontend URL
+#   {{IDP_URL}}             - Keycloak IdP URL
+#   {{KEYCLOAK_HOST_PORT}}  - Keycloak HTTPS port (e.g., 8443)
+#   {{BACKEND_HOST_PORT}}   - Backend port (e.g., 4000)
+#   {{FRONTEND_HOST_PORT}}  - Frontend port (e.g., 3000)
+#
+# Or use: ./dive spoke init <CODE> <NAME> to generate automatically
+# =============================================================================
+
+version: '3.8'
+
+networks:
+  dive-{{INSTANCE_CODE_LOWER}}-network:
+    driver: bridge
+
+volumes:
+  {{INSTANCE_CODE_LOWER}}_postgres_data:
+  {{INSTANCE_CODE_LOWER}}_mongodb_data:
+  {{INSTANCE_CODE_LOWER}}_redis_data:
+  {{INSTANCE_CODE_LOWER}}_opal_cache:
+  {{INSTANCE_CODE_LOWER}}_frontend_modules:
+  {{INSTANCE_CODE_LOWER}}_frontend_next:
+  {{INSTANCE_CODE_LOWER}}_backend_node_modules:
+  {{INSTANCE_CODE_LOWER}}_backend_logs:
+
+services:
+  # ==========================================================================
+  # DATABASE SERVICES
+  # ==========================================================================
+
+  postgres-{{INSTANCE_CODE_LOWER}}:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: keycloak
+    volumes:
+      - {{INSTANCE_CODE_LOWER}}_postgres_data:/var/lib/postgresql/data
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  mongodb-{{INSTANCE_CODE_LOWER}}:
+    image: mongo:7-jammy
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - {{INSTANCE_CODE_LOWER}}_mongodb_data:/data/db
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis-{{INSTANCE_CODE_LOWER}}:
+    image: redis:alpine
+    volumes:
+      - {{INSTANCE_CODE_LOWER}}_redis_data:/data
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==========================================================================
+  # IDENTITY & ACCESS MANAGEMENT
+  # ==========================================================================
+
+  keycloak-{{INSTANCE_CODE_LOWER}}:
+    image: quay.io/keycloak/keycloak:26.0.4
+    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HOSTNAME: {{IDP_HOSTNAME}}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_LOG_LEVEL: info
+    ports:
+      - "{{KEYCLOAK_HOST_PORT}}:8443"
+    volumes:
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      postgres-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ==========================================================================
+  # POLICY ENGINE
+  # ==========================================================================
+
+  opa-{{INSTANCE_CODE_LOWER}}:
+    image: openpolicyagent/opa:0.68.0
+    platform: linux/amd64
+    command: run --server --addr :8181 /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
+    ports:
+      - "8181:8181"
+    volumes:
+      - ../../policies:/policies:ro
+      - ./cache/policies:/var/opa/cache
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "true"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  opal-client-{{INSTANCE_CODE_LOWER}}:
+    image: permitio/opal-client:latest
+    environment:
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN}
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
+      OPAL_SUBSCRIPTION_ID: {{SPOKE_ID}}
+      OPAL_LOG_LEVEL: INFO
+      OPAL_KEEP_ALIVE_TIMEOUT: 60
+      OPAL_RECONNECT_INTERVAL: 5
+      OPAL_RECONNECT_MAX_INTERVAL: 300
+      OPAL_POLICY_REFRESH_INTERVAL: 60
+    volumes:
+      - {{INSTANCE_CODE_LOWER}}_opal_cache:/var/opal/cache
+      - ./certs:/var/opal/certs:ro
+    depends_on:
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - federation  # Only start when federated with Hub
+
+  # ==========================================================================
+  # BACKEND API
+  # ==========================================================================
+
+  backend-{{INSTANCE_CODE_LOWER}}:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.dev
+    command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
+    environment:
+      NODE_ENV: development
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      PORT: "4000"
+      INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
+      INSTANCE_NAME: "{{INSTANCE_NAME}}"
+      SPOKE_ID: {{SPOKE_ID}}
+      SPOKE_MODE: "true"
+      # MongoDB
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
+      MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      REDIS_URL: redis://redis-{{INSTANCE_CODE_LOWER}}:6379
+      # Keycloak
+      KEYCLOAK_URL: {{IDP_BASE_URL}}
+      KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # OPA
+      OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
+      # CORS
+      NEXT_PUBLIC_BASE_URL: {{BASE_URL}}
+      FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
+      # Hub federation
+      HUB_URL: ${HUB_URL:-https://hub.dive25.com}
+      SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN}
+      SPOKE_CONFIG_PATH: /app/config/config.json
+      DIVE_POLICY_CACHE_PATH: /app/cache/policies
+      DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
+    ports:
+      - "{{BACKEND_HOST_PORT}}:4000"
+    volumes:
+      - ../../backend:/app
+      - {{INSTANCE_CODE_LOWER}}_backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw
+      - ./certs:/opt/keycloak/certs:ro
+      - ./config.json:/app/config/config.json:ro
+      - ../../config:/app/config/shared:ro
+      - ./cache:/app/cache
+      - {{INSTANCE_CODE_LOWER}}_backend_logs:/app/logs
+    depends_on:
+      mongodb-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "https://localhost:4000/health", "-k"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ==========================================================================
+  # FRONTEND
+  # ==========================================================================
+
+  frontend-{{INSTANCE_CODE_LOWER}}:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile.dev
+    command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
+    environment:
+      NODE_ENV: development
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      NEXT_PUBLIC_INSTANCE: {{INSTANCE_CODE_UPPER}}
+      NEXT_PUBLIC_INSTANCE_NAME: "{{INSTANCE_NAME}}"
+      # Public URLs for client-side requests
+      NEXT_PUBLIC_API_URL: {{API_URL}}
+      NEXT_PUBLIC_KEYCLOAK_URL: {{IDP_BASE_URL}}
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      NEXT_PUBLIC_BACKEND_URL: {{API_URL}}
+      # Internal URL for SSR requests
+      BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
+      NEXTAUTH_URL: {{BASE_URL}}
+      NEXTAUTH_SECRET: ${AUTH_SECRET}
+      # Database for NextAuth sessions
+      DATABASE_URL: postgres://keycloak:${POSTGRES_PASSWORD}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
+      # Keycloak OAuth config
+      KEYCLOAK_URL: {{IDP_BASE_URL}}
+      KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-client-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      # NextAuth v5 Keycloak provider
+      AUTH_KEYCLOAK_ID: dive-v3-client-{{INSTANCE_CODE_LOWER}}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      AUTH_KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
+    ports:
+      - "{{FRONTEND_HOST_PORT}}:3000"
+    volumes:
+      - ../../frontend:/app
+      - {{INSTANCE_CODE_LOWER}}_frontend_modules:/app/node_modules
+      - {{INSTANCE_CODE_LOWER}}_frontend_next:/app/.next
+      - ./certs:/app/certs:ro
+      - ./certs:/opt/app/certs:ro
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      backend-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+    networks:
+      - dive-{{INSTANCE_CODE_LOWER}}-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # CLOUDFLARE TUNNEL (Optional - uncomment if using dive25.com)
+  # ==========================================================================
+
+  # cloudflared-{{INSTANCE_CODE_LOWER}}:
+  #   image: cloudflare/cloudflared:latest
+  #   command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+  #   environment:
+  #     TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+  #   networks:
+  #     - dive-{{INSTANCE_CODE_LOWER}}-network
+  #   restart: unless-stopped

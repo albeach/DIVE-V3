@@ -17,8 +17,8 @@
  */
 
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
-import HubSpokeRegistryService, { 
-  hubSpokeRegistry, 
+import HubSpokeRegistryService, {
+  hubSpokeRegistry,
   IRegistrationRequest,
   ISpokeRegistration
 } from '../services/hub-spoke-registry.service';
@@ -115,7 +115,7 @@ describe('Hub-Spoke Registry Service', () => {
 
     it('should allow re-registration after revocation', async () => {
       const firstSpoke = await registry.registerSpoke(validRegistrationRequest);
-      
+
       // Approve then revoke
       await registry.approveSpoke(firstSpoke.spokeId, 'admin', {
         allowedScopes: ['policy:base'],
@@ -350,6 +350,61 @@ describe('Hub-Spoke Registry Service', () => {
       expect(validation.valid).toBe(false);
       expect(validation.error).toBe('Token not found');
     });
+
+    // Phase 3: getActiveToken tests
+    it('should return active token for spoke with getActiveToken', async () => {
+      // Generate a token first
+      const generatedToken = await registry.generateSpokeToken(approvedSpoke.spokeId);
+
+      // Now fetch the active token
+      const activeToken = await registry.getActiveToken(approvedSpoke.spokeId);
+
+      expect(activeToken).not.toBeNull();
+      expect(activeToken?.token).toBe(generatedToken.token);
+      expect(activeToken?.spokeId).toBe(approvedSpoke.spokeId);
+      expect(new Date(activeToken!.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    });
+
+    it('should return null for spoke with no tokens', async () => {
+      // Register a new spoke without generating tokens
+      // Use unique code with random suffix to avoid conflicts
+      const uniqueCode = 'ZZ' + Math.random().toString(36).substring(2, 3).toUpperCase();
+      const newSpoke = await registry.registerSpoke({
+        ...validRegistrationRequest,
+        instanceCode: uniqueCode
+      });
+
+      await registry.approveSpoke(newSpoke.spokeId, 'admin', {
+        allowedScopes: ['policy:base'],
+        trustLevel: 'development',
+        maxClassification: 'UNCLASSIFIED',
+        dataIsolationLevel: 'minimal'
+      });
+
+      // Don't generate a token - check that getActiveToken returns null
+      const activeToken = await registry.getActiveToken(newSpoke.spokeId);
+      expect(activeToken).toBeNull();
+    });
+
+    it('should support multiple tokens for same spoke', async () => {
+      // Generate first token
+      const token1 = await registry.generateSpokeToken(approvedSpoke.spokeId);
+
+      // Generate second token
+      const token2 = await registry.generateSpokeToken(approvedSpoke.spokeId);
+
+      // Both tokens should be valid
+      const validation1 = await registry.validateToken(token1.token);
+      const validation2 = await registry.validateToken(token2.token);
+
+      expect(validation1.valid).toBe(true);
+      expect(validation2.valid).toBe(true);
+
+      // getActiveToken should return one of them
+      const activeToken = await registry.getActiveToken(approvedSpoke.spokeId);
+      expect(activeToken).not.toBeNull();
+      expect([token1.token, token2.token]).toContain(activeToken?.token);
+    });
   });
 
   // ============================================
@@ -503,7 +558,7 @@ describe('Hub-Spoke Registry Service', () => {
 
 describe('Policy Sync Service', () => {
   // These tests would be in a separate file but included here for completeness
-  
+
   it('should track policy versions', () => {
     // Placeholder - would test policySyncService
     expect(true).toBe(true);

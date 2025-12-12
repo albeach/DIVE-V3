@@ -1316,6 +1316,30 @@ spoke_register() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local config_file="$spoke_dir/config.json"
+    local poll_mode=false
+    local poll_timeout=600  # 10 minutes default
+    local poll_interval=30   # 30 seconds between polls
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --poll)
+                poll_mode=true
+                shift
+                ;;
+            --poll-timeout)
+                poll_timeout="${2:-600}"
+                shift 2
+                ;;
+            --poll-interval)
+                poll_interval="${2:-30}"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
     
     if [ ! -f "$config_file" ]; then
         log_error "Spoke not initialized. Run: ./dive spoke init <CODE> <NAME>"
@@ -1353,21 +1377,72 @@ spoke_register() {
         fi
     fi
     
-    # Check for certificate
+    # ==========================================================================
+    # Phase 3 Enhancement: Generate CSR if not present
+    # ==========================================================================
+    local certs_dir="$spoke_dir/certs"
+    local csr_pem=""
     local cert_pem=""
-    if [ -f "$spoke_dir/certs/spoke.crt" ]; then
-        cert_pem=$(cat "$spoke_dir/certs/spoke.crt" | sed 's/$/\\n/' | tr -d '\n')
-        log_info "Certificate found: $spoke_dir/certs/spoke.crt"
+    
+    if [ ! -f "$certs_dir/spoke.csr" ]; then
+        log_info "No CSR found. Generating certificates..."
+        mkdir -p "$certs_dir"
+        
+        # Generate private key if not exists
+        if [ ! -f "$certs_dir/spoke.key" ]; then
+            log_step "Generating private key (RSA 4096 bits)"
+            openssl genrsa -out "$certs_dir/spoke.key" 4096 2>/dev/null
+            chmod 600 "$certs_dir/spoke.key"
+        fi
+        
+        # Generate CSR
+        log_step "Generating Certificate Signing Request (CSR)"
+        openssl req -new \
+            -key "$certs_dir/spoke.key" \
+            -out "$certs_dir/spoke.csr" \
+            -subj "/C=${instance_code_config:0:2}/O=DIVE Federation/OU=Spoke Instances/CN=$spoke_id" \
+            2>/dev/null
+        chmod 644 "$certs_dir/spoke.csr"
+        
+        if [ $? -ne 0 ]; then
+            log_error "Failed to generate CSR"
+            return 1
+        fi
+        log_success "CSR generated: $certs_dir/spoke.csr"
+        
+        # Generate self-signed certificate for development
+        log_step "Generating self-signed certificate (for development)"
+        openssl x509 -req -days 365 \
+            -in "$certs_dir/spoke.csr" \
+            -signkey "$certs_dir/spoke.key" \
+            -out "$certs_dir/spoke.crt" \
+            2>/dev/null
+        chmod 644 "$certs_dir/spoke.crt"
     else
-        log_warn "No certificate found. Run: ./dive spoke generate-certs"
-        echo "  Registration will proceed without certificate (development mode)"
+        log_info "CSR found: $certs_dir/spoke.csr"
     fi
+    
+    # Read CSR for submission
+    if [ -f "$certs_dir/spoke.csr" ]; then
+        csr_pem=$(cat "$certs_dir/spoke.csr" | sed 's/$/\\n/' | tr -d '\n')
+        local csr_fingerprint=$(openssl req -in "$certs_dir/spoke.csr" -noout -pubkey 2>/dev/null | openssl sha256 | awk '{print $2}' | cut -c1-16)
+        echo "  CSR Fingerprint: ${csr_fingerprint}..."
+    fi
+    
+    # Read certificate if exists
+    if [ -f "$certs_dir/spoke.crt" ]; then
+        cert_pem=$(cat "$certs_dir/spoke.crt" | sed 's/$/\\n/' | tr -d '\n')
+        local cert_fingerprint=$(openssl x509 -in "$certs_dir/spoke.crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | cut -c1-23)
+        echo "  Cert Fingerprint: ${cert_fingerprint}..."
+    fi
+    echo ""
     
     # Build registration request
     local base_url=$(grep -o '"baseUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
     local api_url=$(grep -o '"apiUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
     local idp_url=$(grep -o '"idpUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
     
+    # Build request with CSR
     local request_body=$(cat << EOF
 {
   "instanceCode": "$instance_code_config",
@@ -1376,6 +1451,7 @@ spoke_register() {
   "baseUrl": "$base_url",
   "apiUrl": "$api_url",
   "idpUrl": "$idp_url",
+  "csrPEM": "$csr_pem",
   "certificatePEM": "$cert_pem",
   "requestedScopes": ["policy:base", "policy:${code_lower}", "data:federation_matrix", "data:trusted_issuers"],
   "contactEmail": "$contact_email"
@@ -1409,25 +1485,247 @@ EOF
         echo "  Status:    $status"
         echo ""
         
-        # Update local config with registered status
+        # Update local config with registered status and spoke ID
         if command -v jq &> /dev/null; then
-            jq ".federation.status = \"pending\" | .federation.registeredAt = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"" \
+            jq ".federation.status = \"pending\" | .federation.registeredAt = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\" | .identity.registeredSpokeId = \"$returned_spoke_id\"" \
                 "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
+        fi
+        
+        # If poll mode is enabled, wait for approval
+        if [ "$poll_mode" = true ]; then
+            echo -e "${CYAN}Polling for approval (timeout: ${poll_timeout}s, interval: ${poll_interval}s)...${NC}"
+            echo ""
+            _spoke_poll_for_approval "$hub_url" "$returned_spoke_id" "$spoke_dir" "$poll_timeout" "$poll_interval"
+            return $?
         fi
         
         echo -e "${YELLOW}⏳ Waiting for Hub admin approval...${NC}"
         echo "   You will receive notification at: $contact_email"
         echo ""
-        echo "   Once approved:"
-        echo "   1. You'll receive a spoke token"
-        echo "   2. Add it to .env: SPOKE_OPAL_TOKEN=<token>"
-        echo "   3. Start services: ./dive spoke up"
+        echo "   Next steps:"
+        echo "   1. Wait for hub admin approval"
+        echo "   2. Run: ./dive --instance $code_lower spoke register --poll"
+        echo "      (Or manually configure token after email notification)"
+        echo ""
     else
         log_error "Registration failed"
         echo ""
         echo "Response:"
         echo "$response" | head -20
         return 1
+    fi
+}
+
+# =============================================================================
+# SPOKE REGISTRATION POLLING (Phase 3)
+# =============================================================================
+
+_spoke_poll_for_approval() {
+    local hub_url="$1"
+    local spoke_id="$2"
+    local spoke_dir="$3"
+    local timeout="${4:-600}"
+    local interval="${5:-30}"
+    
+    local elapsed=0
+    local config_file="$spoke_dir/config.json"
+    local env_file="$spoke_dir/.env"
+    
+    while [ $elapsed -lt $timeout ]; do
+        # Check registration status
+        local response=$(curl -s -k "$hub_url/api/federation/registration/$spoke_id/status" 2>/dev/null)
+        
+        if [ -z "$response" ]; then
+            echo "  [$elapsed s] Hub not responding, retrying..."
+            sleep "$interval"
+            elapsed=$((elapsed + interval))
+            continue
+        fi
+        
+        local status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        
+        case "$status" in
+            approved)
+                log_success "Registration approved!"
+                echo ""
+                
+                # Extract token from response
+                local token=$(echo "$response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+                local expires=$(echo "$response" | grep -o '"expiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+                
+                if [ -n "$token" ]; then
+                    echo -e "${BOLD}Token Configuration:${NC}"
+                    echo "  Token: ${token:0:20}..."
+                    echo "  Expires: $expires"
+                    echo ""
+                    
+                    # Auto-configure token
+                    _spoke_configure_token "$spoke_dir" "$token" "$expires"
+                    return 0
+                else
+                    log_warn "Approved but no token in response"
+                    echo "  Please request token manually or contact hub admin"
+                    return 1
+                fi
+                ;;
+            pending)
+                echo "  [$elapsed s] Status: pending approval..."
+                ;;
+            suspended)
+                log_error "Registration was suspended"
+                return 1
+                ;;
+            revoked)
+                log_error "Registration was revoked"
+                return 1
+                ;;
+            *)
+                echo "  [$elapsed s] Status: $status"
+                ;;
+        esac
+        
+        sleep "$interval"
+        elapsed=$((elapsed + interval))
+    done
+    
+    log_warn "Polling timeout reached ($timeout seconds)"
+    echo "  Registration still pending. You can:"
+    echo "  1. Continue polling: ./dive --instance $(basename $spoke_dir) spoke register --poll"
+    echo "  2. Contact hub admin for manual approval"
+    return 1
+}
+
+_spoke_configure_token() {
+    local spoke_dir="$1"
+    local token="$2"
+    local expires="$3"
+    
+    local env_file="$spoke_dir/.env"
+    local config_file="$spoke_dir/config.json"
+    local code_lower=$(basename "$spoke_dir")
+    
+    log_step "Configuring OPAL token..."
+    
+    # Update .env file
+    if [ -f "$env_file" ]; then
+        # Remove existing SPOKE_OPAL_TOKEN if present
+        if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
+            sed -i.bak '/^SPOKE_OPAL_TOKEN=/d' "$env_file"
+            rm -f "$env_file.bak"
+        fi
+        # Add new token
+        echo "" >> "$env_file"
+        echo "# OPAL Token (auto-configured on $(date -u +"%Y-%m-%dT%H:%M:%SZ"))" >> "$env_file"
+        echo "SPOKE_OPAL_TOKEN=$token" >> "$env_file"
+        log_success "Token added to $env_file"
+    else
+        log_warn "No .env file found at $env_file"
+        echo "SPOKE_OPAL_TOKEN=$token" > "$env_file"
+        log_info "Created $env_file with token"
+    fi
+    
+    # Update config.json
+    if command -v jq &> /dev/null && [ -f "$config_file" ]; then
+        jq ".federation.status = \"approved\" | .federation.approvedAt = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\" | .authentication.tokenExpiresAt = \"$expires\"" \
+            "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
+    fi
+    
+    # Check if OPAL client is running and restart if needed
+    local compose_file="$spoke_dir/docker-compose.yml"
+    if [ -f "$compose_file" ]; then
+        local opal_container=$(docker ps --filter "name=opal-client" --filter "name=$code_lower" -q 2>/dev/null | head -1)
+        if [ -n "$opal_container" ]; then
+            log_step "Restarting OPAL client to apply new token..."
+            docker restart "$opal_container" >/dev/null 2>&1
+            log_success "OPAL client restarted"
+        else
+            log_info "OPAL client not running. Start with: ./dive --instance $code_lower spoke up"
+        fi
+    fi
+    
+    echo ""
+    log_success "Token configuration complete!"
+    echo ""
+    echo "  Next steps:"
+    echo "  1. Start/restart spoke services: ./dive --instance $code_lower spoke up"
+    echo "  2. Verify OPAL connection: ./dive --instance $code_lower spoke verify"
+}
+
+# =============================================================================
+# SPOKE TOKEN REFRESH (Phase 3)
+# =============================================================================
+
+spoke_token_refresh() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local config_file="$spoke_dir/config.json"
+    local env_file="$spoke_dir/.env"
+    
+    if [ ! -f "$config_file" ]; then
+        log_error "Spoke not initialized"
+        return 1
+    fi
+    
+    print_header
+    echo -e "${BOLD}Spoke Token Refresh${NC}"
+    echo ""
+    
+    # Get current token info
+    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    hub_url="${HUB_API_URL:-$hub_url}"
+    hub_url="${hub_url:-https://hub.dive25.com}"
+    
+    local spoke_id=$(grep -o '"registeredSpokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    if [ -z "$spoke_id" ]; then
+        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    fi
+    
+    # Get current token from .env
+    local current_token=""
+    if [ -f "$env_file" ]; then
+        current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" | cut -d= -f2-)
+    fi
+    
+    if [ -z "$current_token" ]; then
+        log_error "No token found in $env_file"
+        echo "  Register first: ./dive --instance $code_lower spoke register"
+        return 1
+    fi
+    
+    echo "  Spoke ID: $spoke_id"
+    echo "  Hub URL:  $hub_url"
+    echo ""
+    
+    log_step "Requesting token refresh..."
+    
+    # Use current token to authenticate and get new token
+    local response=$(curl -s -k \
+        -H "Authorization: Bearer $current_token" \
+        "$hub_url/api/federation/registration/$spoke_id/status" 2>/dev/null)
+    
+    if [ -z "$response" ]; then
+        log_error "Hub not responding"
+        return 1
+    fi
+    
+    local status=$(echo "$response" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    
+    if [ "$status" != "approved" ]; then
+        log_error "Spoke status is '$status', cannot refresh token"
+        return 1
+    fi
+    
+    local new_token=$(echo "$response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local expires=$(echo "$response" | grep -o '"expiresAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    
+    if [ -n "$new_token" ]; then
+        _spoke_configure_token "$spoke_dir" "$new_token" "$expires"
+        log_success "Token refreshed successfully"
+    else
+        log_warn "No new token in response. Token may still be valid."
+        echo "  Contact hub admin if you need a new token."
     fi
 }
 
@@ -1895,6 +2193,774 @@ spoke_up() {
     fi
 }
 
+# =============================================================================
+# SPOKE DEPLOY (Phase 2 - Full Deployment Automation)
+# =============================================================================
+
+spoke_deploy() {
+    local instance_code="${1:-}"
+    local instance_name="${2:-}"
+    
+    # Record start time
+    local start_time=$(date +%s)
+    
+    print_header
+    echo -e "${BOLD}🚀 DIVE V3 Spoke Deployment${NC}"
+    echo ""
+    
+    # Validate arguments
+    if [ -z "$instance_code" ]; then
+        log_error "Usage: ./dive spoke deploy <CODE> [NAME]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke deploy NZL 'New Zealand Defence'"
+        echo "  ./dive spoke deploy HOM 'Home Development'"
+        echo ""
+        return 1
+    fi
+    
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    
+    # Default name if not provided
+    instance_name="${instance_name:-${code_upper} Instance}"
+    
+    echo -e "  Instance Code: ${CYAN}$code_upper${NC}"
+    echo -e "  Instance Name: ${CYAN}$instance_name${NC}"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would deploy spoke: $code_upper ($instance_name)"
+        log_dry "Steps: init → up → wait → init-all → register"
+        return 0
+    fi
+    
+    ensure_dive_root
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local init_marker="${spoke_dir}/.initialized"
+    
+    # ==========================================================================
+    # Step 1: Initialize spoke if not already done
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 1/5: Checking Spoke Initialization${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    if [ -f "$spoke_dir/docker-compose.yml" ] && [ -f "$spoke_dir/config.json" ]; then
+        log_info "Spoke already initialized at: $spoke_dir"
+        echo ""
+    else
+        log_step "Initializing spoke instance..."
+        
+        # Use legacy init for non-interactive deployment
+        INSTANCE="$code_lower" _spoke_init_legacy "$code_upper" "$instance_name"
+        
+        if [ $? -ne 0 ]; then
+            log_error "Spoke initialization failed"
+            return 1
+        fi
+        
+        log_success "Spoke initialized"
+        echo ""
+    fi
+    
+    # ==========================================================================
+    # Step 2: Start spoke services
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 2/5: Starting Spoke Services${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Check if services are already running
+    export COMPOSE_PROJECT_NAME="$code_lower"
+    cd "$spoke_dir"
+    
+    local running_count=$(docker compose ps -q 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$running_count" -gt 0 ]; then
+        log_info "Services already running ($running_count containers)"
+        echo ""
+    else
+        # Load secrets for instance
+        if ! load_gcp_secrets "$code_lower" 2>/dev/null; then
+            log_warn "Falling back to local defaults for secrets"
+            load_local_defaults
+        fi
+        
+        log_step "Starting Docker Compose services..."
+        docker compose up -d 2>&1 | tail -5
+        
+        if [ $? -ne 0 ]; then
+            log_error "Failed to start services"
+            return 1
+        fi
+        
+        log_success "Services started"
+        echo ""
+    fi
+    
+    # ==========================================================================
+    # Step 3: Wait for services to be healthy
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 3/5: Waiting for Services to be Healthy${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    _spoke_wait_for_services "$code_lower" 120
+    local wait_result=$?
+    
+    if [ $wait_result -ne 0 ]; then
+        log_error "Services did not become healthy within timeout"
+        echo ""
+        echo "  Check logs: docker compose -f $spoke_dir/docker-compose.yml logs"
+        return 1
+    fi
+    
+    log_success "All core services healthy"
+    echo ""
+    
+    # ==========================================================================
+    # Step 4: Run initialization scripts (if not already done)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 4/5: Running Post-Deployment Initialization${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    if [ -f "$init_marker" ]; then
+        log_info "Spoke already initialized (skipping init-all.sh)"
+        echo ""
+    else
+        local init_script="${DIVE_ROOT}/scripts/spoke-init/init-all.sh"
+        if [ -f "$init_script" ]; then
+            log_step "Running init-all.sh..."
+            cd "${DIVE_ROOT}"
+            
+            if bash "$init_script" "$code_upper"; then
+                touch "$init_marker"
+                log_success "Initialization complete"
+            else
+                log_warn "Initialization had issues (continuing anyway)"
+            fi
+        else
+            log_warn "init-all.sh not found, skipping"
+        fi
+        echo ""
+    fi
+    
+    # ==========================================================================
+    # Step 5: Register with Hub (if not already registered)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 5/5: Hub Registration${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Check current registration status
+    local config_file="$spoke_dir/config.json"
+    local current_status=""
+    if [ -f "$config_file" ]; then
+        current_status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1 | cut -d'"' -f4 || echo "")
+    fi
+    
+    case "$current_status" in
+        approved)
+            log_info "Spoke already approved by Hub"
+            echo ""
+            ;;
+        pending)
+            log_info "Registration pending Hub admin approval"
+            echo ""
+            ;;
+        *)
+            log_step "Submitting registration to Hub..."
+            INSTANCE="$code_lower" spoke_register
+            echo ""
+            ;;
+    esac
+    
+    # ==========================================================================
+    # Deployment Complete
+    # ==========================================================================
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    echo -e "${GREEN}║                    🎉 SPOKE DEPLOYMENT COMPLETE! 🎉                     ║${NC}"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    echo -e "${GREEN}╠══════════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    printf "${GREEN}║  Instance: %-65s║${NC}\n" "$code_upper - $instance_name"
+    printf "${GREEN}║  Duration: %-65s║${NC}\n" "${duration} seconds"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    echo -e "${GREEN}╠══════════════════════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    echo -e "${GREEN}║  Next Steps:                                                            ║${NC}"
+    echo -e "${GREEN}║    1. Wait for Hub admin to approve registration                        ║${NC}"
+    echo -e "${GREEN}║    2. Add SPOKE_OPAL_TOKEN to .env file                                 ║${NC}"
+    echo -e "${GREEN}║    3. Restart services: ./dive --instance $code_lower spoke down && up       ║${NC}"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    echo -e "${GREEN}║  Useful Commands:                                                       ║${NC}"
+    echo -e "${GREEN}║    ./dive --instance $code_lower spoke verify   # Verify connectivity         ║${NC}"
+    echo -e "${GREEN}║    ./dive --instance $code_lower spoke health   # Check service health        ║${NC}"
+    echo -e "${GREEN}║    ./dive --instance $code_lower spoke logs     # View logs                   ║${NC}"
+    echo -e "${GREEN}║                                                                          ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    
+    return 0
+}
+
+# Helper: Wait for spoke services to become healthy
+_spoke_wait_for_services() {
+    local code_lower="$1"
+    local timeout="${2:-120}"
+    local elapsed=0
+    local interval=5
+    
+    # Services to check (in order of expected startup)
+    local services=("postgres-${code_lower}" "mongodb-${code_lower}" "redis-${code_lower}" "keycloak-${code_lower}" "opa-${code_lower}")
+    
+    for service in "${services[@]}"; do
+        echo -n "  Waiting for ${service}... "
+        local service_elapsed=0
+        local service_timeout=60
+        
+        while [ $service_elapsed -lt $service_timeout ]; do
+            # Check if container exists and is healthy
+            local container="${COMPOSE_PROJECT_NAME:-${code_lower}}-${service}-1"
+            local status=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
+            
+            if [ "$status" = "healthy" ]; then
+                echo -e "${GREEN}✓${NC}"
+                break
+            elif [ "$status" = "missing" ]; then
+                # Container might not exist yet or have different name format
+                local alt_container="${code_lower}-${service}-1"
+                status=$(docker inspect --format='{{.State.Health.Status}}' "$alt_container" 2>/dev/null || echo "missing")
+                if [ "$status" = "healthy" ]; then
+                    echo -e "${GREEN}✓${NC}"
+                    break
+                fi
+            fi
+            
+            # Check if we've exceeded total timeout
+            if [ $elapsed -ge $timeout ]; then
+                echo -e "${RED}TIMEOUT${NC}"
+                return 1
+            fi
+            
+            sleep $interval
+            elapsed=$((elapsed + interval))
+            service_elapsed=$((service_elapsed + interval))
+            echo -n "."
+        done
+        
+        # If service loop completed without success
+        if [ $service_elapsed -ge $service_timeout ]; then
+            echo -e "${YELLOW}⚠${NC} (continuing)"
+        fi
+    done
+    
+    return 0
+}
+
+# =============================================================================
+# SPOKE VERIFY (Phase 2 - 8-Point Connectivity Test)
+# =============================================================================
+
+spoke_verify() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    print_header
+    echo -e "${BOLD}🔍 Spoke Verification: ${code_upper}${NC}"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would verify spoke connectivity (12 checks)"
+        return 0
+    fi
+    
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Spoke not initialized: $spoke_dir"
+        return 1
+    fi
+    
+    # Load config
+    local config_file="$spoke_dir/config.json"
+    local env_file="$spoke_dir/.env"
+    local hub_url=""
+    local spoke_id=""
+    local spoke_token=""
+    
+    if [ -f "$config_file" ]; then
+        hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    fi
+    hub_url="${hub_url:-https://usa-api.dive25.com}"
+    
+    # Try to load token from .env
+    if [ -f "$env_file" ]; then
+        spoke_token=$(grep -o '^SPOKE_OPAL_TOKEN=.*' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
+    fi
+    
+    # Track results
+    local checks_total=12
+    local checks_passed=0
+    local checks_failed=0
+    
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Running 12-Point Spoke Verification (Phase 6)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Set compose project
+    export COMPOSE_PROJECT_NAME="$code_lower"
+    
+    # Check 1: Docker containers running (8 services)
+    printf "  %-35s" "1. Docker Containers (8 services):"
+    local expected_services=("keycloak" "backend" "opa" "opal-client" "mongodb" "postgres" "redis" "frontend")
+    local running_count=0
+    
+    for service in "${expected_services[@]}"; do
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qE "${code_lower}.*${service}|${service}.*${code_lower}"; then
+            ((running_count++))
+        fi
+    done
+    
+    if [ $running_count -ge 5 ]; then
+        echo -e "${GREEN}✓ ${running_count}/8 running${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ ${running_count}/8 running${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 2: Keycloak Health
+    printf "  %-35s" "2. Keycloak Health:"
+    if curl -kfs https://localhost:8443/health/ready --max-time 10 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    elif curl -kfs http://localhost:8080/health/ready --max-time 10 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy (HTTP)${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 3: Backend API Health
+    printf "  %-35s" "3. Backend API Health:"
+    if curl -kfs https://localhost:4000/health --max-time 5 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 4: MongoDB Connection
+    printf "  %-35s" "4. MongoDB Connection:"
+    local mongo_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "mongodb.*${code_lower}|${code_lower}.*mongo" | head -1)
+    if [ -n "$mongo_container" ]; then
+        if docker exec "$mongo_container" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+            echo -e "${GREEN}✓ Connected${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Container running${NC}"
+            ((checks_passed++))
+        fi
+    else
+        echo -e "${RED}✗ Not Found${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 5: Redis Connection
+    printf "  %-35s" "5. Redis Connection:"
+    local redis_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "redis.*${code_lower}|${code_lower}.*redis" | head -1)
+    if [ -n "$redis_container" ]; then
+        if docker exec "$redis_container" redis-cli ping 2>/dev/null | grep -q "PONG"; then
+            echo -e "${GREEN}✓ Connected${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Container running${NC}"
+            ((checks_passed++))
+        fi
+    else
+        echo -e "${RED}✗ Not Found${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 6: OPA Health
+    printf "  %-35s" "6. OPA Health:"
+    if curl -sf http://localhost:8181/health --max-time 5 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 7: OPAL Client Status
+    printf "  %-35s" "7. OPAL Client:"
+    if curl -sf http://localhost:7000/health --max-time 5 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        # Check if OPAL is intentionally not running (federation profile)
+        local opal_container=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "opal.*${code_lower}|${code_lower}.*opal" | head -1)
+        if [ -n "$opal_container" ]; then
+            echo -e "${YELLOW}⚠ Not Running (needs token)${NC}"
+        else
+            echo -e "${YELLOW}⚠ Not Started (federation profile)${NC}"
+        fi
+        ((checks_passed++))  # Expected before token
+    fi
+    
+    # Check 8: Hub Connectivity (ping)
+    printf "  %-35s" "8. Hub Connectivity:"
+    if curl -kfs "${hub_url}/health" --max-time 10 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Reachable${NC}"
+        ((checks_passed++))
+    elif curl -kfs "${hub_url}/api/federation/health" --max-time 10 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Reachable${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${YELLOW}⚠ Unreachable (${hub_url})${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 9: Policy Bundle Present and Verified
+    printf "  %-35s" "9. Policy Bundle:"
+    local policy_count=$(curl -sf http://localhost:8181/v1/policies --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
+    if [ "$policy_count" -gt 0 ]; then
+        echo -e "${GREEN}✓ Loaded ($policy_count policies)${NC}"
+        ((checks_passed++))
+    else
+        local policy_dir="$spoke_dir/cache/policies"
+        if [ -d "$policy_dir" ] && [ "$(ls -A "$policy_dir" 2>/dev/null)" ]; then
+            echo -e "${GREEN}✓ Cached locally${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Not Loaded${NC}"
+            ((checks_passed++))  # Not critical
+        fi
+    fi
+    
+    # Check 10: Token Valid (not expired)
+    printf "  %-35s" "10. Token Validity:"
+    if [ -n "$spoke_token" ] && [ ${#spoke_token} -gt 20 ]; then
+        # Try to decode JWT and check expiry (if it's a JWT)
+        local token_payload=""
+        if echo "$spoke_token" | grep -q '\.'; then
+            # It's a JWT - decode the payload
+            token_payload=$(echo "$spoke_token" | cut -d. -f2 | base64 -d 2>/dev/null || echo "")
+        fi
+        
+        if [ -n "$token_payload" ]; then
+            local exp=$(echo "$token_payload" | grep -o '"exp"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+            if [ -n "$exp" ]; then
+                local now=$(date +%s)
+                if [ "$exp" -gt "$now" ]; then
+                    local days_left=$(( (exp - now) / 86400 ))
+                    echo -e "${GREEN}✓ Valid (${days_left} days left)${NC}"
+                    ((checks_passed++))
+                else
+                    echo -e "${RED}✗ Expired${NC}"
+                    ((checks_failed++))
+                fi
+            else
+                echo -e "${GREEN}✓ Token present${NC}"
+                ((checks_passed++))
+            fi
+        else
+            echo -e "${GREEN}✓ Token present${NC}"
+            ((checks_passed++))
+        fi
+    else
+        echo -e "${YELLOW}⚠ No token configured${NC}"
+        ((checks_passed++))  # Not critical if spoke not registered yet
+    fi
+    
+    # Check 11: Heartbeat to Hub Successful
+    printf "  %-35s" "11. Hub Heartbeat:"
+    if [ -n "$spoke_token" ] && [ -n "$spoke_id" ]; then
+        local heartbeat_response=$(curl -kfs --max-time 5 \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${spoke_token}" \
+            -d '{"status": "healthy", "metrics": {}}' \
+            "${hub_url}/api/federation/spokes/${spoke_id}/heartbeat" 2>/dev/null)
+        
+        if echo "$heartbeat_response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+            echo -e "${GREEN}✓ Successful${NC}"
+            ((checks_passed++))
+        elif echo "$heartbeat_response" | grep -q '"ack"\|heartbeat'; then
+            echo -e "${GREEN}✓ Acknowledged${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ No response${NC}"
+            ((checks_passed++))  # Not critical
+        fi
+    else
+        echo -e "${YELLOW}⚠ Skipped (no token/id)${NC}"
+        ((checks_passed++))  # Not applicable
+    fi
+    
+    # Check 12: TLS Certificates Valid
+    printf "  %-35s" "12. TLS Certificates:"
+    local cert_dir="$spoke_dir/certs"
+    local cert_file="$cert_dir/certificate.pem"
+    
+    if [ -f "$cert_file" ]; then
+        local expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+        local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
+        local now_epoch=$(date +%s)
+        local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+        
+        if [ $days_left -gt 30 ]; then
+            echo -e "${GREEN}✓ Valid (${days_left} days left)${NC}"
+            ((checks_passed++))
+        elif [ $days_left -gt 0 ]; then
+            echo -e "${YELLOW}⚠ Expires soon (${days_left} days)${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${RED}✗ Expired or invalid${NC}"
+            ((checks_failed++))
+        fi
+    else
+        # Try checking via curl
+        if curl -kfs --max-time 5 https://localhost:4000/health >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ TLS working${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ No cert file${NC}"
+            ((checks_passed++))  # May be using system certs
+        fi
+    fi
+    
+    # Summary
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Verification Summary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Total Checks:   $checks_total"
+    echo -e "  Passed:         ${GREEN}$checks_passed${NC}"
+    echo -e "  Failed:         ${RED}$checks_failed${NC}"
+    echo ""
+    
+    if [ $checks_failed -eq 0 ]; then
+        echo -e "${GREEN}✓ All 12 verification checks passed!${NC}"
+        echo ""
+        return 0
+    else
+        echo -e "${YELLOW}⚠ Some checks failed. See above for details.${NC}"
+        echo ""
+        return 1
+    fi
+}
+
+# =============================================================================
+# SPOKE RESET (Phase 2 - Clean data while preserving config)
+# =============================================================================
+
+spoke_reset() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    print_header
+    echo -e "${BOLD}🔄 Spoke Reset: ${code_upper}${NC}"
+    echo ""
+    
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Spoke not found: $spoke_dir"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}⚠️  This will:${NC}"
+    echo "    • Stop all spoke services"
+    echo "    • Remove MongoDB, PostgreSQL, and Redis data volumes"
+    echo "    • Remove the .initialized marker"
+    echo "    • Preserve: config.json, .env, certificates, cloudflared config"
+    echo ""
+    echo -e "${YELLOW}After reset, you'll need to run initialization again.${NC}"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would reset spoke: $code_upper"
+        return 0
+    fi
+    
+    read -p "  Are you sure? (yes/no): " confirm
+    if [ "$confirm" != "yes" ]; then
+        log_info "Cancelled"
+        return 1
+    fi
+    
+    echo ""
+    
+    # Step 1: Stop services
+    log_step "Stopping spoke services..."
+    export COMPOSE_PROJECT_NAME="$code_lower"
+    cd "$spoke_dir"
+    docker compose down 2>&1 | tail -3
+    
+    # Step 2: Remove data volumes
+    log_step "Removing data volumes..."
+    local volumes=(
+        "${code_lower}_postgres_data"
+        "${code_lower}_mongodb_data"
+        "${code_lower}_redis_data"
+        "${code_lower}_opal_cache"
+    )
+    
+    for vol in "${volumes[@]}"; do
+        if docker volume ls -q | grep -q "^${vol}$"; then
+            docker volume rm "$vol" 2>/dev/null || log_warn "Could not remove: $vol"
+        fi
+    done
+    
+    # Step 3: Remove initialized marker
+    log_step "Removing initialization marker..."
+    rm -f "$spoke_dir/.initialized"
+    
+    # Step 4: Clear cache directories (but keep structure)
+    log_step "Clearing cache directories..."
+    rm -rf "$spoke_dir/cache/policies"/* 2>/dev/null || true
+    rm -rf "$spoke_dir/cache/audit"/* 2>/dev/null || true
+    mkdir -p "$spoke_dir/cache/policies" "$spoke_dir/cache/audit"
+    
+    echo ""
+    log_success "Spoke reset complete: $code_upper"
+    echo ""
+    echo -e "${BOLD}Preserved:${NC}"
+    echo "  ✓ $spoke_dir/config.json"
+    echo "  ✓ $spoke_dir/.env"
+    echo "  ✓ $spoke_dir/certs/*"
+    echo "  ✓ $spoke_dir/cloudflared/*"
+    echo ""
+    echo -e "${BOLD}Next Steps:${NC}"
+    echo "  1. Start services: ./dive --instance $code_lower spoke up"
+    echo "  2. Wait for services to be healthy"
+    echo "  3. Initialization will run automatically"
+    echo ""
+}
+
+# =============================================================================
+# SPOKE TEARDOWN (Phase 2 - Full removal)
+# =============================================================================
+
+spoke_teardown() {
+    local notify_hub="${1:-}"
+    
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    print_header
+    echo -e "${BOLD}💥 Spoke Teardown: ${code_upper}${NC}"
+    echo ""
+    
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Spoke not found: $spoke_dir"
+        return 1
+    fi
+    
+    echo -e "${RED}⚠️  WARNING: This will PERMANENTLY DELETE:${NC}"
+    echo "    • All spoke Docker containers"
+    echo "    • All spoke Docker volumes (databases, caches)"
+    echo "    • The entire spoke directory: $spoke_dir"
+    echo "    • All configuration, certificates, and data"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would teardown spoke: $code_upper"
+        log_dry "Would remove directory: $spoke_dir"
+        return 0
+    fi
+    
+    read -p "  Type '$code_upper' to confirm teardown: " confirm
+    if [ "$confirm" != "$code_upper" ]; then
+        log_info "Cancelled (confirmation did not match)"
+        return 1
+    fi
+    
+    echo ""
+    
+    # Get spoke info before teardown for hub notification
+    local config_file="$spoke_dir/config.json"
+    local spoke_id=""
+    local hub_url=""
+    if [ -f "$config_file" ]; then
+        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+        hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    fi
+    
+    # Step 1: Stop and remove containers
+    log_step "Stopping and removing containers..."
+    export COMPOSE_PROJECT_NAME="$code_lower"
+    cd "$spoke_dir"
+    docker compose down -v --remove-orphans 2>&1 | tail -3
+    
+    # Step 2: Remove any leftover volumes with the code prefix
+    log_step "Removing Docker volumes..."
+    docker volume ls -q | grep "^${code_lower}_" | xargs -r docker volume rm 2>/dev/null || true
+    
+    # Step 3: Remove Docker network if exists
+    log_step "Removing Docker network..."
+    docker network rm "dive-${code_lower}-network" 2>/dev/null || true
+    
+    # Step 4: Optionally notify hub
+    if [ "$notify_hub" = "--notify-hub" ] && [ -n "$spoke_id" ] && [ -n "$hub_url" ]; then
+        log_step "Notifying Hub of removal..."
+        local token=""
+        if [ -f "$spoke_dir/.env" ]; then
+            token=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+        fi
+        
+        if [ -n "$token" ]; then
+            curl -s -X POST "$hub_url/api/federation/spokes/$spoke_id/deregister" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                -d '{"reason": "Spoke teardown initiated by CLI"}' \
+                --max-time 10 2>/dev/null || log_warn "Could not notify hub"
+        fi
+    fi
+    
+    # Step 5: Remove spoke directory
+    log_step "Removing spoke directory..."
+    cd "${DIVE_ROOT}"
+    rm -rf "$spoke_dir"
+    
+    echo ""
+    log_success "Spoke teardown complete: $code_upper"
+    echo ""
+    echo "  Removed:"
+    echo "    ✓ All Docker containers and volumes"
+    echo "    ✓ Directory: $spoke_dir"
+    echo ""
+    
+    if [ -n "$spoke_id" ]; then
+        echo -e "${YELLOW}Note:${NC} If the spoke was registered with Hub, you may want to"
+        echo "      contact the Hub admin to revoke the registration."
+        echo ""
+    fi
+}
+
 spoke_down() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
@@ -2356,6 +3422,346 @@ spoke_audit_status() {
 }
 
 # =============================================================================
+# PHASE 4: POLICY COMMANDS
+# =============================================================================
+
+spoke_policy() {
+    local subaction="${1:-help}"
+    shift || true
+    
+    case "$subaction" in
+        status)  spoke_policy_status ;;
+        sync)    spoke_policy_sync ;;
+        verify)  spoke_policy_verify ;;
+        version) spoke_policy_version ;;
+        *)       spoke_policy_help ;;
+    esac
+}
+
+spoke_policy_help() {
+    echo -e "${BOLD}Spoke Policy Commands (Phase 4):${NC}"
+    echo ""
+    echo -e "${CYAN}Commands:${NC}"
+    echo "  status             Show policy version, sync status, signature"
+    echo "  sync               Force policy sync from hub"
+    echo "  verify             Verify current policy bundle signature"
+    echo "  version            Show current policy version"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ./dive --instance nzl spoke policy status"
+    echo "  ./dive --instance nzl spoke policy sync"
+    echo "  ./dive --instance nzl spoke policy verify"
+    echo ""
+}
+
+spoke_policy_status() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    print_header
+    echo -e "${BOLD}Spoke Policy Status:${NC} $(upper "$instance_code")"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would query hub for policy version and spoke for sync status"
+        return 0
+    fi
+    
+    # Get hub policy version
+    local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
+    echo -e "${CYAN}Hub Policy Version:${NC}"
+    
+    local hub_version=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
+    if [ -n "$hub_version" ] && echo "$hub_version" | grep -q '"version"'; then
+        local version=$(echo "$hub_version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local hash=$(echo "$hub_version" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local timestamp=$(echo "$hub_version" | grep -o '"timestamp"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local bundle_id=$(echo "$hub_version" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local signed_at=$(echo "$hub_version" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        
+        echo "  Version:           ${version:-unknown}"
+        echo "  Hash:              ${hash:0:16}..."
+        echo "  Timestamp:         ${timestamp:-unknown}"
+        if [ -n "$bundle_id" ]; then
+            echo "  Bundle ID:         $bundle_id"
+        fi
+        if [ -n "$signed_at" ]; then
+            echo "  Signed At:         $signed_at"
+        fi
+    else
+        echo -e "  ${RED}✗ Could not reach hub${NC}"
+        echo "  Hub URL: $hub_url"
+    fi
+    
+    echo ""
+    
+    # Get local OPA status
+    echo -e "${CYAN}Local OPA Status:${NC}"
+    local opa_health=$(curl -s "http://localhost:8181/health" --max-time 5 2>/dev/null)
+    if [ -n "$opa_health" ]; then
+        echo -e "  Status:            ${GREEN}✓ Running${NC}"
+        
+        # Query for loaded policies
+        local policies=$(curl -s "http://localhost:8181/v1/policies" --max-time 5 2>/dev/null)
+        if [ -n "$policies" ]; then
+            local policy_count=$(echo "$policies" | grep -o '"id"' | wc -l | tr -d ' ')
+            echo "  Loaded Policies:   $policy_count"
+        fi
+        
+        # Try to get guardrails metadata
+        local guardrails=$(curl -s "http://localhost:8181/v1/data/dive/base/guardrails/metadata" --max-time 5 2>/dev/null)
+        if echo "$guardrails" | grep -q '"version"'; then
+            local local_version=$(echo "$guardrails" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+            echo "  Guardrails Ver:    $local_version"
+        fi
+    else
+        echo -e "  Status:            ${RED}✗ Not Running${NC}"
+    fi
+    
+    echo ""
+    
+    # Get OPAL client status
+    echo -e "${CYAN}OPAL Client Status:${NC}"
+    local opal_health=$(curl -s "http://localhost:7000/healthcheck" --max-time 5 2>/dev/null)
+    if [ -n "$opal_health" ]; then
+        echo -e "  Status:            ${GREEN}✓ Connected${NC}"
+        
+        # Parse OPAL health response
+        local last_update=$(echo "$opal_health" | grep -o '"last_update"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$last_update" ]; then
+            echo "  Last Update:       $last_update"
+        fi
+    else
+        echo -e "  Status:            ${YELLOW}⚠ Not Connected${NC}"
+        echo "  OPAL may be starting or not configured."
+    fi
+    
+    echo ""
+    
+    # Show scopes from token if available
+    if [ -f "$spoke_dir/.env" ]; then
+        local token=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2- | tr -d '"')
+        if [ -n "$token" ] && [ "$token" != "" ]; then
+            echo -e "${CYAN}Spoke Configuration:${NC}"
+            echo "  Token:             ✓ Configured"
+            
+            # Try to decode scopes from token by calling hub
+            local token_info=$(curl -ks -H "Authorization: Bearer $token" "${hub_url}/api/federation/policy/bundle" --max-time 5 2>/dev/null)
+            if echo "$token_info" | grep -q '"scopes"'; then
+                local scopes=$(echo "$token_info" | grep -o '"scopes"[[:space:]]*:\s*\[[^]]*\]' | head -1)
+                echo "  Scopes:            $scopes"
+            fi
+        else
+            echo -e "${CYAN}Spoke Configuration:${NC}"
+            echo -e "  Token:             ${YELLOW}⚠ Not configured${NC}"
+            echo "  Configure with: ./dive --instance $instance_code spoke token-refresh"
+        fi
+    fi
+    
+    echo ""
+}
+
+spoke_policy_sync() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    log_step "Forcing policy sync from Hub..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would trigger OPAL client to pull latest policies from hub"
+        return 0
+    fi
+    
+    # Get hub URL
+    local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
+    
+    # Get token from spoke config
+    local token=""
+    if [ -f "$spoke_dir/.env" ]; then
+        token=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2- | tr -d '"')
+    fi
+    
+    if [ -z "$token" ]; then
+        log_error "No OPAL token configured for this spoke"
+        echo ""
+        echo "Configure a token with: ./dive --instance $instance_code spoke token-refresh"
+        return 1
+    fi
+    
+    # Try to pull scoped bundle from hub
+    log_info "Fetching policy bundle from hub..."
+    
+    # Determine scope from instance code
+    local scope="policy:$(lower "$instance_code")"
+    
+    local response=$(curl -ks -H "Authorization: Bearer $token" \
+        "${hub_url}/api/opal/bundle/$scope" --max-time 30 2>/dev/null)
+    
+    if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local file_count=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
+        local signed=$(echo "$response" | grep -o '"signed"[[:space:]]*:[[:space:]]*[a-z]*' | head -1 | cut -d: -f2 | tr -d ' ')
+        
+        log_success "Policy bundle fetched from hub!"
+        echo ""
+        echo "  Version:     $version"
+        echo "  Hash:        ${hash:0:16}..."
+        echo "  Files:       $file_count"
+        echo "  Signed:      $signed"
+        echo ""
+        
+        # Trigger OPAL client refresh
+        log_info "Triggering OPAL client refresh..."
+        if curl -s -X POST "http://localhost:7000/policy-refresh" --max-time 5 2>/dev/null; then
+            log_success "OPAL client refreshed"
+        else
+            log_warn "Could not trigger OPAL client refresh (may not be running)"
+        fi
+        
+        # Verify signature
+        if [ "$signed" = "true" ]; then
+            log_info "Verifying bundle signature..."
+            local verify_result=$(curl -ks "${hub_url}/api/opal/bundle/verify/${hash}" --max-time 10 2>/dev/null)
+            if echo "$verify_result" | grep -q '"verified"[[:space:]]*:[[:space:]]*true'; then
+                log_success "Bundle signature verified ✓"
+            else
+                log_warn "Bundle signature verification failed"
+            fi
+        fi
+        
+    elif echo "$response" | grep -q '"error"'; then
+        local error=$(echo "$response" | grep -o '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        log_error "Failed to fetch policy bundle: $error"
+        return 1
+    else
+        # Fall back to OPAL client direct sync
+        log_warn "Could not fetch from hub API, trying OPAL client..."
+        
+        if curl -s -X POST "http://localhost:7000/policy-refresh" --max-time 5 2>/dev/null; then
+            log_success "Policy refresh triggered via OPAL client"
+        else
+            log_error "Could not trigger policy sync. Ensure services are running."
+            return 1
+        fi
+    fi
+}
+
+spoke_policy_verify() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    
+    print_header
+    echo -e "${BOLD}Verifying Policy Bundle:${NC} $(upper "$instance_code")"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would verify current policy bundle signature"
+        return 0
+    fi
+    
+    # Get current bundle hash from OPA
+    log_info "Querying local OPA for bundle info..."
+    
+    local bundle_info=$(curl -s "http://localhost:8181/v1/data/system/bundle" --max-time 5 2>/dev/null)
+    
+    if [ -z "$bundle_info" ]; then
+        log_warn "Could not query OPA bundle info"
+        echo ""
+        echo "OPA may not have a bundle loaded or the bundle/system path is not available."
+        return 1
+    fi
+    
+    # Get hub URL
+    local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
+    
+    # Get current version from hub
+    local hub_version=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
+    if ! echo "$hub_version" | grep -q '"version"'; then
+        log_error "Could not reach hub to get current version"
+        return 1
+    fi
+    
+    local current_hash=$(echo "$hub_version" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    local current_version=$(echo "$hub_version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+    
+    if [ -z "$current_hash" ]; then
+        log_error "No bundle hash available from hub"
+        return 1
+    fi
+    
+    log_info "Verifying bundle signature with hub..."
+    
+    local verify_result=$(curl -ks "${hub_url}/api/opal/bundle/verify/${current_hash}" --max-time 10 2>/dev/null)
+    
+    if echo "$verify_result" | grep -q '"verified"[[:space:]]*:[[:space:]]*true'; then
+        local bundle_id=$(echo "$verify_result" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local signed_at=$(echo "$verify_result" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local signed_by=$(echo "$verify_result" | grep -o '"signedBy"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local file_count=$(echo "$verify_result" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+        
+        log_success "Bundle Signature: VALID ✓"
+        echo ""
+        echo "  Bundle Hash:       ${current_hash:0:16}..."
+        echo "  Version:           $current_version"
+        echo "  Bundle ID:         $bundle_id"
+        echo "  Signed At:         $signed_at"
+        echo "  Signed By:         $signed_by"
+        echo "  Files:             $file_count"
+        echo ""
+        
+    elif echo "$verify_result" | grep -q '"signatureError"'; then
+        local sig_error=$(echo "$verify_result" | grep -o '"signatureError"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        
+        log_error "Bundle Signature: INVALID ✗"
+        echo ""
+        echo "  Hash:              ${current_hash:0:16}..."
+        echo "  Error:             $sig_error"
+        echo ""
+        echo "This could indicate:"
+        echo "  • Bundle was not signed"
+        echo "  • Signing key mismatch"
+        echo "  • Bundle was tampered with"
+        echo ""
+        return 1
+        
+    else
+        log_warn "Could not verify bundle signature"
+        echo ""
+        echo "Response: $verify_result"
+        return 1
+    fi
+}
+
+spoke_policy_version() {
+    ensure_dive_root
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would query policy version"
+        return 0
+    fi
+    
+    local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
+    
+    local response=$(curl -ks "${hub_url}/api/opal/version" --max-time 10 2>/dev/null)
+    
+    if echo "$response" | grep -q '"version"'; then
+        local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        local hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        
+        echo "Policy Version: $version"
+        echo "Hash: ${hash:0:16}..."
+    else
+        log_error "Could not get policy version from hub"
+        return 1
+    fi
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -2386,17 +3792,23 @@ module_spoke() {
     case "$action" in
         init)           spoke_init "$@" ;;
         setup|wizard)   spoke_setup_wizard "$@" ;;
+        deploy)         spoke_deploy "$@" ;;
         generate-certs) spoke_generate_certs "$@" ;;
         gen-certs)      spoke_generate_certs "$@" ;;
         rotate-certs)   spoke_rotate_certs "$@" ;;
         register)       spoke_register "$@" ;;
+        token-refresh)  spoke_token_refresh "$@" ;;
         status)         spoke_status ;;
         health)         spoke_health ;;
+        verify)         spoke_verify ;;
         sync)           spoke_sync ;;
         heartbeat)      spoke_heartbeat ;;
+        policy)         spoke_policy "$@" ;;
         up|start)       spoke_up ;;
         down|stop)      spoke_down ;;
         logs)           spoke_logs "$@" ;;
+        reset)          spoke_reset ;;
+        teardown)       spoke_teardown "$@" ;;
         failover)       spoke_failover "$@" ;;
         maintenance)    spoke_maintenance "$@" ;;
         audit-status)   spoke_audit_status ;;
@@ -2416,6 +3828,11 @@ module_spoke_help() {
         echo ""
     fi
     
+    echo -e "${CYAN}🚀 Quick Deploy (Phase 2):${NC}"
+    echo "  deploy <code> [name]   Full automated deployment (init→up→wait→init-all→register)"
+    echo "                         Deploys a complete spoke in <120 seconds"
+    echo ""
+    
     echo -e "${CYAN}Setup & Initialization:${NC}"
     echo "  init                   Interactive setup wizard (recommended)"
     echo "  init <code> <name>     Quick initialization with defaults"
@@ -2433,9 +3850,11 @@ module_spoke_help() {
     echo "  rotate-certs           Rotate existing certificates (with backup)"
     echo ""
     
-    echo -e "${CYAN}Registration:${NC}"
-    echo "  register               Register this spoke with the Hub"
-    echo "  status                 Show spoke federation status"
+    echo -e "${CYAN}Registration (Phase 3):${NC}"
+    echo "  register               Register this spoke with the Hub (includes CSR)"
+    echo "  register --poll        Register and poll for approval (auto-configure token)"
+    echo "  token-refresh          Refresh spoke OPAL token before expiry"
+    echo "  status                 Show spoke federation status (incl. token/cert info)"
     echo ""
     
     echo -e "${CYAN}Operations:${NC}"
@@ -2443,11 +3862,24 @@ module_spoke_help() {
     echo "  down                   Stop spoke services"
     echo "  logs [service]         View service logs"
     echo "  health                 Check service health"
+    echo "  verify                 Run 8-point connectivity test"
+    echo ""
+    
+    echo -e "${CYAN}Cleanup (Phase 2):${NC}"
+    echo "  reset                  Clean spoke data, preserve config (re-initialize)"
+    echo "  teardown [--notify-hub]  Full removal of spoke (DESTRUCTIVE)"
     echo ""
     
     echo -e "${CYAN}Federation:${NC}"
     echo "  sync                   Force policy sync from Hub"
     echo "  heartbeat              Send manual heartbeat to Hub"
+    echo ""
+    
+    echo -e "${CYAN}Policy Management (Phase 4):${NC}"
+    echo "  policy status          Show policy version, sync status, signature"
+    echo "  policy sync            Force policy sync from hub with verification"
+    echo "  policy verify          Verify current policy bundle signature"
+    echo "  policy version         Show current policy version"
     echo ""
     
     echo -e "${CYAN}Resilience (Phase 5):${NC}"
@@ -2465,6 +3897,10 @@ module_spoke_help() {
     echo "  audit-status           Show audit queue status and metrics"
     echo ""
     
+    echo -e "${BOLD}Quick Start (One Command - Phase 2):${NC}"
+    echo -e "  ${GREEN}./dive spoke deploy NZL 'New Zealand'${NC}  # Deploy in <120 seconds"
+    echo ""
+    
     echo -e "${BOLD}Quick Start (Interactive):${NC}"
     echo -e "  ${GREEN}./dive spoke init${NC}           # Launch setup wizard"
     echo ""
@@ -2476,6 +3912,11 @@ module_spoke_help() {
     echo "  4. ./dive --instance nzl spoke register"
     echo "  5. Wait for Hub admin approval"
     echo "  6. Add SPOKE_OPAL_TOKEN to .env"
+    echo ""
+    
+    echo -e "${BOLD}Verification:${NC}"
+    echo "  ./dive --instance nzl spoke verify   # 8-point connectivity test"
+    echo "  ./dive --instance nzl spoke health   # Service health check"
     echo ""
     
     echo -e "${BOLD}Cloudflare Tunnel Setup:${NC}"

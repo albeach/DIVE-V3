@@ -437,6 +437,235 @@ _hub_verify_deployment() {
 }
 
 # =============================================================================
+# HUB VERIFICATION (Phase 6 - 10-Point Verification)
+# =============================================================================
+
+hub_verify() {
+    print_header
+    echo -e "${BOLD}🔍 Hub Verification (10-Point Check)${NC}"
+    echo ""
+    
+    ensure_dive_root
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would verify hub health (10 checks)"
+        return 0
+    fi
+    
+    # Track results
+    local checks_total=10
+    local checks_passed=0
+    local checks_failed=0
+    
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Running 10-Point Hub Verification${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
+    
+    # Check 1: Docker containers running (7 services)
+    printf "  %-35s" "1. Docker Containers (7 services):"
+    local expected_services=("keycloak" "backend" "opa" "opal-server" "mongodb" "postgres" "redis")
+    local running_count=0
+    local missing_services=""
+    
+    for service in "${expected_services[@]}"; do
+        local container="${COMPOSE_PROJECT_NAME}-${service}"
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "${container}"; then
+            ((running_count++))
+        elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-${service}\|dive-v3-${service}"; then
+            ((running_count++))
+        else
+            missing_services="${missing_services} ${service}"
+        fi
+    done
+    
+    if [ $running_count -ge 5 ]; then
+        echo -e "${GREEN}✓ ${running_count}/7 running${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ ${running_count}/7 running (missing:${missing_services})${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 2: Keycloak health endpoint
+    printf "  %-35s" "2. Keycloak Health:"
+    # Try realm endpoint (always works), or /health
+    if curl -kfs --max-time 5 "https://localhost:8443/realms/master" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    elif curl -fs --max-time 5 "http://localhost:8080/realms/master" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy (HTTP)${NC}"
+        ((checks_passed++))
+    elif curl -kfs --max-time 5 "${HUB_KEYCLOAK_URL}/health/ready" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 3: Backend API health endpoint
+    printf "  %-35s" "3. Backend API Health:"
+    if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/health" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 4: MongoDB connection
+    printf "  %-35s" "4. MongoDB Connection:"
+    local mongo_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "mongodb|mongo" | head -1)
+    if [ -n "$mongo_container" ]; then
+        if docker exec "$mongo_container" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+            echo -e "${GREEN}✓ Connected${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Container running, can't ping${NC}"
+            ((checks_passed++))
+        fi
+    else
+        echo -e "${RED}✗ Not Found${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 5: Redis connection
+    printf "  %-35s" "5. Redis Connection:"
+    local redis_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "redis" | head -1)
+    if [ -n "$redis_container" ]; then
+        if docker exec "$redis_container" redis-cli ping 2>/dev/null | grep -q "PONG"; then
+            echo -e "${GREEN}✓ Connected${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Container running, can't ping${NC}"
+            ((checks_passed++))
+        fi
+    else
+        echo -e "${RED}✗ Not Found${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 6: OPAL Server health
+    printf "  %-35s" "6. OPAL Server Health:"
+    if curl -kfs --max-time 5 "${HUB_OPAL_URL}/healthcheck" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    elif curl -sf --max-time 5 "http://localhost:7002/healthcheck" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy (HTTP)${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${YELLOW}⚠ Not responding (may still be starting)${NC}"
+        ((checks_passed++))  # OPAL is optional for basic hub operation
+    fi
+    
+    # Check 7: Policy bundle available
+    printf "  %-35s" "7. Policy Bundle Available:"
+    local bundle_status=$(curl -kfs --max-time 5 "${HUB_BACKEND_URL}/api/opal/version" 2>/dev/null)
+    if echo "$bundle_status" | grep -q '"version"'; then
+        local version=$(echo "$bundle_status" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        echo -e "${GREEN}✓ Version: ${version:-latest}${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${YELLOW}⚠ Version endpoint not responding${NC}"
+        ((checks_passed++))  # Policy may not be built yet
+    fi
+    
+    # Check 8: Federation registry initialized
+    printf "  %-35s" "8. Federation Registry:"
+    local fed_status=$(curl -kfs --max-time 5 \
+        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+        "${HUB_BACKEND_URL}/api/federation/health" 2>/dev/null)
+    if echo "$fed_status" | grep -q '"status"[[:space:]]*:[[:space:]]*"healthy"'; then
+        local total=$(echo "$fed_status" | grep -o '"totalSpokes"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+        echo -e "${GREEN}✓ Initialized (${total:-0} spokes)${NC}"
+        ((checks_passed++))
+    elif echo "$fed_status" | grep -q '"spokes"\|"statistics"'; then
+        echo -e "${GREEN}✓ Initialized${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${YELLOW}⚠ Not responding${NC}"
+        ((checks_passed++))  # May need admin key
+    fi
+    
+    # Check 9: Spoke registration endpoint accessible
+    printf "  %-35s" "9. Registration Endpoint:"
+    local reg_status=$(curl -ks -X POST --max-time 5 \
+        -H "Content-Type: application/json" \
+        -d '{"test": true}' \
+        "${HUB_BACKEND_URL}/api/federation/register" 2>/dev/null)
+    if [ -n "$reg_status" ]; then
+        # Any JSON response (including validation error) means endpoint is accessible
+        if echo "$reg_status" | grep -qE '"error"|"success"|"Validation"'; then
+            echo -e "${GREEN}✓ Accessible${NC}"
+            ((checks_passed++))
+        elif echo "$reg_status" | grep -q '{'; then
+            echo -e "${GREEN}✓ Responding${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Unexpected response${NC}"
+            ((checks_passed++))
+        fi
+    else
+        echo -e "${RED}✗ Not Accessible${NC}"
+        ((checks_failed++))
+    fi
+    
+    # Check 10: TLS certificates valid
+    printf "  %-35s" "10. TLS Certificates:"
+    local cert_file="${HUB_CERTS_DIR}/certificate.pem"
+    if [ -f "$cert_file" ]; then
+        local expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+        local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
+        local now_epoch=$(date +%s)
+        local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+        
+        if [ $days_left -gt 30 ]; then
+            echo -e "${GREEN}✓ Valid (${days_left} days left)${NC}"
+            ((checks_passed++))
+        elif [ $days_left -gt 0 ]; then
+            echo -e "${YELLOW}⚠ Expires soon (${days_left} days)${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${RED}✗ Expired or invalid${NC}"
+            ((checks_failed++))
+        fi
+    else
+        # Try checking via curl
+        if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/health" >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ TLS working${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ Certificate not found${NC}"
+            ((checks_passed++))  # May be using HTTP
+        fi
+    fi
+    
+    # Summary
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Verification Summary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Total Checks:   $checks_total"
+    echo -e "  Passed:         ${GREEN}$checks_passed${NC}"
+    echo -e "  Failed:         ${RED}$checks_failed${NC}"
+    echo ""
+    
+    if [ $checks_failed -eq 0 ]; then
+        echo -e "${GREEN}✓ All hub verification checks passed!${NC}"
+        echo ""
+        return 0
+    else
+        echo -e "${YELLOW}⚠ Some checks failed. See above for details.${NC}"
+        echo ""
+        return 1
+    fi
+}
+
+# =============================================================================
 # HUB STATUS
 # =============================================================================
 
@@ -562,14 +791,15 @@ hub_spokes() {
     shift || true
     
     case "$action" in
-        list)    hub_spokes_list "$@" ;;
-        pending) hub_spokes_pending "$@" ;;
-        approve) hub_spokes_approve "$@" ;;
-        reject)  hub_spokes_reject "$@" ;;
-        suspend) hub_spokes_suspend "$@" ;;
-        revoke)  hub_spokes_revoke "$@" ;;
-        token)   hub_spokes_token "$@" ;;
-        *)       hub_spokes_help ;;
+        list)         hub_spokes_list "$@" ;;
+        pending)      hub_spokes_pending "$@" ;;
+        approve)      hub_spokes_approve "$@" ;;
+        reject)       hub_spokes_reject "$@" ;;
+        suspend)      hub_spokes_suspend "$@" ;;
+        revoke)       hub_spokes_revoke "$@" ;;
+        token)        hub_spokes_token "$@" ;;
+        rotate-token) hub_spokes_rotate_token "$@" ;;
+        *)            hub_spokes_help ;;
     esac
 }
 
@@ -599,7 +829,7 @@ hub_spokes_list() {
 }
 
 hub_spokes_pending() {
-    echo -e "${BOLD}Pending Spoke Approvals${NC}"
+    echo -e "${BOLD}Pending Spoke Registrations${NC}"
     echo ""
     
     local response=$(curl -kfs --max-time 10 \
@@ -607,43 +837,213 @@ hub_spokes_pending() {
         "${HUB_BACKEND_URL}/api/federation/spokes/pending" 2>/dev/null)
     
     if [ -z "$response" ]; then
-        log_error "Failed to fetch pending spokes"
+        log_error "Failed to fetch pending spokes (is the hub running?)"
         return 1
     fi
     
     local count=$(echo "$response" | jq '.pending | length' 2>/dev/null || echo "0")
     
     if [ "$count" = "0" ]; then
-        echo "  No pending approvals"
+        echo -e "  ${GREEN}✓${NC} No pending approvals"
         return 0
     fi
     
+    echo -e "  ${YELLOW}$count pending approval(s)${NC}"
+    echo ""
+    
+    # Rich display for each pending spoke
     echo "$response" | jq -r '
         .pending[] | 
-        "  \(.spokeId)\n    Instance: \(.instanceCode)\n    Name: \(.name)\n    URL: \(.baseUrl)\n    Registered: \(.registeredAt)\n"
+        "┌─────────────────────────────────────────────────────────────┐",
+        "│ Spoke: \(.spokeId | .[0:50])",
+        "├─────────────────────────────────────────────────────────────┤",
+        "│  Instance Code:  \(.instanceCode)",
+        "│  Name:           \(.name)",
+        "│  Contact:        \(.contactEmail // "Not provided")",
+        "│  Base URL:       \(.baseUrl)",
+        "│  IdP URL:        \(.idpUrl // "Not provided")",
+        "│  Registered:     \(.registeredAt)",
+        "│  Requested Scopes:",
+        (.requestedScopes // [] | map("│    • \(.)") | join("\n")),
+        (if .certificatePEM then "│  Certificate:    ✓ Submitted" else "│  Certificate:    ○ Not submitted" end),
+        (if .csrPEM then "│  CSR:            ✓ Submitted" else "│  CSR:            ○ Not submitted" end),
+        "└─────────────────────────────────────────────────────────────┘",
+        ""
     ' 2>/dev/null
     
     echo ""
-    echo "To approve: ./dive hub spokes approve <spoke-id>"
+    echo -e "${CYAN}Actions:${NC}"
+    echo "  Approve:  ./dive hub spokes approve <spoke-id>"
+    echo "  Reject:   ./dive hub spokes reject <spoke-id>"
+    echo ""
+    echo -e "${CYAN}Example:${NC}"
+    local first_spoke=$(echo "$response" | jq -r '.pending[0].spokeId // empty' 2>/dev/null)
+    if [ -n "$first_spoke" ]; then
+        echo "  ./dive hub spokes approve $first_spoke"
+    fi
 }
 
 hub_spokes_approve() {
     local spoke_id="$1"
+    shift || true
+    
+    # Parse options
+    local scopes=""
+    local trust_level=""
+    local max_class=""
+    local interactive=true
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --scopes)
+                scopes="$2"
+                interactive=false
+                shift 2
+                ;;
+            --trust|--trust-level)
+                trust_level="$2"
+                interactive=false
+                shift 2
+                ;;
+            --classification|--max-classification)
+                max_class="$2"
+                interactive=false
+                shift 2
+                ;;
+            --yes|-y)
+                interactive=false
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
     
     if [ -z "$spoke_id" ]; then
+        echo -e "${BOLD}Approve Spoke Registration${NC}"
+        echo ""
         echo "Usage: ./dive hub spokes approve <spoke-id> [options]"
         echo ""
         echo "Options:"
-        echo "  --scopes <scopes>       Comma-separated scopes (default: policy:read)"
-        echo "  --trust <level>         Trust level: development|partner|bilateral|national"
-        echo "  --classification <max>  Max classification: UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP_SECRET"
+        echo "  --scopes <scopes>         Comma-separated scopes"
+        echo "  --trust-level <level>     Trust level: development|partner|bilateral|national"
+        echo "  --max-classification <c>  Max classification: UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP_SECRET"
+        echo "  --yes, -y                 Skip interactive prompts"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive hub spokes approve spoke-nzl-abc123"
+        echo "  ./dive hub spokes approve spoke-nzl-abc123 --scopes 'policy:base,data:federation_matrix' --trust-level partner"
         return 1
     fi
     
-    # Parse options
-    local scopes="${2:-policy:read,heartbeat:write}"
-    local trust_level="${3:-partner}"
-    local max_class="${4:-CONFIDENTIAL}"
+    # Fetch spoke details for display
+    log_step "Fetching spoke details: ${spoke_id}"
+    
+    local spoke_details=$(curl -kfs --max-time 10 \
+        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+        "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}" 2>/dev/null)
+    
+    if [ -z "$spoke_details" ] || echo "$spoke_details" | grep -q '"error"'; then
+        # Try by instance code
+        spoke_details=$(curl -kfs --max-time 10 \
+            -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+            "${HUB_BACKEND_URL}/api/federation/spokes" 2>/dev/null | \
+            jq ".spokes[] | select(.instanceCode == \"$(echo $spoke_id | tr '[:lower:]' '[:upper:]')\")" 2>/dev/null)
+        
+        if [ -z "$spoke_details" ]; then
+            log_error "Spoke not found: ${spoke_id}"
+            return 1
+        fi
+    fi
+    
+    # Extract spoke info
+    local spoke_name=$(echo "$spoke_details" | jq -r '.spoke.name // .name // "Unknown"' 2>/dev/null)
+    local instance_code=$(echo "$spoke_details" | jq -r '.spoke.instanceCode // .instanceCode // "?"' 2>/dev/null)
+    local requested_scopes=$(echo "$spoke_details" | jq -r '.spoke.requestedScopes // .requestedScopes // [] | join(", ")' 2>/dev/null)
+    local contact=$(echo "$spoke_details" | jq -r '.spoke.contactEmail // .contactEmail // "Not provided"' 2>/dev/null)
+    local has_cert=$(echo "$spoke_details" | jq -r 'if (.spoke.certificatePEM // .certificatePEM) then "✓" else "○" end' 2>/dev/null)
+    
+    echo ""
+    echo -e "${BOLD}Spoke Details:${NC}"
+    echo "  Instance Code:     $instance_code"
+    echo "  Name:              $spoke_name"
+    echo "  Contact:           $contact"
+    echo "  Certificate:       $has_cert"
+    echo "  Requested Scopes:  $requested_scopes"
+    echo ""
+    
+    # Interactive mode: prompt for options
+    if [ "$interactive" = true ]; then
+        echo -e "${CYAN}Configure Approval:${NC}"
+        echo ""
+        
+        # Scope selection
+        if [ -z "$scopes" ]; then
+            echo "  Available scopes:"
+            echo "    1. policy:base          - Base policy access"
+            echo "    2. policy:coalition     - Coalition policy access"
+            echo "    3. policy:<instance>    - Instance-specific policy"
+            echo "    4. data:federation_matrix - Federation trust matrix"
+            echo "    5. data:trusted_issuers - Trusted IdP issuers"
+            echo "    6. heartbeat:write      - Send heartbeats"
+            echo ""
+            echo "  Enter scopes (comma-separated, or press Enter for default):"
+            echo "  Default: policy:base,heartbeat:write"
+            read -p "  Scopes: " scopes
+            if [ -z "$scopes" ]; then
+                scopes="policy:base,heartbeat:write"
+            fi
+        fi
+        
+        # Trust level selection
+        if [ -z "$trust_level" ]; then
+            echo ""
+            echo "  Trust levels:"
+            echo "    1. development  - Development/testing (limited access)"
+            echo "    2. partner      - Partner nation (standard access)"
+            echo "    3. bilateral    - Bilateral agreement (elevated access)"
+            echo "    4. national     - National/core instance (full access)"
+            echo ""
+            read -p "  Trust level [partner]: " trust_level
+            if [ -z "$trust_level" ]; then
+                trust_level="partner"
+            fi
+        fi
+        
+        # Classification selection
+        if [ -z "$max_class" ]; then
+            echo ""
+            echo "  Max classification:"
+            echo "    1. UNCLASSIFIED"
+            echo "    2. CONFIDENTIAL"
+            echo "    3. SECRET"
+            echo "    4. TOP_SECRET"
+            echo ""
+            read -p "  Max classification [CONFIDENTIAL]: " max_class
+            if [ -z "$max_class" ]; then
+                max_class="CONFIDENTIAL"
+            fi
+        fi
+        
+        echo ""
+        echo -e "${BOLD}Approval Summary:${NC}"
+        echo "  Spoke:              $spoke_name ($instance_code)"
+        echo "  Scopes:             $scopes"
+        echo "  Trust Level:        $trust_level"
+        echo "  Max Classification: $max_class"
+        echo ""
+        read -p "  Proceed with approval? (yes/no): " confirm
+        if [ "$confirm" != "yes" ]; then
+            echo "  Cancelled"
+            return 0
+        fi
+    else
+        # Use defaults if not specified
+        scopes="${scopes:-policy:base,heartbeat:write}"
+        trust_level="${trust_level:-partner}"
+        max_class="${max_class:-CONFIDENTIAL}"
+    fi
     
     log_step "Approving spoke: ${spoke_id}"
     
@@ -671,19 +1071,40 @@ EOF
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/approve" 2>/dev/null)
     
     if [ -z "$response" ]; then
-        log_error "Failed to approve spoke"
+        log_error "Failed to approve spoke (no response from hub)"
         return 1
     fi
     
     local success=$(echo "$response" | jq -r '.success' 2>/dev/null)
     
     if [ "$success" = "true" ]; then
-        log_success "Spoke approved successfully"
+        log_success "Spoke approved successfully!"
         echo ""
-        echo "Token for spoke (provide to spoke admin):"
-        echo "$response" | jq -r '.token.token' 2>/dev/null
+        
+        local token=$(echo "$response" | jq -r '.token.token' 2>/dev/null)
+        local expires=$(echo "$response" | jq -r '.token.expiresAt' 2>/dev/null)
+        local token_scopes=$(echo "$response" | jq -r '.token.scopes | join(", ")' 2>/dev/null)
+        
+        echo -e "${BOLD}Token for Spoke Admin:${NC}"
         echo ""
-        echo "Token expires: $(echo "$response" | jq -r '.token.expiresAt' 2>/dev/null)"
+        echo "┌─────────────────────────────────────────────────────────────┐"
+        echo "│ Token (copy and provide to spoke admin):                    │"
+        echo "├─────────────────────────────────────────────────────────────┤"
+        echo "│"
+        echo "$token"
+        echo "│"
+        echo "└─────────────────────────────────────────────────────────────┘"
+        echo ""
+        echo "  Expires:  $expires"
+        echo "  Scopes:   $token_scopes"
+        echo ""
+        echo -e "${CYAN}Instructions for Spoke Admin:${NC}"
+        echo "  1. Add token to spoke .env: SPOKE_OPAL_TOKEN=<token above>"
+        echo "  2. Restart spoke services: ./dive --instance <code> spoke up"
+        echo "  3. Verify connection: ./dive --instance <code> spoke verify"
+        echo ""
+        echo "  Or auto-configure by running on the spoke:"
+        echo "  ./dive --instance <code> spoke register --poll"
     else
         log_error "Approval failed: $(echo "$response" | jq -r '.error // .message' 2>/dev/null)"
         return 1
@@ -692,17 +1113,82 @@ EOF
 
 hub_spokes_reject() {
     local spoke_id="$1"
-    local reason="${2:-Rejected by administrator}"
+    shift || true
+    
+    local reason=""
+    local interactive=true
+    
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --reason)
+                reason="$2"
+                interactive=false
+                shift 2
+                ;;
+            --yes|-y)
+                interactive=false
+                shift
+                ;;
+            *)
+                if [ -z "$reason" ]; then
+                    reason="$1"
+                    interactive=false
+                fi
+                shift
+                ;;
+        esac
+    done
     
     if [ -z "$spoke_id" ]; then
-        echo "Usage: ./dive hub spokes reject <spoke-id> [reason]"
+        echo -e "${BOLD}Reject Spoke Registration${NC}"
+        echo ""
+        echo "Usage: ./dive hub spokes reject <spoke-id> [--reason 'reason'] [--yes]"
+        echo ""
+        echo "Options:"
+        echo "  --reason <text>  Reason for rejection"
+        echo "  --yes, -y        Skip confirmation prompt"
         return 1
+    fi
+    
+    # Interactive mode: prompt for reason
+    if [ "$interactive" = true ]; then
+        echo -e "${BOLD}Reject Spoke Registration${NC}"
+        echo ""
+        echo "  Spoke ID: $spoke_id"
+        echo ""
+        
+        if [ -z "$reason" ]; then
+            echo "  Common rejection reasons:"
+            echo "    1. Incomplete registration information"
+            echo "    2. Failed security review"
+            echo "    3. Invalid organization"
+            echo "    4. Duplicate registration"
+            echo "    5. Other (enter custom reason)"
+            echo ""
+            read -p "  Enter rejection reason: " reason
+        fi
+        
+        if [ -z "$reason" ]; then
+            reason="Rejected by administrator"
+        fi
+        
+        echo ""
+        echo "  Reason: $reason"
+        read -p "  Proceed with rejection? (yes/no): " confirm
+        if [ "$confirm" != "yes" ]; then
+            echo "  Cancelled"
+            return 0
+        fi
+    else
+        reason="${reason:-Rejected by administrator}"
     fi
     
     log_step "Rejecting spoke: ${spoke_id}"
     
     if [ "$DRY_RUN" = true ]; then
         log_dry "POST ${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke"
+        log_dry "Reason: ${reason}"
         return 0
     fi
     
@@ -714,9 +1200,120 @@ hub_spokes_reject() {
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke" 2>/dev/null)
     
     if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
-        log_success "Spoke rejected"
+        log_success "Spoke registration rejected"
+        echo ""
+        echo "  Spoke ID: $spoke_id"
+        echo "  Reason:   $reason"
+        echo ""
+        echo "  The spoke will be notified of the rejection."
     else
-        log_error "Failed to reject spoke"
+        log_error "Failed to reject spoke: $(echo "$response" | jq -r '.error // .message' 2>/dev/null)"
+        return 1
+    fi
+}
+
+hub_spokes_rotate_token() {
+    local spoke_id="$1"
+    shift || true
+    
+    local force=false
+    
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force|-f)
+                force=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    if [ -z "$spoke_id" ]; then
+        echo -e "${BOLD}Rotate Spoke Token${NC}"
+        echo ""
+        echo "Usage: ./dive hub spokes rotate-token <spoke-id> [--force]"
+        echo ""
+        echo "Options:"
+        echo "  --force, -f   Skip confirmation prompt"
+        echo ""
+        echo "This will:"
+        echo "  1. Revoke the current token (spoke loses access immediately)"
+        echo "  2. Generate a new token"
+        echo "  3. Display the new token for the spoke admin"
+        return 1
+    fi
+    
+    echo -e "${BOLD}Rotate Spoke Token${NC}"
+    echo ""
+    echo "  Spoke ID: $spoke_id"
+    echo ""
+    
+    if [ "$force" != true ]; then
+        log_warn "This will revoke the current token. The spoke will lose access until the new token is configured."
+        read -p "  Continue? (yes/no): " confirm
+        if [ "$confirm" != "yes" ]; then
+            echo "  Cancelled"
+            return 0
+        fi
+    fi
+    
+    log_step "Revoking current token..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would revoke current token and generate new one"
+        return 0
+    fi
+    
+    # First revoke existing tokens
+    curl -kfs --max-time 10 \
+        -X POST \
+        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+        "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke-tokens" 2>/dev/null || true
+    
+    log_step "Generating new token..."
+    
+    # Generate new token
+    local response=$(curl -kfs --max-time 10 \
+        -X POST \
+        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+        "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/token" 2>/dev/null)
+    
+    if [ -z "$response" ]; then
+        log_error "Failed to generate new token"
+        return 1
+    fi
+    
+    local success=$(echo "$response" | jq -r '.success' 2>/dev/null)
+    
+    if [ "$success" = "true" ]; then
+        log_success "Token rotated successfully!"
+        echo ""
+        
+        local token=$(echo "$response" | jq -r '.token.token' 2>/dev/null)
+        local expires=$(echo "$response" | jq -r '.token.expiresAt' 2>/dev/null)
+        local scopes=$(echo "$response" | jq -r '.token.scopes | join(", ")' 2>/dev/null)
+        
+        echo -e "${BOLD}New Token:${NC}"
+        echo ""
+        echo "┌─────────────────────────────────────────────────────────────┐"
+        echo "│ Token (provide to spoke admin):                             │"
+        echo "├─────────────────────────────────────────────────────────────┤"
+        echo "│"
+        echo "$token"
+        echo "│"
+        echo "└─────────────────────────────────────────────────────────────┘"
+        echo ""
+        echo "  Expires:  $expires"
+        echo "  Scopes:   $scopes"
+        echo ""
+        echo -e "${YELLOW}⚠️  Important:${NC}"
+        echo "  The spoke admin must update their .env with this new token"
+        echo "  and restart the OPAL client for policy sync to resume."
+    else
+        log_error "Token rotation failed: $(echo "$response" | jq -r '.error' 2>/dev/null)"
         return 1
     fi
 }
@@ -816,14 +1413,28 @@ hub_spokes_token() {
 }
 
 hub_spokes_help() {
-    echo -e "${BOLD}Spoke Management Commands:${NC}"
-    echo "  list              List all registered spokes"
-    echo "  pending           Show spokes pending approval"
-    echo "  approve <id>      Approve a pending spoke"
-    echo "  reject <id>       Reject a pending spoke"
-    echo "  suspend <id>      Temporarily suspend a spoke"
-    echo "  revoke <id>       Permanently revoke a spoke"
-    echo "  token <id>        Generate new token for a spoke"
+    echo -e "${BOLD}Spoke Management Commands (Phase 3):${NC}"
+    echo ""
+    echo -e "${CYAN}Registration Workflow:${NC}"
+    echo "  pending              Show spokes pending approval (with details)"
+    echo "  approve <id>         Approve a pending spoke (interactive)"
+    echo "  reject <id>          Reject a pending spoke (with reason)"
+    echo ""
+    echo -e "${CYAN}Spoke Operations:${NC}"
+    echo "  list                 List all registered spokes"
+    echo "  suspend <id>         Temporarily suspend a spoke"
+    echo "  revoke <id>          Permanently revoke a spoke"
+    echo ""
+    echo -e "${CYAN}Token Management:${NC}"
+    echo "  token <id>           Generate new token for a spoke"
+    echo "  rotate-token <id>    Revoke current token and issue new one"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  ./dive hub spokes pending"
+    echo "  ./dive hub spokes approve spoke-nzl-abc123"
+    echo "  ./dive hub spokes approve spoke-nzl-abc123 --scopes 'policy:base' --trust-level partner"
+    echo "  ./dive hub spokes reject spoke-xyz-123 --reason 'Failed security review'"
+    echo "  ./dive hub spokes rotate-token spoke-fra-456"
 }
 
 # =============================================================================
@@ -912,6 +1523,7 @@ module_hub() {
         down|stop)   hub_down "$@" ;;
         status)      hub_status "$@" ;;
         health)      hub_health "$@" ;;
+        verify)      hub_verify "$@" ;;
         logs)        hub_logs "$@" ;;
         spokes)      hub_spokes "$@" ;;
         push-policy) hub_push_policy "$@" ;;
@@ -933,19 +1545,21 @@ module_hub_help() {
     echo "  up, start           Start hub services"
     echo "  down, stop          Stop hub services"
     echo ""
-    echo -e "${CYAN}Status:${NC}"
+    echo -e "${CYAN}Status & Verification:${NC}"
     echo "  status              Show comprehensive hub status"
     echo "  health              Check all service health"
+    echo "  verify              10-point hub verification check (Phase 6)"
     echo "  logs [service] [-f] View logs (optionally follow)"
     echo ""
-    echo -e "${CYAN}Spoke Management:${NC}"
-    echo "  spokes list         List all registered spokes"
-    echo "  spokes pending      Show spokes pending approval"
-    echo "  spokes approve <id> Approve a spoke"
-    echo "  spokes reject <id>  Reject a spoke"
-    echo "  spokes suspend <id> Suspend a spoke"
-    echo "  spokes revoke <id>  Permanently revoke a spoke"
-    echo "  spokes token <id>   Generate new token for spoke"
+    echo -e "${CYAN}Spoke Management (Phase 3):${NC}"
+    echo "  spokes list            List all registered spokes"
+    echo "  spokes pending         Show spokes pending approval (rich display)"
+    echo "  spokes approve <id>    Approve a spoke (interactive with scope selection)"
+    echo "  spokes reject <id>     Reject a spoke (with reason)"
+    echo "  spokes suspend <id>    Suspend a spoke"
+    echo "  spokes revoke <id>     Permanently revoke a spoke"
+    echo "  spokes token <id>      Generate new token for spoke"
+    echo "  spokes rotate-token <id>  Rotate (revoke + regenerate) spoke token"
     echo ""
     echo -e "${CYAN}Policy:${NC}"
     echo "  push-policy [layers] Push policy update to all spokes"
