@@ -19,6 +19,8 @@ const router = Router();
  * GET /api/idps/public
  * Public endpoint to list enabled Identity Providers for login page
  * No authentication required - this is for unauthenticated users selecting their IdP
+ * 
+ * UX Enhancement: Filters out self-referential IdP (don't show "USA" on USA Hub)
  */
 router.get('/idps/public', async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -29,13 +31,21 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
         // Get all IdPs from Keycloak
         const result = await keycloakAdminService.listIdentityProviders();
 
-        // Filter to only enabled IdPs (users should only see active options)
-        const enabledIdps = result.idps.filter(idp => idp.enabled);
+        // Get current instance code (USA, FRA, GBR, etc.)
+        const currentInstance = (process.env.INSTANCE_CODE || 'USA').toUpperCase();
+        const selfIdpAlias = `${currentInstance.toLowerCase()}-idp`;
 
-        logger.info('Public: Returning enabled IdPs', {
+        // Filter to only enabled IdPs AND exclude self-referential IdP
+        // Don't show "United States" on USA Hub - that's confusing!
+        const enabledIdps = result.idps.filter(idp => 
+            idp.enabled && idp.alias !== selfIdpAlias
+        );
+
+        logger.info('Public: Returning enabled IdPs (excluding self)', {
             requestId,
             total: result.total,
-            enabled: enabledIdps.length
+            enabled: enabledIdps.length,
+            filtered: `Excluded ${selfIdpAlias}`
         });
 
         res.status(200).json({

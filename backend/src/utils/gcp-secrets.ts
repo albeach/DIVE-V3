@@ -327,6 +327,43 @@ export async function getSecret(type: SecretType, instanceCode?: string): Promis
 }
 
 /**
+ * Get federation secret for cross-instance communication
+ * Format: dive-v3-federation-{instance1}-{instance2} (alphabetical order)
+ * Example: dive-v3-federation-gbr-usa
+ */
+export async function getFederationSecret(instance1: string, instance2: string): Promise<string | null> {
+    const inst1 = instance1.toLowerCase();
+    const inst2 = instance2.toLowerCase();
+    
+    // Use alphabetical order for consistency (gbr-usa, not usa-gbr)
+    const [first, second] = [inst1, inst2].sort();
+    const fullSecretName = `${SECRET_PREFIX}-federation-${first}-${second}`;
+    
+    const cached = getCachedSecret(fullSecretName);
+    if (cached) return cached;
+    
+    // Try GCP Secret Manager (unless explicitly disabled)
+    if (GCP_MODE !== 'disabled') {
+        const gcpSecret = await fetchFromGCPSecretManager(fullSecretName);
+        if (gcpSecret) {
+            setCachedSecret(fullSecretName, gcpSecret);
+            return gcpSecret;
+        }
+    }
+    
+    // Try environment variable (e.g., FEDERATION_GBR_USA)
+    const envKey = `FEDERATION_${first.toUpperCase()}_${second.toUpperCase()}`;
+    const envValue = process.env[envKey];
+    
+    if (envValue) {
+        setCachedSecret(fullSecretName, envValue);
+        return envValue;
+    }
+    
+    return null;
+}
+
+/**
  * Check if GCP Secret Manager is available and configured
  * Returns true if gcloud CLI is authenticated
  */

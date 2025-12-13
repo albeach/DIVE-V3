@@ -39,7 +39,8 @@ export interface ISpokeRegistration {
   description?: string;
   baseUrl: string;
   apiUrl: string;
-  idpUrl: string;
+  idpUrl: string;         // Internal Docker network URL (for backend validation)
+  idpPublicUrl?: string;  // Public browser-accessible URL (for federation)
 
   // Certificate/Auth
   publicKey?: string;
@@ -71,6 +72,9 @@ export interface ISpokeRegistration {
   // Trust
   trustLevel: 'development' | 'partner' | 'bilateral' | 'national';
   maxClassificationAllowed: string;
+
+  // Federation (Phase 3 Enhancement)
+  federationIdPAlias?: string;  // IdP alias in hub Keycloak (e.g., 'gbr-idp')
 
   // Rate Limiting
   rateLimit: {
@@ -119,6 +123,7 @@ export interface IRegistrationRequest {
   baseUrl: string;
   apiUrl: string;
   idpUrl: string;
+  idpPublicUrl?: string; // Public-facing IdP URL (localhost or domain)
   publicKey?: string;
   certificatePEM?: string;  // X.509 certificate for mTLS
   requestedScopes: string[];
@@ -435,6 +440,7 @@ class HubSpokeRegistryService {
       baseUrl: request.baseUrl,
       apiUrl: request.apiUrl,
       idpUrl: request.idpUrl,
+      idpPublicUrl: request.idpPublicUrl, // Add public-facing IdP URL
       publicKey: request.publicKey,
       certificatePEM: request.certificatePEM,
       certificateFingerprint: certFingerprint,
@@ -573,6 +579,9 @@ class HubSpokeRegistryService {
 
   /**
    * Approve a pending spoke registration
+   * 
+   * Phase 3 Enhancement: Automatically creates Keycloak IdP federation
+   * This enables cross-border SSO immediately upon approval.
    */
   async approveSpoke(
     spokeId: string,
@@ -582,6 +591,7 @@ class HubSpokeRegistryService {
       trustLevel: ISpokeRegistration['trustLevel'];
       maxClassification: string;
       dataIsolationLevel: ISpokeRegistration['dataIsolationLevel'];
+      autoLinkIdP?: boolean; // Default true
     }
   ): Promise<ISpokeRegistration> {
     const spoke = await this.store.findById(spokeId);
@@ -614,7 +624,248 @@ class HubSpokeRegistryService {
     // Notify OPAL to include this spoke in policy distribution
     await this.notifyOPALOfSpokeChange(spoke, 'approved');
 
+    // AUTO-LINK IDENTITY PROVIDER (Phase 3 Enhancement)
+    // Create bidirectional Keycloak IdP trust for SSO
+    if (options.autoLinkIdP !== false) {
+      try {
+        await this.createFederationIdP(spoke);
+      } catch (error) {
+        logger.error('Failed to auto-link IdP during spoke approval', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          warning: 'Spoke approved but IdP not linked - use `dive federation link` manually'
+        });
+        // Don't fail spoke approval if IdP linking fails
+        // Admin can manually link later via CLI
+      }
+    }
+
     return spoke;
+  }
+
+  /**
+   * Create Keycloak Identity Provider configuration for approved spoke
+   * 
+   * This is called automatically during spoke approval.
+   * Creates bidirectional OIDC trust: Hub ↔ Spoke
+   * 
+   * What it does:
+   * 1. Creates `{spoke}-idp` in Hub Keycloak → Points to Spoke Keycloak
+   * 2. Configures protocol mappers for DIVE attributes
+   * 3. Enables IdP immediately (shows in login page IdP selector)
+   * 
+   * Example:
+   * - Spoke: GBR
+   * - Creates: `gbr-idp` in USA Hub Keycloak
+   * - Discovery: https://localhost:8446/realms/dive-v3-broker-gbr/.well-known/openid-configuration
+   * - Result: "United Kingdom" button appears on USA Hub login page
+   */
+  private async createFederationIdP(spoke: ISpokeRegistration): Promise<void> {
+    const { keycloakFederationService } = await import('./keycloak-federation.service');
+    
+    const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
+    const spokeInstanceCode = spoke.instanceCode;
+    
+    logger.info('Auto-linking IdP for approved spoke', {
+      spokeId: spoke.spokeId,
+      hubInstance: hubInstanceCode,
+      spokeInstance: spokeInstanceCode,
+      spokeName: spoke.name,
+      spokeIdpUrl: spoke.idpUrl
+    });
+
+    // Determine spoke realm name
+    // Pattern: dive-v3-broker-{code} (e.g., dive-v3-broker-gbr)
+    const spokeRealm = `dive-v3-broker-${spokeInstanceCode.toLowerCase()}`;
+
+    // Determine hub (local) details for reverse IdP creation
+    const hubRealmName = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+    const hubIdpUrl = this.getHubIdpUrl();
+    const hubName = this.getInstanceName(hubInstanceCode);
+
+    // Get spoke's Keycloak admin password for remote IdP creation
+    const spokeKeycloakPassword = await this.getSpokeKeycloakPassword(spokeInstanceCode);
+
+    // Determine URLs for different use cases
+    // Development: Internal Docker network + localhost
+    // Production: External domains
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    
+    let spokeIdpUrlForValidation: string;
+    let spokeIdpUrlForBrowser: string;
+    let spokeKeycloakAdminUrl: string;
+    
+    if (isDevelopment) {
+      // Local dev: Use Docker internal names for Admin API, localhost for browser
+      spokeIdpUrlForValidation = spoke.idpUrl;  // Internal (gbr-keycloak-gbr-1:8443)
+      spokeIdpUrlForBrowser = spoke.idpPublicUrl || this.getSpokePublicIdpUrl(spokeInstanceCode);  // Localhost
+      spokeKeycloakAdminUrl = spoke.idpUrl;  // Internal for Admin API (same network)
+    } else {
+      // Production: Use external domains for everything
+      spokeIdpUrlForValidation = spoke.idpPublicUrl || spoke.idpUrl;  // External domain
+      spokeIdpUrlForBrowser = spoke.idpPublicUrl || spoke.idpUrl;  // Same for browser
+      spokeKeycloakAdminUrl = spoke.idpPublicUrl || spoke.idpUrl;  // Same for Admin API
+    }
+    
+    logger.info('Federation URL strategy', {
+      environment: isDevelopment ? 'development' : 'production',
+      validationUrl: spokeIdpUrlForValidation,
+      browserUrl: spokeIdpUrlForBrowser,
+      adminUrl: spokeKeycloakAdminUrl,
+      spokeInstance: spokeInstanceCode,
+    });
+
+    // Create TRUE BIDIRECTIONAL IdP (both directions)
+    const result = await keycloakFederationService.createBidirectionalFederation({
+      localInstanceCode: hubInstanceCode,
+      remoteInstanceCode: spokeInstanceCode,
+      remoteName: spoke.name,
+      remoteIdpUrl: spokeIdpUrlForBrowser,  // Use PUBLIC URL for browser redirects
+      remoteKeycloakAdminUrl: spokeKeycloakAdminUrl,  // Use INTERNAL URL for Admin API
+      remoteRealm: spokeRealm,
+      localName: hubName,
+      localIdpUrl: hubIdpUrl,
+      localRealm: hubRealmName,
+      remoteKeycloakAdminPassword: spokeKeycloakPassword,
+      federationClientId: 'dive-v3-cross-border-client'
+    });
+
+    logger.info('IdP federation auto-linked successfully (BIDIRECTIONAL)', {
+      spokeId: spoke.spokeId,
+      spokeInstance: spokeInstanceCode,
+      direction1: `${result.local.alias} in ${hubInstanceCode}`,
+      direction2: `${result.remote.alias} in ${spokeInstanceCode}`,
+      bidirectional: true
+    });
+
+    // Store IdP alias in spoke metadata for future reference
+    spoke.federationIdPAlias = result.local.alias;
+    await this.store.save(spoke);
+  }
+
+  /**
+   * Get hub IdP URL for reverse federation
+   */
+  private getHubIdpUrl(): string {
+    // Try explicit environment variable
+    if (process.env.HUB_IDP_URL) {
+      return process.env.HUB_IDP_URL;
+    }
+
+    // Fallback to KEYCLOAK_URL with localhost mapping
+    const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
+    
+    // Map container names to localhost for inter-spoke communication
+    if (keycloakUrl.includes('keycloak:')) {
+      return 'https://localhost:8443';  // USA Hub default (FIXED: was 8081)
+    }
+    
+    return keycloakUrl;
+  }
+
+  /**
+   * Get instance display name
+   */
+  private getInstanceName(instanceCode: string): string {
+    const names: Record<string, string> = {
+      'USA': 'United States',
+      'FRA': 'France',
+      'GBR': 'United Kingdom',
+      'DEU': 'Germany',
+      'CAN': 'Canada',
+    };
+    return names[instanceCode.toUpperCase()] || instanceCode;
+  }
+
+  /**
+   * Get spoke's Keycloak admin password from environment or GCP
+   * 
+   * Environment-aware:
+   * - Development: Uses environment variables with fallbacks
+   * - Production: Requires GCP Secret Manager (no fallbacks)
+   */
+  private async getSpokeKeycloakPassword(spokeInstanceCode: string): Promise<string> {
+    const code = spokeInstanceCode.toUpperCase();
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    
+    // Try environment variable first
+    const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
+    if (process.env[envVar]) {
+      return process.env[envVar];
+    }
+
+    // Development: Allow fallback to shared password
+    if (isDevelopment) {
+      logger.warn('Using fallback password for development', {
+        spokeInstanceCode,
+        warning: 'NOT FOR PRODUCTION',
+      });
+      return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+    }
+
+    // Production: Get from GCP Secret Manager (required!)
+    try {
+      const { getSecret } = await import('../utils/gcp-secrets');
+      const secretName = `keycloak-${code.toLowerCase()}` as any;
+      const secret = await getSecret(secretName);
+      
+      if (!secret) {
+        throw new Error(`GCP secret ${secretName} returned null`);
+      }
+      
+      return secret;
+    } catch (error) {
+      logger.error('Failed to get spoke Keycloak password from GCP', {
+        spokeInstanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hint: 'Ensure GCP Secret Manager is configured and secret exists',
+      });
+      throw new Error(
+        `Cannot retrieve Keycloak password for ${spokeInstanceCode}. ` +
+        `Ensure GCP secret 'dive-v3-keycloak-${code.toLowerCase()}' exists.`
+      );
+    }
+  }
+
+  /**
+   * Get spoke's public IdP URL (browser-accessible)
+   * 
+   * This is different from the internal Docker network URL.
+   * Used for federation redirects where user's browser needs access.
+   */
+  private getSpokePublicIdpUrl(spokeInstanceCode: string): string {
+    const code = spokeInstanceCode.toUpperCase();
+    
+    // Check environment variable first
+    const envVar = `${code}_KEYCLOAK_PUBLIC_URL`;
+    if (process.env[envVar]) {
+      return process.env[envVar];
+    }
+
+    // For local development, use localhost port mapping
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      const portMap: Record<string, string> = {
+        'USA': '8443',  // Hub Keycloak
+        'FRA': '8444',
+        'GBR': '8446',
+        'DEU': '8447',
+        'CAN': '8448',
+      };
+      const port = portMap[code] || '8443';
+      return `https://localhost:${port}`;
+    }
+
+    // Production: Use instance's public domain
+    const domainMap: Record<string, string> = {
+      'USA': 'usa-idp.dive25.com',
+      'FRA': 'fra-idp.dive25.com',
+      'GBR': 'gbr-idp.dive25.com',
+      'DEU': 'deu-idp.dive25.com',
+      'CAN': 'can-idp.dive25.com',
+    };
+    const domain = domainMap[code] || `${code.toLowerCase()}-idp.dive25.com`;
+    return `https://${domain}`;
   }
 
   /**

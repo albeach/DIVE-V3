@@ -18,6 +18,11 @@ name: dive-v3-hub
 networks:
   hub-internal:
     driver: bridge
+  # Shared network for local dev only (when hub + spokes on same server)
+  # In production, instances communicate via external domains
+  dive-v3-shared-network:
+    external: true
+    name: dive-v3-shared-network
 
 volumes:
   hub_postgres_data:
@@ -41,6 +46,7 @@ services:
       POSTGRES_DB: keycloak_db
     volumes:
       - hub_postgres_data:/var/lib/postgresql/data
+      - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     networks:
       - hub-internal
     healthcheck:
@@ -124,14 +130,15 @@ services:
       TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
       INSTANCE_CODE: ${INSTANCE:-USA}
     ports:
-      - "${KEYCLOAK_HTTP_PORT:-8080}:8080"
-      - "${KEYCLOAK_HTTPS_PORT:-8443}:8443"
-      - "${KEYCLOAK_MGMT_PORT:-9000}:9000"
+      - "127.0.0.1:${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "127.0.0.1:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
+      - "127.0.0.1:${KEYCLOAK_MGMT_PORT:-9000}:9000"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
     networks:
       - hub-internal
+      - dive-v3-shared-network  # Required for federation (Keycloak needs to reach spoke Keycloaks)
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,8 +166,8 @@ services:
       - /policies
       - --log-level=info
     ports:
-      - "${OPA_PORT:-8181}:8181"
-      - "${OPA_METRICS_PORT:-8182}:8182"
+      - "127.0.0.1:${OPA_PORT:-8181}:8181"
+      - "127.0.0.1:${OPA_METRICS_PORT:-8182}:8182"
     volumes:
       - ./policies:/policies:ro
       - ./keycloak/certs:/certs:ro
@@ -195,13 +202,19 @@ services:
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Spoke Keycloak admin passwords (for bidirectional federation)
+      # Local dev: Set in .env.hub
+      # Production: Retrieved from GCP Secret Manager via secrets load
+      KEYCLOAK_ADMIN_PASSWORD_GBR: ${KEYCLOAK_ADMIN_PASSWORD_GBR}
+      KEYCLOAK_ADMIN_PASSWORD_FRA: ${KEYCLOAK_ADMIN_PASSWORD_FRA}
+      KEYCLOAK_ADMIN_PASSWORD_DEU: ${KEYCLOAK_ADMIN_PASSWORD_DEU}
       REDIS_URL: redis://redis:6379
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       OPAL_SERVER_URL: https://opal-server:7002
       OPAL_DATA_TOPICS: policy_data
     ports:
-      - "${BACKEND_PORT:-4000}:4000"
+      - "127.0.0.1:${BACKEND_PORT:-4000}:4000"
     volumes:
       - ./backend/src:/app/src
       - ./backend/package.json:/app/package.json:ro
@@ -210,8 +223,10 @@ services:
       - ./policies:/app/policies:ro
       - ./backend/certs:/app/certs:ro
       - ./backend/logs:/app/logs
+      - ./config:/app/config:ro
     networks:
       - hub-internal
+      - dive-v3-shared-network
     depends_on:
       keycloak:
         condition: service_healthy
@@ -243,7 +258,7 @@ services:
     restart: unless-stopped
     # NOTE: Exposing port for debugging only. In production, remove this.
     ports:
-      - "${AUTHZFORCE_PORT:-8282}:8080"
+      - "127.0.0.1:${AUTHZFORCE_PORT:-8282}:8080"
     volumes:
       - ./authzforce/conf:/opt/authzforce-ce-server/conf:ro
       - hub_authzforce_data:/opt/authzforce-ce-server/data
@@ -291,7 +306,7 @@ services:
       KEYCLOAK_REALM: dive-v3-broker
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
     ports:
-      - "8085:8080"
+      - "127.0.0.1:8085:8080"
     depends_on:
       - opa
       - mongodb
@@ -343,7 +358,7 @@ services:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/dive_v3_app
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       keycloak:
         condition: service_healthy
@@ -397,7 +412,7 @@ services:
       # OPAL Authentication - JWT token verification for spoke clients
       OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
     ports:
-      - "${OPAL_PORT:-7002}:7002"
+      - "127.0.0.1:${OPAL_PORT:-7002}:7002"
     networks:
       - hub-internal
     volumes:
