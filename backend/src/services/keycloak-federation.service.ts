@@ -1298,12 +1298,20 @@ export class KeycloakFederationService {
       });
     }
     
-    // Fallback: generate deterministic secret (DEV ONLY)
-    // In production, this should be pre-created in GCP Secret Manager
-    const fallbackSecret = `dive-federation-${instances[0]}-${instances[1]}-dev-${Date.now()}`;
-    logger.warn('Using fallback federation secret (NOT FOR PRODUCTION)', {
+    // Fallback: Use env var or well-known dev secret
+    // CROSS_BORDER_CLIENT_SECRET should be set in .env for local dev
+    const envSecret = process.env.CROSS_BORDER_CLIENT_SECRET;
+    if (envSecret) {
+      logger.debug('Using CROSS_BORDER_CLIENT_SECRET from environment', { secretName });
+      return envSecret;
+    }
+    
+    // Final fallback: standard dev secret (matches spoke init-keycloak.sh default)
+    // In production, this MUST be overridden via GCP Secret Manager
+    const fallbackSecret = 'cross-border-secret-2025';
+    logger.warn('Using standard fallback cross-border secret (SET IN PRODUCTION)', {
       secretName,
-      fallbackSecret: fallbackSecret.substring(0, 30) + '...'
+      hint: 'Set CROSS_BORDER_CLIENT_SECRET or configure GCP secrets'
     });
     return fallbackSecret;
   }

@@ -499,7 +499,8 @@ log_step "Ensuring cross-border federation client (dive-v3-cross-border-client).
 
 HUB_IDP_URL="${HUB_IDP_URL:-https://localhost:8443}"
 CROSS_BORDER_CLIENT_ID="dive-v3-cross-border-client"
-CROSS_BORDER_SECRET="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 16)}}"
+# Use well-known dev secret for local development (MUST be overridden in production via GCP)
+CROSS_BORDER_SECRET="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-cross-border-secret-2025}}"
 
 # Redirect URIs for cross-border: Keycloak only supports wildcards at the END of URIs
 # Include explicit hub broker endpoint + broad wildcard patterns
