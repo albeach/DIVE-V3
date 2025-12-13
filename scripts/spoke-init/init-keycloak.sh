@@ -690,5 +690,38 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
     fi
 fi
 
-log_info "Next: Run ./scripts/spoke-init/seed-users.sh ${INSTANCE_CODE}"
+# =============================================================================
+# AUTO-SEED USERS AND RESOURCES
+# =============================================================================
+log_info "Auto-seeding users and resources..."
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Seed users (pass Keycloak URL and password)
+if [[ -x "${SCRIPT_DIR}/seed-users.sh" ]]; then
+    log_info "Running seed-users.sh..."
+    "${SCRIPT_DIR}/seed-users.sh" "${INSTANCE_CODE}" "${PUBLIC_KEYCLOAK_URL}" "${ADMIN_PASSWORD}" || {
+        log_warn "User seeding failed - you can run manually: ./scripts/spoke-init/seed-users.sh ${INSTANCE_CODE}"
+    }
+else
+    log_warn "seed-users.sh not found or not executable"
+fi
+
+# Seed resources (needs MONGO_PASSWORD from container)
+if [[ -x "${SCRIPT_DIR}/seed-resources.sh" ]]; then
+    log_info "Running seed-resources.sh..."
+    MONGO_CONTAINER="${CODE_LOWER}-mongodb-${CODE_LOWER}-1"
+    MONGO_PWD=$(docker exec "$MONGO_CONTAINER" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
+    if [[ -n "$MONGO_PWD" ]]; then
+        MONGO_PASSWORD="$MONGO_PWD" "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}" || {
+            log_warn "Resource seeding failed - you can run manually: ./scripts/spoke-init/seed-resources.sh ${INSTANCE_CODE}"
+        }
+    else
+        log_warn "Could not get MongoDB password from container - skipping resource seeding"
+    fi
+else
+    log_warn "seed-resources.sh not found or not executable"
+fi
+
+log_info "Keycloak initialization complete for ${INSTANCE_CODE}"
 
