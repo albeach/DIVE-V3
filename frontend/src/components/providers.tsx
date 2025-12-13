@@ -29,8 +29,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <LocaleProvider>
           <QueryClientProvider client={queryClient}>
             <SessionProvider 
-              refetchInterval={30}
-              refetchOnWindowFocus={true}
+              refetchInterval={5 * 60}
+              refetchOnWindowFocus={false}
               refetchWhenOffline={false}
             >
               <PolicyProvider>

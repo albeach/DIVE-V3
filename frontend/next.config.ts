@@ -93,6 +93,15 @@ const nextConfig: NextConfig = {
     // Docker deployment: Use standalone output for production builds
     // This creates a minimal server that can run without node_modules
     output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
+    
+    // FIX: Next.js 15 AbortError - Reduce aggressive fetch caching
+    // This prevents "Fetch is aborted" errors from NextAuth session refetches
+    // See: https://github.com/nextauthjs/next-auth/issues/10128
+    logging: {
+        fetches: {
+            fullUrl: false, // Reduce console noise
+        },
+    },
 };
 
 export default nextConfig;
