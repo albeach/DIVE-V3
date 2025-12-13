@@ -309,6 +309,22 @@ load_gcp_secrets() {
     
     # Make secrets available to child processes (docker compose, terraform)
     export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
+    
+    # For Hub deployment, also load spoke passwords for federation
+    if [ "$inst_lc" = "usa" ] || [ "$inst_lc" = "hub" ]; then
+        log_step "Loading spoke Keycloak passwords for federation..."
+        for spoke in gbr fra deu can; do
+            local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
+            local spoke_password
+            if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
+                eval "export KEYCLOAK_ADMIN_PASSWORD_${spoke_uc}='${spoke_password}'"
+                echo "[secrets-debug] loaded KEYCLOAK_ADMIN_PASSWORD_${spoke_uc} (len=${#spoke_password})"
+            else
+                log_warn "Could not load KEYCLOAK_ADMIN_PASSWORD_${spoke_uc} (spoke may not exist yet)"
+            fi
+        done
+    fi
+    
     # Align NextAuth/JWT to AUTH secret unless explicitly provided
     [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     [ -n "$AUTH_SECRET" ] && export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
