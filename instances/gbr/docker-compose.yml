@@ -98,9 +98,9 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_GBR:?set KEYCLOAK_ADMIN_PASSWORD_GBR}
       # Tunnel host (no port when using Cloudflare)
-      KC_HOSTNAME: gbr-idp.dive25.com
-      KC_HOSTNAME_URL: https://gbr-idp.dive25.com
-      KC_HOSTNAME_ADMIN_URL: https://gbr-idp.dive25.com
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_URL: https://localhost:8446
+      KC_HOSTNAME_ADMIN_URL: https://localhost:8446
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
@@ -290,26 +290,26 @@ services:
       # Instance identity
       NEXT_PUBLIC_INSTANCE: GBR
       NEXT_PUBLIC_INSTANCE_NAME: "United Kingdom"
-      # URLs
-      NEXT_PUBLIC_API_URL: https://gbr-api.dive25.com
-      NEXT_PUBLIC_BACKEND_URL: https://gbr-api.dive25.com
-      NEXT_PUBLIC_BASE_URL: https://gbr-app.dive25.com
-      NEXT_PUBLIC_KEYCLOAK_URL: https://gbr-idp.dive25.com
+      # URLs - LOCAL DEVELOPMENT
+      NEXT_PUBLIC_API_URL: https://localhost:4003
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4003
+      NEXT_PUBLIC_BASE_URL: https://localhost:3003
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8446
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-gbr
       BACKEND_URL: https://backend-gbr:4000
-      # NextAuth / Auth.js
+      # NextAuth / Auth.js - LOCAL DEVELOPMENT
       AUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?set NEXTAUTH_SECRET_GBR}
       AUTH_KEYCLOAK_ID: dive-v3-client-gbr
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
-      AUTH_KEYCLOAK_ISSUER: https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8446/realms/dive-v3-broker-gbr
       AUTH_TRUST_HOST: "true"
-      # NextAuth
-      NEXTAUTH_URL: https://gbr-app.dive25.com
+      # NextAuth - LOCAL DEVELOPMENT
+      NEXTAUTH_URL: https://localhost:3003
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_GBR:?set NEXTAUTH_SECRET_GBR}
       # NextAuth adapter DB (reuse Postgres service)
       DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_GBR:?set POSTGRES_PASSWORD_GBR}@postgres-gbr:5432/keycloak
-      # Keycloak client (server-side)
-      KEYCLOAK_URL: https://gbr-idp.dive25.com
+      # Keycloak client (server-side) - use container name
+      KEYCLOAK_URL: https://keycloak-gbr:8443
       KEYCLOAK_REALM: dive-v3-broker-gbr
       KEYCLOAK_CLIENT_ID: dive-v3-client-gbr
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_GBR:?set KEYCLOAK_CLIENT_SECRET_GBR}
@@ -343,17 +343,21 @@ services:
   # ============================================================================
   # CLOUDFLARE TUNNEL
   # ============================================================================
+  # CLOUDFLARE TUNNEL (Disabled for local development)
+  # Enable for production/pilot deployments with external access
+  # ============================================================================
   
-  cloudflared-gbr:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --config /etc/cloudflared/config.yml run
-    volumes:
-      - ./cloudflared:/etc/cloudflared:ro
-    networks:
-      - dive-gbr-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "cloudflared", "tunnel", "info"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # cloudflared-gbr:
+  #   image: cloudflare/cloudflared:latest
+  #   command: tunnel --config /etc/cloudflared/config.yml run
+  #   volumes:
+  #     - ./cloudflared:/etc/cloudflared:ro
+  #   networks:
+  #     - dive-gbr-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "cloudflared", "tunnel", "info"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+

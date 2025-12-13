@@ -28,7 +28,45 @@ export QUIET="${QUIET:-false}"
 
 # Pilot Mode Configuration
 export PILOT_MODE="${DIVE_PILOT_MODE:-true}"
-export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
+
+# Hub API URL - Environment aware
+# - LOCAL/DEV: Use localhost hub
+# - GCP/PILOT: Use production hub
+if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
+    export HUB_API_URL="${DIVE_HUB_URL:-https://localhost:4000}"
+else
+    export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
+fi
+
+# =============================================================================
+# NETWORK MANAGEMENT (LOCAL DEV ONLY)
+# =============================================================================
+
+# Ensure shared network exists for local cross-instance communication
+# Only used when hub + spokes run on same server (development)
+# In production, instances use external domains (no shared network needed)
+ensure_shared_network() {
+    # Only create shared network in local/dev environment
+    if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ]; then
+        # Skipping shared network (production uses external domains)
+        return 0
+    fi
+    
+    local network_name="dive-v3-shared-network"
+    
+    if docker network ls --format '{{.Name}}' | grep -q "^${network_name}$"; then
+        # Shared network already exists
+        return 0
+    fi
+    
+    log_info "Creating shared network for cross-instance communication..."
+    
+    if docker network create "$network_name" >/dev/null 2>&1; then
+        log_success "Shared network created: $network_name"
+    else
+        log_warn "Could not create shared network (may already exist)"
+    fi
+}
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -259,6 +297,16 @@ load_gcp_secrets() {
     fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
     fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
     fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
+    
+    # Export instance-suffixed variables for spoke docker-compose files
+    local inst_uc=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
+    eval "export POSTGRES_PASSWORD_${inst_uc}='${POSTGRES_PASSWORD}'"
+    eval "export KEYCLOAK_ADMIN_PASSWORD_${inst_uc}='${KEYCLOAK_ADMIN_PASSWORD}'"
+    eval "export MONGO_PASSWORD_${inst_uc}='${MONGO_PASSWORD}'"
+    eval "export AUTH_SECRET_${inst_uc}='${AUTH_SECRET}'"
+    eval "export KEYCLOAK_CLIENT_SECRET_${inst_uc}='${KEYCLOAK_CLIENT_SECRET}'"
+    eval "export REDIS_PASSWORD_${inst_uc}='${REDIS_PASSWORD}'"
+    
     # Make secrets available to child processes (docker compose, terraform)
     export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
     # Align NextAuth/JWT to AUTH secret unless explicitly provided

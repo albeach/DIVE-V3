@@ -446,7 +446,11 @@ spoke_setup_wizard() {
     echo ""
     echo -e "${CYAN}Step 5: Hub Connection${NC}"
     echo ""
-    local default_hub="https://usa-api.dive25.com"
+    # Environment-aware default
+    local default_hub="https://localhost:4000"
+    if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ]; then
+        default_hub="https://usa-api.dive25.com"
+    fi
     read -p "  Hub URL [$default_hub]: " hub_url
     hub_url="${hub_url:-$default_hub}"
     
@@ -2121,6 +2125,9 @@ spoke_up() {
         return 1
     fi
     
+    # Ensure shared network exists (local dev only)
+    ensure_shared_network
+    
     # Always load secrets for the specific instance (even in local) so compose
     # receives instance-scoped *_<CODE> variables.
     if ! load_gcp_secrets "$instance_code"; then
@@ -2142,6 +2149,18 @@ spoke_up() {
         log_warn "No .env file found. Copy and configure .env.template first."
         echo "  cp $spoke_dir/.env.template $spoke_dir/.env"
         return 1
+    fi
+    
+    # Update .env file with GCP secrets (overwrite instance-suffixed variables)
+    local inst_uc=$(upper "$instance_code")
+    if [ -n "$POSTGRES_PASSWORD" ]; then
+        sed -i.bak "s/^POSTGRES_PASSWORD_${inst_uc}=.*/POSTGRES_PASSWORD_${inst_uc}=${POSTGRES_PASSWORD}/" "$spoke_dir/.env"
+        sed -i.bak "s/^KEYCLOAK_ADMIN_PASSWORD_${inst_uc}=.*/KEYCLOAK_ADMIN_PASSWORD_${inst_uc}=${KEYCLOAK_ADMIN_PASSWORD}/" "$spoke_dir/.env"
+        sed -i.bak "s/^MONGO_PASSWORD_${inst_uc}=.*/MONGO_PASSWORD_${inst_uc}=${MONGO_PASSWORD}/" "$spoke_dir/.env"
+        sed -i.bak "s/^AUTH_SECRET_${inst_uc}=.*/AUTH_SECRET_${inst_uc}=${AUTH_SECRET}/" "$spoke_dir/.env"
+        sed -i.bak "s/^KEYCLOAK_CLIENT_SECRET_${inst_uc}=.*/KEYCLOAK_CLIENT_SECRET_${inst_uc}=${KEYCLOAK_CLIENT_SECRET}/" "$spoke_dir/.env"
+        rm -f "$spoke_dir/.env.bak"
+        log_info "Updated .env file with GCP secrets"
     fi
 
     # Force compose project per spoke to avoid cross-stack collisions when a global
@@ -2505,7 +2524,12 @@ spoke_verify() {
         hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
         spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
     fi
-    hub_url="${hub_url:-https://usa-api.dive25.com}"
+    # Default hub URL based on environment
+    if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
+        hub_url="${hub_url:-https://localhost:4000}"
+    else
+        hub_url="${hub_url:-https://usa-api.dive25.com}"
+    fi
     
     # Try to load token from .env
     if [ -f "$env_file" ]; then

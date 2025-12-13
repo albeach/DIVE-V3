@@ -50,6 +50,7 @@ const registrationSchema = z.object({
     baseUrl: z.string().url(),
     apiUrl: z.string().url(),
     idpUrl: z.string().url(),
+    idpPublicUrl: z.string().url().optional(), // Public-facing IdP URL (localhost or domain)
     publicKey: z.string().optional(),
     requestedScopes: z.array(z.string()).min(1),
     contactEmail: z.string().email()
@@ -1758,6 +1759,261 @@ router.post('/spokes/:spokeId/validate-certificate', requireAdmin, async (req: R
         res.status(500).json({
             error: 'Certificate validation failed',
             message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+// ============================================
+// PHASE 3: IDENTITY PROVIDER LINKING
+// ============================================
+
+/**
+ * POST /api/federation/link-idp
+ * 
+ * Create Identity Provider configuration for cross-border SSO
+ * This is called by `dive federation link <CODE>` CLI command
+ * 
+ * Automatically configures Keycloak IdP trust relationship
+ */
+router.post('/link-idp', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+
+    try {
+        const { localInstanceCode, remoteInstanceCode, federationClientId = 'dive-v3-cross-border-client' } = req.body;
+
+        if (!localInstanceCode || !remoteInstanceCode) {
+            res.status(400).json({
+                success: false,
+                error: 'Validation failed',
+                message: 'localInstanceCode and remoteInstanceCode are required',
+            });
+            return;
+        }
+
+        logger.info('Federation link-idp request', {
+            requestId,
+            localInstanceCode,
+            remoteInstanceCode,
+        });
+
+        // Prevent linking to self
+        if (localInstanceCode === remoteInstanceCode) {
+            res.status(400).json({
+                success: false,
+                error: 'Cannot link instance to itself',
+            });
+            return;
+        }
+
+        // Look up remote spoke
+        const spokes = await hubSpokeRegistry.listAllSpokes();
+        const remoteSpoke = spokes.find((s: any) => s.instanceCode === remoteInstanceCode);
+
+        if (!remoteSpoke) {
+            res.status(404).json({
+                success: false,
+                error: 'Remote spoke not found',
+                message: `No approved spoke found: ${remoteInstanceCode}`,
+            });
+            return;
+        }
+
+        // Import federation service (dynamic to avoid circular deps)
+        const { keycloakFederationService } = await import('../services/keycloak-federation.service');
+
+        const remoteRealm = `dive-v3-broker-${remoteInstanceCode.toLowerCase()}`;
+        
+        // Determine local details for bidirectional linking
+        const localRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        const localIdpUrl = getPublicIdpUrl(localInstanceCode);
+        const localName = getInstanceDisplayName(localInstanceCode);
+        
+        // Get remote Keycloak admin password
+        const remoteKeycloakPassword = await getRemoteKeycloakPassword(remoteInstanceCode);
+        
+        // Use PUBLIC URL for browser redirects (idpPublicUrl if available, else construct it)
+        const remoteIdpUrl = remoteSpoke.idpPublicUrl || getPublicIdpUrl(remoteInstanceCode);
+        
+        // Use INTERNAL URL for Admin API (container-to-container)
+        const remoteKeycloakAdminUrl = remoteSpoke.idpUrl;  // Internal Docker network URL
+
+        logger.info('Federation link parameters', {
+            requestId,
+            localInstanceCode,
+            remoteInstanceCode,
+            localIdpUrl,
+            remoteIdpUrl: remoteIdpUrl,
+            remoteIdpUrlInternal: remoteSpoke.idpUrl,
+            remoteKeycloakAdminUrl,
+        });
+
+        // Create TRUE BIDIRECTIONAL federation
+        const result = await keycloakFederationService.createBidirectionalFederation({
+            localInstanceCode,
+            remoteInstanceCode,
+            remoteName: remoteSpoke.name,
+            remoteIdpUrl: remoteIdpUrl,  // PUBLIC URL for browser
+            remoteKeycloakAdminUrl,      // INTERNAL URL for Admin API
+            remoteRealm,
+            localName,
+            localIdpUrl,  // PUBLIC URL for browser
+            localRealm,
+            remoteKeycloakAdminPassword: remoteKeycloakPassword,
+            federationClientId,
+        });
+
+        logger.info('IdP federation link created (BIDIRECTIONAL)', {
+            requestId,
+            direction1: result.local.alias,
+            direction2: result.remote.alias,
+        });
+
+        res.status(200).json({
+            success: true,
+            message: 'Identity Provider linked successfully (bidirectional)',
+            data: {
+                local: {
+                    idpAlias: result.local.alias,
+                    displayName: result.local.displayName,
+                    enabled: result.local.enabled,
+                },
+                remote: {
+                    idpAlias: result.remote.alias,
+                    displayName: result.remote.displayName,
+                    enabled: result.remote.enabled,
+                },
+                bidirectional: true,
+            },
+        });
+    } catch (error) {
+        logger.error('Failed to link IdP', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to link Identity Provider',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+
+/**
+ * Helper: Get instance display name
+ */
+function getInstanceDisplayName(instanceCode: string): string {
+    const names: Record<string, string> = {
+        'USA': 'United States',
+        'FRA': 'France',
+        'GBR': 'United Kingdom',
+        'DEU': 'Germany',
+        'CAN': 'Canada',
+    };
+    return names[instanceCode.toUpperCase()] || instanceCode;
+}
+
+/**
+ * Helper: Get public (browser-accessible) IdP URL
+ * 
+ * Different from internal Docker network URL.
+ * Used for browser redirects during federation authentication.
+ */
+function getPublicIdpUrl(instanceCode: string): string {
+    const code = instanceCode.toUpperCase();
+    
+    // Check environment variable first
+    const envVar = `${code}_KEYCLOAK_PUBLIC_URL`;
+    if (process.env[envVar]) {
+        return process.env[envVar];
+    }
+
+    // For local development, use localhost port mapping
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+        const portMap: Record<string, string> = {
+            'USA': '8443',  // Hub Keycloak
+            'FRA': '8444',
+            'GBR': '8446',
+            'DEU': '8447',
+            'CAN': '8448',
+        };
+        const port = portMap[code] || '8443';
+        return `https://localhost:${port}`;
+    }
+
+    // Production: Use instance's public domain
+    const domainMap: Record<string, string> = {
+        'USA': 'usa-idp.dive25.com',
+        'FRA': 'fra-idp.dive25.com',
+        'GBR': 'gbr-idp.dive25.com',
+        'DEU': 'deu-idp.dive25.com',
+        'CAN': 'can-idp.dive25.com',
+    };
+    const domain = domainMap[code] || `${code.toLowerCase()}-idp.dive25.com`;
+    return `https://${domain}`;
+}
+
+/**
+ * Helper: Get remote Keycloak admin password
+ */
+async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> {
+    const code = instanceCode.toUpperCase();
+    
+    // Try environment variable
+    const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
+    if (process.env[envVar]) {
+        return process.env[envVar];
+    }
+
+    // For local dev, all use same password
+    if (process.env.NODE_ENV === 'development') {
+        return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+    }
+
+    // Production: GCP Secret Manager
+    try {
+        const { getSecret } = await import('../utils/gcp-secrets');
+        const secretName = `keycloak-${code.toLowerCase()}` as any;
+        const secret = await getSecret(secretName);
+        return secret || 'admin';  // Fallback if null
+    } catch (error) {
+        logger.warn('Could not get remote Keycloak password, using fallback', {
+            instanceCode,
+        });
+        return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+    }
+}
+
+/**
+ * DELETE /api/federation/unlink-idp/:alias
+ * 
+ * Remove Identity Provider configuration
+ */
+router.delete('/unlink-idp/:alias', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const { alias } = req.params;
+
+    try {
+        const { keycloakFederationService } = await import('../services/keycloak-federation.service');
+
+        await keycloakFederationService.deleteIdentityProvider(alias);
+
+        logger.info('IdP unlinked', { requestId, idpAlias: alias });
+
+        res.status(200).json({
+            success: true,
+            message: 'Identity Provider unlinked',
+        });
+    } catch (error) {
+        logger.error('Failed to unlink IdP', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to unlink IdP',
+            message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
 });

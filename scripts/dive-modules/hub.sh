@@ -283,6 +283,9 @@ hub_up() {
         return 1
     fi
     
+    # Ensure shared network exists (local dev only)
+    ensure_shared_network
+    
     # Load secrets
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
         set -a
