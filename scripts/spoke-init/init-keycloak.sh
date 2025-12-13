@@ -78,15 +78,24 @@ if [[ -n "${BASE_URL_FROM_INSTANCE}" ]]; then
     BASE_HOST_FROM_INSTANCE=$(echo "${BASE_URL_FROM_INSTANCE}" | sed -E 's#https?://([^/:]+).*#\1#')
 fi
 
-# Calculate port for this instance (USA=8443, GBR=8446, FRA=8444, DEU=8445, etc.)
-case "$CODE_LOWER" in
-    usa) local_kc_port=8443 ;;
-    gbr) local_kc_port=8446 ;;
-    fra) local_kc_port=8444 ;;
-    deu) local_kc_port=8445 ;;
-    can) local_kc_port=8447 ;;
-    *)   local_kc_port="${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-8448}" ;;
+# Calculate port for this instance using SAME logic as spoke.sh (single source of truth)
+# Fixed port offsets: USA=0, FRA=1, DEU=2, GBR=3, CAN=4, NZL=5, AUS=6, ITA=7, ESP=8, NLD=9, POL=10
+local_port_offset=0
+case "$CODE_UPPER" in
+    USA) local_port_offset=0 ;;
+    FRA) local_port_offset=1 ;;
+    DEU) local_port_offset=2 ;;
+    GBR) local_port_offset=3 ;;
+    CAN) local_port_offset=4 ;;
+    NZL) local_port_offset=5 ;;
+    AUS) local_port_offset=6 ;;
+    ITA) local_port_offset=7 ;;
+    ESP) local_port_offset=8 ;;
+    NLD) local_port_offset=9 ;;
+    POL) local_port_offset=10 ;;
+    *)   local_port_offset=$(( ($(echo "$CODE_UPPER" | cksum | cut -d' ' -f1) % 20) + 15 )) ;;
 esac
+local_kc_port=$((8443 + local_port_offset))
 
 # Detect local development mode
 IS_LOCAL_DEV=false
@@ -494,7 +503,8 @@ CROSS_BORDER_SECRET="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-$(o
 
 # Redirect URIs for cross-border: Keycloak only supports wildcards at the END of URIs
 # Include explicit hub broker endpoint + broad wildcard patterns
-CROSS_BORDER_REDIRECT_URIS="[\"https://localhost:8443/*\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint\",\"https://localhost:3000/*\",\"https://localhost:${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-8444}/*\"]"
+# Use calculated port for this instance
+CROSS_BORDER_REDIRECT_URIS="[\"https://localhost:8443/*\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint\",\"https://localhost:3000/*\",\"https://localhost:${local_kc_port}/*\"]"
 
 EXISTING_CB_CLIENT=$(kc_curl -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CROSS_BORDER_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
