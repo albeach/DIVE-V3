@@ -24,6 +24,50 @@ SPOKE_CERT_BITS="${SPOKE_CERT_BITS:-4096}"
 SPOKE_CERT_DAYS="${SPOKE_CERT_DAYS:-365}"
 
 # =============================================================================
+# PORT CALCULATION - SINGLE SOURCE OF TRUTH
+# =============================================================================
+# This function calculates consistent ports for any country code.
+# MUST be used everywhere to ensure docker-compose and config.json match.
+# =============================================================================
+
+_get_spoke_ports() {
+    local code="$1"
+    local code_upper="${code^^}"
+    
+    # Fixed port offsets for known countries (stable, memorable ports)
+    local port_offset=0
+    case "$code_upper" in
+        USA) port_offset=0 ;;   # 8443, 3000, 4000
+        FRA) port_offset=1 ;;   # 8444, 3001, 4001
+        DEU) port_offset=2 ;;   # 8445, 3002, 4002
+        GBR) port_offset=3 ;;   # 8446, 3003, 4003
+        CAN) port_offset=4 ;;   # 8447, 3004, 4004
+        NZL) port_offset=5 ;;   # 8448, 3005, 4005
+        AUS) port_offset=6 ;;   # 8449, 3006, 4006
+        ITA) port_offset=7 ;;   # 8450, 3007, 4007
+        ESP) port_offset=8 ;;   # 8451, 3008, 4008
+        NLD) port_offset=9 ;;   # 8452, 3009, 4009
+        POL) port_offset=10 ;;  # 8453, 3010, 4010
+        *)   
+            # For unknown countries, use deterministic hash (uppercase for consistency)
+            port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20) + 15 ))
+            ;;
+    esac
+    
+    # Export calculated ports (can be sourced or eval'd)
+    echo "SPOKE_PORT_OFFSET=$port_offset"
+    echo "SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
+    echo "SPOKE_BACKEND_PORT=$((4000 + port_offset))"
+    echo "SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + port_offset))"
+    echo "SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + port_offset))"
+    echo "SPOKE_POSTGRES_PORT=$((5432 + port_offset))"
+    echo "SPOKE_MONGODB_PORT=$((27017 + port_offset))"
+    echo "SPOKE_REDIS_PORT=$((6379 + port_offset))"
+    echo "SPOKE_OPA_PORT=$((8381 + port_offset))"
+    echo "SPOKE_KAS_PORT=$((8090 + port_offset))"
+}
+
+# =============================================================================
 # SPOKE INITIALIZATION (Enhanced Interactive Setup)
 # =============================================================================
 
@@ -780,29 +824,19 @@ _create_spoke_docker_compose() {
 
     # ==========================================================================
     # Port allocation based on instance code (spoke-in-a-box pattern)
-    # Each instance gets unique ports to avoid conflicts
+    # Uses centralized _get_spoke_ports function for consistency
     # ==========================================================================
-    local port_offset=0
-    case "$code_upper" in
-        USA) port_offset=0 ;;
-        FRA) port_offset=1 ;;
-        DEU) port_offset=2 ;;
-        GBR) port_offset=3 ;;
-        CAN) port_offset=4 ;;
-        NZL) port_offset=5 ;;
-        AUS) port_offset=6 ;;
-        *)   port_offset=$(($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20 + 10)) ;;
-    esac
-
-    local frontend_host_port=$((3000 + port_offset))
-    local backend_host_port=$((4000 + port_offset))
-    local keycloak_https_port=$((8443 + port_offset))
-    local keycloak_http_port=$((8080 + port_offset))
-    local postgres_host_port=$((5432 + port_offset))
-    local mongodb_host_port=$((27017 + port_offset))
-    local redis_host_port=$((6379 + port_offset))
-    local opa_host_port=$((8381 + port_offset))  # Use 8381+ to avoid authzforce (8282) and keycloak range
-    local kas_host_port=$((8090 + port_offset))
+    eval "$(_get_spoke_ports "$code_upper")"
+    
+    local frontend_host_port=$SPOKE_FRONTEND_PORT
+    local backend_host_port=$SPOKE_BACKEND_PORT
+    local keycloak_https_port=$SPOKE_KEYCLOAK_HTTPS_PORT
+    local keycloak_http_port=$SPOKE_KEYCLOAK_HTTP_PORT
+    local postgres_host_port=$SPOKE_POSTGRES_PORT
+    local mongodb_host_port=$SPOKE_MONGODB_PORT
+    local redis_host_port=$SPOKE_REDIS_PORT
+    local opa_host_port=$SPOKE_OPA_PORT
+    local kas_host_port=$SPOKE_KAS_PORT
 
     # Derive hostnames (strip proto/port) or default to localhost
     local app_host="localhost"
@@ -1238,23 +1272,13 @@ _spoke_init_legacy() {
     local code_lower=$(lower "$instance_code")
     local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
     
-    # Calculate port offset for this instance (for localhost development)
-    # USA=0, GBR=1, FRA=2, DEU=3, CAN=4, etc.
-    local port_offset=0
-    case "$code_lower" in
-        usa) port_offset=0 ;;
-        gbr) port_offset=1 ;;
-        fra) port_offset=2 ;;
-        deu) port_offset=3 ;;
-        can) port_offset=4 ;;
-        *)   port_offset=$(( ($(echo "$code_lower" | cksum | cut -d' ' -f1) % 20) + 5 )) ;;
-    esac
+    # Calculate ports using centralized function (ensures consistency with docker-compose)
+    eval "$(_get_spoke_ports "$code_upper")"
     
-    # Calculate local ports
-    local frontend_port=$((3001 + port_offset))
-    local backend_port=$((4001 + port_offset))
-    local keycloak_port=$((8444 + port_offset))
-    local kas_port=$((8001 + port_offset))
+    local frontend_port=$SPOKE_FRONTEND_PORT
+    local backend_port=$SPOKE_BACKEND_PORT
+    local keycloak_port=$SPOKE_KEYCLOAK_HTTPS_PORT
+    local kas_port=$SPOKE_KAS_PORT
     
     # Generate localhost URLs for local development (default)
     # For production, use the interactive init with Cloudflare tunnel
@@ -2215,6 +2239,7 @@ spoke_up() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     
     if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
@@ -2222,43 +2247,46 @@ spoke_up() {
         return 1
     fi
     
-    # Ensure shared network exists (local dev only)
-    ensure_shared_network
-    
-    # Always load secrets for the specific instance (even in local) so compose
-    # receives instance-scoped *_<CODE> variables.
-    if ! load_gcp_secrets "$instance_code"; then
-        log_warn "Falling back to local defaults for $instance_code secrets"
-        load_local_defaults
-    fi
-    
-    print_header
-    echo -e "${BOLD}Starting Spoke Services:${NC} $(upper "$instance_code")"
-    echo ""
-    
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Would run: docker compose -f $spoke_dir/docker-compose.yml up -d"
-        return 0
-    fi
-    
-    # Check for .env
+    # Check for .env first
     if [ ! -f "$spoke_dir/.env" ]; then
         log_warn "No .env file found. Copy and configure .env.template first."
         echo "  cp $spoke_dir/.env.template $spoke_dir/.env"
         return 1
     fi
     
-    # Update .env file with GCP secrets (overwrite instance-suffixed variables)
-    # Use | delimiter to avoid issues with / in base64 secrets
-    local inst_uc=$(upper "$instance_code")
-    if [ -n "$POSTGRES_PASSWORD" ]; then
-        sed -i.bak "s|^POSTGRES_PASSWORD_${inst_uc}=.*|POSTGRES_PASSWORD_${inst_uc}=${POSTGRES_PASSWORD}|" "$spoke_dir/.env"
-        sed -i.bak "s|^KEYCLOAK_ADMIN_PASSWORD_${inst_uc}=.*|KEYCLOAK_ADMIN_PASSWORD_${inst_uc}=${KEYCLOAK_ADMIN_PASSWORD}|" "$spoke_dir/.env"
-        sed -i.bak "s|^MONGO_PASSWORD_${inst_uc}=.*|MONGO_PASSWORD_${inst_uc}=${MONGO_PASSWORD}|" "$spoke_dir/.env"
-        sed -i.bak "s|^AUTH_SECRET_${inst_uc}=.*|AUTH_SECRET_${inst_uc}=${AUTH_SECRET}|" "$spoke_dir/.env"
-        sed -i.bak "s|^KEYCLOAK_CLIENT_SECRET_${inst_uc}=.*|KEYCLOAK_CLIENT_SECRET_${inst_uc}=${KEYCLOAK_CLIENT_SECRET}|" "$spoke_dir/.env"
-        rm -f "$spoke_dir/.env.bak"
-        log_info "Updated .env file with GCP secrets"
+    # CRITICAL: Source existing .env FIRST so we have local secrets available
+    # This ensures docker-compose gets the secrets even if GCP fails
+    set -a  # Auto-export all variables
+    source "$spoke_dir/.env"
+    set +a
+    
+    # Ensure shared network exists (local dev only)
+    ensure_shared_network
+    
+    # Try to load GCP secrets (will override local values if available)
+    if ! load_gcp_secrets "$instance_code"; then
+        log_warn "Falling back to local .env secrets for $instance_code"
+        # Secrets are already loaded from .env above, no need to call load_local_defaults
+    else
+        # GCP secrets loaded - update .env file for persistence
+        if [ -n "$POSTGRES_PASSWORD" ]; then
+            sed -i.bak "s|^POSTGRES_PASSWORD_${code_upper}=.*|POSTGRES_PASSWORD_${code_upper}=${POSTGRES_PASSWORD}|" "$spoke_dir/.env"
+            sed -i.bak "s|^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=.*|KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${KEYCLOAK_ADMIN_PASSWORD}|" "$spoke_dir/.env"
+            sed -i.bak "s|^MONGO_PASSWORD_${code_upper}=.*|MONGO_PASSWORD_${code_upper}=${MONGO_PASSWORD}|" "$spoke_dir/.env"
+            sed -i.bak "s|^AUTH_SECRET_${code_upper}=.*|AUTH_SECRET_${code_upper}=${AUTH_SECRET}|" "$spoke_dir/.env"
+            sed -i.bak "s|^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*|KEYCLOAK_CLIENT_SECRET_${code_upper}=${KEYCLOAK_CLIENT_SECRET}|" "$spoke_dir/.env"
+            rm -f "$spoke_dir/.env.bak"
+            log_info "Updated .env file with GCP secrets"
+        fi
+    fi
+    
+    print_header
+    echo -e "${BOLD}Starting Spoke Services:${NC} ${code_upper}"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would run: docker compose -f $spoke_dir/docker-compose.yml up -d"
+        return 0
     fi
 
     # Force compose project per spoke to avoid cross-stack collisions when a global

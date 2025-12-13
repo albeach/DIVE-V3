@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/local/bin/bash
 # =============================================================================
 # DIVE V3 CLI - Common Functions
 # =============================================================================
@@ -276,6 +276,7 @@ load_gcp_secrets() {
     check_gcloud || { log_error "GCP authentication required for environment '$ENVIRONMENT'"; return 1; }
     
     # Try secrets using documented naming; fall back to legacy variants if present.
+    # CRITICAL: Do NOT overwrite existing values from .env if GCP fetch fails
     fetch_first_secret() {
         local var_ref="$1"
         shift
@@ -287,7 +288,12 @@ load_gcp_secrets() {
                 return 0
             fi
         done
-        eval "$var_ref=\"\""
+        # Don't clear existing value - it might be set from .env
+        # Only set to empty if variable is truly unset
+        eval "local existing_val=\"\${$var_ref:-}\""
+        if [ -z "$existing_val" ]; then
+            eval "$var_ref=\"\""
+        fi
         return 1
     }
 
@@ -299,13 +305,14 @@ load_gcp_secrets() {
     fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
     
     # Export instance-suffixed variables for spoke docker-compose files
+    # CRITICAL: Only overwrite if we have a non-empty value (preserve .env values)
     local inst_uc=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
-    eval "export POSTGRES_PASSWORD_${inst_uc}='${POSTGRES_PASSWORD}'"
-    eval "export KEYCLOAK_ADMIN_PASSWORD_${inst_uc}='${KEYCLOAK_ADMIN_PASSWORD}'"
-    eval "export MONGO_PASSWORD_${inst_uc}='${MONGO_PASSWORD}'"
-    eval "export AUTH_SECRET_${inst_uc}='${AUTH_SECRET}'"
-    eval "export KEYCLOAK_CLIENT_SECRET_${inst_uc}='${KEYCLOAK_CLIENT_SECRET}'"
-    eval "export REDIS_PASSWORD_${inst_uc}='${REDIS_PASSWORD}'"
+    [ -n "$POSTGRES_PASSWORD" ] && eval "export POSTGRES_PASSWORD_${inst_uc}='${POSTGRES_PASSWORD}'"
+    [ -n "$KEYCLOAK_ADMIN_PASSWORD" ] && eval "export KEYCLOAK_ADMIN_PASSWORD_${inst_uc}='${KEYCLOAK_ADMIN_PASSWORD}'"
+    [ -n "$MONGO_PASSWORD" ] && eval "export MONGO_PASSWORD_${inst_uc}='${MONGO_PASSWORD}'"
+    [ -n "$AUTH_SECRET" ] && eval "export AUTH_SECRET_${inst_uc}='${AUTH_SECRET}'"
+    [ -n "$KEYCLOAK_CLIENT_SECRET" ] && eval "export KEYCLOAK_CLIENT_SECRET_${inst_uc}='${KEYCLOAK_CLIENT_SECRET}'"
+    [ -n "$REDIS_PASSWORD" ] && eval "export REDIS_PASSWORD_${inst_uc}='${REDIS_PASSWORD}'"
     
     # Make secrets available to child processes (docker compose, terraform)
     export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
