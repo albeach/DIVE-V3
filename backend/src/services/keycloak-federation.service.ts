@@ -552,8 +552,10 @@ export class KeycloakFederationService {
         clientSecret,
         clientAuthMethod: 'client_secret_post',
         
-        // Scopes - request DIVE attributes
-        defaultScope: 'openid profile email clearance countryOfAffiliation acpCOI uniqueID',
+        // Scopes - ONLY request standard OIDC scopes
+        // DIVE attributes (clearance, countryOfAffiliation, acpCOI, uniqueID) come from 
+        // protocol mappers on the cross-border client, NOT from scope requests
+        defaultScope: 'openid profile email',
         
         // Token validation
         // In development: disable signature validation for self-signed certs
@@ -563,6 +565,10 @@ export class KeycloakFederationService {
         
         // Sync mode
         syncMode: config.syncMode || 'IMPORT',
+        
+        // PKCE (Proof Key for Code Exchange) - Required for security
+        pkceEnabled: 'true',
+        pkceMethod: 'S256',
         
         // UI hints
         guiOrder: '',

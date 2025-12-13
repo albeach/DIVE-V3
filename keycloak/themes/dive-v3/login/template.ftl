@@ -173,8 +173,10 @@
                         <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
                     </#if>
                 <#else>
-                    <#-- Fallback: If using cross-border-client and realm is NOT dive-v3-broker-*, assume USA Hub -->
-                    <#if realm?? && realm.name?? && !realm.name?contains("-fra") && !realm.name?contains("-deu") && !realm.name?contains("-can")>
+                    <#-- Fallback: If using cross-border-client on any spoke realm, assume USA Hub is the source -->
+                    <#-- This works because spokes receive cross-border traffic from the hub -->
+                    <#if hostInstance?has_content && hostInstance != "USA">
+                        <#-- This spoke is receiving cross-border traffic - source is USA Hub -->
                         <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
                     </#if>
                 </#if>

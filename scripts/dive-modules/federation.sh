@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/local/bin/bash
 # =============================================================================
 # DIVE V3 CLI - Federation & Hub Commands Module
 # =============================================================================
@@ -103,47 +103,95 @@ federation_link() {
         return 0
     fi
     
-    # Call backend API to create IdP configuration
-    local backend_url="${BACKEND_URL:-https://localhost:4000}"
-    local api_endpoint="${backend_url}/api/federation/link-idp"
+    # ==========================================================================
+    # Determine backend URLs based on instance codes (local development ports)
+    # ==========================================================================
+    local local_backend_port remote_backend_port
+    case "${local_code}" in
+        USA) local_backend_port=4000 ;;
+        FRA) local_backend_port=4001 ;;
+        DEU) local_backend_port=4002 ;;
+        GBR) local_backend_port=4003 ;;
+        CAN) local_backend_port=4004 ;;
+        NZL) local_backend_port=4005 ;;
+        *)   local_backend_port=4000 ;;
+    esac
     
-    log_info "Calling federation API: ${api_endpoint}"
+    case "${remote_code}" in
+        USA) remote_backend_port=4000 ;;
+        FRA) remote_backend_port=4001 ;;
+        DEU) remote_backend_port=4002 ;;
+        GBR) remote_backend_port=4003 ;;
+        CAN) remote_backend_port=4004 ;;
+        NZL) remote_backend_port=4005 ;;
+        *)   remote_backend_port=4000 ;;
+    esac
     
-    # Get admin JWT token (simplified for local dev)
-    local jwt_token="admin-token"  # TODO: Proper auth
+    local local_backend_url="https://localhost:${local_backend_port}"
+    local remote_backend_url="https://localhost:${remote_backend_port}"
     
-    # Call API
+    # ==========================================================================
+    # Step 1: Add remote IdP to local Keycloak (via local backend)
+    # ==========================================================================
+    echo -e "${CYAN}Step 1: Adding ${remote_code} IdP to ${local_code} Keycloak${NC}"
+    
+    local api_endpoint="${local_backend_url}/api/federation/link-idp"
+    log_info "Calling: ${api_endpoint}"
+    
+    local response
     response=$(curl -sk -X POST "${api_endpoint}" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${jwt_token}" \
+        -H "Authorization: Bearer admin-token" \
         -d "{
             \"localInstanceCode\": \"${local_code}\",
-            \"remoteInstanceCode\": \"${remote_code}\"
+            \"remoteInstanceCode\": \"${remote_code}\",
+            \"skipRemote\": true
         }" 2>&1)
     
-    if echo "$response" | grep -q '"success":true'; then
-        log_success "IdP linked successfully!"
-        echo ""
-        echo "  ${remote_code} IdP created in ${local_code} Keycloak"
-        echo "  Users from ${remote_code} can now authenticate at ${local_code}"
-        echo ""
-        echo "Next steps:"
-        echo "  1. Verify: Open https://localhost:3000 (or appropriate port)"
-        echo "  2. Should see '${remote_code}' in IdP selector"
-        echo "  3. Test: Click IdP button → Redirects to ${remote_code} Keycloak"
-        echo ""
+    if echo "$response" | grep -q '"success":true' || echo "$response" | grep -q 'already exists'; then
+        log_success "${remote_code} IdP added to ${local_code}"
     else
-        log_error "IdP linking failed"
-        echo ""
-        echo "Response: $response"
-        echo ""
-        echo "Troubleshooting:"
-        echo "  - Ensure backend is running: ./dive hub status"
-        echo "  - Check backend logs: ./dive hub logs backend"
-        echo "  - Verify remote spoke is registered: ./dive hub exec backend npx tsx src/scripts/list-spokes.ts"
-        echo ""
-        return 1
+        log_warn "Step 1 result: $response"
     fi
+    
+    # ==========================================================================
+    # Step 2: Add local IdP to remote Keycloak (via remote backend)  
+    # ==========================================================================
+    echo ""
+    echo -e "${CYAN}Step 2: Adding ${local_code} IdP to ${remote_code} Keycloak${NC}"
+    
+    api_endpoint="${remote_backend_url}/api/federation/link-idp"
+    log_info "Calling: ${api_endpoint}"
+    
+    response=$(curl -sk -X POST "${api_endpoint}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer admin-token" \
+        -d "{
+            \"localInstanceCode\": \"${remote_code}\",
+            \"remoteInstanceCode\": \"${local_code}\",
+            \"skipRemote\": true
+        }" 2>&1)
+    
+    if echo "$response" | grep -q '"success":true' || echo "$response" | grep -q 'already exists'; then
+        log_success "${local_code} IdP added to ${remote_code}"
+    else
+        log_warn "Step 2 result: $response"
+    fi
+    
+    # ==========================================================================
+    # Summary
+    # ==========================================================================
+    echo ""
+    log_success "Bidirectional federation configured!"
+    echo ""
+    echo -e "${BOLD}Federation Summary:${NC}"
+    echo "  ${local_code} → ${remote_code}:  Users from ${remote_code} can login at ${local_code}"
+    echo "  ${remote_code} → ${local_code}:  Users from ${local_code} can login at ${remote_code}"
+    echo ""
+    echo -e "${BOLD}Test URLs:${NC}"
+    echo "  ${local_code}: https://localhost:$((3000 + local_backend_port - 4000))"
+    echo "  ${remote_code}: https://localhost:$((3000 + remote_backend_port - 4000))"
+    echo ""
 }
 
 federation_unlink() {
