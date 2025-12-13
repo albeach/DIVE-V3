@@ -33,6 +33,7 @@ services:
       dockerfile: Dockerfile
     container_name: dive-v3-keycloak-gbr
     restart: unless-stopped
+    entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: start-dev --features=scripts --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true
     environment:
       KC_DB: postgres
@@ -48,6 +49,10 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
+      # Realm Import Configuration for GBR
+      APP_URL: https://localhost:3002
+      API_URL: https://localhost:4002
+      INSTANCE: GBR
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
     ports:
@@ -202,6 +207,13 @@ services:
       CORS_ORIGIN: https://localhost:3002,https://localhost:4002,https://localhost:8445
       FEDERATION_ALLOWED_ORIGINS: https://localhost:3002,https://localhost:4002,https://localhost:8445
       NEXT_PUBLIC_BASE_URL: https://localhost:3002
+      # Federation with Hub
+      HUB_OPAL_URL: https://localhost:7002
+      SPOKE_ID: spoke-gbr-e2e-test
+      SPOKE_OPAL_TOKEN: ${SPOKE_OPAL_TOKEN}
+      OPAL_LOG_LEVEL: INFO
+      OPAL_SERVER_URL: https://localhost:7002
+      OPAL_ENABLED: true
     ports:
       - "4002:4000"
     volumes:

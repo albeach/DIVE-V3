@@ -321,8 +321,8 @@
   ],
   "identityProviders": [
     {
-      "alias": "gbr-idp",
-      "displayName": "United Kingdom",
+      "alias": "usa-idp",
+      "displayName": "United States",
       "providerId": "oidc",
       "enabled": true,
       "updateProfileFirstLoginMode": "on",
@@ -341,6 +341,56 @@
         "jwksUrl": "${USA_IDP_URL}/realms/master/protocol/openid-connect/certs",
         "clientId": "dive-v3-usa-federation",
         "clientSecret": "${USA_IDP_CLIENT_SECRET}",
+        "defaultScope": "openid profile email",
+        "validateSignature": "true"
+      }
+    },
+    {
+      "alias": "fra-federation",
+      "displayName": "France (Federation)",
+      "providerId": "oidc",
+      "enabled": true,
+      "updateProfileFirstLoginMode": "on",
+      "trustEmail": true,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "useJwksUrl": "true",
+        "syncMode": "FORCE",
+        "authorizationUrl": "https://localhost:8444/realms/dive-v3-broker/protocol/openid-connect/auth",
+        "tokenUrl": "https://localhost:8444/realms/dive-v3-broker/protocol/openid-connect/token",
+        "userInfoUrl": "https://localhost:8444/realms/dive-v3-broker/protocol/openid-connect/userinfo",
+        "jwksUrl": "https://localhost:8444/realms/dive-v3-broker/protocol/openid-connect/certs",
+        "clientId": "dive-v3-gbr-federation",
+        "clientSecret": "${GBR_IDP_CLIENT_SECRET:-dive-v3-gbr-federation-secret}",
+        "defaultScope": "openid profile email",
+        "validateSignature": "true"
+      }
+    },
+    {
+      "alias": "deu-federation",
+      "displayName": "Germany (Federation)",
+      "providerId": "oidc",
+      "enabled": true,
+      "updateProfileFirstLoginMode": "on",
+      "trustEmail": true,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "useJwksUrl": "true",
+        "syncMode": "FORCE",
+        "authorizationUrl": "https://localhost:8446/realms/dive-v3-broker/protocol/openid-connect/auth",
+        "tokenUrl": "https://localhost:8446/realms/dive-v3-broker/protocol/openid-connect/token",
+        "userInfoUrl": "https://localhost:8446/realms/dive-v3-broker/protocol/openid-connect/userinfo",
+        "jwksUrl": "https://localhost:8446/realms/dive-v3-broker/protocol/openid-connect/certs",
+        "clientId": "dive-v3-gbr-federation",
+        "clientSecret": "${GBR_IDP_CLIENT_SECRET:-dive-v3-gbr-federation-secret}",
         "defaultScope": "openid profile email",
         "validateSignature": "true"
       }
@@ -389,6 +439,104 @@
     {
       "name": "acpCOI-importer",
       "identityProviderAlias": "gbr-idp",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "acpCOI",
+        "user.attribute": "acpCOI"
+      }
+    },
+    {
+      "name": "username-importer-fra",
+      "identityProviderAlias": "fra-federation",
+      "identityProviderMapper": "oidc-username-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "template": "${CLAIM.preferred_username}"
+      }
+    },
+    {
+      "name": "clearance-importer-fra",
+      "identityProviderAlias": "fra-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "clearance",
+        "user.attribute": "clearance"
+      }
+    },
+    {
+      "name": "country-importer-fra",
+      "identityProviderAlias": "fra-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "countryOfAffiliation",
+        "user.attribute": "countryOfAffiliation"
+      }
+    },
+    {
+      "name": "uniqueid-importer-fra",
+      "identityProviderAlias": "fra-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "uniqueID",
+        "user.attribute": "uniqueID"
+      }
+    },
+    {
+      "name": "acp-coi-importer-fra",
+      "identityProviderAlias": "fra-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "acpCOI",
+        "user.attribute": "acpCOI"
+      }
+    },
+    {
+      "name": "username-importer-deu",
+      "identityProviderAlias": "deu-federation",
+      "identityProviderMapper": "oidc-username-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "template": "${CLAIM.preferred_username}"
+      }
+    },
+    {
+      "name": "clearance-importer-deu",
+      "identityProviderAlias": "deu-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "clearance",
+        "user.attribute": "clearance"
+      }
+    },
+    {
+      "name": "country-importer-deu",
+      "identityProviderAlias": "deu-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "countryOfAffiliation",
+        "user.attribute": "countryOfAffiliation"
+      }
+    },
+    {
+      "name": "uniqueid-importer-deu",
+      "identityProviderAlias": "deu-federation",
+      "identityProviderMapper": "oidc-user-attribute-idp-mapper",
+      "config": {
+        "syncMode": "FORCE",
+        "claim": "uniqueID",
+        "user.attribute": "uniqueID"
+      }
+    },
+    {
+      "name": "acp-coi-importer-deu",
+      "identityProviderAlias": "deu-federation",
       "identityProviderMapper": "oidc-user-attribute-idp-mapper",
       "config": {
         "syncMode": "FORCE",

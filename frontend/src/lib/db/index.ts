@@ -15,9 +15,7 @@ const client = postgres(connectionString, {
     } : undefined,
     max: 10,  // Connection pool size
     idle_timeout: 20,
-    connect_timeout: 5,  // Reduced from 10s to 5s for faster failure detection
-    max_lifetime: 60 * 30,  // 30 minutes max connection lifetime
-    prepare: false,  // Disable prepared statements for faster initial connection
+    connect_timeout: 10,
 });
 
 export const db = drizzle(client, { schema });

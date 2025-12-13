@@ -17,3 +17,6 @@ deu_idp_url = "https://deu-idp.dive25.com"
 # Local Keycloak endpoint (self-signed)
 keycloak_url = "https://localhost:8443"
 
+
+
+

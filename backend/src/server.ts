@@ -41,6 +41,7 @@ import { kasRegistryService } from './services/kas-registry.service';  // Phase 
 import { policyVersionMonitor } from './services/policy-version-monitor.service';  // Phase 4: Policy drift
 import { spokeFailover } from './services/spoke-failover.service';  // Phase 5: Circuit breaker
 import { spokeAuditQueue } from './services/spoke-audit-queue.service';  // Phase 5: Audit queue
+import { spokeHeartbeat } from './services/spoke-heartbeat.service';  // Phase 5: Heartbeat service
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -171,6 +172,7 @@ app.use(errorHandler);
 // ============================================
 function startServer() {
   const serverCallback = async () => {
+    console.log('🚀 SERVER CALLBACK STARTED - SPOKE_MODE:', process.env.SPOKE_MODE);
     logger.info('DIVE V3 Backend API started', {
       port: PORT,
       env: process.env.NODE_ENV,
@@ -294,6 +296,42 @@ function startServer() {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       // Non-fatal: audit queue service disabled
+    }
+
+    // Phase 5: Initialize spoke heartbeat service
+    console.log('🔄 Initializing spoke heartbeat service...');
+    try {
+      const spokeId = process.env.SPOKE_ID || process.env.INSTANCE_CODE || 'local';
+      const instanceCode = process.env.INSTANCE_CODE || 'USA';
+      const hubUrl = process.env.HUB_URL || 'https://hub.dive25.com';
+      const spokeToken = process.env.SPOKE_OPAL_TOKEN || process.env.SPOKE_TOKEN;
+
+      console.log('🔄 Heartbeat config:', { spokeId, instanceCode, hubUrl, hasToken: !!spokeToken });
+
+      if (!spokeToken) {
+        logger.warn('SPOKE_OPAL_TOKEN or SPOKE_TOKEN not configured, heartbeat service disabled');
+      } else {
+        logger.info('Initializing spoke heartbeat service', { spokeId, instanceCode, hubUrl });
+
+        spokeHeartbeat.initialize({
+          hubUrl: `${hubUrl}/api/federation/heartbeat`,
+          spokeId,
+          instanceCode,
+          spokeToken,
+          intervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '30000'), // 30 seconds
+          timeoutMs: parseInt(process.env.HEARTBEAT_TIMEOUT_MS || '10000'), // 10 seconds
+          maxQueueSize: parseInt(process.env.HEARTBEAT_MAX_QUEUE_SIZE || '10'),
+          maxRetries: parseInt(process.env.HEARTBEAT_MAX_RETRIES || '3'),
+        });
+
+        spokeHeartbeat.start();
+        logger.info('Spoke heartbeat service initialized and started');
+      }
+    } catch (error) {
+      logger.warn('Failed to initialize spoke heartbeat service', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Non-fatal: heartbeat service disabled
     }
   };
 

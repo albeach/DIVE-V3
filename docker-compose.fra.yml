@@ -161,7 +161,7 @@ services:
       - "--set=decision_logs.console=true"
       - "/policies"
     ports:
-      - "8182:8181"
+      - "8184:8181"
     volumes:
       - ./policies:/policies:ro
     networks:

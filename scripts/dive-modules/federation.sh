@@ -71,6 +71,137 @@ federation_sync_idps() {
     fi
 }
 
+# =============================================================================
+# FEDERATION LINK - Auto-configure IdP Trust (Phase 3)
+# =============================================================================
+
+federation_link() {
+    local remote_instance="${1:-}"
+    
+    if [ -z "$remote_instance" ]; then
+        log_error "Usage: ./dive federation link <INSTANCE_CODE>"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive federation link GBR    # Link GBR spoke to this instance"
+        echo "  ./dive federation link USA    # Link USA hub to this instance"
+        echo ""
+        return 1
+    fi
+    
+    local remote_code="${remote_instance^^}"  # Uppercase
+    local local_instance="${INSTANCE:-USA}"
+    local local_code="${local_instance^^}"
+    
+    log_step "Linking Identity Provider: ${remote_code} ↔ ${local_code}"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would call backend API: POST /api/federation/link-idp"
+        log_dry "  localInstance: ${local_code}"
+        log_dry "  remoteInstance: ${remote_code}"
+        log_dry "Would create ${remote_code}-idp in local Keycloak"
+        return 0
+    fi
+    
+    # Call backend API to create IdP configuration
+    local backend_url="${BACKEND_URL:-https://localhost:4000}"
+    local api_endpoint="${backend_url}/api/federation/link-idp"
+    
+    log_info "Calling federation API: ${api_endpoint}"
+    
+    # Get admin JWT token (simplified for local dev)
+    local jwt_token="admin-token"  # TODO: Proper auth
+    
+    # Call API
+    response=$(curl -sk -X POST "${api_endpoint}" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${jwt_token}" \
+        -d "{
+            \"localInstanceCode\": \"${local_code}\",
+            \"remoteInstanceCode\": \"${remote_code}\"
+        }" 2>&1)
+    
+    if echo "$response" | grep -q '"success":true'; then
+        log_success "IdP linked successfully!"
+        echo ""
+        echo "  ${remote_code} IdP created in ${local_code} Keycloak"
+        echo "  Users from ${remote_code} can now authenticate at ${local_code}"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Verify: Open https://localhost:3000 (or appropriate port)"
+        echo "  2. Should see '${remote_code}' in IdP selector"
+        echo "  3. Test: Click IdP button → Redirects to ${remote_code} Keycloak"
+        echo ""
+    else
+        log_error "IdP linking failed"
+        echo ""
+        echo "Response: $response"
+        echo ""
+        echo "Troubleshooting:"
+        echo "  - Ensure backend is running: ./dive hub status"
+        echo "  - Check backend logs: ./dive hub logs backend"
+        echo "  - Verify remote spoke is registered: ./dive hub exec backend npx tsx src/scripts/list-spokes.ts"
+        echo ""
+        return 1
+    fi
+}
+
+federation_unlink() {
+    local remote_instance="${1:-}"
+    
+    if [ -z "$remote_instance" ]; then
+        log_error "Usage: ./dive federation unlink <INSTANCE_CODE>"
+        return 1
+    fi
+    
+    local remote_code="${remote_instance^^}"
+    local idp_alias="${remote_code,,}-idp"  # Lowercase with -idp suffix
+    
+    log_step "Unlinking Identity Provider: ${remote_code}"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would delete IdP: ${idp_alias}"
+        return 0
+    fi
+    
+    # Call backend API to delete IdP
+    local backend_url="${BACKEND_URL:-https://localhost:4000}"
+    local api_endpoint="${backend_url}/api/federation/unlink-idp/${idp_alias}"
+    
+    response=$(curl -sk -X DELETE "${api_endpoint}" \
+        -H "Authorization: Bearer admin-token" 2>&1)
+    
+    if echo "$response" | grep -q '"success":true'; then
+        log_success "IdP unlinked successfully"
+    else
+        log_error "IdP unlinking failed: $response"
+        return 1
+    fi
+}
+
+federation_list_idps() {
+    log_step "Listing configured Identity Providers..."
+    echo ""
+    
+    local backend_url="${BACKEND_URL:-https://localhost:4000}"
+    local api_endpoint="${backend_url}/api/idps/public"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would call: GET ${api_endpoint}"
+        return 0
+    fi
+    
+    response=$(curl -sk "${api_endpoint}" 2>&1)
+    
+    if echo "$response" | grep -q '"success":true'; then
+        echo "$response" | jq -r '.idps[] | "  [\(.enabled | if . then "✓" else " " end)] \(.displayName) (\(.alias))"'
+    else
+        log_error "Failed to list IdPs"
+        echo "$response"
+    fi
+    echo ""
+}
+
 federation_push_audit() {
     log_step "Pushing audit logs to hub..."
     if [ "$DRY_RUN" = true ]; then
@@ -278,6 +409,9 @@ module_federation() {
         sync-policies) federation_sync_policies ;;
         sync-idps)     federation_sync_idps ;;
         push-audit)    federation_push_audit ;;
+        link)          federation_link "$@" ;;
+        unlink)        federation_unlink "$@" ;;
+        list-idps)     federation_list_idps ;;
         *)             module_federation_help ;;
     esac
 }
@@ -298,11 +432,22 @@ module_hub() {
 
 module_federation_help() {
     echo -e "${BOLD}Federation Commands:${NC}"
-    echo "  status           Show federation status"
-    echo "  register <url>   Register instance with hub"
-    echo "  sync-policies    Pull latest policies from hub"
-    echo "  sync-idps        Sync IdP metadata from hub"
-    echo "  push-audit       Push audit logs to hub"
+    echo ""
+    echo "  ${CYAN}status${NC}               Show federation status"
+    echo "  ${CYAN}register${NC} <url>       Register instance with hub"
+    echo "  ${CYAN}sync-policies${NC}        Pull latest policies from hub"
+    echo "  ${CYAN}sync-idps${NC}            Sync IdP metadata from hub"
+    echo "  ${CYAN}push-audit${NC}           Push audit logs to hub"
+    echo ""
+    echo "  ${GREEN}${BOLD}link${NC} <CODE>         ${BOLD}[NEW]${NC} Link IdP for cross-border SSO"
+    echo "  ${GREEN}${BOLD}unlink${NC} <CODE>       ${BOLD}[NEW]${NC} Remove IdP link"
+    echo "  ${GREEN}${BOLD}list-idps${NC}           ${BOLD}[NEW]${NC} List configured IdPs"
+    echo ""
+    echo "Examples:"
+    echo "  ./dive federation link GBR              # Link GBR to USA Hub"
+    echo "  ./dive --instance gbr federation link USA   # Link USA to GBR Spoke"
+    echo "  ./dive federation list-idps             # Show all IdPs"
+    echo ""
 }
 
 module_hub_help() {

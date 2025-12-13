@@ -148,7 +148,7 @@
     <#assign sourceCountryName = "">
     <#if client?? && client.clientId??>
         <#assign clientData = client.clientId?lower_case>
-        <#if clientData?contains("federation") || clientData?contains("broker")>
+        <#if clientData?contains("federation") || clientData?contains("broker") || clientData?contains("cross-border")>
             <#assign isFederatedLogin = true>
             <#-- Extract source country from client_id (e.g., dive-v3-usa-federation) -->
             <#if clientData?contains("-usa-")>
@@ -163,6 +163,21 @@
                 <#assign sourceInstance = "CAN"><#assign sourceFlag = "🇨🇦"><#assign sourceCountryName = "Canada">
             <#elseif clientData?contains("-esp-")>
                 <#assign sourceInstance = "ESP"><#assign sourceFlag = "🇪🇸"><#assign sourceCountryName = "Spain">
+            <#-- NEW: For cross-border-client, detect source from redirect_uri parameter -->
+            <#elseif clientData?contains("cross-border")>
+                <#-- Check redirect_uri query parameter to determine source -->
+                <#if RequestParameters?? && RequestParameters['redirect_uri']??>
+                    <#assign redirectUriParam = RequestParameters['redirect_uri']?first?lower_case>
+                    <#if redirectUriParam?contains("dive-v3-broker/broker") || redirectUriParam?contains(":8443")>
+                        <#-- Default to USA Hub for dive-v3-broker realm -->
+                        <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
+                    </#if>
+                <#else>
+                    <#-- Fallback: If using cross-border-client and realm is NOT dive-v3-broker-*, assume USA Hub -->
+                    <#if realm?? && realm.name?? && !realm.name?contains("-fra") && !realm.name?contains("-deu") && !realm.name?contains("-can")>
+                        <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
+                    </#if>
+                </#if>
             </#if>
         </#if>
     </#if>
