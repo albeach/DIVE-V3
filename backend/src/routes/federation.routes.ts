@@ -52,6 +52,8 @@ const registrationSchema = z.object({
     idpUrl: z.string().url(),
     idpPublicUrl: z.string().url().optional(), // Public-facing IdP URL (localhost or domain)
     publicKey: z.string().optional(),
+    csrPEM: z.string().optional(),           // Base64-encoded CSR
+    certificatePEM: z.string().optional(),   // Base64-encoded certificate
     requestedScopes: z.array(z.string()).min(1),
     contactEmail: z.string().email()
 });
@@ -220,6 +222,15 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         }
 
         const request: IRegistrationRequest = parsed.data;
+
+        // Decode base64-encoded certificate/CSR if provided
+        if (request.certificatePEM) {
+            try {
+                request.certificatePEM = Buffer.from(request.certificatePEM, 'base64').toString('utf-8');
+            } catch {
+                // Already in PEM format, use as-is
+            }
+        }
 
         // Check if IdP validation should be skipped (for testing or dev environments)
         const skipValidation = req.body.skipValidation === true ||

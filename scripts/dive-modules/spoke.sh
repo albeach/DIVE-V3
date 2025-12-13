@@ -1547,16 +1547,16 @@ spoke_register() {
         log_info "CSR found: $certs_dir/spoke.csr"
     fi
     
-    # Read CSR for submission
+    # Read CSR for submission (base64-encoded for JSON safety)
     if [ -f "$certs_dir/spoke.csr" ]; then
-        csr_pem=$(cat "$certs_dir/spoke.csr" | sed 's/$/\\n/' | tr -d '\n')
+        csr_pem=$(base64 < "$certs_dir/spoke.csr" | tr -d '\n')
         local csr_fingerprint=$(openssl req -in "$certs_dir/spoke.csr" -noout -pubkey 2>/dev/null | openssl sha256 | awk '{print $2}' | cut -c1-16)
         echo "  CSR Fingerprint: ${csr_fingerprint}..."
     fi
     
-    # Read certificate if exists
+    # Read certificate if exists (base64-encoded for JSON safety)
     if [ -f "$certs_dir/spoke.crt" ]; then
-        cert_pem=$(cat "$certs_dir/spoke.crt" | sed 's/$/\\n/' | tr -d '\n')
+        cert_pem=$(base64 < "$certs_dir/spoke.crt" | tr -d '\n')
         local cert_fingerprint=$(openssl x509 -in "$certs_dir/spoke.crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | cut -c1-23)
         echo "  Cert Fingerprint: ${cert_fingerprint}..."
     fi
