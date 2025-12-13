@@ -3010,6 +3010,32 @@ spoke_down() {
     log_success "Spoke services stopped"
 }
 
+spoke_init_keycloak() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower
+    local code_upper
+    code_lower=$(lower "$instance_code")
+    code_upper=$(upper "$instance_code")
+
+    print_header
+    echo -e "${BOLD}Configuring Keycloak (Spoke):${NC} ${code_upper}"
+    echo ""
+
+    # Ensure the spoke directory exists
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Spoke not found: $spoke_dir"
+        return 1
+    fi
+
+    # Ensure services are running (Keycloak + backend needed for docker exec / curl)
+    export COMPOSE_PROJECT_NAME="$code_lower"
+
+    # Run the existing init script (idempotent: updates realm theme/frontendUrl/client redirects)
+    (cd "${DIVE_ROOT}" && bash "${DIVE_ROOT}/scripts/spoke-init/init-keycloak.sh" "${code_upper}")
+}
+
 spoke_logs() {
     local service="${1:-}"
     
@@ -3820,6 +3846,7 @@ module_spoke() {
         generate-certs) spoke_generate_certs "$@" ;;
         gen-certs)      spoke_generate_certs "$@" ;;
         rotate-certs)   spoke_rotate_certs "$@" ;;
+        init-keycloak)  spoke_init_keycloak ;;
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
         status)         spoke_status ;;
