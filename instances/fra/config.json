@@ -1,0 +1,53 @@
+{
+  "identity": {
+    "spokeId": "spoke-fra-b78e9b79",
+    "instanceCode": "FRA",
+    "name": "France",
+    "description": "DIVE V3 Spoke Instance for France",
+    "country": "FRA",
+    "organizationType": "government",
+    "contactEmail": "fra-admin@dive-demo.example",
+    "registeredSpokeId": "spoke-fra-a4db3486"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3002",
+    "apiUrl": "https://localhost:4001",
+    "idpUrl": "https://localhost:8444",
+    "kasUrl": "https://localhost:8001"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:fra",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-13T14:30:25Z"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-13T14:27:03Z",
+    "lastModified": "2025-12-13T14:27:03Z",
+    "configHash": ""
+  }
+}

@@ -54,8 +54,10 @@ if command -v jq >/dev/null 2>&1 && [[ -f "${INSTANCE_DIR}/instance.json" ]]; th
     KEYCLOAK_HTTPS_PORT_FROM_INSTANCE=$(jq -r '.ports.keycloak_https // empty' "${INSTANCE_DIR}/instance.json")
 fi
 
-# Set defaults
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_GBR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
+# Set defaults - dynamically check for instance-specific password variable
+# Look for KEYCLOAK_ADMIN_PASSWORD_<CODE> first, then fallback to generic KEYCLOAK_ADMIN_PASSWORD
+INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${!INSTANCE_PASSWORD_VAR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
 
 # Use backend container for API calls (has curl, on same network)
 PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
@@ -65,18 +67,41 @@ KC_CONTAINER="${PROJECT_PREFIX}-keycloak-${CODE_LOWER}-1"
 # Internal URL for API calls (via Docker network using Keycloak container name)
 KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
 # Default public URL:
-# - For local dev, prefer the public localhost URL so discovery + redirects never point to the external hostname.
-#   Local dev can be detected via either:
-#   - instance.json hostnames.idp == "localhost" (new schema), OR
-#   - instance.json baseUrl host == "localhost" / "127.0.0.1" (legacy schema used by generated instances)
-# - Otherwise fall back to cloud hostname
+# Determine the public Keycloak URL for frontendUrl (issuer in tokens)
+# Priority:
+#   1. Explicit PUBLIC_KEYCLOAK_URL environment variable
+#   2. DIVE_LOCAL_DEV=true -> use localhost with port offset
+#   3. instance.json detection (localhost in baseUrl or hostnames.idp)
+#   4. Fallback to cloud hostname (requires Cloudflare tunnel)
 BASE_HOST_FROM_INSTANCE=""
 if [[ -n "${BASE_URL_FROM_INSTANCE}" ]]; then
     BASE_HOST_FROM_INSTANCE=$(echo "${BASE_URL_FROM_INSTANCE}" | sed -E 's#https?://([^/:]+).*#\1#')
 fi
-if [[ "${IDP_HOST_FROM_INSTANCE}" == "localhost" || "${BASE_HOST_FROM_INSTANCE}" == "localhost" || "${BASE_HOST_FROM_INSTANCE}" == "127.0.0.1" ]]; then
-    local_kc_port="${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-8446}"
+
+# Calculate port for this instance (USA=8443, GBR=8446, FRA=8444, DEU=8445, etc.)
+case "$CODE_LOWER" in
+    usa) local_kc_port=8443 ;;
+    gbr) local_kc_port=8446 ;;
+    fra) local_kc_port=8444 ;;
+    deu) local_kc_port=8445 ;;
+    can) local_kc_port=8447 ;;
+    *)   local_kc_port="${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-8448}" ;;
+esac
+
+# Detect local development mode
+IS_LOCAL_DEV=false
+if [[ "${DIVE_LOCAL_DEV}" == "true" || "${IDP_HOST_FROM_INSTANCE}" == "localhost" || "${BASE_HOST_FROM_INSTANCE}" == "localhost" || "${BASE_HOST_FROM_INSTANCE}" == "127.0.0.1" ]]; then
+    IS_LOCAL_DEV=true
+fi
+
+# Also detect if we're running in Docker Compose on localhost (no tunnel)
+if [[ -z "${CLOUDFLARE_TUNNEL_TOKEN}" && -z "${TUNNEL_TOKEN}" ]]; then
+    IS_LOCAL_DEV=true
+fi
+
+if [[ "$IS_LOCAL_DEV" == "true" ]]; then
     PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://localhost:${local_kc_port}}"
+    log_info "Local dev mode: Using frontendUrl=${PUBLIC_KEYCLOAK_URL}"
 else
     PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
 fi
@@ -459,47 +484,64 @@ kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${C
 log_success "DIVE attribute mappers created"
 
 # =============================================================================
-# Ensure Hub Federation Client (for broker→spoke callback)
+# Ensure Cross-Border Federation Client (for other instances to federate TO us)
 # =============================================================================
-log_step "Ensuring federation client for hub (dive-v3-usa-federation)..."
+log_step "Ensuring cross-border federation client (dive-v3-cross-border-client)..."
 
 HUB_IDP_URL="${HUB_IDP_URL:-https://localhost:8443}"
-FED_CLIENT_ID="dive-v3-usa-federation"
-FED_REDIRECT_URI="${HUB_IDP_URL}/realms/dive-v3-broker/broker/${CODE_LOWER}-federation/endpoint"
+CROSS_BORDER_CLIENT_ID="dive-v3-cross-border-client"
+CROSS_BORDER_SECRET="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 16)}}"
 
-EXISTING_FED_CLIENT=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${FED_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
-FED_CLIENT_UUID="$EXISTING_FED_CLIENT"
+# Redirect URIs for cross-border: Keycloak only supports wildcards at the END of URIs
+# Include explicit hub broker endpoint + broad wildcard patterns
+CROSS_BORDER_REDIRECT_URIS="[\"https://localhost:8443/*\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint\",\"https://localhost:3000/*\",\"https://localhost:${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-8444}/*\"]"
 
-if [[ -n "$EXISTING_FED_CLIENT" ]]; then
-    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${EXISTING_FED_CLIENT}" \
+EXISTING_CB_CLIENT=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CROSS_BORDER_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
+CB_CLIENT_UUID="$EXISTING_CB_CLIENT"
+
+if [[ -n "$EXISTING_CB_CLIENT" ]]; then
+    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${EXISTING_CB_CLIENT}" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{
-            \"redirectUris\": [\"${FED_REDIRECT_URI}\"],
-            \"webOrigins\": [\"${HUB_IDP_URL}\"],
-            \"publicClient\": true
+            \"redirectUris\": ${CROSS_BORDER_REDIRECT_URIS},
+            \"webOrigins\": [\"*\"],
+            \"publicClient\": false,
+            \"clientAuthenticatorType\": \"client-secret\",
+            \"attributes\": {
+                \"pkce.code.challenge.method\": \"S256\"
+            }
         }" 2>/dev/null
-    log_info "Federation client exists: ${FED_CLIENT_ID} (updated redirects/webOrigins)"
+    log_info "Cross-border client exists: ${CROSS_BORDER_CLIENT_ID} (updated)"
 else
     kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "{
-            \"clientId\": \"${FED_CLIENT_ID}\",
-            \"name\": \"DIVE V3 Federation - HUB\",
+            \"clientId\": \"${CROSS_BORDER_CLIENT_ID}\",
+            \"name\": \"DIVE V3 Cross-Border Federation\",
             \"enabled\": true,
-            \"publicClient\": true,
-            \"redirectUris\": [\"${FED_REDIRECT_URI}\"],
-            \"webOrigins\": [\"${HUB_IDP_URL}\"],
+            \"publicClient\": false,
+            \"clientAuthenticatorType\": \"client-secret\",
+            \"secret\": \"${CROSS_BORDER_SECRET}\",
+            \"redirectUris\": ${CROSS_BORDER_REDIRECT_URIS},
+            \"webOrigins\": [\"*\"],
             \"protocol\": \"openid-connect\",
             \"standardFlowEnabled\": true,
-            \"directAccessGrantsEnabled\": false
+            \"directAccessGrantsEnabled\": false,
+            \"serviceAccountsEnabled\": false,
+            \"attributes\": {
+                \"pkce.code.challenge.method\": \"S256\"
+            }
         }" 2>/dev/null
-    log_success "Federation client created: ${FED_CLIENT_ID}"
-    FED_CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${FED_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
+    log_success "Cross-border client created: ${CROSS_BORDER_CLIENT_ID}"
+    CB_CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CROSS_BORDER_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
 fi
+
+# For backwards compatibility, also keep the FED_CLIENT_UUID reference
+FED_CLIENT_UUID="$CB_CLIENT_UUID"
 
 # Ensure the federation client exposes GBR attributes to the hub
 if [[ -n "$FED_CLIENT_UUID" ]]; then
@@ -552,17 +594,17 @@ fi
 # =============================================================================
 # Ensure USA Hub Identity Provider (so spoke can federate to hub)
 # =============================================================================
-log_step "Ensuring USA hub IdP (usa-federation) is configured..."
+log_step "Ensuring USA hub IdP (usa-idp) is configured..."
 
-USA_IDP_ALIAS="usa-federation"
-USA_IDP_DISPLAY="DIVE V3 - United States"
+USA_IDP_ALIAS="usa-idp"
+USA_IDP_DISPLAY="United States"
 HUB_IDP_PUBLIC_URL="${HUB_IDP_URL:-https://localhost:8443}"
 HUB_IDP_INTERNAL_URL="${HUB_IDP_INTERNAL_URL:-${HUB_IDP_PUBLIC_URL}}"
 HUB_IDP_DISABLE_TRUST="${HUB_IDP_DISABLE_TRUST:-true}"
-# Use the hub's incoming federation client for this spoke (dive-v3-<spoke>-federation)
-USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-${CODE_LOWER}-federation}"
-# Allow multiple env var fallbacks for the client secret (loaded via DIVE CLI secrets sync)
-USA_IDP_CLIENT_SECRET="${USA_IDP_CLIENT_SECRET:-${FEDERATION_CLIENT_SECRET_USA_GBR:-${FEDERATION_CLIENT_SECRET_GBR_USA:-${HUB_IDP_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-}}}}}"
+# Use the hub's cross-border client (must exist in USA Keycloak's dive-v3-broker realm)
+USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-cross-border-client}"
+# Allow multiple env var fallbacks for the client secret
+USA_IDP_CLIENT_SECRET="${USA_IDP_CLIENT_SECRET:-${CROSS_BORDER_CLIENT_SECRET:-${HUB_IDP_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-}}}}"
 
 if [[ -z "${USA_IDP_CLIENT_SECRET}" ]]; then
     log_warn "Hub federation client secret not set (USA_IDP_CLIENT_SECRET / FEDERATION_CLIENT_SECRET_*). Skipping IdP create/update."
@@ -590,8 +632,9 @@ else
             \"validateSignature\": \"true\",
             \"useJwksUrl\": \"true\",
             \"backchannelSupported\": \"true\",
-            \"disable-trust-manager\": \"${HUB_IDP_DISABLE_TRUST}\",
-            \"pkceEnabled\": \"true\"
+            \"syncMode\": \"INHERIT\",
+            \"pkceEnabled\": \"true\",
+            \"pkceMethod\": \"S256\"
         }
     }"
 
