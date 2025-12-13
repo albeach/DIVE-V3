@@ -214,6 +214,404 @@ federation_push_audit() {
 }
 
 # =============================================================================
+# FEDERATION MAPPERS - NATO Nations Protocol Mapper Management
+# =============================================================================
+
+federation_mappers_list() {
+    ensure_dive_root
+    local template_dir="${DIVE_ROOT}/keycloak/mapper-templates/reference/nato-nations"
+    
+    echo -e "${RED}${BOLD}⚠️  PII MINIMIZATION WARNING ⚠️${NC}"
+    echo -e "${YELLOW}These templates are for REFERENCE ONLY and contain PII.${NC}"
+    echo -e "${YELLOW}DO NOT use in production. Use './dive federation mappers apply' instead.${NC}"
+    echo ""
+    
+    echo -e "${BOLD}NATO Nation Reference Templates (Documentation Only):${NC}"
+    echo ""
+    
+    if [ ! -d "$template_dir" ]; then
+        log_error "Reference templates directory not found: $template_dir"
+        return 1
+    fi
+    
+    echo -e "${CYAN}Nation${NC}                 ${CYAN}ISO${NC}  ${CYAN}Convention${NC}              ${CYAN}Attributes (PII)${NC}"
+    echo "─────────────────────  ───  ─────────────────────  ──────────────────────"
+    
+    for template in "$template_dir"/*.json; do
+        [ "$template" = "$template_dir/_template.json" ] && continue
+        [ ! -f "$template" ] && continue
+        
+        local nation=$(jq -r '.nation.name' "$template" 2>/dev/null)
+        local iso=$(jq -r '.nation.iso3166' "$template" 2>/dev/null)
+        local conv=$(jq -r '.nation.attributeConvention' "$template" 2>/dev/null)
+        local surname=$(jq -r '.attributes.profile.surname' "$template" 2>/dev/null)
+        local givenname=$(jq -r '.attributes.profile.givenName' "$template" 2>/dev/null)
+        
+        [ "$nation" = "null" ] && continue
+        
+        printf "%-22s %-4s %-22s %s, %s\n" "$nation" "$iso" "$conv" "$surname" "$givenname"
+    done
+    
+    echo ""
+    echo "Total reference templates: $(find "$template_dir" -name '*.json' ! -name '_template.json' | wc -l | tr -d ' ')"
+    echo ""
+    echo -e "${YELLOW}For production: ./dive federation mappers apply (uses PII-minimized template)${NC}"
+}
+
+federation_mappers_show() {
+    local nation="${1:-}"
+    
+    if [ -z "$nation" ]; then
+        log_error "Usage: ./dive federation mappers show <nation>"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive federation mappers show france"
+        echo "  ./dive federation mappers show united-kingdom"
+        return 1
+    fi
+    
+    ensure_dive_root
+    local template_file="${DIVE_ROOT}/keycloak/mapper-templates/reference/nato-nations/${nation}.json"
+    
+    if [ ! -f "$template_file" ]; then
+        log_error "Template not found: $nation"
+        echo ""
+        echo "Run './dive federation mappers list' to see available nations."
+        return 1
+    fi
+    
+    echo -e "${RED}${BOLD}⚠️  PII WARNING ⚠️${NC}"
+    echo -e "${YELLOW}This template contains PII (names, emails, national IDs).${NC}"
+    echo -e "${YELLOW}Reference only - NOT for production use.${NC}"
+    echo ""
+    
+    echo -e "${BOLD}NATO Nation Reference Template: $nation${NC}"
+    echo ""
+    
+    echo -e "${CYAN}Nation Information:${NC}"
+    jq -r '.nation | "  Name:       \(.name)\n  ISO 3166:   \(.iso3166)\n  Language:   \(.language)\n  Convention: \(.attributeConvention)"' "$template_file"
+    echo ""
+    
+    echo -e "${CYAN}Locale-Specific Attributes (PII):${NC}"
+    jq -r '.attributes.profile | "  Surname:    \(.surname)\n  Given Name: \(.givenName)\n  Email:      \(.email)"' "$template_file"
+    echo ""
+    
+    local nationalid_name=$(jq -r '.attributes.nationalId.name' "$template_file")
+    local nationalid_desc=$(jq -r '.attributes.nationalId.description' "$template_file")
+    echo -e "${CYAN}National Identifier (PII):${NC}"
+    echo "  Name:        $nationalid_name"
+    echo "  Description: $nationalid_desc"
+    echo ""
+    
+    echo -e "${CYAN}Protocol Mappers (9 total - includes PII):${NC}"
+    jq -r '.protocolMappers[] | "  • \(.name): \(.config["user.attribute"]) → \(.config["claim.name"])"' "$template_file"
+    echo ""
+    
+    echo -e "${YELLOW}For production: ./dive federation mappers apply (uses PII-minimized template)${NC}"
+}
+
+federation_mappers_apply() {
+    ensure_dive_root
+    
+    # Use production template with 4 PII-minimized claims
+    local template_file="${DIVE_ROOT}/keycloak/mapper-templates/production/dive-core-claims.json"
+    
+    if [ ! -f "$template_file" ]; then
+        log_error "Production template not found: $template_file"
+        return 1
+    fi
+    
+    # Determine instance-specific parameters
+    local instance_lower=$(lower "$INSTANCE")
+    local instance_upper=$(upper "$INSTANCE")
+    
+    # Map instance to Keycloak URL and realm
+    local keycloak_url="localhost:8443"
+    local realm="dive-v3-broker"
+    local client_id="dive-v3-cross-border-client"
+    
+    case "$instance_lower" in
+        fra)
+            keycloak_url="localhost:8447"
+            realm="dive-v3-broker-fra"
+            ;;
+        gbr)
+            keycloak_url="localhost:8446"
+            realm="dive-v3-broker-gbr"
+            ;;
+        deu)
+            keycloak_url="localhost:8448"
+            realm="dive-v3-broker-deu"
+            ;;
+        usa)
+            keycloak_url="localhost:8443"
+            realm="dive-v3-broker"
+            ;;
+    esac
+    
+    log_step "Applying PII-minimized DIVE mappers to $instance_upper"
+    echo ""
+    echo -e "  ${GREEN}Template:${NC}        production/dive-core-claims.json"
+    echo -e "  ${GREEN}Mappers:${NC}         4 (uniqueID, clearance, countryOfAffiliation, acpCOI)"
+    echo -e "  ${GREEN}PII Status:${NC}      NO PII - Pseudonymized identifiers only"
+    echo ""
+    echo "  Target Keycloak: $keycloak_url"
+    echo "  Target Realm:    $realm"
+    echo "  Target Client:   $client_id"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would apply 4 PII-minimized mappers from production template"
+        log_dry "Would authenticate with Keycloak at $keycloak_url"
+        log_dry "Would create/update mappers on client: $client_id"
+        return 0
+    fi
+    
+    # Get admin password from instance env file
+    local env_file="${DIVE_ROOT}/instances/${instance_lower}/.env"
+    if [ ! -f "$env_file" ]; then
+        log_error "Instance environment file not found: $env_file"
+        return 1
+    fi
+    
+    source "$env_file"
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD}"
+    
+    if [ -z "$admin_pass" ]; then
+        log_error "KEYCLOAK_ADMIN_PASSWORD not found in $env_file"
+        return 1
+    fi
+    
+    # Authenticate
+    local token=$(curl -sk -X POST "https://${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_pass}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+    
+    if [ "$token" = "null" ] || [ -z "$token" ]; then
+        log_error "Failed to authenticate with Keycloak"
+        return 1
+    fi
+    
+    # Get client UUID
+    local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
+        "https://${keycloak_url}/admin/realms/${realm}/clients?clientId=$client_id" 2>/dev/null \
+        | jq -r '.[0].id')
+    
+    if [ "$client_uuid" = "null" ] || [ -z "$client_uuid" ]; then
+        log_error "Client not found: $client_id"
+        return 1
+    fi
+    
+    # Apply mappers from production template
+    local mappers=$(jq '.protocolMappers' "$template_file")
+    local mapper_count=$(echo "$mappers" | jq 'length')
+    
+    log_info "Applying $mapper_count PII-minimized mappers..."
+    
+    local success_count=0
+    for i in $(seq 0 $((mapper_count - 1))); do
+        local mapper=$(echo "$mappers" | jq ".[$i]")
+        local mapper_name=$(echo "$mapper" | jq -r '.name')
+        
+        # Check if mapper exists
+        local existing=$(curl -sk -H "Authorization: Bearer $token" \
+            "https://${keycloak_url}/admin/realms/${realm}/clients/$client_uuid/protocol-mappers/models" 2>/dev/null | \
+            jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id')
+        
+        if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            # Update existing
+            curl -sk -X PUT \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                "https://${keycloak_url}/admin/realms/${realm}/clients/$client_uuid/protocol-mappers/models/$existing" \
+                -d "$mapper" >/dev/null 2>&1
+            echo -e "  ${GREEN}✓${NC} Updated: $mapper_name"
+        else
+            # Create new
+            curl -sk -X POST \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                "https://${keycloak_url}/admin/realms/${realm}/clients/$client_uuid/protocol-mappers/models" \
+                -d "$mapper" >/dev/null 2>&1
+            echo -e "  ${GREEN}✓${NC} Created: $mapper_name"
+        fi
+        ((success_count++))
+    done
+    
+    echo ""
+    log_success "Applied $success_count PII-minimized mappers successfully!"
+    echo ""
+    echo "Next: Verify with './dive federation mappers verify'"
+}
+
+federation_mappers_verify() {
+    ensure_dive_root
+    local instance_lower=$(lower "$INSTANCE")
+    local instance_upper=$(upper "$INSTANCE")
+    
+    log_step "Verifying PII-minimized DIVE mappers on $instance_upper Keycloak"
+    
+    # Determine Keycloak URL based on instance
+    local keycloak_url="localhost:8443"
+    case "$instance_lower" in
+        fra) keycloak_url="localhost:8447" ;;
+        gbr) keycloak_url="localhost:8446" ;;
+        deu) keycloak_url="localhost:8448" ;;
+    esac
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would check mappers on client: dive-v3-cross-border-client"
+        log_dry "Would verify 4 required DIVE claims are present"
+        log_dry "Would check optional pseudonym fields if present"
+        return 0
+    fi
+    
+    # Get admin password
+    local env_file="${DIVE_ROOT}/instances/${instance_lower}/.env"
+    if [ ! -f "$env_file" ]; then
+        log_error "Instance environment file not found: $env_file"
+        return 1
+    fi
+    
+    source "$env_file"
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD}"
+    
+    if [ -z "$admin_pass" ]; then
+        log_error "KEYCLOAK_ADMIN_PASSWORD not found in $env_file"
+        return 1
+    fi
+    
+    # Authenticate and get client mappers
+    local token=$(curl -sk -X POST "https://${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_pass}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+    
+    if [ "$token" = "null" ] || [ -z "$token" ]; then
+        log_error "Failed to authenticate with Keycloak"
+        return 1
+    fi
+    
+    local realm="dive-v3-broker"
+    [ "$instance_lower" != "usa" ] && realm="dive-v3-broker-${instance_lower}"
+    
+    # Get client ID
+    local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
+        "https://${keycloak_url}/admin/realms/${realm}/clients?clientId=dive-v3-cross-border-client" 2>/dev/null \
+        | jq -r '.[0].id')
+    
+    if [ "$client_uuid" = "null" ] || [ -z "$client_uuid" ]; then
+        log_error "Client not found: dive-v3-cross-border-client"
+        return 1
+    fi
+    
+    # Get mappers
+    local mappers=$(curl -sk -H "Authorization: Bearer $token" \
+        "https://${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null)
+    
+    echo ""
+    echo -e "${CYAN}Required DIVE Claims (PII-Minimized):${NC}"
+    
+    local required=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
+    local found=0
+    
+    for mapper in "${required[@]}"; do
+        if echo "$mappers" | jq -e ".[] | select(.name==\"$mapper\")" >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} $mapper"
+            ((found++))
+        else
+            echo -e "  ${RED}✗${NC} $mapper (missing)"
+        fi
+    done
+    
+    echo ""
+    echo -e "${CYAN}Optional Claims (if backend generates):${NC}"
+    
+    local optional=("pseudonym" "pseudonymousIdentifier")
+    for mapper in "${optional[@]}"; do
+        if echo "$mappers" | jq -e ".[] | select(.name==\"$mapper\")" >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} $mapper (optional)"
+        else
+            echo -e "  ${GRAY}−${NC} $mapper (not present - OK)"
+        fi
+    done
+    
+    echo ""
+    echo -e "${CYAN}PII Minimization Check:${NC}"
+    
+    local pii_fields=("family_name" "given_name" "email" "nationalId" "name" "phone_number")
+    local pii_found=false
+    
+    for field in "${pii_fields[@]}"; do
+        if echo "$mappers" | jq -e ".[] | select(.name==\"$field\")" >/dev/null 2>&1; then
+            echo -e "  ${RED}✗${NC} $field (PII VIOLATION!)"
+            pii_found=true
+        fi
+    done
+    
+    if [ "$pii_found" = false ]; then
+        echo -e "  ${GREEN}✓${NC} No PII fields detected"
+    fi
+    
+    echo ""
+    if [ $found -eq 4 ] && [ "$pii_found" = false ]; then
+        log_success "All required mappers verified! PII minimization enforced."
+    elif [ $found -eq 4 ]; then
+        log_warn "Required mappers present but PII fields detected. Remove PII mappers!"
+    else
+        log_warn "Found $found/4 required mappers. Run './dive federation mappers apply' to fix."
+    fi
+}
+
+federation_mappers_help() {
+    echo -e "${BOLD}Federation Mapper Commands:${NC}"
+    echo ""
+    echo "Manage DIVE protocol mappers with PII minimization enforcement."
+    echo ""
+    echo -e "${GREEN}Production Commands (PII-Minimized):${NC}"
+    echo "  ${CYAN}apply${NC}                Apply 4 core DIVE claims (uniqueID, clearance,"
+    echo "                       countryOfAffiliation, acpCOI) - NO PII"
+    echo "  ${CYAN}verify${NC}               Verify required mappers + check for PII violations"
+    echo ""
+    echo -e "${YELLOW}Reference Commands (Documentation Only - Contains PII):${NC}"
+    echo "  ${CYAN}list${NC}                 List NATO nation reference templates (PII warning)"
+    echo "  ${CYAN}show${NC} <nation>        Show nation mapper details (PII warning)"
+    echo ""
+    echo "Examples:"
+    echo "  ${GRAY}# Apply PII-minimized mappers to current instance${NC}"
+    echo "  ./dive federation mappers apply"
+    echo ""
+    echo "  ${GRAY}# Apply to FRA instance${NC}"
+    echo "  ./dive --instance fra federation mappers apply"
+    echo ""
+    echo "  ${GRAY}# Verify mappers and check for PII violations${NC}"
+    echo "  ./dive federation mappers verify"
+    echo ""
+    echo "  ${GRAY}# View reference templates (educational only)${NC}"
+    echo "  ./dive federation mappers list"
+    echo "  ./dive federation mappers show france"
+    echo ""
+    echo -e "${BOLD}⚠️  PII MINIMIZATION POLICY:${NC}"
+    echo ""
+    echo "  Production systems use ONLY 4 core claims:"
+    echo "    • uniqueID (required)"
+    echo "    • clearance (required)"
+    echo "    • countryOfAffiliation (required)"
+    echo "    • acpCOI (optional)"
+    echo ""
+    echo "  NO real names, emails, or national IDs in JWT tokens!"
+    echo "  Display names are auto-generated pseudonyms by backend."
+    echo ""
+    echo "Documentation:"
+    echo "  PII_MINIMIZATION_POLICY.md           - Complete policy"
+    echo "  keycloak/mapper-templates/production/README.md"
+    echo ""
+}
+
+# =============================================================================
 # HUB COMMANDS
 # =============================================================================
 
@@ -412,7 +810,21 @@ module_federation() {
         link)          federation_link "$@" ;;
         unlink)        federation_unlink "$@" ;;
         list-idps)     federation_list_idps ;;
+        mappers)       federation_mappers_dispatch "$@" ;;
         *)             module_federation_help ;;
+    esac
+}
+
+federation_mappers_dispatch() {
+    local subcommand="${1:-help}"
+    shift || true
+    
+    case "$subcommand" in
+        list)    federation_mappers_list ;;
+        show)    federation_mappers_show "$@" ;;
+        apply)   federation_mappers_apply "$@" ;;
+        verify)  federation_mappers_verify "$@" ;;
+        help|*)  federation_mappers_help ;;
     esac
 }
 
@@ -439,14 +851,24 @@ module_federation_help() {
     echo "  ${CYAN}sync-idps${NC}            Sync IdP metadata from hub"
     echo "  ${CYAN}push-audit${NC}           Push audit logs to hub"
     echo ""
-    echo "  ${GREEN}${BOLD}link${NC} <CODE>         ${BOLD}[NEW]${NC} Link IdP for cross-border SSO"
-    echo "  ${GREEN}${BOLD}unlink${NC} <CODE>       ${BOLD}[NEW]${NC} Remove IdP link"
-    echo "  ${GREEN}${BOLD}list-idps${NC}           ${BOLD}[NEW]${NC} List configured IdPs"
+    echo "  ${GREEN}${BOLD}link${NC} <CODE>         ${BOLD}Link IdP for cross-border SSO${NC}"
+    echo "  ${GREEN}${BOLD}unlink${NC} <CODE>       ${BOLD}Remove IdP link${NC}"
+    echo "  ${GREEN}${BOLD}list-idps${NC}           ${BOLD}List configured IdPs${NC}"
+    echo ""
+    echo "  ${GREEN}${BOLD}mappers${NC} <cmd>       ${BOLD}Manage NATO nation protocol mappers${NC}"
+    echo "    ${CYAN}list${NC}               List available nation templates"
+    echo "    ${CYAN}show${NC} <nation>      Show nation mapper details"
+    echo "    ${CYAN}apply${NC} <nation>     Apply mappers to instance"
+    echo "    ${CYAN}verify${NC} <nation>    Verify mapper configuration"
     echo ""
     echo "Examples:"
-    echo "  ./dive federation link GBR              # Link GBR to USA Hub"
-    echo "  ./dive --instance gbr federation link USA   # Link USA to GBR Spoke"
-    echo "  ./dive federation list-idps             # Show all IdPs"
+    echo "  ./dive federation link GBR                       # Link GBR to USA Hub"
+    echo "  ./dive --instance gbr federation link USA        # Link USA to GBR Spoke"
+    echo "  ./dive federation list-idps                      # Show all IdPs"
+    echo ""
+    echo "  ./dive federation mappers list                   # List all NATO nations"
+    echo "  ./dive federation mappers show france            # Show France details"
+    echo "  ./dive --instance fra federation mappers apply france  # Apply to FRA"
     echo ""
 }
 
