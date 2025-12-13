@@ -622,93 +622,105 @@ export class KeycloakFederationService {
       throw new Error('Keycloak Admin client not initialized');
     }
 
-    const mappers: IProtocolMapper[] = [
+    // IdP Mappers use different structure than protocol mappers
+    // identityProviderMapper is the mapper type, config contains claim mapping
+    const mappers = [
       {
-        name: 'uniqueID',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'uniqueID-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'uniqueID',
           'user.attribute': 'uniqueID',
-          'syncMode': 'INHERIT',
+          'syncMode': 'FORCE',  // Always update from IdP
         },
       },
       {
-        name: 'clearance',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'clearance-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'clearance',
           'user.attribute': 'clearance',
-          'syncMode': 'INHERIT',
+          'syncMode': 'FORCE',
         },
       },
       {
-        name: 'countryOfAffiliation',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'countryOfAffiliation-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'countryOfAffiliation',
           'user.attribute': 'countryOfAffiliation',
-          'syncMode': 'INHERIT',
+          'syncMode': 'FORCE',
         },
       },
       {
-        name: 'acpCOI',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'acpCOI-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'acpCOI',
           'user.attribute': 'acpCOI',
-          'syncMode': 'INHERIT',
-          'multivalued': 'true',  // CRITICAL: Support multi-valued COI arrays
+          'syncMode': 'FORCE',
         },
       },
       {
-        name: 'email',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'email-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'email',
           'user.attribute': 'email',
-          'syncMode': 'INHERIT',
+          'syncMode': 'FORCE',
         },
       },
       {
-        name: 'firstName',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'firstName-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'given_name',
           'user.attribute': 'firstName',
-          'syncMode': 'INHERIT',
+          'syncMode': 'FORCE',
         },
       },
       {
-        name: 'lastName',
-        protocol: 'openid-connect',
-        protocolMapper: 'oidc-user-attribute-idp-mapper',
+        name: 'lastName-mapper',
+        identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+        identityProviderAlias: idpAlias,
         config: {
           'claim': 'family_name',
           'user.attribute': 'lastName',
-          'syncMode': 'INHERIT',
+          'syncMode': 'FORCE',
+        },
+      },
+      {
+        name: 'username-mapper',
+        identityProviderMapper: 'oidc-username-idp-mapper',
+        identityProviderAlias: idpAlias,
+        config: {
+          'syncMode': 'FORCE',
+          'template': '${CLAIM.preferred_username}',
         },
       },
     ];
 
     for (const mapper of mappers) {
       try {
+        // Keycloak Admin Client expects the mapper object directly
         await this.kcAdmin.identityProviders.createMapper({
           alias: idpAlias,
-          identityProviderMapper: mapper,
+          identityProviderMapper: mapper as any,
         });
 
-        logger.debug('Created protocol mapper', {
+        logger.debug('Created IdP attribute mapper', {
           idpAlias,
           mapperName: mapper.name,
+          mapperType: mapper.identityProviderMapper,
         });
       } catch (error) {
-        logger.warn('Failed to create protocol mapper (may already exist)', {
+        logger.warn('Failed to create IdP mapper (may already exist)', {
           idpAlias,
           mapperName: mapper.name,
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -716,9 +728,10 @@ export class KeycloakFederationService {
       }
     }
 
-    logger.info('DIVE attribute mappers created', {
+    logger.info('DIVE IdP attribute mappers created', {
       idpAlias,
       mapperCount: mappers.length,
+      mappers: mappers.map(m => m.name),
     });
   }
 
