@@ -655,6 +655,7 @@ export class KeycloakFederationService {
           'claim': 'acpCOI',
           'user.attribute': 'acpCOI',
           'syncMode': 'INHERIT',
+          'multivalued': 'true',  // CRITICAL: Support multi-valued COI arrays
         },
       },
       {
