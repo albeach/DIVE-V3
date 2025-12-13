@@ -14,11 +14,22 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { sessions, accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
     try {
+        const headerStore = await headers();
+        const host = headerStore.get('host');
+        const xForwardedHost = headerStore.get('x-forwarded-host');
+        const xForwardedProto = headerStore.get('x-forwarded-proto');
+        const referer = headerStore.get('referer');
+
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H2',location:'api/auth/logout/route.ts:POST',message:'Server logout endpoint called (env vs request host)',data:{host,xForwardedHost,xForwardedProto,referer,envNextAuthUrl:process.env.NEXTAUTH_URL??null,envBaseUrl:process.env.NEXT_PUBLIC_BASE_URL??null,envPublicRealm:process.env.NEXT_PUBLIC_KEYCLOAK_REALM??null,envServerRealm:process.env.KEYCLOAK_REALM??null,envPublicKeycloakUrl:process.env.NEXT_PUBLIC_KEYCLOAK_URL??null,envKeycloakUrl:process.env.KEYCLOAK_URL??null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+
         console.log('[DIVE] Complete server-side logout initiated');
 
         // Get current session to identify user

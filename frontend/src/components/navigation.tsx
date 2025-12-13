@@ -928,6 +928,10 @@ const SignOutIconButton = memo(function SignOutIconButton() {
     const handleLogout = async () => {
         try {
             setIsLoggingOut(true);
+
+            // #region agent log
+            fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'navigation.tsx:SignOutIconButton:handleLogout',message:'User initiated logout (client)',data:{component:'SignOutIconButton',windowHref:typeof window!=='undefined'?window.location.href:null,windowOrigin:typeof window!=='undefined'?window.location.origin:null,envBaseUrl:process.env.NEXT_PUBLIC_BASE_URL??null,envNextAuthUrl:process.env.NEXTAUTH_URL??null,envKeycloakUrl:process.env.NEXT_PUBLIC_KEYCLOAK_URL??null,envKeycloakRealm:process.env.NEXT_PUBLIC_KEYCLOAK_REALM??null,envInstance:process.env.NEXT_PUBLIC_INSTANCE??null},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             
             // Get Keycloak logout URL first
             let keycloakLogoutUrl: string | null = null;
@@ -940,6 +944,10 @@ const SignOutIconButton = memo(function SignOutIconButton() {
                         const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";
                         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
                         keycloakLogoutUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout?id_token_hint=${tokens.idToken}&post_logout_redirect_uri=${baseUrl}`;
+
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'navigation.tsx:SignOutIconButton:logoutUrl',message:'Constructed Keycloak logout URL (sanitized, client)',data:{postLogoutRedirectUri:baseUrl,logoutUrlSanitized:keycloakLogoutUrl.replace(/id_token_hint=[^&]+/,'id_token_hint=[REDACTED]')},timestamp:Date.now()})}).catch(()=>{});
+                        // #endregion
                     }
                 }
             } catch (e) {

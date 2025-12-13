@@ -46,8 +46,12 @@ fi
 
 # Detect local dev hostname from instance.json (if present)
 IDP_HOST_FROM_INSTANCE=""
+BASE_URL_FROM_INSTANCE=""
+KEYCLOAK_HTTPS_PORT_FROM_INSTANCE=""
 if command -v jq >/dev/null 2>&1 && [[ -f "${INSTANCE_DIR}/instance.json" ]]; then
     IDP_HOST_FROM_INSTANCE=$(jq -r '.hostnames.idp // empty' "${INSTANCE_DIR}/instance.json")
+    BASE_URL_FROM_INSTANCE=$(jq -r '.baseUrl // empty' "${INSTANCE_DIR}/instance.json")
+    KEYCLOAK_HTTPS_PORT_FROM_INSTANCE=$(jq -r '.ports.keycloak_https // empty' "${INSTANCE_DIR}/instance.json")
 fi
 
 # Set defaults
@@ -61,11 +65,18 @@ KC_CONTAINER="${PROJECT_PREFIX}-keycloak-${CODE_LOWER}-1"
 # Internal URL for API calls (via Docker network using Keycloak container name)
 KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
 # Default public URL:
-# - For local dev (idp host=localhost), prefer the public localhost URL (8446) so browser redirects never point
-#   to the internal hostname (keycloak-<code>).
+# - For local dev, prefer the public localhost URL so discovery + redirects never point to the external hostname.
+#   Local dev can be detected via either:
+#   - instance.json hostnames.idp == "localhost" (new schema), OR
+#   - instance.json baseUrl host == "localhost" / "127.0.0.1" (legacy schema used by generated instances)
 # - Otherwise fall back to cloud hostname
-if [[ "${IDP_HOST_FROM_INSTANCE}" == "localhost" ]]; then
-    PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://localhost:8446}"
+BASE_HOST_FROM_INSTANCE=""
+if [[ -n "${BASE_URL_FROM_INSTANCE}" ]]; then
+    BASE_HOST_FROM_INSTANCE=$(echo "${BASE_URL_FROM_INSTANCE}" | sed -E 's#https?://([^/:]+).*#\1#')
+fi
+if [[ "${IDP_HOST_FROM_INSTANCE}" == "localhost" || "${BASE_HOST_FROM_INSTANCE}" == "localhost" || "${BASE_HOST_FROM_INSTANCE}" == "127.0.0.1" ]]; then
+    local_kc_port="${KEYCLOAK_HTTPS_PORT_FROM_INSTANCE:-8446}"
+    PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://localhost:${local_kc_port}}"
 else
     PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
 fi
@@ -80,6 +91,10 @@ FRONTEND_URL="${FRONTEND_URL:-https://${CODE_LOWER}-app.dive25.com}"
 # Derive a localhost fallback that matches the spoke's port (default 3000 if not localhost)
 FRONTEND_PORT_FROM_URL=$(echo "$FRONTEND_URL" | sed -n 's#https://localhost:\\([0-9]\\+\\).*#\\1#p')
 LOCALHOST_FALLBACK="https://localhost:${FRONTEND_PORT_FROM_URL:-3000}"
+
+# Keycloak expects post logout redirect URIs as a single string delimited by "##" (realm export format).
+# IMPORTANT: Do NOT use spaces as delimiters — Keycloak will treat it as one value and reject logout redirects.
+POST_LOGOUT_REDIRECT_URIS="${FRONTEND_URL}##${FRONTEND_URL}/*##${FRONTEND_URL}/api/auth/logout-callback##${LOCALHOST_FALLBACK}##${LOCALHOST_FALLBACK}/*##${LOCALHOST_FALLBACK}/api/auth/logout-callback##https://localhost:3003##https://localhost:3003/*##https://localhost:3003/api/auth/logout-callback##http://localhost:3003##http://localhost:3003/*##http://localhost:3003/api/auth/logout-callback"
 
 # Map country codes to full names for Keycloak theme detection (POSIX-friendly)
 case "$CODE_LOWER" in
@@ -212,11 +227,11 @@ USER_PROFILE_SCRIPT="/app/src/scripts/init-user-profiles.ts"
 # Check if backend container is running
 if docker ps --filter "name=${BACKEND_CONTAINER}" --format '{{.Names}}' | grep -q "${BACKEND_CONTAINER}"; then
     # Run the User Profile init script inside the backend container
-    docker exec "$BACKEND_CONTAINER" npx ts-node "$USER_PROFILE_SCRIPT" "$CODE_UPPER" 2>/dev/null
-    if [ $? -eq 0 ]; then
+    # NOTE: Must not abort the whole init script if this step fails (set -e is enabled).
+    if docker exec "$BACKEND_CONTAINER" npx ts-node "$USER_PROFILE_SCRIPT" "$CODE_UPPER" 2>/dev/null; then
         log_success "User Profile initialized with multi-valued COI support"
     else
-        log_warn "User Profile initialization failed (may require manual setup)"
+        log_warn "User Profile initialization failed (non-blocking; continuing)"
     fi
 else
     log_warn "Backend container not running, skipping User Profile init"
@@ -290,7 +305,7 @@ if [[ -n "$CLIENT_EXISTS" ]]; then
             ],
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\",
-                \"post.logout.redirect.uris\": \"${FRONTEND_URL} ${FRONTEND_URL}/* ${FRONTEND_URL}/api/auth/logout-callback ${LOCALHOST_FALLBACK} ${LOCALHOST_FALLBACK}/* ${LOCALHOST_FALLBACK}/api/auth/logout-callback https://localhost:3003 https://localhost:3003/* https://localhost:3003/api/auth/logout-callback http://localhost:3003 http://localhost:3003/* http://localhost:3003/api/auth/logout-callback\",
+                \"post.logout.redirect.uris\": \"${POST_LOGOUT_REDIRECT_URIS}\",
                 \"frontchannel.logout.url\": \"https://localhost:3003/api/auth/logout-callback\",
                 \"backchannel.logout.session.required\": \"true\",
                 \"backchannel.logout.revoke.offline.tokens\": \"false\"
@@ -329,7 +344,7 @@ else
             \"protocol\": \"openid-connect\",
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\",
-                \"post.logout.redirect.uris\": \"${FRONTEND_URL} ${FRONTEND_URL}/* ${FRONTEND_URL}/api/auth/logout-callback ${LOCALHOST_FALLBACK} ${LOCALHOST_FALLBACK}/* ${LOCALHOST_FALLBACK}/api/auth/logout-callback https://localhost:3003 https://localhost:3003/* https://localhost:3003/api/auth/logout-callback http://localhost:3003 http://localhost:3003/* http://localhost:3003/api/auth/logout-callback\",
+                \"post.logout.redirect.uris\": \"${POST_LOGOUT_REDIRECT_URIS}\",
                 \"frontchannel.logout.url\": \"https://localhost:3003/api/auth/logout-callback\",
                 \"backchannel.logout.session.required\": \"true\",
                 \"backchannel.logout.revoke.offline.tokens\": \"false\"

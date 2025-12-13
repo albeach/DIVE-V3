@@ -1,4 +1,7 @@
 import { handlers } from "@/auth";
+import { NextRequest } from "next/server";
+
+type INextAuthRouteContext = { params: { nextauth?: string[] } };
 
 /**
  * NextAuth v5 Route Handlers
@@ -27,6 +30,38 @@ if (!nextauthUrl) {
     console.error('[NextAuth Route Handler] ❌ ERROR: NEXTAUTH_URL is not set! NextAuth will fail.');
 }
 
-export const { GET, POST } = handlers;
+export async function GET(request: NextRequest, context: INextAuthRouteContext) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'L1',location:'api/auth/[...nextauth]/route.ts:GET',message:'NextAuth handler invoked (request/env snapshot)',data:{method:'GET',path:request.nextUrl.pathname,host:request.headers.get('host'),xForwardedHost:request.headers.get('x-forwarded-host'),xForwardedProto:request.headers.get('x-forwarded-proto'),referer:request.headers.get('referer'),envNextAuthUrl:process.env.NEXTAUTH_URL??null,envAuthUrl:(process.env as Record<string, string | undefined>).AUTH_URL??null,envAuthTrustHost:process.env.AUTH_TRUST_HOST??null,hasAuthSecret:!!process.env.AUTH_SECRET,hasNextAuthSecret:!!process.env.NEXTAUTH_SECRET,authKeycloakIssuer:(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_ISSUER??null,keycloakIssuer:process.env.KEYCLOAK_ISSUER??null,nextPublicBaseUrl:process.env.NEXT_PUBLIC_BASE_URL??null,nextPublicKeycloakRealm:process.env.NEXT_PUBLIC_KEYCLOAK_REALM??null,keycloakRealm:process.env.KEYCLOAK_REALM??null,authKeycloakId:(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_ID??null,hasAuthKeycloakSecret:!!(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_SECRET},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    try {
+        const handlersGet = handlers.GET as unknown as (req: NextRequest, ctx: unknown) => Promise<Response> | Response;
+        return await handlersGet(request, context);
+    } catch (err) {
+        const e = err instanceof Error ? err : new Error('Unknown NextAuth GET error');
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'L1',location:'api/auth/[...nextauth]/route.ts:GET:catch',message:'NextAuth handler threw (sanitized)',data:{name:e.name,message:e.message,stack:(e.stack||'').split('\n').slice(0,8).join('\n')},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        throw err;
+    }
+}
+
+export async function POST(request: NextRequest, context: INextAuthRouteContext) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'L1',location:'api/auth/[...nextauth]/route.ts:POST',message:'NextAuth handler invoked (request/env snapshot)',data:{method:'POST',path:request.nextUrl.pathname,host:request.headers.get('host'),xForwardedHost:request.headers.get('x-forwarded-host'),xForwardedProto:request.headers.get('x-forwarded-proto'),referer:request.headers.get('referer'),envNextAuthUrl:process.env.NEXTAUTH_URL??null,envAuthUrl:(process.env as Record<string, string | undefined>).AUTH_URL??null,envAuthTrustHost:process.env.AUTH_TRUST_HOST??null,hasAuthSecret:!!process.env.AUTH_SECRET,hasNextAuthSecret:!!process.env.NEXTAUTH_SECRET,authKeycloakIssuer:(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_ISSUER??null,keycloakIssuer:process.env.KEYCLOAK_ISSUER??null,nextPublicBaseUrl:process.env.NEXT_PUBLIC_BASE_URL??null,nextPublicKeycloakRealm:process.env.NEXT_PUBLIC_KEYCLOAK_REALM??null,keycloakRealm:process.env.KEYCLOAK_REALM??null,authKeycloakId:(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_ID??null,hasAuthKeycloakSecret:!!(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_SECRET},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
+    try {
+        const handlersPost = handlers.POST as unknown as (req: NextRequest, ctx: unknown) => Promise<Response> | Response;
+        return await handlersPost(request, context);
+    } catch (err) {
+        const e = err instanceof Error ? err : new Error('Unknown NextAuth POST error');
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run2',hypothesisId:'L1',location:'api/auth/[...nextauth]/route.ts:POST:catch',message:'NextAuth handler threw (sanitized)',data:{name:e.name,message:e.message,stack:(e.stack||'').split('\n').slice(0,8).join('\n')},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        throw err;
+    }
+}
 
 
