@@ -56,11 +56,23 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
 fi
 
 # Use backend container for API calls (has curl, on same network)
-PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+# Force project prefix to match spoke instance (ignore hub's COMPOSE_PROJECT_NAME)
+PROJECT_PREFIX="${CODE_LOWER}"
 API_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
+KEYCLOAK_CONTAINER="${PROJECT_PREFIX}-keycloak-${CODE_LOWER}-1"
 KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
 PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_GBR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
+
+# Get admin password from instance-specific variable or container environment
+INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-${!INSTANCE_PASSWORD_VAR:-}}"
+if [[ -z "$ADMIN_PASSWORD" ]]; then
+    # Try to get from the running Keycloak container
+    ADMIN_PASSWORD=$(docker exec "$KEYCLOAK_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
+fi
+if [[ -z "$ADMIN_PASSWORD" ]]; then
+    ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+fi
 
 # Helper function to call Keycloak API via Docker exec (uses backend container)
 kc_curl() {
