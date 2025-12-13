@@ -65,6 +65,8 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: 8443
+      # Trust mkcert root CA for federation with spoke Keycloaks
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/certs/mkcert-rootCA.pem
       # Enable debug logging for broker troubleshooting
       KC_LOG_LEVEL: "DEBUG,org.keycloak.broker:DEBUG,org.keycloak.broker.oidc:DEBUG,org.keycloak.events:DEBUG"
       KC_METRICS_ENABLED: true
