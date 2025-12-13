@@ -201,6 +201,29 @@ else
 fi
 
 # =============================================================================
+# Initialize User Profile (Multi-Valued COI Support)
+# =============================================================================
+log_step "Initializing User Profile with multi-valued attributes..."
+
+# Call the TypeScript init script from backend
+BACKEND_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
+USER_PROFILE_SCRIPT="/app/src/scripts/init-user-profiles.ts"
+
+# Check if backend container is running
+if docker ps --filter "name=${BACKEND_CONTAINER}" --format '{{.Names}}' | grep -q "${BACKEND_CONTAINER}"; then
+    # Run the User Profile init script inside the backend container
+    docker exec "$BACKEND_CONTAINER" npx ts-node "$USER_PROFILE_SCRIPT" "$CODE_UPPER" 2>/dev/null
+    if [ $? -eq 0 ]; then
+        log_success "User Profile initialized with multi-valued COI support"
+    else
+        log_warn "User Profile initialization failed (may require manual setup)"
+    fi
+else
+    log_warn "Backend container not running, skipping User Profile init"
+    log_info "Run manually: cd backend && npx ts-node src/scripts/init-user-profiles.ts ${CODE_UPPER}"
+fi
+
+# =============================================================================
 # Create OAuth Scopes
 # =============================================================================
 log_step "Creating OAuth scopes..."
