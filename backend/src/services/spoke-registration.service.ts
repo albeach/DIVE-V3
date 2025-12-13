@@ -318,6 +318,7 @@ class SpokeRegistrationService extends EventEmitter {
       baseUrl: this.spokeConfig.endpoints.baseUrl,
       apiUrl: this.spokeConfig.endpoints.apiUrl,
       idpUrl: this.spokeConfig.endpoints.idpUrl,
+      idpPublicUrl: this.spokeConfig.endpoints.idpPublicUrl, // Add public-facing IdP URL
       certificatePEM,
       requestedScopes: this.spokeConfig.federation.requestedScopes,
       contactEmail: this.spokeConfig.identity.contactEmail,

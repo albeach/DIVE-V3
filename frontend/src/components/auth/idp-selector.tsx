@@ -170,39 +170,16 @@ export function IdpSelector() {
    * Format: '{country}-federation' (e.g., 'deu-federation', 'usa-federation')
    */
   const handleIdpClick = async (idp: IdPOption) => {
-    // Extract country code from alias (e.g., 'usa-realm-broker' -> 'usa')
-    const aliasLower = idp.alias.toLowerCase();
-    let targetCountry: string | null = null;
+    // Use the IdP alias directly as kc_idp_hint
+    // This triggers Keycloak broker to redirect to the federated IdP
+    const idpHint = idp.alias;
     
-    // Parse country code from various alias formats
-    if (aliasLower.includes('usa') || aliasLower.includes('us-')) targetCountry = 'usa';
-    else if (aliasLower.includes('fra') || aliasLower.includes('france')) targetCountry = 'fra';
-    else if (aliasLower.includes('deu') || aliasLower.includes('germany')) targetCountry = 'deu';
-    else if (aliasLower.includes('gbr') || aliasLower.includes('uk')) targetCountry = 'gbr';
-    else if (aliasLower.includes('can') || aliasLower.includes('canada')) targetCountry = 'can';
-    
-    const currentInstance = instanceCode.toLowerCase();
-    
-    // Determine the correct kc_idp_hint
-    // For cross-border: use '{country}-federation' format
-    // For same instance: use the original alias
-    let idpHint: string;
-    
-    if (targetCountry && targetCountry !== currentInstance) {
-      // CROSS-BORDER FEDERATION
-      // Use the federation IdP alias configured in LOCAL Keycloak
-      // This triggers: Local KC → Partner KC → Auth → Back to Local KC → App
-      idpHint = `${targetCountry}-federation`;
-      console.log(`[IdP Selector] Cross-border federation: ${currentInstance} → ${targetCountry}`);
-      console.log(`[IdP Selector] Using kc_idp_hint: ${idpHint}`);
-    } else {
-      // SAME INSTANCE - use original alias
-      idpHint = idp.alias;
-      console.log(`[IdP Selector] Same-instance auth with hint: ${idpHint}`);
-    }
+    console.log(`[IdP Selector] Federation: ${instanceCode} → ${idp.displayName}`);
+    console.log(`[IdP Selector] Using kc_idp_hint: ${idpHint}`);
     
     // Trigger NextAuth signIn with kc_idp_hint
-    // This sends user to LOCAL Keycloak, which handles federation if needed
+    // This sends user to LOCAL Keycloak with IdP hint
+    // Keycloak broker then redirects to the REMOTE IdP
     const { signIn } = await import('next-auth/react');
     await signIn(
       'keycloak',
