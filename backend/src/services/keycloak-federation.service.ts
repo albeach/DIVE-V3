@@ -225,8 +225,8 @@ export class KeycloakFederationService {
    * - Single-valued (clearance, countryOfAffiliation, uniqueID): 
    *   aggregate.attrs=true, multivalued=false, jsonType=String
    * - Multi-valued (acpCOI): 
-   *   Currently NOT MAPPED to avoid "cannot map type" error
-   *   TODO: Implement custom script mapper or JSON array mapper
+   *   multivalued=true, jsonType=String (NO aggregate.attrs)
+   *   Keycloak v26+ requires User Profile attribute to have multivalued=true
    */
   private async ensureProtocolMapperForScope(scopeName: string): Promise<void> {
     if (!this.kcAdmin) {
@@ -256,19 +256,26 @@ export class KeycloakFederationService {
         return;
       }
 
-      // Skip acpCOI - multivalued arrays cause "cannot map type" error
-      // Will be handled separately with custom script mapper
-      if (scopeName === 'acpCOI') {
-        logger.info('Skipping protocol mapper for acpCOI (multivalued - requires custom mapper)', {
-          realm: this.realm,
-          scopeName,
-          reason: 'Standard user attribute mapper cannot handle arrays properly',
-        });
-        return;
+      // Determine mapper configuration based on attribute type
+      const isMultiValued = scopeName === 'acpCOI';
+      
+      const mapperConfig: Record<string, string> = {
+        'user.attribute': scopeName,
+        'claim.name': scopeName,
+        'jsonType.label': 'String',
+        'id.token.claim': 'true',
+        'access.token.claim': 'true',
+        'userinfo.token.claim': 'true',
+        'introspection.token.claim': 'true',
+        'multivalued': isMultiValued ? 'true' : 'false',
+      };
+
+      // For single-valued attributes, use aggregate.attrs to extract first element
+      // For multi-valued attributes (like acpCOI), omit aggregate.attrs to keep array
+      if (!isMultiValued) {
+        mapperConfig['aggregate.attrs'] = 'true';
       }
 
-      // Create protocol mapper for single-valued attributes
-      // CRITICAL: Use aggregate.attrs=true to extract first element from Keycloak's internal array storage
       await this.kcAdmin.clientScopes.addProtocolMapper({
         id: scope.id,
         realm: this.realm
@@ -276,23 +283,15 @@ export class KeycloakFederationService {
         name: `${scopeName}-mapper`,
         protocol: 'openid-connect',
         protocolMapper: 'oidc-usermodel-attribute-mapper',
-        config: {
-          'user.attribute': scopeName,
-          'claim.name': scopeName,
-          'jsonType.label': 'String',
-          'id.token.claim': 'true',
-          'access.token.claim': 'true',
-          'userinfo.token.claim': 'true',
-          'multivalued': 'false',
-          'aggregate.attrs': 'true',  // CRITICAL: Extract first element from array
-        },
+        config: mapperConfig,
       });
 
       logger.info('Created protocol mapper for DIVE scope', {
         realm: this.realm,
         scopeName,
         mapperType: 'oidc-usermodel-attribute-mapper',
-        config: 'aggregate.attrs=true, multivalued=false',
+        isMultiValued,
+        config: isMultiValued ? 'multivalued=true' : 'aggregate.attrs=true, multivalued=false',
       });
 
     } catch (error) {
