@@ -815,6 +815,231 @@ body[data-instance="POL"] .dive-button-primary:hover {
     box-shadow: 0 20px 25px -5px rgba(220, 20, 60, 0.5);
 }
 
+/* Norway - Norwegian Red */
+body[data-instance="NOR"] .dive-button-primary {
+    background: linear-gradient(135deg, #ba0c2f 0%, #960a26 100%);
+    box-shadow: 0 10px 15px -3px rgba(186, 12, 47, 0.4);
+}
+body[data-instance="NOR"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(186, 12, 47, 0.5);
+}
+
+/* Denmark - Danish Red */
+body[data-instance="DNK"] .dive-button-primary {
+    background: linear-gradient(135deg, #c60c30 0%, #a00a28 100%);
+    box-shadow: 0 10px 15px -3px rgba(198, 12, 48, 0.4);
+}
+body[data-instance="DNK"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(198, 12, 48, 0.5);
+}
+
+/* Belgium - Belgian Red */
+body[data-instance="BEL"] .dive-button-primary {
+    background: linear-gradient(135deg, #ef3340 0%, #cc2a36 100%);
+    box-shadow: 0 10px 15px -3px rgba(239, 51, 64, 0.4);
+}
+body[data-instance="BEL"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(239, 51, 64, 0.5);
+}
+
+/* Albania - Albanian Red */
+body[data-instance="ALB"] .dive-button-primary {
+    background: linear-gradient(135deg, #e41e20 0%, #b8181a 100%);
+    box-shadow: 0 10px 15px -3px rgba(228, 30, 32, 0.4);
+}
+body[data-instance="ALB"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(228, 30, 32, 0.5);
+}
+
+/* Portugal - Portuguese Green */
+body[data-instance="PRT"] .dive-button-primary {
+    background: linear-gradient(135deg, #006600 0%, #004d00 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 102, 0, 0.4);
+}
+body[data-instance="PRT"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 102, 0, 0.5);
+}
+
+/* Greece - Greek Blue */
+body[data-instance="GRC"] .dive-button-primary {
+    background: linear-gradient(135deg, #0d5eaf 0%, #0a4a8c 100%);
+    box-shadow: 0 10px 15px -3px rgba(13, 94, 175, 0.4);
+}
+body[data-instance="GRC"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(13, 94, 175, 0.5);
+}
+
+/* Turkey - Turkish Red */
+body[data-instance="TUR"] .dive-button-primary {
+    background: linear-gradient(135deg, #e30a17 0%, #b80813 100%);
+    box-shadow: 0 10px 15px -3px rgba(227, 10, 23, 0.4);
+}
+body[data-instance="TUR"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(227, 10, 23, 0.5);
+}
+
+/* Czechia - Czech Blue */
+body[data-instance="CZE"] .dive-button-primary {
+    background: linear-gradient(135deg, #11457e 0%, #0d3662 100%);
+    box-shadow: 0 10px 15px -3px rgba(17, 69, 126, 0.4);
+}
+body[data-instance="CZE"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(17, 69, 126, 0.5);
+}
+
+/* Hungary - Hungarian Red */
+body[data-instance="HUN"] .dive-button-primary {
+    background: linear-gradient(135deg, #cd2a3e 0%, #a32232 100%);
+    box-shadow: 0 10px 15px -3px rgba(205, 42, 62, 0.4);
+}
+body[data-instance="HUN"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(205, 42, 62, 0.5);
+}
+
+/* Sweden - Swedish Blue */
+body[data-instance="SWE"] .dive-button-primary {
+    background: linear-gradient(135deg, #006aa7 0%, #005486 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 106, 167, 0.4);
+}
+body[data-instance="SWE"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 106, 167, 0.5);
+}
+
+/* Finland - Finnish Blue */
+body[data-instance="FIN"] .dive-button-primary {
+    background: linear-gradient(135deg, #002f6c 0%, #002354 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 47, 108, 0.4);
+}
+body[data-instance="FIN"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 47, 108, 0.5);
+}
+
+/* Romania - Romanian Blue */
+body[data-instance="ROU"] .dive-button-primary {
+    background: linear-gradient(135deg, #002b7f 0%, #002163 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 43, 127, 0.4);
+}
+body[data-instance="ROU"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 43, 127, 0.5);
+}
+
+/* Bulgaria - Bulgarian Green */
+body[data-instance="BGR"] .dive-button-primary {
+    background: linear-gradient(135deg, #00966e 0%, #007858 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 150, 110, 0.4);
+}
+body[data-instance="BGR"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 150, 110, 0.5);
+}
+
+/* Croatia - Croatian Red */
+body[data-instance="HRV"] .dive-button-primary {
+    background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+    box-shadow: 0 10px 15px -3px rgba(255, 0, 0, 0.4);
+}
+body[data-instance="HRV"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(255, 0, 0, 0.5);
+}
+
+/* Slovenia - Slovenian Blue */
+body[data-instance="SVN"] .dive-button-primary {
+    background: linear-gradient(135deg, #005da4 0%, #004a83 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 93, 164, 0.4);
+}
+body[data-instance="SVN"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 93, 164, 0.5);
+}
+
+/* Slovakia - Slovakian Blue */
+body[data-instance="SVK"] .dive-button-primary {
+    background: linear-gradient(135deg, #0b4ea2 0%, #093d80 100%);
+    box-shadow: 0 10px 15px -3px rgba(11, 78, 162, 0.4);
+}
+body[data-instance="SVK"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(11, 78, 162, 0.5);
+}
+
+/* Lithuania - Lithuanian Yellow-Green */
+body[data-instance="LTU"] .dive-button-primary {
+    background: linear-gradient(135deg, #006a44 0%, #005536 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 106, 68, 0.4);
+}
+body[data-instance="LTU"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 106, 68, 0.5);
+}
+
+/* Latvia - Latvian Maroon */
+body[data-instance="LVA"] .dive-button-primary {
+    background: linear-gradient(135deg, #9e3039 0%, #7e262e 100%);
+    box-shadow: 0 10px 15px -3px rgba(158, 48, 57, 0.4);
+}
+body[data-instance="LVA"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(158, 48, 57, 0.5);
+}
+
+/* Estonia - Estonian Blue */
+body[data-instance="EST"] .dive-button-primary {
+    background: linear-gradient(135deg, #0072ce 0%, #005ba5 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 114, 206, 0.4);
+}
+body[data-instance="EST"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 114, 206, 0.5);
+}
+
+/* Montenegro - Montenegrin Red */
+body[data-instance="MNE"] .dive-button-primary {
+    background: linear-gradient(135deg, #c40308 0%, #9c0206 100%);
+    box-shadow: 0 10px 15px -3px rgba(196, 3, 8, 0.4);
+}
+body[data-instance="MNE"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(196, 3, 8, 0.5);
+}
+
+/* North Macedonia - Macedonian Red */
+body[data-instance="MKD"] .dive-button-primary {
+    background: linear-gradient(135deg, #d20000 0%, #a80000 100%);
+    box-shadow: 0 10px 15px -3px rgba(210, 0, 0, 0.4);
+}
+body[data-instance="MKD"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(210, 0, 0, 0.5);
+}
+
+/* Iceland - Icelandic Blue */
+body[data-instance="ISL"] .dive-button-primary {
+    background: linear-gradient(135deg, #02529c 0%, #01417c 100%);
+    box-shadow: 0 10px 15px -3px rgba(2, 82, 156, 0.4);
+}
+body[data-instance="ISL"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(2, 82, 156, 0.5);
+}
+
+/* Luxembourg - Luxembourgish Blue */
+body[data-instance="LUX"] .dive-button-primary {
+    background: linear-gradient(135deg, #00a1de 0%, #0081b2 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 161, 222, 0.4);
+}
+body[data-instance="LUX"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 161, 222, 0.5);
+}
+
+/* Australia - Australian Blue */
+body[data-instance="AUS"] .dive-button-primary {
+    background: linear-gradient(135deg, #00008b 0%, #00006e 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 139, 0.4);
+}
+body[data-instance="AUS"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 139, 0.5);
+}
+
+/* New Zealand - NZ Blue */
+body[data-instance="NZL"] .dive-button-primary {
+    background: linear-gradient(135deg, #00247d 0%, #001c62 100%);
+    box-shadow: 0 10px 15px -3px rgba(0, 36, 125, 0.4);
+}
+body[data-instance="NZL"] .dive-button-primary:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 36, 125, 0.5);
+}
+
 /* ============================================
    Social Providers (IdP Brokers)
    ============================================ */
@@ -1136,6 +1361,42 @@ body[data-instance="POL"] .dive-button-primary:hover {
 .dive-trust-steps strong {
     color: #a78bfa;
 }
+
+/* Country-Specific Trust Steps Accent Colors */
+body[data-instance="USA"] .dive-trust-steps strong { color: #60a5fa; } /* Blue */
+body[data-instance="FRA"] .dive-trust-steps strong { color: #60a5fa; } /* Bleu */
+body[data-instance="DEU"] .dive-trust-steps strong { color: #fcd34d; } /* Gold */
+body[data-instance="GBR"] .dive-trust-steps strong { color: #f472b6; } /* Royal Pink */
+body[data-instance="CAN"] .dive-trust-steps strong { color: #f87171; } /* Maple Red */
+body[data-instance="ESP"] .dive-trust-steps strong { color: #fcd34d; } /* Spanish Gold */
+body[data-instance="ITA"] .dive-trust-steps strong { color: #4ade80; } /* Italian Green */
+body[data-instance="NLD"] .dive-trust-steps strong { color: #fb923c; } /* Dutch Orange */
+body[data-instance="POL"] .dive-trust-steps strong { color: #f87171; } /* Polish Red */
+body[data-instance="NOR"] .dive-trust-steps strong { color: #60a5fa; } /* Norwegian Blue */
+body[data-instance="DNK"] .dive-trust-steps strong { color: #f87171; } /* Danish Red */
+body[data-instance="BEL"] .dive-trust-steps strong { color: #fcd34d; } /* Belgian Gold */
+body[data-instance="ALB"] .dive-trust-steps strong { color: #f87171; } /* Albanian Red */
+body[data-instance="PRT"] .dive-trust-steps strong { color: #4ade80; } /* Portuguese Green */
+body[data-instance="GRC"] .dive-trust-steps strong { color: #60a5fa; } /* Greek Blue */
+body[data-instance="TUR"] .dive-trust-steps strong { color: #f87171; } /* Turkish Red */
+body[data-instance="CZE"] .dive-trust-steps strong { color: #60a5fa; } /* Czech Blue */
+body[data-instance="HUN"] .dive-trust-steps strong { color: #4ade80; } /* Hungarian Green */
+body[data-instance="SWE"] .dive-trust-steps strong { color: #fcd34d; } /* Swedish Yellow */
+body[data-instance="FIN"] .dive-trust-steps strong { color: #60a5fa; } /* Finnish Blue */
+body[data-instance="ROU"] .dive-trust-steps strong { color: #fcd34d; } /* Romanian Yellow */
+body[data-instance="BGR"] .dive-trust-steps strong { color: #4ade80; } /* Bulgarian Green */
+body[data-instance="HRV"] .dive-trust-steps strong { color: #f87171; } /* Croatian Red */
+body[data-instance="SVN"] .dive-trust-steps strong { color: #60a5fa; } /* Slovenian Blue */
+body[data-instance="SVK"] .dive-trust-steps strong { color: #60a5fa; } /* Slovakian Blue */
+body[data-instance="LTU"] .dive-trust-steps strong { color: #fcd34d; } /* Lithuanian Yellow */
+body[data-instance="LVA"] .dive-trust-steps strong { color: #f87171; } /* Latvian Maroon */
+body[data-instance="EST"] .dive-trust-steps strong { color: #60a5fa; } /* Estonian Blue */
+body[data-instance="MNE"] .dive-trust-steps strong { color: #fcd34d; } /* Montenegrin Gold */
+body[data-instance="MKD"] .dive-trust-steps strong { color: #fcd34d; } /* Macedonian Yellow */
+body[data-instance="ISL"] .dive-trust-steps strong { color: #60a5fa; } /* Icelandic Blue */
+body[data-instance="LUX"] .dive-trust-steps strong { color: #38bdf8; } /* Luxembourg Light Blue */
+body[data-instance="AUS"] .dive-trust-steps strong { color: #60a5fa; } /* Australian Blue */
+body[data-instance="NZL"] .dive-trust-steps strong { color: #60a5fa; } /* NZ Blue */
 
 /* Level 2: Attribute List */
 .dive-attribute-list {
