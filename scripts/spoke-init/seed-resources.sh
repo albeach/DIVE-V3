@@ -276,14 +276,21 @@ sed -i.bak "s/CODE_UPPER/${CODE_UPPER}/g" "$MONGO_SCRIPT"
 sed -i.bak "s/RESOURCE_COUNT/${RESOURCE_COUNT}/g" "$MONGO_SCRIPT"
 rm -f "${MONGO_SCRIPT}.bak"
 
-# Get MongoDB credentials from .env
+# Get MongoDB credentials - auto-detect from container if not set
 MONGO_USER="${MONGO_USER:-admin}"
 MONGO_PASS="${MONGO_PASSWORD:-}"
+
+# Auto-detect from container environment if not provided
+if [[ -z "$MONGO_PASS" ]]; then
+    log_info "Detecting MongoDB password from container..."
+    MONGO_PASS=$(docker exec "$MONGODB_CONTAINER" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
+fi
 
 if [[ -z "$MONGO_PASS" ]]; then
     log_warn "MONGO_PASSWORD not set, trying without auth"
     docker exec -i "$MONGODB_CONTAINER" mongosh --quiet "${DB_NAME}" < "$MONGO_SCRIPT" 2>/dev/null
 else
+    log_info "Using authenticated MongoDB connection"
     # Execute with authentication
     docker exec -i "$MONGODB_CONTAINER" mongosh --quiet \
         "mongodb://${MONGO_USER}:${MONGO_PASS}@localhost:27017/${DB_NAME}?authSource=admin" < "$MONGO_SCRIPT" 2>/dev/null
@@ -298,6 +305,11 @@ log_success "Resources seeded"
 # Verify
 # =============================================================================
 log_step "Verifying seeded resources..."
+
+# Re-detect password if needed for verification
+if [[ -z "$MONGO_PASS" ]]; then
+    MONGO_PASS=$(docker exec "$MONGODB_CONTAINER" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
+fi
 
 if [[ -z "$MONGO_PASS" ]]; then
     COUNT=$(docker exec "$MONGODB_CONTAINER" mongosh --quiet --eval "
