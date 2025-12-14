@@ -1,14 +1,16 @@
-#!/bin/bash
+#!/usr/local/bin/bash
 # =============================================================================
 # DIVE V3 - Dynamic Keycloak Theme Generator
 # =============================================================================
-# Generates a Keycloak theme for any country based on 3-letter ISO code
-# Usage: ./scripts/generate-spoke-theme.sh <COUNTRY_CODE> [COUNTRY_NAME]
+# Generates a Keycloak theme for any NATO country based on 3-letter ISO code
+# Uses centralized NATO countries database for consistent metadata
+#
+# Usage: ./scripts/generate-spoke-theme.sh <COUNTRY_CODE> [--all] [--force]
 #
 # Examples:
-#   ./scripts/generate-spoke-theme.sh NZL "New Zealand"
-#   ./scripts/generate-spoke-theme.sh AUS "Australia"
-#   ./scripts/generate-spoke-theme.sh JPN "Japan"
+#   ./scripts/generate-spoke-theme.sh GBR          # Generate GBR theme
+#   ./scripts/generate-spoke-theme.sh --all        # Generate all 32 NATO themes
+#   ./scripts/generate-spoke-theme.sh ALB --force  # Regenerate even if exists
 # =============================================================================
 
 set -e
@@ -18,130 +20,258 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 THEMES_DIR="$PROJECT_ROOT/keycloak/themes"
 BASE_THEME="dive-v3"
 
-# Country code (required) - compatible with bash 3.x
-COUNTRY_CODE="$(echo "$1" | tr '[:lower:]' '[:upper:]')"
-COUNTRY_CODE_LOWER="$(echo "$COUNTRY_CODE" | tr '[:upper:]' '[:lower:]')"
+# Load NATO countries database
+source "$SCRIPT_DIR/nato-countries.sh"
 
-# Country name (optional, will lookup if not provided)
-COUNTRY_NAME="${2:-}"
+# Parse arguments
+FORCE=false
+ALL=false
+COUNTRY_CODE=""
 
-if [ -z "$COUNTRY_CODE" ]; then
-    echo "❌ Usage: $0 <COUNTRY_CODE> [COUNTRY_NAME]"
-    echo "   Example: $0 NZL 'New Zealand'"
-    exit 1
-fi
-
-# =============================================================================
-# COUNTRY DATA - Colors based on national flags
-# Format: PRIMARY|SECONDARY|ACCENT|NAME|FLAG
-# =============================================================================
-get_country_data() {
-    local code="$1"
-    case "$code" in
-        # Five Eyes
-        USA) echo "#3C3B6E|#B22234|#ffffff|United States|🇺🇸" ;;
-        GBR) echo "#012169|#C8102E|#ffffff|United Kingdom|🇬🇧" ;;
-        CAN) echo "#FF0000|#ffffff|#FF0000|Canada|🇨🇦" ;;
-        AUS) echo "#00008B|#FF0000|#ffffff|Australia|🇦🇺" ;;
-        NZL) echo "#00247D|#CC142B|#ffffff|New Zealand|🇳🇿" ;;
-        
-        # NATO Major
-        FRA) echo "#002395|#ED2939|#ffffff|France|🇫🇷" ;;
-        DEU) echo "#000000|#DD0000|#FFCC00|Germany|🇩🇪" ;;
-        ITA) echo "#009246|#CE2B37|#ffffff|Italy|🇮🇹" ;;
-        ESP) echo "#AA151B|#F1BF00|#ffffff|Spain|🇪🇸" ;;
-        POL) echo "#DC143C|#ffffff|#DC143C|Poland|🇵🇱" ;;
-        NLD) echo "#21468B|#AE1C28|#ffffff|Netherlands|🇳🇱" ;;
-        
-        # Asia-Pacific
-        JPN) echo "#BC002D|#ffffff|#BC002D|Japan|🇯🇵" ;;
-        KOR) echo "#003478|#C60C30|#ffffff|South Korea|🇰🇷" ;;
-        SGP) echo "#ED2939|#ffffff|#ED2939|Singapore|🇸🇬" ;;
-        
-        # Nordic
-        NOR) echo "#BA0C2F|#00205B|#ffffff|Norway|🇳🇴" ;;
-        SWE) echo "#006AA7|#FECC02|#FECC02|Sweden|🇸🇪" ;;
-        DNK) echo "#C8102E|#ffffff|#C8102E|Denmark|🇩🇰" ;;
-        FIN) echo "#003580|#ffffff|#003580|Finland|🇫🇮" ;;
-        
-        # Others
-        BEL) echo "#000000|#FFD90F|#ED2939|Belgium|🇧🇪" ;;
-        PRT) echo "#006600|#FF0000|#FFE100|Portugal|🇵🇹" ;;
-        GRC) echo "#0D5EAF|#ffffff|#0D5EAF|Greece|🇬🇷" ;;
-        TUR) echo "#E30A17|#ffffff|#E30A17|Turkey|🇹🇷" ;;
-        CZE) echo "#11457E|#D7141A|#ffffff|Czech Republic|🇨🇿" ;;
-        HUN) echo "#436F4D|#CD2A3E|#ffffff|Hungary|🇭🇺" ;;
-        ROU) echo "#002B7F|#FCD116|#CE1126|Romania|🇷🇴" ;;
-        BGR) echo "#00966E|#D62612|#ffffff|Bulgaria|🇧🇬" ;;
-        
-        # Default
-        *) echo "" ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --all|-a)
+            ALL=true
+            shift
+            ;;
+        --force|-f)
+            FORCE=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 <COUNTRY_CODE> [--all] [--force]"
+            echo ""
+            echo "Options:"
+            echo "  --all, -a     Generate themes for all 32 NATO countries"
+            echo "  --force, -f   Regenerate theme even if it exists"
+            echo "  --help, -h    Show this help"
+            echo ""
+            echo "Examples:"
+            echo "  $0 GBR          Generate UK theme"
+            echo "  $0 --all        Generate all 32 NATO themes"
+            echo "  $0 POL --force  Regenerate Poland theme"
+            exit 0
+            ;;
+        *)
+            COUNTRY_CODE="${1^^}"
+            shift
+            ;;
     esac
-}
+done
 
 # =============================================================================
-# Lookup or use provided country data
+# Generate theme for a single country
 # =============================================================================
-COUNTRY_INFO="$(get_country_data "$COUNTRY_CODE")"
-
-if [ -n "$COUNTRY_INFO" ]; then
-    PRIMARY="$(echo "$COUNTRY_INFO" | cut -d'|' -f1)"
-    SECONDARY="$(echo "$COUNTRY_INFO" | cut -d'|' -f2)"
-    ACCENT="$(echo "$COUNTRY_INFO" | cut -d'|' -f3)"
-    NAME="$(echo "$COUNTRY_INFO" | cut -d'|' -f4)"
-    FLAG="$(echo "$COUNTRY_INFO" | cut -d'|' -f5)"
-    COUNTRY_NAME="${COUNTRY_NAME:-$NAME}"
-else
-    # Default colors for unknown countries
-    PRIMARY="#1a365d"
-    SECONDARY="#c53030"
-    ACCENT="#ffffff"
-    FLAG="🌐"
-    if [ -z "$COUNTRY_NAME" ]; then
-        echo "⚠️  Unknown country code: $COUNTRY_CODE"
-        echo "   Please provide country name as second argument"
-        echo "   Using default colors (blue/red)"
-        COUNTRY_NAME="$COUNTRY_CODE"
+generate_theme() {
+    local code="$1"
+    local code_lower="${code,,}"
+    
+    # Validate NATO country
+    if ! is_nato_country "$code"; then
+        if is_partner_nation "$code"; then
+            echo "⚠️  $code is a partner nation (not NATO member). Using partner data..."
+        else
+            echo "❌ Unknown country code: $code"
+            echo "   Run './dive spoke list-countries' to see valid codes"
+            return 1
+        fi
     fi
-fi
+    
+    # Get country data from NATO database
+    local name=$(get_country_name "$code")
+    local flag=$(get_country_flag "$code")
+    local primary=$(get_country_primary_color "$code")
+    local secondary=$(get_country_secondary_color "$code")
+    local accent="#ffffff"  # White accent works for most flags
+    
+    # Handle partner nations
+    if is_partner_nation "$code"; then
+        local partner_data="${PARTNER_NATIONS[$code]}"
+        name=$(echo "$partner_data" | cut -d'|' -f1)
+        flag=$(echo "$partner_data" | cut -d'|' -f2)
+        primary=$(echo "$partner_data" | cut -d'|' -f3)
+        secondary=$(echo "$partner_data" | cut -d'|' -f4)
+    fi
+    
+    local theme_name="dive-v3-${code_lower}"
+    local theme_dir="$THEMES_DIR/$theme_name"
+    
+    # Check if theme exists
+    if [ -d "$theme_dir" ] && [ "$FORCE" != true ]; then
+        echo "  ⏭️  $code: Theme exists (use --force to regenerate)"
+        return 0
+    fi
 
-THEME_NAME="dive-v3-${COUNTRY_CODE_LOWER}"
-THEME_DIR="$THEMES_DIR/$THEME_NAME"
-
-echo "═══════════════════════════════════════════════════════════════════════"
-echo "  Generating Keycloak Theme: $THEME_NAME"
-echo "═══════════════════════════════════════════════════════════════════════"
-echo "  Country: $COUNTRY_NAME ($COUNTRY_CODE)"
-echo "  Flag: $FLAG"
-echo "  Primary: $PRIMARY"
-echo "  Secondary: $SECONDARY"
-echo "  Accent: $ACCENT"
-echo "═══════════════════════════════════════════════════════════════════════"
-
-# =============================================================================
-# Create theme directory structure
-# =============================================================================
-mkdir -p "$THEME_DIR/login/messages"
-mkdir -p "$THEME_DIR/login/resources/css"
-mkdir -p "$THEME_DIR/login/resources/img"
-
-# =============================================================================
-# Generate theme.properties
-# =============================================================================
-cat > "$THEME_DIR/login/theme.properties" << EOF
-# $COUNTRY_NAME Theme - Auto-generated
+    echo "  ✨ Generating: $name ($code) $flag"
+    
+    # Create theme directory structure
+    mkdir -p "$theme_dir/login/messages"
+    mkdir -p "$theme_dir/login/resources/css"
+    mkdir -p "$theme_dir/login/resources/img"
+    
+    # Convert hex to RGB for rgba() usage
+    local primary_rgb=$(hex_to_rgb "$primary")
+    local secondary_rgb=$(hex_to_rgb "$secondary")
+    
+    # Generate theme.properties
+    cat > "$theme_dir/login/theme.properties" << PROPS
+# $name Theme - Auto-generated from NATO countries database
+# Do not edit manually - run: ./scripts/generate-spoke-theme.sh $code --force
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-# Country Code: $COUNTRY_CODE
 
 parent=dive-v3
-backgroundImage=background-${COUNTRY_CODE_LOWER}.jpg
-primaryColor=$PRIMARY
-secondaryColor=$SECONDARY
-accentColor=$ACCENT
+backgroundImage=background-${code_lower}.jpg
+primaryColor=$primary
+secondaryColor=$secondary
+accentColor=$accent
 locales=en
 
 styles=css/custom.css
-EOF
+PROPS
+
+    # Generate custom.css
+    cat > "$theme_dir/login/resources/css/custom.css" << CSS
+/**
+ * $name Keycloak Theme
+ * Auto-generated from NATO countries database
+ * Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+ * 
+ * Primary: $primary
+ * Secondary: $secondary
+ * Accent: $accent
+ */
+
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: $primary;
+    --instance-secondary: $secondary;
+    --instance-accent: $accent;
+    --instance-primary-rgb: $primary_rgb;
+    --instance-secondary-rgb: $secondary_rgb;
+}
+
+/* Background gradient */
+.dive-background {
+    background: linear-gradient(135deg, $primary 0%, $secondary 100%);
+}
+
+/* Primary button styling */
+.dive-button-primary {
+    background: linear-gradient(135deg, $primary 0%, $secondary 100%);
+    transition: all 0.3s ease;
+}
+
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba($primary_rgb, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
+.dive-header h1 {
+    color: $primary;
+}
+
+.dive-header .logo {
+    border-color: $primary;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: $primary;
+    box-shadow: 0 0 0 3px rgba($primary_rgb, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: $primary;
+    background: rgba($primary_rgb, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: $primary;
+    box-shadow: 0 0 0 3px rgba($primary_rgb, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: $primary;
+}
+
+.dive-link:hover {
+    color: $secondary;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: $accent;
+}
+
+.dive-accent-bg {
+    background-color: $accent;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba($primary_rgb, 0.1);
+    border: 1px solid $primary;
+    color: $primary;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: $primary;
+    background: rgba($primary_rgb, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: $primary;
+    box-shadow: 0 0 0 3px rgba($primary_rgb, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, $primary 0%, $secondary 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: $primary;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: $primary;
+}
+
+.dive-footer a:hover {
+    color: $secondary;
+}
+CSS
+
+    # Copy messages from base theme or GBR (English)
+    if [ -f "$THEMES_DIR/dive-v3-gbr/login/messages/messages_en.properties" ]; then
+        cp "$THEMES_DIR/dive-v3-gbr/login/messages/messages_en.properties" \
+           "$theme_dir/login/messages/"
+    elif [ -f "$THEMES_DIR/$BASE_THEME/login/messages/messages_en.properties" ]; then
+        cp "$THEMES_DIR/$BASE_THEME/login/messages/messages_en.properties" \
+           "$theme_dir/login/messages/"
+    fi
+    
+    # Create placeholder background (copy from GBR if exists, otherwise from base)
+    local bg_src=""
+    if [ -f "$THEMES_DIR/dive-v3-gbr/login/resources/img/background-gbr.jpg" ]; then
+        bg_src="$THEMES_DIR/dive-v3-gbr/login/resources/img/background-gbr.jpg"
+    elif [ -f "$THEMES_DIR/$BASE_THEME/login/resources/img/background.jpg" ]; then
+        bg_src="$THEMES_DIR/$BASE_THEME/login/resources/img/background.jpg"
+    fi
+    
+    if [ -n "$bg_src" ]; then
+        cp "$bg_src" "$theme_dir/login/resources/img/background-${code_lower}.jpg"
+    fi
+    
+    echo "     ✓ Created: $theme_dir"
+    return 0
+}
 
 # =============================================================================
 # Convert hex to RGB for rgba() usage
@@ -154,155 +284,49 @@ hex_to_rgb() {
     echo "$r, $g, $b"
 }
 
-PRIMARY_RGB="$(hex_to_rgb "$PRIMARY")"
-SECONDARY_RGB="$(hex_to_rgb "$SECONDARY")"
-
 # =============================================================================
-# Generate custom.css
+# Main execution
 # =============================================================================
-cat > "$THEME_DIR/login/resources/css/custom.css" << EOF
-/**
- * $COUNTRY_NAME Keycloak Theme
- * Auto-generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
- * 
- * Primary: $PRIMARY
- * Secondary: $SECONDARY
- * Accent: $ACCENT
- */
 
-/* CSS Variables for this instance */
-:root {
-    --instance-primary: $PRIMARY;
-    --instance-secondary: $SECONDARY;
-    --instance-accent: $ACCENT;
-    --instance-primary-rgb: $PRIMARY_RGB;
-    --instance-secondary-rgb: $SECONDARY_RGB;
-}
-
-/* Background gradient */
-.dive-background {
-    background: linear-gradient(135deg, $PRIMARY 0%, $SECONDARY 100%);
-}
-
-/* Primary button styling */
-.dive-button-primary {
-    background: linear-gradient(135deg, $PRIMARY 0%, $SECONDARY 100%);
-    transition: all 0.3s ease;
-}
-
-.dive-button-primary:hover {
-    box-shadow: 0 8px 25px rgba($PRIMARY_RGB, 0.4);
-    transform: translateY(-2px);
-}
-
-/* Header styling */
-.dive-header h1 {
-    color: $PRIMARY;
-}
-
-.dive-header .logo {
-    border-color: $PRIMARY;
-}
-
-/* Input focus states */
-.dive-input:focus {
-    border-color: $PRIMARY;
-    box-shadow: 0 0 0 3px rgba($PRIMARY_RGB, 0.15);
-}
-
-/* Social/IdP link styling */
-.dive-social-link:hover {
-    border-color: $PRIMARY;
-    background: rgba($PRIMARY_RGB, 0.05);
-}
-
-.dive-social-link:focus {
-    border-color: $PRIMARY;
-    box-shadow: 0 0 0 3px rgba($PRIMARY_RGB, 0.15);
-}
-
-/* Links */
-.dive-link {
-    color: $PRIMARY;
-}
-
-.dive-link:hover {
-    color: $SECONDARY;
-}
-
-/* Accent elements */
-.dive-accent {
-    color: $ACCENT;
-}
-
-.dive-accent-bg {
-    background-color: $ACCENT;
-}
-
-/* Instance badge */
-.dive-instance-badge {
-    background: rgba($PRIMARY_RGB, 0.1);
-    border: 1px solid $PRIMARY;
-    color: $PRIMARY;
-}
-
-/* Alert/notification styling */
-.dive-alert-info {
-    border-left-color: $PRIMARY;
-    background: rgba($PRIMARY_RGB, 0.05);
-}
-
-/* OTP/WebAuthn specific styling */
-.otp-input:focus {
-    border-color: $PRIMARY;
-    box-shadow: 0 0 0 3px rgba($PRIMARY_RGB, 0.15);
-}
-
-.webauthn-button {
-    background: linear-gradient(135deg, $PRIMARY 0%, $SECONDARY 100%);
-}
-
-/* Passkey/WebAuthn icon coloring */
-.passkey-icon {
-    color: $PRIMARY;
-}
-
-/* Footer styling */
-.dive-footer a {
-    color: $PRIMARY;
-}
-
-.dive-footer a:hover {
-    color: $SECONDARY;
-}
-EOF
-
-# =============================================================================
-# Copy messages from base theme or GBR (English)
-# =============================================================================
-if [ -f "$THEMES_DIR/dive-v3-gbr/login/messages/messages_en.properties" ]; then
-    cp "$THEMES_DIR/dive-v3-gbr/login/messages/messages_en.properties" \
-       "$THEME_DIR/login/messages/"
-elif [ -f "$THEMES_DIR/$BASE_THEME/login/messages/messages_en.properties" ]; then
-    cp "$THEMES_DIR/$BASE_THEME/login/messages/messages_en.properties" \
-       "$THEME_DIR/login/messages/"
+if [ "$ALL" = true ]; then
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo "  Generating Keycloak Themes for All 32 NATO Countries"
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo ""
+    
+    generated=0
+    skipped=0
+    failed=0
+    
+    for code in $(echo "${!NATO_COUNTRIES[@]}" | tr ' ' '\n' | sort); do
+        generate_theme "$code" && generated=$((generated + 1)) || failed=$((failed + 1))
+    done
+    
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo "  Summary: Processed ${#NATO_COUNTRIES[@]} countries"
+    echo "  Generated/Updated: $generated themes"
+    if [ $failed -gt 0 ]; then
+        echo "  Failed: $failed"
+    fi
+    echo "═══════════════════════════════════════════════════════════════════════"
+    
+elif [ -n "$COUNTRY_CODE" ]; then
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo "  Generating Keycloak Theme: dive-v3-${COUNTRY_CODE,,}"
+    echo "═══════════════════════════════════════════════════════════════════════"
+    echo ""
+    
+    if generate_theme "$COUNTRY_CODE"; then
+        echo ""
+        echo "To apply the theme to a realm:"
+        echo "  kcadm.sh update realms/dive-v3-${COUNTRY_CODE,,} -s loginTheme=dive-v3-${COUNTRY_CODE,,}"
+        echo ""
+        echo "To add custom background image:"
+        echo "  cp your-image.jpg $THEMES_DIR/dive-v3-${COUNTRY_CODE,,}/login/resources/img/background-${COUNTRY_CODE,,}.jpg"
+    fi
+else
+    echo "❌ Usage: $0 <COUNTRY_CODE> [--all] [--force]"
+    echo "   Run '$0 --help' for more options"
+    exit 1
 fi
-
-# =============================================================================
-# Create placeholder background image (copy from GBR if exists)
-# =============================================================================
-if [ -f "$THEMES_DIR/dive-v3-gbr/login/resources/img/background-gbr.jpg" ]; then
-    cp "$THEMES_DIR/dive-v3-gbr/login/resources/img/background-gbr.jpg" \
-       "$THEME_DIR/login/resources/img/background-${COUNTRY_CODE_LOWER}.jpg"
-    echo "📷 Copied placeholder background image"
-fi
-
-echo ""
-echo "✅ Theme generated: $THEME_DIR"
-echo ""
-echo "To apply the theme to a realm:"
-echo "  kcadm.sh update realms/dive-v3-broker -s loginTheme=$THEME_NAME"
-echo ""
-echo "To add custom background image:"
-echo "  cp your-image.jpg $THEME_DIR/login/resources/img/background-${COUNTRY_CODE_LOWER}.jpg"
-echo ""

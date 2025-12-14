@@ -1,30 +1,30 @@
 /**
  * Poland Keycloak Theme
- * Auto-generated from instance.json
- * Generated: 2025-12-01T01:00:00Z
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:45Z
  * 
  * Primary: #DC143C
  * Secondary: #FFFFFF
- * Accent: #DC143C
+ * Accent: #ffffff
  */
 
 /* CSS Variables for this instance */
 :root {
     --instance-primary: #DC143C;
     --instance-secondary: #FFFFFF;
-    --instance-accent: #DC143C;
+    --instance-accent: #ffffff;
     --instance-primary-rgb: 220, 20, 60;
     --instance-secondary-rgb: 255, 255, 255;
 }
 
 /* Background gradient */
 .dive-background {
-    background: linear-gradient(135deg, #FFFFFF 0%, #DC143C 100%);
+    background: linear-gradient(135deg, #DC143C 0%, #FFFFFF 100%);
 }
 
 /* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #DC143C 0%, #b01030 100%);
+    background: linear-gradient(135deg, #DC143C 0%, #FFFFFF 100%);
     transition: all 0.3s ease;
 }
 
@@ -65,16 +65,16 @@
 }
 
 .dive-link:hover {
-    color: #b01030;
+    color: #FFFFFF;
 }
 
 /* Accent elements */
 .dive-accent {
-    color: #DC143C;
+    color: #ffffff;
 }
 
 .dive-accent-bg {
-    background-color: #DC143C;
+    background-color: #ffffff;
 }
 
 /* Instance badge */
@@ -97,7 +97,7 @@
 }
 
 .webauthn-button {
-    background: linear-gradient(135deg, #DC143C 0%, #b01030 100%);
+    background: linear-gradient(135deg, #DC143C 0%, #FFFFFF 100%);
 }
 
 /* Passkey/WebAuthn icon coloring */
@@ -111,5 +111,5 @@
 }
 
 .dive-footer a:hover {
-    color: #b01030;
+    color: #FFFFFF;
 }

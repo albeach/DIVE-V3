@@ -1,0 +1,115 @@
+/**
+ * Norway Keycloak Theme
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:58:33Z
+ * 
+ * Primary: #BA0C2F
+ * Secondary: #00205B
+ * Accent: #ffffff
+ */
+
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #BA0C2F;
+    --instance-secondary: #00205B;
+    --instance-accent: #ffffff;
+    --instance-primary-rgb: 186, 12, 47;
+    --instance-secondary-rgb: 0, 32, 91;
+}
+
+/* Background gradient */
+.dive-background {
+    background: linear-gradient(135deg, #BA0C2F 0%, #00205B 100%);
+}
+
+/* Primary button styling */
+.dive-button-primary {
+    background: linear-gradient(135deg, #BA0C2F 0%, #00205B 100%);
+    transition: all 0.3s ease;
+}
+
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(186, 12, 47, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
+.dive-header h1 {
+    color: #BA0C2F;
+}
+
+.dive-header .logo {
+    border-color: #BA0C2F;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: #BA0C2F;
+    box-shadow: 0 0 0 3px rgba(186, 12, 47, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: #BA0C2F;
+    background: rgba(186, 12, 47, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: #BA0C2F;
+    box-shadow: 0 0 0 3px rgba(186, 12, 47, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #BA0C2F;
+}
+
+.dive-link:hover {
+    color: #00205B;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #ffffff;
+}
+
+.dive-accent-bg {
+    background-color: #ffffff;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(186, 12, 47, 0.1);
+    border: 1px solid #BA0C2F;
+    color: #BA0C2F;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #BA0C2F;
+    background: rgba(186, 12, 47, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #BA0C2F;
+    box-shadow: 0 0 0 3px rgba(186, 12, 47, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #BA0C2F 0%, #00205B 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #BA0C2F;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #BA0C2F;
+}
+
+.dive-footer a:hover {
+    color: #00205B;
+}

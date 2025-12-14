@@ -1,0 +1,115 @@
+/**
+ * Lithuania Keycloak Theme
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:44Z
+ * 
+ * Primary: #FDB913
+ * Secondary: #006A44
+ * Accent: #ffffff
+ */
+
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #FDB913;
+    --instance-secondary: #006A44;
+    --instance-accent: #ffffff;
+    --instance-primary-rgb: 253, 185, 19;
+    --instance-secondary-rgb: 0, 106, 68;
+}
+
+/* Background gradient */
+.dive-background {
+    background: linear-gradient(135deg, #FDB913 0%, #006A44 100%);
+}
+
+/* Primary button styling */
+.dive-button-primary {
+    background: linear-gradient(135deg, #FDB913 0%, #006A44 100%);
+    transition: all 0.3s ease;
+}
+
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(253, 185, 19, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
+.dive-header h1 {
+    color: #FDB913;
+}
+
+.dive-header .logo {
+    border-color: #FDB913;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: #FDB913;
+    box-shadow: 0 0 0 3px rgba(253, 185, 19, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: #FDB913;
+    background: rgba(253, 185, 19, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: #FDB913;
+    box-shadow: 0 0 0 3px rgba(253, 185, 19, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #FDB913;
+}
+
+.dive-link:hover {
+    color: #006A44;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #ffffff;
+}
+
+.dive-accent-bg {
+    background-color: #ffffff;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(253, 185, 19, 0.1);
+    border: 1px solid #FDB913;
+    color: #FDB913;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #FDB913;
+    background: rgba(253, 185, 19, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #FDB913;
+    box-shadow: 0 0 0 3px rgba(253, 185, 19, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #FDB913 0%, #006A44 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #FDB913;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #FDB913;
+}
+
+.dive-footer a:hover {
+    color: #006A44;
+}

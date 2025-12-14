@@ -1,0 +1,51 @@
+{
+  "identity": {
+    "spokeId": "spoke-bel-a7551553",
+    "instanceCode": "BEL",
+    "name": "Belgium",
+    "description": "DIVE V3 Spoke Instance for Belgium",
+    "country": "BEL",
+    "organizationType": "government",
+    "contactEmail": ""
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3002",
+    "apiUrl": "https://localhost:4002",
+    "idpUrl": "https://localhost:8445",
+    "kasUrl": "https://localhost:9002"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bel/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bel/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bel/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bel/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "unregistered",
+    "requestedScopes": [
+      "policy:base",
+      "policy:bel",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ]
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bel/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bel/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-14T00:47:29Z",
+    "lastModified": "2025-12-14T00:47:29Z",
+    "configHash": ""
+  }
+}
