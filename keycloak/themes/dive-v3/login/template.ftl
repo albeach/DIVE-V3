@@ -632,8 +632,8 @@
                         </div>
                     </details>
                     
-                    <!-- LEVEL 2: "What gets shared?" (Expandable) -->
-                    <details class="dive-microprogression dive-level-2">
+                    <!-- LEVEL 2: "What gets shared?" (Auto-expanded) -->
+                    <details class="dive-microprogression dive-level-2" open>
                         <summary class="dive-expand-trigger">
                             ${msg("dive.trust.whatShared")}
                             <svg class="dive-expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
