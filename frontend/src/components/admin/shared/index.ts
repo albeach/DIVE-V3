@@ -59,3 +59,27 @@ export {
   SessionBar,
 } from './session-countdown';
 
+// Bulk Operations
+export {
+  BulkOperationsToolbar,
+  commonBulkActions,
+  useBulkSelection,
+  type BulkAction,
+  type BulkOperationResult,
+} from './bulk-operations';
+
+// Virtual Table
+export {
+  VirtualTable,
+  type VirtualColumn,
+} from './virtual-table';
+
+// Pagination
+export {
+  Pagination,
+  usePagination,
+  useServerPagination,
+  type PaginationProps,
+  type PaginationState,
+} from './pagination';
+
