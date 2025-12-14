@@ -73,6 +73,28 @@ Terraform modules that are not currently used by any active configuration:
 
 These modules may be useful for future enhancements but are not required for the current pilot.
 
+### orphaned-workspaces/
+
+Legacy Terraform workspace state directories from the old root-level configuration:
+
+- `fra/terraform.tfstate` - France deployment state (serial ~84)
+- `deu/terraform.tfstate` - Germany deployment state
+
+These workspaces were created using the old monolithic `main.tf` at the terraform root.
+The resources they managed have been migrated to the modular `pilot/` and `spoke/` configurations.
+
+### State Migration Notes
+
+**IMPORTANT**: The archived `terraform.tfstate` file (serial 7736) represents the OLD
+root-level terraform configuration that managed the `dive-v3-broker` realm.
+
+The **current** `terraform/pilot/terraform.tfstate` (serial 3360) now manages the same
+realm using the modular `federated-instance` module. This represents a successful
+migration from monolithic to modular architecture.
+
+**Do NOT attempt to use the archived state files** - the resources are now managed
+by the active pilot/spoke configurations.
+
 ## DO NOT USE
 
 These archived configurations are **not maintained** and may contain:
