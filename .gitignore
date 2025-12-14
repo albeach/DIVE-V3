@@ -5,6 +5,7 @@
 # Root-level markdown files (local notes/status docs)
 /*.md
 !README.md
+!DIVE-V3-CLI-USER-GUIDE.md
 
 # Environment files
 .env
