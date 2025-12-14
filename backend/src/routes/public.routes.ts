@@ -78,6 +78,134 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
 });
 
 /**
+ * GET /api/idps/:alias/health
+ * Public endpoint to check IdP health status
+ * No authentication required - used by frontend to show status indicators
+ */
+router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<void> => {
+    const { alias } = req.params;
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+
+    try {
+        logger.debug('IdP health check', { requestId, alias });
+
+        // Get IdP configuration from Keycloak
+        const result = await keycloakAdminService.listIdentityProviders();
+        const idp = result.idps.find(p => p.alias === alias);
+
+        if (!idp) {
+            // IdP not found - could be disabled or doesn't exist
+            res.status(404).json({
+                success: false,
+                healthy: false,
+                alias,
+                status: 'not_found',
+                message: 'Identity provider not found'
+            });
+            return;
+        }
+
+        if (!idp.enabled) {
+            res.status(200).json({
+                success: true,
+                healthy: false,
+                degraded: false,
+                alias,
+                status: 'disabled',
+                message: 'Identity provider is disabled'
+            });
+            return;
+        }
+
+        // Try to reach the IdP's authorization endpoint
+        // Extract the issuer/base URL from the IdP config
+        const idpBaseUrl = idp.config?.authorizationUrl || 
+                          idp.config?.tokenUrl?.replace('/token', '') ||
+                          null;
+
+        if (idpBaseUrl) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+                
+                // Try to fetch the well-known config (lightweight health check)
+                const issuer = idpBaseUrl.replace(/\/protocol\/openid-connect.*$/, '');
+                const wellKnownUrl = `${issuer}/.well-known/openid-configuration`;
+                
+                const response = await fetch(wellKnownUrl, {
+                    method: 'GET',
+                    signal: controller.signal,
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    res.status(200).json({
+                        success: true,
+                        healthy: true,
+                        degraded: false,
+                        alias,
+                        displayName: idp.displayName,
+                        status: 'online',
+                        responseTime: 'fast'
+                    });
+                    return;
+                } else {
+                    res.status(200).json({
+                        success: true,
+                        healthy: false,
+                        degraded: true,
+                        alias,
+                        displayName: idp.displayName,
+                        status: 'degraded',
+                        message: `IdP returned ${response.status}`
+                    });
+                    return;
+                }
+            } catch (fetchError) {
+                // Network error or timeout
+                res.status(200).json({
+                    success: true,
+                    healthy: false,
+                    degraded: false,
+                    alias,
+                    displayName: idp.displayName,
+                    status: 'unreachable',
+                    message: 'IdP is not reachable'
+                });
+                return;
+            }
+        }
+
+        // If we can't determine the endpoint, assume healthy if enabled
+        res.status(200).json({
+            success: true,
+            healthy: true,
+            degraded: false,
+            alias,
+            displayName: idp.displayName,
+            status: 'assumed_online',
+            message: 'IdP is enabled (health check unavailable)'
+        });
+
+    } catch (error) {
+        logger.error('IdP health check failed', {
+            requestId,
+            alias,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(500).json({
+            success: false,
+            healthy: false,
+            alias,
+            status: 'error',
+            message: 'Health check failed'
+        });
+    }
+});
+
+/**
  * POST /api/public/sp-registration
  * Phase 4, Task 1.2: Self-Service SP Registration Portal
  * 
