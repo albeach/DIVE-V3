@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { auth } from '@/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,10 +12,18 @@ const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_U
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request });
+    const session = await auth();
     
-    if (!token) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const isAdmin = session.user.roles?.includes('super_admin') || 
+                   session.user.roles?.includes('admin') ||
+                   session.user.roles?.includes('dive-admin');
+    
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -25,12 +33,8 @@ export async function GET(request: NextRequest) {
       `${BACKEND_URL}/api/opal/transactions/export?format=${format}`,
       {
         headers: {
-          'Authorization': `Bearer ${token.accessToken}`,
+          'Authorization': `Bearer ${session.accessToken}`,
         },
-        ...(process.env.NODE_ENV !== 'production' && {
-          // @ts-ignore
-          agent: new (require('https').Agent)({ rejectUnauthorized: false }),
-        }),
       }
     );
 
@@ -59,4 +63,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

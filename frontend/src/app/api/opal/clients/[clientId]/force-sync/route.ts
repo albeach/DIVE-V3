@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { auth } from '@/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,10 +16,18 @@ interface RouteContext {
 
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    const token = await getToken({ req: request });
+    const session = await auth();
     
-    if (!token) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const isAdmin = session.user.roles?.includes('super_admin') || 
+                   session.user.roles?.includes('admin') ||
+                   session.user.roles?.includes('dive-admin');
+    
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { clientId } = await context.params;
@@ -29,13 +37,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token.accessToken}`,
+          'Authorization': `Bearer ${session.accessToken}`,
           'Content-Type': 'application/json',
         },
-        ...(process.env.NODE_ENV !== 'production' && {
-          // @ts-ignore
-          agent: new (require('https').Agent)({ rejectUnauthorized: false }),
-        }),
       }
     );
 
@@ -56,4 +60,3 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
   }
 }
-
