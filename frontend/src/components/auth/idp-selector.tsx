@@ -24,6 +24,8 @@ interface IdPOption {
   enabled: boolean;
 }
 
+type IdPStatus = 'checking' | 'active' | 'warning' | 'offline';
+
 /**
  * FlagIcon Component - Uses local SVG flags for CSP compliance
  * 
@@ -42,34 +44,46 @@ const FlagIcon = ({ alias, size = 48 }: { alias: string; size?: number }) => {
  * - Green: Active/Online
  * - Yellow: Degraded/Warning  
  * - Red: Offline/Error
+ * - Gray: Checking (loading)
  */
-const StatusIndicator = ({ status = 'active' }: { status?: 'active' | 'warning' | 'offline' }) => {
+const StatusIndicator = ({ status = 'active' }: { status?: IdPStatus }) => {
   const colors = {
+    checking: {
+      bg: 'bg-gray-400',
+      glow: 'shadow-gray-400/50',
+      ring: 'ring-gray-300/30',
+      label: 'Checking...',
+    },
     active: {
       bg: 'bg-emerald-500',
       glow: 'shadow-emerald-500/50',
       ring: 'ring-emerald-400/30',
+      label: 'Online',
     },
     warning: {
       bg: 'bg-amber-500',
       glow: 'shadow-amber-500/50',
       ring: 'ring-amber-400/30',
+      label: 'Degraded',
     },
     offline: {
       bg: 'bg-red-500',
       glow: 'shadow-red-500/50',
       ring: 'ring-red-400/30',
+      label: 'Offline',
     },
   };
 
   const c = colors[status];
   
   return (
-    <span className="relative flex h-3 w-3" title={status.charAt(0).toUpperCase() + status.slice(1)}>
-      {/* Outer pulse ring */}
-      <span className={`absolute inline-flex h-full w-full rounded-full ${c.bg} opacity-40 animate-ping`} />
+    <span className="relative flex h-2.5 w-2.5 flex-shrink-0" title={c.label}>
+      {/* Outer pulse ring - only for active/checking */}
+      {(status === 'active' || status === 'checking') && (
+        <span className={`absolute inline-flex h-full w-full rounded-full ${c.bg} opacity-40 animate-ping`} />
+      )}
       {/* Inner solid dot with glow */}
-      <span className={`relative inline-flex h-3 w-3 rounded-full ${c.bg} shadow-lg ${c.glow} ring-2 ${c.ring}`} />
+      <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${c.bg} shadow-lg ${c.glow} ring-1 ${c.ring}`} />
     </span>
   );
 };
@@ -80,6 +94,7 @@ export function IdpSelector() {
   const [idps, setIdps] = useState<IdPOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [idpStatuses, setIdpStatuses] = useState<Record<string, IdPStatus>>({});
   
   // 🥚 Easter egg state
   const [eggActive, setEggActive] = useState(false);
@@ -89,6 +104,58 @@ export function IdpSelector() {
   const konamiBuffer = useRef<number[]>([]);
   const logoClickCount = useRef(0);
   const logoClickTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Check health of all IdPs
+  const checkIdpHealth = async (idpList: IdPOption[]) => {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 
+                      process.env.NEXT_PUBLIC_API_URL || 
+                      'https://localhost:4000';
+    
+    // Initialize all to checking
+    const initialStatuses: Record<string, IdPStatus> = {};
+    idpList.forEach(idp => {
+      initialStatuses[idp.alias] = 'checking';
+    });
+    setIdpStatuses(initialStatuses);
+    
+    // Check each IdP in parallel
+    const healthChecks = idpList.map(async (idp) => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+        
+        const response = await fetch(`${backendUrl}/api/idps/${idp.alias}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const data = await response.json();
+          return { 
+            alias: idp.alias, 
+            status: data.healthy ? 'active' : (data.degraded ? 'warning' : 'offline') as IdPStatus 
+          };
+        } else if (response.status === 503) {
+          return { alias: idp.alias, status: 'warning' as IdPStatus };
+        } else {
+          return { alias: idp.alias, status: 'offline' as IdPStatus };
+        }
+      } catch (err) {
+        // Timeout or network error - assume offline
+        return { alias: idp.alias, status: 'offline' as IdPStatus };
+      }
+    });
+    
+    // Update statuses as they complete
+    const results = await Promise.all(healthChecks);
+    const newStatuses: Record<string, IdPStatus> = {};
+    results.forEach(r => {
+      newStatuses[r.alias] = r.status;
+    });
+    setIdpStatuses(newStatuses);
+  };
 
   useEffect(() => {
     fetchEnabledIdPs();
@@ -135,6 +202,11 @@ export function IdpSelector() {
       const enabledIdps = data.idps?.filter((idp: IdPOption) => idp.enabled) || [];
       setIdps(enabledIdps);
       setError(null); // Clear any previous errors
+      
+      // Check health of all IdPs
+      if (enabledIdps.length > 0) {
+        checkIdpHealth(enabledIdps);
+      }
     } catch (err) {
       console.error('[IdP Selector] Error fetching IdPs:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unable to load identity providers';
@@ -144,11 +216,13 @@ export function IdpSelector() {
       // NOTE: No "Industry Partners" IdP - contractors authenticate via their nation's IdP
       // with userType: contractor attribute. OPA policies handle authorization.
       console.warn('[IdP Selector] Using fallback IdPs');
-      setIdps([
+      const fallbackIdps: IdPOption[] = [
         { alias: 'fra-realm-broker', displayName: 'France', protocol: 'oidc', enabled: true },
         { alias: 'gbr-realm-broker', displayName: 'United Kingdom', protocol: 'oidc', enabled: true },
         { alias: 'deu-realm-broker', displayName: 'Germany', protocol: 'oidc', enabled: true },
-      ]);
+      ];
+      setIdps(fallbackIdps);
+      checkIdpHealth(fallbackIdps);
     } finally {
       setLoading(false);
     }
@@ -347,10 +421,11 @@ export function IdpSelector() {
             {/* Text - Dynamic based on instance */}
             <div className="flex-1">
               <div className="flex items-center gap-2">
+                {/* Status indicator on the left */}
+                <StatusIndicator status={idpStatuses['local'] || 'active'} />
                 <h3 className="text-lg font-bold text-gray-900 group-hover:text-[#009ab3] transition-colors">
                   Login as {instanceName} User
                 </h3>
-                <StatusIndicator status="active" />
               </div>
               <p className="text-sm text-gray-600 mt-0.5">
                 Authenticate directly with DIVE V3 credentials
@@ -404,12 +479,13 @@ export function IdpSelector() {
               
               {/* Country Name + Status */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2">
+                  {/* Status indicator on the left */}
+                  <StatusIndicator status={idpStatuses[idp.alias] || 'checking'} />
                   <h3 className="text-sm font-semibold text-gray-900 group-hover:text-[#009ab3] transition-colors truncate">
                     {/* Extract just the country name, remove "DIVE V3 -" prefix and parenthetical */}
                     {idp.displayName.replace(/^DIVE V3\s*-?\s*/i, '').split('(')[0].trim()}
                   </h3>
-                  <StatusIndicator status={idp.enabled ? 'active' : 'offline'} />
                 </div>
               </div>
             </div>

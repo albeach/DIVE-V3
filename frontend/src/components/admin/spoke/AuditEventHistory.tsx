@@ -25,7 +25,7 @@ import {
   Zap,
   Trash2,
   Link,
-  LinkOff,
+  Unlink,
 } from 'lucide-react';
 import { IAuditEvent, AuditEventType } from '@/types/federation.types';
 
@@ -82,7 +82,7 @@ const EVENT_TYPE_CONFIG: Record<AuditEventType, {
     label: 'Queue Overflow',
   },
   connection_lost: {
-    icon: LinkOff,
+    icon: Unlink,
     color: 'text-red-600',
     bg: 'bg-red-100 dark:bg-red-900/30',
     label: 'Connection Lost',

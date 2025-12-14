@@ -1,7 +1,8 @@
 import { handlers } from "@/auth";
 import { NextRequest } from "next/server";
 
-type INextAuthRouteContext = { params: { nextauth?: string[] } };
+// Next.js 15+ requires Promise-wrapped params
+type INextAuthRouteContext = { params: Promise<{ nextauth?: string[] }> };
 
 /**
  * NextAuth v5 Route Handlers
