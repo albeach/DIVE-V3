@@ -29,8 +29,7 @@ import {
   LogOut,
   Trash2,
 } from 'lucide-react';
-import { adminToast } from '@/lib/admin-toast';
-import { auditActions } from '@/lib/admin-audit';
+import { adminToast, notify } from '@/lib/admin-toast';
 
 // ============================================
 // Types
@@ -119,8 +118,8 @@ export function SessionManager() {
 
       if (response.ok) {
         setSessions(sessions.filter(s => s.id !== session.id));
-        adminToast.security.sessionTerminated(session.username);
-        auditActions.sessionTerminated(session.id, session.username);
+        // Use unified notification service - shows toast AND creates persistent notification
+        notify.admin.sessionTerminated(session.username);
       } else {
         adminToast.error('Failed to terminate session');
       }
@@ -149,7 +148,8 @@ export function SessionManager() {
 
     setSessions(sessions.filter(s => !selectedSessions.has(s.id)));
     setSelectedSessions(new Set());
-    adminToast.success(`Terminated ${terminated} session(s)`);
+    // Use unified notification for bulk termination
+    notify.admin.bulkSessionsTerminated(terminated);
   };
 
   const toggleSessionSelection = (sessionId: string) => {

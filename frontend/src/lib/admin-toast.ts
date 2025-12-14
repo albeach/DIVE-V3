@@ -223,3 +223,6 @@ export const adminToast = {
 
 export default adminToast;
 
+// Re-export notification service for convenience
+export { notify } from './notification-service';
+

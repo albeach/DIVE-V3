@@ -42,6 +42,7 @@ import {
   Activity,
   Server,
 } from 'lucide-react';
+import { notify } from '@/lib/notification-service';
 
 type FilterStatus = 'all' | SpokeStatus;
 
@@ -132,9 +133,13 @@ export default function FederationSpokesPage() {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
+      notify.toast.error('Failed to approve spoke', errData.error || 'Unknown error');
       throw new Error(errData.error || 'Failed to approve spoke');
     }
 
+    const spoke = spokes.find(s => s.spokeId === spokeId);
+    notify.admin.spokeApproved(spoke?.name || spokeId);
+    
     await fetchSpokes();
     setApprovalModalSpoke(null);
   };
@@ -149,8 +154,18 @@ export default function FederationSpokesPage() {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
+      notify.toast.error('Failed to suspend spoke', errData.error || 'Unknown error');
       throw new Error(errData.error || 'Failed to suspend spoke');
     }
+
+    // Use unified notification - suspending is a security event
+    notify.persist({
+      type: 'security',
+      title: 'Spoke Suspended',
+      message: `Federation spoke "${spoke.name}" (${spoke.instanceCode}) suspended. Reason: ${reason}`,
+      actionUrl: '/admin/federation/spokes',
+    });
+    notify.toast.warning(`Spoke "${spoke.instanceCode}" suspended`);
 
     await fetchSpokes();
     setConfirmAction(null);
@@ -165,8 +180,12 @@ export default function FederationSpokesPage() {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
+      notify.toast.error('Failed to revoke spoke', errData.error || 'Unknown error');
       throw new Error(errData.error || 'Failed to revoke spoke');
     }
+
+    // Use unified notification - revoking is a critical security event
+    notify.admin.spokeRejected(spoke.name, 'Access revoked by administrator');
 
     await fetchSpokes();
     setConfirmAction(null);
@@ -181,14 +200,18 @@ export default function FederationSpokesPage() {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
+      notify.toast.error('Failed to rotate token', errData.error || 'Unknown error');
       throw new Error(errData.error || 'Failed to rotate token');
     }
 
+    notify.toast.success(`Token rotated for "${spoke.instanceCode}"`);
     await fetchSpokes();
   };
 
   // Force sync
   const handleForceSync = async (spoke: ISpoke) => {
+    notify.toast.loading(`Syncing policy to "${spoke.instanceCode}"...`);
+    
     const response = await fetch('/api/opal/force-sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -197,9 +220,13 @@ export default function FederationSpokesPage() {
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
+      notify.toast.dismiss();
+      notify.toast.error('Failed to force sync', errData.error || 'Unknown error');
       throw new Error(errData.error || 'Failed to force sync');
     }
 
+    notify.toast.dismiss();
+    notify.toast.success(`Policy synced to "${spoke.instanceCode}"`);
     await fetchSpokes();
   };
 
