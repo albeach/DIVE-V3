@@ -11,6 +11,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   FileText,
@@ -20,6 +22,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import Link from 'next/link';
+import PageLayout from '@/components/layout/page-layout';
 import { AuditQueueStatus, IAuditQueueInfo } from '@/components/admin/spoke/AuditQueueStatus';
 import { AuditSyncControl } from '@/components/admin/spoke/AuditSyncControl';
 import { AuditEventHistory } from '@/components/admin/spoke/AuditEventHistory';
@@ -34,6 +37,8 @@ import {
 const POLLING_INTERVAL = 15000; // 15 seconds
 
 export default function AuditPage() {
+  const { data: session, status: sessionStatus } = useSession();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [queueInfo, setQueueInfo] = useState<IAuditQueueInfo | null>(null);
@@ -200,8 +205,28 @@ export default function AuditPage() {
     URL.revokeObjectURL(url);
   }, [handleExport]);
 
+  // Loading state for session
+  if (sessionStatus === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600"></div>
+          <p className="mt-4 text-lg text-gray-600">Loading Audit Queue...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800 p-6">
+    <PageLayout
+      user={session?.user || {}}
+      breadcrumbs={[
+        { label: 'Admin', href: '/admin/dashboard' },
+        { label: 'Spoke', href: '/admin/spoke' },
+        { label: 'Audit Queue', href: null }
+      ]}
+    >
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
@@ -338,6 +363,7 @@ export default function AuditPage() {
         </motion.div>
       </div>
     </div>
+    </PageLayout>
   );
 }
 
