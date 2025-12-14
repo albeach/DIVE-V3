@@ -24,6 +24,7 @@ import {
     ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { useUpdateIdP, useDeleteIdP, useTestIdP } from '@/lib/api/idp-management';
+import { adminToast } from '@/lib/admin-toast';
 
 // ============================================
 // Types
@@ -71,12 +72,12 @@ export default function IdPBatchOperations({
                 setProgress((completed / ids.length) * 100);
             }
 
-            alert(`Successfully enabled ${completed} IdP(s)`);
+            adminToast.success(`Successfully enabled ${completed} IdP(s)`);
             onClearSelection();
             if (onComplete) onComplete();
         } catch (error) {
             console.error('Failed to enable IdPs:', error);
-            alert(`Enabled ${completed}/${ids.length} IdP(s). Some operations failed.`);
+            adminToast.warning(`Enabled ${completed}/${ids.length} IdP(s). Some operations failed.`);
         } finally {
             setIsProcessing(false);
             setProgress(0);
@@ -101,12 +102,12 @@ export default function IdPBatchOperations({
                 setProgress((completed / ids.length) * 100);
             }
 
-            alert(`Successfully disabled ${completed} IdP(s)`);
+            adminToast.success(`Successfully disabled ${completed} IdP(s)`);
             onClearSelection();
             if (onComplete) onComplete();
         } catch (error) {
             console.error('Failed to disable IdPs:', error);
-            alert(`Disabled ${completed}/${ids.length} IdP(s). Some operations failed.`);
+            adminToast.warning(`Disabled ${completed}/${ids.length} IdP(s). Some operations failed.`);
         } finally {
             setIsProcessing(false);
             setProgress(0);
@@ -128,12 +129,12 @@ export default function IdPBatchOperations({
                 setProgress((completed / ids.length) * 100);
             }
 
-            alert(`Successfully deleted ${completed} IdP(s)`);
+            adminToast.success(`Successfully deleted ${completed} IdP(s)`);
             onClearSelection();
             if (onComplete) onComplete();
         } catch (error) {
             console.error('Failed to delete IdPs:', error);
-            alert(`Deleted ${completed}/${ids.length} IdP(s). Some operations failed.`);
+            adminToast.error(`Deleted ${completed}/${ids.length} IdP(s). Some operations failed.`, error);
         } finally {
             setIsProcessing(false);
             setProgress(0);
@@ -157,11 +158,15 @@ export default function IdPBatchOperations({
                 setProgress((completed / ids.length) * 100);
             }
 
-            alert(`Test complete: ${successful}/${ids.length} IdP(s) passed`);
+            if (successful === ids.length) {
+                adminToast.success(`All ${ids.length} IdP(s) passed connectivity test`);
+            } else {
+                adminToast.warning(`Test complete: ${successful}/${ids.length} IdP(s) passed`);
+            }
             onClearSelection();
         } catch (error) {
             console.error('Failed to test IdPs:', error);
-            alert(`Tested ${completed}/${ids.length} IdP(s). Some operations failed.`);
+            adminToast.error(`Tested ${completed}/${ids.length} IdP(s). Some operations failed.`, error);
         } finally {
             setIsProcessing(false);
             setProgress(0);
