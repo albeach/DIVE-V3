@@ -105,8 +105,8 @@ export default async function Home() {
         <div className="max-w-6xl w-full">
           {/* Main content card with glassmorphism */}
           <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 overflow-hidden animate-fade-in-up">
-            {/* Header section with logo - Compact version */}
-            <div className="relative px-6 py-5 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
+            {/* Header section with logo - More Compact */}
+            <div className="relative px-4 py-3 md:px-6 md:py-4 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
               {/* Digital Grid Pattern */}
               <div className="absolute inset-0 opacity-30" style={{
                 backgroundImage: `
@@ -160,7 +160,7 @@ export default async function Home() {
               <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#79d85a] to-transparent animate-shimmer" style={{ animationDelay: '1s' }}></div>
               
               {/* Flexbox Layout: Logo Left, Content Right - Compact */}
-              <div className="relative flex flex-col md:flex-row items-center gap-4 md:gap-6">
+              <div className="relative flex flex-col md:flex-row items-center gap-3 md:gap-5">
                 {/* Logo - Links to main DIVE25.COM portal */}
                 <div className="flex-shrink-0 animate-scale-in">
                   <a href="https://dive25.com" title="Go to DIVE25 Portal" className="relative inline-block group">
@@ -170,7 +170,7 @@ export default async function Home() {
                     <img 
                       src="/DIVE-Logo.png" 
                       alt="DIVE - Digital Interoperability Verification Experiment" 
-                      className="relative h-40 w-40 md:h-48 md:w-48 drop-shadow-2xl animate-float-logo hover:scale-110 transition-transform duration-500 cursor-pointer"
+                      className="relative h-28 w-28 md:h-36 md:w-36 drop-shadow-2xl animate-float-logo hover:scale-110 transition-transform duration-500 cursor-pointer"
                     />
                   </a>
                 </div>
@@ -178,19 +178,19 @@ export default async function Home() {
                 {/* Content - Compact */}
                 <div className="flex-1 text-center md:text-left animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                   {/* Instance Badge with Flag */}
-                  <div className="mb-2">
-                    <InstanceHeroBadge size="lg" className="justify-center md:justify-start" />
+                  <div className="mb-1">
+                    <InstanceHeroBadge size="md" className="justify-center md:justify-start" />
                   </div>
                   
-                  <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-1 tracking-tight">
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-0.5 tracking-tight">
                     DIVE V3
                   </h1>
-                  <div className="inline-block px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 mb-2">
-                    <p className="text-sm md:text-base text-white font-semibold">
+                  <div className="inline-block px-2.5 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 mb-1.5">
+                    <p className="text-xs md:text-sm text-white font-semibold">
                       Digital Interoperability Verification Experiment
                     </p>
                   </div>
-                  <p className="text-white/90 text-xs md:text-sm leading-relaxed mb-2">
+                  <p className="text-white/90 text-[10px] md:text-xs leading-relaxed mb-1.5">
                     Coalition Identity & Access Management Platform
                   </p>
                   
