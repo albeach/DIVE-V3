@@ -233,11 +233,11 @@ hub_deploy() {
     check_docker || return 1
     
     # Step 1: Initialize
-    log_step "Step 1/6: Initializing hub..."
+    log_step "Step 1/7: Initializing hub..."
     hub_init || return 1
     
     # Step 2: Load secrets
-    log_step "Step 2/6: Loading secrets..."
+    log_step "Step 2/7: Loading secrets..."
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
         set -a
         source "${DIVE_ROOT}/.env.hub"
@@ -248,23 +248,31 @@ hub_deploy() {
     fi
     
     # Step 3: Start services
-    log_step "Step 3/6: Starting hub services..."
+    log_step "Step 3/7: Starting hub services..."
     hub_up || return 1
     
     # Step 4: Wait for services
-    log_step "Step 4/6: Waiting for services to be healthy..."
+    log_step "Step 4/7: Waiting for services to be healthy..."
     _hub_wait_all_healthy || return 1
     
     # Step 5: Apply Terraform (if available)
-    log_step "Step 5/6: Applying Keycloak configuration..."
+    log_step "Step 5/7: Applying Keycloak configuration..."
     if [ -d "${DIVE_ROOT}/terraform/pilot" ]; then
         _hub_apply_terraform || log_warn "Terraform apply skipped or failed"
     else
         log_info "No Terraform config found, skipping"
     fi
     
-    # Step 6: Verify deployment
-    log_step "Step 6/6: Verifying deployment..."
+    # Step 6: Seed test users and resources
+    log_step "Step 6/7: Seeding test users and resources..."
+    if [ -d "${DIVE_ROOT}/scripts/hub-init" ]; then
+        hub_seed 200 || log_warn "Seeding failed - you can run './dive hub seed' later"
+    else
+        log_info "Hub seed scripts not found, skipping"
+    fi
+    
+    # Step 7: Verify deployment
+    log_step "Step 7/7: Verifying deployment..."
     _hub_verify_deployment || log_warn "Some verification checks failed"
     
     echo ""
@@ -1512,6 +1520,60 @@ hub_logs() {
 }
 
 # =============================================================================
+# HUB SEED (Users + Resources)
+# =============================================================================
+
+hub_seed() {
+    local resource_count="${1:-200}"
+    
+    print_header
+    echo -e "${BOLD}Seeding Hub (USA) with Test Data${NC}"
+    echo ""
+    
+    # Check for seed scripts
+    local SEED_SCRIPTS_DIR="${DIVE_ROOT}/scripts/hub-init"
+    
+    if [ ! -d "$SEED_SCRIPTS_DIR" ]; then
+        log_error "Hub seed scripts not found at $SEED_SCRIPTS_DIR"
+        return 1
+    fi
+    
+    # Step 1: Seed users (includes User Profile configuration)
+    log_step "Seeding test users..."
+    if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-users.sh" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            log_dry "Would run: ${SEED_SCRIPTS_DIR}/seed-hub-users.sh"
+        else
+            "${SEED_SCRIPTS_DIR}/seed-hub-users.sh"
+        fi
+    else
+        log_error "seed-hub-users.sh not found or not executable"
+        return 1
+    fi
+    
+    # Step 2: Seed resources
+    log_step "Seeding resources..."
+    if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            log_dry "Would run: ${SEED_SCRIPTS_DIR}/seed-hub-resources.sh ${resource_count}"
+        else
+            "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" "$resource_count"
+        fi
+    else
+        log_error "seed-hub-resources.sh not found or not executable"
+        return 1
+    fi
+    
+    echo ""
+    log_success "Hub seeding complete!"
+    echo ""
+    echo "  Test users: testuser-usa-{1-4}, admin-usa"
+    echo "  Resources:  ${resource_count} (evenly distributed across classifications)"
+    echo ""
+    echo "  ABAC is now functional - users see resources based on clearance level"
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1530,6 +1592,7 @@ module_hub() {
         logs)        hub_logs "$@" ;;
         spokes)      hub_spokes "$@" ;;
         push-policy) hub_push_policy "$@" ;;
+        seed)        hub_seed "$@" ;;
         
         # Legacy compatibility
         bootstrap)   hub_deploy "$@" ;;
@@ -1547,6 +1610,7 @@ module_hub_help() {
     echo "  init                Initialize hub directories and config"
     echo "  up, start           Start hub services"
     echo "  down, stop          Stop hub services"
+    echo "  seed [count]        Seed test users and resources (default: 200 resources)"
     echo ""
     echo -e "${CYAN}Status & Verification:${NC}"
     echo "  status              Show comprehensive hub status"
@@ -1569,6 +1633,7 @@ module_hub_help() {
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  ./dive hub deploy"
+    echo "  ./dive hub seed 500"
     echo "  ./dive hub spokes approve spoke-fra-abc123"
     echo "  ./dive hub logs backend -f"
 }
