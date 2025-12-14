@@ -1,0 +1,1524 @@
+# DIVE V3 CLI User Guide
+
+## Overview
+
+The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the DIVE V3 coalition-friendly ICAM web application. It provides unified control over all aspects of the DIVE V3 federation platform, including deployment, federation management, policy distribution, and operational monitoring.
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Global Options](#global-options)
+- [Core Commands](#core-commands)
+- [Deployment Commands](#deployment-commands)
+- [Database Commands](#database-commands)
+- [Terraform Commands](#terraform-commands)
+- [Secrets Management](#secrets-management)
+- [Pilot VM Commands](#pilot-vm-commands)
+- [Federation Commands](#federation-commands)
+- [Hub Management](#hub-management)
+- [Spoke Management](#spoke-management)
+- [NATO Country Management](#nato-country-management)
+- [SP Client Registration](#sp-client-registration)
+- [Policy Management](#policy-management)
+- [Testing Suite](#testing-suite)
+- [Status & Diagnostics](#status--diagnostics)
+- [Environment Helpers](#environment-helpers)
+- [Troubleshooting](#troubleshooting)
+- [Architecture Reference](#architecture-reference)
+
+## Quick Start
+
+```bash
+# Start local development stack (USA Hub)
+./dive up
+
+# Deploy to pilot environment
+./dive --env pilot deploy
+
+# Check overall status
+./dive status
+
+# Get help
+./dive help
+```
+
+### NATO 32-Country Quick Start
+
+```bash
+# List all supported NATO countries
+./dive spoke list-countries
+
+# View port assignments for a country
+./dive spoke ports POL
+
+# Generate Keycloak theme for a country
+./dive spoke generate-theme POL
+
+# Generate Terraform tfvars for a country
+./dive tf generate POL
+
+# Deploy a new NATO spoke
+DIVE_PILOT_MODE=false ./dive spoke init POL "Poland"
+./dive --instance pol spoke up
+./dive --instance pol spoke register
+
+# Batch deploy multiple countries
+./dive spoke batch-deploy POL NOR ALB
+
+# Verify federation health
+./dive spoke verify-federation
+```
+
+## Global Options
+
+All commands support these global options:
+
+| Option | Description | Default | Examples |
+|--------|-------------|---------|----------|
+| `--env <env>` | Set environment | `local` | `--env local`, `--env gcp`, `--env pilot` |
+| `--instance <code>` | Set instance code | `usa` | `--instance fra`, `--instance gbr`, `--instance deu` |
+| `--dry-run` | Show what would be done | `false` | `--dry-run` |
+| `--verbose` | Show detailed output | `false` | `--verbose` |
+| `--quiet` | Suppress non-essential output | `false` | `--quiet` |
+
+### Environment Types
+
+- **`local`**: Local development with Docker Compose
+- **`dev`**: Development environment (may use GCP secrets)
+- **`gcp`**: Google Cloud Platform deployment
+- **`pilot`**: Remote pilot VM environment
+- **`prod`**: Production environment
+
+### Instance Codes
+
+DIVE V3 supports all 32 NATO member countries. Common codes include:
+
+- **`usa`**: United States (Hub)
+- **`gbr`**: United Kingdom
+- **`fra`**: France
+- **`deu`**: Germany
+- **`can`**: Canada
+- **`pol`**: Poland
+- **`nor`**: Norway
+- **`alb`**: Albania
+
+View all 32 NATO countries with:
+```bash
+./dive spoke list-countries
+```
+
+## Core Commands
+
+Basic container and service management.
+
+### `up` - Start the Stack
+
+Starts all services for the current environment and instance.
+
+```bash
+./dive up
+./dive --env local up
+./dive --instance fra up
+```
+
+**What it does:**
+1. Validates prerequisites (Docker, secrets)
+2. Loads environment secrets
+3. Generates SSL certificates (local/dev only)
+4. Stops existing containers
+5. Starts infrastructure services
+6. Waits for services to be healthy
+7. Applies Terraform configuration
+8. Ensures broker realm exists
+9. Seeds database (local/dev)
+10. Verifies deployment
+
+**Services started:**
+- Keycloak (IdP)
+- Backend API
+- Frontend (Next.js)
+- PostgreSQL
+- MongoDB
+- Redis
+- OPA (Open Policy Agent)
+- OPAL Server
+
+### `down` - Stop the Stack
+
+Stops all running containers.
+
+```bash
+./dive down
+```
+
+### `restart [service]` - Restart Services
+
+Restart all services or a specific service.
+
+```bash
+./dive restart
+./dive restart backend
+./dive restart keycloak
+```
+
+### `logs [service]` - View Logs
+
+View logs from all services or a specific service.
+
+```bash
+./dive logs                    # All services (last 100 lines)
+./dive logs backend            # Backend logs
+./dive logs keycloak -f        # Keycloak logs (follow)
+```
+
+### `ps` - List Running Containers
+
+Show status of all DIVE containers.
+
+```bash
+./dive ps
+```
+
+Output example:
+```
+NAMES                    STATUS                   PORTS
+dive-v3-keycloak         Up 2 hours               0.0.0.0:8443->8443/tcp
+dive-v3-backend          Up 2 hours               0.0.0.0:4000->4000/tcp
+dive-v3-frontend         Up 2 hours               0.0.0.0:3000->3000/tcp
+```
+
+### `exec <service> [command]` - Execute in Container
+
+Execute commands inside running containers.
+
+```bash
+./dive exec backend bash
+./dive exec keycloak /opt/keycloak/bin/kcadm.sh --help
+./dive exec postgres psql -U postgres -d dive_v3
+```
+
+**Available services:**
+- `frontend`, `fe` - Next.js application
+- `backend`, `be` - Express.js API
+- `keycloak`, `kc` - Identity Provider
+- `postgres`, `pg` - PostgreSQL database
+- `mongo`, `mongodb` - MongoDB database
+- `redis` - Redis cache
+- `opa` - Open Policy Agent
+- `opal`, `opal-server` - OPAL policy server
+
+## Deployment Commands
+
+Full-stack deployment and lifecycle management.
+
+### `deploy` - Full Deployment Workflow
+
+Complete deployment workflow with validation, secrets loading, and verification.
+
+```bash
+./dive deploy              # Deploy to local environment
+./dive --env pilot deploy  # Deploy to pilot VM
+```
+
+**10-step deployment process:**
+1. Validate prerequisites
+2. Load secrets
+3. Generate SSL certificates
+4. Stop existing containers
+5. Remove old volumes
+6. Start infrastructure services
+7. Wait for health checks
+8. Apply Terraform configuration
+9. Seed database
+10. Verify deployment
+
+### `reset` - Reset to Clean State
+
+Complete reset: nuke everything then deploy fresh.
+
+```bash
+./dive reset
+```
+
+### `nuke` - Destroy Everything
+
+Completely destroys all containers, volumes, and networks.
+
+```bash
+./dive nuke
+```
+
+**Warning:** This permanently deletes all data and volumes.
+
+### `validate` - Validate Prerequisites
+
+Check system prerequisites before deployment.
+
+```bash
+./dive validate
+```
+
+Checks:
+- Docker installation and running
+- Required ports available
+- Sufficient disk space
+- Network connectivity
+- Required tools (terraform, gcloud, etc.)
+
+## Database Commands
+
+Database management and data seeding.
+
+### `seed [instance]` - Seed Database
+
+Populate database with test data.
+
+```bash
+./dive seed        # Seed current instance
+./dive seed usa    # Seed USA instance data
+./dive seed fra    # Seed FRA instance data
+```
+
+**What gets seeded:**
+- Test users for each country
+- Sample resources with various classifications
+- Federation metadata
+- Policy test data
+
+### `backup` - Create Database Backup
+
+Create timestamped backup of all databases.
+
+```bash
+./dive backup
+```
+
+Creates backup in `backups/YYYYMMDD_HHMMSS/` containing:
+- PostgreSQL dump (`postgres.sql`)
+- MongoDB archive (`mongo.archive`)
+
+### `restore <backup-dir>` - Restore from Backup
+
+Restore databases from backup directory.
+
+```bash
+./dive restore backups/20250115_143000
+./dive restore ./my-backup
+```
+
+## Terraform Commands
+
+Infrastructure as Code management via Terraform.
+
+### Core Operations
+
+#### `tf plan [dir]` - Show Terraform Plan
+
+Preview infrastructure changes.
+
+```bash
+./dive tf plan                # Plan pilot (default)
+./dive tf plan pilot          # Plan pilot deployment
+./dive tf plan spoke          # Plan spoke deployment
+```
+
+#### `tf apply [dir]` - Apply Terraform Configuration
+
+Apply infrastructure changes.
+
+```bash
+./dive tf apply               # Apply pilot (default)
+./dive tf apply pilot         # Apply pilot configuration
+```
+
+#### `tf destroy [dir]` - Destroy Terraform Resources
+
+Remove all Terraform-managed resources.
+
+```bash
+./dive tf destroy
+./dive tf destroy pilot
+```
+
+#### `tf output [dir]` - Show Terraform Outputs
+
+Display Terraform output values.
+
+```bash
+./dive tf output
+./dive tf output pilot
+```
+
+#### `tf init [dir]` - Initialize Terraform
+
+Initialize Terraform working directory.
+
+```bash
+./dive tf init pilot
+./dive tf init spoke
+```
+
+#### `tf validate` - Validate All Configurations
+
+Validate all active Terraform configurations.
+
+```bash
+./dive tf validate
+```
+
+Output:
+```
+→ Validating Terraform configurations...
+  ✓ pilot: valid
+  ✓ spoke: valid
+✅ All configurations valid
+```
+
+#### `tf fmt` - Format Terraform Files
+
+Format all Terraform files in the terraform directory.
+
+```bash
+./dive tf fmt                 # Format all files
+./dive tf fmt --check         # Check formatting only
+```
+
+### NATO Country tfvars Generation
+
+#### `tf generate <CODE>` - Generate Country tfvars
+
+Generate Terraform variable files for NATO countries using the centralized database.
+
+```bash
+./dive tf generate POL              # Generate Poland tfvars
+./dive tf generate --all            # Generate all 32 NATO tfvars
+./dive tf generate NOR --force      # Force regenerate Norway
+```
+
+Generated files are placed in `terraform/countries/<code>.tfvars` and include:
+- Instance identification (code, name)
+- URLs with correct port assignments
+- Client and theme configuration
+- Federation partner references
+- GCP Secret Manager references (no hardcoded secrets)
+
+#### `tf list-countries` - List Generated tfvars
+
+Show all generated Terraform variable files.
+
+```bash
+./dive tf list-countries
+```
+
+### Workspace Management
+
+Terraform workspaces allow deploying multiple NATO countries with isolated state.
+
+#### `tf workspace list` - List Workspaces
+
+Show all Terraform workspaces in the spoke configuration.
+
+```bash
+./dive tf workspace list
+```
+
+#### `tf workspace new <CODE>` - Create Workspace
+
+Create a new workspace for a NATO country.
+
+```bash
+./dive tf workspace new pol         # Create Poland workspace
+./dive tf workspace new fra         # Create France workspace
+```
+
+#### `tf workspace select <CODE>` - Select Workspace
+
+Switch to an existing workspace.
+
+```bash
+./dive tf workspace select pol      # Switch to Poland workspace
+```
+
+#### `tf workspace delete <CODE>` - Delete Workspace
+
+Remove a workspace (must not be active).
+
+```bash
+./dive tf workspace delete pol      # Delete Poland workspace
+```
+
+#### `tf workspace show` - Show Current Workspace
+
+Display the currently selected workspace.
+
+```bash
+./dive tf workspace show
+```
+
+### Spoke Deployment
+
+Simplified commands for deploying NATO country spokes with automatic tfvars handling.
+
+#### `tf spoke init <CODE>` - Initialize Spoke
+
+Initialize Terraform for a NATO country spoke, creating workspace and loading tfvars.
+
+```bash
+./dive tf spoke init POL            # Initialize Poland spoke
+./dive tf spoke init NOR            # Initialize Norway spoke
+```
+
+**What it does:**
+1. Generates tfvars if not present
+2. Initializes Terraform
+3. Creates or selects workspace for the country
+
+#### `tf spoke plan <CODE>` - Plan Spoke Deployment
+
+Show what changes would be made for a NATO country.
+
+```bash
+./dive tf spoke plan POL            # Plan Poland deployment
+./dive tf spoke plan FRA            # Plan France deployment
+```
+
+#### `tf spoke apply <CODE>` - Apply Spoke Configuration
+
+Deploy a NATO country spoke to Keycloak.
+
+```bash
+./dive tf spoke apply POL           # Deploy Poland
+./dive tf spoke apply NOR           # Deploy Norway
+```
+
+#### `tf spoke destroy <CODE>` - Destroy Spoke
+
+Remove all Terraform-managed resources for a spoke.
+
+```bash
+./dive tf spoke destroy POL         # Destroy Poland resources
+```
+
+### Terraform Directory Structure
+
+```
+terraform/
+├── pilot/              # USA hub deployment
+│   ├── main.tf         # Uses federated-instance + realm-mfa modules
+│   └── terraform.tfstate
+├── spoke/              # NATO country deployments (uses workspaces)
+│   ├── main.tf         # Generic spoke configuration
+│   └── terraform.tfstate.d/<code>/  # Per-country state
+├── countries/          # Generated tfvars for all 32 NATO countries
+│   ├── pol.tfvars
+│   ├── fra.tfvars
+│   └── ...
+├── modules/            # Reusable Terraform modules
+│   ├── federated-instance/  # Realm, client, mappers, federation
+│   └── realm-mfa/           # MFA authentication flows
+└── archived/           # Deprecated configurations (do not use)
+```
+
+## Secrets Management
+
+GCP Secret Manager integration for secure credential management.
+
+### `secrets list` - List All Secrets
+
+List all DIVE secrets in GCP Secret Manager.
+
+```bash
+./dive secrets list
+```
+
+### `secrets show [instance]` - Show Instance Secrets
+
+Display secrets for a specific instance.
+
+```bash
+./dive secrets show usa
+./dive secrets show
+```
+
+### `secrets load [instance]` - Load Secrets into Environment
+
+Load secrets from GCP into shell environment.
+
+```bash
+./dive secrets load usa
+```
+
+### `secrets verify [instance]` - Verify Secret Access
+
+Check if all required secrets are accessible.
+
+```bash
+./dive secrets verify
+```
+
+Output example:
+```
+  POSTGRES_PASSWORD:        ✓ loaded
+  KEYCLOAK_ADMIN_PASSWORD:  ✓ loaded
+  MONGO_PASSWORD:           ✓ loaded
+  AUTH_SECRET:              ✓ loaded
+  KEYCLOAK_CLIENT_SECRET:   ✓ loaded
+```
+
+### `secrets export [instance]` - Export Secrets as Shell Commands
+
+Export secrets as export statements (safe mode by default).
+
+```bash
+./dive secrets export              # Redacted output
+./dive secrets export --unsafe     # Plain text output
+```
+
+## Pilot VM Commands
+
+Remote pilot VM management via GCP Compute Engine.
+
+### `pilot up` - Start Services on Pilot VM
+
+Start DIVE services on the remote pilot VM.
+
+```bash
+./dive --env pilot pilot up
+```
+
+### `pilot down` - Stop Services on Pilot VM
+
+Stop all services on the pilot VM.
+
+```bash
+./dive --env pilot pilot down
+```
+
+### `pilot status` - Show Pilot VM Status
+
+Display status of services and recent logs on pilot VM.
+
+```bash
+./dive --env pilot pilot status
+```
+
+### `pilot logs [service]` - View Pilot VM Logs
+
+View logs from pilot VM services.
+
+```bash
+./dive --env pilot pilot logs
+./dive --env pilot pilot logs backend -f
+```
+
+### `pilot ssh` - SSH into Pilot VM
+
+Open SSH session to the pilot VM.
+
+```bash
+./dive --env pilot pilot ssh
+```
+
+### `pilot reset` - Reset Pilot VM
+
+Clean reset of pilot VM to fresh state.
+
+```bash
+./dive --env pilot pilot reset
+```
+
+### `pilot deploy` - Full Deployment to Pilot VM
+
+Complete deployment workflow on pilot VM.
+
+```bash
+./dive --env pilot pilot deploy
+```
+
+## Federation Commands
+
+Cross-instance federation management and identity linking.
+
+### `federation status` - Show Federation Status
+
+Display overall federation status.
+
+```bash
+./dive federation status
+```
+
+### `federation register <url>` - Register Instance with Hub
+
+Register a new instance with the federation hub.
+
+```bash
+./dive federation register https://fra-api.dive25.com
+```
+
+### `federation link <CODE>` - Link IdP for Cross-Border SSO
+
+Auto-configure IdP trust between instances.
+
+```bash
+./dive federation link GBR    # Link GBR to USA Hub
+./dive --instance gbr federation link USA  # Link USA to GBR Spoke
+```
+
+### `federation unlink <CODE>` - Remove IdP Link
+
+Remove IdP trust relationship.
+
+```bash
+./dive federation unlink GBR
+```
+
+### `federation list-idps` - List Configured Identity Providers
+
+Show all configured IdPs in the broker realm.
+
+```bash
+./dive federation list-idps
+```
+
+### `federation mappers list` - List NATO Nation Templates
+
+List available protocol mapper templates (PII warning).
+
+```bash
+./dive federation mappers list
+```
+
+### `federation mappers show <nation>` - Show Nation Mapper Details
+
+Display protocol mapper configuration for a nation.
+
+```bash
+./dive federation mappers show france
+```
+
+### `federation mappers apply` - Apply PII-Minimized Mappers
+
+Apply production-safe protocol mappers.
+
+```bash
+./dive federation mappers apply
+./dive --instance fra federation mappers apply
+```
+
+### `federation mappers verify` - Verify Mapper Configuration
+
+Check mapper setup and PII compliance.
+
+```bash
+./dive federation mappers verify
+```
+
+## Hub Management
+
+Central hub administration and spoke lifecycle management.
+
+### `hub deploy` - Full Hub Deployment
+
+Complete hub deployment with 7-step process.
+
+```bash
+./dive hub deploy
+```
+
+**7-step process:**
+1. Initialize hub directories and config
+2. Load secrets
+3. Start hub services
+4. Wait for services to be healthy
+5. Apply Terraform configuration
+6. Seed test users and resources (ABAC)
+7. Verify deployment
+
+### `hub init` - Initialize Hub
+
+Set up hub directories, certificates, and configuration.
+
+```bash
+./dive hub init
+```
+
+### `hub seed [count]` - Seed Hub with Test Data
+
+Seeds the Hub with test users and resources for ABAC testing.
+
+```bash
+./dive hub seed           # Default: 200 resources
+./dive hub seed 500       # Custom: 500 resources
+```
+
+**What it does:**
+
+1. **Configures Keycloak User Profile** - Adds DIVE attributes (clearance, countryOfAffiliation, uniqueID, acpCOI)
+2. **Fixes protocol mappers** - Ensures acpCOI mapper is multivalued
+3. **Creates test users** with escalating clearances:
+   - `testuser-usa-1` (UNCLASSIFIED)
+   - `testuser-usa-2` (CONFIDENTIAL)
+   - `testuser-usa-3` (SECRET)
+   - `testuser-usa-4` (TOP_SECRET)
+   - `admin-usa` (TOP_SECRET + admin role)
+4. **Seeds resources** evenly distributed across classification levels
+
+**ABAC Result:**
+- UNCLASSIFIED user sees 25% of resources
+- CONFIDENTIAL user sees 50% of resources
+- SECRET user sees 75% of resources
+- TOP_SECRET user sees 100% of resources
+
+**Note:** This is automatically run during `hub deploy`. Use this command to re-seed or increase resource count.
+
+### `hub up` - Start Hub Services
+
+Start all hub services.
+
+```bash
+./dive hub up
+```
+
+### `hub down` - Stop Hub Services
+
+Stop all hub services.
+
+```bash
+./dive hub down
+```
+
+### `hub status` - Show Hub Status
+
+Comprehensive hub status including services and federation stats.
+
+```bash
+./dive hub status
+```
+
+### `hub health` - Check Hub Health
+
+Detailed health check of all hub services.
+
+```bash
+./dive hub health
+```
+
+### `hub verify` - 10-Point Hub Verification
+
+Complete hub verification checklist (Phase 6).
+
+```bash
+./dive hub verify
+```
+
+**10-point verification:**
+1. Docker containers running (7 services)
+2. Keycloak health
+3. Backend API health
+4. MongoDB connection
+5. Redis connection
+6. OPAL Server health
+7. Policy bundle available
+8. Federation registry initialized
+9. Registration endpoint accessible
+10. TLS certificates valid
+
+### `hub spokes list` - List Registered Spokes
+
+Show all registered federation spokes.
+
+```bash
+./dive hub spokes list
+```
+
+### `hub spokes pending` - Show Pending Approvals
+
+Rich display of spokes awaiting approval.
+
+```bash
+./dive hub spokes pending
+```
+
+### `hub spokes approve <id>` - Approve Spoke Registration
+
+Interactive spoke approval with scope and trust level selection.
+
+```bash
+./dive hub spokes approve spoke-fra-abc123
+./dive hub spokes approve spoke-fra-abc123 --scopes 'policy:base' --trust-level partner
+```
+
+### `hub spokes reject <id>` - Reject Spoke Registration
+
+Reject spoke registration with reason.
+
+```bash
+./dive hub spokes reject spoke-xyz-123 --reason 'Incomplete information'
+```
+
+### `hub spokes rotate-token <id>` - Rotate Spoke Token
+
+Revoke current token and generate new one.
+
+```bash
+./dive hub spokes rotate-token spoke-fra-456
+```
+
+### `hub push-policy [layers]` - Push Policy Update
+
+Distribute policy updates to all connected spokes.
+
+```bash
+./dive hub push-policy
+./dive hub push-policy base,coalition
+```
+
+## Spoke Management
+
+Distributed spoke instance management with full NATO 32-country support.
+
+### `spoke init <code> <name>` - Initialize New Spoke
+
+Interactive spoke setup wizard with Cloudflare tunnel auto-configuration.
+
+```bash
+./dive spoke init POL "Poland"
+./dive spoke init NOR "Norway"
+```
+
+**Setup options:**
+- **Hostname configuration:** dive25.com subdomains, custom domains, or IP addresses
+- **Cloudflare tunnel:** Auto-create, manual token, or skip
+- **Contact information** and hub connection
+- **Secure password generation**
+
+### `spoke generate-certs` - Generate SSL Certificates
+
+Generate development certificates for spoke services.
+
+```bash
+./dive --instance pol spoke generate-certs
+```
+
+### `spoke register` - Register with Hub
+
+Register spoke with federation hub.
+
+```bash
+./dive --instance pol spoke register
+```
+
+### `spoke status` - Show Spoke Status
+
+Display spoke federation and service status.
+
+```bash
+./dive --instance pol spoke status
+```
+
+### `spoke health` - Check Spoke Health
+
+Verify all spoke services are healthy.
+
+```bash
+./dive --instance pol spoke health
+```
+
+### `spoke up` - Start Spoke Services
+
+Start all services for the spoke instance.
+
+```bash
+./dive --instance pol spoke up
+```
+
+### `spoke down` - Stop Spoke Services
+
+Stop all spoke services.
+
+```bash
+./dive --instance pol spoke down
+```
+
+### `spoke sync` - Force Policy Sync
+
+Manually trigger policy synchronization from hub.
+
+```bash
+./dive --instance pol spoke sync
+```
+
+### `spoke logs [service]` - View Spoke Logs
+
+View logs from spoke services.
+
+```bash
+./dive --instance pol spoke logs
+./dive --instance pol spoke logs backend -f
+```
+
+## NATO Country Management
+
+Centralized management for all 32 NATO member countries.
+
+### `spoke list-countries` - List All NATO Countries
+
+Display all 32 NATO member countries with metadata.
+
+```bash
+./dive spoke list-countries              # Table format
+./dive spoke list-countries --simple     # Simple list
+./dive spoke list-countries --json       # JSON format
+```
+
+Output includes country code, flag, name, NATO join year, and port offset.
+
+### `spoke ports [CODE]` - Show Port Assignments
+
+Display port assignments for countries based on the NATO database.
+
+```bash
+./dive spoke ports              # Show all 32 countries
+./dive spoke ports POL          # Show Poland ports only
+```
+
+**Port allocation scheme:**
+| Service | Range | Formula |
+|---------|-------|---------|
+| Frontend | 3000-3031 | 3000 + offset |
+| Backend | 4000-4031 | 4000 + offset |
+| Keycloak | 8443-8474 | 8443 + offset |
+| PostgreSQL | 5432-5463 | 5432 + offset |
+| MongoDB | 27017-27048 | 27017 + offset |
+
+### `spoke country-info <CODE>` - Show Country Details
+
+Display detailed information for a specific NATO country.
+
+```bash
+./dive spoke country-info POL
+./dive spoke country-info NOR
+```
+
+Shows: name, flag, colors, timezone, NATO join year, all port assignments, and instance status.
+
+### `spoke validate-country <CODE>` - Validate Country Code
+
+Check if a country code is a valid NATO member.
+
+```bash
+./dive spoke validate-country POL    # ✓ Valid NATO member
+./dive spoke validate-country XYZ    # ✗ Invalid code
+```
+
+### `spoke generate-theme <CODE>` - Generate Keycloak Theme
+
+Generate a Keycloak login theme for a NATO country.
+
+```bash
+./dive spoke generate-theme POL          # Generate Poland theme
+./dive spoke generate-theme --all        # Generate all 32 themes
+./dive spoke generate-theme NOR --force  # Force regenerate Norway
+```
+
+Themes are generated in `keycloak/themes/dive-v3-<code>/` with:
+- Country-specific CSS colors (from national flag)
+- Placeholder background image
+- English messages file
+
+### `spoke batch-deploy <CODES>` - Batch Deploy Countries
+
+Deploy multiple NATO countries in sequence.
+
+```bash
+./dive spoke batch-deploy POL NOR ALB           # Deploy 3 countries
+./dive spoke batch-deploy --all                 # Deploy all 32 (not recommended locally)
+./dive spoke batch-deploy POL NOR --dry-run     # Preview deployment
+./dive spoke batch-deploy --all --skip-existing # Skip already deployed
+```
+
+**Deployment steps per country:**
+1. Initialize spoke configuration
+2. Start Docker services
+3. Wait for Keycloak health
+4. Initialize Keycloak realm
+5. Register with hub
+6. (Manual) Approve at hub
+
+### `spoke verify-federation` - Verify Federation Health
+
+Check federation connectivity for running spokes.
+
+```bash
+./dive spoke verify-federation              # Verify all running spokes
+./dive spoke verify-federation POL NOR      # Verify specific countries
+```
+
+Checks per spoke:
+- Keycloak health and OIDC discovery
+- Backend API health
+- Frontend accessibility
+- OPA policy engine
+- KAS (Key Access Service)
+
+## SP Client Registration
+
+OAuth/OIDC partner application registration.
+
+### `sp register` - Register OAuth Client
+
+Interactive wizard for registering OAuth/OIDC clients.
+
+```bash
+./dive sp register
+```
+
+**Registration includes:**
+- Organization information
+- Country code (ISO 3166-1 alpha-3)
+- Application details
+- OAuth configuration (redirect URIs, scopes, PKCE)
+- Classification limits
+
+### `sp status [sp-id]` - Show Registration Status
+
+Check status of SP client registration.
+
+```bash
+./dive sp status sp-nzl-123456789
+```
+
+### `sp list` - List Registered Clients
+
+Show all registered SP clients.
+
+```bash
+./dive sp list
+```
+
+### `sp credentials [sp-id]` - Show Client Credentials
+
+Display client ID and secret for registered SP.
+
+```bash
+./dive sp credentials sp-nzl-123456789
+```
+
+## Policy Management
+
+OPA policy bundle creation and OPAL distribution.
+
+### `policy build [--sign]` - Build Policy Bundle
+
+Create signed OPA policy bundle.
+
+```bash
+./dive policy build              # Build with signing
+./dive policy build --no-sign    # Build without signing
+./dive policy build --scopes base,coalition  # Specific scopes
+```
+
+### `policy push` - Push to OPAL Server
+
+Publish policy bundle to OPAL distribution server.
+
+```bash
+./dive policy push
+```
+
+### `policy status` - Show Distribution Status
+
+Display policy distribution status across federation.
+
+```bash
+./dive policy status
+```
+
+### `policy test [pattern]` - Run Policy Tests
+
+Execute OPA policy tests.
+
+```bash
+./dive policy test                    # All tests
+./dive policy test fuel_inventory     # Specific pattern
+```
+
+### `policy version` - Show Current Version
+
+Display current policy bundle version.
+
+```bash
+./dive policy version
+```
+
+## Testing Suite
+
+Phase 6 comprehensive testing framework.
+
+### `test federation` - Run Federation E2E Tests
+
+Execute end-to-end federation tests.
+
+```bash
+./dive test federation
+./dive test federation --verbose
+./dive test federation --fail-fast
+```
+
+### `test unit` - Run Backend Unit Tests
+
+Execute backend unit test suite.
+
+```bash
+./dive test unit
+```
+
+### `test all` - Run All Tests
+
+Complete test suite (unit + E2E).
+
+```bash
+./dive test all
+```
+
+## Status & Diagnostics
+
+System monitoring and diagnostic tools.
+
+### `status` - Overall System Status
+
+Comprehensive status report for current environment.
+
+```bash
+./dive status
+```
+
+Shows:
+- Service health
+- Container status
+- Federation statistics
+- Policy version
+- Recent logs
+
+### `health` - Health Check All Services
+
+Detailed health check of all services.
+
+```bash
+./dive health
+```
+
+### `validate` - Validate Configuration
+
+Check prerequisites and configuration validity.
+
+```bash
+./dive validate
+```
+
+### `info` - Show Environment Information
+
+Display current environment configuration.
+
+```bash
+./dive info
+```
+
+### `diagnostics` - Comprehensive Diagnostics
+
+Full system diagnostic report.
+
+```bash
+./dive diagnostics
+```
+
+### `brief` - Brief Status Summary
+
+Quick status overview.
+
+```bash
+./dive brief
+```
+
+## Environment Helpers
+
+### `env` - Show Environment Variables
+
+Display resolved environment variables.
+
+```bash
+./dive env
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Docker Issues
+```bash
+# Check Docker status
+docker info
+
+# Restart Docker
+sudo systemctl restart docker
+
+# Check container logs
+./dive logs <service>
+```
+
+#### Secrets Issues
+```bash
+# Verify secrets access
+./dive secrets verify
+
+# Load secrets manually
+./dive secrets load
+
+# Check GCP authentication
+gcloud auth list
+```
+
+#### Network Issues
+```bash
+# Check port availability
+lsof -i :3000
+lsof -i :4000
+lsof -i :8443
+
+# Restart services
+./dive restart
+```
+
+#### Federation Issues
+```bash
+# Check federation status
+./dive federation status
+
+# Verify IdP links
+./dive federation list-idps
+
+# Check spoke registration
+./dive hub spokes list
+```
+
+### Logs and Debugging
+
+```bash
+# View all logs
+./dive logs
+
+# Follow specific service logs
+./dive logs backend -f
+
+# Execute in container for debugging
+./dive exec backend bash
+
+# View pilot VM logs
+./dive --env pilot pilot logs backend -f
+```
+
+### Reset Procedures
+
+```bash
+# Soft reset (restart services)
+./dive restart
+
+# Clean reset (remove containers, keep volumes)
+./dive down
+./dive up
+
+# Full reset (destroy everything)
+./dive nuke
+./dive deploy
+
+# Pilot VM reset
+./dive --env pilot pilot reset
+```
+
+## Architecture Reference
+
+### DIVE V3 Architecture
+
+DIVE V3 follows a **hub-spoke federation model**:
+
+```
+┌─────────────────┐    ┌─────────────────┐
+│   USA Hub       │◄──►│   FRA Spoke     │
+│                 │    │                 │
+│ • Keycloak      │    │ • Keycloak      │
+│ • Backend API   │    │ • Backend API   │
+│ • OPAL Server   │    │ • OPAL Client   │
+│ • Registry      │    │ • Local Cache   │
+└─────────────────┘    └─────────────────┘
+         ▲                       ▲
+         │                       │
+         └───────────────────────┘
+              Federation Bus
+```
+
+### Security Model
+
+- **Policy Decision Point (PDP):** OPA evaluates ABAC policies
+- **Policy Enforcement Point (PEP):** Backend API enforces decisions
+- **Federation Trust:** Hub manages spoke authentication
+- **PII Minimization:** JWT tokens contain only pseudonymized identifiers
+
+### Data Flow
+
+1. **Authentication:** User → Keycloak → JWT token
+2. **Authorization:** API request → PEP → OPA → Decision
+3. **Federation:** Cross-instance requests → Hub validation
+4. **Policy Sync:** Hub → OPAL → Spoke clients
+
+### Key Components
+
+- **Keycloak:** Identity and Access Management
+- **OPA:** Open Policy Agent for authorization decisions
+- **OPAL:** Policy distribution and synchronization
+- **MongoDB:** Resource metadata and classifications
+- **PostgreSQL:** User sessions and audit logs
+- **Redis:** Caching and session management
+
+### Federation Features
+
+- **NATO 32-Country Support:** All NATO member nations supported with unique port allocations
+- **Cross-border SSO:** Seamless authentication across instances
+- **Policy synchronization:** Real-time policy updates
+- **Audit aggregation:** Centralized security event logging
+- **Trust management:** Configurable trust levels between nations
+- **Automated Theme Generation:** Country-specific Keycloak themes from national colors
+- **Terraform IaC:** Pre-generated tfvars for all 32 NATO countries
+
+## Command Reference
+
+### All Commands Summary
+
+```
+Core Commands:
+  up              Start the stack
+  down            Stop the stack
+  restart [svc]   Restart stack or service
+  logs [svc]      View logs (follow mode)
+  ps              List running containers
+  exec <svc> [cmd] Execute command in container
+
+Deployment:
+  deploy          Full deployment workflow
+  validate        Validate prerequisites
+  reset           Reset to clean state
+  nuke            Destroy everything
+
+Database:
+  seed [inst]     Seed database with test data
+  backup          Create database backup
+  restore <dir>   Restore from backup
+
+Terraform:
+  tf plan [dir]            Show Terraform plan
+  tf apply [dir]           Apply Terraform configuration
+  tf destroy [dir]         Destroy Terraform resources
+  tf output [dir]          Show Terraform outputs
+  tf init [dir]            Initialize Terraform
+  tf validate              Validate all configurations
+  tf fmt                   Format all Terraform files
+  tf generate <CODE>       Generate country tfvars from NATO database
+  tf generate --all        Generate all 32 NATO tfvars
+  tf list-countries        List generated country tfvars
+
+Terraform Workspaces:
+  tf workspace list        List all workspaces
+  tf workspace new <CODE>  Create workspace for country
+  tf workspace select <CODE> Switch to workspace
+  tf workspace delete <CODE> Delete workspace
+  tf workspace show        Show current workspace
+
+Terraform Spoke Deployment:
+  tf spoke init <CODE>     Initialize spoke for country
+  tf spoke plan <CODE>     Plan spoke deployment
+  tf spoke apply <CODE>    Apply spoke configuration
+  tf spoke destroy <CODE>  Destroy spoke resources
+
+Secrets:
+  secrets list    List all DIVE secrets in GCP
+  secrets show    Show secrets for instance
+  secrets load    Load secrets into environment
+  secrets verify  Verify secrets accessible
+  secrets export  Export secrets as shell commands
+
+Pilot VM:
+  pilot up        Start services on pilot VM
+  pilot down      Stop services on pilot VM
+  pilot status    Show pilot VM status
+  pilot logs      View pilot VM logs
+  pilot ssh       SSH into pilot VM
+  pilot reset     Reset pilot VM to clean state
+  pilot deploy    Full deployment to pilot VM
+
+Federation:
+  federation status       Show federation status
+  federation link <CODE>  Link IdP for cross-border SSO
+  federation unlink <CODE> Remove IdP link
+  federation list-idps    List configured IdPs
+  federation mappers apply Apply PII-minimized mappers
+  federation mappers verify Verify mapper configuration
+
+Hub Management:
+  hub deploy              Full hub deployment (includes seeding)
+  hub seed [count]        Seed test users and resources (ABAC)
+  hub status              Show hub status
+  hub verify              10-point hub verification
+  hub spokes list         List registered spokes
+  hub spokes pending      Show pending approvals
+  hub spokes approve <id> Approve spoke registration
+  hub push-policy         Push policy to all spokes
+
+Spoke Management:
+  spoke init <code> <name> Initialize new spoke
+  spoke up                 Start spoke services
+  spoke status             Show spoke status
+  spoke health             Check spoke health
+  spoke sync               Force policy sync
+
+NATO Country Management:
+  spoke list-countries     List all 32 NATO countries
+  spoke ports [CODE]       Show port assignments
+  spoke country-info <CODE> Show detailed country info
+  spoke validate-country   Validate NATO country code
+  spoke generate-theme     Generate Keycloak theme for country
+  spoke batch-deploy       Deploy multiple countries
+  spoke verify-federation  Verify federation health
+
+SP Client:
+  sp register              Register OAuth client
+  sp status [id]           Show registration status
+  sp list                  List registered clients
+
+Policy:
+  policy build [--sign]    Build OPA policy bundle
+  policy push              Push to OPAL server
+  policy status            Show distribution status
+  policy test [pattern]    Run OPA policy tests
+
+Testing:
+  test federation          Run federation E2E tests
+  test unit                Run backend unit tests
+  test all                 Run all tests
+
+Status:
+  status                   Overall system status
+  health                   Health check all services
+  validate                 Validate prerequisites
+  info                     Show environment info
+  diagnostics              Comprehensive diagnostics
+  brief                    Brief status summary
+
+Other:
+  env                      Show environment variables
+  help                     Show this help
+```
+
+---
+
+**DIVE V3 CLI Version:** Modular Unified Management Script (NATO 32-Country Edition)  
+**Last Updated:** December 2025  
+**Documentation:** This guide covers all CLI functionality including NATO 32-country expansion (Phases 1-5)
