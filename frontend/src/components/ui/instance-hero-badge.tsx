@@ -7,7 +7,7 @@
  * in the hero section. Uses the ThemeProvider context for instance info.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useInstanceTheme } from './theme-provider';
 import { getCountryFlagComponent } from './flags';
 
@@ -127,51 +127,88 @@ export function InstanceInline({ className = '' }: { className?: string }) {
  * Coalition Partners Footer - shows which countries are federated partners
  */
 export function CoalitionPartnersFooter({ className = '' }: { className?: string }) {
-  const { instanceCode, instanceName, coalitionPartners, strings } = useInstanceTheme();
+  const { instanceCode, instanceName, strings } = useInstanceTheme();
   const FlagComponent = getCountryFlagComponent(instanceCode);
+  const [availableIdPs, setAvailableIdPs] = useState<Array<{ alias: string; code: string }>>([]);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
   
-  // Get names for coalition partners
-  const partnerNames: Record<string, string> = {
-    USA: 'United States',
-    FRA: 'France',
-    DEU: 'Germany',
-    GBR: 'United Kingdom',
-    CAN: 'Canada',
-    ITA: 'Italy',
-    ESP: 'Spain',
-    NLD: 'Netherlands',
-    POL: 'Poland',
-  };
+  // Fetch actual available IdPs on mount
+  useEffect(() => {
+    const fetchIdPs = async () => {
+      try {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 
+                          process.env.NEXT_PUBLIC_API_URL || 
+                          'https://localhost:4000';
+        const response = await fetch(`${backendUrl}/api/idps/public`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Extract 3-letter code from alias (e.g., "fra-idp" → "FRA")
+          const idps = (data.idps || []).map((idp: { alias: string }) => ({
+            alias: idp.alias,
+            code: idp.alias.replace(/-idp$/, '').replace(/-realm-broker$/, '').toUpperCase()
+          }));
+          setAvailableIdPs(idps);
+        }
+      } catch (err) {
+        console.warn('[Footer] Failed to fetch IdPs:', err);
+      }
+    };
+    
+    fetchIdPs();
+    
+    // Set current date as last updated
+    const now = new Date();
+    const month = now.toLocaleString('en-US', { month: 'long' });
+    const year = now.getFullYear();
+    setLastUpdated(`${month} ${year}`);
+  }, []);
   
   return (
     <div className={`text-center ${className}`}>
-      <div className="flex items-center justify-center gap-3 text-sm text-gray-500 mb-4">
+      <div className="flex items-center justify-center gap-3 text-sm text-gray-500 mb-4 flex-wrap">
         <span className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-[var(--instance-primary)] to-[var(--instance-secondary)] text-white rounded-full font-semibold">
           <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
           LIVE
         </span>
-        <span>•</span>
+        <span className="hidden sm:inline">•</span>
         <span>{strings.coalitionPilot}</span>
-        <span>•</span>
-        <span>November 2025</span>
+        <span className="hidden sm:inline">•</span>
+        <span>{lastUpdated || 'December 2025'}</span>
       </div>
       
-      {/* Coalition Partners */}
+      {/* Available Federation Partners - Dynamic */}
       <div className="mb-4">
         <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">
           <FlagComponent size={16} className="inline mr-1" />
-          {instanceName} Coalition Partners
+          {availableIdPs.length > 0 
+            ? `${availableIdPs.length} Federation Partners Available`
+            : `${instanceName} Coalition Partners`
+          }
         </p>
-        <div className="flex items-center justify-center gap-3 flex-wrap">
-          {coalitionPartners.map((code) => {
-            const PartnerFlag = getCountryFlagComponent(code);
-            return (
-              <div key={code} className="flex items-center gap-1 text-xs text-gray-500">
-                <PartnerFlag size={18} />
-                <span>{partnerNames[code] || code}</span>
-              </div>
-            );
-          })}
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          {availableIdPs.length > 0 ? (
+            // Show actual available IdPs with 3-letter codes
+            availableIdPs.map(({ alias, code }) => {
+              const PartnerFlag = getCountryFlagComponent(code);
+              return (
+                <div 
+                  key={alias} 
+                  className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+                  title={alias}
+                >
+                  <PartnerFlag size={16} />
+                  <span className="font-mono font-semibold">{code}</span>
+                </div>
+              );
+            })
+          ) : (
+            // Fallback while loading
+            <span className="text-xs text-gray-400">Loading partners...</span>
+          )}
         </div>
       </div>
       
