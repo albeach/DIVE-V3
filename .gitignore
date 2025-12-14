@@ -16,6 +16,7 @@
 
 # Logs
 logs/
+!frontend/src/app/api/admin/logs/
 !frontend/src/app/admin/logs/
 *.log
 npm-debug.log*
