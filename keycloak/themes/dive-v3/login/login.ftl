@@ -152,15 +152,54 @@
                         <#assign countryCode = "">
                         <#assign flagEmoji = "🌐">
                         <#assign idpAlias = p.alias!?lower_case>
+                        
+                        <#-- NATO Founding Members (1949) - 12 countries -->
                         <#if idpAlias?contains("usa") || idpAlias?contains("us-")><#assign countryCode = "USA"><#assign flagEmoji = "🇺🇸"></#if>
-                        <#if idpAlias?contains("fra") || idpAlias?contains("france")><#assign countryCode = "FRA"><#assign flagEmoji = "🇫🇷"></#if>
-                        <#if idpAlias?contains("deu") || idpAlias?contains("germany")><#assign countryCode = "DEU"><#assign flagEmoji = "🇩🇪"></#if>
                         <#if idpAlias?contains("can") || idpAlias?contains("canada")><#assign countryCode = "CAN"><#assign flagEmoji = "🇨🇦"></#if>
                         <#if idpAlias?contains("gbr") || idpAlias?contains("uk")><#assign countryCode = "GBR"><#assign flagEmoji = "🇬🇧"></#if>
-                        <#if idpAlias?contains("esp") || idpAlias?contains("spain")><#assign countryCode = "ESP"><#assign flagEmoji = "🇪🇸"></#if>
-                        <#if idpAlias?contains("ita") || idpAlias?contains("italy")><#assign countryCode = "ITA"><#assign flagEmoji = "🇮🇹"></#if>
+                        <#if idpAlias?contains("fra") || idpAlias?contains("france")><#assign countryCode = "FRA"><#assign flagEmoji = "🇫🇷"></#if>
+                        <#if idpAlias?contains("bel") || idpAlias?contains("belgium")><#assign countryCode = "BEL"><#assign flagEmoji = "🇧🇪"></#if>
                         <#if idpAlias?contains("nld") || idpAlias?contains("netherlands")><#assign countryCode = "NLD"><#assign flagEmoji = "🇳🇱"></#if>
+                        <#if idpAlias?contains("lux") || idpAlias?contains("luxembourg")><#assign countryCode = "LUX"><#assign flagEmoji = "🇱🇺"></#if>
+                        <#if idpAlias?contains("dnk") || idpAlias?contains("denmark")><#assign countryCode = "DNK"><#assign flagEmoji = "🇩🇰"></#if>
+                        <#if idpAlias?contains("nor") || idpAlias?contains("norway")><#assign countryCode = "NOR"><#assign flagEmoji = "🇳🇴"></#if>
+                        <#if idpAlias?contains("isl") || idpAlias?contains("iceland")><#assign countryCode = "ISL"><#assign flagEmoji = "🇮🇸"></#if>
+                        <#if idpAlias?contains("prt") || idpAlias?contains("portugal")><#assign countryCode = "PRT"><#assign flagEmoji = "🇵🇹"></#if>
+                        <#if idpAlias?contains("ita") || idpAlias?contains("italy")><#assign countryCode = "ITA"><#assign flagEmoji = "🇮🇹"></#if>
+                        
+                        <#-- Cold War Expansion (1952-1982) - 4 countries -->
+                        <#if idpAlias?contains("grc") || idpAlias?contains("greece")><#assign countryCode = "GRC"><#assign flagEmoji = "🇬🇷"></#if>
+                        <#if idpAlias?contains("tur") || idpAlias?contains("turkey")><#assign countryCode = "TUR"><#assign flagEmoji = "🇹🇷"></#if>
+                        <#if idpAlias?contains("deu") || idpAlias?contains("germany")><#assign countryCode = "DEU"><#assign flagEmoji = "🇩🇪"></#if>
+                        <#if idpAlias?contains("esp") || idpAlias?contains("spain")><#assign countryCode = "ESP"><#assign flagEmoji = "🇪🇸"></#if>
+                        
+                        <#-- Post-Cold War Expansion (1999) - 3 countries -->
+                        <#if idpAlias?contains("cze") || idpAlias?contains("czech")><#assign countryCode = "CZE"><#assign flagEmoji = "🇨🇿"></#if>
+                        <#if idpAlias?contains("hun") || idpAlias?contains("hungary")><#assign countryCode = "HUN"><#assign flagEmoji = "🇭🇺"></#if>
                         <#if idpAlias?contains("pol") || idpAlias?contains("poland")><#assign countryCode = "POL"><#assign flagEmoji = "🇵🇱"></#if>
+                        
+                        <#-- 2004 Expansion - 7 countries -->
+                        <#if idpAlias?contains("bgr") || idpAlias?contains("bulgaria")><#assign countryCode = "BGR"><#assign flagEmoji = "🇧🇬"></#if>
+                        <#if idpAlias?contains("est") || idpAlias?contains("estonia")><#assign countryCode = "EST"><#assign flagEmoji = "🇪🇪"></#if>
+                        <#if idpAlias?contains("lva") || idpAlias?contains("latvia")><#assign countryCode = "LVA"><#assign flagEmoji = "🇱🇻"></#if>
+                        <#if idpAlias?contains("ltu") || idpAlias?contains("lithuania")><#assign countryCode = "LTU"><#assign flagEmoji = "🇱🇹"></#if>
+                        <#if idpAlias?contains("rou") || idpAlias?contains("romania")><#assign countryCode = "ROU"><#assign flagEmoji = "🇷🇴"></#if>
+                        <#if idpAlias?contains("svk") || idpAlias?contains("slovakia")><#assign countryCode = "SVK"><#assign flagEmoji = "🇸🇰"></#if>
+                        <#if idpAlias?contains("svn") || idpAlias?contains("slovenia")><#assign countryCode = "SVN"><#assign flagEmoji = "🇸🇮"></#if>
+                        
+                        <#-- 2009-2020 Expansion - 4 countries -->
+                        <#if idpAlias?contains("alb") || idpAlias?contains("albania")><#assign countryCode = "ALB"><#assign flagEmoji = "🇦🇱"></#if>
+                        <#if idpAlias?contains("hrv") || idpAlias?contains("croatia")><#assign countryCode = "HRV"><#assign flagEmoji = "🇭🇷"></#if>
+                        <#if idpAlias?contains("mne") || idpAlias?contains("montenegro")><#assign countryCode = "MNE"><#assign flagEmoji = "🇲🇪"></#if>
+                        <#if idpAlias?contains("mkd") || idpAlias?contains("macedonia")><#assign countryCode = "MKD"><#assign flagEmoji = "🇲🇰"></#if>
+                        
+                        <#-- Nordic Expansion (2023-2024) - 2 countries -->
+                        <#if idpAlias?contains("fin") || idpAlias?contains("finland")><#assign countryCode = "FIN"><#assign flagEmoji = "🇫🇮"></#if>
+                        <#if idpAlias?contains("swe") || idpAlias?contains("sweden")><#assign countryCode = "SWE"><#assign flagEmoji = "🇸🇪"></#if>
+                        
+                        <#-- Non-NATO Partners (FVEY) -->
+                        <#if idpAlias?contains("aus") || idpAlias?contains("australia")><#assign countryCode = "AUS"><#assign flagEmoji = "🇦🇺"></#if>
+                        <#if idpAlias?contains("nzl") || idpAlias?contains("zealand")><#assign countryCode = "NZL"><#assign flagEmoji = "🇳🇿"></#if>
                         
                         <a id="social-${p.alias}" 
                            class="dive-idp-button" 
