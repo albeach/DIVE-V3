@@ -3545,11 +3545,19 @@ details[open] .dive-policy-chevron {
 /* Adjust container when animated banner is present */
 body:has(.dive-federation-banner-animated) .dive-container {
     padding-top: 9.5rem;
+    transition: padding-top 0.3s ease;
 }
 
 /* Extra padding when cross-border details are expanded */
 body:has(.dive-policy-notice[open]) .dive-container {
-    padding-top: 16rem;
+    padding-top: 22rem;
+}
+
+/* Mobile: need even more space when expanded */
+@media (max-width: 640px) {
+    body:has(.dive-policy-notice[open]) .dive-container {
+        padding-top: 26rem;
+    }
 }
 
 /* ============================================
