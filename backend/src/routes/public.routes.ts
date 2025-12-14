@@ -89,11 +89,10 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
     try {
         logger.debug('IdP health check', { requestId, alias });
 
-        // Get IdP configuration from Keycloak
-        const result = await keycloakAdminService.listIdentityProviders();
-        const idp = result.idps.find(p => p.alias === alias);
-
-        if (!idp) {
+        // Get full IdP configuration from Keycloak (including URLs)
+        const idpDetails = await keycloakAdminService.getIdentityProvider(alias);
+        
+        if (!idpDetails) {
             // IdP not found - could be disabled or doesn't exist
             res.status(404).json({
                 success: false,
@@ -104,6 +103,8 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
             });
             return;
         }
+
+        const idp = idpDetails;
 
         if (!idp.enabled) {
             res.status(200).json({
@@ -117,20 +118,38 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
             return;
         }
 
-        // Try to reach the IdP's authorization endpoint
-        // Extract the issuer/base URL from the IdP config
-        const idpBaseUrl = idp.config?.authorizationUrl || 
-                          idp.config?.tokenUrl?.replace('/token', '') ||
-                          null;
+        // Try to reach the IdP's endpoint
+        // Priority: discoveryEndpoint > tokenUrl (internal Docker URL) > authorizationUrl
+        // The tokenUrl typically uses internal Docker hostnames (e.g., fra-keycloak-fra-1:8443)
+        // while authorizationUrl uses localhost which isn't reachable from inside Docker
+        const tokenUrl = idp.config?.tokenUrl;
+        const discoveryEndpoint = idp.config?.discoveryEndpoint;
+        
+        // Build the well-known URL from internal Docker URL or discovery endpoint
+        let wellKnownUrl: string | null = null;
+        
+        if (discoveryEndpoint) {
+            wellKnownUrl = discoveryEndpoint;
+        } else if (tokenUrl) {
+            // Convert tokenUrl to well-known endpoint
+            // tokenUrl: https://fra-keycloak-fra-1:8443/realms/.../protocol/openid-connect/token
+            // wellKnown: https://fra-keycloak-fra-1:8443/realms/.../.well-known/openid-configuration
+            const issuer = tokenUrl.replace(/\/protocol\/openid-connect.*$/, '');
+            wellKnownUrl = `${issuer}/.well-known/openid-configuration`;
+        }
+        
+        logger.debug('IdP health check - URLs', { 
+            requestId, 
+            alias, 
+            tokenUrl,
+            discoveryEndpoint,
+            wellKnownUrl 
+        });
 
-        if (idpBaseUrl) {
+        if (wellKnownUrl) {
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
-                
-                // Try to fetch the well-known config (lightweight health check)
-                const issuer = idpBaseUrl.replace(/\/protocol\/openid-connect.*$/, '');
-                const wellKnownUrl = `${issuer}/.well-known/openid-configuration`;
                 
                 const response = await fetch(wellKnownUrl, {
                     method: 'GET',
