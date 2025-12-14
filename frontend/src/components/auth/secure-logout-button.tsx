@@ -1,8 +1,7 @@
 "use client";
 
-import { signOut, useSession } from "next-auth/react";
 import { useState } from "react";
-import { getSessionSyncManager } from "@/lib/session-sync-manager";
+import { federatedLogout } from "@/lib/federated-logout";
 
 interface SecureLogoutButtonProps {
   compact?: boolean;
@@ -10,157 +9,15 @@ interface SecureLogoutButtonProps {
 
 export function SecureLogoutButton({ compact = false }: SecureLogoutButtonProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { data: session } = useSession();
   
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'secure-logout-button.tsx:handleLogout',message:'User initiated logout (client)',data:{component:'SecureLogoutButton',windowHref:typeof window!=='undefined'?window.location.href:null,windowOrigin:typeof window!=='undefined'?window.location.origin:null,envBaseUrl:process.env.NEXT_PUBLIC_BASE_URL??null,envNextAuthUrl:process.env.NEXTAUTH_URL??null,envKeycloakUrl:process.env.NEXT_PUBLIC_KEYCLOAK_URL??null,envKeycloakRealm:process.env.NEXT_PUBLIC_KEYCLOAK_REALM??null,envInstance:process.env.NEXT_PUBLIC_INSTANCE??null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      
-      console.log('[DIVE] User-initiated logout - starting COMPREHENSIVE cleanup...');
-      console.log('[DIVE] This will: 1) Get Keycloak logout URL, 2) Delete DB sessions, 3) Clear tokens, 4) Delete cookies, 5) Clear storage, 6) Terminate Keycloak SSO');
-      
-      // STEP 1: Get Keycloak logout URL FIRST (before clearing anything!)
-      // CRITICAL: Must capture idToken BEFORE clearing session/tokens
-      console.log('[DIVE] Step 1: Getting Keycloak logout URL (BEFORE clearing session)...');
-      const keycloakLogoutUrl = await getKeycloakLogoutUrl();
-      
-      if (keycloakLogoutUrl) {
-        console.log('[DIVE] ✅ Keycloak logout URL obtained');
-      } else {
-        console.warn('[DIVE] ⚠️ No Keycloak logout URL - SSO session will persist!');
-      }
-      
-      // STEP 2: Complete server-side logout
-      // This deletes database sessions AND clears account tokens
-      console.log('[DIVE] Step 2: Complete server-side logout (DB + tokens)...');
-      try {
-        const response = await fetch('/api/auth/logout', { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (response.ok) {
-          const result = await response.json();
-          console.log('[DIVE] Server-side logout SUCCESS:', result);
-        } else {
-          console.error('[DIVE] Server-side logout FAILED:', response.status);
-        }
-      } catch (serverError) {
-        console.error('[DIVE] Server-side logout API error:', serverError);
-        // Continue with local cleanup even if server fails
-      }
-      
-      // Step 3: Call NextAuth signOut (client-side cookie deletion)
-      console.log('[DIVE] Step 3: NextAuth signOut (delete cookies)...');
-      await signOut({ redirect: false });
-      console.log('[DIVE] NextAuth signOut complete');
-      
-      // Step 4: Clear browser storage
-      console.log('[DIVE] Step 4: Clearing browser storage...');
-      localStorage.clear();
-      sessionStorage.clear();
-      console.log('[DIVE] Browser storage cleared');
-      
-      // Step 5: Notify other tabs
-      console.log('[DIVE] Step 5: Notifying other tabs via BroadcastChannel...');
-      const syncManager = getSessionSyncManager();
-      syncManager.notifyUserLogout();
-      console.log('[DIVE] Other tabs notified');
-      
-      // Step 6: Terminate Keycloak SSO session (using URL captured in Step 1)
-      console.log('[DIVE] Step 6: Terminating Keycloak SSO session...');
-      
-      if (keycloakLogoutUrl) {
-        console.log('[DIVE] Redirecting to Keycloak for SSO termination');
-        console.log('[DIVE] Full logout URL:', keycloakLogoutUrl.substring(0, 100) + '...');
-        
-        // DIRECT REDIRECT: Simplest and most reliable method
-        // Keycloak will terminate SSO session and redirect back to post_logout_redirect_uri
-        console.log('[DIVE] Using direct redirect to Keycloak logout endpoint');
-        window.location.href = keycloakLogoutUrl;
-        // Note: This will redirect to Keycloak, then back to / (home page)
-        
-      } else {
-        console.warn('[DIVE] No Keycloak logout URL - doing local logout only');
-        console.log('[DIVE] Complete logout done, redirecting to home');
-        
-        // All cleanup complete, redirect home
-        window.location.href = "/";
-      }
-      
+      console.log('[DIVE] SecureLogoutButton: Initiating federated logout');
+      await federatedLogout({ reason: 'secure_logout_button' });
     } catch (error) {
-      console.error("[DIVE] Logout error:", error);
-      
-      // Emergency cleanup even on error
-      try {
-        localStorage.clear();
-        sessionStorage.clear();
-      } catch (storageError) {
-        console.error("[DIVE] Emergency storage clear error:", storageError);
-      }
-      
-      // Force redirect home
-      console.log('[DIVE] Forcing redirect after error');
-      window.location.href = "/";
-    }
-  };
-  
-  const getKeycloakLogoutUrl = async (): Promise<string | null> => {
-    try {
-      console.log('[DIVE] Building Keycloak logout URL...');
-      console.log('[DIVE] Session state:', {
-        hasSession: !!session,
-        hasUser: !!session?.user,
-        userName: session?.user?.name,
-      });
-      
-      // Fetch idToken from server (tokens are server-side only now)
-      console.log("[DIVE] Fetching idToken from server (2025 security pattern)...");
-      try {
-        const response = await fetch('/api/auth/session-tokens');
-        if (!response.ok) {
-          throw new Error(`Failed to get session tokens: ${response.status}`);
-        }
-        
-        const tokens = await response.json();
-        console.log("[DIVE] Server tokens received:", {
-          hasIdToken: !!tokens.idToken,
-          idTokenLength: tokens.idToken?.length || 0
-        });
-        
-        if (!tokens.idToken) {
-          console.error("[DIVE] No idToken available - local logout only");
-          return null;
-        }
-        
-        console.log("[DIVE] SUCCESS: Using server-side idToken for logout");
-        const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8081";
-        const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "dive-v3-broker";
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H1',location:'secure-logout-button.tsx:getKeycloakLogoutUrl:env',message:'Computed logout env inputs (client)',data:{keycloakUrl,realm,baseUrl,windowOrigin:typeof window!=='undefined'?window.location.origin:null,windowPath:typeof window!=='undefined'?window.location.pathname:null,hasIdToken:!!tokens.idToken,idTokenLength:tokens.idToken?.length||0},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        
-        // Build logout URL manually (without using URL searchParams to avoid double-encoding)
-        const logoutUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/logout?id_token_hint=${tokens.idToken}&post_logout_redirect_uri=${baseUrl}`;
-
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'debug-session',runId:'run1',hypothesisId:'H4',location:'secure-logout-button.tsx:getKeycloakLogoutUrl:url',message:'Constructed Keycloak logout URL (sanitized, client)',data:{postLogoutRedirectUri:baseUrl,logoutUrlSanitized:logoutUrl.replace(/id_token_hint=[^&]+/,'id_token_hint=[REDACTED]')},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        
-        return logoutUrl;
-      } catch (fallbackError) {
-        console.error("[DIVE] Failed to fetch idToken from server:", fallbackError);
-        return null;
-      }
-    } catch (error) {
-      console.error("[DIVE] Error building Keycloak logout URL:", error);
-      return null;
+      console.error("[DIVE] SecureLogoutButton: Logout error:", error);
+      // federatedLogout handles its own error recovery
     }
   };
 

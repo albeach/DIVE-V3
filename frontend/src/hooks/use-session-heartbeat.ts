@@ -16,7 +16,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { federatedLogout } from '@/lib/federated-logout';
 
 interface HeartbeatResponse {
     authenticated: boolean;
@@ -123,7 +124,7 @@ export function useSessionHeartbeat() {
             // Heartbeat-triggered logout failsafe
             if (!health.isValid && data.authenticated === false) {
                 console.error('[Heartbeat] Server reports session invalid - forcing logout');
-                await signOut({ callbackUrl: '/', redirect: true });
+                await federatedLogout({ reason: 'heartbeat_invalid' });
                 return null;
             }
 
