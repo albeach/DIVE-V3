@@ -68,7 +68,7 @@ resource "keycloak_authentication_execution" "browser_idp_redirector" {
   parent_flow_alias = keycloak_authentication_flow.classified_browser.alias
   authenticator     = "identity-provider-redirector"
   requirement       = "ALTERNATIVE"
-  priority          = 5  # Run before cookie so kc_idp_hint is honored immediately
+  priority          = 5 # Run before cookie so kc_idp_hint is honored immediately
 }
 
 resource "keycloak_authentication_execution" "browser_cookie" {

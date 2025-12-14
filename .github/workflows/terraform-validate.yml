@@ -1,0 +1,86 @@
+name: Terraform Validate
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-validate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive terraform/
+        continue-on-error: true
+
+      - name: Validate Pilot Configuration
+        id: validate-pilot
+        run: |
+          cd terraform/pilot
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Spoke Configuration
+        id: validate-spoke
+        run: |
+          cd terraform/spoke
+          terraform init -backend=false
+          terraform validate
+
+      - name: Validate Modules
+        id: validate-modules
+        run: |
+          for dir in terraform/modules/*/; do
+            echo "Validating $dir..."
+            cd "$dir"
+            terraform init -backend=false 2>/dev/null || true
+            terraform validate || exit 1
+            cd - > /dev/null
+          done
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `### Terraform Validation Results
+            
+            | Check | Status |
+            |-------|--------|
+            | Format | ${{ steps.fmt.outcome == 'success' && '✅ Passed' || '⚠️ Needs formatting' }} |
+            | Pilot | ${{ steps.validate-pilot.outcome == 'success' && '✅ Valid' || '❌ Invalid' }} |
+            | Spoke | ${{ steps.validate-spoke.outcome == 'success' && '✅ Valid' || '❌ Invalid' }} |
+            | Modules | ${{ steps.validate-modules.outcome == 'success' && '✅ Valid' || '❌ Invalid' }} |
+            
+            ${steps.fmt.outcome == 'failure' ? '> Run `./dive tf fmt` to fix formatting issues.' : ''}
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Fail if format check failed
+        if: steps.fmt.outcome == 'failure'
+        run: |
+          echo "::error::Terraform files are not formatted. Run 'terraform fmt -recursive' locally."
+          exit 1

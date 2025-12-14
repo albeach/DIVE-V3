@@ -28,7 +28,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   enabled      = each.value.enabled
 
   # Provider settings
-  provider_id       = "oidc"
+  provider_id = "oidc"
   # Split front-channel (browser) vs back-channel (server-to-server) URLs.
   # Front-channel: use public IdP URL so redirects match the browser.
   # Back-channel: allow an internal URL (e.g., http://keycloak-gbr:8080) to avoid TLS trust issues in local.
@@ -63,7 +63,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
 
   # Extra config for attribute mapping
   extra_config = {
-    "clientAuthMethod"   = "client_secret_post"
+    "clientAuthMethod" = "client_secret_post"
     # Local dev: allow self-signed certs when disable_trust_manager is true
     "disableTrustManager" = tostring(local.partner_disable_trust[each.key])
   }

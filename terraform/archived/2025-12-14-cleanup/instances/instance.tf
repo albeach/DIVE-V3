@@ -29,11 +29,11 @@ module "instance" {
   # Realm configuration
   realm_name    = "dive-v3-broker"
   client_id     = "dive-v3-client-broker"
-  client_secret = var.client_secret  # From GCP Secret Manager via TF_VAR_client_secret
+  client_secret = var.client_secret # From GCP Secret Manager via TF_VAR_client_secret
 
   # Test users
-  create_test_users = var.create_test_users
-  test_user_password = var.test_user_password
+  create_test_users   = var.create_test_users
+  test_user_password  = var.test_user_password
   admin_user_password = var.admin_user_password
 
   # Theme - use instance-specific if exists, otherwise default
