@@ -66,7 +66,9 @@ app.prepare().then(() => {
   });
 
   server.listen(port, hostname, () => {
-    console.log(`> Ready on https://${hostname}:${port}`);
+    // Display localhost for user-friendly output (0.0.0.0 is just for binding)
+    const displayHost = hostname === '0.0.0.0' ? 'localhost' : hostname;
+    console.log(`> Ready on https://${displayHost}:${port}`);
     console.log(`> HTTP/2 (h2) and HTTP/1.1 enabled`);
     console.log(`> Certificate: ${path.join(certPath, 'certificate.pem')}`);
   });

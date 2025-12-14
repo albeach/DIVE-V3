@@ -26,10 +26,9 @@ const httpsOptions = {
 const server = https.createServer(httpsOptions, app);
 
 server.listen(PORT, () => {
-  console.log(`✅ Backend HTTPS server running on https://0.0.0.0:${PORT}`);
+  console.log(`✅ Backend HTTPS server running on https://localhost:${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   SSL Certificates: ${certPath}`);
-  console.log(`   External access: https://localhost:${PORT}`);
   console.log(`   Docker internal: https://backend:${PORT}`);
 });
 
