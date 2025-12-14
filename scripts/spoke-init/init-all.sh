@@ -115,6 +115,24 @@ echo ""
 "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}"
 
 # =============================================================================
+# Step 5: Sync Federation Secrets (if Hub is running)
+# =============================================================================
+if docker ps --format '{{.Names}}' | grep -q 'dive-hub-keycloak'; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 5/5: Syncing Federation Secrets with Hub${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    "${SCRIPT_DIR}/sync-federation-secrets.sh" "${INSTANCE_CODE}" || {
+        echo -e "${YELLOW}⚠ Federation sync skipped (Hub IdP may not exist yet)${NC}"
+        echo -e "${YELLOW}  Run './dive --instance ${INSTANCE_CODE} federation approve' after setup${NC}"
+    }
+else
+    echo -e "${YELLOW}⚠ Hub not running - skipping federation secret sync${NC}"
+    echo -e "${YELLOW}  Run './scripts/spoke-init/sync-federation-secrets.sh ${INSTANCE_CODE}' later${NC}"
+fi
+
+# =============================================================================
 # Complete!
 # =============================================================================
 END_TIME=$(date +%s)
