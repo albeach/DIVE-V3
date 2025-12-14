@@ -588,18 +588,18 @@ export interface ISpokeDetailPanelProps {
 // POLICY SCOPE DEFINITIONS
 // =============================================================================
 
-export const POLICY_SCOPES = [
+export const POLICY_SCOPES: readonly { id: string; label: string; description: string; required?: boolean }[] = [
   { id: 'policy:base', label: 'Base Guardrails', description: 'Core security guardrails (always included)', required: true },
-  { id: 'policy:fvey', label: 'Five Eyes', description: 'FVEY organization policies' },
-  { id: 'policy:nato', label: 'NATO', description: 'NATO organization policies' },
-  { id: 'policy:usa', label: 'USA Tenant', description: 'United States tenant policies' },
-  { id: 'policy:fra', label: 'France Tenant', description: 'France tenant policies' },
-  { id: 'policy:gbr', label: 'UK Tenant', description: 'United Kingdom tenant policies' },
-  { id: 'policy:deu', label: 'Germany Tenant', description: 'Germany tenant policies' },
-  { id: 'policy:nzl', label: 'New Zealand Tenant', description: 'New Zealand tenant policies' },
-  { id: 'policy:aus', label: 'Australia Tenant', description: 'Australia tenant policies' },
-  { id: 'policy:can', label: 'Canada Tenant', description: 'Canada tenant policies' },
-] as const;
+  { id: 'policy:fvey', label: 'Five Eyes', description: 'FVEY organization policies', required: false },
+  { id: 'policy:nato', label: 'NATO', description: 'NATO organization policies', required: false },
+  { id: 'policy:usa', label: 'USA Tenant', description: 'United States tenant policies', required: false },
+  { id: 'policy:fra', label: 'France Tenant', description: 'France tenant policies', required: false },
+  { id: 'policy:gbr', label: 'UK Tenant', description: 'United Kingdom tenant policies', required: false },
+  { id: 'policy:deu', label: 'Germany Tenant', description: 'Germany tenant policies', required: false },
+  { id: 'policy:nzl', label: 'New Zealand Tenant', description: 'New Zealand tenant policies', required: false },
+  { id: 'policy:aus', label: 'Australia Tenant', description: 'Australia tenant policies', required: false },
+  { id: 'policy:can', label: 'Canada Tenant', description: 'Canada tenant policies', required: false },
+];
 
 export const TRUST_LEVELS: { id: TrustLevel; label: string; description: string }[] = [
   { id: 'development', label: 'Development', description: 'Non-production testing only' },

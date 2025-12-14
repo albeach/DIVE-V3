@@ -19,7 +19,8 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { federatedLogout } from '@/lib/federated-logout';
 import { useRouter } from 'next/navigation';
 import { SessionExpiryModal, type SessionExpiryReason } from './session-expiry-modal';
 import { getSessionSyncManager } from '@/lib/session-sync-manager';
@@ -112,7 +113,8 @@ export function TokenExpiryChecker() {
                 case 'USER_LOGOUT':
                     // User logged out in another tab
                     console.log('[TokenExpiry] User logged out in another tab');
-                    signOut({ callbackUrl: '/' });
+                    // Skip Keycloak redirect since SSO already terminated in other tab
+                    federatedLogout({ skipKeycloakRedirect: true, reason: 'cross_tab_logout' });
                     break;
                     
                 case 'WARNING_SHOWN':

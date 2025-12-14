@@ -35,7 +35,7 @@ export interface IAuditQueueInfo {
 interface AuditQueueStatusProps {
   queue: IAuditQueueInfo | null;
   loading?: boolean;
-  onSync?: () => Promise<void>;
+  onSync?: () => Promise<void | unknown>;
   onClear?: () => Promise<void>;
 }
 

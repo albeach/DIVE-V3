@@ -14,7 +14,7 @@
 
 import { Fragment } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { signOut } from 'next-auth/react';
+import { federatedLogout } from '@/lib/federated-logout';
 
 export type SessionExpiryReason = 'warning' | 'expired' | 'error' | 'inactivity';
 
@@ -37,7 +37,7 @@ export function SessionExpiryModal({
 }: SessionExpiryModalProps) {
     const handleLogout = async () => {
         console.log('[SessionExpiry] User logging out from modal');
-        await signOut({ callbackUrl: '/' });
+        await federatedLogout({ reason: 'session_expiry_modal' });
     };
 
     const handleExtend = () => {

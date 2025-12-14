@@ -14,7 +14,7 @@
 'use client';
 
 import React, { Component, ReactNode } from 'react';
-import { signOut } from 'next-auth/react';
+import { federatedLogout } from '@/lib/federated-logout';
 
 interface Props {
     children: ReactNode;
@@ -95,7 +95,7 @@ export class SessionErrorBoundary extends Component<Props, State> {
 
     handleLogout = async () => {
         try {
-            await signOut({ callbackUrl: '/' });
+            await federatedLogout({ reason: 'session_error_boundary' });
         } catch (error) {
             console.error('[SessionErrorBoundary] Error during logout:', error);
             // Force redirect

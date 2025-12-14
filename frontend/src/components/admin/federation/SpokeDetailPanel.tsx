@@ -148,7 +148,7 @@ export function SpokeDetailPanel({
     return `${diffDays}d ago`;
   };
 
-  const getTokenStatus = () => {
+  const getSpokeTokenStatus = () => {
     if (!spoke?.tokenExpiresAt) return { status: 'none', label: 'No Token', color: 'text-gray-500' };
     
     const expiresAt = new Date(spoke.tokenExpiresAt);
@@ -164,7 +164,7 @@ export function SpokeDetailPanel({
 
   const statusConfig = STATUS_CONFIGS[spoke.status];
   const StatusIcon = statusConfig.icon;
-  const tokenStatus = getTokenStatus();
+  const tokenStatus = getSpokeTokenStatus();
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: Globe2 },
