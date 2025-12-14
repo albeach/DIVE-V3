@@ -1,0 +1,115 @@
+/**
+ * Turkey Keycloak Theme
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:46Z
+ * 
+ * Primary: #E30A17
+ * Secondary: #FFFFFF
+ * Accent: #ffffff
+ */
+
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #E30A17;
+    --instance-secondary: #FFFFFF;
+    --instance-accent: #ffffff;
+    --instance-primary-rgb: 227, 10, 23;
+    --instance-secondary-rgb: 255, 255, 255;
+}
+
+/* Background gradient */
+.dive-background {
+    background: linear-gradient(135deg, #E30A17 0%, #FFFFFF 100%);
+}
+
+/* Primary button styling */
+.dive-button-primary {
+    background: linear-gradient(135deg, #E30A17 0%, #FFFFFF 100%);
+    transition: all 0.3s ease;
+}
+
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(227, 10, 23, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
+.dive-header h1 {
+    color: #E30A17;
+}
+
+.dive-header .logo {
+    border-color: #E30A17;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: #E30A17;
+    box-shadow: 0 0 0 3px rgba(227, 10, 23, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: #E30A17;
+    background: rgba(227, 10, 23, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: #E30A17;
+    box-shadow: 0 0 0 3px rgba(227, 10, 23, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #E30A17;
+}
+
+.dive-link:hover {
+    color: #FFFFFF;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #ffffff;
+}
+
+.dive-accent-bg {
+    background-color: #ffffff;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(227, 10, 23, 0.1);
+    border: 1px solid #E30A17;
+    color: #E30A17;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #E30A17;
+    background: rgba(227, 10, 23, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #E30A17;
+    box-shadow: 0 0 0 3px rgba(227, 10, 23, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #E30A17 0%, #FFFFFF 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #E30A17;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #E30A17;
+}
+
+.dive-footer a:hover {
+    color: #FFFFFF;
+}

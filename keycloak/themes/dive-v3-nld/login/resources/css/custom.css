@@ -1,115 +1,115 @@
 /**
  * Netherlands Keycloak Theme
- * Auto-generated from instance.json
- * Generated: 2025-12-01T01:00:00Z
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:45Z
  * 
- * Primary: #21468B
- * Secondary: #AE1C28
- * Accent: #FF6600
+ * Primary: #AE1C28
+ * Secondary: #21468B
+ * Accent: #ffffff
  */
 
 /* CSS Variables for this instance */
 :root {
-    --instance-primary: #21468B;
-    --instance-secondary: #AE1C28;
-    --instance-accent: #FF6600;
-    --instance-primary-rgb: 33, 70, 139;
-    --instance-secondary-rgb: 174, 28, 40;
+    --instance-primary: #AE1C28;
+    --instance-secondary: #21468B;
+    --instance-accent: #ffffff;
+    --instance-primary-rgb: 174, 28, 40;
+    --instance-secondary-rgb: 33, 70, 139;
 }
 
 /* Background gradient */
 .dive-background {
-    background: linear-gradient(135deg, #21468B 0%, #AE1C28 100%);
+    background: linear-gradient(135deg, #AE1C28 0%, #21468B 100%);
 }
 
 /* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #FF6600 0%, #CC5200 100%);
+    background: linear-gradient(135deg, #AE1C28 0%, #21468B 100%);
     transition: all 0.3s ease;
 }
 
 .dive-button-primary:hover {
-    box-shadow: 0 8px 25px rgba(255, 102, 0, 0.4);
+    box-shadow: 0 8px 25px rgba(174, 28, 40, 0.4);
     transform: translateY(-2px);
 }
 
 /* Header styling */
 .dive-header h1 {
-    color: #21468B;
+    color: #AE1C28;
 }
 
 .dive-header .logo {
-    border-color: #21468B;
+    border-color: #AE1C28;
 }
 
 /* Input focus states */
 .dive-input:focus {
-    border-color: #FF6600;
-    box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.15);
+    border-color: #AE1C28;
+    box-shadow: 0 0 0 3px rgba(174, 28, 40, 0.15);
 }
 
 /* Social/IdP link styling */
 .dive-social-link:hover {
-    border-color: #FF6600;
-    background: rgba(255, 102, 0, 0.05);
+    border-color: #AE1C28;
+    background: rgba(174, 28, 40, 0.05);
 }
 
 .dive-social-link:focus {
-    border-color: #FF6600;
-    box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.15);
+    border-color: #AE1C28;
+    box-shadow: 0 0 0 3px rgba(174, 28, 40, 0.15);
 }
 
 /* Links */
 .dive-link {
-    color: #21468B;
+    color: #AE1C28;
 }
 
 .dive-link:hover {
-    color: #FF6600;
+    color: #21468B;
 }
 
 /* Accent elements */
 .dive-accent {
-    color: #FF6600;
+    color: #ffffff;
 }
 
 .dive-accent-bg {
-    background-color: #FF6600;
+    background-color: #ffffff;
 }
 
 /* Instance badge */
 .dive-instance-badge {
-    background: rgba(33, 70, 139, 0.1);
-    border: 1px solid #21468B;
-    color: #21468B;
+    background: rgba(174, 28, 40, 0.1);
+    border: 1px solid #AE1C28;
+    color: #AE1C28;
 }
 
 /* Alert/notification styling */
 .dive-alert-info {
-    border-left-color: #FF6600;
-    background: rgba(255, 102, 0, 0.05);
+    border-left-color: #AE1C28;
+    background: rgba(174, 28, 40, 0.05);
 }
 
 /* OTP/WebAuthn specific styling */
 .otp-input:focus {
-    border-color: #FF6600;
-    box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.15);
+    border-color: #AE1C28;
+    box-shadow: 0 0 0 3px rgba(174, 28, 40, 0.15);
 }
 
 .webauthn-button {
-    background: linear-gradient(135deg, #FF6600 0%, #CC5200 100%);
+    background: linear-gradient(135deg, #AE1C28 0%, #21468B 100%);
 }
 
 /* Passkey/WebAuthn icon coloring */
 .passkey-icon {
-    color: #FF6600;
+    color: #AE1C28;
 }
 
 /* Footer styling */
 .dive-footer a {
-    color: #21468B;
+    color: #AE1C28;
 }
 
 .dive-footer a:hover {
-    color: #FF6600;
+    color: #21468B;
 }

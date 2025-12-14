@@ -1,18 +1,18 @@
 /**
  * Italy Keycloak Theme
- * Auto-generated from instance.json
- * Generated: 2025-12-01T01:00:00Z
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:44Z
  * 
  * Primary: #009246
  * Secondary: #CE2B37
- * Accent: #FFFFFF
+ * Accent: #ffffff
  */
 
 /* CSS Variables for this instance */
 :root {
     --instance-primary: #009246;
     --instance-secondary: #CE2B37;
-    --instance-accent: #FFFFFF;
+    --instance-accent: #ffffff;
     --instance-primary-rgb: 0, 146, 70;
     --instance-secondary-rgb: 206, 43, 55;
 }
@@ -24,7 +24,7 @@
 
 /* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #009246 0%, #006d34 100%);
+    background: linear-gradient(135deg, #009246 0%, #CE2B37 100%);
     transition: all 0.3s ease;
 }
 
@@ -70,11 +70,11 @@
 
 /* Accent elements */
 .dive-accent {
-    color: #FFFFFF;
+    color: #ffffff;
 }
 
 .dive-accent-bg {
-    background-color: #FFFFFF;
+    background-color: #ffffff;
 }
 
 /* Instance badge */

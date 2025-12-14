@@ -53,38 +53,101 @@
     <#-- ============================================ -->
     <#-- Detect HOST INSTANCE (before body for data attribute) -->
     <#-- ============================================ -->
+    <#-- Complete NATO 32-country detection with ISO 3166-1 alpha-3 codes -->
     <#assign hostInstance = "">
     <#assign hostFlag = "🌐">
     <#assign hostCountryName = "">
     
     <#-- Parse from realm displayName (e.g., "France", "Germany", "United States") -->
-    <#if realm?? && realm.displayName?has_content>
-        <#if realm.displayName?lower_case?contains("france")>
-            <#assign hostInstance = "FRA"><#assign hostFlag = "🇫🇷"><#assign hostCountryName = "France">
-        <#elseif realm.displayName?lower_case?contains("germany") || realm.displayName?lower_case?contains("deutschland")>
-            <#assign hostInstance = "DEU"><#assign hostFlag = "🇩🇪"><#assign hostCountryName = "Germany">
-        <#elseif realm.displayName?lower_case?contains("united kingdom") || realm.displayName?lower_case?contains("britain")>
-            <#assign hostInstance = "GBR"><#assign hostFlag = "🇬🇧"><#assign hostCountryName = "United Kingdom">
-        <#elseif realm.displayName?lower_case?contains("canada")>
+    <#-- Also check for realm name containing ISO code (e.g., "dive-v3-broker-alb") -->
+    <#if realm?? && (realm.displayName?has_content || realm.name?has_content)>
+        <#assign realmCheck = ((realm.displayName!'') + ' ' + (realm.name!''))?lower_case>
+        
+        <#-- NATO Founding Members (1949) - 12 countries -->
+        <#if realmCheck?contains("belgium") || realmCheck?contains("-bel")>
+            <#assign hostInstance = "BEL"><#assign hostFlag = "🇧🇪"><#assign hostCountryName = "Belgium">
+        <#elseif realmCheck?contains("canada") || realmCheck?contains("-can")>
             <#assign hostInstance = "CAN"><#assign hostFlag = "🇨🇦"><#assign hostCountryName = "Canada">
-        <#elseif realm.displayName?lower_case?contains("spain") || realm.displayName?lower_case?contains("españa")>
-            <#assign hostInstance = "ESP"><#assign hostFlag = "🇪🇸"><#assign hostCountryName = "Spain">
-        <#elseif realm.displayName?lower_case?contains("italy") || realm.displayName?lower_case?contains("italia")>
+        <#elseif realmCheck?contains("denmark") || realmCheck?contains("danmark") || realmCheck?contains("-dnk")>
+            <#assign hostInstance = "DNK"><#assign hostFlag = "🇩🇰"><#assign hostCountryName = "Denmark">
+        <#elseif realmCheck?contains("france") || realmCheck?contains("-fra")>
+            <#assign hostInstance = "FRA"><#assign hostFlag = "🇫🇷"><#assign hostCountryName = "France">
+        <#elseif realmCheck?contains("iceland") || realmCheck?contains("-isl")>
+            <#assign hostInstance = "ISL"><#assign hostFlag = "🇮🇸"><#assign hostCountryName = "Iceland">
+        <#elseif realmCheck?contains("italy") || realmCheck?contains("italia") || realmCheck?contains("-ita")>
             <#assign hostInstance = "ITA"><#assign hostFlag = "🇮🇹"><#assign hostCountryName = "Italy">
-        <#elseif realm.displayName?lower_case?contains("netherlands") || realm.displayName?lower_case?contains("nederland")>
+        <#elseif realmCheck?contains("luxembourg") || realmCheck?contains("-lux")>
+            <#assign hostInstance = "LUX"><#assign hostFlag = "🇱🇺"><#assign hostCountryName = "Luxembourg">
+        <#elseif realmCheck?contains("netherlands") || realmCheck?contains("nederland") || realmCheck?contains("-nld")>
             <#assign hostInstance = "NLD"><#assign hostFlag = "🇳🇱"><#assign hostCountryName = "Netherlands">
-        <#elseif realm.displayName?lower_case?contains("poland") || realm.displayName?lower_case?contains("polska")>
-            <#assign hostInstance = "POL"><#assign hostFlag = "🇵🇱"><#assign hostCountryName = "Poland">
-        <#elseif realm.displayName?lower_case?contains("new zealand") || realm.displayName?lower_case?contains("nzl") || realm.displayName?lower_case?contains("nzdf")>
-            <#assign hostInstance = "NZL"><#assign hostFlag = "🇳🇿"><#assign hostCountryName = "New Zealand">
-        <#elseif realm.displayName?lower_case?contains("australia") || realm.displayName?lower_case?contains("aus")>
-            <#assign hostInstance = "AUS"><#assign hostFlag = "🇦🇺"><#assign hostCountryName = "Australia">
-        <#elseif realm.displayName?lower_case?contains("japan") || realm.displayName?lower_case?contains("jpn")>
-            <#assign hostInstance = "JPN"><#assign hostFlag = "🇯🇵"><#assign hostCountryName = "Japan">
-        <#elseif realm.displayName?lower_case?contains("korea") || realm.displayName?lower_case?contains("kor")>
-            <#assign hostInstance = "KOR"><#assign hostFlag = "🇰🇷"><#assign hostCountryName = "South Korea">
-        <#elseif realm.displayName?lower_case?contains("usa") || realm.displayName?lower_case?contains("united states") || realm.displayName?lower_case?contains("america")>
+        <#elseif realmCheck?contains("norway") || realmCheck?contains("norge") || realmCheck?contains("-nor")>
+            <#assign hostInstance = "NOR"><#assign hostFlag = "🇳🇴"><#assign hostCountryName = "Norway">
+        <#elseif realmCheck?contains("portugal") || realmCheck?contains("-prt")>
+            <#assign hostInstance = "PRT"><#assign hostFlag = "🇵🇹"><#assign hostCountryName = "Portugal">
+        <#elseif realmCheck?contains("united kingdom") || realmCheck?contains("britain") || realmCheck?contains("-gbr")>
+            <#assign hostInstance = "GBR"><#assign hostFlag = "🇬🇧"><#assign hostCountryName = "United Kingdom">
+        <#elseif realmCheck?contains("united states") || realmCheck?contains("america") || realmCheck?contains("-usa")>
             <#assign hostInstance = "USA"><#assign hostFlag = "🇺🇸"><#assign hostCountryName = "United States">
+        
+        <#-- Cold War Expansion (1952-1982) - 4 countries -->
+        <#elseif realmCheck?contains("greece") || realmCheck?contains("hellas") || realmCheck?contains("-grc")>
+            <#assign hostInstance = "GRC"><#assign hostFlag = "🇬🇷"><#assign hostCountryName = "Greece">
+        <#elseif realmCheck?contains("turkey") || realmCheck?contains("türkiye") || realmCheck?contains("-tur")>
+            <#assign hostInstance = "TUR"><#assign hostFlag = "🇹🇷"><#assign hostCountryName = "Turkey">
+        <#elseif realmCheck?contains("germany") || realmCheck?contains("deutschland") || realmCheck?contains("-deu")>
+            <#assign hostInstance = "DEU"><#assign hostFlag = "🇩🇪"><#assign hostCountryName = "Germany">
+        <#elseif realmCheck?contains("spain") || realmCheck?contains("españa") || realmCheck?contains("-esp")>
+            <#assign hostInstance = "ESP"><#assign hostFlag = "🇪🇸"><#assign hostCountryName = "Spain">
+        
+        <#-- Post-Cold War Expansion (1999) - 3 countries -->
+        <#elseif realmCheck?contains("czechia") || realmCheck?contains("czech") || realmCheck?contains("-cze")>
+            <#assign hostInstance = "CZE"><#assign hostFlag = "🇨🇿"><#assign hostCountryName = "Czechia">
+        <#elseif realmCheck?contains("hungary") || realmCheck?contains("magyarország") || realmCheck?contains("-hun")>
+            <#assign hostInstance = "HUN"><#assign hostFlag = "🇭🇺"><#assign hostCountryName = "Hungary">
+        <#elseif realmCheck?contains("poland") || realmCheck?contains("polska") || realmCheck?contains("-pol")>
+            <#assign hostInstance = "POL"><#assign hostFlag = "🇵🇱"><#assign hostCountryName = "Poland">
+        
+        <#-- 2004 Expansion (Big Bang) - 7 countries -->
+        <#elseif realmCheck?contains("bulgaria") || realmCheck?contains("-bgr")>
+            <#assign hostInstance = "BGR"><#assign hostFlag = "🇧🇬"><#assign hostCountryName = "Bulgaria">
+        <#elseif realmCheck?contains("estonia") || realmCheck?contains("-est")>
+            <#assign hostInstance = "EST"><#assign hostFlag = "🇪🇪"><#assign hostCountryName = "Estonia">
+        <#elseif realmCheck?contains("latvia") || realmCheck?contains("-lva")>
+            <#assign hostInstance = "LVA"><#assign hostFlag = "🇱🇻"><#assign hostCountryName = "Latvia">
+        <#elseif realmCheck?contains("lithuania") || realmCheck?contains("-ltu")>
+            <#assign hostInstance = "LTU"><#assign hostFlag = "🇱🇹"><#assign hostCountryName = "Lithuania">
+        <#elseif realmCheck?contains("romania") || realmCheck?contains("-rou")>
+            <#assign hostInstance = "ROU"><#assign hostFlag = "🇷🇴"><#assign hostCountryName = "Romania">
+        <#elseif realmCheck?contains("slovakia") || realmCheck?contains("-svk")>
+            <#assign hostInstance = "SVK"><#assign hostFlag = "🇸🇰"><#assign hostCountryName = "Slovakia">
+        <#elseif realmCheck?contains("slovenia") || realmCheck?contains("-svn")>
+            <#assign hostInstance = "SVN"><#assign hostFlag = "🇸🇮"><#assign hostCountryName = "Slovenia">
+        
+        <#-- 2009-2020 Expansion - 4 countries -->
+        <#elseif realmCheck?contains("albania") || realmCheck?contains("-alb")>
+            <#assign hostInstance = "ALB"><#assign hostFlag = "🇦🇱"><#assign hostCountryName = "Albania">
+        <#elseif realmCheck?contains("croatia") || realmCheck?contains("hrvatska") || realmCheck?contains("-hrv")>
+            <#assign hostInstance = "HRV"><#assign hostFlag = "🇭🇷"><#assign hostCountryName = "Croatia">
+        <#elseif realmCheck?contains("montenegro") || realmCheck?contains("-mne")>
+            <#assign hostInstance = "MNE"><#assign hostFlag = "🇲🇪"><#assign hostCountryName = "Montenegro">
+        <#elseif realmCheck?contains("north macedonia") || realmCheck?contains("macedonia") || realmCheck?contains("-mkd")>
+            <#assign hostInstance = "MKD"><#assign hostFlag = "🇲🇰"><#assign hostCountryName = "North Macedonia">
+        
+        <#-- Nordic Expansion (2023-2024) - 2 countries -->
+        <#elseif realmCheck?contains("finland") || realmCheck?contains("suomi") || realmCheck?contains("-fin")>
+            <#assign hostInstance = "FIN"><#assign hostFlag = "🇫🇮"><#assign hostCountryName = "Finland">
+        <#elseif realmCheck?contains("sweden") || realmCheck?contains("sverige") || realmCheck?contains("-swe")>
+            <#assign hostInstance = "SWE"><#assign hostFlag = "🇸🇪"><#assign hostCountryName = "Sweden">
+        
+        <#-- Non-NATO Partners (FVEY) -->
+        <#elseif realmCheck?contains("australia") || realmCheck?contains("-aus")>
+            <#assign hostInstance = "AUS"><#assign hostFlag = "🇦🇺"><#assign hostCountryName = "Australia">
+        <#elseif realmCheck?contains("new zealand") || realmCheck?contains("-nzl")>
+            <#assign hostInstance = "NZL"><#assign hostFlag = "🇳🇿"><#assign hostCountryName = "New Zealand">
+        <#elseif realmCheck?contains("japan") || realmCheck?contains("-jpn")>
+            <#assign hostInstance = "JPN"><#assign hostFlag = "🇯🇵"><#assign hostCountryName = "Japan">
+        <#elseif realmCheck?contains("korea") || realmCheck?contains("-kor")>
+            <#assign hostInstance = "KOR"><#assign hostFlag = "🇰🇷"><#assign hostCountryName = "South Korea">
         </#if>
     </#if>
     
@@ -115,28 +178,96 @@
     <#assign isFederatedLogin = false>
     
     <#-- Check for brokerContext (user coming from external IdP) -->
+    <#-- Uses IdP alias format: "{country-code}-idp" (e.g., "usa-idp", "pol-idp") -->
     <#if brokerContext?? && brokerContext.identityProviderAlias?has_content>
         <#assign isFederatedLogin = true>
         <#assign idpAlias = brokerContext.identityProviderAlias?lower_case>
         
-        <#if idpAlias?contains("usa") || idpAlias?contains("us-")>
-            <#assign userHomeInstance = "USA"><#assign userHomeFlag = "🇺🇸"><#assign userHomeCountryName = "United States">
-        <#elseif idpAlias?contains("fra") || idpAlias?contains("france")>
-            <#assign userHomeInstance = "FRA"><#assign userHomeFlag = "🇫🇷"><#assign userHomeCountryName = "France">
-        <#elseif idpAlias?contains("deu") || idpAlias?contains("germany")>
-            <#assign userHomeInstance = "DEU"><#assign userHomeFlag = "🇩🇪"><#assign userHomeCountryName = "Germany">
-        <#elseif idpAlias?contains("gbr") || idpAlias?contains("uk")>
-            <#assign userHomeInstance = "GBR"><#assign userHomeFlag = "🇬🇧"><#assign userHomeCountryName = "United Kingdom">
-        <#elseif idpAlias?contains("can") || idpAlias?contains("canada")>
+        <#-- NATO Founding Members (1949) -->
+        <#if idpAlias?contains("bel")>
+            <#assign userHomeInstance = "BEL"><#assign userHomeFlag = "🇧🇪"><#assign userHomeCountryName = "Belgium">
+        <#elseif idpAlias?contains("can")>
             <#assign userHomeInstance = "CAN"><#assign userHomeFlag = "🇨🇦"><#assign userHomeCountryName = "Canada">
-        <#elseif idpAlias?contains("esp") || idpAlias?contains("spain")>
-            <#assign userHomeInstance = "ESP"><#assign userHomeFlag = "🇪🇸"><#assign userHomeCountryName = "Spain">
-        <#elseif idpAlias?contains("ita") || idpAlias?contains("italy")>
+        <#elseif idpAlias?contains("dnk")>
+            <#assign userHomeInstance = "DNK"><#assign userHomeFlag = "🇩🇰"><#assign userHomeCountryName = "Denmark">
+        <#elseif idpAlias?contains("fra")>
+            <#assign userHomeInstance = "FRA"><#assign userHomeFlag = "🇫🇷"><#assign userHomeCountryName = "France">
+        <#elseif idpAlias?contains("isl")>
+            <#assign userHomeInstance = "ISL"><#assign userHomeFlag = "🇮🇸"><#assign userHomeCountryName = "Iceland">
+        <#elseif idpAlias?contains("ita")>
             <#assign userHomeInstance = "ITA"><#assign userHomeFlag = "🇮🇹"><#assign userHomeCountryName = "Italy">
-        <#elseif idpAlias?contains("nld") || idpAlias?contains("netherlands")>
+        <#elseif idpAlias?contains("lux")>
+            <#assign userHomeInstance = "LUX"><#assign userHomeFlag = "🇱🇺"><#assign userHomeCountryName = "Luxembourg">
+        <#elseif idpAlias?contains("nld")>
             <#assign userHomeInstance = "NLD"><#assign userHomeFlag = "🇳🇱"><#assign userHomeCountryName = "Netherlands">
-        <#elseif idpAlias?contains("pol") || idpAlias?contains("poland")>
+        <#elseif idpAlias?contains("nor")>
+            <#assign userHomeInstance = "NOR"><#assign userHomeFlag = "🇳🇴"><#assign userHomeCountryName = "Norway">
+        <#elseif idpAlias?contains("prt")>
+            <#assign userHomeInstance = "PRT"><#assign userHomeFlag = "🇵🇹"><#assign userHomeCountryName = "Portugal">
+        <#elseif idpAlias?contains("gbr")>
+            <#assign userHomeInstance = "GBR"><#assign userHomeFlag = "🇬🇧"><#assign userHomeCountryName = "United Kingdom">
+        <#elseif idpAlias?contains("usa")>
+            <#assign userHomeInstance = "USA"><#assign userHomeFlag = "🇺🇸"><#assign userHomeCountryName = "United States">
+        
+        <#-- Cold War Expansion -->
+        <#elseif idpAlias?contains("grc")>
+            <#assign userHomeInstance = "GRC"><#assign userHomeFlag = "🇬🇷"><#assign userHomeCountryName = "Greece">
+        <#elseif idpAlias?contains("tur")>
+            <#assign userHomeInstance = "TUR"><#assign userHomeFlag = "🇹🇷"><#assign userHomeCountryName = "Turkey">
+        <#elseif idpAlias?contains("deu")>
+            <#assign userHomeInstance = "DEU"><#assign userHomeFlag = "🇩🇪"><#assign userHomeCountryName = "Germany">
+        <#elseif idpAlias?contains("esp")>
+            <#assign userHomeInstance = "ESP"><#assign userHomeFlag = "🇪🇸"><#assign userHomeCountryName = "Spain">
+        
+        <#-- Post-Cold War Expansion -->
+        <#elseif idpAlias?contains("cze")>
+            <#assign userHomeInstance = "CZE"><#assign userHomeFlag = "🇨🇿"><#assign userHomeCountryName = "Czechia">
+        <#elseif idpAlias?contains("hun")>
+            <#assign userHomeInstance = "HUN"><#assign userHomeFlag = "🇭🇺"><#assign userHomeCountryName = "Hungary">
+        <#elseif idpAlias?contains("pol")>
             <#assign userHomeInstance = "POL"><#assign userHomeFlag = "🇵🇱"><#assign userHomeCountryName = "Poland">
+        
+        <#-- 2004 Expansion -->
+        <#elseif idpAlias?contains("bgr")>
+            <#assign userHomeInstance = "BGR"><#assign userHomeFlag = "🇧🇬"><#assign userHomeCountryName = "Bulgaria">
+        <#elseif idpAlias?contains("est")>
+            <#assign userHomeInstance = "EST"><#assign userHomeFlag = "🇪🇪"><#assign userHomeCountryName = "Estonia">
+        <#elseif idpAlias?contains("lva")>
+            <#assign userHomeInstance = "LVA"><#assign userHomeFlag = "🇱🇻"><#assign userHomeCountryName = "Latvia">
+        <#elseif idpAlias?contains("ltu")>
+            <#assign userHomeInstance = "LTU"><#assign userHomeFlag = "🇱🇹"><#assign userHomeCountryName = "Lithuania">
+        <#elseif idpAlias?contains("rou")>
+            <#assign userHomeInstance = "ROU"><#assign userHomeFlag = "🇷🇴"><#assign userHomeCountryName = "Romania">
+        <#elseif idpAlias?contains("svk")>
+            <#assign userHomeInstance = "SVK"><#assign userHomeFlag = "🇸🇰"><#assign userHomeCountryName = "Slovakia">
+        <#elseif idpAlias?contains("svn")>
+            <#assign userHomeInstance = "SVN"><#assign userHomeFlag = "🇸🇮"><#assign userHomeCountryName = "Slovenia">
+        
+        <#-- 2009-2020 Expansion -->
+        <#elseif idpAlias?contains("alb")>
+            <#assign userHomeInstance = "ALB"><#assign userHomeFlag = "🇦🇱"><#assign userHomeCountryName = "Albania">
+        <#elseif idpAlias?contains("hrv")>
+            <#assign userHomeInstance = "HRV"><#assign userHomeFlag = "🇭🇷"><#assign userHomeCountryName = "Croatia">
+        <#elseif idpAlias?contains("mne")>
+            <#assign userHomeInstance = "MNE"><#assign userHomeFlag = "🇲🇪"><#assign userHomeCountryName = "Montenegro">
+        <#elseif idpAlias?contains("mkd")>
+            <#assign userHomeInstance = "MKD"><#assign userHomeFlag = "🇲🇰"><#assign userHomeCountryName = "North Macedonia">
+        
+        <#-- Nordic Expansion -->
+        <#elseif idpAlias?contains("fin")>
+            <#assign userHomeInstance = "FIN"><#assign userHomeFlag = "🇫🇮"><#assign userHomeCountryName = "Finland">
+        <#elseif idpAlias?contains("swe")>
+            <#assign userHomeInstance = "SWE"><#assign userHomeFlag = "🇸🇪"><#assign userHomeCountryName = "Sweden">
+        
+        <#-- Non-NATO Partners -->
+        <#elseif idpAlias?contains("aus")>
+            <#assign userHomeInstance = "AUS"><#assign userHomeFlag = "🇦🇺"><#assign userHomeCountryName = "Australia">
+        <#elseif idpAlias?contains("nzl")>
+            <#assign userHomeInstance = "NZL"><#assign userHomeFlag = "🇳🇿"><#assign userHomeCountryName = "New Zealand">
+        <#elseif idpAlias?contains("jpn")>
+            <#assign userHomeInstance = "JPN"><#assign userHomeFlag = "🇯🇵"><#assign userHomeCountryName = "Japan">
+        <#elseif idpAlias?contains("kor")>
+            <#assign userHomeInstance = "KOR"><#assign userHomeFlag = "🇰🇷"><#assign userHomeCountryName = "South Korea">
         </#if>
     </#if>
     
@@ -151,19 +282,94 @@
         <#if clientData?contains("federation") || clientData?contains("broker") || clientData?contains("cross-border")>
             <#assign isFederatedLogin = true>
             <#-- Extract source country from client_id (e.g., dive-v3-usa-federation) -->
-            <#if clientData?contains("-usa-")>
-                <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
-            <#elseif clientData?contains("-fra-")>
-                <#assign sourceInstance = "FRA"><#assign sourceFlag = "🇫🇷"><#assign sourceCountryName = "France">
-            <#elseif clientData?contains("-deu-")>
-                <#assign sourceInstance = "DEU"><#assign sourceFlag = "🇩🇪"><#assign sourceCountryName = "Germany">
-            <#elseif clientData?contains("-gbr-")>
-                <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
+            
+            <#-- NATO Founding Members -->
+            <#if clientData?contains("-bel-")>
+                <#assign sourceInstance = "BEL"><#assign sourceFlag = "🇧🇪"><#assign sourceCountryName = "Belgium">
             <#elseif clientData?contains("-can-")>
                 <#assign sourceInstance = "CAN"><#assign sourceFlag = "🇨🇦"><#assign sourceCountryName = "Canada">
+            <#elseif clientData?contains("-dnk-")>
+                <#assign sourceInstance = "DNK"><#assign sourceFlag = "🇩🇰"><#assign sourceCountryName = "Denmark">
+            <#elseif clientData?contains("-fra-")>
+                <#assign sourceInstance = "FRA"><#assign sourceFlag = "🇫🇷"><#assign sourceCountryName = "France">
+            <#elseif clientData?contains("-isl-")>
+                <#assign sourceInstance = "ISL"><#assign sourceFlag = "🇮🇸"><#assign sourceCountryName = "Iceland">
+            <#elseif clientData?contains("-ita-")>
+                <#assign sourceInstance = "ITA"><#assign sourceFlag = "🇮🇹"><#assign sourceCountryName = "Italy">
+            <#elseif clientData?contains("-lux-")>
+                <#assign sourceInstance = "LUX"><#assign sourceFlag = "🇱🇺"><#assign sourceCountryName = "Luxembourg">
+            <#elseif clientData?contains("-nld-")>
+                <#assign sourceInstance = "NLD"><#assign sourceFlag = "🇳🇱"><#assign sourceCountryName = "Netherlands">
+            <#elseif clientData?contains("-nor-")>
+                <#assign sourceInstance = "NOR"><#assign sourceFlag = "🇳🇴"><#assign sourceCountryName = "Norway">
+            <#elseif clientData?contains("-prt-")>
+                <#assign sourceInstance = "PRT"><#assign sourceFlag = "🇵🇹"><#assign sourceCountryName = "Portugal">
+            <#elseif clientData?contains("-gbr-")>
+                <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
+            <#elseif clientData?contains("-usa-")>
+                <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
+            
+            <#-- Cold War Expansion -->
+            <#elseif clientData?contains("-grc-")>
+                <#assign sourceInstance = "GRC"><#assign sourceFlag = "🇬🇷"><#assign sourceCountryName = "Greece">
+            <#elseif clientData?contains("-tur-")>
+                <#assign sourceInstance = "TUR"><#assign sourceFlag = "🇹🇷"><#assign sourceCountryName = "Turkey">
+            <#elseif clientData?contains("-deu-")>
+                <#assign sourceInstance = "DEU"><#assign sourceFlag = "🇩🇪"><#assign sourceCountryName = "Germany">
             <#elseif clientData?contains("-esp-")>
                 <#assign sourceInstance = "ESP"><#assign sourceFlag = "🇪🇸"><#assign sourceCountryName = "Spain">
-            <#-- NEW: For cross-border-client, detect source from redirect_uri parameter -->
+            
+            <#-- Post-Cold War Expansion -->
+            <#elseif clientData?contains("-cze-")>
+                <#assign sourceInstance = "CZE"><#assign sourceFlag = "🇨🇿"><#assign sourceCountryName = "Czechia">
+            <#elseif clientData?contains("-hun-")>
+                <#assign sourceInstance = "HUN"><#assign sourceFlag = "🇭🇺"><#assign sourceCountryName = "Hungary">
+            <#elseif clientData?contains("-pol-")>
+                <#assign sourceInstance = "POL"><#assign sourceFlag = "🇵🇱"><#assign sourceCountryName = "Poland">
+            
+            <#-- 2004 Expansion -->
+            <#elseif clientData?contains("-bgr-")>
+                <#assign sourceInstance = "BGR"><#assign sourceFlag = "🇧🇬"><#assign sourceCountryName = "Bulgaria">
+            <#elseif clientData?contains("-est-")>
+                <#assign sourceInstance = "EST"><#assign sourceFlag = "🇪🇪"><#assign sourceCountryName = "Estonia">
+            <#elseif clientData?contains("-lva-")>
+                <#assign sourceInstance = "LVA"><#assign sourceFlag = "🇱🇻"><#assign sourceCountryName = "Latvia">
+            <#elseif clientData?contains("-ltu-")>
+                <#assign sourceInstance = "LTU"><#assign sourceFlag = "🇱🇹"><#assign sourceCountryName = "Lithuania">
+            <#elseif clientData?contains("-rou-")>
+                <#assign sourceInstance = "ROU"><#assign sourceFlag = "🇷🇴"><#assign sourceCountryName = "Romania">
+            <#elseif clientData?contains("-svk-")>
+                <#assign sourceInstance = "SVK"><#assign sourceFlag = "🇸🇰"><#assign sourceCountryName = "Slovakia">
+            <#elseif clientData?contains("-svn-")>
+                <#assign sourceInstance = "SVN"><#assign sourceFlag = "🇸🇮"><#assign sourceCountryName = "Slovenia">
+            
+            <#-- 2009-2020 Expansion -->
+            <#elseif clientData?contains("-alb-")>
+                <#assign sourceInstance = "ALB"><#assign sourceFlag = "🇦🇱"><#assign sourceCountryName = "Albania">
+            <#elseif clientData?contains("-hrv-")>
+                <#assign sourceInstance = "HRV"><#assign sourceFlag = "🇭🇷"><#assign sourceCountryName = "Croatia">
+            <#elseif clientData?contains("-mne-")>
+                <#assign sourceInstance = "MNE"><#assign sourceFlag = "🇲🇪"><#assign sourceCountryName = "Montenegro">
+            <#elseif clientData?contains("-mkd-")>
+                <#assign sourceInstance = "MKD"><#assign sourceFlag = "🇲🇰"><#assign sourceCountryName = "North Macedonia">
+            
+            <#-- Nordic Expansion -->
+            <#elseif clientData?contains("-fin-")>
+                <#assign sourceInstance = "FIN"><#assign sourceFlag = "🇫🇮"><#assign sourceCountryName = "Finland">
+            <#elseif clientData?contains("-swe-")>
+                <#assign sourceInstance = "SWE"><#assign sourceFlag = "🇸🇪"><#assign sourceCountryName = "Sweden">
+            
+            <#-- Non-NATO Partners -->
+            <#elseif clientData?contains("-aus-")>
+                <#assign sourceInstance = "AUS"><#assign sourceFlag = "🇦🇺"><#assign sourceCountryName = "Australia">
+            <#elseif clientData?contains("-nzl-")>
+                <#assign sourceInstance = "NZL"><#assign sourceFlag = "🇳🇿"><#assign sourceCountryName = "New Zealand">
+            <#elseif clientData?contains("-jpn-")>
+                <#assign sourceInstance = "JPN"><#assign sourceFlag = "🇯🇵"><#assign sourceCountryName = "Japan">
+            <#elseif clientData?contains("-kor-")>
+                <#assign sourceInstance = "KOR"><#assign sourceFlag = "🇰🇷"><#assign sourceCountryName = "South Korea">
+            
+            <#-- Cross-border client fallback -->
             <#elseif clientData?contains("cross-border")>
                 <#-- Check redirect_uri query parameter to determine source -->
                 <#if RequestParameters?? && RequestParameters['redirect_uri']??>

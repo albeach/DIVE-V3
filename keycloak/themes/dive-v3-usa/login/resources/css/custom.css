@@ -1,115 +1,115 @@
 /**
  * United States Keycloak Theme
- * Auto-generated from instance.json
- * Generated: 2025-11-26T12:54:37Z
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:46Z
  * 
- * Primary: #1a365d
- * Secondary: #2b6cb0
- * Accent: #3182ce
+ * Primary: #002868
+ * Secondary: #BF0A30
+ * Accent: #ffffff
  */
 
 /* CSS Variables for this instance */
 :root {
-    --instance-primary: #1a365d;
-    --instance-secondary: #2b6cb0;
-    --instance-accent: #3182ce;
-    --instance-primary-rgb: 26, 54, 93;
-    --instance-secondary-rgb: 43, 108, 176;
+    --instance-primary: #002868;
+    --instance-secondary: #BF0A30;
+    --instance-accent: #ffffff;
+    --instance-primary-rgb: 0, 40, 104;
+    --instance-secondary-rgb: 191, 10, 48;
 }
 
 /* Background gradient */
 .dive-background {
-    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+    background: linear-gradient(135deg, #002868 0%, #BF0A30 100%);
 }
 
 /* Primary button styling */
 .dive-button-primary {
-    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+    background: linear-gradient(135deg, #002868 0%, #BF0A30 100%);
     transition: all 0.3s ease;
 }
 
 .dive-button-primary:hover {
-    box-shadow: 0 8px 25px rgba(26, 54, 93, 0.4);
+    box-shadow: 0 8px 25px rgba(0, 40, 104, 0.4);
     transform: translateY(-2px);
 }
 
 /* Header styling */
 .dive-header h1 {
-    color: #1a365d;
+    color: #002868;
 }
 
 .dive-header .logo {
-    border-color: #1a365d;
+    border-color: #002868;
 }
 
 /* Input focus states */
 .dive-input:focus {
-    border-color: #1a365d;
-    box-shadow: 0 0 0 3px rgba(26, 54, 93, 0.15);
+    border-color: #002868;
+    box-shadow: 0 0 0 3px rgba(0, 40, 104, 0.15);
 }
 
 /* Social/IdP link styling */
 .dive-social-link:hover {
-    border-color: #1a365d;
-    background: rgba(26, 54, 93, 0.05);
+    border-color: #002868;
+    background: rgba(0, 40, 104, 0.05);
 }
 
 .dive-social-link:focus {
-    border-color: #1a365d;
-    box-shadow: 0 0 0 3px rgba(26, 54, 93, 0.15);
+    border-color: #002868;
+    box-shadow: 0 0 0 3px rgba(0, 40, 104, 0.15);
 }
 
 /* Links */
 .dive-link {
-    color: #1a365d;
+    color: #002868;
 }
 
 .dive-link:hover {
-    color: #2b6cb0;
+    color: #BF0A30;
 }
 
 /* Accent elements */
 .dive-accent {
-    color: #3182ce;
+    color: #ffffff;
 }
 
 .dive-accent-bg {
-    background-color: #3182ce;
+    background-color: #ffffff;
 }
 
 /* Instance badge */
 .dive-instance-badge {
-    background: rgba(26, 54, 93, 0.1);
-    border: 1px solid #1a365d;
-    color: #1a365d;
+    background: rgba(0, 40, 104, 0.1);
+    border: 1px solid #002868;
+    color: #002868;
 }
 
 /* Alert/notification styling */
 .dive-alert-info {
-    border-left-color: #1a365d;
-    background: rgba(26, 54, 93, 0.05);
+    border-left-color: #002868;
+    background: rgba(0, 40, 104, 0.05);
 }
 
 /* OTP/WebAuthn specific styling */
 .otp-input:focus {
-    border-color: #1a365d;
-    box-shadow: 0 0 0 3px rgba(26, 54, 93, 0.15);
+    border-color: #002868;
+    box-shadow: 0 0 0 3px rgba(0, 40, 104, 0.15);
 }
 
 .webauthn-button {
-    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+    background: linear-gradient(135deg, #002868 0%, #BF0A30 100%);
 }
 
 /* Passkey/WebAuthn icon coloring */
 .passkey-icon {
-    color: #1a365d;
+    color: #002868;
 }
 
 /* Footer styling */
 .dive-footer a {
-    color: #1a365d;
+    color: #002868;
 }
 
 .dive-footer a:hover {
-    color: #2b6cb0;
+    color: #BF0A30;
 }

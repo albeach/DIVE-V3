@@ -1,0 +1,115 @@
+/**
+ * North Macedonia Keycloak Theme
+ * Auto-generated from NATO countries database
+ * Generated: 2025-12-13T23:57:45Z
+ * 
+ * Primary: #D20000
+ * Secondary: #FFE600
+ * Accent: #ffffff
+ */
+
+/* CSS Variables for this instance */
+:root {
+    --instance-primary: #D20000;
+    --instance-secondary: #FFE600;
+    --instance-accent: #ffffff;
+    --instance-primary-rgb: 210, 0, 0;
+    --instance-secondary-rgb: 255, 230, 0;
+}
+
+/* Background gradient */
+.dive-background {
+    background: linear-gradient(135deg, #D20000 0%, #FFE600 100%);
+}
+
+/* Primary button styling */
+.dive-button-primary {
+    background: linear-gradient(135deg, #D20000 0%, #FFE600 100%);
+    transition: all 0.3s ease;
+}
+
+.dive-button-primary:hover {
+    box-shadow: 0 8px 25px rgba(210, 0, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+/* Header styling */
+.dive-header h1 {
+    color: #D20000;
+}
+
+.dive-header .logo {
+    border-color: #D20000;
+}
+
+/* Input focus states */
+.dive-input:focus {
+    border-color: #D20000;
+    box-shadow: 0 0 0 3px rgba(210, 0, 0, 0.15);
+}
+
+/* Social/IdP link styling */
+.dive-social-link:hover {
+    border-color: #D20000;
+    background: rgba(210, 0, 0, 0.05);
+}
+
+.dive-social-link:focus {
+    border-color: #D20000;
+    box-shadow: 0 0 0 3px rgba(210, 0, 0, 0.15);
+}
+
+/* Links */
+.dive-link {
+    color: #D20000;
+}
+
+.dive-link:hover {
+    color: #FFE600;
+}
+
+/* Accent elements */
+.dive-accent {
+    color: #ffffff;
+}
+
+.dive-accent-bg {
+    background-color: #ffffff;
+}
+
+/* Instance badge */
+.dive-instance-badge {
+    background: rgba(210, 0, 0, 0.1);
+    border: 1px solid #D20000;
+    color: #D20000;
+}
+
+/* Alert/notification styling */
+.dive-alert-info {
+    border-left-color: #D20000;
+    background: rgba(210, 0, 0, 0.05);
+}
+
+/* OTP/WebAuthn specific styling */
+.otp-input:focus {
+    border-color: #D20000;
+    box-shadow: 0 0 0 3px rgba(210, 0, 0, 0.15);
+}
+
+.webauthn-button {
+    background: linear-gradient(135deg, #D20000 0%, #FFE600 100%);
+}
+
+/* Passkey/WebAuthn icon coloring */
+.passkey-icon {
+    color: #D20000;
+}
+
+/* Footer styling */
+.dive-footer a {
+    color: #D20000;
+}
+
+.dive-footer a:hover {
+    color: #FFE600;
+}
