@@ -76,7 +76,15 @@ fi
 # =============================================================================
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  Step 1/2: Seeding Users                                       ${NC}"
+echo -e "${CYAN}  Step 1/3: Configuring Client (Logout URIs)                    ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+
+"$SCRIPT_DIR/configure-hub-client.sh"
+
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}  Step 2/3: Seeding Users                                       ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -84,7 +92,7 @@ echo ""
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  Step 2/2: Seeding Resources                                   ${NC}"
+echo -e "${CYAN}  Step 3/3: Seeding Resources                                   ${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
