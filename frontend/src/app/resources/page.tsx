@@ -64,7 +64,6 @@ interface ISelectedFilters {
 
 const VIEW_MODE_KEY = 'dive_resources_view_mode_v2';
 const FEDERATED_MODE_KEY = 'dive_resources_federated_mode';
-const FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'] as const;
 
 // Get current instance from environment (FRA, USA, GBR, DEU)
 // This determines the default instance for local searches
@@ -81,9 +80,25 @@ const CLASSIFICATION_OPTIONS = [
 // Component
 // ============================================
 
+// ============================================
+// Federation IdP Type
+// ============================================
+
+interface IFederationIdP {
+  alias: string;
+  displayName: string;
+  enabled: boolean;
+  instanceCode?: string;
+}
+
 export default function ResourcesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+
+  // Federated instances - loaded from API
+  const [federationInstances, setFederationInstances] = useState<string[]>([CURRENT_INSTANCE]);
+  const [federationIdPs, setFederationIdPs] = useState<IFederationIdP[]>([]);
+  const [isLoadingIdPs, setIsLoadingIdPs] = useState(true);
 
   // State
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -153,6 +168,50 @@ export default function ResourcesPage() {
     enableMultiSelect: true,
     enableVimNavigation: true,
   });
+
+  // Load Federation IdPs from API
+  useEffect(() => {
+    async function loadFederationIdPs() {
+      setIsLoadingIdPs(true);
+      try {
+        const response = await fetch('/api/idps/public');
+        if (response.ok) {
+          const data = await response.json();
+          // data can be { idps: [...] } or direct array
+          const idpList: IFederationIdP[] = Array.isArray(data) ? data : (data.idps || data.data || []);
+          
+          // Filter enabled IdPs and extract instance codes
+          const enabledIdPs = idpList.filter((idp: IFederationIdP) => idp.enabled);
+          setFederationIdPs(enabledIdPs);
+          
+          // Extract instance codes from aliases (e.g., "usa-idp" -> "USA")
+          const codes = enabledIdPs
+            .map((idp: IFederationIdP) => {
+              // Try instanceCode first, then extract from alias
+              if (idp.instanceCode) return idp.instanceCode.toUpperCase();
+              const match = idp.alias?.match(/^([a-z]{2,3})-idp$/i);
+              return match ? match[1].toUpperCase() : null;
+            })
+            .filter((code): code is string => code !== null);
+          
+          // Always include current instance
+          const uniqueCodes = Array.from(new Set([CURRENT_INSTANCE, ...codes]));
+          setFederationInstances(uniqueCodes);
+          
+          console.log('[Resources] Loaded federation IdPs:', uniqueCodes);
+        } else {
+          console.warn('[Resources] Failed to load IdPs, using fallback');
+          setFederationInstances([CURRENT_INSTANCE]);
+        }
+      } catch (error) {
+        console.error('[Resources] Error loading federation IdPs:', error);
+        setFederationInstances([CURRENT_INSTANCE]);
+      } finally {
+        setIsLoadingIdPs(false);
+      }
+    }
+    loadFederationIdPs();
+  }, []);
 
   // Load Preferences
   useEffect(() => {
@@ -343,27 +402,34 @@ export default function ResourcesPage() {
             {federatedMode ? 'Federated' : 'Local'}
           </button>
 
-          {/* Instance Pills */}
+          {/* Instance Pills - Dynamic from federated IdPs */}
           <div className="flex items-center gap-1">
-            {FEDERATION_INSTANCES.map((instance) => {
-              const isSelected = selectedInstances.includes(instance);
-              return (
-                <button
-                  key={instance}
-                  onClick={() => handleInstanceToggle(instance)}
-                  disabled={!federatedMode && instance !== CURRENT_INSTANCE}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                    isSelected
-                      ? 'bg-blue-600 text-white'
-                      : federatedMode
-                        ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'
-                        : 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                  }`}
-                >
-                  {instance}
-                </button>
-              );
-            })}
+            {isLoadingIdPs ? (
+              <div className="flex items-center gap-1">
+                <div className="w-8 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="w-8 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              </div>
+            ) : (
+              federationInstances.map((instance) => {
+                const isSelected = selectedInstances.includes(instance);
+                return (
+                  <button
+                    key={instance}
+                    onClick={() => handleInstanceToggle(instance)}
+                    disabled={!federatedMode && instance !== CURRENT_INSTANCE}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                      isSelected
+                        ? 'bg-blue-600 text-white'
+                        : federatedMode
+                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'
+                          : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                    }`}
+                  >
+                    {instance}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -417,7 +483,7 @@ export default function ResourcesPage() {
                 })),
                 countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
                 cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
-                instances: FEDERATION_INSTANCES.map(i => ({ 
+                instances: federationInstances.map(i => ({ 
                   value: i, 
                   label: i, 
                   count: facets?.instances?.find(f => f.value === i)?.count || 0 
@@ -565,7 +631,7 @@ export default function ResourcesPage() {
           })),
           countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
           cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
-          instances: FEDERATION_INSTANCES.map(i => ({ 
+          instances: federationInstances.map(i => ({ 
             value: i, 
             label: i, 
             count: facets?.instances?.find(f => f.value === i)?.count || 0 
