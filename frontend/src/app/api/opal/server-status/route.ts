@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { auth } from '@/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,22 +14,26 @@ const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_U
 
 export async function GET(request: NextRequest) {
   try {
-    const token = await getToken({ req: request });
+    const session = await auth();
     
-    if (!token) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check for admin role
+    const isAdmin = session.user.roles?.includes('super_admin') || 
+                   session.user.roles?.includes('admin') ||
+                   session.user.roles?.includes('dive-admin');
+    
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Forbidden - Admin access required' }, { status: 403 });
     }
 
     const response = await fetch(`${BACKEND_URL}/api/opal/server-status`, {
       headers: {
-        'Authorization': `Bearer ${token.accessToken}`,
+        'Authorization': `Bearer ${session.accessToken}`,
         'Content-Type': 'application/json',
       },
-      // Allow self-signed certs in development
-      ...(process.env.NODE_ENV !== 'production' && {
-        // @ts-ignore - Node.js specific option
-        agent: new (require('https').Agent)({ rejectUnauthorized: false }),
-      }),
     });
 
     if (!response.ok) {
@@ -51,4 +55,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
