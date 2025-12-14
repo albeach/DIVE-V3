@@ -37,7 +37,7 @@ variable "app_url" {
   description = "Frontend application URL (e.g., https://usa-app.dive25.com)"
   type        = string
   # Default to localhost for resilient local dev; override in *.tfvars for CF/tunnel
-  default     = "https://localhost:3000"
+  default = "https://localhost:3000"
 }
 
 variable "api_url" {

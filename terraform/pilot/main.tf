@@ -19,8 +19,8 @@ module "instance" {
   client_secret = var.client_secret
 
   # Test users
-  create_test_users = true
-  test_user_password = var.test_user_password
+  create_test_users   = true
+  test_user_password  = var.test_user_password
   admin_user_password = var.admin_user_password
 
   # Federation partners (real IdPs)
@@ -33,13 +33,13 @@ module "instance" {
       client_secret = "placeholder-sync-after-terraform"
     }
     gbr = {
-      instance_code = "GBR"
-      instance_name = "United Kingdom"
-      idp_url       = var.gbr_idp_url
-      idp_internal_url = var.gbr_idp_internal_url
+      instance_code         = "GBR"
+      instance_name         = "United Kingdom"
+      idp_url               = var.gbr_idp_url
+      idp_internal_url      = var.gbr_idp_internal_url
       disable_trust_manager = var.gbr_disable_trust_manager
-      enabled       = true
-      client_secret = var.gbr_client_secret
+      enabled               = true
+      client_secret         = var.gbr_client_secret
     }
     deu = {
       instance_code = "DEU"
@@ -51,14 +51,14 @@ module "instance" {
   }
 
   # Theme - use USA custom theme
-  login_theme = "dive-v3-usa"
+  login_theme                 = "dive-v3-usa"
   incoming_federation_secrets = {}
 
   # WebAuthn - localhost domain
   webauthn_rp_id = "localhost"
 
   # MFA Flow
-  browser_flow_override_id = module.mfa.browser_flow_id
+  browser_flow_override_id          = module.mfa.browser_flow_id
   simple_post_broker_otp_flow_alias = module.mfa.simple_post_broker_otp_flow_alias
 }
 
@@ -70,18 +70,18 @@ module "mfa" {
   realm_display_name = "DIVE V3 - USA Pilot"
 
   use_standard_browser_flow = false
-  enable_direct_grant_mfa = false
+  enable_direct_grant_mfa   = false
 }
 
-output "realm_id" { 
-  value = module.instance.realm_id 
+output "realm_id" {
+  value = module.instance.realm_id
 }
 
-output "client_id" { 
-  value = module.instance.client_id 
+output "client_id" {
+  value = module.instance.client_id
 }
 
-output "client_secret" { 
+output "client_secret" {
   value     = module.instance.client_secret
-  sensitive = true 
+  sensitive = true
 }

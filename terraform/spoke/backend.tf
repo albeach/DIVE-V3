@@ -4,20 +4,20 @@
 # Uses local state per workspace. In production, use GCS backend.
 #
 # Usage with workspaces:
-#   terraform workspace new pol
-#   terraform workspace select pol
-#   terraform plan -var-file=../countries/pol.tfvars
+#   ./dive tf workspace new pol
+#   ./dive tf spoke plan POL
+#   ./dive tf spoke apply POL
+#
+# State files are stored in terraform.tfstate.d/<workspace>/
 # =============================================================================
 
 terraform {
-  # Local backend for development
-  # Each workspace stores state in terraform.tfstate.d/<workspace>/
   backend "local" {}
-  
+
   # For production, use GCS backend:
   # backend "gcs" {
-  #   bucket  = "dive25-terraform-state"
-  #   prefix  = "dive-v3/spokes"
+  #   bucket = "dive25-terraform-state"
+  #   prefix = "dive-v3/spokes"
   # }
 }
 

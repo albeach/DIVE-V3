@@ -320,10 +320,10 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "acr" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "acr"
 
-  session_note       = "acr"
-  claim_name         = "acr"
-  claim_value_type   = "String"
-  add_to_id_token    = true
+  session_note        = "acr"
+  claim_name          = "acr"
+  claim_value_type    = "String"
+  add_to_id_token     = true
   add_to_access_token = true
 }
 
@@ -332,10 +332,10 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "amr" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "amr"
 
-  session_note       = "amr"
-  claim_name         = "amr"
-  claim_value_type   = "String"
-  add_to_id_token    = true
+  session_note        = "amr"
+  claim_name          = "amr"
+  claim_value_type    = "String"
+  add_to_id_token     = true
   add_to_access_token = true
 }
 
@@ -344,10 +344,10 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "auth_time"
 
-  session_note       = "auth_time"
-  claim_name         = "auth_time"
-  claim_value_type   = "String"
-  add_to_id_token    = true
+  session_note        = "auth_time"
+  claim_name          = "auth_time"
+  claim_value_type    = "String"
+  add_to_id_token     = true
   add_to_access_token = true
 }
 
@@ -360,10 +360,10 @@ resource "keycloak_generic_protocol_mapper" "amr_mapper" {
   protocol_mapper = "oidc-amr-mapper"
 
   config = {
-    "id.token.claim"     = "true"
-    "access.token.claim" = "true"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
-    "claim.name"         = "amr"
+    "claim.name"           = "amr"
   }
 }
 
@@ -375,10 +375,10 @@ resource "keycloak_generic_protocol_mapper" "acr_mapper" {
   protocol_mapper = "oidc-acr-mapper"
 
   config = {
-    "id.token.claim"     = "true"
-    "access.token.claim" = "true"
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
     "userinfo.token.claim" = "true"
-    "claim.name"         = "acr"
+    "claim.name"           = "acr"
   }
 }
 
@@ -537,10 +537,10 @@ locals {
 }
 
 resource "keycloak_user" "admin_user" {
-  realm_id = keycloak_realm.broker.id
-  username = "admin-${lower(var.instance_code)}"
-  enabled  = true
-  email    = "admin-${lower(var.instance_code)}@dive-demo.example"
+  realm_id   = keycloak_realm.broker.id
+  username   = "admin-${lower(var.instance_code)}"
+  enabled    = true
+  email      = "admin-${lower(var.instance_code)}@dive-demo.example"
   first_name = "Admin"
   last_name  = upper(var.instance_code)
 
@@ -555,12 +555,12 @@ resource "keycloak_user" "admin_user" {
     clearance            = "TOP_SECRET"
     clearance_level      = "4"
     # Keep admin aligned with L4 users for policy evaluation
-    acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
-    organization         = "${var.instance_name} Admin"
-    organizationType     = "GOV"
-    userType             = "admin"
-    pilot_user           = "true"
-    created_by           = "terraform"
+    acpCOI           = jsonencode(["FVEY", "NATO-COSMIC"])
+    organization     = "${var.instance_name} Admin"
+    organizationType = "GOV"
+    userType         = "admin"
+    pilot_user       = "true"
+    created_by       = "terraform"
   }
 
   lifecycle {

@@ -61,7 +61,7 @@ variable "federation_partners" {
     enabled       = bool
     client_secret = optional(string, "placeholder-sync-after-terraform") # Set by sync-federation-secrets.sh
     # Optional: internal/back-channel URL (e.g., http://keycloak-gbr:8080 for local spoke)
-    idp_internal_url      = optional(string, null)
+    idp_internal_url = optional(string, null)
     # Optional: disable trust manager for self-signed local certs (keeps validate_signature=true)
     disable_trust_manager = optional(bool, false)
   }))

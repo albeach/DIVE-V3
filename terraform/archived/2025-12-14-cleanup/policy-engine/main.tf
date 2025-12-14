@@ -133,7 +133,7 @@ output "policy_engine" {
 output "policy_rollout" {
   description = "Policy rollout configuration"
   value       = module.policy_rollout
-  sensitive   = true  # Contains notification_webhook
+  sensitive   = true # Contains notification_webhook
 }
 
 output "environment" {
