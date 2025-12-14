@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { IdpSelector } from "@/components/auth/idp-selector";
-import { Globe2, Target, Shield, MapPin, Users, Lock } from "lucide-react";
+import { FeatureCarousel } from "@/components/ui/feature-carousel";
 import { 
   InstanceHeroBadge, 
   IdpSectionHeader, 
@@ -209,75 +209,10 @@ export default async function Home() {
                 <IdpSelector />
               </div>
 
-              {/* Features grid - Compact version with animated icons */}
+              {/* Features - Swipeable carousel on mobile, grid on desktop */}
               <div className="border-t border-gray-200 pt-8 mt-8 animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
                 <LocalizedPilotCapabilities />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { Icon: Globe2, title: "Multi-IdP Federation", desc: "Seamless authentication across USA/NATO partners", color: "from-blue-500/5 to-cyan-500/5", accent: "#009ab3", iconColor: "text-[#009ab3]" },
-                    { Icon: Target, title: "ABAC Authorization", desc: "Attribute-based access control with OPA policies", color: "from-purple-500/5 to-pink-500/5", accent: "#9333ea", iconColor: "text-purple-600" },
-                    { Icon: Shield, title: "Clearance-Based Access", desc: "UNCLASSIFIED to TOP_SECRET enforcement", color: "from-red-500/5 to-orange-500/5", accent: "#dc2626", iconColor: "text-red-600" },
-                    { Icon: MapPin, title: "Coalition Releasability", desc: "Country-based information sharing controls", color: "from-green-500/5 to-emerald-500/5", accent: "#79d85a", iconColor: "text-[#79d85a]" },
-                    { Icon: Users, title: "COI Management", desc: "Community of Interest tagging & access", color: "from-yellow-500/5 to-amber-500/5", accent: "#f59e0b", iconColor: "text-amber-500" },
-                    { Icon: Lock, title: "Encrypted Documents", desc: "KAS-enabled policy-bound encryption", color: "from-indigo-500/5 to-violet-500/5", accent: "#6366f1", iconColor: "text-indigo-600" },
-                  ].map((feature, idx) => (
-                    <div 
-                      key={idx}
-                      className="group relative p-4 bg-white rounded-xl border border-gray-200 hover:border-transparent transition-all duration-300 hover:shadow-xl hover:-translate-y-1 animate-fade-in-up overflow-hidden"
-                      style={{ 
-                        animationDelay: `${0.9 + idx * 0.08}s`,
-                      }}
-                    >
-                      {/* Animated gradient background on hover */}
-                      <div 
-                        className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
-                      ></div>
-
-                      {/* Shimmer effect */}
-                      <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out">
-                        <div className="h-full w-1/3 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12"></div>
-                      </div>
-
-                      {/* Content */}
-                      <div className="relative z-10">
-                        {/* Animated icon */}
-                        <div className="mb-3 flex items-center justify-center">
-                          <div className="relative w-14 h-14 flex items-center justify-center">
-                            <div 
-                              className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-20 blur-lg transition-all duration-300"
-                              style={{ 
-                                background: feature.accent,
-                              }}
-                            ></div>
-                            <feature.Icon 
-                              className={`relative ${feature.iconColor} transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}
-                              size={32}
-                              strokeWidth={2}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Title */}
-                        <h4 className="font-bold text-base text-gray-900 mb-1.5 text-center transition-all duration-300">
-                          <span className="bg-gradient-to-r from-gray-900 to-gray-900 group-hover:from-[#009ab3] group-hover:to-[#79d85a] bg-clip-text group-hover:text-transparent transition-all duration-300">
-                            {feature.title}
-                          </span>
-                        </h4>
-
-                        {/* Description */}
-                        <p className="text-xs text-gray-600 leading-relaxed text-center group-hover:text-gray-700 transition-colors duration-300">
-                          {feature.desc}
-                        </p>
-
-                        {/* Corner accent circle */}
-                        <div 
-                          className="absolute -bottom-4 -right-4 w-12 h-12 rounded-full opacity-0 group-hover:opacity-5 transition-opacity duration-300"
-                          style={{ background: feature.accent }}
-                        ></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <FeatureCarousel />
               </div>
 
               {/* Footer with Coalition Partners */}
