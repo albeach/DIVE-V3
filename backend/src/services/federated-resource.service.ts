@@ -136,12 +136,21 @@ class FederatedResourceService {
     private currentInstanceRealm: string;
 
     constructor() {
-        this.currentInstanceRealm = process.env.INSTANCE_REALM || 'USA';
+        // CRITICAL FIX: Use INSTANCE_CODE (which is set by spoke deployment)
+        // Fall back to INSTANCE_REALM for backward compatibility, then to USA
+        this.currentInstanceRealm = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
+        logger.info('FederatedResourceService using instance realm', { 
+            currentInstanceRealm: this.currentInstanceRealm,
+            fromEnv: process.env.INSTANCE_CODE ? 'INSTANCE_CODE' : (process.env.INSTANCE_REALM ? 'INSTANCE_REALM' : 'default')
+        });
     }
 
     /**
      * Initialize connections to all federated instances
      * Loads configuration from federation-registry.json
+     * 
+     * CRITICAL FIX: If current instance is not in the registry (dynamic spoke),
+     * automatically register it as a local instance with MongoDB connection.
      */
     async initialize(): Promise<void> {
         if (this.initialized) {
@@ -149,41 +158,89 @@ class FederatedResourceService {
             return;
         }
 
-        logger.info('Initializing FederatedResourceService');
+        logger.info('Initializing FederatedResourceService', {
+            currentInstance: this.currentInstanceRealm
+        });
 
         // Load federation registry
         const registry = await this.loadFederationRegistry();
-        if (!registry) {
-            logger.error('Failed to load federation registry');
-            return;
+        
+        // Initialize instances from registry (if available)
+        if (registry?.instances) {
+            for (const [key, instance] of Object.entries(registry.instances)) {
+                const inst = instance as any;
+                if (!inst.enabled) {
+                    logger.debug(`Instance ${key} is disabled, skipping`);
+                    continue;
+                }
+
+                try {
+                    const federatedInstance = await this.createInstanceConfig(key, inst);
+                    this.instances.set(key.toUpperCase(), federatedInstance);
+                    logger.info(`Initialized federated instance: ${key}`, {
+                        code: federatedInstance.code,
+                        type: federatedInstance.type,
+                        database: federatedInstance.mongoDatabase
+                    });
+                } catch (error) {
+                    logger.error(`Failed to initialize instance ${key}`, {
+                        error: error instanceof Error ? error.message : 'Unknown error'
+                    });
+                }
+            }
         }
 
-        // Initialize each instance
-        for (const [key, instance] of Object.entries(registry.instances)) {
-            const inst = instance as any;
-            if (!inst.enabled) {
-                logger.debug(`Instance ${key} is disabled, skipping`);
-                continue;
-            }
-
-            try {
-                const federatedInstance = await this.createInstanceConfig(key, inst);
-                this.instances.set(key.toUpperCase(), federatedInstance);
-                logger.info(`Initialized federated instance: ${key}`, {
-                    code: federatedInstance.code,
-                    type: federatedInstance.type,
-                    database: federatedInstance.mongoDatabase
-                });
-            } catch (error) {
-                logger.error(`Failed to initialize instance ${key}`, {
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
-            }
+        // CRITICAL FIX: Ensure current instance is always registered
+        // This handles dynamically deployed spokes that aren't in the static registry
+        if (!this.instances.has(this.currentInstanceRealm)) {
+            logger.info(`Current instance ${this.currentInstanceRealm} not in registry, registering dynamically`);
+            await this.registerCurrentInstance();
         }
 
         this.initialized = true;
         logger.info('FederatedResourceService initialized', {
-            instances: Array.from(this.instances.keys())
+            instances: Array.from(this.instances.keys()),
+            currentInstance: this.currentInstanceRealm
+        });
+    }
+
+    /**
+     * Dynamically register the current instance when not in static registry
+     * Uses environment variables to configure MongoDB connection
+     */
+    private async registerCurrentInstance(): Promise<void> {
+        const instanceCode = this.currentInstanceRealm;
+        const instanceName = process.env.INSTANCE_NAME || `${instanceCode} Instance`;
+        
+        // Get MongoDB configuration from environment
+        const mongoUrl = getMongoDBUrl();
+        const mongoDatabase = getMongoDBName();
+        
+        if (!mongoUrl) {
+            logger.error(`Cannot register current instance ${instanceCode}: No MongoDB URL configured`);
+            return;
+        }
+
+        const federatedInstance: IFederatedInstance = {
+            code: instanceCode,
+            name: instanceName,
+            type: 'local',
+            enabled: true,
+            mongoUrl,
+            mongoDatabase,
+            useApiMode: false,
+            circuitBreaker: {
+                state: 'closed',
+                failures: 0
+            }
+        };
+
+        this.instances.set(instanceCode, federatedInstance);
+        logger.info(`Dynamically registered current instance: ${instanceCode}`, {
+            code: instanceCode,
+            name: instanceName,
+            database: mongoDatabase,
+            hasMongoUrl: !!mongoUrl
         });
     }
 

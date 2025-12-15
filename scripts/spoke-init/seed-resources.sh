@@ -155,6 +155,76 @@ const creators = [
 ];
 
 // =============================================================================
+// LOCALE-SPECIFIC CLASSIFICATION MAPPINGS (ACP-240 Section 4.3)
+// Original national classifications in native language
+// =============================================================================
+const localeClassifications = {
+    // NATO standard (English)
+    USA: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+    GBR: { UNCLASSIFIED: 'OFFICIAL', CONFIDENTIAL: 'OFFICIAL-SENSITIVE', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+    CAN: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+    AUS: { UNCLASSIFIED: 'OFFICIAL', CONFIDENTIAL: 'OFFICIAL:SENSITIVE', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+    NZL: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+    
+    // French-speaking nations
+    FRA: { UNCLASSIFIED: 'NON PROTÉGÉ', CONFIDENTIAL: 'CONFIDENTIEL DÉFENSE', SECRET: 'SECRET DÉFENSE', TOP_SECRET: 'TRÈS SECRET DÉFENSE' },
+    BEL: { UNCLASSIFIED: 'NON CLASSIFIÉ', CONFIDENTIAL: 'CONFIDENTIEL', SECRET: 'SECRET', TOP_SECRET: 'TRÈS SECRET' },
+    LUX: { UNCLASSIFIED: 'NON CLASSIFIÉ', CONFIDENTIAL: 'CONFIDENTIEL', SECRET: 'SECRET', TOP_SECRET: 'TRÈS SECRET' },
+    
+    // German-speaking nations
+    DEU: { UNCLASSIFIED: 'OFFEN', CONFIDENTIAL: 'VS-VERTRAULICH', SECRET: 'GEHEIM', TOP_SECRET: 'STRENG GEHEIM' },
+    
+    // Spanish-speaking nations
+    ESP: { UNCLASSIFIED: 'SIN CLASIFICAR', CONFIDENTIAL: 'CONFIDENCIAL', SECRET: 'RESERVADO', TOP_SECRET: 'SECRETO' },
+    
+    // Italian
+    ITA: { UNCLASSIFIED: 'NON CLASSIFICATO', CONFIDENTIAL: 'RISERVATO', SECRET: 'SEGRETO', TOP_SECRET: 'SEGRETISSIMO' },
+    
+    // Portuguese
+    PRT: { UNCLASSIFIED: 'NÃO CLASSIFICADO', CONFIDENTIAL: 'CONFIDENCIAL', SECRET: 'SECRETO', TOP_SECRET: 'MUITO SECRETO' },
+    
+    // Nordic countries
+    NOR: { UNCLASSIFIED: 'UGRADERT', CONFIDENTIAL: 'FORTROLIG', SECRET: 'HEMMELIG', TOP_SECRET: 'STRENGT HEMMELIG' },
+    DNK: { UNCLASSIFIED: 'UKLASSIFICERET', CONFIDENTIAL: 'FORTROLIGT', SECRET: 'HEMMELIGT', TOP_SECRET: 'YDERST HEMMELIGT' },
+    SWE: { UNCLASSIFIED: 'ÖPPEN', CONFIDENTIAL: 'KONFIDENTIELLT', SECRET: 'HEMLIGT', TOP_SECRET: 'KVALIFICERAT HEMLIGT' },
+    FIN: { UNCLASSIFIED: 'JULKINEN', CONFIDENTIAL: 'LUOTTAMUKSELLINEN', SECRET: 'SALAINEN', TOP_SECRET: 'ERITTÄIN SALAINEN' },
+    ISL: { UNCLASSIFIED: 'ÓFLOKAÐ', CONFIDENTIAL: 'TRÚNAÐARMÁL', SECRET: 'LEYNDARMÁL', TOP_SECRET: 'MJÖG LEYNDARMÁL' },
+    
+    // Central/Eastern Europe
+    POL: { UNCLASSIFIED: 'JAWNE', CONFIDENTIAL: 'ZASTRZEŻONE', SECRET: 'POUFNE', TOP_SECRET: 'TAJNE' },
+    CZE: { UNCLASSIFIED: 'NEUTAJOVANÉ', CONFIDENTIAL: 'DŮVĚRNÉ', SECRET: 'TAJNÉ', TOP_SECRET: 'PŘÍSNĚ TAJNÉ' },
+    HUN: { UNCLASSIFIED: 'NYÍLT', CONFIDENTIAL: 'BIZALMAS', SECRET: 'TITKOS', TOP_SECRET: 'SZIGORÚAN TITKOS' },
+    SVK: { UNCLASSIFIED: 'NEUTAJOVANÉ', CONFIDENTIAL: 'DÔVERNÉ', SECRET: 'TAJNÉ', TOP_SECRET: 'PRÍSNE TAJNÉ' },
+    SVN: { UNCLASSIFIED: 'NEKLASIFICIRANO', CONFIDENTIAL: 'ZAUPNO', SECRET: 'TAJNO', TOP_SECRET: 'STROGO TAJNO' },
+    
+    // Baltic states
+    EST: { UNCLASSIFIED: 'AVALIK', CONFIDENTIAL: 'KONFIDENTSIAALNE', SECRET: 'SALAJANE', TOP_SECRET: 'TÄIESTI SALAJANE' },
+    LVA: { UNCLASSIFIED: 'NEKLASIFICĒTA', CONFIDENTIAL: 'KONFIDENCIĀLA', SECRET: 'SLEPENA', TOP_SECRET: 'SEVIŠĶI SLEPENA' },
+    LTU: { UNCLASSIFIED: 'NESLAPTA', CONFIDENTIAL: 'KONFIDENCIALI', SECRET: 'SLAPTA', TOP_SECRET: 'VISIŠKAI SLAPTA' },
+    
+    // Southeastern Europe
+    ALB: { UNCLASSIFIED: 'I PAKLASIFIKUAR', CONFIDENTIAL: 'KONFIDENCIAL', SECRET: 'SEKRET', TOP_SECRET: 'TEPER SEKRET' },
+    HRV: { UNCLASSIFIED: 'NEKLASIFICIRANO', CONFIDENTIAL: 'POVJERLJIVO', SECRET: 'TAJNO', TOP_SECRET: 'VRLO TAJNO' },
+    MNE: { UNCLASSIFIED: 'NEKLASIFIKOVANO', CONFIDENTIAL: 'POVJERLJIVO', SECRET: 'TAJNO', TOP_SECRET: 'STROGO TAJNO' },
+    MKD: { UNCLASSIFIED: 'НЕКЛАСИФИЦИРАНО', CONFIDENTIAL: 'ДОВЕРЛИВО', SECRET: 'ТАЈНО', TOP_SECRET: 'СТРОГО ТАЈНО' },
+    GRC: { UNCLASSIFIED: 'ΑΔΙΑΒΑΘΜΗΤΟ', CONFIDENTIAL: 'ΕΜΠΙΣΤΕΥΤΙΚΟ', SECRET: 'ΑΠΟΡΡΗΤΟ', TOP_SECRET: 'ΑΚΡΩΣ ΑΠΟΡΡΗΤΟ' },
+    BGR: { UNCLASSIFIED: 'НEКЛАСИФИЦИРАНО', CONFIDENTIAL: 'ПОВЕРИТЕЛНО', SECRET: 'СЕКРЕТНО', TOP_SECRET: 'СТРОГО СЕКРЕТНО' },
+    ROU: { UNCLASSIFIED: 'NECLASIFICAT', CONFIDENTIAL: 'CONFIDENȚIAL', SECRET: 'SECRET', TOP_SECRET: 'STRICT SECRET' },
+    
+    // Turkey
+    TUR: { UNCLASSIFIED: 'TASNIF DIŞI', CONFIDENTIAL: 'HİZMETE ÖZEL', SECRET: 'GİZLİ', TOP_SECRET: 'ÇOK GİZLİ' },
+    
+    // Netherlands
+    NLD: { UNCLASSIFIED: 'ONGERUBRICEERD', CONFIDENTIAL: 'VERTROUWELIJK', SECRET: 'GEHEIM', TOP_SECRET: 'ZEER GEHEIM' }
+};
+
+// Get locale classification or fall back to NATO standard
+function getOriginalClassification(code, natoLevel) {
+    const countryMap = localeClassifications[code] || localeClassifications['USA'];
+    return countryMap[natoLevel] || natoLevel;
+}
+
+// =============================================================================
 // GENERATE RESOURCES
 // =============================================================================
 
@@ -195,11 +265,17 @@ for (let classIdx = 0; classIdx < classifications.length; classIdx++) {
         // Create date variation (within last 365 days)
         const createdDate = new Date(now.getTime() - Math.floor(Math.random() * 365 * 24 * 60 * 60 * 1000));
         
+        // Get locale-specific classification term (ACP-240 Section 4.3)
+        const originalClassification = getOriginalClassification(instanceCode, classification);
+        
         const resource = {
             resourceId: `${instanceCode.toLowerCase()}-${docType.prefix}-${String(resourceIndex).padStart(5, '0')}`,
             title: `${instanceCode} ${docType.title} - ${topic}`,
             description: `${docType.category.charAt(0).toUpperCase() + docType.category.slice(1)} document for ${instanceCode} operations`,
-            classification: classification,
+            classification: classification,                    // NATO standard classification
+            originalClassification: originalClassification,    // Native language classification (ACP-240)
+            originalCountry: instanceCode,                     // Originating country (ISO 3166-1 alpha-3)
+            natoEquivalent: classification,                    // NATO equivalent for coalition sharing
             releasabilityTo: releasability,
             COI: coi,
             instance: instanceCode,

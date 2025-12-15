@@ -40,12 +40,35 @@ export function getMongoDBUrl(): string {
  * 
  * Priority:
  * 1. MONGODB_DATABASE env var
- * 2. Test database if NODE_ENV === 'test'
- * 3. Production database
+ * 2. Parse database from MONGODB_URI/MONGODB_URL (e.g., mongodb://host:port/dive-v3-rou?authSource=admin)
+ * 3. Test database if NODE_ENV === 'test'
+ * 4. Fallback: 'dive-v3'
+ * 
+ * CRITICAL FIX: For dynamically deployed spokes, the database name is embedded in the URL
+ * but MONGODB_DATABASE may not be explicitly set. We must extract it from the URL.
  */
 export function getMongoDBName(): string {
-    return process.env.MONGODB_DATABASE || 
-           (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
+    // Explicit env var takes priority
+    if (process.env.MONGODB_DATABASE) {
+        return process.env.MONGODB_DATABASE;
+    }
+    
+    // Try to parse database from connection URL
+    const mongoUrl = process.env.MONGODB_URI || process.env.MONGODB_URL;
+    if (mongoUrl) {
+        try {
+            // Parse URL format: mongodb://[user:pass@]host:port/database?options
+            const urlMatch = mongoUrl.match(/mongodb(?:\+srv)?:\/\/[^/]+\/([^?]+)/);
+            if (urlMatch && urlMatch[1]) {
+                return urlMatch[1];
+            }
+        } catch {
+            // Failed to parse, fall through to defaults
+        }
+    }
+    
+    // Fallbacks
+    return process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3';
 }
 
 /**

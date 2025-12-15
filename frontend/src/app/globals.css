@@ -1219,3 +1219,25 @@ body {
         }
     }
 }
+/* ============================================ */
+/* Hide Next.js Dev Indicator on Mobile */
+/* ============================================ */
+@media (max-width: 768px) {
+    /* Next.js development indicator (the "N" circle) */
+    [data-nextjs-dialog-overlay],
+    [data-nextjs-toast],
+    nextjs-portal,
+    #__next-build-indicator,
+    /* React Query Devtools */
+    .ReactQueryDevtools,
+    /* Any devtools floating indicator */
+    [class*="devtools"],
+    [class*="Devtools"],
+    [id*="devtools"],
+    [id*="Devtools"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+}

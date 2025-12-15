@@ -105,14 +105,26 @@ echo ""
 "${SCRIPT_DIR}/seed-users.sh" "${INSTANCE_CODE}"
 
 # =============================================================================
-# Step 4: Seed Resources
+# Step 4: Seed Resources (ZTDF-encrypted)
 # =============================================================================
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}  STEP 4/4: Seeding Sample Resources${NC}"
+echo -e "${CYAN}  STEP 4/5: Seeding ZTDF-Encrypted Resources${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-"${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}"
+# Use the TypeScript ZTDF seeding script via docker exec
+# This creates properly encrypted resources with full ADatP-5663/ACP-240 compliance
+BACKEND_CONTAINER="${INSTANCE_CODE,,}-backend-${INSTANCE_CODE,,}-1"
+if docker ps --format '{{.Names}}' | grep -q "^${BACKEND_CONTAINER}$"; then
+    echo -e "${BLUE}ℹ${NC} Using ZTDF seeding script (npm run seed:instance)"
+    docker exec "${BACKEND_CONTAINER}" npm run seed:instance -- --instance="${INSTANCE_CODE}" --count=5000 2>&1 || {
+        echo -e "${YELLOW}⚠${NC} ZTDF seeding failed, falling back to basic seeding..."
+        "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}"
+    }
+else
+    echo -e "${YELLOW}⚠${NC} Backend container not running, using basic seeding..."
+    "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}"
+fi
 
 # =============================================================================
 # Step 5: Sync Federation Secrets (if Hub is running)
@@ -152,7 +164,7 @@ echo -e "${GREEN}║  ✓ PostgreSQL: NextAuth tables created                   
 echo -e "${GREEN}║  ✓ MongoDB: Collections and indexes created                             ║${NC}"
 echo -e "${GREEN}║  ✓ Keycloak: Realm, client, and scopes configured                       ║${NC}"
 echo -e "${GREEN}║  ✓ Users: 5 test users with DIVE attributes                             ║${NC}"
-echo -e "${GREEN}║  ✓ Resources: 7 sample documents seeded                                 ║${NC}"
+echo -e "${GREEN}║  ✓ Resources: 5000 sample documents seeded                              ║${NC}"
 echo -e "${GREEN}║                                                                          ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║                                                                          ║${NC}"

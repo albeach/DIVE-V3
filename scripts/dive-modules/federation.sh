@@ -231,7 +231,20 @@ federation_list_idps() {
     log_step "Listing configured Identity Providers..."
     echo ""
     
-    local backend_url="${BACKEND_URL:-https://localhost:4000}"
+    # Determine backend URL based on instance
+    local backend_port=4000
+    local inst_lc=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+    
+    # Calculate port offset for non-USA instances (NATO port allocation)
+    if [[ "$inst_lc" != "usa" && -f "${DIVE_ROOT}/scripts/nato-countries.sh" ]]; then
+        source "${DIVE_ROOT}/scripts/nato-countries.sh"
+        local port_offset=$(get_country_offset "$(echo "$inst_lc" | tr '[:lower:]' '[:upper:]')")
+        if [[ -n "$port_offset" && "$port_offset" != "0" ]]; then
+            backend_port=$((4000 + port_offset))
+        fi
+    fi
+    
+    local backend_url="${BACKEND_URL:-https://localhost:${backend_port}}"
     local api_endpoint="${backend_url}/api/idps/public"
     
     if [ "$DRY_RUN" = true ]; then
@@ -423,10 +436,12 @@ federation_mappers_apply() {
     fi
     
     source "$env_file"
-    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD}"
+    # Try instance-specific password first, then generic
+    local password_var="KEYCLOAK_ADMIN_PASSWORD_${instance_upper}"
+    local admin_pass="${!password_var:-$KEYCLOAK_ADMIN_PASSWORD}"
     
     if [ -z "$admin_pass" ]; then
-        log_error "KEYCLOAK_ADMIN_PASSWORD not found in $env_file"
+        log_error "KEYCLOAK_ADMIN_PASSWORD or KEYCLOAK_ADMIN_PASSWORD_${instance_upper} not found in $env_file"
         return 1
     fi
     
@@ -524,10 +539,12 @@ federation_mappers_verify() {
     fi
     
     source "$env_file"
-    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD}"
+    # Try instance-specific password first, then generic
+    local password_var="KEYCLOAK_ADMIN_PASSWORD_${instance_upper}"
+    local admin_pass="${!password_var:-$KEYCLOAK_ADMIN_PASSWORD}"
     
     if [ -z "$admin_pass" ]; then
-        log_error "KEYCLOAK_ADMIN_PASSWORD not found in $env_file"
+        log_error "KEYCLOAK_ADMIN_PASSWORD or KEYCLOAK_ADMIN_PASSWORD_${instance_upper} not found in $env_file"
         return 1
     fi
     

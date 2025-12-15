@@ -192,6 +192,18 @@ case "$COMMAND" in
         module_policy "$@"
         ;;
     
+    # Certificate commands (certificates.sh)
+    certs|certificates)
+        source "${MODULES_DIR}/certificates.sh"
+        module_certificates "$@"
+        ;;
+    
+    # Federation setup commands (federation-setup.sh)
+    federation-setup|fed-setup)
+        source "${MODULES_DIR}/federation-setup.sh"
+        module_federation_setup "$@"
+        ;;
+    
     # Test commands (test.sh) - Phase 6
     test)
         source "${MODULES_DIR}/test.sh"
@@ -227,6 +239,51 @@ case "$COMMAND" in
     env)
         source "${MODULES_DIR}/status.sh"
         cmd_env_print "$@"
+        ;;
+    
+    # Fix command - run federation fixes
+    fix)
+        FIX_TARGET="${1:-all}"
+        shift || true
+        case "$FIX_TARGET" in
+            federation|fed)
+                # Run federation issues fix script
+                if [ -n "$INSTANCE" ] && [ "$INSTANCE" != "usa" ]; then
+                    bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" --spoke "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
+                else
+                    bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" "$@"
+                fi
+                ;;
+            hub)
+                bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" --hub-only
+                ;;
+            spoke)
+                if [ -n "$INSTANCE" ]; then
+                    bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" --spoke "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
+                else
+                    log_error "Specify instance with --instance <CODE> or use: ./dive fix federation"
+                    exit 1
+                fi
+                ;;
+            all)
+                bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" "$@"
+                ;;
+            *)
+                echo -e "${BOLD}DIVE Fix Commands:${NC}"
+                echo ""
+                echo "Usage:"
+                echo "  ./dive fix federation                Fix all federation issues (hub + all spokes)"
+                echo "  ./dive fix hub                       Fix hub logout/redirect issues only"
+                echo "  ./dive --instance ALB fix spoke      Fix specific spoke federation"
+                echo "  ./dive fix all                       Fix all (same as federation)"
+                echo ""
+                echo "Fixes:"
+                echo "  1. Logout redirect to internal container name"
+                echo "  2. 'Invalid parameter: redirect_uri' errors"
+                echo "  3. Cross-border IdP not loading"
+                echo ""
+                ;;
+        esac
         ;;
     
     # Help

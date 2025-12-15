@@ -68,48 +68,356 @@
     },
     "https://localhost:8443/realms/dive-v3-broker": {
       "tenant": "USA",
-      "name": "Local Dev Keycloak (HTTPS)",
+      "name": "Local Dev Keycloak (HTTPS) - Hub",
       "country": "USA",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8444/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Local Dev)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8445/realms/dive-v3-broker-bel": {
+      "tenant": "BEL",
+      "name": "BEL Keycloak (Local Dev)",
+      "country": "BEL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8450/realms/dive-v3-broker-dnk": {
+      "tenant": "DNK",
+      "name": "DNK Keycloak (Local Dev)",
+      "country": "DNK",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8465/realms/dive-v3-broker-nor": {
+      "tenant": "NOR",
+      "name": "NOR Keycloak (Local Dev)",
+      "country": "NOR",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8466/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak (Local Dev)",
+      "country": "POL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Local Dev)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-bel": {
+      "tenant": "BEL",
+      "name": "BEL Keycloak (Local Dev)",
+      "country": "BEL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-dnk": {
+      "tenant": "DNK",
+      "name": "DNK Keycloak (Local Dev)",
+      "country": "DNK",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-nor": {
+      "tenant": "NOR",
+      "name": "NOR Keycloak (Local Dev)",
+      "country": "NOR",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak (Local Dev)",
+      "country": "POL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8446/realms/dive-v3-broker-gbr": {
+      "tenant": "GBR",
+      "name": "GBR Keycloak (Local Dev)",
+      "country": "GBR",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8468/realms/dive-v3-broker-rou": {
+      "tenant": "ROU",
+      "name": "ROU Keycloak (Local Dev)",
+      "country": "ROU",
       "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {
-    "USA": ["FRA", "GBR", "DEU"],
-    "FRA": ["USA", "GBR", "DEU"],
-    "GBR": ["USA", "FRA", "DEU"],
-    "DEU": ["USA", "FRA", "GBR"]
+    "USA": [
+      "ALB",
+      "BEL",
+      "DEU",
+      "DNK",
+      "FRA",
+      "GBR",
+      "NOR",
+      "POL",
+      "ROU"
+    ],
+    "FRA": [
+      "USA",
+      "GBR",
+      "DEU",
+      "ALB",
+      "BEL",
+      "DNK",
+      "NOR",
+      "POL"
+    ],
+    "GBR": [
+      "ALB",
+      "BEL",
+      "DEU",
+      "DNK",
+      "FRA",
+      "NOR",
+      "POL",
+      "USA"
+    ],
+    "DEU": [
+      "USA",
+      "FRA",
+      "GBR",
+      "ALB",
+      "BEL",
+      "DNK",
+      "NOR",
+      "POL"
+    ],
+    "ALB": [
+      "BEL",
+      "DEU",
+      "DNK",
+      "FRA",
+      "GBR",
+      "NOR",
+      "POL",
+      "USA"
+    ],
+    "BEL": [
+      "ALB",
+      "DEU",
+      "DNK",
+      "FRA",
+      "GBR",
+      "NOR",
+      "POL",
+      "USA"
+    ],
+    "DNK": [
+      "ALB",
+      "BEL",
+      "DEU",
+      "FRA",
+      "GBR",
+      "NOR",
+      "POL",
+      "USA"
+    ],
+    "NOR": [
+      "ALB",
+      "BEL",
+      "DEU",
+      "DNK",
+      "FRA",
+      "GBR",
+      "POL",
+      "USA"
+    ],
+    "POL": [
+      "ALB",
+      "BEL",
+      "DEU",
+      "DNK",
+      "FRA",
+      "GBR",
+      "NOR",
+      "USA"
+    ],
+    "ROU": [
+      "DEU",
+      "FRA",
+      "GBR",
+      "USA"
+    ]
   },
   "coi_members": {
-    "US-ONLY": ["USA"],
-    "CAN-US": ["CAN", "USA"],
-    "GBR-US": ["GBR", "USA"],
-    "FRA-US": ["FRA", "USA"],
-    "DEU-US": ["DEU", "USA"],
-    "FVEY": ["USA", "GBR", "CAN", "AUS", "NZL"],
+    "US-ONLY": [
+      "USA"
+    ],
+    "CAN-US": [
+      "CAN",
+      "USA"
+    ],
+    "GBR-US": [
+      "GBR",
+      "USA"
+    ],
+    "FRA-US": [
+      "FRA",
+      "USA"
+    ],
+    "DEU-US": [
+      "DEU",
+      "USA"
+    ],
+    "FVEY": [
+      "USA",
+      "GBR",
+      "CAN",
+      "AUS",
+      "NZL"
+    ],
     "NATO": [
-      "ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
-      "DEU", "GBR", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE",
-      "NLD", "MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE",
-      "TUR", "USA"
+      "ALB",
+      "BEL",
+      "BGR",
+      "CAN",
+      "HRV",
+      "CZE",
+      "DNK",
+      "EST",
+      "FIN",
+      "FRA",
+      "DEU",
+      "GBR",
+      "GRC",
+      "HUN",
+      "ISL",
+      "ITA",
+      "LVA",
+      "LTU",
+      "LUX",
+      "MNE",
+      "NLD",
+      "MKD",
+      "NOR",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "ESP",
+      "SWE",
+      "TUR",
+      "USA"
     ],
     "NATO-COSMIC": [
-      "ALB", "BEL", "BGR", "CAN", "HRV", "CZE", "DNK", "EST", "FIN", "FRA",
-      "DEU", "GBR", "GRC", "HUN", "ISL", "ITA", "LVA", "LTU", "LUX", "MNE",
-      "NLD", "MKD", "NOR", "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE",
-      "TUR", "USA"
+      "ALB",
+      "BEL",
+      "BGR",
+      "CAN",
+      "HRV",
+      "CZE",
+      "DNK",
+      "EST",
+      "FIN",
+      "FRA",
+      "DEU",
+      "GBR",
+      "GRC",
+      "HUN",
+      "ISL",
+      "ITA",
+      "LVA",
+      "LTU",
+      "LUX",
+      "MNE",
+      "NLD",
+      "MKD",
+      "NOR",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "ESP",
+      "SWE",
+      "TUR",
+      "USA"
     ],
     "EU-RESTRICTED": [
-      "AUT", "BEL", "BGR", "HRV", "CYP", "CZE", "DNK", "EST", "FIN", "FRA",
-      "DEU", "GRC", "HUN", "IRL", "ITA", "LVA", "LTU", "LUX", "MLT", "NLD",
-      "POL", "PRT", "ROU", "SVK", "SVN", "ESP", "SWE"
+      "AUT",
+      "BEL",
+      "BGR",
+      "HRV",
+      "CYP",
+      "CZE",
+      "DNK",
+      "EST",
+      "FIN",
+      "FRA",
+      "DEU",
+      "GRC",
+      "HUN",
+      "IRL",
+      "ITA",
+      "LVA",
+      "LTU",
+      "LUX",
+      "MLT",
+      "NLD",
+      "POL",
+      "PRT",
+      "ROU",
+      "SVK",
+      "SVN",
+      "ESP",
+      "SWE"
     ],
-    "AUKUS": ["AUS", "GBR", "USA"],
-    "QUAD": ["USA", "AUS", "IND", "JPN"],
-    "NORTHCOM": ["USA", "CAN", "MEX"],
-    "EUCOM": ["USA", "DEU", "GBR", "FRA", "ITA", "ESP", "POL"],
-    "PACOM": ["USA", "JPN", "KOR", "AUS", "NZL", "PHL"],
-    "CENTCOM": ["USA", "SAU", "ARE", "QAT", "KWT", "BHR", "JOR", "EGY"],
-    "SOCOM": ["USA", "GBR", "CAN", "AUS", "NZL"],
+    "AUKUS": [
+      "AUS",
+      "GBR",
+      "USA"
+    ],
+    "QUAD": [
+      "USA",
+      "AUS",
+      "IND",
+      "JPN"
+    ],
+    "NORTHCOM": [
+      "USA",
+      "CAN",
+      "MEX"
+    ],
+    "EUCOM": [
+      "USA",
+      "DEU",
+      "GBR",
+      "FRA",
+      "ITA",
+      "ESP",
+      "POL"
+    ],
+    "PACOM": [
+      "USA",
+      "JPN",
+      "KOR",
+      "AUS",
+      "NZL",
+      "PHL"
+    ],
+    "CENTCOM": [
+      "USA",
+      "SAU",
+      "ARE",
+      "QAT",
+      "KWT",
+      "BHR",
+      "JOR",
+      "EGY"
+    ],
+    "SOCOM": [
+      "USA",
+      "GBR",
+      "CAN",
+      "AUS",
+      "NZL"
+    ],
     "Alpha": [],
     "Beta": [],
     "Gamma": []
@@ -121,7 +429,11 @@
       "locale": "en-US",
       "mfa_required_above": "UNCLASSIFIED",
       "max_session_hours": 10,
-      "default_coi": ["US-ONLY", "FVEY", "NATO"],
+      "default_coi": [
+        "US-ONLY",
+        "FVEY",
+        "NATO"
+      ],
       "allow_industry_access": true,
       "industry_max_classification": "SECRET"
     },
@@ -131,19 +443,24 @@
       "locale": "fr-FR",
       "mfa_required_above": "UNCLASSIFIED",
       "max_session_hours": 8,
-      "default_coi": ["FRA-US", "NATO"],
+      "default_coi": [
+        "FRA-US",
+        "NATO"
+      ],
       "allow_industry_access": true,
       "industry_max_classification": "CONFIDENTIAL"
     },
     "GBR": {
       "code": "GBR",
-      "name": "United Kingdom",
-      "locale": "en-GB",
+      "name": "GBR",
+      "locale": "en-US",
       "mfa_required_above": "UNCLASSIFIED",
       "max_session_hours": 8,
-      "default_coi": ["GBR-US", "FVEY", "NATO"],
+      "default_coi": [
+        "NATO"
+      ],
       "allow_industry_access": true,
-      "industry_max_classification": "SECRET"
+      "industry_max_classification": "CONFIDENTIAL"
     },
     "DEU": {
       "code": "DEU",
@@ -151,12 +468,84 @@
       "locale": "de-DE",
       "mfa_required_above": "UNCLASSIFIED",
       "max_session_hours": 8,
-      "default_coi": ["DEU-US", "NATO"],
+      "default_coi": [
+        "DEU-US",
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "ALB": {
+      "code": "ALB",
+      "name": "ALB",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "BEL": {
+      "code": "BEL",
+      "name": "BEL",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "DNK": {
+      "code": "DNK",
+      "name": "DNK",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "NOR": {
+      "code": "NOR",
+      "name": "NOR",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "POL": {
+      "code": "POL",
+      "name": "POL",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "ROU": {
+      "code": "ROU",
+      "name": "ROU",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
       "allow_industry_access": true,
       "industry_max_classification": "CONFIDENTIAL"
     }
   }
 }
-
-
-

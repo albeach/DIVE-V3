@@ -578,6 +578,7 @@ _spoke_init_internal() {
     mkdir -p "$spoke_dir"
     mkdir -p "$spoke_dir/certs"
     mkdir -p "$spoke_dir/certs/crl"
+    mkdir -p "$spoke_dir/truststores"
     mkdir -p "$spoke_dir/cache/policies"
     mkdir -p "$spoke_dir/cache/audit"
     mkdir -p "$spoke_dir/cloudflared"
@@ -851,6 +852,24 @@ _create_spoke_docker_compose() {
     local opa_host_port=$SPOKE_OPA_PORT
     local kas_host_port=$SPOKE_KAS_PORT
 
+    # ==========================================================================
+    # Country-specific theming from NATO countries database
+    # Dynamic colors, locale, and timezone for each NATO member
+    # ==========================================================================
+    local theme_primary=$(get_country_primary_color "$code_upper")
+    local theme_secondary=$(get_country_secondary_color "$code_upper")
+    local country_timezone=$(get_country_timezone "$code_upper")
+    local country_name=$(get_country_name "$code_upper")
+    
+    # Fallback to default colors if country not in database
+    if [ -z "$theme_primary" ]; then
+        theme_primary="#1a365d"
+        theme_secondary="#2b6cb0"
+        log_warn "Country $code_upper not in NATO database, using default colors"
+    fi
+    
+    log_info "Using theme colors for $code_upper: primary=$theme_primary, secondary=$theme_secondary"
+
     # Derive hostnames (strip proto/port) or default to localhost
     local app_host="localhost"
     local idp_host="localhost"
@@ -968,6 +987,8 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: "8443"
+      # Truststore for federation SSL (mkcert root CA)
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
@@ -977,6 +998,7 @@ services:
       - "${keycloak_http_port}:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres-${code_lower}:
@@ -1124,6 +1146,7 @@ services:
         condition: service_healthy
     networks:
       - dive-${code_lower}-network
+      - dive-v3-shared-network  # Required for federation: allows reaching Hub Keycloak
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/health"]
       interval: 30s
@@ -1141,9 +1164,9 @@ services:
     command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
     environment:
       NODE_ENV: development
-      # Instance identity
+      # Instance identity - use full country name from NATO database
       NEXT_PUBLIC_INSTANCE: ${code_upper}
-      NEXT_PUBLIC_INSTANCE_NAME: "$instance_name"
+      NEXT_PUBLIC_INSTANCE_NAME: "${country_name:-$instance_name}"
       # URLs - LOCAL DEVELOPMENT
       NEXT_PUBLIC_API_URL: https://localhost:${backend_host_port}
       NEXT_PUBLIC_BACKEND_URL: https://localhost:${backend_host_port}
@@ -1172,10 +1195,12 @@ services:
       NEXT_PUBLIC_EXTERNAL_DOMAINS: https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com,https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port}
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      # Theme customization
-      NEXT_PUBLIC_THEME_PRIMARY: "#002395"
-      NEXT_PUBLIC_THEME_SECONDARY: "#ED2939"
+      # Theme customization - dynamic from NATO countries database
+      NEXT_PUBLIC_THEME_PRIMARY: "${theme_primary}"
+      NEXT_PUBLIC_THEME_SECONDARY: "${theme_secondary}"
       NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      # Locale/timezone for country-specific formatting
+      TZ: "${country_timezone:-UTC}"
     ports:
       - "${frontend_host_port}:3000"
     volumes:
@@ -2389,19 +2414,20 @@ spoke_deploy() {
     
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would deploy spoke: $code_upper ($instance_name)"
-        log_dry "Steps: init → up → wait → init-all → register"
+        log_dry "Steps: init → certs → up → wait → init-all → federation → register"
         return 0
     fi
     
     ensure_dive_root
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local init_marker="${spoke_dir}/.initialized"
+    local fed_marker="${spoke_dir}/.federation-configured"
     
     # ==========================================================================
     # Step 1: Initialize spoke if not already done
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 1/5: Checking Spoke Initialization${NC}"
+    echo -e "${CYAN}  STEP 1/7: Checking Spoke Initialization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2424,10 +2450,32 @@ spoke_deploy() {
     fi
     
     # ==========================================================================
-    # Step 2: Start spoke services
+    # Step 2: Prepare Federation Certificates (NEW!)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 2/5: Starting Spoke Services${NC}"
+    echo -e "${CYAN}  STEP 2/7: Preparing Federation Certificates${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Load certificates module
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        
+        if prepare_federation_certificates "$code_lower"; then
+            log_success "Federation certificates prepared"
+        else
+            log_warn "Certificate preparation had issues (continuing)"
+        fi
+    else
+        log_warn "certificates.sh module not found, skipping certificate preparation"
+    fi
+    echo ""
+    
+    # ==========================================================================
+    # Step 3: Start spoke services
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 3/7: Starting Spoke Services${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2459,10 +2507,10 @@ spoke_deploy() {
     fi
     
     # ==========================================================================
-    # Step 3: Wait for services to be healthy
+    # Step 4: Wait for services to be healthy
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 3/5: Waiting for Services to be Healthy${NC}"
+    echo -e "${CYAN}  STEP 4/7: Waiting for Services to be Healthy${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2480,10 +2528,10 @@ spoke_deploy() {
     echo ""
     
     # ==========================================================================
-    # Step 4: Run initialization scripts (if not already done)
+    # Step 5: Run initialization scripts (if not already done)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 4/5: Running Post-Deployment Initialization${NC}"
+    echo -e "${CYAN}  STEP 5/7: Running Post-Deployment Initialization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2509,10 +2557,51 @@ spoke_deploy() {
     fi
     
     # ==========================================================================
-    # Step 5: Register with Hub (if not already registered)
+    # Step 6: Configure Federation (NEW! - replaces fix-all-spokes-federation.sh)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 5/5: Hub Registration${NC}"
+    echo -e "${CYAN}  STEP 6/7: Configuring Federation${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    if [ -f "$fed_marker" ]; then
+        log_info "Federation already configured"
+        echo ""
+    else
+        # Load federation-setup module
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
+            
+            log_step "Configuring usa-idp and syncing secrets..."
+            
+            if configure_spoke_federation "$code_lower"; then
+                touch "$fed_marker"
+                log_success "Federation configured successfully!"
+                
+                # Restart frontend to pick up new secrets
+                log_step "Restarting frontend to load new secrets..."
+                cd "$spoke_dir"
+                docker compose restart "frontend-${code_lower}" 2>/dev/null || true
+            else
+                log_warn "Federation configuration had issues"
+                echo ""
+                echo "  You may need to run manually:"
+                echo "  ./dive federation-setup configure $code_lower"
+            fi
+        else
+            log_warn "federation-setup.sh module not found"
+            echo ""
+            echo "  Run manually after deployment:"
+            echo "  ./dive federation-setup configure $code_lower"
+        fi
+        echo ""
+    fi
+    
+    # ==========================================================================
+    # Step 7: Register with Hub (if not already registered)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 7/7: Hub Registration${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     

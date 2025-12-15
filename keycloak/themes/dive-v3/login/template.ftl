@@ -279,9 +279,9 @@
     <#assign sourceCountryName = "">
     <#if client?? && client.clientId??>
         <#assign clientData = client.clientId?lower_case>
-        <#if clientData?contains("federation") || clientData?contains("broker") || clientData?contains("cross-border")>
+        <#if clientData?contains("federation") || clientData?contains("broker") || clientData?contains("cross-border") || clientData?contains("client-")>
             <#assign isFederatedLogin = true>
-            <#-- Extract source country from client_id (e.g., dive-v3-usa-federation) -->
+            <#-- Extract source country from client_id (e.g., dive-v3-usa-federation or dive-v3-client-alb) -->
             
             <#-- NATO Founding Members -->
             <#if clientData?contains("-bel-")>
@@ -369,92 +369,152 @@
             <#elseif clientData?contains("-kor-")>
                 <#assign sourceInstance = "KOR"><#assign sourceFlag = "🇰🇷"><#assign sourceCountryName = "South Korea">
             
-            <#-- Cross-border client fallback -->
+            <#-- Spoke-specific client pattern: dive-v3-client-{country} -->
+            <#elseif clientData?contains("client-alb")>
+                <#assign sourceInstance = "ALB"><#assign sourceFlag = "🇦🇱"><#assign sourceCountryName = "Albania">
+            <#elseif clientData?contains("client-bel")>
+                <#assign sourceInstance = "BEL"><#assign sourceFlag = "🇧🇪"><#assign sourceCountryName = "Belgium">
+            <#elseif clientData?contains("client-bgr")>
+                <#assign sourceInstance = "BGR"><#assign sourceFlag = "🇧🇬"><#assign sourceCountryName = "Bulgaria">
+            <#elseif clientData?contains("client-can")>
+                <#assign sourceInstance = "CAN"><#assign sourceFlag = "🇨🇦"><#assign sourceCountryName = "Canada">
+            <#elseif clientData?contains("client-hrv")>
+                <#assign sourceInstance = "HRV"><#assign sourceFlag = "🇭🇷"><#assign sourceCountryName = "Croatia">
+            <#elseif clientData?contains("client-cze")>
+                <#assign sourceInstance = "CZE"><#assign sourceFlag = "🇨🇿"><#assign sourceCountryName = "Czechia">
+            <#elseif clientData?contains("client-dnk")>
+                <#assign sourceInstance = "DNK"><#assign sourceFlag = "🇩🇰"><#assign sourceCountryName = "Denmark">
+            <#elseif clientData?contains("client-est")>
+                <#assign sourceInstance = "EST"><#assign sourceFlag = "🇪🇪"><#assign sourceCountryName = "Estonia">
+            <#elseif clientData?contains("client-fin")>
+                <#assign sourceInstance = "FIN"><#assign sourceFlag = "🇫🇮"><#assign sourceCountryName = "Finland">
+            <#elseif clientData?contains("client-fra")>
+                <#assign sourceInstance = "FRA"><#assign sourceFlag = "🇫🇷"><#assign sourceCountryName = "France">
+            <#elseif clientData?contains("client-deu")>
+                <#assign sourceInstance = "DEU"><#assign sourceFlag = "🇩🇪"><#assign sourceCountryName = "Germany">
+            <#elseif clientData?contains("client-grc")>
+                <#assign sourceInstance = "GRC"><#assign sourceFlag = "🇬🇷"><#assign sourceCountryName = "Greece">
+            <#elseif clientData?contains("client-hun")>
+                <#assign sourceInstance = "HUN"><#assign sourceFlag = "🇭🇺"><#assign sourceCountryName = "Hungary">
+            <#elseif clientData?contains("client-isl")>
+                <#assign sourceInstance = "ISL"><#assign sourceFlag = "🇮🇸"><#assign sourceCountryName = "Iceland">
+            <#elseif clientData?contains("client-ita")>
+                <#assign sourceInstance = "ITA"><#assign sourceFlag = "🇮🇹"><#assign sourceCountryName = "Italy">
+            <#elseif clientData?contains("client-lva")>
+                <#assign sourceInstance = "LVA"><#assign sourceFlag = "🇱🇻"><#assign sourceCountryName = "Latvia">
+            <#elseif clientData?contains("client-ltu")>
+                <#assign sourceInstance = "LTU"><#assign sourceFlag = "🇱🇹"><#assign sourceCountryName = "Lithuania">
+            <#elseif clientData?contains("client-lux")>
+                <#assign sourceInstance = "LUX"><#assign sourceFlag = "🇱🇺"><#assign sourceCountryName = "Luxembourg">
+            <#elseif clientData?contains("client-mne")>
+                <#assign sourceInstance = "MNE"><#assign sourceFlag = "🇲🇪"><#assign sourceCountryName = "Montenegro">
+            <#elseif clientData?contains("client-nld")>
+                <#assign sourceInstance = "NLD"><#assign sourceFlag = "🇳🇱"><#assign sourceCountryName = "Netherlands">
+            <#elseif clientData?contains("client-mkd")>
+                <#assign sourceInstance = "MKD"><#assign sourceFlag = "🇲🇰"><#assign sourceCountryName = "North Macedonia">
+            <#elseif clientData?contains("client-nor")>
+                <#assign sourceInstance = "NOR"><#assign sourceFlag = "🇳🇴"><#assign sourceCountryName = "Norway">
+            <#elseif clientData?contains("client-pol")>
+                <#assign sourceInstance = "POL"><#assign sourceFlag = "🇵🇱"><#assign sourceCountryName = "Poland">
+            <#elseif clientData?contains("client-prt")>
+                <#assign sourceInstance = "PRT"><#assign sourceFlag = "🇵🇹"><#assign sourceCountryName = "Portugal">
+            <#elseif clientData?contains("client-rou")>
+                <#assign sourceInstance = "ROU"><#assign sourceFlag = "🇷🇴"><#assign sourceCountryName = "Romania">
+            <#elseif clientData?contains("client-svk")>
+                <#assign sourceInstance = "SVK"><#assign sourceFlag = "🇸🇰"><#assign sourceCountryName = "Slovakia">
+            <#elseif clientData?contains("client-svn")>
+                <#assign sourceInstance = "SVN"><#assign sourceFlag = "🇸🇮"><#assign sourceCountryName = "Slovenia">
+            <#elseif clientData?contains("client-esp")>
+                <#assign sourceInstance = "ESP"><#assign sourceFlag = "🇪🇸"><#assign sourceCountryName = "Spain">
+            <#elseif clientData?contains("client-swe")>
+                <#assign sourceInstance = "SWE"><#assign sourceFlag = "🇸🇪"><#assign sourceCountryName = "Sweden">
+            <#elseif clientData?contains("client-tur")>
+                <#assign sourceInstance = "TUR"><#assign sourceFlag = "🇹🇷"><#assign sourceCountryName = "Turkey">
+            <#elseif clientData?contains("client-gbr")>
+                <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
+            
+            <#-- Legacy cross-border client (backward compatibility) -->
             <#elseif clientData?contains("cross-border")>
-                <#-- Check redirect_uri query parameter to determine source -->
-                <#if RequestParameters?? && RequestParameters['redirect_uri']??>
-                    <#assign redirectUriParam = RequestParameters['redirect_uri']?first?lower_case>
-                    <#if redirectUriParam?contains("dive-v3-broker/broker") || redirectUriParam?contains(":8443")>
-                        <#-- Default to USA Hub for dive-v3-broker realm -->
-                        <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
-                    </#if>
+                <#-- Fallback for old generic cross-border client - default to ALB -->
+                <#if hostInstance == "USA">
+                    <#assign sourceInstance = "ALB">
+                    <#assign sourceFlag = "🇦🇱">
+                    <#assign sourceCountryName = "Albania">
                 <#else>
-                    <#-- Fallback: If using cross-border-client on any spoke realm, assume USA Hub is the source -->
-                    <#-- This works because spokes receive cross-border traffic from the hub -->
-                    <#if hostInstance?has_content && hostInstance != "USA">
-                        <#-- This spoke is receiving cross-border traffic - source is USA Hub -->
-                        <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
-                    </#if>
+                    <#assign sourceInstance = "USA">
+                    <#assign sourceFlag = "🇺🇸">
+                    <#assign sourceCountryName = "United States">
                 </#if>
             </#if>
         </#if>
     </#if>
 
-    <#-- Show Federation Handoff Banner when cross-border authentication detected -->
-    <#-- This shows when: user comes from a different instance (sourceInstance != hostInstance) -->
-    <#if isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance>
-    <div class="dive-federation-banner dive-federation-banner-animated">
-        <div class="dive-federation-handoff">
-            <!-- LEFT: Your Identity (Where you're authenticating) -->
-            <div class="dive-handoff-source">
-                <div class="dive-handoff-flag-container dive-flag-glow">
-                    <span class="dive-handoff-flag">${hostFlag}</span>
-                </div>
-                <div class="dive-handoff-label">
-                    <span class="dive-handoff-micro">Your Identity</span>
-                    <span class="dive-handoff-country">${hostInstance}</span>
-                </div>
-            </div>
-            
-            <!-- Animated Flow Indicator -->
-            <div class="dive-handoff-flow">
-                <div class="dive-handoff-arrow-track">
-                    <div class="dive-handoff-arrow-particle"></div>
-                </div>
-                <span class="dive-handoff-via">→</span>
-            </div>
-            
-            <!-- RIGHT: Destination Application (Where you want access) -->
-            <div class="dive-handoff-destination">
-                <div class="dive-handoff-flag-container dive-flag-pulse">
-                    <span class="dive-handoff-flag">${sourceFlag}</span>
-                </div>
-                <div class="dive-handoff-label">
-                    <span class="dive-handoff-micro">Accessing</span>
-                    <span class="dive-handoff-country">${sourceInstance}</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Policy Notice - Expandable -->
-        <details class="dive-policy-notice">
-            <summary class="dive-policy-trigger">
-                <svg class="dive-policy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span>Cross-Border Access · Tap to learn more</span>
-                <svg class="dive-policy-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </summary>
-            <div class="dive-policy-content">
-                <p class="dive-policy-main">
-                    <strong>🤝 Bilateral Trust Agreement</strong><br/>
-                    By authenticating through <strong>${hostCountryName}</strong> to access <strong>${sourceCountryName}</strong>'s resources, 
-                    you agree to operate under ${sourceCountryName}'s data governance policies.
-                </p>
-                <ul class="dive-policy-list">
-                    <li>✓ Your identity is verified by ${hostCountryName} (${hostInstance})</li>
-                    <li>✓ Access decisions follow ${sourceInstance}'s security policies</li>
-                    <li>✓ Your actions may be logged for audit compliance</li>
-                </ul>
-            </div>
-        </details>
-    </div>
-    </#if>
-
     <!-- Main Container -->
     <div class="dive-container">
+        
+        <#-- Show Federation Handoff Banner when cross-border authentication detected -->
+        <#-- This shows when: user comes from a different instance (sourceInstance != hostInstance) -->
+        <#if isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance>
+        <div class="dive-federation-banner dive-federation-banner-animated">
+            <div class="dive-federation-handoff">
+                <!-- LEFT: Your Identity (Where you're authenticating) -->
+                <div class="dive-handoff-source">
+                    <div class="dive-handoff-flag-container dive-flag-glow">
+                        <span class="dive-handoff-flag">${hostFlag}</span>
+                    </div>
+                    <div class="dive-handoff-label">
+                        <span class="dive-handoff-micro">Your Identity</span>
+                        <span class="dive-handoff-country">${hostInstance}</span>
+                    </div>
+                </div>
+                
+                <!-- Animated Flow Indicator -->
+                <div class="dive-handoff-flow">
+                    <div class="dive-handoff-arrow-track">
+                        <div class="dive-handoff-arrow-particle"></div>
+                    </div>
+                    <span class="dive-handoff-via">→</span>
+                </div>
+                
+                <!-- RIGHT: Destination Application (Where you want access) -->
+                <div class="dive-handoff-destination">
+                    <div class="dive-handoff-flag-container dive-flag-pulse">
+                        <span class="dive-handoff-flag">${sourceFlag}</span>
+                    </div>
+                    <div class="dive-handoff-label">
+                        <span class="dive-handoff-micro">Accessing</span>
+                        <span class="dive-handoff-country">${sourceInstance}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Policy Notice - Expandable -->
+            <details class="dive-policy-notice">
+                <summary class="dive-policy-trigger">
+                    <svg class="dive-policy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <span>Cross-Border Access · Tap to learn more</span>
+                    <svg class="dive-policy-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </summary>
+                <div class="dive-policy-content">
+                    <p class="dive-policy-main">
+                        <strong>🤝 Bilateral Trust Agreement</strong><br/>
+                        By authenticating through <strong>${hostCountryName}</strong> to access <strong>${sourceCountryName}</strong>'s resources, 
+                        you agree to operate under ${sourceCountryName}'s data governance policies.
+                    </p>
+                    <ul class="dive-policy-list">
+                        <li>✓ Your identity is verified by ${hostCountryName} (${hostInstance})</li>
+                        <li>✓ Access decisions follow ${sourceInstance}'s security policies</li>
+                        <li>✓ Your actions may be logged for audit compliance</li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+        </#if>
+        
         <!-- Split Layout -->
         <div class="dive-layout">
             <!-- LEFT: Login Form -->
@@ -534,6 +594,16 @@
             
             <div class="dive-description-column">
                 <div class="dive-transparency-panel">
+                    
+                    <!-- TEMP DEBUG: Show detection values -->
+                    <div style="background: #1e3a5f; color: white; padding: 8px; margin-bottom: 10px; font-size: 11px; border-left: 3px solid #3b82f6;">
+                        <strong>🔍 Detection:</strong><br/>
+                        clientId: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${client.clientId!'NONE'}</code><br/>
+                        sourceInstance: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${sourceInstance!'EMPTY'}</code><br/>
+                        hostInstance: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${hostInstance!'EMPTY'}</code><br/>
+                        isFederated: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${isFederatedLogin?c!'false'}</code><br/>
+                        Match: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${(isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance)?c!'false'}</code>
+                    </div>
                     
                     <!-- LEVEL 0: Trust Chain Summary (Always Visible) -->
                     <div class="dive-trust-summary">

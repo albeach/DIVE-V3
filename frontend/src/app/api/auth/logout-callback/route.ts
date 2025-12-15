@@ -75,14 +75,31 @@ export async function GET(request: NextRequest) {
 </html>
         `;
 
+        // Build CSP frame-ancestors dynamically to include all Keycloak instances
+        // This fixes the logout redirect issue when Keycloak loads this in an iframe
+        const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
+        const keycloakHost = new URL(keycloakUrl).host;
+
+        // Include common Keycloak URLs (localhost ports, internal container names, Cloudflare domains)
+        const frameAncestors = [
+            "'self'",
+            "https://localhost:8443",
+            "https://localhost:8444",
+            "https://localhost:8445",
+            `https://${keycloakHost}`,
+            "https://keycloak:8443",
+            "http://keycloak:8080",
+            "https://*.dive25.com",
+        ].join(' ');
+
         return new NextResponse(html, {
             status: 200,
             headers: {
                 'Content-Type': 'text/html',
                 'Cache-Control': 'no-store',
-                // CRITICAL: Allow iframe embedding from Keycloak
+                // CRITICAL: Allow iframe embedding from Keycloak (all instances)
                 'X-Frame-Options': 'ALLOWALL',
-                'Content-Security-Policy': "frame-ancestors 'self' http://localhost:8081 http://keycloak:8080",
+                'Content-Security-Policy': `frame-ancestors ${frameAncestors}`,
             },
         });
 

@@ -490,12 +490,33 @@ is_coi_coherence_violation contains msg if {
 	msg := "COI EU-RESTRICTED cannot be combined with US-ONLY"
 }
 
+# RELAXED: Releasability ⊆ COI check (ACP-240 Section 4.7 - Explicit Release)
+# 
+# The strict interpretation (releasabilityTo ⊆ COI_members) has been relaxed.
+# Rationale: releasabilityTo is the AUTHORITATIVE list of approved recipients.
+# COI indicates the originating community, but explicit release overrides.
+#
+# Example: COI: ["FVEY"] + releasabilityTo: ["ROU", "USA"] means
+#          "FVEY-relevant content with explicit approval to share with Romania"
+#
+# To enforce strict mode, enable input.context.strict_coi_coherence = true
 is_coi_coherence_violation contains msg if {
+	# Only enforce in strict mode
+	input.context.strict_coi_coherence == true
 	count(input.resource.COI) > 0
 	union := {c | some coi_name in input.resource.COI; some c in coi.members(coi_name)}
 	some r in input.resource.releasabilityTo
 	not r in union
-	msg := sprintf("Releasability country %s not in COI union %v", [r, union])
+	msg := sprintf("[STRICT] Releasability country %s not in COI union %v", [r, union])
+}
+
+# Informational warning (does not block access)
+coi_extended_release_warning := warning if {
+	count(input.resource.COI) > 0
+	union := {c | some coi_name in input.resource.COI; some c in coi.members(coi_name)}
+	extended := {r | some r in input.resource.releasabilityTo; not r in union}
+	count(extended) > 0
+	warning := sprintf("Explicit release beyond COI: %v extended to %v", [input.resource.COI, extended])
 }
 
 # NOFORN caveat enforcement
