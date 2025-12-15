@@ -92,13 +92,31 @@ deny contains msg if {
 }
 
 # ============================================
-# VIOLATION 2: Releasability ⊆ COI Membership
+# VIOLATION 2: Releasability ⊆ COI Membership (DEPRECATED - See below)
+# ============================================
+# 
+# IMPORTANT: This check has been relaxed based on operational requirements.
+# 
+# The original strict interpretation required: releasabilityTo ⊆ COI_members
+# This would prevent sharing FVEY documents with non-FVEY partners like ROU.
+#
+# The NEW interpretation (ACP-240 Section 4.7 - Explicit Release):
+# - COI indicates the originating community/program relevance
+# - releasabilityTo is the AUTHORITATIVE list of approved recipients
+# - If a document has COI: ["FVEY"] and releasabilityTo: ["ROU", "USA"], 
+#   it means "FVEY-relevant content with explicit approval to share with ROU"
+#
+# To enforce strict mode, set input.context.strict_coi_coherence = true
 # ============================================
 
 # COIs with no country affiliation (membership-based only)
 no_affiliation_cois := {"Alpha", "Beta", "Gamma"}
 
+# Only enforce strict COI⊇REL check when explicitly requested
 deny contains msg if {
+	# Only enforce if strict mode is enabled
+	input.context.strict_coi_coherence == true
+
 	# Compute union of all COI member countries (excluding no-affiliation COIs)
 	union := {c | 
 		some resource_coi in input.resource.COI
@@ -113,7 +131,31 @@ deny contains msg if {
 	some r in input.resource.releasabilityTo
 	not r in union
 
-	msg := sprintf("Releasability country %s not in COI union %v", [r, union])
+	msg := sprintf("[STRICT MODE] Releasability country %s not in COI union %v", [r, union])
+}
+
+# Warning (non-blocking): Log when releasability extends beyond COI members
+# This is informational only - does NOT deny access
+coi_releasability_warnings contains warning if {
+	# Compute union of all COI member countries
+	union := {c | 
+		some resource_coi in input.resource.COI
+		not resource_coi in no_affiliation_cois
+		some c in coi_members[resource_coi]
+	}
+
+	# Only check if COI has country restrictions
+	count(union) > 0
+	count(input.resource.COI) > 0
+
+	# Find countries in releasability but not in COI
+	extended := {r | 
+		some r in input.resource.releasabilityTo
+		not r in union
+	}
+	count(extended) > 0
+
+	warning := sprintf("Explicit release to non-COI members: %v (COI: %v)", [extended, input.resource.COI])
 }
 
 # ============================================

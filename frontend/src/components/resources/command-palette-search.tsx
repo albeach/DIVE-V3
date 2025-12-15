@@ -1027,17 +1027,39 @@ export default function CommandPaletteSearch({
 
   return (
     <>
-      {/* Trigger Button - Document Search */}
+      {/* Trigger Button - Modern 2025 Spotlight Search Bar */}
       <button
         onClick={() => setIsOpen(true)}
-        className="group flex items-center gap-3 w-full px-4 py-3 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 transition-all shadow-sm hover:shadow-md"
+        className="group relative flex items-center w-full h-12 sm:h-[52px] px-5
+                   bg-white dark:bg-gray-900
+                   border border-gray-200 dark:border-gray-700
+                   rounded-xl sm:rounded-2xl
+                   shadow-sm shadow-gray-200/60 dark:shadow-black/20
+                   hover:shadow-md hover:shadow-gray-300/50 dark:hover:shadow-black/30
+                   hover:border-gray-300 dark:hover:border-gray-600
+                   focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-400
+                   transition-all duration-150 ease-out"
         aria-label="Search documents (press /)"
       >
-        <Search className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors" />
-        <span className="flex-1 text-left text-gray-500 dark:text-gray-400">
-          Search documents, filters...
+        {/* Search Icon - Larger and more prominent */}
+        <Search className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-150 flex-shrink-0" strokeWidth={2} />
+        
+        {/* Placeholder Text - Better typography */}
+        <span className="flex-1 ml-4 text-left text-base sm:text-[15px] text-gray-400 dark:text-gray-500 font-normal truncate">
+          Search documents...
         </span>
-        <kbd className="hidden sm:inline-flex items-center px-2.5 py-1 text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-md font-mono font-semibold">
+        
+        {/* Keyboard Shortcut Badge - More refined */}
+        <kbd className="hidden sm:flex items-center justify-center w-7 h-7
+                        text-xs font-semibold text-gray-400 dark:text-gray-500
+                        bg-gray-100 dark:bg-gray-800 
+                        border border-gray-200 dark:border-gray-700
+                        rounded-lg
+                        group-hover:bg-gray-50 dark:group-hover:bg-gray-700
+                        group-hover:border-gray-300 dark:group-hover:border-gray-600
+                        group-hover:text-gray-500 dark:group-hover:text-gray-400
+                        transition-all duration-150
+                        font-mono shadow-sm">
           /
         </kbd>
       </button>
@@ -1056,12 +1078,27 @@ export function DocumentSearchTrigger({ onClick }: { onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+      className="group flex items-center gap-2.5 h-9 px-3.5
+                 bg-gray-100/70 dark:bg-gray-800/50
+                 hover:bg-gray-200/80 dark:hover:bg-gray-700/60
+                 border border-transparent hover:border-gray-200 dark:hover:border-gray-600
+                 rounded-xl
+                 transition-all duration-200 ease-out"
       aria-label="Search documents (press /)"
     >
-      <Search className="w-4 h-4" />
-      <span className="hidden md:inline">Search Documents</span>
-      <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-xs text-gray-400 bg-white dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 font-mono font-semibold">
+      <Search className="w-4 h-4 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors" />
+      <span className="hidden md:inline text-sm text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 transition-colors">
+        Search
+      </span>
+      <kbd className="hidden md:flex items-center justify-center min-w-[22px] h-5 px-1.5
+                      text-[10px] font-medium text-gray-400 dark:text-gray-500
+                      bg-white/80 dark:bg-gray-700/60 
+                      border border-gray-200/60 dark:border-gray-600/40
+                      rounded-md
+                      group-hover:bg-gray-50 dark:group-hover:bg-gray-600/60
+                      group-hover:border-gray-300 dark:group-hover:border-gray-500
+                      transition-all duration-200
+                      font-mono">
         /
       </kbd>
     </button>

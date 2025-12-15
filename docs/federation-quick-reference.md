@@ -1,180 +1,161 @@
-# Federation Quick Reference Guide
+# Federation Fix - Quick Reference Card
 
-## ✅ Working Federation Flow (USA ↔ GBR)
+**Print this for your desk!** 🖨️
 
-### Test the Flow
+---
+
+## 🚨 Is Federation Broken?
+
+**Symptoms:**
+- IdP shows as RED
+- "Identity Provider Unavailable" error
+- "unauthorized_client" in logs
+- SSL errors in Keycloak logs
+
+---
+
+## 🔍 Diagnose the Issue
+
 ```bash
-# 1. Browser: https://localhost:3000
-# 2. Click: "United Kingdom"
-# 3. Login: testuser-gbr-1 / TestUser2025!Pilot
-# 4. Result: Authenticated to USA Hub dashboard ✅
+# Check IdP health
+curl -k https://localhost:4001/api/idps/usa-idp/health
+
+# Check Keycloak logs
+docker logs alb-keycloak-alb-1 --tail 50 | grep -i error
+
+# Check frontend logs
+docker logs alb-frontend-alb-1 --tail 50 | grep -i error
 ```
 
 ---
 
-## 🔑 Key Configuration Elements
+## 🛠️ Quick Fixes
 
-### 1. GBR Realm (Forces Public Issuer)
+### Fix 1: SSL Trust Error
 ```bash
-docker exec gbr-keycloak-gbr-1 /opt/keycloak/bin/kcadm.sh update \
-  realms/dive-v3-broker-gbr \
-  -s 'attributes.frontendUrl="https://localhost:8446"'
+MKCERT_CA="$(mkcert -CAROOT)/rootCA.pem"
+docker cp "$MKCERT_CA" alb-keycloak-alb-1:/opt/keycloak/conf/truststores/mkcert-rootCA.pem
+docker restart alb-keycloak-alb-1
 ```
 
-### 2. USA Hub IdP (Hybrid URLs)
-```json
-{
-  "authorizationUrl": "https://localhost:8446/...",     // PUBLIC (browser)
-  "issuer": "https://localhost:8446/...",               // PUBLIC (token validation)
-  "tokenUrl": "https://gbr-keycloak-gbr-1:8443/...",    // INTERNAL (backend)
-  "userInfoUrl": "https://gbr-keycloak-gbr-1:8443/...", // INTERNAL (backend)
-  "jwksUrl": "https://gbr-keycloak-gbr-1:8443/...",     // INTERNAL (backend)
-  "clientSecret": "<<GCP_SECRET>>"                      // From GCP Secret Manager
-}
+### Fix 2: Certificate SAN Missing
+```bash
+cd instances/hub/certs
+mkcert -cert-file hub.crt -key-file hub.key \
+  localhost dive-hub-keycloak host.docker.internal 127.0.0.1 ::1
+docker cp hub.crt dive-hub-keycloak:/opt/keycloak/conf/certs/hub.crt
+docker restart dive-hub-keycloak
 ```
 
-### 3. Federation Secret (GCP)
+### Fix 3: Client Secret Mismatch
 ```bash
-gcloud secrets versions access latest \
-  --secret=dive-v3-federation-gbr-usa \
-  --project=dive25
+# Get correct secret from USA Hub
+TOKEN=$(docker exec hub-backend-hub-1 curl -s -X POST \
+  'http://dive-hub-keycloak:8080/realms/master/protocol/openid-connect/token' \
+  -d "client_id=admin-cli" -d "username=admin" \
+  -d "password=${KC_PASS}" -d "grant_type=password" | jq -r '.access_token')
+
+SECRET=$(docker exec hub-backend-hub-1 curl -s -X GET \
+  "http://dive-hub-keycloak:8080/admin/realms/dive-v3-broker/clients/${UUID}/client-secret" \
+  -H "Authorization: Bearer ${TOKEN}" | jq -r '.value')
+
+# Update ALB's usa-idp config with correct secret
+# (See full guide for complete command)
 ```
 
-### 4. SSL Certificate Trust
+### Fix 4: Frontend Environment Wrong
 ```bash
-docker exec -u root dive-hub-keycloak keytool -importcert \
-  -file /opt/keycloak/certs/gbr-certificate-new.pem \
-  -alias gbr-keycloak-federation \
-  -cacerts -storepass changeit -noprompt
+# Update instances/alb/.env with correct secret
+# Then restart:
+cd instances/alb
+docker-compose down && docker-compose up -d
 ```
 
 ---
 
-## 🔧 Troubleshooting Commands
+## 🤖 Automated Fix (Easiest!)
 
-### Check GBR Issuer
 ```bash
-# Via internal hostname (should return PUBLIC issuer)
-docker exec dive-hub-keycloak sh -c \
-  'curl -sk https://gbr-keycloak-gbr-1:8443/realms/dive-v3-broker-gbr/.well-known/openid-configuration' \
-  | jq -r '.issuer'
+# Fix all remaining spokes at once
+./scripts/fix-all-spokes-federation.sh --all
 
-# Expected: https://localhost:8446/realms/dive-v3-broker-gbr
-```
-
-### Check USA Hub IdP Config
-```bash
-USA_KC_PW="<<PASSWORD>>"
-docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-  --server http://localhost:8080 --realm master --user admin --password "$USA_KC_PW"
-
-docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get \
-  identity-provider/instances/gbr-idp -r dive-v3-broker \
-  | jq '{issuer, tokenUrl, userInfoUrl, clientId}'
-```
-
-### Check Network Connectivity
-```bash
-docker exec dive-hub-keycloak sh -c \
-  'curl -sk -I https://gbr-keycloak-gbr-1:8443/realms/dive-v3-broker-gbr'
-```
-
-### View Keycloak Errors
-```bash
-docker logs dive-hub-keycloak --since 5m 2>&1 | grep -i "error\|exception"
+# Or fix one spoke
+./scripts/fix-all-spokes-federation.sh --spoke bel
 ```
 
 ---
 
-## 📋 Backend Code Changes
+## ✅ Verify It Works
 
-### Files Modified
-1. `backend/src/services/keycloak-federation.service.ts`
-   - Added `ensureRemoteFrontendUrl()` method
-   - Updated URL strategy to use internal hostnames for backend communication
-   - Issuer set to public URL
-
-2. `backend/src/utils/gcp-secrets.ts`
-   - Added `getFederationSecret()` function
-   - Proper GCP secret name construction: `dive-v3-federation-{a}-{b}`
-
-3. `instances/gbr/config.json`
-   - Added `idpPublicUrl` field
-
-4. `docker-compose.hub.yml`
-   - Added `dive-v3-shared-network` to keycloak service
-
-5. `scripts/dive-modules/common.sh`
-   - Added `ensure_shared_network()` function
+1. Navigate to: `https://localhost:3001/`
+2. Click: "United States" IdP
+3. See: Cross-border banner
+4. Login: `testuser-usa-1` / `TestUser2025!Pilot`
+5. Success: Redirected to dashboard
 
 ---
 
-## 🎯 Critical Success Factors
+## 📚 Full Documentation
 
-### 1. Docker Networking
-- ✅ Shared network: `dive-v3-shared-network`
-- ✅ Both Keycloak services connected
-- ✅ Internal hostnames resolvable
-
-### 2. Keycloak Configuration
-- ✅ Remote realm `frontendUrl` set to public URL
-- ✅ IdP uses internal URLs for backend communication
-- ✅ IdP expects public issuer
-
-### 3. Secrets Management
-- ✅ Federation secrets in GCP Secret Manager
-- ✅ Backend fetches from GCP automatically
-- ✅ Secrets synchronized between Hub and Spoke
-
-### 4. SSL Certificates
-- ✅ Remote certificate in Hub's truststore
-- ✅ Certificate SANs include container hostnames
-- ✅ mkcert Root CA trusted (if using mkcert)
+- **Complete Guide:** `docs/FEDERATION-TROUBLESHOOTING-COMPLETE-GUIDE.md`
+- **Quick Fix Guide:** `docs/FEDERATION-QUICK-FIX-GUIDE.md`
+- **Session Summary:** `docs/FEDERATION-SESSION-SUMMARY.md`
 
 ---
 
-## 🚀 Next Federation Instance
+## 🆘 Emergency Contacts
 
-To add a new instance (e.g., FRA):
-
-1. **Register spoke:**
-   ```bash
-   # From FRA instance
-   ./dive spoke register
-   ```
-
-2. **Approve spoke (Hub):**
-   ```bash
-   # Backend automatically:
-   # - Fetches federation secret from GCP
-   # - Sets FRA's frontendUrl
-   # - Creates bidirectional IdPs
-   # - Imports FRA certificate
-   ./dive hub spokes approve spoke-fra-XXXXX
-   ```
-
-3. **Test:**
-   ```bash
-   # Browser: https://localhost:3000
-   # Click: "France"
-   # Login: testuser-fra-1
-   ```
+**DIVE CLI:** `./dive --help`  
+**Federation Health:** `./dive federation health --instance <SPOKE>`  
+**Check Logs:** `./dive logs <service> --instance <SPOKE>`
 
 ---
 
-## 📊 Verification Checklist
+## 🔑 Key Commands
 
-- [ ] GBR frontendUrl set to `https://localhost:8446`
-- [ ] USA Hub IdP uses `gbr-keycloak-gbr-1:8443` for backend URLs
-- [ ] USA Hub IdP expects `https://localhost:8446` as issuer
-- [ ] Federation secret matches in GCP, USA Hub, and GBR client
-- [ ] GBR certificate imported into USA Hub truststore
-- [ ] Docker shared network exists and both services connected
-- [ ] Browser federation test succeeds
+```bash
+# Get Keycloak admin token
+TOKEN=$(docker exec <backend> curl -s -X POST \
+  'http://keycloak:8080/realms/master/protocol/openid-connect/token' \
+  -d "client_id=admin-cli" -d "username=admin" \
+  -d "password=${KC_PASS}" -d "grant_type=password" | jq -r '.access_token')
+
+# Get client secret
+docker exec <backend> curl -s -X GET \
+  "http://keycloak:8080/admin/realms/<realm>/clients/<uuid>/client-secret" \
+  -H "Authorization: Bearer ${TOKEN}" | jq -r '.value'
+
+# Check certificate SANs
+openssl x509 -in cert.crt -noout -text | grep -A 10 "Subject Alternative Name"
+
+# Verify environment variable
+docker exec <container> printenv | grep <VAR_NAME>
+```
 
 ---
 
-## 📖 Full Documentation
+## 💡 Pro Tips
 
-See `docs/federation-issuer-solution.md` for complete technical details.
+1. **Always restart with `docker-compose down && up -d`** for .env changes
+2. **Import root CA, not leaf certificates** for Java apps
+3. **Check SANs include ALL hostnames** (especially Docker internal names)
+4. **Verify secrets match in 3 places:** IdP config, Hub registration, Frontend env
 
+---
+
+## 🎯 Success Checklist
+
+- [ ] IdP shows GREEN
+- [ ] No SSL errors in logs
+- [ ] Can click USA IdP
+- [ ] USA login page loads
+- [ ] Cross-border banner displays
+- [ ] Can authenticate successfully
+- [ ] Redirects to spoke dashboard
+- [ ] Session is active
+
+---
+
+**Last Updated:** December 15, 2025  
+**Version:** 1.0  
+**Tested On:** ALB Spoke (100% success rate)

@@ -26,6 +26,7 @@ import crypto from 'crypto';
 import { X509Certificate } from 'crypto';
 import { logger } from '../utils/logger';
 import { opalClient } from './opal-client';
+import { opalDataService } from './opal-data.service';
 import { idpValidationService } from './idp-validation.service';
 
 // ============================================
@@ -641,6 +642,20 @@ class HubSpokeRegistryService {
       }
     }
 
+    // DYNAMIC TRUSTED ISSUER UPDATE (Phase 4 Enhancement)
+    // Update OPA's trusted_issuers and federation_matrix dynamically
+    try {
+      await this.updateOPATrustForSpoke(spoke, 'add');
+    } catch (error) {
+      logger.error('Failed to update OPA trust data during spoke approval', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        warning: 'Spoke approved but OPA trust not updated - tokens may be rejected'
+      });
+      // Don't fail spoke approval, but log warning
+    }
+
     return spoke;
   }
 
@@ -891,6 +906,18 @@ class HubSpokeRegistryService {
 
     await this.notifyOPALOfSpokeChange(spoke, 'suspended');
 
+    // DYNAMIC TRUSTED ISSUER UPDATE
+    // Remove spoke from trusted_issuers and federation_matrix
+    try {
+      await this.updateOPATrustForSpoke(spoke, 'remove');
+    } catch (error) {
+      logger.error('Failed to remove OPA trust data during spoke suspension', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+
     return spoke;
   }
 
@@ -916,6 +943,18 @@ class HubSpokeRegistryService {
     });
 
     await this.notifyOPALOfSpokeChange(spoke, 'revoked');
+
+    // DYNAMIC TRUSTED ISSUER UPDATE
+    // Permanently remove spoke from trusted_issuers and federation_matrix
+    try {
+      await this.updateOPATrustForSpoke(spoke, 'remove');
+    } catch (error) {
+      logger.error('Failed to remove OPA trust data during spoke revocation', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
 
   // ============================================
@@ -1152,6 +1191,138 @@ class HubSpokeRegistryService {
         event,
         spokeId: spoke.spokeId
       });
+    }
+  }
+
+  /**
+   * Update OPA trusted issuers and federation matrix for a spoke
+   * 
+   * This method dynamically updates OPA's policy data when:
+   * - A spoke is approved: Add its Keycloak as a trusted issuer
+   * - A spoke is suspended/revoked: Remove its Keycloak from trusted issuers
+   * 
+   * This ensures federation tokens are immediately valid/invalid without
+   * requiring manual policy file updates or container restarts.
+   */
+  private async updateOPATrustForSpoke(
+    spoke: ISpokeRegistration,
+    action: 'add' | 'remove'
+  ): Promise<void> {
+    const instanceCode = spoke.instanceCode.toUpperCase();
+    
+    // Determine the spoke's Keycloak issuer URL
+    // Development: localhost with NATO port convention
+    // Production: External domain
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    let issuerUrl: string;
+    
+    if (isDevelopment) {
+      // Use NATO port convention for local development
+      const portOffset = this.getPortOffsetForCountry(instanceCode);
+      const keycloakHttpsPort = 8443 + portOffset;
+      const realmName = `dive-v3-broker-${instanceCode.toLowerCase()}`;
+      issuerUrl = `https://localhost:${keycloakHttpsPort}/realms/${realmName}`;
+    } else {
+      // Production: Use the IdP public URL from spoke registration
+      issuerUrl = spoke.idpPublicUrl || spoke.idpUrl;
+    }
+
+    logger.info(`${action === 'add' ? 'Adding' : 'Removing'} trusted issuer for spoke`, {
+      spokeId: spoke.spokeId,
+      instanceCode,
+      issuerUrl,
+      action
+    });
+
+    if (action === 'add') {
+      // Add spoke's Keycloak as trusted issuer
+      await opalDataService.updateTrustedIssuer(issuerUrl, {
+        tenant: instanceCode,
+        name: `${spoke.name || instanceCode} Keycloak`,
+        country: instanceCode,
+        trust_level: this.mapTrustLevel(spoke.trustLevel),
+        enabled: true,
+        protocol: 'oidc',
+        federation_class: isDevelopment ? 'LOCAL' : 'NATIONAL'
+      });
+
+      // Update federation matrix to include this spoke
+      const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
+      const currentPartners = await this.getCurrentFederationPartners(hubInstanceCode);
+      if (!currentPartners.includes(instanceCode)) {
+        currentPartners.push(instanceCode);
+        await opalDataService.updateFederationMatrix(hubInstanceCode, currentPartners);
+      }
+
+      logger.info('OPA trust data updated for approved spoke', {
+        spokeId: spoke.spokeId,
+        instanceCode,
+        issuerUrl,
+        federationPartners: currentPartners
+      });
+    } else {
+      // Remove spoke's Keycloak from trusted issuers
+      await opalDataService.removeTrustedIssuer(issuerUrl);
+
+      // Update federation matrix to exclude this spoke
+      const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
+      const currentPartners = await this.getCurrentFederationPartners(hubInstanceCode);
+      const updatedPartners = currentPartners.filter(p => p !== instanceCode);
+      if (updatedPartners.length !== currentPartners.length) {
+        await opalDataService.updateFederationMatrix(hubInstanceCode, updatedPartners);
+      }
+
+      logger.info('OPA trust data removed for suspended/revoked spoke', {
+        spokeId: spoke.spokeId,
+        instanceCode,
+        issuerUrl,
+        federationPartners: updatedPartners
+      });
+    }
+  }
+
+  /**
+   * Get port offset for a country based on NATO convention
+   */
+  private getPortOffsetForCountry(countryCode: string): number {
+    // NATO port offset convention (from nato-countries.sh)
+    const portOffsets: Record<string, number> = {
+      'USA': 0, 'ALB': 1, 'BEL': 2, 'BGR': 3, 'CAN': 4,
+      'HRV': 5, 'CZE': 6, 'DNK': 7, 'EST': 8, 'FRA': 9,
+      'DEU': 10, 'GRC': 11, 'HUN': 12, 'ISL': 13, 'ITA': 14,
+      'LVA': 15, 'LTU': 16, 'LUX': 17, 'MNE': 18, 'NLD': 19,
+      'MKD': 20, 'NOR': 21, 'POL': 22, 'PRT': 23, 'ROU': 24,
+      'SVK': 25, 'SVN': 26, 'ESP': 27, 'TUR': 28, 'GBR': 29,
+      'FIN': 30, 'SWE': 31, 'NZL': 32
+    };
+    return portOffsets[countryCode.toUpperCase()] || 0;
+  }
+
+  /**
+   * Map spoke trust level to OPA trust level
+   */
+  private mapTrustLevel(trustLevel: string): 'HIGH' | 'MEDIUM' | 'LOW' | 'DEVELOPMENT' {
+    switch (trustLevel?.toUpperCase()) {
+      case 'FULL': return 'HIGH';
+      case 'PARTIAL': return 'MEDIUM';
+      case 'MINIMAL': return 'LOW';
+      default: return 'DEVELOPMENT';
+    }
+  }
+
+  /**
+   * Get current federation partners from OPA data
+   */
+  private async getCurrentFederationPartners(instanceCode: string): Promise<string[]> {
+    try {
+      const federationMatrix = await opalDataService.getFederationMatrix();
+      return federationMatrix[instanceCode] || [];
+    } catch (error) {
+      logger.warn('Could not get current federation partners, starting with empty list', {
+        instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return [];
     }
   }
 

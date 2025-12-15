@@ -435,6 +435,16 @@ class OPALDataService {
   }
 
   /**
+   * Get current federation matrix (read-only)
+   */
+  async getFederationMatrix(): Promise<Record<string, string[]>> {
+    const data = this.loadJsonFile<{ federation_matrix: Record<string, string[]> }>(
+      this.getDataFilePath(FEDERATION_MATRIX_FILE)
+    );
+    return data?.federation_matrix || {};
+  }
+
+  /**
    * Add bidirectional federation link
    */
   async addFederationLink(

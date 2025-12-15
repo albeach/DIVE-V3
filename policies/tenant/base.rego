@@ -100,7 +100,7 @@ default_trusted_issuers := {
 		"country": "DEU",
 		"trust_level": "HIGH",
 	},
-	# Local Development
+	# Local Development - Hub
 	"http://localhost:8443/realms/dive-v3-broker": {
 		"tenant": "USA",
 		"name": "Local Dev Keycloak",
@@ -111,6 +111,37 @@ default_trusted_issuers := {
 		"tenant": "USA",
 		"name": "Local Dev Keycloak (HTTPS)",
 		"country": "USA",
+		"trust_level": "DEVELOPMENT",
+	},
+	# Local Development - Spokes (NATO Port Convention)
+	"https://localhost:8444/realms/dive-v3-broker-alb": {
+		"tenant": "ALB",
+		"name": "Albania Keycloak (Local Dev)",
+		"country": "ALB",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8445/realms/dive-v3-broker-bel": {
+		"tenant": "BEL",
+		"name": "Belgium Keycloak (Local Dev)",
+		"country": "BEL",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8450/realms/dive-v3-broker-dnk": {
+		"tenant": "DNK",
+		"name": "Denmark Keycloak (Local Dev)",
+		"country": "DNK",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8465/realms/dive-v3-broker-nor": {
+		"tenant": "NOR",
+		"name": "Norway Keycloak (Local Dev)",
+		"country": "NOR",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8466/realms/dive-v3-broker-pol": {
+		"tenant": "POL",
+		"name": "Poland Keycloak (Local Dev)",
+		"country": "POL",
 		"trust_level": "DEVELOPMENT",
 	},
 }
@@ -154,10 +185,17 @@ tenant_issuers(tenant) := issuers if {
 # Uses bilateral trust model per ACP-240.
 
 default_federation_matrix := {
-	"USA": {"FRA", "GBR", "DEU"},
-	"FRA": {"USA", "GBR", "DEU"},
-	"GBR": {"USA", "FRA", "DEU"},
-	"DEU": {"USA", "FRA", "GBR"},
+	# Original partners
+	"USA": {"FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"},
+	"FRA": {"USA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"},
+	"GBR": {"USA", "FRA", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"},
+	"DEU": {"USA", "FRA", "GBR", "ALB", "BEL", "DNK", "NOR", "POL"},
+	# NATO Spokes - all can federate with USA and each other
+	"ALB": {"USA", "FRA", "GBR", "DEU", "BEL", "DNK", "NOR", "POL"},
+	"BEL": {"USA", "FRA", "GBR", "DEU", "ALB", "DNK", "NOR", "POL"},
+	"DNK": {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "NOR", "POL"},
+	"NOR": {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "POL"},
+	"POL": {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR"},
 }
 
 # Use OPAL-provided data if available
@@ -278,7 +316,7 @@ federation_denied_msg(subject_tenant, target_tenant) := msg if {
 # Tenant List
 # ============================================
 
-all_tenants := {"USA", "FRA", "GBR", "DEU"}
+all_tenants := {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"}
 
 is_valid_tenant(tenant) if {
 	tenant in all_tenants

@@ -632,21 +632,59 @@ export function InstanceThemeProvider({ children }: InstanceThemeProviderProps) 
     // Get coalition partners - default to USA partners if not defined
     setCoalitionPartners(COALITION_PARTNERS[code] || DEFAULT_PARTNERS);
 
-    // Get theme from predefined themes or use defaults
-    const instanceTheme = INSTANCE_THEMES[code] || DEFAULT_THEME;
+    // Get theme from predefined themes or generate dynamically from env vars
+    // CRITICAL FIX: For dynamically deployed spokes, generate theme from NEXT_PUBLIC_THEME_* env vars
+    const envPrimary = process.env.NEXT_PUBLIC_THEME_PRIMARY;
+    const envSecondary = process.env.NEXT_PUBLIC_THEME_SECONDARY;
+    const envAccent = process.env.NEXT_PUBLIC_THEME_ACCENT || '#ffffff';
+    
+    let instanceTheme: InstanceTheme;
+    
+    if (INSTANCE_THEMES[code]) {
+      // Use predefined theme if available
+      instanceTheme = { ...INSTANCE_THEMES[code] };
+    } else if (envPrimary && envSecondary) {
+      // Generate dynamic theme from environment variables
+      // This handles all NATO countries not in the predefined list
+      instanceTheme = {
+        primary_color: envPrimary,
+        secondary_color: envSecondary,
+        accent_color: envAccent,
+        background_image: `background-${code.toLowerCase()}.jpg`,
+        keycloak_theme: `dive-v3-${code.toLowerCase()}`,
+        css_variables: {
+          '--instance-primary': envPrimary,
+          '--instance-secondary': envSecondary,
+          '--instance-accent': envAccent,
+          '--instance-text': '#ffffff',
+          '--instance-banner-bg': `linear-gradient(135deg, ${envPrimary} 0%, ${envSecondary} 100%)`,
+        },
+      };
+      console.log(`[Theme] Generated dynamic theme for ${code}:`, instanceTheme.css_variables);
+    } else {
+      // Fallback to default
+      instanceTheme = { ...DEFAULT_THEME };
+    }
 
-    // Allow environment variable overrides
-    if (process.env.NEXT_PUBLIC_THEME_PRIMARY) {
-      instanceTheme.primary_color = process.env.NEXT_PUBLIC_THEME_PRIMARY;
-      instanceTheme.css_variables['--instance-primary'] = process.env.NEXT_PUBLIC_THEME_PRIMARY;
+    // Always apply environment variable overrides (for fine-tuning predefined themes)
+    if (envPrimary) {
+      instanceTheme.primary_color = envPrimary;
+      instanceTheme.css_variables['--instance-primary'] = envPrimary;
     }
-    if (process.env.NEXT_PUBLIC_THEME_SECONDARY) {
-      instanceTheme.secondary_color = process.env.NEXT_PUBLIC_THEME_SECONDARY;
-      instanceTheme.css_variables['--instance-secondary'] = process.env.NEXT_PUBLIC_THEME_SECONDARY;
+    if (envSecondary) {
+      instanceTheme.secondary_color = envSecondary;
+      instanceTheme.css_variables['--instance-secondary'] = envSecondary;
     }
-    if (process.env.NEXT_PUBLIC_THEME_ACCENT) {
-      instanceTheme.accent_color = process.env.NEXT_PUBLIC_THEME_ACCENT;
-      instanceTheme.css_variables['--instance-accent'] = process.env.NEXT_PUBLIC_THEME_ACCENT;
+    if (envAccent) {
+      instanceTheme.accent_color = envAccent;
+      instanceTheme.css_variables['--instance-accent'] = envAccent;
+    }
+    
+    // Regenerate banner gradient if primary/secondary were overridden
+    if (envPrimary || envSecondary) {
+      const primary = instanceTheme.primary_color;
+      const secondary = instanceTheme.secondary_color;
+      instanceTheme.css_variables['--instance-banner-bg'] = `linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)`;
     }
 
     setTheme(instanceTheme);

@@ -124,13 +124,26 @@ kc_curl() {
 
 CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
 FRONTEND_URL="${FRONTEND_URL:-https://${CODE_LOWER}-app.dive25.com}"
-# Derive a localhost fallback that matches the spoke's port (default 3000 if not localhost)
-FRONTEND_PORT_FROM_URL=$(echo "$FRONTEND_URL" | sed -n 's#https://localhost:\\([0-9]\\+\\).*#\\1#p')
-LOCALHOST_FALLBACK="https://localhost:${FRONTEND_PORT_FROM_URL:-3000}"
+
+# Calculate the correct localhost port for this spoke using port offset
+# This ensures redirect URIs work correctly for local development
+LOCAL_FRONTEND_PORT=$((3000 + local_port_offset))
+LOCAL_BACKEND_PORT=$((4000 + local_port_offset))
+
+# Derive localhost fallback - use calculated port offset, not parsed from URL
+# CRITICAL: This fixes the "Invalid parameter: redirect_uri" error for spokes
+if [[ "$IS_LOCAL_DEV" == "true" ]]; then
+    LOCALHOST_FALLBACK="https://localhost:${LOCAL_FRONTEND_PORT}"
+else
+    # For production, still include localhost:3000 as common fallback
+    LOCALHOST_FALLBACK="https://localhost:${LOCAL_FRONTEND_PORT}"
+fi
+log_info "Localhost fallback URL: ${LOCALHOST_FALLBACK}"
 
 # Keycloak expects post logout redirect URIs as a single string delimited by "##" (realm export format).
 # IMPORTANT: Do NOT use spaces as delimiters — Keycloak will treat it as one value and reject logout redirects.
-POST_LOGOUT_REDIRECT_URIS="${FRONTEND_URL}##${FRONTEND_URL}/*##${FRONTEND_URL}/api/auth/logout-callback##${LOCALHOST_FALLBACK}##${LOCALHOST_FALLBACK}/*##${LOCALHOST_FALLBACK}/api/auth/logout-callback##https://localhost:3003##https://localhost:3003/*##https://localhost:3003/api/auth/logout-callback##http://localhost:3003##http://localhost:3003/*##http://localhost:3003/api/auth/logout-callback"
+# CRITICAL FIX: Include both the calculated port-based localhost URL AND common fallback ports
+POST_LOGOUT_REDIRECT_URIS="${FRONTEND_URL}##${FRONTEND_URL}/*##${FRONTEND_URL}/api/auth/logout-callback##${LOCALHOST_FALLBACK}##${LOCALHOST_FALLBACK}/*##${LOCALHOST_FALLBACK}/api/auth/logout-callback##https://localhost:3000##https://localhost:3000/*##https://localhost:3000/api/auth/logout-callback##http://localhost:3000##http://localhost:3000/*##http://localhost:3000/api/auth/logout-callback"
 
 # Map country codes to full names for Keycloak theme detection (POSIX-friendly)
 case "$CODE_LOWER" in
@@ -314,6 +327,8 @@ CLIENT_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
 if [[ -n "$CLIENT_EXISTS" ]]; then
     log_warn "Client already exists, updating..."
     CLIENT_UUID="$CLIENT_EXISTS"
+    # CRITICAL FIX: Include both port-offset localhost URLs AND common fallbacks
+    # This fixes "Invalid parameter: redirect_uri" for spokes on non-default ports
     kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
@@ -325,31 +340,30 @@ if [[ -n "$CLIENT_EXISTS" ]]; then
                 \"${LOCALHOST_FALLBACK}\",
                 \"${LOCALHOST_FALLBACK}/*\",
                 \"${LOCALHOST_FALLBACK}/api/auth/callback/keycloak\",
-                \"https://localhost:3003\",
-                \"https://localhost:3003/*\",
-                \"https://localhost:3003/api/auth/callback/keycloak\",
-                \"http://localhost:3003\",
-                \"http://localhost:3003/*\",
-                \"http://localhost:3003/api/auth/callback/keycloak\"
+                \"https://localhost:3000\",
+                \"https://localhost:3000/*\",
+                \"https://localhost:3000/api/auth/callback/keycloak\",
+                \"http://localhost:3000\",
+                \"http://localhost:3000/*\",
+                \"http://localhost:3000/api/auth/callback/keycloak\"
             ],
             \"webOrigins\": [
                 \"${FRONTEND_URL}\",
                 \"${LOCALHOST_FALLBACK}\",
-                \"${LOCALHOST_FALLBACK%:*}\",
-                \"https://localhost:3003\",
-                \"http://localhost:3003\"
+                \"https://localhost:3000\",
+                \"http://localhost:3000\"
             ],
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\",
                 \"post.logout.redirect.uris\": \"${POST_LOGOUT_REDIRECT_URIS}\",
-                \"frontchannel.logout.url\": \"https://localhost:3003/api/auth/logout-callback\",
+                \"frontchannel.logout.url\": \"${LOCALHOST_FALLBACK}/api/auth/logout-callback\",
                 \"backchannel.logout.session.required\": \"true\",
                 \"backchannel.logout.revoke.offline.tokens\": \"false\"
             },
             \"frontchannelLogout\": true
         }" 2>/dev/null
 else
-    # Create client
+    # Create client with comprehensive redirect URIs including port-offset localhost
     kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
@@ -365,14 +379,16 @@ else
                 \"${FRONTEND_URL}/api/auth/callback/keycloak\",
                 \"${LOCALHOST_FALLBACK}\",
                 \"${LOCALHOST_FALLBACK}/*\",
-                \"${LOCALHOST_FALLBACK}/api/auth/callback/keycloak\"
+                \"${LOCALHOST_FALLBACK}/api/auth/callback/keycloak\",
+                \"https://localhost:3000\",
+                \"https://localhost:3000/*\",
+                \"https://localhost:3000/api/auth/callback/keycloak\"
             ],
             \"webOrigins\": [
                 \"${FRONTEND_URL}\",
                 \"${LOCALHOST_FALLBACK}\",
-                \"${LOCALHOST_FALLBACK%:*}\",
-                \"https://localhost:3003\",
-                \"http://localhost:3003\"
+                \"https://localhost:3000\",
+                \"http://localhost:3000\"
             ],
             \"standardFlowEnabled\": true,
             \"directAccessGrantsEnabled\": false,
@@ -381,7 +397,7 @@ else
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\",
                 \"post.logout.redirect.uris\": \"${POST_LOGOUT_REDIRECT_URIS}\",
-                \"frontchannel.logout.url\": \"https://localhost:3003/api/auth/logout-callback\",
+                \"frontchannel.logout.url\": \"${LOCALHOST_FALLBACK}/api/auth/logout-callback\",
                 \"backchannel.logout.session.required\": \"true\",
                 \"backchannel.logout.revoke.offline.tokens\": \"false\"
             },
@@ -506,8 +522,9 @@ CROSS_BORDER_SECRET="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-cro
 
 # Redirect URIs for cross-border: Keycloak only supports wildcards at the END of URIs
 # Include explicit hub broker endpoint + broad wildcard patterns
+# CRITICAL: Include both default ports AND port-offset ports for all scenarios
 # Use calculated port for this instance
-CROSS_BORDER_REDIRECT_URIS="[\"https://localhost:8443/*\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint\",\"https://localhost:3000/*\",\"https://localhost:${local_kc_port}/*\"]"
+CROSS_BORDER_REDIRECT_URIS="[\"https://localhost:8443/*\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint/*\",\"https://localhost:3000/*\",\"https://localhost:${local_kc_port}/*\",\"https://localhost:${local_kc_port}/realms/dive-v3-broker-${CODE_LOWER}/broker/usa-idp/endpoint\",\"https://localhost:${local_kc_port}/realms/dive-v3-broker-${CODE_LOWER}/broker/usa-idp/endpoint/*\",\"https://${CODE_LOWER}-idp.dive25.com/*\"]"
 
 EXISTING_CB_CLIENT=$(kc_curl -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CROSS_BORDER_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')

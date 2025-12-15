@@ -229,6 +229,7 @@ services:
       # Database
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_ALB:?set MONGO_PASSWORD_ALB}@mongodb-alb:27017/dive-v3-alb?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_ALB:?set MONGO_PASSWORD_ALB}@mongodb-alb:27017/dive-v3-alb?authSource=admin
+      MONGODB_DATABASE: dive-v3-alb
       REDIS_URL: redis://:${REDIS_PASSWORD_ALB:?set REDIS_PASSWORD_ALB}@redis-alb:6379
       # Keycloak
       KEYCLOAK_URL: https://keycloak-alb:8443
@@ -261,6 +262,7 @@ services:
         condition: service_healthy
     networks:
       - dive-alb-network
+      - dive-v3-shared-network
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/health"]
       interval: 30s

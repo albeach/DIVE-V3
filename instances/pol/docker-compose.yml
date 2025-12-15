@@ -229,6 +229,7 @@ services:
       # Database
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_POL:?set MONGO_PASSWORD_POL}@mongodb-pol:27017/dive-v3-pol?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_POL:?set MONGO_PASSWORD_POL}@mongodb-pol:27017/dive-v3-pol?authSource=admin
+      MONGODB_DATABASE: dive-v3-pol
       REDIS_URL: redis://:${REDIS_PASSWORD_POL:?set REDIS_PASSWORD_POL}@redis-pol:6379
       # Keycloak
       KEYCLOAK_URL: https://keycloak-pol:8443

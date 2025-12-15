@@ -228,11 +228,8 @@ export function useInfiniteScroll<T = any>({
     // Prevent concurrent requests; allow hard refresh (initial=true) to preempt
     if (loadingRef.current) {
       if (isInitial) {
-        try {
-          abortControllerRef.current?.abort();
-        } catch (err) {
-          console.debug('[useInfiniteScroll] AbortController cleanup during refresh:', err);
-        }
+        // Abort previous request to allow refresh - using reason prevents console noise
+        abortControllerRef.current?.abort('Refresh requested');
         loadingRef.current = false;
         setIsLoading(false);
         setIsLoadingMore(false);
@@ -243,14 +240,8 @@ export function useInfiniteScroll<T = any>({
     }
     loadingRef.current = true;
 
-    // Cancel previous request
-    if (abortControllerRef.current) {
-      try {
-        abortControllerRef.current.abort();
-      } catch (err) {
-        console.debug('[useInfiniteScroll] AbortController cleanup:', err);
-      }
-    }
+    // Cancel previous request - using reason prevents "signal is aborted without reason" console noise
+    abortControllerRef.current?.abort('New request started');
     abortControllerRef.current = new AbortController();
 
     if (isInitial) {
@@ -301,11 +292,16 @@ export function useInfiniteScroll<T = any>({
       }
 
     } catch (err) {
-      console.error('[useInfiniteScroll] Fetch error:', err);
+      // Check for abort first - this is expected behavior during cleanup/refresh
       if (err instanceof Error && err.name === 'AbortError') {
-        // Request was cancelled, ignore
+        // Request was cancelled, silently ignore
         return;
       }
+      // Also check for string abort reasons (from AbortController.abort('reason'))
+      if (typeof err === 'string' && (err.includes('unmounted') || err.includes('request'))) {
+        return;
+      }
+      console.error('[useInfiniteScroll] Fetch error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load resources');
     } finally {
       console.log('[useInfiniteScroll] Fetch complete, setting isLoading=false');
@@ -448,13 +444,10 @@ export function useInfiniteScroll<T = any>({
 
   useEffect(() => {
     return () => {
-      try {
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-      } catch (err) {
-        // Ignore abort errors during cleanup - this is expected
-        console.debug('[useInfiniteScroll] AbortController cleanup:', err);
+      // Abort any in-flight requests on unmount - this is expected behavior
+      // Using a reason prevents "signal is aborted without reason" console noise
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort('Component unmounted');
       }
       if (observerRef.current) {
         observerRef.current.disconnect();

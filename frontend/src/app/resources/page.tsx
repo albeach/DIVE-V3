@@ -369,63 +369,98 @@ export default function ResourcesPage() {
       breadcrumbs={[{ label: 'Documents', href: null }]}
     >
       {/* Command Palette Search - Opens with "/" */}
-      <CommandPaletteSearch
-        resources={resources}
-        onSearch={handleSearch}
-        onFilterApply={(filter) => {
-          if (filter.type === 'classification') {
-            handleFilterChange({ ...selectedFilters, classifications: [filter.value] });
-          } else if (filter.type === 'country') {
-            handleFilterChange({ ...selectedFilters, countries: [filter.value] });
-          } else if (filter.type === 'encrypted') {
-            handleFilterChange({ ...selectedFilters, encryptionStatus: 'encrypted' });
-          }
-        }}
-        onResourceSelect={(resourceId) => router.push(`/resources/${resourceId}`)}
-        userClearance={session.user?.clearance}
-        userCountry={session.user?.countryOfAffiliation}
-      />
+      <div className="mb-5">
+        <CommandPaletteSearch
+          resources={resources}
+          onSearch={handleSearch}
+          onFilterApply={(filter) => {
+            if (filter.type === 'classification') {
+              handleFilterChange({ ...selectedFilters, classifications: [filter.value] });
+            } else if (filter.type === 'country') {
+              handleFilterChange({ ...selectedFilters, countries: [filter.value] });
+            } else if (filter.type === 'encrypted') {
+              handleFilterChange({ ...selectedFilters, encryptionStatus: 'encrypted' });
+            }
+          }}
+          onResourceSelect={(resourceId) => router.push(`/resources/${resourceId}`)}
+          userClearance={session.user?.clearance}
+          userCountry={session.user?.countryOfAffiliation}
+        />
+      </div>
 
-      {/* Toolbar: Federation + Actions */}
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-3">
-          {/* Federation Toggle */}
-          <button
-            onClick={handleFederatedModeToggle}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-              federatedMode 
-                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-            }`}
-          >
-            {federatedMode ? <Globe2 className="w-4 h-4" /> : <Server className="w-4 h-4" />}
-            {federatedMode ? 'Federated' : 'Local'}
-          </button>
+      {/* Toolbar: Federation + Actions - Modern 2025 Design */}
+      <div className="flex items-center justify-between gap-4 mb-6">
+        {/* Federation Mode Selector - Highly visible segmented control */}
+        <div className="flex items-center gap-4">
+          {/* Mode Toggle - Segmented Control Style */}
+          <div className="inline-flex items-center p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+            <button
+              onClick={() => !federatedMode || handleFederatedModeToggle()}
+              className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                !federatedMode 
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Server className="w-4 h-4" />
+              <span>Local</span>
+              {!federatedMode && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              )}
+            </button>
+            <button
+              onClick={() => federatedMode || handleFederatedModeToggle()}
+              className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                federatedMode 
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Globe2 className="w-4 h-4" />
+              <span>Federated</span>
+              {federatedMode && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+              )}
+            </button>
+          </div>
 
-          {/* Instance Pills - Dynamic from federated IdPs */}
-          <div className="flex items-center gap-1">
+          {/* Divider */}
+          <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
+
+          {/* Instance Pills - Enhanced visibility */}
+          <div className="flex items-center gap-1.5">
             {isLoadingIdPs ? (
-              <div className="flex items-center gap-1">
-                <div className="w-8 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                <div className="w-8 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-12 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
+                <div className="w-12 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
               </div>
             ) : (
               federationInstances.map((instance) => {
                 const isSelected = selectedInstances.includes(instance);
+                const isCurrentInstance = instance === CURRENT_INSTANCE;
                 return (
                   <button
                     key={instance}
                     onClick={() => handleInstanceToggle(instance)}
-                    disabled={!federatedMode && instance !== CURRENT_INSTANCE}
-                    className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                    disabled={!federatedMode && !isCurrentInstance}
+                    className={`relative px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-all duration-200 ${
                       isSelected
-                        ? 'bg-blue-600 text-white'
+                        ? isCurrentInstance
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                          : 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30'
                         : federatedMode
-                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200'
-                          : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300'
+                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-300 dark:text-gray-600 cursor-not-allowed'
                     }`}
+                    title={isCurrentInstance ? 'Current instance (always included)' : federatedMode ? 'Click to toggle' : 'Enable Federation mode to include'}
                   >
                     {instance}
+                    {isCurrentInstance && isSelected && (
+                      <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                      </span>
+                    )}
                   </button>
                 );
               })
@@ -433,12 +468,14 @@ export default function ResourcesPage() {
           </div>
         </div>
 
+        {/* Actions */}
         <div className="flex items-center gap-2">
           <BookmarksTrigger onClick={() => setShowBookmarks(true)} />
           <button
             onClick={() => refresh()}
             disabled={isLoading}
-            className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-2.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 disabled:opacity-50 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>

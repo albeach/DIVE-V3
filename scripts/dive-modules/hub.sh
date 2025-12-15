@@ -141,23 +141,48 @@ EOF
 
 _hub_generate_certs() {
     mkdir -p "${HUB_CERTS_DIR}"
+    mkdir -p "${HUB_DATA_DIR}/truststores"
     
     # Check for mkcert
     if command -v mkcert >/dev/null 2>&1; then
         log_info "Using mkcert for certificate generation..."
+        
+        # Install mkcert CA if not already done
+        mkcert -install 2>/dev/null || true
+        
+        # Get all spoke hostnames for comprehensive SANs
+        local spoke_sans=""
+        for code in alb bel bgr can cze dnk est fra deu grc hun isl ita lva ltu lux mne nld mkd nor pol prt rou svk svn esp tur gbr nzl; do
+            spoke_sans="$spoke_sans keycloak-${code} ${code}-keycloak-${code}-1 dive-${code}-keycloak"
+        done
+        
+        # Generate Hub certificate with all SANs (including spoke hostnames)
         (
             cd "${HUB_CERTS_DIR}"
-            mkcert -install 2>/dev/null || true
+            # shellcheck disable=SC2086
             mkcert -key-file key.pem -cert-file certificate.pem \
-                localhost 127.0.0.1 \
+                localhost 127.0.0.1 ::1 host.docker.internal \
                 hub.dive25.com usa-idp.dive25.com \
-                keycloak backend opa opal-server \
+                keycloak dive-hub-keycloak hub-keycloak \
+                backend opa opal-server frontend \
+                $spoke_sans \
                 2>/dev/null
         )
-        log_success "Certificates generated with mkcert"
+        log_success "Hub certificate generated with spoke SANs"
+        
+        # Copy mkcert root CA to truststores directory
+        local ca_root
+        ca_root=$(mkcert -CAROOT 2>/dev/null)
+        if [ -f "$ca_root/rootCA.pem" ]; then
+            cp "$ca_root/rootCA.pem" "${HUB_CERTS_DIR}/mkcert-rootCA.pem"
+            cp "$ca_root/rootCA.pem" "${HUB_DATA_DIR}/truststores/mkcert-rootCA.pem"
+            log_success "mkcert root CA installed in Hub truststore"
+        else
+            log_warn "mkcert root CA not found at: $ca_root"
+        fi
     else
         # Fallback to openssl self-signed
-        log_warn "mkcert not found, using self-signed certificate"
+        log_warn "mkcert not found, using self-signed certificate (federation may have SSL issues)"
         openssl req -x509 -newkey rsa:4096 -sha256 -days 365 \
             -nodes -keyout "${HUB_CERTS_DIR}/key.pem" \
             -out "${HUB_CERTS_DIR}/certificate.pem" \
@@ -165,6 +190,7 @@ _hub_generate_certs() {
             -addext "subjectAltName=DNS:localhost,DNS:keycloak,DNS:backend,DNS:opa,DNS:opal-server,IP:127.0.0.1" \
             2>/dev/null
         log_success "Self-signed certificates generated"
+        log_warn "For federation to work, install mkcert and regenerate certificates"
     fi
 }
 
