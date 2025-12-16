@@ -272,15 +272,37 @@
     </#if>
     
     <#-- Also check client ID for federation hints -->
-    <#-- Client ID format: dive-v3-{source}-federation (e.g., dive-v3-usa-federation means coming FROM USA) -->
+    <#-- IMPORTANT: Client ID patterns have different meanings:
+         - dive-v3-{source}-federation: Source is {source} (coming FROM that country)
+         - dive-v3-client-{target}: This is Hub's client for {target} - source is the HUB (USA)
+         When we see dive-v3-client-{country} and hostInstance matches {country},
+         it means Hub is federating TO us, so source = USA -->
     <#assign clientData = "">
     <#assign sourceInstance = "">
     <#assign sourceFlag = "">
     <#assign sourceCountryName = "">
+    <#assign isReverseFedaration = false>
     <#if client?? && client.clientId??>
         <#assign clientData = client.clientId?lower_case>
         <#if clientData?contains("federation") || clientData?contains("broker") || clientData?contains("cross-border") || clientData?contains("client-")>
             <#assign isFederatedLogin = true>
+            
+            <#-- FIRST: Check if this is a reverse federation (Hub → Spoke) -->
+            <#-- Pattern: dive-v3-client-{country} where we ARE on that country's Keycloak -->
+            <#-- Example: client=dive-v3-client-rou on ROU Keycloak means Hub is connecting TO us -->
+            <#if clientData?starts_with("dive-v3-client-") && hostInstance?has_content>
+                <#assign clientCountry = clientData?replace("dive-v3-client-", "")?upper_case>
+                <#if clientCountry == hostInstance>
+                    <#-- This is reverse federation! Source is the Hub (USA) -->
+                    <#assign isReverseFedaration = true>
+                    <#assign sourceInstance = "USA">
+                    <#assign sourceFlag = "🇺🇸">
+                    <#assign sourceCountryName = "United States">
+                </#if>
+            </#if>
+            
+            <#-- Only do country extraction from client ID if NOT reverse federation -->
+            <#if !isReverseFedaration>
             <#-- Extract source country from client_id (e.g., dive-v3-usa-federation or dive-v3-client-alb) -->
             
             <#-- NATO Founding Members -->
@@ -446,6 +468,7 @@
                     <#assign sourceCountryName = "United States">
                 </#if>
             </#if>
+            </#if><#-- End of !isReverseFedaration block -->
         </#if>
     </#if>
 
