@@ -1,0 +1,42 @@
+groups:
+  - name: redis
+    rules:
+      # Redis Instance Down
+      - alert: RedisInstanceDown
+        expr: redis_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis instance {{ $labels.instance }} is down"
+          description: "Redis instance {{ $labels.instance }} ({{ $labels.redis_type }}) has been down for more than 5 minutes."
+
+      # High Memory Usage
+      - alert: RedisHighMemoryUsage
+        expr: (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high memory usage on {{ $labels.instance }}"
+          description: "Redis instance {{ $labels.instance }} memory usage is {{ $value }}%"
+
+      # Redis Connection Issues
+      - alert: RedisConnectionIssues
+        expr: increase(redis_rejected_connections_total[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis rejecting connections on {{ $labels.instance }}"
+          description: "Redis instance {{ $labels.instance }} is rejecting connections"
+
+      # Redis Keyspace Misses High
+      - alert: RedisHighKeyspaceMisses
+        expr: rate(redis_keyspace_misses_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "High Redis keyspace miss rate on {{ $labels.instance }}"
+          description: "Redis cache miss rate is {{ $value }}% on instance {{ $labels.instance }}"
