@@ -1748,7 +1748,7 @@ register_spoke_in_hub() {
     echo ""
     
     # Step 1: Authenticate to Hub Keycloak
-    echo -e "  ${BOLD}[1/6] Authenticating to Hub Keycloak...${NC}"
+    echo -e "  ${BOLD}[1/7] Authenticating to Hub Keycloak...${NC}"
     
     local hub_pass=""
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -1771,7 +1771,7 @@ register_spoke_in_hub() {
     log_success "Authenticated to Hub Keycloak"
     
     # Step 2: Create or verify Hub client for spoke
-    echo -e "  ${BOLD}[2/6] Creating Hub client: ${spoke_client}...${NC}"
+    echo -e "  ${BOLD}[2/7] Creating Hub client: ${spoke_client}...${NC}"
     
     local existing_client
     existing_client=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
@@ -1813,7 +1813,7 @@ register_spoke_in_hub() {
     echo "        Client Secret: ${client_secret:0:8}..."
     
     # Step 3: Create or verify IdP in Hub
-    echo -e "  ${BOLD}[3/6] Creating IdP in Hub: ${spoke_idp}...${NC}"
+    echo -e "  ${BOLD}[3/7] Creating IdP in Hub: ${spoke_idp}...${NC}"
     
     local existing_idp
     existing_idp=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
@@ -1862,7 +1862,7 @@ register_spoke_in_hub() {
     fi
     
     # Step 4: Create IdP mappers for DIVE attributes
-    echo -e "  ${BOLD}[4/6] Creating IdP mappers for DIVE attributes...${NC}"
+    echo -e "  ${BOLD}[4/7] Creating IdP mappers for DIVE attributes...${NC}"
     
     local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
     local mapper_count=0
@@ -1896,8 +1896,8 @@ register_spoke_in_hub() {
         log_info "All IdP mappers already exist"
     fi
     
-    # Step 5: Update spoke's client to include Hub broker endpoint (BIDIRECTIONAL!)
-    echo -e "  ${BOLD}[5/6] Updating spoke client for bidirectional federation...${NC}"
+    # Step 5: Update spoke's client for bidirectional federation
+    echo -e "  ${BOLD}[5/7] Updating spoke client for bidirectional federation...${NC}"
     
     # Get spoke admin token
     local spoke_keycloak_container="${spoke_lower}-keycloak-${spoke_lower}-1"
@@ -1922,7 +1922,7 @@ register_spoke_in_hub() {
                 docker exec "$spoke_keycloak_container" /opt/keycloak/bin/kcadm.sh update "clients/${spoke_client_uuid}" \
                     -r "${spoke_realm}" \
                     -s "redirectUris=[\"https://localhost:${frontend_port}/*\",\"https://localhost:${frontend_port}\",\"https://localhost:${frontend_port}/api/auth/callback/keycloak\",\"https://localhost:3000/*\",\"https://localhost:3000/api/auth/callback/keycloak\",\"https://localhost:8443/realms/dive-v3-broker/broker/${spoke_idp}/endpoint\",\"https://localhost:8443/*\",\"https://${spoke_lower}-app.dive25.com/*\"]" 2>/dev/null
-                log_success "Updated spoke client with Hub broker endpoint"
+                log_success "Updated spoke client redirect URIs"
             else
                 log_warn "Could not find spoke client: ${spoke_client}"
             fi
@@ -1934,8 +1934,25 @@ register_spoke_in_hub() {
         echo "        Run: ./dive federation-setup update-spoke-uris ${spoke_lower}"
     fi
     
-    # Step 6: Sync OPA trusted issuers
-    echo -e "  ${BOLD}[6/6] Syncing OPA trusted issuers...${NC}"
+    # Step 6: Update spoke client post-logout redirect URIs (for sign-out flow)
+    echo -e "  ${BOLD}[6/7] Configuring post-logout redirect URIs...${NC}"
+    
+    if [ -n "$spoke_pass" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${spoke_keycloak_container}$"; then
+        if [ -n "$spoke_client_uuid" ]; then
+            # Post-logout URIs must include Hub URLs for proper sign-out redirect
+            # Format: URLs separated by ##
+            local post_logout_uris="https://localhost:3000##https://localhost:3000/*##https://localhost:${frontend_port}##https://localhost:${frontend_port}/*##https://localhost:8443##https://localhost:8443/*##https://${spoke_lower}-app.dive25.com##https://${spoke_lower}-app.dive25.com/*##+"
+            
+            docker exec "$spoke_keycloak_container" /opt/keycloak/bin/kcadm.sh update "clients/${spoke_client_uuid}" \
+                -r "${spoke_realm}" \
+                -s "attributes.post\.logout\.redirect\.uris=${post_logout_uris}" 2>/dev/null && \
+            log_success "Updated post-logout redirect URIs" || \
+            log_warn "Could not update post-logout redirect URIs"
+        fi
+    fi
+    
+    # Step 7: Sync OPA trusted issuers
+    echo -e "  ${BOLD}[7/7] Syncing OPA trusted issuers...${NC}"
     
     sync_opa_trusted_issuers "$spoke" 2>/dev/null || log_warn "OPA sync may require manual review"
     
