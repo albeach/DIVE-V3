@@ -2427,7 +2427,7 @@ spoke_deploy() {
     # Step 1: Initialize spoke if not already done
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 1/7: Checking Spoke Initialization${NC}"
+    echo -e "${CYAN}  STEP 1/8: Checking Spoke Initialization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2453,7 +2453,7 @@ spoke_deploy() {
     # Step 2: Prepare Federation Certificates (NEW!)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 2/7: Preparing Federation Certificates${NC}"
+    echo -e "${CYAN}  STEP 2/8: Preparing Federation Certificates${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2475,7 +2475,7 @@ spoke_deploy() {
     # Step 3: Start spoke services
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 3/7: Starting Spoke Services${NC}"
+    echo -e "${CYAN}  STEP 3/8: Starting Spoke Services${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2510,7 +2510,7 @@ spoke_deploy() {
     # Step 4: Wait for services to be healthy
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 4/7: Waiting for Services to be Healthy${NC}"
+    echo -e "${CYAN}  STEP 4/8: Waiting for Services to be Healthy${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2531,7 +2531,7 @@ spoke_deploy() {
     # Step 5: Run initialization scripts (if not already done)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 5/7: Running Post-Deployment Initialization${NC}"
+    echo -e "${CYAN}  STEP 5/8: Running Post-Deployment Initialization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2560,7 +2560,7 @@ spoke_deploy() {
     # Step 6: Configure Federation (NEW! - replaces fix-all-spokes-federation.sh)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 6/7: Configuring Federation${NC}"
+    echo -e "${CYAN}  STEP 6/8: Configuring Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2598,10 +2598,58 @@ spoke_deploy() {
     fi
     
     # ==========================================================================
-    # Step 7: Register with Hub (if not already registered)
+    # Step 7: Register with Hub (BIDIRECTIONAL - spoke in Hub AND Hub in spoke)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 7/7: Hub Registration${NC}"
+    echo -e "${CYAN}  STEP 7/8: Hub Registration (Bidirectional Federation)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    local hub_reg_marker="$spoke_dir/.hub-registered"
+    
+    if [ -f "$hub_reg_marker" ]; then
+        log_info "Spoke already registered in Hub"
+        echo ""
+    else
+        # Check if Hub Keycloak is running locally
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}$"; then
+            log_step "Hub Keycloak detected - registering spoke as IdP..."
+            
+            # Load federation-setup module if not already loaded
+            if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
+                source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" 2>/dev/null || true
+            fi
+            
+            if type register_spoke_in_hub &>/dev/null; then
+                if register_spoke_in_hub "$code_lower"; then
+                    touch "$hub_reg_marker"
+                    log_success "Spoke registered in Hub successfully!"
+                else
+                    log_warn "Hub registration had issues"
+                    echo ""
+                    echo "  You can retry with:"
+                    echo "  ./dive federation-setup register-hub $code_lower"
+                fi
+            else
+                log_warn "register_spoke_in_hub function not available"
+                echo ""
+                echo "  Run manually:"
+                echo "  ./dive federation-setup register-hub $code_lower"
+            fi
+        else
+            log_info "Hub Keycloak not running locally - skipping auto-registration"
+            echo ""
+            echo "  When Hub is available, run:"
+            echo "  ./dive federation-setup register-hub $code_lower"
+        fi
+        echo ""
+    fi
+    
+    # ==========================================================================
+    # Step 8: Formal Registration (optional - for production approval workflow)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 8/8: Formal Registration Status${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
@@ -2614,16 +2662,16 @@ spoke_deploy() {
     
     case "$current_status" in
         approved)
-            log_info "Spoke already approved by Hub"
+            log_info "Spoke formally approved by Hub"
             echo ""
             ;;
         pending)
-            log_info "Registration pending Hub admin approval"
+            log_info "Formal registration pending Hub admin approval"
             echo ""
             ;;
         *)
-            log_step "Submitting registration to Hub..."
-            INSTANCE="$code_lower" spoke_register
+            log_step "Submitting formal registration to Hub..."
+            INSTANCE="$code_lower" spoke_register 2>/dev/null || true
             echo ""
             ;;
     esac
