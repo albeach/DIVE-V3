@@ -1637,6 +1637,62 @@ delete_federated_user() {
     return 0
 }
 
+##
+# Delete a federated user from the Hub
+# Use this when attributes need to be refreshed after IdP mapper changes
+#
+# Arguments:
+#   $1 - Username (e.g., testuser-rou-1)
+##
+delete_hub_federated_user() {
+    local username="${1:-}"
+    
+    if [ -z "$username" ]; then
+        log_error "Usage: delete_hub_federated_user <username>"
+        echo "  Example: delete_hub_federated_user testuser-rou-1"
+        return 1
+    fi
+    
+    echo -e "${BOLD}Deleting federated user from Hub: ${username}${NC}"
+    
+    # Get Hub admin token
+    local hub_token
+    hub_token=$(get_hub_admin_token)
+    if [ -z "$hub_token" ] || [ "$hub_token" = "null" ]; then
+        log_error "Failed to get Hub admin token"
+        return 1
+    fi
+    
+    # Find user in Hub realm
+    local user_id
+    user_id=$(docker exec "$HUB_BACKEND_CONTAINER" curl -s \
+        "http://dive-hub-keycloak:8080/admin/realms/${HUB_REALM}/users?username=${username}&exact=true" \
+        -H "Authorization: Bearer ${hub_token}" 2>/dev/null | jq -r '.[0].id')
+    
+    if [ -z "$user_id" ] || [ "$user_id" = "null" ]; then
+        log_info "User not found in Hub: ${username}"
+        return 0
+    fi
+    
+    echo "  User ID: ${user_id}"
+    
+    # Delete user from Hub
+    local result
+    result=$(docker exec "$HUB_BACKEND_CONTAINER" curl -s -o /dev/null -w "%{http_code}" \
+        -X DELETE "http://dive-hub-keycloak:8080/admin/realms/${HUB_REALM}/users/${user_id}" \
+        -H "Authorization: Bearer ${hub_token}" 2>/dev/null)
+    
+    if [ "$result" = "204" ]; then
+        log_success "Federated user deleted from Hub: ${username}"
+        echo "  The user will be recreated with fresh attributes on next login."
+    else
+        log_error "Failed to delete user from Hub: ${username} (HTTP ${result})"
+        return 1
+    fi
+    
+    return 0
+}
+
 # =============================================================================
 # HUB REGISTRATION - Register spoke as IdP in Hub
 # =============================================================================
@@ -1786,7 +1842,8 @@ register_spoke_in_hub() {
             -s 'firstBrokerLoginFlowAlias=first broker login' \
             -s "config.authorizationUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/auth" \
             -s "config.tokenUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/token" \
-            -s "config.userInfoUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
+            -s "config.userInfoUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
+            -s "config.logoutUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/logout" \
             -s "config.jwksUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/certs" \
             -s "config.issuer=https://localhost:${kc_port}/realms/${spoke_realm}" \
             -s "config.clientId=${spoke_client}" \
@@ -1826,7 +1883,7 @@ register_spoke_in_hub() {
             -s "name=${mapper}" \
             -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
             -s "identityProviderAlias=${spoke_idp}" \
-            -s "config.syncMode=INHERIT" \
+            -s "config.syncMode=FORCE" \
             -s "config.claim=${mapper}" \
             -s "config.user.attribute=${mapper}" 2>/dev/null; then
             mapper_count=$((mapper_count + 1))
@@ -2018,6 +2075,9 @@ module_federation_setup() {
         delete-user)
             delete_federated_user "$@"
             ;;
+        delete-hub-user)
+            delete_hub_federated_user "$@"
+            ;;
         *)
             module_federation_setup_help
             ;;
@@ -2053,7 +2113,8 @@ module_federation_setup_help() {
     echo -e "  ${YELLOW}═══ TROUBLESHOOTING ═══${NC}"
     echo "  ${CYAN}fix-issuer${NC} <spoke>        Fix realm issuer URL to match port mapping"
     echo "  ${CYAN}fix-issuer-all${NC}            Fix realm issuer for all running spokes"
-    echo "  ${CYAN}delete-user${NC} <spoke> <user> Delete federated user (force re-sync)"
+    echo "  ${CYAN}delete-user${NC} <spoke> <user> Delete user from spoke realm"
+    echo "  ${CYAN}delete-hub-user${NC} <user>    Delete federated user from Hub (force attr refresh)"
     echo ""
     echo -e "  ${YELLOW}═══ VERIFICATION ═══${NC}"
     echo "  ${CYAN}verify${NC} <spoke>            Verify federation configuration"
