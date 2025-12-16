@@ -20,6 +20,8 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 - [NATO Country Management](#nato-country-management)
 - [SP Client Registration](#sp-client-registration)
 - [Policy Management](#policy-management)
+- [Certificate Management](#certificate-management)
+- [Federation Setup](#federation-setup)
 - [Testing Suite](#testing-suite)
 - [Status & Diagnostics](#status--diagnostics)
 - [Environment Helpers](#environment-helpers)
@@ -57,16 +59,24 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 # Generate Terraform tfvars for a country
 ./dive tf generate POL
 
-# Deploy a new NATO spoke
+# Deploy a new NATO spoke (automatic federation setup)
+./dive spoke deploy POL
+
+# Or manual step-by-step deployment:
 DIVE_PILOT_MODE=false ./dive spoke init POL "Poland"
 ./dive --instance pol spoke up
 ./dive --instance pol spoke register
+
+# Configure federation (Spoke→Hub and Hub→Spoke)
+./dive federation-setup configure pol        # Spoke→Hub flow
+./dive federation-setup register-hub pol     # Hub→Spoke flow
 
 # Batch deploy multiple countries
 ./dive spoke batch-deploy POL NOR ALB
 
 # Verify federation health
 ./dive spoke verify-federation
+./dive federation-setup verify-all
 ```
 
 ## Global Options
@@ -1151,6 +1161,227 @@ Display current policy bundle version.
 ./dive policy version
 ```
 
+## Certificate Management
+
+SSL certificate generation and truststore management for federation.
+
+### `certs check` - Check mkcert Prerequisites
+
+Verify mkcert is installed and configured with a root CA.
+
+```bash
+./dive certs check
+```
+
+### `certs prepare-federation <spoke>` - Complete Certificate Setup
+
+Full certificate setup for a spoke including CA installation and certificate generation.
+
+```bash
+./dive certs prepare-federation pol        # Setup for Poland
+./dive certs prepare-federation rou        # Setup for Romania
+```
+
+**What it does:**
+1. Verifies mkcert is ready
+2. Installs mkcert CA in Hub truststore
+3. Installs mkcert CA in spoke truststore
+4. Updates Hub certificate with spoke SANs
+5. Generates spoke-specific certificates
+
+### `certs prepare-all` - Batch Certificate Setup
+
+Prepare certificates for all running spokes.
+
+```bash
+./dive certs prepare-all
+```
+
+### `certs verify <spoke>` - Verify Certificate Configuration
+
+Check certificate configuration for a spoke.
+
+```bash
+./dive certs verify pol
+./dive certs verify rou
+```
+
+### `certs verify-all` - Batch Certificate Verification
+
+Verify certificates for all spokes.
+
+```bash
+./dive certs verify-all
+```
+
+### `certs install-hub-ca` - Install CA in Hub
+
+Install mkcert root CA in Hub Keycloak truststore.
+
+```bash
+./dive certs install-hub-ca
+```
+
+### `certs install-spoke-ca <spoke>` - Install CA in Spoke
+
+Install mkcert root CA in spoke Keycloak truststore.
+
+```bash
+./dive certs install-spoke-ca pol
+```
+
+### `certs update-hub-sans <spoke>` - Update Hub Certificate SANs
+
+Add spoke hostname to Hub certificate Subject Alternative Names.
+
+```bash
+./dive certs update-hub-sans pol
+```
+
+### `certs generate-spoke <spoke>` - Generate Spoke Certificate
+
+Generate SSL certificate for a spoke.
+
+```bash
+./dive certs generate-spoke pol
+```
+
+## Federation Setup
+
+Keycloak federation configuration and troubleshooting.
+
+### `federation-setup register-hub <spoke>` - Register Spoke in Hub
+
+Register a spoke as an IdP in the Hub, enabling Hub→Spoke federation.
+
+```bash
+./dive federation-setup register-hub rou     # Register Romania in Hub
+./dive federation-setup register-hub pol     # Register Poland in Hub
+```
+
+**7-step process:**
+1. Authenticate to Hub Keycloak
+2. Create Hub client for spoke (`dive-v3-client-{spoke}`)
+3. Create IdP in Hub (`{spoke}-idp`) with PKCE
+4. Create IdP mappers for DIVE attributes
+5. Update spoke client redirect URIs (login flow)
+6. Update spoke client post-logout redirect URIs (logout flow)
+7. Sync OPA trusted issuers
+
+### `federation-setup register-hub-all` - Register All Spokes in Hub
+
+Register all running spokes in the Hub.
+
+```bash
+./dive federation-setup register-hub-all
+```
+
+### `federation-setup configure <spoke>` - Configure Spoke Federation
+
+Complete federation configuration for Spoke→Hub flow.
+
+```bash
+./dive federation-setup configure pol        # Configure Poland
+./dive federation-setup configure rou        # Configure Romania
+```
+
+**5-step process:**
+1. Configure usa-idp with Hub client secret
+2. Update spoke client redirect URIs
+3. Update Hub client redirect URIs
+4. Sync frontend .env with local client secret
+5. Recreate frontend container
+
+### `federation-setup configure-all` - Batch Federation Configuration
+
+Configure federation for all running spokes.
+
+```bash
+./dive federation-setup configure-all
+```
+
+### `federation-setup verify <spoke>` - Verify Spoke Federation
+
+Check federation configuration for a spoke.
+
+```bash
+./dive federation-setup verify pol
+./dive federation-setup verify rou
+```
+
+**Checks:**
+- Hub Keycloak running
+- Spoke Keycloak running
+- Hub Keycloak authentication
+- Spoke Keycloak authentication
+- Hub client exists
+- Spoke local client exists
+
+### `federation-setup verify-all` - Batch Federation Verification
+
+Verify federation for all spokes.
+
+```bash
+./dive federation-setup verify-all
+```
+
+### `federation-setup sync-opa <spoke>` - Sync OPA Trusted Issuers
+
+Add spoke's Keycloak issuer to OPA trusted_issuers.json.
+
+```bash
+./dive federation-setup sync-opa pol
+./dive federation-setup sync-opa rou
+```
+
+### `federation-setup sync-opa-all` - Sync All OPA Trusted Issuers
+
+Sync OPA trusted issuers for all running spokes.
+
+```bash
+./dive federation-setup sync-opa-all
+```
+
+### `federation-setup fix-issuer <spoke>` - Fix Realm Issuer
+
+Correct Keycloak realm's frontendUrl to match exposed port.
+
+```bash
+./dive federation-setup fix-issuer pol
+```
+
+### `federation-setup fix-issuer-all` - Fix All Realm Issuers
+
+Fix realm issuers for all running spokes.
+
+```bash
+./dive federation-setup fix-issuer-all
+```
+
+### `federation-setup recreate-frontend <spoke>` - Recreate Frontend Container
+
+Force recreate frontend to reload .env secrets.
+
+```bash
+./dive federation-setup recreate-frontend pol
+```
+
+### `federation-setup get-hub-secret <spoke>` - Get Hub Client Secret
+
+Retrieve client secret from Hub for a spoke.
+
+```bash
+./dive federation-setup get-hub-secret pol
+```
+
+### `federation-setup get-spoke-secret <spoke>` - Get Spoke Local Client Secret
+
+Retrieve local client secret from spoke's Keycloak.
+
+```bash
+./dive federation-setup get-spoke-secret pol
+```
+
 ## Testing Suite
 
 Phase 6 comprehensive testing framework.
@@ -1488,6 +1719,32 @@ NATO Country Management:
   spoke batch-deploy       Deploy multiple countries
   spoke verify-federation  Verify federation health
 
+Certificate Management:
+  certs check              Check mkcert prerequisites
+  certs prepare-federation <spoke>  Complete certificate setup
+  certs prepare-all        Batch setup for all spokes
+  certs verify <spoke>     Verify certificate configuration
+  certs verify-all         Batch verification
+  certs install-hub-ca     Install CA in Hub truststore
+  certs install-spoke-ca   Install CA in spoke truststore
+  certs update-hub-sans    Update Hub certificate SANs
+  certs generate-spoke     Generate spoke certificate
+
+Federation Setup:
+  federation-setup register-hub <spoke>   Register spoke as IdP in Hub
+  federation-setup register-hub-all       Register all spokes in Hub
+  federation-setup configure <spoke>      Configure spoke→Hub federation
+  federation-setup configure-all          Configure all spokes
+  federation-setup verify <spoke>         Verify federation configuration
+  federation-setup verify-all             Verify all spokes
+  federation-setup sync-opa <spoke>       Sync OPA trusted issuers
+  federation-setup sync-opa-all           Sync all OPA issuers
+  federation-setup fix-issuer <spoke>     Fix realm issuer URL
+  federation-setup fix-issuer-all         Fix all realm issuers
+  federation-setup recreate-frontend      Force recreate frontend container
+  federation-setup get-hub-secret         Get Hub client secret
+  federation-setup get-spoke-secret       Get spoke local client secret
+
 SP Client:
   sp register              Register OAuth client
   sp status [id]           Show registration status
@@ -1520,5 +1777,5 @@ Other:
 ---
 
 **DIVE V3 CLI Version:** Modular Unified Management Script (NATO 32-Country Edition)  
-**Last Updated:** December 2025  
-**Documentation:** This guide covers all CLI functionality including NATO 32-country expansion (Phases 1-5)
+**Last Updated:** December 16, 2025  
+**Documentation:** This guide covers all CLI functionality including NATO 32-country expansion, Certificate Management, and Federation Setup modules
