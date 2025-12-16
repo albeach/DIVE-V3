@@ -1843,7 +1843,7 @@ register_spoke_in_hub() {
             -s "config.authorizationUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/auth" \
             -s "config.tokenUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/token" \
             -s "config.userInfoUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
-            -s "config.logoutUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/logout" \
+            -s "config.logoutUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/logout" \
             -s "config.jwksUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/certs" \
             -s "config.issuer=https://localhost:${kc_port}/realms/${spoke_realm}" \
             -s "config.clientId=${spoke_client}" \
