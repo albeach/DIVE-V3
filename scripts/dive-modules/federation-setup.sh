@@ -1692,7 +1692,7 @@ register_spoke_in_hub() {
     echo ""
     
     # Step 1: Authenticate to Hub Keycloak
-    echo -e "  ${BOLD}[1/5] Authenticating to Hub Keycloak...${NC}"
+    echo -e "  ${BOLD}[1/6] Authenticating to Hub Keycloak...${NC}"
     
     local hub_pass=""
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -1715,7 +1715,7 @@ register_spoke_in_hub() {
     log_success "Authenticated to Hub Keycloak"
     
     # Step 2: Create or verify Hub client for spoke
-    echo -e "  ${BOLD}[2/5] Creating Hub client: ${spoke_client}...${NC}"
+    echo -e "  ${BOLD}[2/6] Creating Hub client: ${spoke_client}...${NC}"
     
     local existing_client
     existing_client=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
@@ -1757,7 +1757,7 @@ register_spoke_in_hub() {
     echo "        Client Secret: ${client_secret:0:8}..."
     
     # Step 3: Create or verify IdP in Hub
-    echo -e "  ${BOLD}[3/5] Creating IdP in Hub: ${spoke_idp}...${NC}"
+    echo -e "  ${BOLD}[3/6] Creating IdP in Hub: ${spoke_idp}...${NC}"
     
     local existing_idp
     existing_idp=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
@@ -1803,7 +1803,7 @@ register_spoke_in_hub() {
     fi
     
     # Step 4: Create IdP mappers for DIVE attributes
-    echo -e "  ${BOLD}[4/5] Creating IdP mappers for DIVE attributes...${NC}"
+    echo -e "  ${BOLD}[4/6] Creating IdP mappers for DIVE attributes...${NC}"
     
     local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
     local mapper_count=0
@@ -1837,8 +1837,46 @@ register_spoke_in_hub() {
         log_info "All IdP mappers already exist"
     fi
     
-    # Step 5: Sync OPA trusted issuers
-    echo -e "  ${BOLD}[5/5] Syncing OPA trusted issuers...${NC}"
+    # Step 5: Update spoke's client to include Hub broker endpoint (BIDIRECTIONAL!)
+    echo -e "  ${BOLD}[5/6] Updating spoke client for bidirectional federation...${NC}"
+    
+    # Get spoke admin token
+    local spoke_keycloak_container="${spoke_lower}-keycloak-${spoke_lower}-1"
+    local spoke_pass=""
+    if [ -f "${spoke_dir}/.env" ]; then
+        spoke_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD" "${spoke_dir}/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    
+    if [ -n "$spoke_pass" ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${spoke_keycloak_container}$"; then
+        # Authenticate to spoke Keycloak
+        if docker exec "$spoke_keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://localhost:8080 --realm master --user admin --password "$spoke_pass" 2>/dev/null; then
+            
+            # Get spoke client UUID
+            local spoke_client_uuid
+            spoke_client_uuid=$(docker exec "$spoke_keycloak_container" /opt/keycloak/bin/kcadm.sh get clients \
+                -r "${spoke_realm}" -q "clientId=${spoke_client}" --fields id 2>/dev/null | jq -r '.[0].id // empty')
+            
+            if [ -n "$spoke_client_uuid" ]; then
+                # Update redirect URIs to include Hub broker endpoint
+                # This allows: Hub → Spoke Keycloak → callback to Hub broker
+                docker exec "$spoke_keycloak_container" /opt/keycloak/bin/kcadm.sh update "clients/${spoke_client_uuid}" \
+                    -r "${spoke_realm}" \
+                    -s "redirectUris=[\"https://localhost:${frontend_port}/*\",\"https://localhost:${frontend_port}\",\"https://localhost:${frontend_port}/api/auth/callback/keycloak\",\"https://localhost:3000/*\",\"https://localhost:3000/api/auth/callback/keycloak\",\"https://localhost:8443/realms/dive-v3-broker/broker/${spoke_idp}/endpoint\",\"https://localhost:8443/*\",\"https://${spoke_lower}-app.dive25.com/*\"]" 2>/dev/null
+                log_success "Updated spoke client with Hub broker endpoint"
+            else
+                log_warn "Could not find spoke client: ${spoke_client}"
+            fi
+        else
+            log_warn "Could not authenticate to spoke Keycloak"
+        fi
+    else
+        log_warn "Spoke Keycloak not accessible - manual update may be needed"
+        echo "        Run: ./dive federation-setup update-spoke-uris ${spoke_lower}"
+    fi
+    
+    # Step 6: Sync OPA trusted issuers
+    echo -e "  ${BOLD}[6/6] Syncing OPA trusted issuers...${NC}"
     
     sync_opa_trusted_issuers "$spoke" 2>/dev/null || log_warn "OPA sync may require manual review"
     
