@@ -1785,16 +1785,18 @@ register_spoke_in_hub() {
             -s linkOnly=false \
             -s 'firstBrokerLoginFlowAlias=first broker login' \
             -s "config.authorizationUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/auth" \
-            -s "config.tokenUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/token" \
+            -s "config.tokenUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/token" \
             -s "config.userInfoUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
-            -s "config.jwksUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/certs" \
+            -s "config.jwksUrl=https://${spoke_lower}-keycloak-${spoke_lower}-1:8443/realms/${spoke_realm}/protocol/openid-connect/certs" \
             -s "config.issuer=https://localhost:${kc_port}/realms/${spoke_realm}" \
             -s "config.clientId=${spoke_client}" \
             -s "config.clientSecret=${client_secret}" \
             -s "config.defaultScope=openid profile email" \
             -s "config.syncMode=INHERIT" \
             -s "config.validateSignature=true" \
-            -s "config.useJwksUrl=true" 2>/dev/null; then
+            -s "config.useJwksUrl=true" \
+            -s "config.pkceEnabled=true" \
+            -s "config.pkceMethod=S256" 2>/dev/null; then
             log_success "Created IdP: ${spoke_idp}"
         else
             log_error "Failed to create IdP: ${spoke_idp}"
