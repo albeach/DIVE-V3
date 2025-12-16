@@ -1638,6 +1638,275 @@ delete_federated_user() {
 }
 
 # =============================================================================
+# HUB REGISTRATION - Register spoke as IdP in Hub
+# =============================================================================
+
+##
+# Register a spoke as an Identity Provider in the Hub
+# This is the CRITICAL step that allows users to login FROM the Hub TO the spoke
+#
+# Creates (idempotently):
+#   1. Hub client for spoke (dive-v3-client-<spoke>)
+#   2. IdP in Hub pointing to spoke (<spoke>-idp)
+#   3. IdP mappers for DIVE attributes
+#   4. Syncs OPA trusted issuers
+#
+# Arguments:
+#   $1 - Spoke code (e.g., ROU, GBR, DNK)
+#
+# Returns:
+#   0 on success, 1 on failure
+##
+register_spoke_in_hub() {
+    local spoke="${1:-}"
+    
+    if [ -z "$spoke" ]; then
+        log_error "Usage: register_spoke_in_hub <spoke>"
+        return 1
+    fi
+    
+    local spoke_upper=$(upper "$spoke")
+    local spoke_lower=$(lower "$spoke")
+    local spoke_realm="dive-v3-broker-${spoke_lower}"
+    local spoke_client="dive-v3-client-${spoke_lower}"
+    local spoke_idp="${spoke_lower}-idp"
+    local spoke_display_name=$(get_country_name "$spoke_upper" 2>/dev/null || echo "$spoke_upper")
+    
+    echo -e "\n${BOLD}Registering ${spoke_upper} (${spoke_display_name}) in Hub${NC}\n"
+    
+    # Get spoke ports from docker-compose
+    local spoke_dir="${DIVE_ROOT}/instances/${spoke_lower}"
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Spoke directory not found: $spoke_dir"
+        return 1
+    fi
+    
+    # Parse ports from docker-compose.yml
+    eval "$(_get_spoke_ports_fed "$spoke")"
+    local kc_port="${SPOKE_KEYCLOAK_PORT:-8443}"
+    local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
+    
+    echo "  Spoke Ports:"
+    echo "    Frontend:  $frontend_port"
+    echo "    Keycloak:  $kc_port"
+    echo ""
+    
+    # Step 1: Authenticate to Hub Keycloak
+    echo -e "  ${BOLD}[1/5] Authenticating to Hub Keycloak...${NC}"
+    
+    local hub_pass=""
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        hub_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2)
+    elif [ -f "${DIVE_ROOT}/instances/usa/.env" ]; then
+        hub_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD" "${DIVE_ROOT}/instances/usa/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    
+    if [ -z "$hub_pass" ]; then
+        log_error "Cannot find Hub admin password"
+        return 1
+    fi
+    
+    # Configure kcadm for Hub
+    if ! docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin --password "$hub_pass" 2>/dev/null; then
+        log_error "Failed to authenticate to Hub Keycloak"
+        return 1
+    fi
+    log_success "Authenticated to Hub Keycloak"
+    
+    # Step 2: Create or verify Hub client for spoke
+    echo -e "  ${BOLD}[2/5] Creating Hub client: ${spoke_client}...${NC}"
+    
+    local existing_client
+    existing_client=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
+        -r "$HUB_REALM" -q "clientId=${spoke_client}" --fields id 2>/dev/null | jq -r '.[0].id // empty')
+    
+    if [ -n "$existing_client" ]; then
+        log_info "Client already exists: ${spoke_client}"
+    else
+        # Create the client
+        if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create clients \
+            -r "$HUB_REALM" \
+            -s "clientId=${spoke_client}" \
+            -s enabled=true \
+            -s protocol=openid-connect \
+            -s publicClient=false \
+            -s standardFlowEnabled=true \
+            -s directAccessGrantsEnabled=false \
+            -s serviceAccountsEnabled=false \
+            -s "redirectUris=[\"https://localhost:${kc_port}/realms/${spoke_realm}/broker/usa-idp/endpoint\",\"https://localhost:${frontend_port}/*\",\"https://${spoke_lower}-app.dive25.com/*\"]" \
+            -s "webOrigins=[\"https://localhost:${kc_port}\",\"https://localhost:${frontend_port}\",\"https://${spoke_lower}-app.dive25.com\"]" \
+            -s "attributes={\"post.logout.redirect.uris\":\"https://localhost:${kc_port}/*##https://localhost:${frontend_port}/*\"}" 2>/dev/null; then
+            log_success "Created client: ${spoke_client}"
+        else
+            log_error "Failed to create client: ${spoke_client}"
+            return 1
+        fi
+    fi
+    
+    # Get client UUID and secret
+    local client_uuid
+    client_uuid=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
+        -r "$HUB_REALM" -q "clientId=${spoke_client}" --fields id 2>/dev/null | jq -r '.[0].id')
+    
+    local client_secret
+    client_secret=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
+        "clients/${client_uuid}/client-secret" -r "$HUB_REALM" 2>/dev/null | jq -r '.value')
+    
+    echo "        Client UUID: ${client_uuid}"
+    echo "        Client Secret: ${client_secret:0:8}..."
+    
+    # Step 3: Create or verify IdP in Hub
+    echo -e "  ${BOLD}[3/5] Creating IdP in Hub: ${spoke_idp}...${NC}"
+    
+    local existing_idp
+    existing_idp=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
+        "identity-provider/instances/${spoke_idp}" -r "$HUB_REALM" 2>/dev/null | jq -r '.alias // empty')
+    
+    if [ -n "$existing_idp" ]; then
+        log_info "IdP already exists: ${spoke_idp}"
+        # Update the client secret in case it changed
+        docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh update \
+            "identity-provider/instances/${spoke_idp}" -r "$HUB_REALM" \
+            -s "config.clientSecret=${client_secret}" 2>/dev/null
+        log_success "Updated IdP client secret"
+    else
+        # Create the IdP
+        if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create identity-provider/instances \
+            -r "$HUB_REALM" \
+            -s "alias=${spoke_idp}" \
+            -s providerId=oidc \
+            -s enabled=true \
+            -s "displayName=${spoke_display_name}" \
+            -s trustEmail=true \
+            -s storeToken=false \
+            -s addReadTokenRoleOnCreate=false \
+            -s authenticateByDefault=false \
+            -s linkOnly=false \
+            -s 'firstBrokerLoginFlowAlias=first broker login' \
+            -s "config.authorizationUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/auth" \
+            -s "config.tokenUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/token" \
+            -s "config.userInfoUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
+            -s "config.jwksUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/certs" \
+            -s "config.issuer=https://localhost:${kc_port}/realms/${spoke_realm}" \
+            -s "config.clientId=${spoke_client}" \
+            -s "config.clientSecret=${client_secret}" \
+            -s "config.defaultScope=openid profile email" \
+            -s "config.syncMode=INHERIT" \
+            -s "config.validateSignature=true" \
+            -s "config.useJwksUrl=true" 2>/dev/null; then
+            log_success "Created IdP: ${spoke_idp}"
+        else
+            log_error "Failed to create IdP: ${spoke_idp}"
+            return 1
+        fi
+    fi
+    
+    # Step 4: Create IdP mappers for DIVE attributes
+    echo -e "  ${BOLD}[4/5] Creating IdP mappers for DIVE attributes...${NC}"
+    
+    local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
+    local mapper_count=0
+    
+    for mapper in "${mappers[@]}"; do
+        # Check if mapper exists
+        local existing_mapper
+        existing_mapper=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
+            "identity-provider/instances/${spoke_idp}/mappers" -r "$HUB_REALM" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty")
+        
+        if [ -n "$existing_mapper" ]; then
+            continue
+        fi
+        
+        # Create mapper
+        if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create \
+            "identity-provider/instances/${spoke_idp}/mappers" -r "$HUB_REALM" \
+            -s "name=${mapper}" \
+            -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
+            -s "identityProviderAlias=${spoke_idp}" \
+            -s "config.syncMode=INHERIT" \
+            -s "config.claim=${mapper}" \
+            -s "config.user.attribute=${mapper}" 2>/dev/null; then
+            mapper_count=$((mapper_count + 1))
+        fi
+    done
+    
+    if [ "$mapper_count" -gt 0 ]; then
+        log_success "Created ${mapper_count} IdP mappers"
+    else
+        log_info "All IdP mappers already exist"
+    fi
+    
+    # Step 5: Sync OPA trusted issuers
+    echo -e "  ${BOLD}[5/5] Syncing OPA trusted issuers...${NC}"
+    
+    sync_opa_trusted_issuers "$spoke" 2>/dev/null || log_warn "OPA sync may require manual review"
+    
+    echo ""
+    echo -e "${GREEN}✓${NC} ${spoke_upper} (${spoke_display_name}) registered in Hub successfully"
+    echo ""
+    echo "  Hub IdP:        ${spoke_idp}"
+    echo "  Hub Client:     ${spoke_client}"
+    echo "  Spoke Realm:    ${spoke_realm}"
+    echo "  Issuer URL:     https://localhost:${kc_port}/realms/${spoke_realm}"
+    echo ""
+    
+    return 0
+}
+
+##
+# Register all running spokes in the Hub
+# Scans for running spoke containers and registers each one
+##
+register_all_spokes_in_hub() {
+    echo -e "\n${BOLD}Registering all running spokes in Hub${NC}\n"
+    
+    local spokes=()
+    local spoke_dirs=("${DIVE_ROOT}/instances"/*)
+    
+    for dir in "${spoke_dirs[@]}"; do
+        local code=$(basename "$dir")
+        # Skip usa (hub) and non-directories
+        [ "$code" = "usa" ] && continue
+        [ ! -d "$dir" ] && continue
+        
+        local code_lower=$(lower "$code")
+        local kc_container="${code_lower}-keycloak-${code_lower}-1"
+        
+        # Check if Keycloak container is running
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${kc_container}$"; then
+            spokes+=("$code")
+        fi
+    done
+    
+    if [ ${#spokes[@]} -eq 0 ]; then
+        log_warn "No running spoke Keycloaks found"
+        return 0
+    fi
+    
+    echo "Found ${#spokes[@]} running spokes: ${spokes[*]}"
+    echo ""
+    
+    local success=0
+    local failed=0
+    
+    for spoke in "${spokes[@]}"; do
+        if register_spoke_in_hub "$spoke"; then
+            success=$((success + 1))
+        else
+            failed=$((failed + 1))
+        fi
+    done
+    
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════════════"
+    echo -e "  Registration Complete: ${GREEN}${success} succeeded${NC}, ${RED}${failed} failed${NC}"
+    echo "═══════════════════════════════════════════════════════════════════════════"
+    
+    return $failed
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1646,6 +1915,12 @@ module_federation_setup() {
     shift || true
     
     case "$action" in
+        register-hub)
+            register_spoke_in_hub "$@"
+            ;;
+        register-hub-all)
+            register_all_spokes_in_hub
+            ;;
         configure)
             configure_spoke_federation "$@"
             ;;
@@ -1712,43 +1987,54 @@ module_federation_setup() {
 module_federation_setup_help() {
     echo -e "${BOLD}Federation Setup Commands:${NC}"
     echo ""
-    echo "  ${CYAN}configure${NC} <spoke>         Complete federation setup for spoke (5 steps)"
-    echo "  ${CYAN}configure-all${NC}             Configure federation for all spokes"
+    echo -e "  ${YELLOW}═══ HUB REGISTRATION (Bidirectional Federation) ═══${NC}"
+    echo "  ${CYAN}register-hub${NC} <spoke>      Register spoke as IdP in Hub (CRITICAL!)"
+    echo "  ${CYAN}register-hub-all${NC}          Register all running spokes in Hub"
+    echo ""
+    echo -e "  ${YELLOW}═══ SPOKE CONFIGURATION ═══${NC}"
+    echo "  ${CYAN}configure${NC} <spoke>         Configure spoke to federate with Hub (5 steps)"
+    echo "  ${CYAN}configure-all${NC}             Configure all spokes"
     echo ""
     echo "  ${CYAN}configure-idp${NC} <spoke>     Configure usa-idp with Hub secret"
     echo "  ${CYAN}update-spoke-uris${NC} <spoke> Update spoke client redirect URIs"
     echo "  ${CYAN}update-hub-uris${NC} <spoke>   Update Hub client redirect URIs"
     echo "  ${CYAN}sync-env${NC} <spoke>          Sync .env with correct secrets"
-    echo ""
-    echo "  ${CYAN}get-hub-secret${NC} <spoke>    Get Hub client secret for spoke"
-    echo "  ${CYAN}get-spoke-secret${NC} <spoke>  Get local client secret from spoke"
     echo "  ${CYAN}recreate-frontend${NC} <spoke> Recreate frontend to load new secrets"
     echo ""
+    echo -e "  ${YELLOW}═══ OPA POLICY SYNC ═══${NC}"
     echo "  ${CYAN}sync-opa${NC} <spoke>          Sync spoke to OPA trusted issuers"
-    echo "  ${CYAN}sync-opa-all${NC}              Sync all spokes to OPA trusted issuers"
+    echo "  ${CYAN}sync-opa-all${NC}              Sync all spokes to OPA"
     echo ""
-    echo "  ${CYAN}fix-issuer${NC} <spoke>        Fix realm issuer URL to match port mapping"
-    echo "  ${CYAN}fix-issuer-all${NC}            Fix realm issuer for all running spokes"
-    echo ""
+    echo -e "  ${YELLOW}═══ CLAIM PASSTHROUGH ═══${NC}"
     echo "  ${CYAN}setup-claims${NC} <spoke>      Setup DIVE claim passthrough (scopes + mappers)"
     echo "  ${CYAN}assign-scopes${NC} <spoke>     Assign DIVE scopes to Hub client"
     echo "  ${CYAN}create-mappers${NC} <spoke>    Create IdP mappers in spoke for usa-idp"
     echo ""
+    echo -e "  ${YELLOW}═══ TROUBLESHOOTING ═══${NC}"
+    echo "  ${CYAN}fix-issuer${NC} <spoke>        Fix realm issuer URL to match port mapping"
+    echo "  ${CYAN}fix-issuer-all${NC}            Fix realm issuer for all running spokes"
+    echo "  ${CYAN}delete-user${NC} <spoke> <user> Delete federated user (force re-sync)"
+    echo ""
+    echo -e "  ${YELLOW}═══ VERIFICATION ═══${NC}"
     echo "  ${CYAN}verify${NC} <spoke>            Verify federation configuration"
-    echo "  ${CYAN}verify-all${NC}                Verify federation for all spokes"
+    echo "  ${CYAN}verify-all${NC}                Verify all spokes"
+    echo ""
+    echo -e "  ${YELLOW}═══ SECRETS ═══${NC}"
+    echo "  ${CYAN}get-hub-secret${NC} <spoke>    Get Hub client secret for spoke"
+    echo "  ${CYAN}get-spoke-secret${NC} <spoke>  Get local client secret from spoke"
     echo ""
     echo "Examples:"
-    echo "  ./dive federation-setup configure alb    # Full 5-step setup for ALB"
-    echo "  ./dive federation-setup configure-all    # Full setup for all spokes"
-    echo "  ./dive federation-setup sync-opa-all     # Sync all spokes to OPA"
-    echo "  ./dive federation-setup fix-issuer gbr   # Fix realm issuer for GBR"
-    echo "  ./dive federation-setup verify alb       # Verify ALB federation"
-    echo "  ./dive federation-setup verify-all       # Verify all spokes"
+    echo "  ./dive federation-setup register-hub rou  # Register ROU in Hub (bidirectional)"
+    echo "  ./dive federation-setup register-hub-all  # Register ALL spokes in Hub"
+    echo "  ./dive federation-setup configure rou     # Configure ROU to federate with Hub"
+    echo "  ./dive federation-setup sync-opa-all      # Sync all OPA trusted issuers"
+    echo "  ./dive federation-setup verify-all        # Verify all federation"
     echo ""
-    echo "Port Convention (NATO standard):"
-    echo "  Frontend:     3000 + offset (USA=0, ALB=1, BEL=2, ...)"
-    echo "  Backend:      4000 + offset"
-    echo "  Keycloak:     8443 + offset"
+    echo "Complete New Spoke Setup:"
+    echo "  1. ./dive spoke deploy <code>              # Deploy spoke infrastructure"
+    echo "  2. ./dive federation-setup register-hub <code>  # Register in Hub"
+    echo "  3. ./dive federation-setup configure <code>     # Configure federation"
+    echo "  4. ./dive federation-setup verify <code>        # Verify setup"
     echo ""
 }
 
