@@ -28,6 +28,7 @@ volumes:
   hub_postgres_data:
   hub_mongodb_data:
   hub_redis_data:
+  hub_redis_blacklist_data:
   hub_frontend_node_modules:
   hub_frontend_next:
   hub_authzforce_data:
@@ -77,19 +78,120 @@ services:
       retries: 5
 
   # ---------------------------------------------------------------------------
-  # Redis - session/blacklist cache
+  # Redis - session/blacklist cache (Hardened)
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_USA:-}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --loglevel notice
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    environment:
+      REDIS_PASSWORD_USA: ${REDIS_PASSWORD_USA:-}
     networks:
       - hub-internal
+    volumes:
+      - hub_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_USA:-}", "ping"]
       interval: 10s
       timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis Exporter - Prometheus metrics
+  # ---------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD_USA:-}
+      REDIS_EXPORTER_LOG_FORMAT: json
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9121/metrics"]
+      interval: 30s
+      timeout: 10s
       retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Redis Blacklist - Shared token blacklist across federation
+  # ---------------------------------------------------------------------------
+  redis-blacklist:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_BLACKLIST:-}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --loglevel notice
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    environment:
+      REDIS_PASSWORD_BLACKLIST: ${REDIS_PASSWORD_BLACKLIST:-}
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
+    volumes:
+      - hub_redis_blacklist_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST:-}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "127.0.0.1:6380:6379"
+
+  # ---------------------------------------------------------------------------
+  # Redis Blacklist Exporter - Prometheus metrics for blacklist
+  # ---------------------------------------------------------------------------
+  redis-blacklist-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis-blacklist:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD_BLACKLIST:-}
+      REDIS_EXPORTER_LOG_FORMAT: json
+    networks:
+      - hub-internal
+    depends_on:
+      redis-blacklist:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9121/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
   # ---------------------------------------------------------------------------
   # Keycloak - Identity Broker
@@ -204,13 +306,17 @@ services:
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Redis configuration
+      REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
+      REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
+      # Shared blacklist Redis
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@redis-blacklist:6379
       # Spoke Keycloak admin passwords (for bidirectional federation)
       # Local dev: Set in .env.hub
       # Production: Retrieved from GCP Secret Manager via secrets load
       KEYCLOAK_ADMIN_PASSWORD_GBR: ${KEYCLOAK_ADMIN_PASSWORD_GBR}
       KEYCLOAK_ADMIN_PASSWORD_FRA: ${KEYCLOAK_ADMIN_PASSWORD_FRA}
       KEYCLOAK_ADMIN_PASSWORD_DEU: ${KEYCLOAK_ADMIN_PASSWORD_DEU}
-      REDIS_URL: redis://redis:6379
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       OPAL_SERVER_URL: https://opal-server:7002
@@ -389,7 +495,7 @@ services:
     stop_grace_period: 30s
     environment:
       # Use Redis as broadcast backend for pub/sub
-      OPAL_BROADCAST_URI: redis://redis:6379
+      OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@redis:6379
       # Git-based policy distribution - policies from GitHub repo
       OPAL_REPO_WATCHER_ENABLED: "true"
       OPAL_POLICY_REPO_URL: https://github.com/albeach/dive-v3-policies.git

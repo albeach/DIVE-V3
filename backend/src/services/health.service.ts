@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { MongoClient } from 'mongodb';
+import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 import { getAllCircuitBreakerStats, CircuitState } from '../utils/circuit-breaker';
 import { authzCacheService } from './authz-cache.service';
@@ -50,6 +51,7 @@ export interface IDetailedHealth extends IBasicHealth {
         mongodb: IServiceHealth;
         opa: IServiceHealth;
         keycloak: IServiceHealth;
+        redis?: IServiceHealth;
         kas?: IServiceHealth;
         cache?: IServiceHealth;
     };
@@ -157,6 +159,9 @@ class HealthService {
             this.checkKAS(),
         ]);
 
+        // Check Redis health
+        const redisHealth = await this.checkRedis();
+
         // Check cache health
         const cacheHealthCheck = authzCacheService.isHealthy();
         const cacheHealth: IServiceHealth = {
@@ -198,6 +203,7 @@ class HealthService {
                 mongodb: mongoHealth,
                 opa: opaHealth,
                 keycloak: keycloakHealth,
+                redis: redisHealth,
                 kas: kasHealth,
                 cache: cacheHealth,
             },
@@ -527,6 +533,83 @@ class HealthService {
         }
 
         return info;
+    }
+
+    /**
+     * Check Redis health
+     */
+    private async checkRedis(): Promise<IServiceHealth> {
+        const startTime = Date.now();
+
+        let redisClient: Redis | null = null;
+
+        try {
+            const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+
+            // Create a temporary Redis client for health check
+            redisClient = new Redis(redisUrl, {
+                connectTimeout: 5000,
+                commandTimeout: 5000,
+                maxRetriesPerRequest: 1,
+                lazyConnect: false,
+            });
+
+            // Wait for connection
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Redis connection timeout'));
+                }, 5000);
+
+                redisClient!.once('ready', () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+
+                redisClient!.once('error', (err) => {
+                    clearTimeout(timeout);
+                    reject(err);
+                });
+            });
+
+            // Ping test
+            await redisClient.ping();
+
+            const responseTime = Date.now() - startTime;
+
+            return {
+                status: 'up',
+                responseTime,
+                details: {
+                    mode: 'standalone',
+                    message: 'Redis ping successful',
+                },
+            };
+        } catch (error) {
+            const responseTime = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown Redis error';
+
+            logger.error('Redis health check failed', {
+                error: errorMessage,
+                responseTime,
+            });
+
+            return {
+                status: 'down',
+                responseTime,
+                error: errorMessage,
+                details: {
+                    reason: 'Redis connection failed',
+                },
+            };
+        } finally {
+            if (redisClient) {
+                try {
+                    redisClient.disconnect();
+                } catch (err) {
+                    // Ignore disconnect errors
+                }
+            }
+        }
     }
 }
 

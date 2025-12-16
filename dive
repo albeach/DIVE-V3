@@ -285,7 +285,13 @@ case "$COMMAND" in
                 ;;
         esac
         ;;
-    
+
+    # Redis commands (redis.sh)
+    redis)
+        source "${MODULES_DIR}/redis.sh"
+        module_redis "$@"
+        ;;
+
     # Help
     help|--help|-h)
         source "${MODULES_DIR}/help.sh"
