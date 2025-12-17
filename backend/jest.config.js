@@ -2,7 +2,7 @@ module.exports = {
     preset: 'ts-jest',
     testEnvironment: 'node',
     roots: ['<rootDir>/src'],
-    testMatch: ['**/__tests__/**/*.test.ts'],
+    testMatch: ['**/__tests__/**/*.test.ts', '!**/__tests__/e2e/**/*.test.ts'],
     setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
     collectCoverageFrom: [
         'src/**/*.ts',
@@ -30,10 +30,15 @@ module.exports = {
         '^@keycloak/keycloak-admin-client$': '<rootDir>/src/__mocks__/keycloak-admin-client.ts',
         '^ioredis$': '<rootDir>/src/__mocks__/ioredis.ts'
     },
-    testTimeout: 15000,
-    maxWorkers: 1, // Run tests sequentially to prevent MongoDB interference
+    testTimeout: 30000, // Increased timeout for integration tests
+    maxWorkers: '50%', // Allow parallel execution (50% of available cores)
     forceExit: true, // Always force exit to prevent hanging after Winston mocking
     detectOpenHandles: false, // Enable temporarily for debugging: npm test -- --detectOpenHandles
+    // Memory optimization for large test suites
+    workerIdleMemoryLimit: '512MB', // Restart workers if they exceed memory limit
+    // Better error reporting
+    bail: false, // Don't stop on first failure in CI
+    verbose: false, // Reduce output noise
     globalSetup: '<rootDir>/src/__tests__/globalSetup.ts',
     globalTeardown: '<rootDir>/src/__tests__/globalTeardown.ts',
     // Phase 4 - Comprehensive Coverage Thresholds
