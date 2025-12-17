@@ -292,6 +292,12 @@ case "$COMMAND" in
         module_redis "$@"
         ;;
 
+    # KAS commands (kas.sh)
+    kas)
+        source "${MODULES_DIR}/kas.sh"
+        module_kas "$@"
+        ;;
+
     # Help
     help|--help|-h)
         source "${MODULES_DIR}/help.sh"
