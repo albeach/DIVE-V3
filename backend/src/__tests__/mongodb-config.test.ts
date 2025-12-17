@@ -121,28 +121,34 @@ describe('MongoDB Config Utils', () => {
 
             it('should return production database when NODE_ENV is production', () => {
                 delete process.env.MONGODB_DATABASE;
+                delete process.env.MONGODB_URI;
+                delete process.env.MONGODB_URL;
                 process.env.NODE_ENV = 'production';
-                
+
                 const result = getMongoDBName();
-                
+
                 expect(result).toBe('dive-v3');
             });
 
             it('should return production database when NODE_ENV is development', () => {
                 delete process.env.MONGODB_DATABASE;
+                delete process.env.MONGODB_URI;
+                delete process.env.MONGODB_URL;
                 process.env.NODE_ENV = 'development';
-                
+
                 const result = getMongoDBName();
-                
+
                 expect(result).toBe('dive-v3');
             });
 
             it('should return production database when NODE_ENV not set', () => {
                 delete process.env.MONGODB_DATABASE;
+                delete process.env.MONGODB_URI;
+                delete process.env.MONGODB_URL;
                 delete process.env.NODE_ENV;
-                
+
                 const result = getMongoDBName();
-                
+
                 expect(result).toBe('dive-v3');
             });
         });
