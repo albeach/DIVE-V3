@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { adminToast } from '@/lib/admin-toast';
 import { exportUsers } from '@/lib/export-utils';
+import type { IAdminUser } from '@/types/admin.types';
 import { auditActions } from '@/lib/admin-audit';
 
 // ============================================
@@ -84,7 +85,7 @@ const AVAILABLE_ROLES = ['dive-user', 'dive-admin', 'super_admin'];
 
 export default function UserList() {
   const { data: session } = useSession();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<IAdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function UserList() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUser, setSelectedUser] = useState<IAdminUser | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
   // Form state
@@ -139,7 +140,7 @@ export default function UserList() {
 
       const data = await response.json();
       if (data.success && data.data?.users) {
-        setUsers(data.data.users);
+        setUsers(data.data.users as IAdminUser[]);
       } else if (Array.isArray(data)) {
         setUsers(data);
       } else {
@@ -309,7 +310,7 @@ export default function UserList() {
     });
   };
 
-  const openEditModal = (user: User) => {
+  const openEditModal = (user: IAdminUser) => {
     setSelectedUser(user);
     setFormData({
       username: user.username,
@@ -319,8 +320,8 @@ export default function UserList() {
       password: '',
       confirmPassword: '',
       enabled: user.enabled,
-      clearance: user.attributes?.clearance?.[0] || 'UNCLASSIFIED',
-      countryOfAffiliation: user.attributes?.countryOfAffiliation?.[0] || 'USA',
+      clearance: user.clearance || 'UNCLASSIFIED',
+      countryOfAffiliation: user.countryOfAffiliation || 'USA',
       roles: user.realmRoles || ['dive-user'],
     });
     setShowEditModal(true);
@@ -408,7 +409,7 @@ export default function UserList() {
         </div>
         <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border border-orange-100">
           <div className="text-2xl font-bold text-orange-700">
-            {users.filter(u => u.attributes?.clearance?.[0] === 'SECRET' || u.attributes?.clearance?.[0] === 'TOP_SECRET').length}
+            {users.filter(u => u.clearance === 'SECRET' || u.clearance === 'TOP_SECRET').length}
           </div>
           <div className="text-sm text-orange-600">Cleared (S/TS)</div>
         </div>
@@ -489,15 +490,15 @@ export default function UserList() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getClearanceBadgeColor(user.attributes?.clearance?.[0] || 'UNCLASSIFIED')}`}>
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getClearanceBadgeColor(user.clearance || 'UNCLASSIFIED')}`}>
                         <Shield className="h-3 w-3 mr-1" />
-                        {user.attributes?.clearance?.[0] || 'UNCLASSIFIED'}
+                        {user.clearance || 'UNCLASSIFIED'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1 text-sm text-gray-700">
                         <Globe className="h-4 w-4 text-gray-400" />
-                        {user.attributes?.countryOfAffiliation?.[0] || 'N/A'}
+                        {user.countryOfAffiliation || 'N/A'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -868,18 +869,18 @@ export default function UserList() {
 // Mock Data Generator
 // ============================================
 
-function generateMockUsers(): User[] {
+function generateMockUsers(): IAdminUser[] {
   const clearances = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
   const countries = ['USA', 'GBR', 'FRA', 'CAN', 'DEU'];
   const roles = [['dive-user'], ['dive-user', 'dive-admin'], ['dive-user', 'dive-admin', 'super_admin']];
   
   return [
-    { id: '1', username: 'testuser-usa-1', firstName: 'Test', lastName: 'User 1', email: 'testuser1@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 30, attributes: { clearance: ['UNCLASSIFIED'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-1-001'] }, realmRoles: ['dive-user'] },
-    { id: '2', username: 'testuser-usa-2', firstName: 'Test', lastName: 'User 2', email: 'testuser2@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 25, attributes: { clearance: ['CONFIDENTIAL'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-2-001'] }, realmRoles: ['dive-user'] },
-    { id: '3', username: 'testuser-usa-3', firstName: 'Test', lastName: 'User 3', email: 'testuser3@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 20, attributes: { clearance: ['SECRET'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-3-001'] }, realmRoles: ['dive-user'] },
-    { id: '4', username: 'testuser-usa-4', firstName: 'Test', lastName: 'User 4', email: 'testuser4@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 15, attributes: { clearance: ['TOP_SECRET'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-4-001'] }, realmRoles: ['dive-user'] },
-    { id: '5', username: 'admin-usa', firstName: 'Admin', lastName: 'USA', email: 'admin@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 60, attributes: { clearance: ['TOP_SECRET'], countryOfAffiliation: ['USA'], uniqueID: ['admin-usa-001'] }, realmRoles: ['dive-user', 'dive-admin', 'super_admin'] },
-    { id: '6', username: 'testuser-gbr-1', firstName: 'British', lastName: 'User', email: 'user@mod.uk', enabled: true, emailVerified: false, createdTimestamp: Date.now() - 86400000 * 10, attributes: { clearance: ['SECRET'], countryOfAffiliation: ['GBR'], uniqueID: ['testuser-gbr-1-001'] }, realmRoles: ['dive-user'] },
-    { id: '7', username: 'testuser-fra-1', firstName: 'French', lastName: 'User', email: 'user@defense.gouv.fr', enabled: false, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 5, attributes: { clearance: ['CONFIDENTIAL'], countryOfAffiliation: ['FRA'], uniqueID: ['testuser-fra-1-001'] }, realmRoles: ['dive-user'] },
+    { id: '1', username: 'testuser-usa-1', firstName: 'Test', lastName: 'User 1', email: 'testuser1@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), clearance: 'UNCLASSIFIED', countryOfAffiliation: 'USA', uniqueID: 'testuser-usa-1-001', realmRoles: ['dive-user'] },
+    { id: '2', username: 'testuser-usa-2', firstName: 'Test', lastName: 'User 2', email: 'testuser2@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 25).toISOString(), clearance: 'CONFIDENTIAL', countryOfAffiliation: 'USA', uniqueID: 'testuser-usa-2-001', realmRoles: ['dive-user'] },
+    { id: '3', username: 'testuser-usa-3', firstName: 'Test', lastName: 'User 3', email: 'testuser3@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 20).toISOString(), clearance: 'SECRET', countryOfAffiliation: 'USA', uniqueID: 'testuser-usa-3-001', realmRoles: ['dive-user'] },
+    { id: '4', username: 'testuser-usa-4', firstName: 'Test', lastName: 'User 4', email: 'testuser4@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 15).toISOString(), clearance: 'TOP_SECRET', countryOfAffiliation: 'USA', uniqueID: 'testuser-usa-4-001', realmRoles: ['dive-user'] },
+    { id: '5', username: 'admin-usa', firstName: 'Admin', lastName: 'USA', email: 'admin@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 60).toISOString(), clearance: 'TOP_SECRET', countryOfAffiliation: 'USA', uniqueID: 'admin-usa-001', realmRoles: ['dive-user', 'dive-admin', 'super_admin'] },
+    { id: '6', username: 'testuser-gbr-1', firstName: 'British', lastName: 'User', email: 'user@mod.uk', enabled: true, emailVerified: false, createdAt: new Date(Date.now() - 86400000 * 10).toISOString(), clearance: 'SECRET', countryOfAffiliation: 'GBR', uniqueID: 'testuser-gbr-1-001', realmRoles: ['dive-user'] },
+    { id: '7', username: 'testuser-fra-1', firstName: 'French', lastName: 'User', email: 'user@defense.gouv.fr', enabled: false, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 5).toISOString(), clearance: 'CONFIDENTIAL', countryOfAffiliation: 'FRA', uniqueID: 'testuser-fra-1-001', realmRoles: ['dive-user'] },
   ];
 }

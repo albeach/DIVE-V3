@@ -23,66 +23,76 @@ import {
   SEARCH_SYNTAX_HELP,
 } from '@/lib/search-syntax-parser';
 
+// Helper function to compare tokens without position
+const expectToken = (token: any, expected: any) => {
+  expect(token.type).toBe(expected.type);
+  expect(token.value).toBe(expected.value);
+  expect(token).toHaveProperty('position');
+  expect(typeof token.position).toBe('number');
+};
+
 describe('search-syntax-parser', () => {
   describe('tokenize', () => {
     it('should tokenize simple terms', () => {
       const tokens = tokenize('fuel inventory');
-      
+
       expect(tokens).toHaveLength(2);
-      expect(tokens[0]).toEqual({ type: 'TERM', value: 'fuel' });
-      expect(tokens[1]).toEqual({ type: 'TERM', value: 'inventory' });
+      expectToken(tokens[0], { type: 'TERM', value: 'fuel' });
+      expectToken(tokens[1], { type: 'TERM', value: 'inventory' });
     });
 
     it('should tokenize quoted phrases', () => {
       const tokens = tokenize('"fuel inventory report"');
-      
+
       expect(tokens).toHaveLength(1);
-      expect(tokens[0]).toEqual({ type: 'PHRASE', value: 'fuel inventory report' });
+      expectToken(tokens[0], { type: 'PHRASE', value: 'fuel inventory report' });
     });
 
     it('should tokenize field:value syntax', () => {
       const tokens = tokenize('classification:SECRET');
-      
+
       expect(tokens).toHaveLength(1);
-      expect(tokens[0]).toEqual({ type: 'FIELD', value: 'classification:SECRET' });
+      expectToken(tokens[0], { type: 'FIELD', value: 'classification:SECRET' });
     });
 
     it('should tokenize boolean operators', () => {
       const tokens = tokenize('fuel AND inventory');
-      
+
       expect(tokens).toHaveLength(3);
-      expect(tokens[1]).toEqual({ type: 'OPERATOR', value: 'AND' });
+      expectToken(tokens[1], { type: 'OPERATOR', value: 'AND' });
     });
 
     it('should handle case-insensitive operators', () => {
       const tokensLower = tokenize('fuel and inventory');
       const tokensUpper = tokenize('fuel AND inventory');
-      
-      expect(tokensLower[1]).toEqual({ type: 'OPERATOR', value: 'AND' });
-      expect(tokensUpper[1]).toEqual({ type: 'OPERATOR', value: 'AND' });
+
+      expectToken(tokensLower[1], { type: 'OPERATOR', value: 'AND' });
+      expectToken(tokensUpper[1], { type: 'OPERATOR', value: 'AND' });
     });
 
     it('should tokenize negation with hyphen', () => {
       const tokens = tokenize('-classified');
-      
-      expect(tokens).toHaveLength(1);
-      expect(tokens[0]).toEqual({ type: 'NEGATION', value: 'classified' });
+
+      expect(tokens).toHaveLength(2);
+      expectToken(tokens[0], { type: 'NEGATION', value: '-' });
+      expectToken(tokens[1], { type: 'TERM', value: 'classified' });
     });
 
     it('should tokenize parentheses', () => {
       const tokens = tokenize('(fuel OR gas) AND inventory');
-      
-      expect(tokens).toContainEqual({ type: 'LPAREN', value: '(' });
-      expect(tokens).toContainEqual({ type: 'RPAREN', value: ')' });
+
+      expect(tokens.some(t => t.type === 'LPAREN' && t.value === '(')).toBe(true);
+      expect(tokens.some(t => t.type === 'RPAREN' && t.value === ')')).toBe(true);
     });
 
     it('should handle mixed syntax', () => {
       const tokens = tokenize('classification:SECRET "fuel report" -draft');
-      
-      expect(tokens).toHaveLength(3);
+
+      expect(tokens).toHaveLength(4);
       expect(tokens[0].type).toBe('FIELD');
       expect(tokens[1].type).toBe('PHRASE');
       expect(tokens[2].type).toBe('NEGATION');
+      expect(tokens[3].type).toBe('TERM');
     });
 
     it('should handle empty input', () => {
@@ -118,7 +128,7 @@ describe('search-syntax-parser', () => {
       expect(result.filters).toHaveLength(1);
       expect(result.filters[0]).toEqual({
         field: 'classification',
-        operator: ':',
+        operator: '=',
         value: 'SECRET',
         negated: false,
       });

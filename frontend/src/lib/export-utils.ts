@@ -13,6 +13,8 @@
  *   exportToJSON(logs, 'audit-logs');
  */
 
+import type { IAdminUser } from '@/types/admin.types';
+
 // ============================================
 // Types
 // ============================================
@@ -53,10 +55,10 @@ export function exportToCSV<T extends Record<string, unknown>>(
 
   // Determine columns from first row if not specified
   const cols = columns || Object.keys(data[0]);
-  
+
   // Build header row
   const headerRow = cols.map(col => headers[col] || formatColumnHeader(col)).join(',');
-  
+
   // Build data rows
   const rows = data.map(row => {
     return cols.map(col => {
@@ -67,7 +69,7 @@ export function exportToCSV<T extends Record<string, unknown>>(
 
   // Combine header and rows
   const csv = [headerRow, ...rows].join('\n');
-  
+
   // Generate filename with timestamp
   const finalFilename = includeTimestamp
     ? `${filename}-${getTimestamp()}.csv`
@@ -88,7 +90,7 @@ export function exportToJSON<T>(
   const { includeTimestamp = true } = options;
 
   const json = JSON.stringify(data, null, 2);
-  
+
   const finalFilename = includeTimestamp
     ? `${filename}-${getTimestamp()}.json`
     : `${filename}.json`;
@@ -157,7 +159,7 @@ export function exportAuditLogs(
  * Export users
  */
 export function exportUsers(
-  users: UserEntry[],
+  users: IAdminUser[],
   filename = 'users'
 ): void {
   // Flatten nested attributes for export
@@ -169,10 +171,10 @@ export function exportUsers(
     email: user.email,
     enabled: user.enabled,
     emailVerified: user.emailVerified,
-    clearance: user.attributes?.clearance?.[0] || '',
-    countryOfAffiliation: user.attributes?.countryOfAffiliation?.[0] || '',
+    clearance: user.clearance || '',
+    countryOfAffiliation: user.countryOfAffiliation || '',
     roles: (user.realmRoles || []).join('; '),
-    createdAt: new Date(user.createdTimestamp).toISOString(),
+    createdAt: user.createdAt || new Date().toISOString(),
   }));
 
   exportToCSV(flattenedUsers, filename, {
@@ -334,7 +336,7 @@ function formatCSVValue(value: unknown, dateFormat: 'iso' | 'locale' | 'unix'): 
   }
 
   const strValue = String(value);
-  
+
   // Escape values containing commas, quotes, or newlines
   if (strValue.includes(',') || strValue.includes('"') || strValue.includes('\n')) {
     return `"${strValue.replace(/"/g, '""')}"`;
@@ -346,14 +348,14 @@ function formatCSVValue(value: unknown, dateFormat: 'iso' | 'locale' | 'unix'): 
 function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
   const parts = path.split('.');
   let current: unknown = obj;
-  
+
   for (const part of parts) {
     if (current === null || current === undefined) {
       return undefined;
     }
     current = (current as Record<string, unknown>)[part];
   }
-  
+
   return current;
 }
 

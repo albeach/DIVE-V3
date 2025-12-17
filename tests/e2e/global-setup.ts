@@ -10,12 +10,12 @@
 import { chromium, request, FullConfig, APIRequestContext } from '@playwright/test';
 import { execSync } from 'node:child_process';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://localhost:3000';
-const BACKEND_URL = process.env.BACKEND_URL || 'https://localhost:4000';
-const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'https://localhost:8443';
-const KEYCLOAK_HEALTH_URL = process.env.KEYCLOAK_HEALTH_URL || 'https://localhost:9000/health/ready';
-const OPA_URL = process.env.OPA_URL || 'https://localhost:8181';
-const OPAL_URL = process.env.OPAL_URL || 'https://localhost:7002';
+const FRONTEND_URL = process.env.FRONTEND_URL || (process.env.CI ? 'https://localhost:3000' : 'http://localhost:3000');
+const BACKEND_URL = process.env.BACKEND_URL || (process.env.CI ? 'https://localhost:4000' : 'http://localhost:4000');
+const KEYCLOAK_URL = process.env.KEYCLOAK_URL || (process.env.CI ? 'https://localhost:8443' : 'http://localhost:8080');
+const KEYCLOAK_HEALTH_URL = process.env.KEYCLOAK_HEALTH_URL || (process.env.CI ? 'https://localhost:9000/health/ready' : 'http://localhost:8080/health/ready');
+const OPA_URL = process.env.OPA_URL || (process.env.CI ? 'https://localhost:8181' : 'http://localhost:8181');
+const OPAL_URL = process.env.OPAL_URL || (process.env.CI ? 'https://localhost:7002' : 'http://localhost:7002');
 
 const BOOTSTRAP_CMD = process.env.E2E_BOOTSTRAP_CMD || './dive hub bootstrap';
 

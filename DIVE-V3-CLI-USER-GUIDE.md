@@ -1454,7 +1454,7 @@ Retrieve local client secret from spoke's Keycloak.
 
 ## Testing Suite
 
-Phase 6 comprehensive testing framework.
+Phase 6 comprehensive testing framework with dynamic Playwright testing for hub-spoke architectures.
 
 ### `test federation` - Run Federation E2E Tests
 
@@ -1474,13 +1474,96 @@ Execute backend unit test suite.
 ./dive test unit
 ```
 
-### `test all` - Run All Tests
+### `test playwright` - Run Dynamic Playwright E2E Tests
 
-Complete test suite (unit + E2E).
+Run intelligent Playwright tests that automatically detect and test all running hub-spoke instances.
+
+```bash
+# Test all detected instances sequentially
+./dive test playwright
+
+# Test with federation features
+./dive test playwright --federation
+
+# Preview what would run (dry run)
+./dive test playwright --dry-run --verbose
+```
+
+**Features:**
+- Auto-detects running Docker containers (hub, ALB, DNK, GBR, ROU, etc.)
+- Maps container names to test configurations
+- Generates instance-specific Playwright projects
+- Tests hub-spoke federation workflows
+- Parallel execution across multiple instances
+
+### `test instances` - Test All Running Hub-Spoke Instances
+
+Comprehensive testing of all running hub and spoke instances with instance-aware test suites.
+
+```bash
+# Test all running instances
+./dive test instances
+
+# Test all instances in parallel (faster)
+./dive test instances --parallel
+
+# Test specific instance only
+./dive test instances ALB
+./dive test instances GBR
+
+# Preview instance detection (dry run)
+./dive test instances --dry-run --verbose
+```
+
+**What it tests per instance:**
+- Frontend accessibility and health
+- Backend API connectivity
+- Instance-specific branding and UI
+- Authentication flows
+- Resource access controls
+- Cross-instance federation (when applicable)
+
+### `test all` - Run Complete Test Suite
+
+Execute all test suites: unit tests, federation tests, and dynamic Playwright tests.
 
 ```bash
 ./dive test all
 ```
+
+**Complete test matrix:**
+1. Backend unit tests (Jest)
+2. Federation E2E tests (bash scripts)
+3. Dynamic Playwright E2E tests (auto-detected instances)
+
+### Hub-Spoke Architecture Testing
+
+The dynamic testing system understands DIVE V3's hub-spoke federation model:
+
+```
+┌─────────────┐    ┌─────────────┐
+│   USA Hub   │◄──►│  FRA Spoke  │
+│             │    │             │
+│ Port: 3000  │    │ Port: 3025  │
+│ Tests: Hub  │    │ Tests: FRA  │
+└─────────────┘    └─────────────┘
+       ▲                 ▲
+       │                 │
+       └─────────────────┘
+        Federation Bus
+```
+
+**Instance Detection:**
+- **Hub**: `dive-hub-frontend` → USA Hub (port 3000)
+- **Spokes**: `alb-frontend-alb-1` → Albania (port 3001)
+- **Spokes**: `dnk-frontend-dnk-1` → Denmark (port 3007)
+- **Spokes**: `gbr-frontend-gbr-1` → UK (port 3003)
+- **Spokes**: `rou-frontend-rou-1` → Romania (port 3025)
+
+**Test Categories:**
+- **Hub Tests**: Federation management, spoke registration, policy distribution
+- **Spoke Tests**: Local authentication, resource access, hub connectivity
+- **Federation Tests**: Cross-instance SSO, policy synchronization, trust relationships
 
 ## Status & Diagnostics
 
@@ -2304,7 +2387,9 @@ Policy:
 Testing:
   test federation          Run federation E2E tests
   test unit                Run backend unit tests
-  test all                 Run all tests
+  test playwright          Run dynamic Playwright E2E tests
+  test instances [CODE]    Test all running hub-spoke instances (or specific NATO country)
+  test all                 Run complete test suite (unit + e2e + playwright)
 
 Status:
   status                   Overall system status

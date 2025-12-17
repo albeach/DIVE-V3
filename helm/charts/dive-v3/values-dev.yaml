@@ -1,0 +1,91 @@
+# =============================================================================
+# DIVE V3 Helm Chart - Development Environment Values
+# =============================================================================
+# Development-specific overrides
+# =============================================================================
+
+global:
+  instance: "usa"
+  namespace: "dive-v3-dev"
+
+frontend:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: false
+
+backend:
+  replicaCount: 1
+  image:
+    tag: "dev"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: false
+
+keycloak:
+  replicaCount: 1
+  image:
+    tag: "dev"
+
+opa:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+
+postgresql:
+  primary:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+mongodb:
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+redis:
+  master:
+    persistence:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+blueGreen:
+  enabled: false
+
+monitoring:
+  enabled: true
+  prometheus:
+    scrapeInterval: 60s
+

@@ -116,6 +116,15 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: 9000
+              scheme: HTTPS
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           volumeMounts:
             - name: keycloak-certs
               mountPath: /opt/keycloak/certs

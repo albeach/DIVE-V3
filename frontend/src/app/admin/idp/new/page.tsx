@@ -25,7 +25,7 @@ import RiskScoreBadge from '@/components/admin/risk-score-badge';
 import RiskBreakdown from '@/components/admin/risk-breakdown';
 import ComplianceStatusCard from '@/components/admin/compliance-status-card';
 import SLACountdown from '@/components/admin/sla-countdown';
-import { IIdPFormData, IdPProtocol, IAdminAPIResponse } from '@/types/admin.types';
+import { IIdPFormData, IdPProtocol, IAdminAPIResponse, IIdentityProvider } from '@/types/admin.types';
 
 const WIZARD_STEPS = [
     { number: 1, title: 'Protocol', description: 'Select IdP protocol' },
@@ -123,9 +123,11 @@ export default function NewIdPWizard() {
     const [selectedPartner, setSelectedPartner] = useState<FederationPartner | null>(null);
 
     const [formData, setFormData] = useState<IIdPFormData>({
-        protocol: 'oidc',
+        providerId: 'oidc',
         alias: '',
         displayName: '',
+        enabled: true,
+        trustLevel: 'development',
         description: '',
         oidcConfig: {
             issuer: '',
@@ -134,23 +136,22 @@ export default function NewIdPWizard() {
             authorizationUrl: '',
             tokenUrl: '',
             userInfoUrl: '',
-            jwksUrl: '',
-            defaultScopes: 'openid profile email'
+            jwksUri: '',
+            defaultScope: 'openid profile email'
         },
         samlConfig: {
             entityId: '',
             singleSignOnServiceUrl: '',
             singleLogoutServiceUrl: '',
-            certificate: '',
-            signatureAlgorithm: 'RSA_SHA256',
-            nameIDFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified'
+            signingCertificate: '',
+            nameIDPolicyFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified'
         },
-        attributeMappings: {
-            uniqueID: { claim: 'sub', userAttribute: 'uniqueID' },
-            clearance: { claim: 'clearance', userAttribute: 'clearance' },
-            countryOfAffiliation: { claim: 'country', userAttribute: 'countryOfAffiliation' },
-            acpCOI: { claim: 'groups', userAttribute: 'acpCOI' }
-        },
+        attributeMappings: [
+            { source: 'sub', target: 'uniqueID', required: true, description: 'Unique user identifier' },
+            { source: 'clearance', target: 'clearance', required: true, description: 'Security clearance level' },
+            { source: 'country', target: 'countryOfAffiliation', required: true, description: 'Country of affiliation' },
+            { source: 'groups', target: 'acpCOI', required: false, description: 'Community of Interest' }
+        ],
         // Auth0 Integration (Week 3.4.6)
         useAuth0: false,
         auth0Protocol: 'oidc',
@@ -222,7 +223,7 @@ export default function NewIdPWizard() {
 
             case 3:
                 // Protocol-specific config
-                if (formData.protocol === 'oidc' && formData.oidcConfig) {
+                if (formData.providerId === 'oidc' && formData.oidcConfig) {
                     if (!formData.oidcConfig.issuer) {
                         newErrors.issuer = 'Issuer URL is required';
                     }
@@ -238,7 +239,7 @@ export default function NewIdPWizard() {
                     if (!formData.oidcConfig.tokenUrl) {
                         newErrors.tokenUrl = 'Token URL is required';
                     }
-                } else if (formData.protocol === 'saml' && formData.samlConfig) {
+                } else if (formData.providerId === 'saml' && formData.samlConfig) {
                     if (!formData.samlConfig.entityId) {
                         newErrors.entityId = 'Entity ID is required';
                     }
@@ -250,13 +251,22 @@ export default function NewIdPWizard() {
 
             case 4:
                 // Attribute mappings
-                if (!formData.attributeMappings.uniqueID.claim) {
+                if (!formData.attributeMappings) {
+                    newErrors['attributeMappings'] = 'Attribute mappings are required';
+                    break;
+                }
+
+                const uniqueIdMapping = formData.attributeMappings.find(m => m.target === 'uniqueID');
+                const clearanceMapping = formData.attributeMappings.find(m => m.target === 'clearance');
+                const countryMapping = formData.attributeMappings.find(m => m.target === 'countryOfAffiliation');
+
+                if (!uniqueIdMapping?.source) {
                     newErrors['uniqueID.claim'] = 'uniqueID claim is required';
                 }
-                if (!formData.attributeMappings.clearance.claim) {
+                if (!clearanceMapping?.source) {
                     newErrors['clearance.claim'] = 'clearance claim is required';
                 }
-                if (!formData.attributeMappings.countryOfAffiliation.claim) {
+                if (!countryMapping?.source) {
                     newErrors['countryOfAffiliation.claim'] = 'countryOfAffiliation claim is required';
                 }
                 break;
@@ -316,11 +326,11 @@ export default function NewIdPWizard() {
             // Submit via internal API proxy so tokens stay server-side
             console.log('[DEBUG] Starting IdP submission...', {
                 alias: formData.alias,
-                protocol: formData.protocol
+                protocol: formData.providerId
             });
 
             // Create Keycloak IdP configuration
-            const keycloakConfig = formData.protocol === 'oidc' 
+            const keycloakConfig = formData.providerId === 'oidc'
                 ? formData.oidcConfig
                 : formData.samlConfig;
 
@@ -328,7 +338,7 @@ export default function NewIdPWizard() {
                 alias: formData.alias,
                 displayName: formData.displayName,
                 description: formData.description,
-                protocol: formData.protocol,
+                protocol: formData.providerId,
                 config: keycloakConfig,
                 attributeMappings: formData.attributeMappings,
                 // Phase 2: Operational data and compliance
@@ -353,7 +363,7 @@ export default function NewIdPWizard() {
 
             console.log('[DEBUG] Response status:', response.status);
 
-            const result: IAdminAPIResponse = await response.json();
+            const result: IAdminAPIResponse<IIdentityProvider> = await response.json();
             console.log('[DEBUG] Response body:', result);
 
             if (!response.ok) {
@@ -510,28 +520,28 @@ export default function NewIdPWizard() {
                                         className="group relative transform transition-all duration-300 hover:scale-105 focus:outline-none"
                                     >
                                         <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
-                                            formData.protocol === 'oidc' 
+                                            formData.providerId === 'oidc' 
                                                 ? 'bg-gradient-to-r from-blue-600 to-cyan-500 opacity-75 blur-sm' 
                                                 : 'bg-gradient-to-r from-blue-400 to-cyan-400 opacity-0 group-hover:opacity-50 blur-sm'
                                         }`} />
                                         
                                         <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
-                                            formData.protocol === 'oidc'
+                                            formData.providerId === 'oidc'
                                                 ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-2xl'
                                                 : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl'
                                         }`}>
                                             <div className={`text-6xl mb-3 transition-transform duration-300 ${
-                                                formData.protocol === 'oidc' ? 'scale-110' : 'group-hover:scale-110'
+                                                formData.providerId === 'oidc' ? 'scale-110' : 'group-hover:scale-110'
                                             }`}>
                                                 🔷
                                             </div>
-                                            <span className={`text-xl font-bold mb-1 ${formData.protocol === 'oidc' ? 'text-white' : 'text-gray-900'}`}>
+                                            <span className={`text-xl font-bold mb-1 ${formData.providerId === 'oidc' ? 'text-white' : 'text-gray-900'}`}>
                                                 OIDC
                                             </span>
-                                            <span className={`text-sm ${formData.protocol === 'oidc' ? 'text-blue-100' : 'text-gray-600'}`}>
+                                            <span className={`text-sm ${formData.providerId === 'oidc' ? 'text-blue-100' : 'text-gray-600'}`}>
                                                 OpenID Connect
                                             </span>
-                                            {formData.protocol === 'oidc' && (
+                                            {formData.providerId === 'oidc' && (
                                                 <div className="absolute top-3 right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md">
                                                     <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -548,28 +558,28 @@ export default function NewIdPWizard() {
                                         className="group relative transform transition-all duration-300 hover:scale-105 focus:outline-none"
                                     >
                                         <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
-                                            formData.protocol === 'saml' 
+                                            formData.providerId === 'saml' 
                                                 ? 'bg-gradient-to-r from-orange-600 to-pink-500 opacity-75 blur-sm' 
                                                 : 'bg-gradient-to-r from-orange-400 to-pink-400 opacity-0 group-hover:opacity-50 blur-sm'
                                         }`} />
                                         
                                         <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
-                                            formData.protocol === 'saml'
+                                            formData.providerId === 'saml'
                                                 ? 'bg-gradient-to-br from-orange-600 to-pink-600 text-white shadow-2xl'
                                                 : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl'
                                         }`}>
                                             <div className={`text-6xl mb-3 transition-transform duration-300 ${
-                                                formData.protocol === 'saml' ? 'scale-110' : 'group-hover:scale-110'
+                                                formData.providerId === 'saml' ? 'scale-110' : 'group-hover:scale-110'
                                             }`}>
                                                 🔶
                                             </div>
-                                            <span className={`text-xl font-bold mb-1 ${formData.protocol === 'saml' ? 'text-white' : 'text-gray-900'}`}>
+                                            <span className={`text-xl font-bold mb-1 ${formData.providerId === 'saml' ? 'text-white' : 'text-gray-900'}`}>
                                                 SAML
                                             </span>
-                                            <span className={`text-sm ${formData.protocol === 'saml' ? 'text-orange-100' : 'text-gray-600'}`}>
+                                            <span className={`text-sm ${formData.providerId === 'saml' ? 'text-orange-100' : 'text-gray-600'}`}>
                                                 SAML 2.0
                                             </span>
-                                            {formData.protocol === 'saml' && (
+                                            {formData.providerId === 'saml' && (
                                                 <div className="absolute top-3 right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md">
                                                     <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -661,8 +671,8 @@ export default function NewIdPWizard() {
                                                                     authorizationUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/auth`,
                                                                     tokenUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/token`,
                                                                     userInfoUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/userinfo`,
-                                                                    jwksUrl: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/certs`,
-                                                                    defaultScopes: 'openid profile email clearance countryOfAffiliation acpCOI'
+                                                                    jwksUri: `${partner.idpUrl}/realms/${partner.realm}/protocol/openid-connect/certs`,
+                                                                    defaultScope: 'openid profile email clearance countryOfAffiliation acpCOI'
                                                                 },
                                                                 metadata: {
                                                                     ...formData.metadata,
@@ -826,7 +836,7 @@ export default function NewIdPWizard() {
                         )}
 
                         {/* Step 3: Protocol Configuration */}
-                        {currentStep === 3 && formData.protocol === 'oidc' && formData.oidcConfig && (
+                        {currentStep === 3 && formData.providerId === 'oidc' && formData.oidcConfig && (
                             <OIDCConfigForm
                                 config={formData.oidcConfig}
                                 onChange={(config) => setFormData({ ...formData, oidcConfig: config })}
@@ -837,7 +847,7 @@ export default function NewIdPWizard() {
                         )}
 
                         {/* Step 3: SAML Configuration */}
-                        {currentStep === 3 && formData.protocol === 'saml' && formData.samlConfig && (
+                        {currentStep === 3 && formData.providerId === 'saml' && formData.samlConfig && (
                             <SAMLConfigForm
                                 config={formData.samlConfig}
                                 onChange={(config) => setFormData({ ...formData, samlConfig: config })}
@@ -979,9 +989,12 @@ export default function NewIdPWizard() {
                         {/* Step 5: Attribute Mapping (moved from Step 4) */}
                         {currentStep === 5 && (
                             <AttributeMapper
-                                mappings={formData.attributeMappings}
-                                onChange={(mappings) => setFormData({ ...formData, attributeMappings: mappings })}
-                                protocol={formData.protocol}
+                                mappings={Object.fromEntries((formData.attributeMappings || []).map(m => [m.target, m])) as any}
+                                onChange={(mappings) => setFormData({
+                                    ...formData,
+                                    attributeMappings: Object.values(mappings)
+                                })}
+                                protocol={formData.providerId}
                                 errors={errors}
                             />
                         )}
@@ -1008,9 +1021,9 @@ export default function NewIdPWizard() {
                                     </div>
                                     <div>
                                         <span className="text-sm font-medium text-gray-700">Protocol:</span>
-                                        <span className="ml-2 text-sm text-gray-900">{formData.protocol.toUpperCase()}</span>
+                                        <span className="ml-2 text-sm text-gray-900">{formData.providerId.toUpperCase()}</span>
                                     </div>
-                                    {formData.protocol === 'oidc' && formData.oidcConfig && (
+                                    {formData.providerId === 'oidc' && formData.oidcConfig && (
                                         <>
                                             <div>
                                                 <span className="text-sm font-medium text-gray-700">Issuer:</span>

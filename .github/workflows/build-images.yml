@@ -149,20 +149,63 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
+      - name: Security Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Security Scan Backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Security Scan Keycloak
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-keycloak-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Security Scan KAS
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'image'
+          scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-kas-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-frontend-results.sarif,trivy-backend-results.sarif,trivy-keycloak-results.sarif,trivy-kas-results.sarif'
+
       - name: Image Summary
         run: |
-          echo "## 🐳 Container Images Built" >> $GITHUB_STEP_SUMMARY
+          echo "## 🐳 Container Images Built & Scanned" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Service | Image | Tag |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|-------|-----|" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Keycloak | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| KAS | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas\` | \`${{ github.sha }}\` / \`latest\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Image | Tag | Security Scan |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|-----|---------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+          echo "| Keycloak | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
+          echo "| KAS | \`${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas\` | \`${{ github.sha }}\` / \`latest\` | ✅ Trivy |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "**Platforms:** linux/amd64, linux/arm64 (multi-platform)" >> $GITHUB_STEP_SUMMARY
+          echo "**Security:** Trivy vulnerability scanning completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Images are ready for deployment to Kubernetes!" >> $GITHUB_STEP_SUMMARY
 

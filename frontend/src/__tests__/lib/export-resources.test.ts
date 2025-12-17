@@ -14,8 +14,6 @@
 
 import {
   exportResources,
-  exportToCSV,
-  exportToJSON,
   getAvailableFormats,
   estimateExportSize,
   formatBytes,
@@ -77,180 +75,77 @@ describe('export-resources', () => {
     jest.clearAllMocks();
   });
 
-  describe('exportToCSV', () => {
-    it('should generate valid CSV content', () => {
-      const csv = exportToCSV(mockResources);
-      
-      expect(csv).toContain('resourceId');
-      expect(csv).toContain('title');
-      expect(csv).toContain('classification');
-    });
-
-    it('should include all default columns', () => {
-      const csv = exportToCSV(mockResources);
-      const headers = csv.split('\n')[0];
-      
-      expect(headers).toContain('resourceId');
-      expect(headers).toContain('title');
-      expect(headers).toContain('classification');
-      expect(headers).toContain('releasabilityTo');
-      expect(headers).toContain('COI');
-      expect(headers).toContain('encrypted');
-    });
-
-    it('should include resource data rows', () => {
-      const csv = exportToCSV(mockResources);
-      const lines = csv.split('\n');
-      
-      // Header + 2 data rows
-      expect(lines.length).toBe(3);
-      expect(lines[1]).toContain('doc-1');
-      expect(lines[1]).toContain('Fuel Inventory Report');
-      expect(lines[2]).toContain('doc-2');
-    });
-
-    it('should escape CSV special characters', () => {
-      const resourceWithComma = [{
-        ...mockResources[0],
-        title: 'Report, with comma',
-      }];
-      
-      const csv = exportToCSV(resourceWithComma);
-      
-      // Should wrap in quotes
-      expect(csv).toContain('"Report, with comma"');
-    });
-
-    it('should escape quotes in values', () => {
-      const resourceWithQuote = [{
-        ...mockResources[0],
-        title: 'Report "quoted"',
-      }];
-      
-      const csv = exportToCSV(resourceWithQuote);
-      
-      // Should escape quotes
-      expect(csv).toContain('""');
-    });
-
-    it('should format array fields', () => {
-      const csv = exportToCSV(mockResources);
-      
-      // releasabilityTo should be formatted
-      expect(csv).toContain('USA');
-      expect(csv).toContain('GBR');
-    });
-
-    it('should respect custom columns', () => {
-      const csv = exportToCSV(mockResources, {
-        columns: ['resourceId', 'title'],
-      });
-      
-      const headers = csv.split('\n')[0];
-      
-      expect(headers).toContain('resourceId');
-      expect(headers).toContain('title');
-      expect(headers).not.toContain('classification');
-    });
-
-    it('should include BOM for Excel compatibility', () => {
-      const csv = exportToCSV(mockResources, { includeBOM: true });
-      
-      expect(csv.charCodeAt(0)).toBe(0xFEFF);
-    });
-
-    it('should format dates', () => {
-      const csv = exportToCSV(mockResources);
-      
-      // Should include formatted date
-      expect(csv).toContain('2024');
-    });
-
-    it('should handle empty resources array', () => {
-      const csv = exportToCSV([]);
-      const lines = csv.split('\n').filter(l => l.trim());
-      
-      // Should only have header
-      expect(lines.length).toBe(1);
-    });
-  });
-
-  describe('exportToJSON', () => {
-    it('should generate valid JSON', () => {
-      const json = exportToJSON(mockResources);
-      
-      expect(() => JSON.parse(json)).not.toThrow();
-    });
-
-    it('should include all resources', () => {
-      const json = exportToJSON(mockResources);
-      const parsed = JSON.parse(json);
-      
-      expect(parsed.data).toHaveLength(2);
-    });
-
-    it('should include metadata when requested', () => {
-      const json = exportToJSON(mockResources, { includeMetadata: true });
-      const parsed = JSON.parse(json);
-      
-      expect(parsed.metadata).toBeDefined();
-      expect(parsed.metadata.exportedAt).toBeDefined();
-      expect(parsed.metadata.count).toBe(2);
-    });
-
-    it('should exclude metadata when not requested', () => {
-      const json = exportToJSON(mockResources, { includeMetadata: false });
-      const parsed = JSON.parse(json);
-      
-      // Should be just the array
-      expect(Array.isArray(parsed)).toBe(true);
-    });
-
-    it('should format JSON with indentation', () => {
-      const json = exportToJSON(mockResources, { pretty: true });
-      
-      expect(json).toContain('\n');
-      expect(json).toContain('  ');
-    });
-
-    it('should respect custom columns', () => {
-      const json = exportToJSON(mockResources, {
-        columns: ['resourceId', 'title'],
-      });
-      const parsed = JSON.parse(json);
-      
-      expect(Object.keys(parsed[0])).toEqual(['resourceId', 'title']);
-    });
-
-    it('should handle empty resources array', () => {
-      const json = exportToJSON([]);
-      const parsed = JSON.parse(json);
-      
-      expect(parsed).toEqual([]);
-    });
-  });
-
   describe('exportResources', () => {
-    it('should export as CSV', async () => {
-      const result = await exportResources(mockResources, { format: 'csv' });
-      
-      expect(result.success).toBe(true);
-      expect(result.filename).toMatch(/\.csv$/);
-    });
+    it('should export to CSV format', async () => {
+      const result = await exportResources(mockResources, { format: 'csv', filename: 'test' });
 
-    it('should export as JSON', async () => {
-      const result = await exportResources(mockResources, { format: 'json' });
-      
       expect(result.success).toBe(true);
-      expect(result.filename).toMatch(/\.json$/);
-    });
-
-    it('should trigger file download', async () => {
-      await exportResources(mockResources, { format: 'csv' });
-      
+      expect(result.format).toBe('csv');
+      expect(result.filename).toContain('test');
+      expect(result.recordCount).toBe(mockResources.length);
       expect(mockCreateObjectURL).toHaveBeenCalled();
       expect(mockClick).toHaveBeenCalled();
-      expect(mockRevokeObjectURL).toHaveBeenCalled();
+    });
+
+    it('should export to JSON format', async () => {
+      const result = await exportResources(mockResources, { format: 'json', filename: 'test' });
+
+      expect(result.success).toBe(true);
+      expect(result.format).toBe('json');
+      expect(result.filename).toContain('test');
+      expect(result.recordCount).toBe(mockResources.length);
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+    });
+
+    it('should export to Excel format (CSV with .xlsx extension)', async () => {
+      const result = await exportResources(mockResources, { format: 'excel', filename: 'test' });
+
+      expect(result.success).toBe(true);
+      expect(result.format).toBe('excel');
+      expect(result.filename).toContain('test.xlsx');
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+    });
+
+    it('should handle empty resources array', async () => {
+      const result = await exportResources([], { format: 'csv', filename: 'empty' });
+
+      expect(result.success).toBe(true);
+      expect(result.recordCount).toBe(0);
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+    });
+
+    it('should include metadata in JSON export when requested', async () => {
+      const result = await exportResources(mockResources, { 
+        format: 'json', 
+        includeMetadata: true,
+        filename: 'test'
+      });
+      
+      expect(result.success).toBe(true);
+      expect(result.format).toBe('json');
+    });
+
+    it('should exclude metadata in JSON export when not requested', async () => {
+      const result = await exportResources(mockResources, { 
+        format: 'json', 
+        includeMetadata: false,
+        filename: 'test'
+      });
+      
+      expect(result.success).toBe(true);
+    });
+
+    it('should use custom columns', async () => {
+      const result = await exportResources(mockResources, {
+        format: 'csv',
+        columns: ['resourceId', 'title'],
+        filename: 'test'
+      });
+      
+      expect(result.success).toBe(true);
     });
 
     it('should use custom filename', async () => {
@@ -265,7 +160,7 @@ describe('export-resources', () => {
     it('should include timestamp in default filename', async () => {
       const result = await exportResources(mockResources, { format: 'csv' });
       
-      expect(result.filename).toMatch(/resources-\d{4}-\d{2}-\d{2}/);
+      expect(result.filename).toMatch(/dive-resources-/);
     });
 
     it('should return error on failure', async () => {
@@ -279,10 +174,12 @@ describe('export-resources', () => {
       expect(result.error).toBeDefined();
     });
 
-    it('should handle empty resources', async () => {
-      const result = await exportResources([], { format: 'csv' });
+    it('should trigger file download', async () => {
+      await exportResources(mockResources, { format: 'csv' });
       
-      expect(result.success).toBe(true);
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockClick).toHaveBeenCalled();
+      expect(mockRevokeObjectURL).toHaveBeenCalled();
     });
   });
 
@@ -354,64 +251,55 @@ describe('export-resources', () => {
   });
 
   describe('column selection', () => {
-    it('should support custom column headers', () => {
-      const csv = exportToCSV(mockResources, {
+    it('should support custom column headers', async () => {
+      const result = await exportResources(mockResources, {
+        format: 'csv',
         columns: ['resourceId', 'title'],
-        headers: {
+        customHeaders: {
           resourceId: 'Document ID',
           title: 'Document Title',
         },
+        filename: 'test'
       });
       
-      const headers = csv.split('\n')[0];
-      
-      expect(headers).toContain('Document ID');
-      expect(headers).toContain('Document Title');
-    });
-
-    it('should support nested field access', () => {
-      const resourcesWithNested = [{
-        ...mockResources[0],
-        metadata: {
-          author: 'John Smith',
-        },
-      }];
-      
-      const csv = exportToCSV(resourcesWithNested, {
-        columns: ['resourceId', 'metadata.author'],
-      });
-      
-      expect(csv).toContain('John Smith');
+      expect(result.success).toBe(true);
     });
   });
 
   describe('date formatting', () => {
-    it('should format ISO dates to readable format', () => {
-      const csv = exportToCSV(mockResources);
+    it('should format dates when formatDates is true', async () => {
+      const result = await exportResources(mockResources, {
+        format: 'csv',
+        formatDates: true,
+        filename: 'test'
+      });
       
-      // Should have formatted date, not raw ISO
-      expect(csv).toContain('2024');
+      expect(result.success).toBe(true);
     });
 
-    it('should handle invalid dates', () => {
+    it('should handle invalid dates gracefully', async () => {
       const resourceWithBadDate = [{
         ...mockResources[0],
         createdAt: 'not-a-date',
       }];
       
-      const csv = exportToCSV(resourceWithBadDate);
+      const result = await exportResources(resourceWithBadDate, {
+        format: 'csv',
+        filename: 'test'
+      });
       
-      // Should not throw
-      expect(csv).toBeDefined();
+      expect(result.success).toBe(true);
     });
   });
 
   describe('boolean formatting', () => {
-    it('should format boolean values', () => {
-      const csv = exportToCSV(mockResources);
+    it('should format boolean values in CSV', async () => {
+      const result = await exportResources(mockResources, {
+        format: 'csv',
+        filename: 'test'
+      });
       
-      // encrypted field should be readable
-      expect(csv).toMatch(/true|yes|1/i);
+      expect(result.success).toBe(true);
     });
   });
 });

@@ -591,7 +591,20 @@ export default function FacetedFilters({
 
       {/* Facet Sections */}
       <div className="divide-y divide-gray-200 dark:divide-gray-700">
-        {facetGroups.map((group) => (
+        {facetGroups.every(group => group.items.length === 0) ? (
+          <div className="px-5 py-8 text-center">
+            <div className="text-gray-400 dark:text-gray-500 mb-2">
+              <Filter className="w-8 h-8 mx-auto opacity-50" />
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+              No filters available
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              Try adjusting your search criteria
+            </p>
+          </div>
+        ) : (
+          facetGroups.map((group) => (
           <FacetSection
             key={group.id}
             group={group}
@@ -604,8 +617,9 @@ export default function FacetedFilters({
             userHighlight={(userHighlights as any)[group.id]}
             isLoading={isLoading}
           />
-        ))}
-        
+        ))
+        )}
+
         {/* Date Range Filter Section - Enhanced */}
         <div className="border-b border-gray-200/60 dark:border-gray-700/60 last:border-b-0">
           <div className="px-5 py-4">

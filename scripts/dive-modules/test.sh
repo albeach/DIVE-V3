@@ -7,13 +7,18 @@
 # Commands:
 #   federation    Run all federation E2E tests
 #   unit          Run backend unit tests
-#   all           Run all tests (unit + e2e)
+#   playwright    Run dynamic Playwright E2E tests
+#   instances     Test all running hub-spoke instances
+#   all           Run all tests (unit + e2e + playwright)
 #
 # Usage:
 #   ./dive test federation               # Run federation E2E tests
 #   ./dive test federation --verbose     # Verbose output
 #   ./dive test federation --fail-fast   # Stop on first failure
 #   ./dive test unit                     # Run backend unit tests
+#   ./dive test playwright               # Run dynamic Playwright tests
+#   ./dive test instances                # Test all running instances
+#   ./dive test instances --parallel     # Test in parallel
 # =============================================================================
 
 # Ensure common functions are loaded
@@ -271,40 +276,174 @@ test_federation() {
 
 test_unit() {
     test_log_header
-    
+
     echo -e "${CYAN}Running Backend Unit Tests${NC}"
     echo ""
-    
+
     if [ ! -d "$BACKEND_DIR" ]; then
         log_error "Backend directory not found: ${BACKEND_DIR}"
         return 1
     fi
-    
+
     cd "$BACKEND_DIR"
-    
+
     if [ ! -f "package.json" ]; then
         log_error "No package.json found in backend directory"
         return 1
     fi
-    
+
     # Check if node_modules exists
     if [ ! -d "node_modules" ]; then
         log_info "Installing dependencies..."
         npm install
     fi
-    
+
     # Run tests
     if [ "$VERBOSE" = true ]; then
         npm test -- --verbose
     else
         npm test
     fi
-    
+
     local exit_code=$?
-    
+
     cd "$DIVE_ROOT"
-    
+
     return $exit_code
+}
+
+# =============================================================================
+# DYNAMIC PLAYWRIGHT TESTS
+# =============================================================================
+
+test_playwright() {
+    local playwright_script="${DIVE_ROOT}/scripts/dynamic-test-runner.sh"
+
+    if [ ! -f "$playwright_script" ]; then
+        log_error "Dynamic test runner not found: ${playwright_script}"
+        log_info "Run: git pull && chmod +x scripts/dynamic-test-runner.sh"
+        return 1
+    fi
+
+    log_info "Running Dynamic Playwright E2E Tests..."
+    echo ""
+
+    # Forward all arguments to the dynamic runner
+    bash "$playwright_script" "$@"
+}
+
+test_instances() {
+    echo "DEBUG: test_instances called with $# arguments: $@"
+
+    local parallel=false
+    local specific_instance=""
+    local dry_run=false
+
+    # Parse instance-specific options and positional arguments
+    while [[ $# -gt 0 ]]; do
+        echo "DEBUG: Processing argument: '$1'"
+        case $1 in
+            --parallel|-p)
+                parallel=true
+                echo "DEBUG: Set parallel=true"
+                shift
+                ;;
+            --dry-run|-d)
+                dry_run=true
+                echo "DEBUG: Set dry_run=true"
+                shift
+                ;;
+            # Handle instance code as positional argument (ALB, DNK, GBR, etc.)
+            [A-Z][A-Z][A-Z])
+                if [ -z "$specific_instance" ]; then
+                    specific_instance="$1"
+                    echo "DEBUG: Found instance code: $specific_instance"
+                fi
+                shift
+                ;;
+            *)
+                echo "DEBUG: Unknown argument in test_instances: '$1'"
+                shift
+                ;;
+        esac
+    done
+
+    echo ""
+    echo -e "${BOLD}${CYAN}Testing All Running Hub-Spoke Instances${NC}"
+    echo -e "${CYAN}$(printf '%.0s=' {1..50})${NC}"
+
+    log_info "Parsed: parallel=$parallel, instance=$specific_instance, dry_run=$dry_run"
+
+    # Build arguments for the dynamic runner
+    local args=()
+    if [ "$parallel" = true ]; then
+        args+=("--parallel")
+    fi
+    if [ "$dry_run" = true ]; then
+        args+=("--dry-run")
+    fi
+    if [ -n "$specific_instance" ]; then
+        args+=("--instance")
+        args+=("$specific_instance")
+    fi
+
+    log_info "Number of args: ${#args[@]}"
+    for i in "${!args[@]}"; do
+        log_info "  args[$i]: '${args[$i]}'"
+    done
+
+    # Run the dynamic test runner
+    test_playwright "${args[@]}"
+}
+
+test_instances() {
+    local parallel=false
+    local specific_instance=""
+    local dry_run=false
+
+    # Parse instance-specific options and positional arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --parallel|-p)
+                parallel=true
+                shift
+                ;;
+            --dry-run|-d)
+                dry_run=true
+                shift
+                ;;
+            # Handle instance code as positional argument (ALB, DNK, GBR, etc.)
+            [A-Z][A-Z][A-Z])
+                if [ -z "$specific_instance" ]; then
+                    specific_instance="$1"
+                fi
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    echo ""
+    echo -e "${BOLD}${CYAN}Testing All Running Hub-Spoke Instances${NC}"
+    echo -e "${CYAN}$(printf '%.0s=' {1..50})${NC}"
+
+    # Build arguments array for the dynamic runner
+    local args=()
+    if [ "$parallel" = true ]; then
+        args+=("--parallel")
+    fi
+    if [ "$dry_run" = true ]; then
+        args+=("--dry-run")
+    fi
+    if [ -n "$specific_instance" ]; then
+        args+=("--instance")
+        args+=("$specific_instance")
+    fi
+
+    # Run the dynamic test runner
+    test_playwright "${args[@]}"
 }
 
 # =============================================================================
@@ -314,36 +453,47 @@ test_unit() {
 test_all() {
     local unit_result=0
     local federation_result=0
-    
+    local playwright_result=0
+
     test_log_header
     echo -e "${BOLD}Running All Tests${NC}"
     echo ""
-    
+
     # Run unit tests
     test_log_section "Unit Tests"
     test_unit
     unit_result=$?
-    
+
     # Run federation tests
     test_log_section "Federation E2E Tests"
     test_federation
     federation_result=$?
-    
+
+    # Run Playwright tests
+    test_log_section "Dynamic Playwright E2E Tests"
+    test_playwright --parallel
+    playwright_result=$?
+
     # Summary
     echo ""
     echo -e "${BOLD}Final Results:${NC}"
     if [ $unit_result -eq 0 ]; then
-        echo -e "  Unit Tests:       ${GREEN}PASS${NC}"
+        echo -e "  Unit Tests:         ${GREEN}PASS${NC}"
     else
-        echo -e "  Unit Tests:       ${RED}FAIL${NC}"
+        echo -e "  Unit Tests:         ${RED}FAIL${NC}"
     fi
     if [ $federation_result -eq 0 ]; then
-        echo -e "  Federation Tests: ${GREEN}PASS${NC}"
+        echo -e "  Federation Tests:   ${GREEN}PASS${NC}"
     else
-        echo -e "  Federation Tests: ${RED}FAIL${NC}"
+        echo -e "  Federation Tests:   ${RED}FAIL${NC}"
     fi
-    
-    if [ $unit_result -eq 0 ] && [ $federation_result -eq 0 ]; then
+    if [ $playwright_result -eq 0 ]; then
+        echo -e "  Playwright Tests:   ${GREEN}PASS${NC}"
+    else
+        echo -e "  Playwright Tests:   ${RED}FAIL${NC}"
+    fi
+
+    if [ $unit_result -eq 0 ] && [ $federation_result -eq 0 ] && [ $playwright_result -eq 0 ]; then
         return 0
     else
         return 1
@@ -357,8 +507,8 @@ test_all() {
 module_test() {
     local command="${1:-help}"
     shift || true
-    
-    # Parse options
+
+    # Parse options - handle test-specific flags that might conflict with global CLI flags
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --verbose|-v)
@@ -373,18 +523,42 @@ module_test() {
                 OUTPUT_FORMAT="$2"
                 shift 2
                 ;;
-            *)
+            --parallel|-p)
+                PARALLEL=true
                 shift
+                ;;
+            --dry-run|-d)
+                DRY_RUN=true
+                shift
+                ;;
+            # Handle instance flag carefully (might conflict with global --instance)
+            instance|--instance|-i)
+                if [[ "$2" != --* && -n "$2" ]]; then
+                    SPECIFIC_INSTANCE="$2"
+                    shift 2
+                else
+                    shift
+                fi
+                ;;
+            *)
+                # Pass through unrecognized options to the underlying test runner
+                break
                 ;;
         esac
     done
-    
+
     case "$command" in
         federation|fed|e2e)
             test_federation
             ;;
         unit|backend)
             test_unit
+            ;;
+        playwright|e2e-new|dynamic)
+            test_playwright "$@"
+            ;;
+        instances|hub-spoke)
+            test_instances "$@"
             ;;
         all)
             test_all
@@ -401,17 +575,29 @@ module_test_help() {
     echo -e "${CYAN}Test Suites:${NC}"
     echo "  federation          Run all federation E2E tests"
     echo "  unit                Run backend unit tests (Jest)"
-    echo "  all                 Run all tests (unit + e2e)"
+    echo "  playwright          Run dynamic Playwright E2E tests"
+    echo "  instances           Test all running hub-spoke instances"
+    echo "  all                 Run all tests (unit + e2e + playwright)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
     echo "  --verbose, -v       Show detailed test output"
     echo "  --fail-fast, -f     Stop on first failure"
+    echo "  --parallel, -p      Run tests in parallel (instances command)"
+    echo "  --dry-run, -d       Show what would run without executing"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  <CODE>              NATO country code (ALB, DNK, GBR, ROU, etc.) for instances command"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  ./dive test federation"
     echo "  ./dive test federation --verbose"
     echo "  ./dive test federation --fail-fast"
     echo "  ./dive test unit"
+    echo "  ./dive test playwright"
+    echo "  ./dive test instances"
+    echo "  ./dive test instances --parallel"
+    echo "  ./dive test instances ALB"
+    echo "  ./dive test instances --dry-run --verbose"
     echo "  ./dive test all"
     echo ""
     echo -e "${CYAN}Federation Test Suites:${NC}"
@@ -421,4 +607,11 @@ module_test_help() {
     echo "  • policy-sync         Policy distribution and scoping"
     echo "  • failover            Circuit breaker and resilience"
     echo "  • multi-spoke         Multi-spoke concurrent testing"
+    echo ""
+    echo -e "${CYAN}Dynamic Playwright Features:${NC}"
+    echo "  • Auto-detects running Docker instances"
+    echo "  • Tests hub (USA) and all NATO spoke instances"
+    echo "  • Generates instance-specific test configurations"
+    echo "  • Parallel execution across multiple instances"
+    echo "  • Federation testing across hub-spoke boundaries"
 }

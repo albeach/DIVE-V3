@@ -196,14 +196,14 @@ export default function SAMLConfigForm({ config, onChange, errors = {}, accessTo
 
             {/* Certificate */}
             <div>
-                <label htmlFor="certificate" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="signingCertificate" className="block text-sm font-medium text-gray-700">
                     X.509 Certificate
                 </label>
                 <textarea
-                    id="certificate"
+                    id="signingCertificate"
                     rows={8}
-                    value={config.certificate || ''}
-                    onChange={(e) => handleChange('certificate', e.target.value)}
+                    value={config.signingCertificate || ''}
+                    onChange={(e) => handleChange('signingCertificate', e.target.value)}
                     placeholder="-----BEGIN CERTIFICATE-----&#10;MIIDXTCCAkWgAwIBAgIJAKZ...&#10;-----END CERTIFICATE-----"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
                 />
@@ -241,10 +241,10 @@ export default function SAMLConfigForm({ config, onChange, errors = {}, accessTo
                 <select
                     id="nameIDFormat"
                     value={
-                        config.nameIDFormat ||
+                        config.nameIDPolicyFormat ||
                         'urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified'
                     }
-                    onChange={(e) => handleChange('nameIDFormat', e.target.value)}
+                    onChange={(e) => handleChange('nameIDPolicyFormat', e.target.value)}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
                     <option value="urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified">
@@ -325,9 +325,9 @@ export default function SAMLConfigForm({ config, onChange, errors = {}, accessTo
                     <input
                         id="validateSignature"
                         type="checkbox"
-                        checked={config.validateSignature !== false}
+                        checked={config.validateSignature !== 'false'}
                         onChange={(e) =>
-                            onChange({ ...config, validateSignature: e.target.checked })
+                            onChange({ ...config, validateSignature: e.target.checked ? 'true' : 'false' })
                         }
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />

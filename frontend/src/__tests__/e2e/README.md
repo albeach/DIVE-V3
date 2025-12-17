@@ -528,11 +528,97 @@ npm run test:e2e -- --grep "can access" --headed
 
 ---
 
+## Hub-Spoke Architecture Testing Strategies
+
+### Strategy 1: Instance-Specific Testing
+```bash
+# Test hub instance only
+npm run test:e2e:hub
+
+# Test specific spoke instances
+npm run test:e2e:spoke
+
+# Test all instances in sequence
+npm run test:e2e:all-instances
+```
+
+### Strategy 2: Cross-Instance Federation Testing
+```bash
+# Test federation features across instances
+npm run test:e2e:federation
+
+# Test with real federation URLs
+HUB_FRONTEND_URL=https://hub.dive25.com \
+FRA_FRONTEND_URL=https://fra.dive25.com \
+npm run test:e2e:federation
+```
+
+### Strategy 3: Parallel Multi-Instance Testing
+```typescript
+// playwright.config.ts - Parallel projects
+projects: [
+  { name: 'hub', baseURL: 'http://localhost:3000' },
+  { name: 'fra', baseURL: 'http://localhost:3025' },
+  { name: 'gbr', baseURL: 'http://localhost:3003' },
+]
+```
+
+### Strategy 4: Dynamic Instance Selection
+```typescript
+// Test that can run against any instance
+const instanceUrl = process.env.INSTANCE_URL || 'http://localhost:3000';
+const instanceName = process.env.INSTANCE_NAME || 'Unknown';
+
+test.describe(`Instance: ${instanceName} (${instanceUrl})`, () => {
+  test.use({ baseURL: instanceUrl });
+
+  test('works on any instance', async ({ page }) => {
+    // Test logic here - automatically adapts to instance
+  });
+});
+```
+
+### Strategy 5: CLI-Driven Test Orchestration
+```bash
+# Start hub and test it
+./dive hub up
+npm run test:e2e:hub
+
+# Start FRA spoke and test it
+./dive --instance fra spoke up
+FRA_FRONTEND_URL=http://localhost:3025 npm run test:e2e -- --project=spoke-fra-chromium
+
+# Test federation between instances
+./dive federation test
+```
+
+### Strategy 6: Environment-Based Configuration
+```typescript
+// test-config.ts - Environment-aware URLs
+export const INSTANCE_CONFIG = {
+  hub: {
+    frontend: process.env.HUB_FRONTEND_URL || 'http://localhost:3000',
+    backend: process.env.HUB_BACKEND_URL || 'http://localhost:4000',
+    name: 'DIVE Hub'
+  },
+  fra: {
+    frontend: process.env.FRA_FRONTEND_URL || 'http://localhost:3025',
+    backend: process.env.FRA_BACKEND_URL || 'http://localhost:4025',
+    name: 'France Spoke'
+  }
+};
+
+export const CURRENT_INSTANCE = INSTANCE_CONFIG[process.env.DIVE_INSTANCE || 'hub'];
+```
+
+---
+
 ## Next Steps
 
 1. ✅ **Infrastructure Complete** - Fixtures, helpers, page objects ready
 2. ⏳ **Refactor Existing Tests** - Apply new patterns to 7 broken tests
 3. ⏳ **Add New Coverage** - Security, accessibility, performance tests
+4. 🆕 **Hub-Spoke Testing** - Multi-instance test orchestration
 
 **Refactoring Priority:**
 1. `identity-drawer.spec.ts` - Update to use new auth helper
