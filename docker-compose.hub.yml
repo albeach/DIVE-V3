@@ -20,9 +20,9 @@ networks:
     driver: bridge
   # Shared network for local dev only (when hub + spokes on same server)
   # In production, instances communicate via external domains
-  dive-v3-shared-network:
+  shared-network:
     external: true
-    name: dive-v3-shared-network
+    name: shared-network
 
 volumes:
   hub_postgres_data:
