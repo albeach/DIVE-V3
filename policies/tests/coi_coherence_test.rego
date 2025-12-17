@@ -86,6 +86,9 @@ test_releasability_outside_fvey_denied if {
 			"COI": ["FVEY"],
 			"releasabilityTo": ["USA", "GBR", "FRA"],
 		},
+		"context": {
+			"strict_coi_coherence": true
+		}
 	}
 	count(result) > 0
 }
@@ -106,6 +109,9 @@ test_releasability_outside_nato_denied if {
 			"COI": ["NATO"],
 			"releasabilityTo": ["USA", "JPN"],
 		},
+		"context": {
+			"strict_coi_coherence": true
+		}
 	}
 	count(result) > 0
 }
@@ -126,6 +132,9 @@ test_releasability_outside_can_us_denied if {
 			"COI": ["CAN-US"],
 			"releasabilityTo": ["USA", "GBR"],
 		},
+		"context": {
+			"strict_coi_coherence": true
+		}
 	}
 	count(result) > 0
 }
