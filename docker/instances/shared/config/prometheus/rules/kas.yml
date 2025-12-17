@@ -1,0 +1,119 @@
+# DIVE V3 KAS (Key Access Service) Alert Rules
+# Reference: ACP-240 Section 6 (Audit & Monitoring)
+groups:
+  - name: kas
+    rules:
+      # KAS Instance Down - Critical
+      - alert: KASInstanceDown
+        expr: up{service="kas"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KAS instance {{ $labels.instance }} is down"
+          description: "KAS instance {{ $labels.instance }} ({{ $labels.realm }}) has been down for more than 2 minutes. Key access is unavailable."
+
+      # High Key Request Denial Rate
+      - alert: KASHighDenialRate
+        expr: |
+          rate(kas_key_requests_denied_total[5m]) / 
+          (rate(kas_key_requests_total[5m]) + 0.001) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High key denial rate on {{ $labels.instance }}"
+          description: "KAS {{ $labels.instance }} has a key denial rate of {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # Key Request Errors
+      - alert: KASKeyRequestErrors
+        expr: increase(kas_key_requests_error_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Key request errors on {{ $labels.instance }}"
+          description: "KAS {{ $labels.instance }} has {{ $value }} key request errors in the last 5 minutes."
+
+      # High Key Request Latency
+      - alert: KASHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(kas_key_request_duration_seconds_bucket[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High key request latency on {{ $labels.instance }}"
+          description: "KAS {{ $labels.instance }} p95 latency is {{ $value }}s (threshold: 0.5s)."
+
+      # Federation Request Failures
+      - alert: KASFederationFailures
+        expr: increase(kas_federation_error_total[10m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Federation failures from {{ $labels.origin_kas }} to {{ $labels.target_kas }}"
+          description: "KAS federation from {{ $labels.origin_kas }} to {{ $labels.target_kas }} has {{ $value }} errors in the last 10 minutes."
+
+      # Circuit Breaker Opened
+      - alert: KASCircuitBreakerOpen
+        expr: kas_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "KAS circuit breaker is OPEN on {{ $labels.kas_id }}"
+          description: "Circuit breaker for KAS {{ $labels.kas_id }} is OPEN, blocking requests to prevent cascading failures."
+
+      # DEK Cache Low Hit Rate
+      - alert: KASLowCacheHitRate
+        expr: |
+          rate(kas_dek_cache_hits_total[5m]) / 
+          (rate(kas_dek_cache_hits_total[5m]) + rate(kas_dek_cache_misses_total[5m]) + 0.001) < 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low DEK cache hit rate on {{ $labels.instance }}"
+          description: "KAS {{ $labels.instance }} DEK cache hit rate is {{ $value | humanizePercentage }}."
+
+      # OPA Evaluation Latency
+      - alert: KASOPASlowEvaluation
+        expr: |
+          histogram_quantile(0.95, 
+            rate(kas_opa_evaluation_duration_seconds_bucket[5m])
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow OPA evaluation on {{ $labels.instance }}"
+          description: "OPA policy evaluation p95 latency is {{ $value }}s (threshold: 0.2s) on KAS {{ $labels.instance }}."
+
+      # Authorization Check Failures
+      - alert: KASHighClearanceFailures
+        expr: |
+          rate(kas_authz_clearance_check_fail[5m]) / 
+          (rate(kas_authz_clearance_check_pass[5m]) + rate(kas_authz_clearance_check_fail[5m]) + 0.001) > 0.3
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High clearance check failure rate on {{ $labels.instance }}"
+          description: "KAS {{ $labels.instance }} clearance check failure rate is {{ $value | humanizePercentage }}."
+
+      # No Key Requests (Service May Be Unused or Broken)
+      - alert: KASNoTraffic
+        expr: |
+          increase(kas_key_requests_total[30m]) == 0 
+          and up{service="kas"} == 1
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "No key requests on {{ $labels.instance }}"
+          description: "KAS {{ $labels.instance }} has received no key requests in 30 minutes."
+

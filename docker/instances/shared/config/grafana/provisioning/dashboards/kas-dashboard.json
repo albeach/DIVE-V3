@@ -1,0 +1,373 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "dive-v3-kas",
+    "title": "DIVE V3 KAS (Key Access Service)",
+    "description": "NATO ACP-240 Compliant Key Access Service Monitoring",
+    "tags": ["dive-v3", "kas", "security", "acp-240"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "schemaVersion": 38,
+    "panels": [
+      {
+        "id": 1,
+        "title": "KAS Instances Status",
+        "type": "stat",
+        "description": "Status of all KAS instances",
+        "targets": [
+          {
+            "expr": "up{service=\"kas\"}",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": { "text": "DOWN", "color": "red" },
+                  "1": { "text": "UP", "color": "green" }
+                },
+                "type": "value"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Total Key Requests",
+        "type": "stat",
+        "description": "Total key requests across all KAS instances",
+        "targets": [
+          {
+            "expr": "sum(kas_key_requests_total)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "blue", "value": null }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Keys Released",
+        "type": "stat",
+        "description": "Successful key releases",
+        "targets": [
+          {
+            "expr": "sum(kas_key_requests_success_total)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+      },
+      {
+        "id": 4,
+        "title": "Keys Denied",
+        "type": "stat",
+        "description": "Denied key requests (policy enforcement)",
+        "targets": [
+          {
+            "expr": "sum(kas_key_requests_denied_total)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "orange", "value": null }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+      },
+      {
+        "id": 5,
+        "title": "Key Request Rate",
+        "type": "timeseries",
+        "description": "Key requests per second by instance",
+        "targets": [
+          {
+            "expr": "rate(kas_key_requests_total[5m])",
+            "refId": "A",
+            "legendFormat": "{{instance}} - total"
+          },
+          {
+            "expr": "rate(kas_key_requests_success_total[5m])",
+            "refId": "B",
+            "legendFormat": "{{instance}} - success"
+          },
+          {
+            "expr": "rate(kas_key_requests_denied_total[5m])",
+            "refId": "C",
+            "legendFormat": "{{instance}} - denied"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+      },
+      {
+        "id": 6,
+        "title": "Key Request Latency (p95)",
+        "type": "timeseries",
+        "description": "95th percentile key request latency",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(kas_key_request_duration_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "{{instance}} p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(kas_key_request_duration_seconds_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "{{instance}} p50"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 0.2 },
+                { "color": "red", "value": 0.5 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+      },
+      {
+        "id": 7,
+        "title": "DEK Cache Size",
+        "type": "gauge",
+        "description": "Current DEK cache size",
+        "targets": [
+          {
+            "expr": "kas_dek_cache_size",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "min": 0,
+            "max": 1000,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 500 },
+                { "color": "red", "value": 800 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 6, "x": 0, "y": 12 }
+      },
+      {
+        "id": 8,
+        "title": "DEK Cache Hit Rate",
+        "type": "gauge",
+        "description": "DEK cache hit rate (higher is better)",
+        "targets": [
+          {
+            "expr": "rate(kas_dek_cache_hits_total[5m]) / (rate(kas_dek_cache_hits_total[5m]) + rate(kas_dek_cache_misses_total[5m]) + 0.001)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "yellow", "value": 0.5 },
+                { "color": "green", "value": 0.8 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 6, "w": 6, "x": 6, "y": 12 }
+      },
+      {
+        "id": 9,
+        "title": "Federation Requests",
+        "type": "timeseries",
+        "description": "Cross-KAS federation requests",
+        "targets": [
+          {
+            "expr": "rate(kas_federation_requests_total[5m])",
+            "refId": "A",
+            "legendFormat": "{{origin_kas}} → {{target_kas}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        },
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 12 }
+      },
+      {
+        "id": 10,
+        "title": "Circuit Breaker State",
+        "type": "stat",
+        "description": "Circuit breaker state (0=closed, 1=half-open, 2=open)",
+        "targets": [
+          {
+            "expr": "kas_circuit_breaker_state",
+            "refId": "A",
+            "legendFormat": "{{kas_id}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "options": {
+                  "0": { "text": "CLOSED", "color": "green" },
+                  "1": { "text": "HALF-OPEN", "color": "yellow" },
+                  "2": { "text": "OPEN", "color": "red" }
+                },
+                "type": "value"
+              }
+            ]
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 18 }
+      },
+      {
+        "id": 11,
+        "title": "Authorization Checks",
+        "type": "piechart",
+        "description": "Authorization check outcomes",
+        "targets": [
+          {
+            "expr": "sum(kas_authz_clearance_check_pass)",
+            "refId": "A",
+            "legendFormat": "Clearance Pass"
+          },
+          {
+            "expr": "sum(kas_authz_clearance_check_fail)",
+            "refId": "B",
+            "legendFormat": "Clearance Fail"
+          },
+          {
+            "expr": "sum(kas_authz_country_check_pass)",
+            "refId": "C",
+            "legendFormat": "Country Pass"
+          },
+          {
+            "expr": "sum(kas_authz_country_check_fail)",
+            "refId": "D",
+            "legendFormat": "Country Fail"
+          },
+          {
+            "expr": "sum(kas_authz_coi_check_pass)",
+            "refId": "E",
+            "legendFormat": "COI Pass"
+          },
+          {
+            "expr": "sum(kas_authz_coi_check_fail)",
+            "refId": "F",
+            "legendFormat": "COI Fail"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 6, "y": 18 }
+      },
+      {
+        "id": 12,
+        "title": "OPA Evaluation Latency",
+        "type": "timeseries",
+        "description": "OPA policy evaluation latency",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(kas_opa_evaluation_duration_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(kas_opa_evaluation_duration_seconds_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "p50"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 18 }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(up{service=\"kas\"}, instance)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "KAS Alerts",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "ALERTS{alertname=~\"KAS.*\"}",
+          "iconColor": "red"
+        }
+      ]
+    }
+  },
+  "overwrite": true
+}
+

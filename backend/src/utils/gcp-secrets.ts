@@ -364,6 +364,100 @@ export async function getFederationSecret(instance1: string, instance2: string):
 }
 
 /**
+ * Get KAS signing key for JWT signature
+ * Used for KAS-to-KAS authentication in federation
+ * 
+ * SECURITY: Required for production. No fallback.
+ */
+export async function getKASSigningKey(): Promise<string> {
+    const secretName = `${SECRET_PREFIX}-kas-signing-key`;
+    
+    // Check cache first
+    const cached = getCachedSecret(secretName);
+    if (cached) {
+        return cached;
+    }
+    
+    // Try GCP Secret Manager
+    if (GCP_MODE !== 'disabled') {
+        const gcpSecret = await fetchFromGCPSecretManager(secretName);
+        if (gcpSecret) {
+            setCachedSecret(secretName, gcpSecret);
+            return gcpSecret;
+        }
+        
+        if (GCP_MODE === 'force') {
+            throw new Error(`GCP Secret Manager required but secret not found: ${secretName}`);
+        }
+    }
+    
+    // Fall back to environment variable
+    const envKey = process.env.KAS_SIGNING_KEY;
+    if (envKey) {
+        logger.info('Using KAS signing key from environment variable');
+        setCachedSecret(secretName, envKey);
+        return envKey;
+    }
+    
+    throw new Error('KAS signing key not configured. Set KAS_SIGNING_KEY or create GCP secret.');
+}
+
+/**
+ * Get KAS encryption key for DEK wrapping
+ * Used for encrypting/decrypting Data Encryption Keys
+ * 
+ * SECURITY: Required for production. No fallback.
+ */
+export async function getKASEncryptionKey(): Promise<string> {
+    const secretName = `${SECRET_PREFIX}-kas-encryption-key`;
+    
+    // Check cache first
+    const cached = getCachedSecret(secretName);
+    if (cached) {
+        return cached;
+    }
+    
+    // Try GCP Secret Manager
+    if (GCP_MODE !== 'disabled') {
+        const gcpSecret = await fetchFromGCPSecretManager(secretName);
+        if (gcpSecret) {
+            setCachedSecret(secretName, gcpSecret);
+            return gcpSecret;
+        }
+        
+        if (GCP_MODE === 'force') {
+            throw new Error(`GCP Secret Manager required but secret not found: ${secretName}`);
+        }
+    }
+    
+    // Fall back to environment variable
+    const envKey = process.env.KAS_ENCRYPTION_KEY;
+    if (envKey) {
+        logger.info('Using KAS encryption key from environment variable');
+        setCachedSecret(secretName, envKey);
+        return envKey;
+    }
+    
+    throw new Error('KAS encryption key not configured. Set KAS_ENCRYPTION_KEY or create GCP secret.');
+}
+
+/**
+ * Get all KAS secrets (for initialization)
+ * Returns an object with all KAS-related secrets
+ */
+export async function getKASSecrets(): Promise<{
+    signingKey: string;
+    encryptionKey: string;
+}> {
+    const [signingKey, encryptionKey] = await Promise.all([
+        getKASSigningKey(),
+        getKASEncryptionKey()
+    ]);
+    
+    return { signingKey, encryptionKey };
+}
+
+/**
  * Check if GCP Secret Manager is available and configured
  * Returns true if gcloud CLI is authenticated
  */
