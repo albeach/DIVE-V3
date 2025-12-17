@@ -23,18 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15  # Realistic for 1,643+ comprehensive tests
 
-    # Use real MongoDB service instead of MongoDB Memory Server (10x faster in CI)
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --noauth  # Disable authentication for CI testing
+    # Use MongoDB Memory Server for isolated testing (sequential execution to avoid conflicts)
 
     steps:
       - name: Checkout Code
@@ -57,6 +46,18 @@ jobs:
           key: ${{ runner.os }}-mongodb-binary-7.0.0
           restore-keys: |
             ${{ runner.os }}-mongodb-binary-
+
+      - name: Install MongoDB dependencies
+        run: |
+          # Ensure required system dependencies for MongoDB Memory Server
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
+
+      - name: Install MongoDB dependencies
+        run: |
+          # Ensure required system dependencies for MongoDB Memory Server
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
 
       - name: Generate Test Certificates
         run: |
@@ -133,7 +134,6 @@ jobs:
           echo "**MongoDB:** Real service (GitHub Actions service container)" >> $GITHUB_STEP_SUMMARY
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           MONGODB_AUTH_DISABLED: true
           OPA_URL: https://localhost:8181
           KAS_URL: http://localhost:8080
@@ -148,18 +148,8 @@ jobs:
     name: Backend - Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10  # Increased for integration test suite
-    
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --noauth  # Disable authentication for CI testing
+
+    # Use MongoDB Memory Server for isolated testing
     
     steps:
       - name: Checkout Code
@@ -228,7 +218,6 @@ jobs:
         run: cd backend && npm run test:integration
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: https://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -239,7 +228,6 @@ jobs:
         run: cd backend && npm run test:audit-logs
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: https://localhost:8181
 
   backend-coverage:
@@ -247,27 +235,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20  # Coverage generation needs time
 
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --noauth  # Disable authentication for CI testing
-
-      opa:
-        image: openpolicyagent/opa:latest
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "curl -f http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 3
+    # Use MongoDB Memory Server for isolated testing
 
     steps:
       - name: Checkout Code
@@ -336,7 +304,6 @@ jobs:
         run: cd backend && npm run test:coverage
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: https://localhost:8181
           KAS_URL: http://localhost:8080
           JWT_SECRET: test-jwt-secret-for-ci
@@ -445,27 +412,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    services:
-      mongodb:
-        image: mongo:7.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --noauth  # Disable authentication for CI testing
-
-      opa:
-        image: openpolicyagent/opa:latest
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "curl -f http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 3
+    # Use MongoDB Memory Server for isolated testing
 
     steps:
       - name: Checkout Code
@@ -488,7 +435,6 @@ jobs:
           npm test -- --testPathPattern=performance --testTimeout=30000 || echo "No performance tests found"
         env:
           NODE_ENV: test
-          MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           MONGODB_AUTH_DISABLED: true
           OPA_URL: https://localhost:8181
       

@@ -74,6 +74,53 @@ jest.mock('../utils/logger', () => {
 // Global test timeout
 jest.setTimeout(10000);
 
+// Database connection helper for tests
+export function getTestDatabase(): { mongoClient: any; db: any } | null {
+    // Use the global MongoDB connection established by globalSetup
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGODB_URL;
+    if (!mongoUri) {
+        console.warn('[Test Setup] No MongoDB connection available');
+        return null;
+    }
+
+    try {
+        // Return connection info - tests should NOT create their own connections
+        // Global setup handles connection lifecycle
+        return {
+            mongoClient: null, // Global setup manages this
+            db: null // Tests should use service methods, not direct DB access
+        };
+    } catch (error) {
+        console.warn('[Test Setup] Database connection issue:', error);
+        return null;
+    }
+}
+
+// Memory cleanup utility for tests
+export function cleanupTestResources(): void {
+    // Clear all jest mocks and timers
+    jest.clearAllMocks();
+    jest.clearAllTimers();
+
+    // Clear any cached modules that might hold connections
+    jest.resetModules();
+
+    // Force garbage collection if available
+    if (global.gc) {
+        global.gc();
+    }
+}
+
+// Test timeout helper
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+    return Promise.race([
+        promise,
+        new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        )
+    ]);
+}
+
 // Clean up after all tests
 afterAll(async () => {
     // Force cleanup of any remaining async operations
