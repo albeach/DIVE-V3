@@ -200,8 +200,8 @@ describe('Rate Limit Middleware', () => {
     });
 
     describe('Rate Limit Stats', () => {
-        it('should return rate limit configuration', () => {
-            const stats = getRateLimitStats();
+        it('should return rate limit configuration', async () => {
+            const stats = await getRateLimitStats();
 
             expect(stats.enabled).toBeDefined();
             expect(stats.limits).toBeDefined();
@@ -212,8 +212,8 @@ describe('Rate Limit Middleware', () => {
             expect(stats.limits.strict).toBeDefined();
         });
 
-        it('should include windowMs and max for each limiter', () => {
-            const stats = getRateLimitStats();
+        it('should include windowMs and max for each limiter', async () => {
+            const stats = await getRateLimitStats();
 
             expect(stats.limits.api.windowMs).toBeGreaterThan(0);
             expect(stats.limits.api.max).toBeGreaterThan(0);
@@ -221,10 +221,10 @@ describe('Rate Limit Middleware', () => {
             expect(stats.limits.auth.max).toBeGreaterThan(0);
         });
 
-        it('should respect environment variables', () => {
+        it('should respect environment variables', async () => {
             process.env.API_RATE_LIMIT_MAX = '999';
-            
-            const stats = getRateLimitStats();
+
+            const stats = await getRateLimitStats();
             expect(stats.limits.api.max).toBe(999);
         });
     });
