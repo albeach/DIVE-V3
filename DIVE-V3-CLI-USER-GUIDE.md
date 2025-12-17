@@ -1073,6 +1073,74 @@ Checks per spoke:
 - OPA policy engine
 - KAS (Key Access Service)
 
+### Spoke KAS Commands
+
+Manage KAS (Key Access Service) for spoke instances.
+
+#### `spoke kas init <code>` - Initialize Spoke KAS
+
+Initialize KAS configuration for a spoke instance including certificates and registry registration.
+
+```bash
+./dive spoke kas init POL
+./dive spoke kas init NOR
+./dive --instance fra spoke kas init
+```
+
+Performs:
+- Creates KAS certificates if needed
+- Configures KAS port in spoke environment
+- Auto-registers in KAS federation registry
+
+#### `spoke kas status <code>` - Spoke KAS Status
+
+Show KAS service status for a spoke instance.
+
+```bash
+./dive spoke kas status POL
+./dive --instance fra spoke kas status
+```
+
+#### `spoke kas health <code>` - Spoke KAS Health Check
+
+Detailed health check for spoke KAS.
+
+```bash
+./dive spoke kas health POL
+```
+
+#### `spoke kas register <code>` - Register in Federation
+
+Register spoke KAS in the federation registry with automatic trust matrix configuration.
+
+```bash
+./dive spoke kas register POL
+./dive spoke kas register NOR
+```
+
+Creates entry in `config/kas-registry.json` with:
+- KAS endpoint URLs
+- JWT authentication configuration
+- Supported COIs and clearance mappings
+- Bilateral trust with usa-kas (Hub)
+
+#### `spoke kas unregister <code>` - Remove from Federation
+
+Remove spoke KAS from the federation registry.
+
+```bash
+./dive spoke kas unregister POL
+```
+
+#### `spoke kas logs <code> [-f]` - View Spoke KAS Logs
+
+View logs for spoke KAS with optional follow mode.
+
+```bash
+./dive spoke kas logs FRA
+./dive spoke kas logs POL -f
+```
+
 ## SP Client Registration
 
 OAuth/OIDC partner application registration.
