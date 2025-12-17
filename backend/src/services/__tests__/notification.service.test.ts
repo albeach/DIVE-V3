@@ -3,9 +3,7 @@
  * Tests notification CRUD operations, validation, and error handling
  */
 
-import { MongoClient, Db } from 'mongodb';
 import { notificationService, INotification } from '../notification.service';
-import { getMongoDBUrl, getMongoDBName } from '../../utils/mongodb-config';
 
 // Mock MongoDB connection
 jest.mock('../../utils/mongodb-config', () => ({
