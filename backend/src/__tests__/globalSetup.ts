@@ -147,6 +147,10 @@ Root CA (self-signed, 10-year)
 
 export default async function globalSetup() {
     console.log('🔧 Global Setup: Configuring MongoDB for tests...');
+    console.log('   Environment:', process.env.NODE_ENV);
+    console.log('   MONGODB_URL present:', !!process.env.MONGODB_URL);
+    console.log('   MONGODB_URI present:', !!process.env.MONGODB_URI);
+    console.log('   MONGODB_DATABASE:', process.env.MONGODB_DATABASE);
 
     try {
         ensurePKIFixtures();
@@ -154,8 +158,11 @@ export default async function globalSetup() {
         // Check if MongoDB URL is already provided (e.g., from CI service container)
         const existingMongoUrl = process.env.MONGODB_URL;
 
+        console.log('   Checking for existing MongoDB URL...');
+        console.log('   MONGODB_URL value:', existingMongoUrl ? 'present' : 'not present');
+
         if (existingMongoUrl && existingMongoUrl.startsWith('mongodb://')) {
-            console.log('✅ Using existing MongoDB connection:', existingMongoUrl);
+            console.log('✅ Using existing MongoDB connection:', existingMongoUrl.replace(/:([^:@]{4})[^:@]*@/, ':****@')); // Mask password
             console.log(`   Database: dive-v3-test`);
             console.log(`   Environment: ${process.env.NODE_ENV}`);
             console.log(`   Mode: External MongoDB service (CI/Local override)`);
@@ -164,14 +171,16 @@ export default async function globalSetup() {
             process.env.MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
             // Seed test data with existing connection
+            console.log('   Seeding test data with external connection...');
             await seedTestData(existingMongoUrl);
 
             console.log(`   Benefit: Using external MongoDB service for consistency!`);
+            console.log('✅ Global setup completed successfully (external MongoDB)');
             return;
         }
 
         // No existing MongoDB URL - start Memory Server (local development)
-        console.log('🔧 Starting MongoDB Memory Server for local development...');
+        console.log('🔧 No external MongoDB found, starting MongoDB Memory Server for local development...');
 
         // Create MongoDB Memory Server (in-memory instance)
         const mongoServer = await MongoMemoryServer.create({
@@ -208,6 +217,7 @@ export default async function globalSetup() {
         await seedTestData(uri);
 
         console.log(`   Benefit: Complete test infrastructure ready!`);
+        console.log('✅ Global setup completed successfully (memory server)');
     } catch (error) {
         console.error('❌ Failed to configure MongoDB for tests:', error);
         console.error('   This may happen if:');
@@ -215,6 +225,10 @@ export default async function globalSetup() {
         console.error('   - MongoDB service container not ready');
         console.error('   - Insufficient disk space');
         console.error('   - Port conflict (unlikely with random port)');
+        console.error('   Environment variables:');
+        console.error('   - NODE_ENV:', process.env.NODE_ENV);
+        console.error('   - MONGODB_URL:', process.env.MONGODB_URL ? 'present' : 'not present');
+        console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'present' : 'not present');
         throw error;
     }
 }
