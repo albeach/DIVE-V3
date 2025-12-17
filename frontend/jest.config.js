@@ -46,6 +46,33 @@ const customJestConfig = {
         '!<rootDir>/src/__tests__/e2e/**',
     ],
     moduleDirectories: ['node_modules', '<rootDir>/'],
+
+    // Performance and memory optimizations
+    testTimeout: 10000, // 10 second timeout for unit tests
+    maxWorkers: '50%', // Use 50% of available cores
+    workerIdleMemoryLimit: '512MB', // Restart workers if they exceed memory limit
+
+    // CI optimizations - GitHub Actions paid plan has higher limits
+    ...(process.env.CI && {
+        maxWorkers: 4, // GitHub Actions paid plan allows more workers
+        testTimeout: 20000, // Longer timeout for CI
+        workerIdleMemoryLimit: '1GB', // Higher memory limit for paid plan
+        // Enable verbose output for CI debugging
+        verbose: false, // Keep clean output
+        bail: false, // Don't stop on first failure
+        // Force exit to prevent hanging
+        forceExit: true,
+        detectOpenHandles: false,
+    }),
+
+    // Memory management
+    resetMocks: true,
+    restoreMocks: true,
+    clearMocks: true,
+
+    // Better error reporting
+    notify: false, // Disable OS notifications in CI
+    notifyMode: 'failure-change', // Only notify on status changes
 }
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
