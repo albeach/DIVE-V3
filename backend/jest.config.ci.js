@@ -18,4 +18,5 @@ module.exports = {
     clearMocks: true,
     resetMocks: true,
     restoreMocks: true,
+    // CI trigger: Updated test fixes - monitoring workflow performance
 };
