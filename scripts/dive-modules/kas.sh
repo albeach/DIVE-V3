@@ -1013,6 +1013,95 @@ kas_metrics() {
 }
 
 # =============================================================================
+# ALERTS COMMAND
+# =============================================================================
+
+# Query KAS alerts from Prometheus
+kas_alerts() {
+    echo -e "${BOLD}KAS Monitoring Alerts${NC}"
+    echo ""
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would show KAS alerts"
+        return 0
+    fi
+
+    # Check if Prometheus is accessible
+    if ! curl -s "http://localhost:9090/-/healthy" >/dev/null 2>&1; then
+        log_warn "Prometheus not accessible at http://localhost:9090"
+        echo ""
+        echo "Start monitoring stack with:"
+        echo "  cd docker/instances/shared && docker compose up -d"
+        echo ""
+        echo "Or check manually with: ./dive kas logs"
+        return 1
+    fi
+
+    echo -e "${BOLD}KAS Alert Rules Configured:${NC}"
+    echo "  🔴 KASInstanceDown          - Critical: KAS instance is down"
+    echo "  🟠 KASHighDenialRate        - Warning: High key denial rate (>50%)"
+    echo "  🟠 KASKeyRequestErrors      - Warning: Key request errors"
+    echo "  🟠 KASHighLatency           - Warning: High p95 latency (>500ms)"
+    echo "  🟠 KASFederationFailures    - Warning: Federation request failures"
+    echo "  🔴 KASCircuitBreakerOpen    - Critical: Circuit breaker is open"
+    echo "  🔵 KASLowCacheHitRate       - Info: Low DEK cache hit rate"
+    echo "  🟠 KASOPASlowEvaluation     - Warning: Slow OPA evaluation"
+    echo "  🔵 KASHighClearanceFailures - Info: High clearance check failures"
+    echo "  🔵 KASNoTraffic             - Info: No key requests in 30 minutes"
+    echo ""
+
+    echo -e "${BOLD}Current Alert Status:${NC}"
+    
+    # Query active KAS alerts
+    local alerts
+    alerts=$(curl -s "http://localhost:9090/api/v1/alerts" 2>/dev/null)
+    
+    if [ -n "$alerts" ] && echo "$alerts" | jq -e '.data.alerts' >/dev/null 2>&1; then
+        local kas_alerts
+        kas_alerts=$(echo "$alerts" | jq -r '.data.alerts[] | select(.labels.alertname | startswith("KAS"))')
+        
+        if [ -n "$kas_alerts" ]; then
+            local alert_count
+            alert_count=$(echo "$alerts" | jq -r '[.data.alerts[] | select(.labels.alertname | startswith("KAS"))] | length')
+            
+            echo -e "${RED}⚠️  Active KAS alerts: $alert_count${NC}"
+            echo ""
+            
+            echo "$alerts" | jq -r '.data.alerts[] | select(.labels.alertname | startswith("KAS")) | "  \(.labels.severity | ascii_upcase): \(.labels.alertname) - \(.annotations.summary)"' 2>/dev/null
+        else
+            echo -e "${GREEN}✅ No active KAS alerts${NC}"
+        fi
+    else
+        log_warn "Could not query alerts from Prometheus"
+    fi
+
+    echo ""
+    echo -e "${BOLD}Prometheus Alertmanager:${NC}"
+    if curl -s "http://localhost:9093/-/healthy" >/dev/null 2>&1; then
+        log_success "Alertmanager is running at http://localhost:9093"
+    else
+        log_warn "Alertmanager not accessible at http://localhost:9093"
+    fi
+
+    echo ""
+    echo -e "${BOLD}Grafana Dashboard:${NC}"
+    echo "  KAS Dashboard: http://localhost:3333/d/dive-v3-kas"
+    echo "  Credentials: admin/admin"
+
+    echo ""
+    echo -e "${BOLD}Alert Rule Files:${NC}"
+    local rules_file="${DIVE_ROOT}/docker/instances/shared/config/prometheus/rules/kas.yml"
+    if [ -f "$rules_file" ]; then
+        echo "  $rules_file"
+        local rule_count
+        rule_count=$(grep -c "alert:" "$rules_file" 2>/dev/null || echo "0")
+        echo "  Rules defined: $rule_count"
+    else
+        log_warn "KAS alert rules file not found"
+    fi
+}
+
+# =============================================================================
 # AUDIT COMMANDS
 # =============================================================================
 
@@ -1105,6 +1194,7 @@ ${BOLD}CACHE COMMANDS:${NC}
 
 ${BOLD}MONITORING COMMANDS:${NC}
   metrics [instance]          Show KAS Prometheus metrics
+  alerts                      Show KAS alert status and configured rules
   audit [--last N]            Query KAS audit logs (default: last 50)
 
 ${BOLD}INSTANCES:${NC}
@@ -1228,6 +1318,9 @@ module_kas() {
         # Monitoring commands
         metrics)
             kas_metrics "$@"
+            ;;
+        alerts)
+            kas_alerts "$@"
             ;;
         audit)
             kas_audit "${INSTANCE:-usa}" "$@"
