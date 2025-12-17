@@ -11,6 +11,7 @@ import { clearAuthzCaches } from '../middleware/authz.middleware';
 import { initializeSCIMServices } from '../controllers/scim.controller';
 
 // CRITICAL: Use var (not const/let) so it's available during jest.mock hoisting!
+// eslint-disable-next-line no-var
 var mockSCIMServiceMethods = {
   searchUsers: jest.fn(),
   getUserById: jest.fn(),
@@ -63,28 +64,28 @@ jest.mock('../middleware/authz.middleware', () => {
   return {
     ...actual,
     authenticateJWT: async (req: any, res: any, next: any) => {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            res.status(401).json({
-                schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
-                status: "401",
-                detail: "Authentication required"
-            });
-            return;
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({
+          schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+          status: "401",
+          detail: "Authentication required"
+        });
+        return;
+      }
+      // Set req.sp so scimAuthMiddleware accepts it
+      req.sp = {
+        clientId: 'sp-gbr-scim',
+        scopes: ['scim:read', 'scim:write'],
+        sp: {
+          spId: 'SP-SCIM-001',
+          name: 'Test SCIM Provider',
+          country: 'GBR',
+          clientId: 'sp-gbr-scim',
+          status: 'ACTIVE'
         }
-        // Set req.sp so scimAuthMiddleware accepts it
-        req.sp = {
-            clientId: 'sp-gbr-scim',
-            scopes: ['scim:read', 'scim:write'],
-            sp: {
-                spId: 'SP-SCIM-001',
-                name: 'Test SCIM Provider',
-                country: 'GBR',
-                clientId: 'sp-gbr-scim',
-                status: 'ACTIVE'
-            }
-        };
-        next();
+      };
+      next();
     }
   };
 });
@@ -128,7 +129,7 @@ describe('SCIM 2.0 Integration Tests', () => {
     mockSCIMServiceInstance.updateUser.mockClear();
     mockSCIMServiceInstance.patchUser.mockClear();
     mockSCIMServiceInstance.deleteUser.mockClear();
-    
+
     clearAuthzCaches();
     clearResourceServiceCache();
 

@@ -92,7 +92,7 @@ test.describe('KAS Integration Flow - Policy-Bound Key Release', () => {
 
     test('France SECRET user denied access to US-ONLY encrypted resource', async ({ page }) => {
         await test.step('Login as France SECRET user', async () => {
-            await loginAs(page, TEST_USERS.FRANCE.SECRET, {
+            await loginAs(page, TEST_USERS.FRA.SECRET, {
                 otpCode: '123456', // SECRET requires OTP (AAL2)
             });
         });
@@ -144,7 +144,7 @@ test.describe('KAS Integration Flow - Policy-Bound Key Release', () => {
 
     test('Canada TOP_SECRET user accesses NATO encrypted resource with WebAuthn', async ({ page }) => {
         await test.step('Login as Canada TOP_SECRET user with WebAuthn', async () => {
-            await loginAs(page, TEST_USERS.CANADA.TOP_SECRET, {
+            await loginAs(page, TEST_USERS.USA.TOP_SECRET, {
                 expectMFASetup: false, // May already have WebAuthn configured
             });
         });
@@ -289,19 +289,19 @@ test.describe('KAS Integration Flow - Multi-National Coverage', () => {
             description: 'USA SECRET accesses FVEY encrypted resource'
         },
         {
-            user: TEST_USERS.BRITAIN.SECRET,
+            user: TEST_USERS.GBR.SECRET,
             resource: 'test-secret-fvey-encrypted',
             expectedResult: 'ALLOW',
             description: 'Britain SECRET accesses FVEY encrypted resource'
         },
         {
-            user: TEST_USERS.GERMANY.SECRET,
+            user: TEST_USERS.DEU.SECRET,
             resource: 'test-secret-fvey-encrypted',
             expectedResult: 'DENY',
             description: 'Germany SECRET denied FVEY encrypted resource (not FVEY member)'
         },
         {
-            user: TEST_USERS.FRANCE.CONFIDENTIAL,
+            user: TEST_USERS.FRA.CONFIDENTIAL,
             resource: 'test-confidential-nato-encrypted',
             expectedResult: 'ALLOW',
             description: 'France CONFIDENTIAL accesses NATO encrypted resource'

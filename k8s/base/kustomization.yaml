@@ -35,6 +35,10 @@ resources:
   - opa/deployment.yaml
   - opa/service.yaml
   
+  # Horizontal Pod Autoscalers
+  - frontend/hpa.yaml
+  - backend/hpa.yaml
+  
   # PostgreSQL
   - postgres/deployment.yaml
   - postgres/service.yaml

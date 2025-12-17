@@ -59,6 +59,26 @@ Object.defineProperty(window, 'matchMedia', {
     })),
 })
 
+// Mock window.scrollTo
+Object.defineProperty(window, 'scrollTo', {
+    writable: true,
+    value: jest.fn(),
+})
+
+// Mock window.requestAnimationFrame
+global.requestAnimationFrame = jest.fn(cb => setTimeout(cb, 16))
+global.cancelAnimationFrame = jest.fn(id => clearTimeout(id))
+
+// Mock ResizeObserver
+global.ResizeObserver = class ResizeObserver {
+    constructor(cb) {
+        this.cb = cb
+    }
+    observe() { }
+    unobserve() { }
+    disconnect() { }
+}
+
 // Mock IntersectionObserver
 global.IntersectionObserver = class IntersectionObserver {
     constructor() { }
@@ -69,6 +89,18 @@ global.IntersectionObserver = class IntersectionObserver {
     }
     unobserve() { }
 }
+
+// Mock performance.mark and performance.measure
+Object.defineProperty(window, 'performance', {
+    writable: true,
+    value: {
+        ...window.performance,
+        mark: jest.fn(),
+        measure: jest.fn(),
+        getEntriesByName: jest.fn(() => []),
+        getEntriesByType: jest.fn(() => []),
+    },
+})
 
 // Suppress console errors/warnings in tests (optional)
 global.console = {

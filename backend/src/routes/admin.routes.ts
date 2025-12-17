@@ -51,6 +51,11 @@ import {
     exportLogsHandler
 } from '../controllers/admin-log.controller';
 import {
+    generateNISTReportHandler,
+    generateNATOReportHandler,
+    exportComplianceReportHandler
+} from '../controllers/compliance-report.controller';
+import {
     listCertificates,
     getCertificateHealth,
     rotateCertificate,
@@ -166,6 +171,28 @@ router.get('/logs/stats', getStatsHandler);
  * Export logs to JSON
  */
 router.get('/logs/export', exportLogsHandler);
+
+// ============================================
+// Compliance Reporting Routes (Phase 12)
+// ============================================
+
+/**
+ * GET /api/admin/compliance/reports/nist
+ * Generate NIST SP 800-63-3 compliance report
+ */
+router.get('/compliance/reports/nist', generateNISTReportHandler);
+
+/**
+ * GET /api/admin/compliance/reports/nato
+ * Generate NATO ACP-240 compliance report
+ */
+router.get('/compliance/reports/nato', generateNATOReportHandler);
+
+/**
+ * GET /api/admin/compliance/reports/export
+ * Export compliance report (JSON or CSV)
+ */
+router.get('/compliance/reports/export', exportComplianceReportHandler);
 
 // ============================================
 // IdP Approval Workflow Routes

@@ -19,7 +19,7 @@ import useSearchHistory from '@/hooks/useSearchHistory';
 const mockLocalStorage = (() => {
   let store: Record<string, string> = {};
   return {
-    getItem: jest.fn((key: string) => store[key] || null),
+    getItem: (key: string) => store[key] || null,
     setItem: jest.fn((key: string, value: string) => {
       store[key] = value;
     }),

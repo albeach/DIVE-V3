@@ -15,9 +15,19 @@
         "test:coverage": "jest --coverage",
         "test:e2e": "playwright test",
         "test:e2e:localhost": "BASE_URL=http://localhost:3000 playwright test",
+        "test:e2e:hub": "playwright test --project=hub-chromium",
+        "test:e2e:spoke": "playwright test --project=spoke-fra-chromium --project=spoke-gbr-chromium",
+        "test:e2e:federation": "playwright test --project=federation-chromium",
+        "test:e2e:all-instances": "npm run test:e2e:hub && npm run test:e2e:spoke",
+        "test:e2e:dynamic": "../scripts/dynamic-test-runner.sh",
+        "test:e2e:dynamic:parallel": "../scripts/dynamic-test-runner.sh --parallel",
+        "test:e2e:dynamic:federation": "../scripts/dynamic-test-runner.sh --federation",
+        "test:e2e:dynamic:dry-run": "../scripts/dynamic-test-runner.sh --dry-run --verbose",
         "test:e2e:ui": "playwright test --ui",
         "test:e2e:report": "playwright show-report",
-        "test:e2e:debug": "playwright test --debug"
+        "test:e2e:debug": "playwright test --debug",
+        "test:performance": "playwright test --grep performance",
+        "test:performance:auth": "playwright test tests/e2e/auth-flows.test.ts --grep 'performance'"
     },
     "dependencies": {
         "@auth/drizzle-adapter": "^1.10.0",

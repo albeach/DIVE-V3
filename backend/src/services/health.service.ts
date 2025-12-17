@@ -184,7 +184,7 @@ class HealthService {
 
         // Determine overall status
         let status = HealthStatus.HEALTHY;
-        
+
         if (mongoHealth.status === 'down' || opaHealth.status === 'down') {
             status = HealthStatus.UNHEALTHY;
         } else if (
@@ -207,7 +207,6 @@ class HealthService {
                 opa: opaHealth,
                 keycloak: keycloakHealth,
                 redis: redisHealth,
-                blacklistCache: blacklistRedisHealth,
                 kas: kasHealth,
                 cache: cacheHealth,
             },
@@ -340,8 +339,8 @@ class HealthService {
         } catch (error) {
             const responseTime = Date.now() - startTime;
 
-            const errorMessage = error instanceof Error 
-                ? error.message 
+            const errorMessage = error instanceof Error
+                ? error.message
                 : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : 'Unknown error');
 
             logger.error('OPA health check failed', {
@@ -351,8 +350,8 @@ class HealthService {
             return {
                 status: 'down',
                 responseTime,
-                error: error instanceof Error 
-                    ? error.message 
+                error: error instanceof Error
+                    ? error.message
                     : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : 'Connection failed'),
             };
         }
@@ -407,7 +406,7 @@ class HealthService {
      */
     private async checkKAS(): Promise<IServiceHealth | undefined> {
         const kasUrl = process.env.KAS_URL;
-        
+
         if (!kasUrl) {
             // KAS is optional
             return undefined;
@@ -462,7 +461,7 @@ class HealthService {
             if (this.mongoClient) {
                 try {
                     const db = this.mongoClient.db(DB_NAME);
-                    
+
                     // Count active IdPs (approved submissions)
                     activeIdPs = await db.collection('idp_submissions').countDocuments({
                         status: 'approved',

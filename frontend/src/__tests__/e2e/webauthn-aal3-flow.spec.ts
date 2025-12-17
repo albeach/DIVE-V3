@@ -67,7 +67,7 @@ test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
 
     test('France TOP_SECRET user WebAuthn flow', async ({ page }) => {
         await test.step('WebAuthn authentication for French TOP_SECRET user', async () => {
-            await loginAs(page, TEST_USERS.FRANCE.TOP_SECRET, {
+            await loginAs(page, TEST_USERS.FRA.TOP_SECRET, {
                 expectMFASetup: false, // May already be configured
             });
         });
@@ -76,7 +76,7 @@ test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
-                TEST_USERS.FRANCE.TOP_SECRET.username,
+                TEST_USERS.FRA.TOP_SECRET.username,
                 'TOP_SECRET',
                 'FRA'
             );
@@ -85,7 +85,7 @@ test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
 
     test('Canada TOP_SECRET user WebAuthn flow', async ({ page }) => {
         await test.step('WebAuthn authentication for Canadian TOP_SECRET user', async () => {
-            await loginAs(page, TEST_USERS.CANADA.TOP_SECRET, {
+            await loginAs(page, TEST_USERS.DEU.TOP_SECRET, {
                 expectMFASetup: false, // May already be configured
             });
         });
@@ -94,7 +94,7 @@ test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
-                TEST_USERS.CANADA.TOP_SECRET.username,
+                TEST_USERS.DEU.TOP_SECRET.username,
                 'TOP_SECRET',
                 'CAN'
             );
@@ -182,10 +182,9 @@ test.describe('WebAuthn AAL3 Flow - Multi-National Coverage', () => {
     // Test TOP_SECRET users from all major realms
     const topSecretUsers = [
         TEST_USERS.USA.TOP_SECRET,
-        TEST_USERS.FRANCE.TOP_SECRET,
-        TEST_USERS.CANADA.TOP_SECRET,
-        TEST_USERS.GERMANY.TOP_SECRET,
-        TEST_USERS.BRITAIN.TOP_SECRET,
+        TEST_USERS.FRA.TOP_SECRET,
+        TEST_USERS.DEU.TOP_SECRET,
+        TEST_USERS.GBR.TOP_SECRET,
     ];
 
     topSecretUsers.forEach(user => {

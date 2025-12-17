@@ -2,7 +2,7 @@
   "$schema": "./schemas/trusted_issuers.schema.json",
   "_metadata": {
     "version": "1.0.0",
-    "lastUpdated": "2025-12-11T08:05:30.002Z",
+    "lastUpdated": "2025-12-17T07:23:41.563Z",
     "description": "OPAL-managed trusted issuer registry for DIVE V3",
     "compliance": [
       "ACP-240",
@@ -195,6 +195,69 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://esp-idp.dive25.com": {
+      "tenant": "ESP",
+      "name": "Spain Spoke Keycloak",
+      "country": "ESP",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://idp.che.example.com": {
+      "tenant": "CHE",
+      "name": "Switzerland Test Spoke Keycloak",
+      "country": "CHE",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://idp.test.example.com": {
+      "tenant": "TST",
+      "name": "Test Spoke Keycloak",
+      "country": "TST",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://idp.behind.example.com": {
+      "tenant": "BHD",
+      "name": "Behind Spoke Keycloak",
+      "country": "BHD",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://idp.delta.example.com": {
+      "tenant": "DLT",
+      "name": "Delta Test Spoke Keycloak",
+      "country": "DLT",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://idp.limited.example.com": {
+      "tenant": "LTD",
+      "name": "Limited Scope Spoke Keycloak",
+      "country": "LTD",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://nzl-idp.nzdf.mil.nz": {
+      "tenant": "NZL",
+      "name": "New Zealand Defence Force Keycloak",
+      "country": "NZL",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
     }
   },
   "https://localhost:8450/realms/dive-v3-broker-dnk": {

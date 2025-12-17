@@ -1,0 +1,62 @@
+# =============================================================================
+# DIVE V3 Helm Chart - Staging Environment Values
+# =============================================================================
+# Staging-specific overrides
+# =============================================================================
+
+global:
+  instance: "usa"
+  namespace: "dive-v3-staging"
+
+frontend:
+  replicaCount: 2
+  image:
+    tag: "staging"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+backend:
+  replicaCount: 2
+  image:
+    tag: "staging"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+keycloak:
+  replicaCount: 1
+
+opa:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+
+postgresql:
+  primary:
+    persistence:
+      size: 20Gi
+
+mongodb:
+  persistence:
+    size: 20Gi
+
+redis:
+  master:
+    persistence:
+      size: 10Gi
+
+blueGreen:
+  enabled: true
+  previewReplicas: 1
+  autoPromotion:
+    enabled: true
+    promotionDelaySeconds: 300
+
+monitoring:
+  enabled: true
+

@@ -5,8 +5,8 @@
  * and simulating user interactions.
  */
 
+import React, { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactNode } from 'react';
 
 // ============================================
 // Test Query Client

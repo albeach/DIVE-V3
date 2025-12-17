@@ -28,12 +28,12 @@ import { toast, ExternalToast } from 'sonner';
 // Types
 // ============================================
 
-export type NotificationType = 
-  | 'access_granted' 
-  | 'access_denied' 
-  | 'document_shared' 
-  | 'upload_complete' 
-  | 'system' 
+export type NotificationType =
+  | 'access_granted'
+  | 'access_denied'
+  | 'document_shared'
+  | 'upload_complete'
+  | 'system'
   | 'security'
   | 'admin_action';
 
@@ -96,7 +96,7 @@ const toastFunctions = {
     },
     options?: ExternalToast
   ) => {
-    return toast.promise(promise, messages, options);
+    return toast.promise(promise, messages);
   },
 };
 
@@ -158,7 +158,7 @@ async function notifyError(
   toastOptions?: ExternalToast
 ): Promise<void> {
   const errorMessage = error instanceof Error ? error.message : notification.message;
-  
+
   // Show immediate toast
   toast.error(notification.title, {
     description: errorMessage,
@@ -339,15 +339,15 @@ const adminNotifications = {
 export const notify = {
   // Basic toast functions
   toast: toastFunctions,
-  
+
   // Persistent notification creation
   persist: createPersistentNotification,
-  
+
   // Combined toast + persistent
   important: notifyImportant,
   error: notifyError,
   security: notifySecurity,
-  
+
   // Admin-specific (pre-built)
   admin: adminNotifications,
 };

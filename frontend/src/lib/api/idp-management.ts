@@ -12,7 +12,7 @@
 
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
-import { IIdPListItem, IIdPTestResult, IAdminAPIResponse } from '@/types/admin.types';
+import { IIdPListItem, IIdPTestResult, IApiResponse } from '@/types/admin.types';
 import React from 'react';
 
 // ============================================
@@ -56,7 +56,7 @@ class IdPManagementAPI {
                 cache: 'no-store',
             });
 
-            const data = await this.handleResponse<IAdminAPIResponse<{ idps: IIdPListItem[]; total: number }>>(response);
+            const data = await this.handleResponse<IApiResponse<{ idps: IIdPListItem[]; total: number }>>(response);
 
             // DEFENSIVE: Backend returns { data: { idps: [...], total: N } }
             if (data.data && typeof data.data === 'object' && 'idps' in data.data) {
@@ -102,7 +102,7 @@ class IdPManagementAPI {
             cache: 'no-store',
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
+        const data = await this.handleResponse<IApiResponse<any>>(response);
         return data.data;
     }
 
@@ -118,7 +118,7 @@ class IdPManagementAPI {
             body: JSON.stringify(updates)
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     // ============================================
@@ -132,7 +132,7 @@ class IdPManagementAPI {
             credentials: 'include'
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     // ============================================
@@ -146,8 +146,8 @@ class IdPManagementAPI {
             credentials: 'include'
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<IIdPTestResult>>(response);
-        return data.data || { success: false, message: 'Test failed' };
+        const data = await this.handleResponse<IApiResponse<IIdPTestResult>>(response);
+        return data.data || { success: false, message: 'Test failed' } as IIdPTestResult;
     }
 
     // ============================================
@@ -162,7 +162,7 @@ class IdPManagementAPI {
             cache: 'no-store',
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
+        const data = await this.handleResponse<IApiResponse<any>>(response);
         return data.data;
     }
 
@@ -174,7 +174,7 @@ class IdPManagementAPI {
             body: JSON.stringify(config)
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     static async testMFAFlow(alias: string): Promise<any> {
@@ -184,7 +184,7 @@ class IdPManagementAPI {
             credentials: 'include'
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
+        const data = await this.handleResponse<IApiResponse<any>>(response);
         return data.data;
     }
 
@@ -207,7 +207,7 @@ class IdPManagementAPI {
             cache: 'no-store',
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<any[]>>(response);
+        const data = await this.handleResponse<IApiResponse<any[]>>(response);
         return data.data || [];
     }
 
@@ -218,7 +218,7 @@ class IdPManagementAPI {
             credentials: 'include'
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     static async revokeUserSessions(alias: string, username: string): Promise<void> {
@@ -228,7 +228,7 @@ class IdPManagementAPI {
             credentials: 'include'
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     static async getSessionStats(alias: string): Promise<any> {
@@ -239,7 +239,7 @@ class IdPManagementAPI {
             cache: 'no-store',
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
+        const data = await this.handleResponse<IApiResponse<any>>(response);
         return data.data;
     }
 
@@ -255,7 +255,7 @@ class IdPManagementAPI {
             cache: 'no-store',
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<any>>(response);
+        const data = await this.handleResponse<IApiResponse<any>>(response);
         return data.data;
     }
 
@@ -267,7 +267,7 @@ class IdPManagementAPI {
             body: JSON.stringify(theme)
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     static async uploadThemeAsset(alias: string, file: File, type: 'background' | 'logo'): Promise<string> {
@@ -282,7 +282,7 @@ class IdPManagementAPI {
             body: formData
         });
 
-        const data = await this.handleResponse<IAdminAPIResponse<{ url: string }>>(response);
+        const data = await this.handleResponse<IApiResponse<{ url: string }>>(response);
         return data.data?.url || '';
     }
 
@@ -293,7 +293,7 @@ class IdPManagementAPI {
             credentials: 'include'
         });
 
-        await this.handleResponse<IAdminAPIResponse>(response);
+        await this.handleResponse<IApiResponse<any>>(response);
     }
 
     static async previewTheme(alias: string): Promise<string> {
