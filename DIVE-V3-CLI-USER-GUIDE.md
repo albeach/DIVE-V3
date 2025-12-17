@@ -24,6 +24,7 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 - [Federation Setup](#federation-setup)
 - [Testing Suite](#testing-suite)
 - [Status & Diagnostics](#status--diagnostics)
+- [Redis Management](#redis-management)
 - [Environment Helpers](#environment-helpers)
 - [Troubleshooting](#troubleshooting)
 - [Architecture Reference](#architecture-reference)
@@ -1469,6 +1470,125 @@ Quick status overview.
 
 ```bash
 ./dive brief
+```
+
+## Redis Management
+
+Comprehensive Redis management across Hub and all Spoke instances. Provides monitoring, health checks, and cache management for all DIVE V3 Redis deployments.
+
+### `redis status [instance]` - Redis Status
+
+Show Redis status for a specific instance.
+
+```bash
+# Hub Redis status
+./dive redis status
+
+# Specific spoke Redis status
+./dive redis status rou
+./dive redis status pol
+```
+
+Shows:
+- Ping response status
+- Redis version and mode
+- Memory usage
+- Connected clients
+- Authentication status
+
+### `redis status-all` - All Instances Status
+
+Show Redis status for all running instances.
+
+```bash
+./dive redis status-all
+```
+
+Displays status for Hub and all running spoke Redis containers.
+
+### `redis health [instance]` - Detailed Health Check
+
+Perform comprehensive Redis health check.
+
+```bash
+# Hub health check
+./dive redis health
+
+# Spoke health check
+./dive redis health fra
+```
+
+Health checks include:
+- Ping connectivity
+- Memory usage validation
+- Client connection count
+- Persistence (AOF) status
+- Authentication verification
+
+### `redis flush [instance]` - Flush Redis Caches
+
+Flush all Redis data (dangerous operation with confirmation).
+
+```bash
+# Flush hub Redis (requires confirmation)
+./dive redis flush usa
+
+# Flush spoke Redis
+./dive redis flush gbr
+```
+
+**Warning**: This operation cannot be undone. Use with extreme caution.
+
+### `redis stats [instance]` - Redis Statistics
+
+Show Redis performance statistics and metrics.
+
+```bash
+# Hub statistics
+./dive redis stats
+
+# Spoke statistics
+./dive redis stats deu
+```
+
+Shows:
+- Connection statistics
+- Cache hit/miss rates
+- Memory breakdown
+- Performance metrics
+
+### Supported Instances
+
+All NATO 32 countries plus industry partners:
+
+| Code | Country | Code | Country | Code | Country | Code | Country |
+|------|---------|------|---------|------|---------|------|---------|
+| `usa` | United States | `fra` | France | `gbr` | United Kingdom | `deu` | Germany |
+| `can` | Canada | `ita` | Italy | `esp` | Spain | `nld` | Netherlands |
+| `bel` | Belgium | `dnk` | Denmark | `nor` | Norway | `swe` | Sweden |
+| `pol` | Poland | `rou` | Romania | `cze` | Czech Republic | `hun` | Hungary |
+| `svn` | Slovenia | `hrv` | Croatia | `bgr` | Bulgaria | `grc` | Greece |
+| `prt` | Portugal | `aut` | Austria | `che` | Switzerland | `fin` | Finland |
+| `est` | Estonia | `lva` | Latvia | `ltu` | Lithuania | `svk` | Slovakia |
+| `alb` | Albania | `mne` | Montenegro | `mkd` | North Macedonia | `srb` | Serbia |
+
+### Examples
+
+```bash
+# Check all Redis instances
+./dive redis status-all
+
+# Health check Romanian spoke
+./dive redis health rou
+
+# View Polish spoke statistics
+./dive redis stats pol
+
+# Clear German hub caches (with confirmation)
+./dive redis flush deu
+
+# Dry run mode for testing
+./dive --dry-run redis status fra
 ```
 
 ## Environment Helpers

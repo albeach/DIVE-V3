@@ -94,6 +94,7 @@ export interface ISpokeConfig {
     baseUrl: string;
     apiUrl: string;
     idpUrl: string;
+    idpPublicUrl?: string; // Public-facing IdP URL (localhost or domain)
     kasUrl?: string;
   };
   certificates: {
@@ -318,7 +319,6 @@ class SpokeRegistrationService extends EventEmitter {
       baseUrl: this.spokeConfig.endpoints.baseUrl,
       apiUrl: this.spokeConfig.endpoints.apiUrl,
       idpUrl: this.spokeConfig.endpoints.idpUrl,
-      idpPublicUrl: this.spokeConfig.endpoints.idpPublicUrl, // Add public-facing IdP URL
       certificatePEM,
       requestedScopes: this.spokeConfig.federation.requestedScopes,
       contactEmail: this.spokeConfig.identity.contactEmail,

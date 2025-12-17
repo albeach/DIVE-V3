@@ -3,6 +3,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - rules/*.yml
+
 alerting:
   alertmanagers:
     - static_configs:
@@ -77,10 +80,20 @@ scrape_configs:
           instance: 'gbr'
           realm: 'GBR'
 
-  # Redis Exporter
-  - job_name: 'redis'
+  # Redis Exporters - Hub Redis and Blacklist Redis
+  - job_name: 'redis-hub'
     static_configs:
-      - targets: ['redis-exporter:9121']
+      - targets: ['hub-redis-exporter:9121']
+        labels:
+          instance: 'hub'
+          redis_type: 'main'
+
+  - job_name: 'redis-blacklist'
+    static_configs:
+      - targets: ['blacklist-redis-exporter:9122']
+        labels:
+          instance: 'shared'
+          redis_type: 'blacklist'
 
 
 

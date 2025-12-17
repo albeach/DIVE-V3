@@ -675,6 +675,9 @@ AUTH_SECRET_${code_upper}=$auth_secret
 JWT_SECRET_${code_upper}=$jwt_secret
 NEXTAUTH_SECRET_${code_upper}=$nextauth_secret
 
+# Shared Blacklist Redis (for cross-instance token revocation)
+BLACKLIST_REDIS_URL=redis://:${redis_pass}@dive-hub-redis-blacklist:6379
+
 # OPAL/Federation
 HUB_OPAL_URL=${hub_url//:4000/:7002}
 SPOKE_ID=$spoke_id
