@@ -25,6 +25,7 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 - [Testing Suite](#testing-suite)
 - [Status & Diagnostics](#status--diagnostics)
 - [Redis Management](#redis-management)
+- [KAS Management](#kas-management)
 - [Environment Helpers](#environment-helpers)
 - [Troubleshooting](#troubleshooting)
 - [Architecture Reference](#architecture-reference)
@@ -1589,6 +1590,284 @@ All NATO 32 countries plus industry partners:
 
 # Dry run mode for testing
 ./dive --dry-run redis status fra
+```
+
+## KAS Management
+
+The KAS (Key Access Service) module provides comprehensive management for NATO ACP-240 compliant key access services across Hub and all Spoke instances. KAS implements policy-bound encryption with OPA re-evaluation before key release.
+
+### `kas status [instance]` - KAS Status
+
+Show KAS service status for a specific instance.
+
+```bash
+# Hub KAS status
+./dive kas status
+
+# Specific spoke KAS status
+./dive kas status fra
+./dive kas status gbr
+```
+
+Shows:
+- Container running status
+- Service version and health
+- Enabled features (policy evaluation, audit logging, etc.)
+- DEK cache size
+
+### `kas health [instance]` - Detailed Health Check
+
+Perform comprehensive KAS health check including all dependencies.
+
+```bash
+# Hub health check
+./dive kas health
+
+# Spoke health check
+./dive kas health deu
+```
+
+Health checks include:
+- Container running status
+- Health endpoint responding
+- OPA connectivity
+- Backend API connectivity
+- Metrics endpoint
+- HTTPS/TLS enabled
+- DEK cache operational
+
+### `kas logs [instance] [-f]` - View KAS Logs
+
+View KAS service logs with optional follow mode.
+
+```bash
+# View last 100 lines
+./dive kas logs
+
+# Follow logs in real-time
+./dive kas logs -f
+
+# Specify number of lines
+./dive kas logs -n 500
+
+# Spoke logs
+./dive kas logs fra -f
+```
+
+### `kas config [instance]` - Show Configuration
+
+Display current KAS configuration including environment variables and registry settings.
+
+```bash
+./dive kas config
+./dive kas config fra
+```
+
+Shows:
+- Environment variables (sensitive values masked)
+- KAS registry information
+- Network configuration
+
+### `kas restart [instance]` - Restart KAS
+
+Restart the KAS service and wait for healthy status.
+
+```bash
+./dive kas restart
+./dive kas restart fra
+```
+
+Includes automatic health check after restart.
+
+### KAS Registry Commands
+
+#### `kas registry list` - List All KAS Instances
+
+List all registered KAS instances from the federation registry.
+
+```bash
+./dive kas registry list
+```
+
+Shows:
+- KAS ID, organization, country code
+- Trust level and external URL
+- Registry version and compliance standards
+
+#### `kas registry show <kas-id>` - Show KAS Details
+
+Display detailed information for a specific KAS instance.
+
+```bash
+./dive kas registry show usa-kas
+./dive kas registry show fra-kas
+./dive kas registry show gbr-kas
+./dive kas registry show deu-kas
+```
+
+Shows:
+- Basic info (organization, country, trust level)
+- Authentication configuration (JWT issuer, audience)
+- Supported countries and COIs
+- Clearance mapping (e.g., French TRES_SECRET → TOP_SECRET)
+- Metadata and capabilities
+
+#### `kas registry health` - Health Check All KAS
+
+Perform health checks on all registered KAS instances.
+
+```bash
+./dive kas registry health
+```
+
+Tests connectivity to each KAS and reports:
+- Health status per instance
+- Response latency
+- Summary of healthy vs unhealthy instances
+
+### KAS Federation Commands
+
+#### `kas federation status` - Federation Status
+
+Show federation configuration and current status.
+
+```bash
+./dive kas federation status
+```
+
+Displays:
+- Federation model (bilateral)
+- Cross-KAS enabled status
+- Fail-closed configuration
+- Maximum latency thresholds
+- Retry policy
+- Trust matrix (which KAS trusts which)
+- Monitoring configuration
+- Live federation status from Hub KAS
+
+#### `kas federation verify` - Verify All Trust Relationships
+
+Test all configured cross-KAS trust relationships.
+
+```bash
+./dive kas federation verify
+```
+
+Performs connectivity tests between all trusted KAS pairs and reports:
+- Source → Target status
+- Response latency
+- Summary of passed/failed relationships
+
+#### `kas federation test <source> <target>` - Test Specific Federation
+
+Test federation between two specific KAS instances.
+
+```bash
+./dive kas federation test usa-kas fra-kas
+./dive kas federation test gbr-kas deu-kas
+```
+
+Verifies:
+- Trust relationship configured
+- Source and target health
+- Connectivity between instances
+
+### KAS Cache Commands
+
+#### `kas cache status` - DEK Cache Status
+
+Show DEK (Data Encryption Key) cache statistics.
+
+```bash
+./dive kas cache status
+./dive kas cache status fra
+```
+
+Shows:
+- Number of cached DEKs
+- Cache TTL and configuration
+- Cache type (NodeCache for dev, HSM for production)
+
+#### `kas cache flush` - Flush DEK Cache
+
+Flush the DEK cache (requires KAS restart).
+
+```bash
+./dive kas cache flush
+```
+
+**Warning**: This clears all cached keys and restarts KAS.
+
+### KAS Monitoring Commands
+
+#### `kas metrics [instance]` - Show Prometheus Metrics
+
+Query KAS Prometheus metrics.
+
+```bash
+./dive kas metrics
+./dive kas metrics fra
+```
+
+Shows metrics from Prometheus (if available) and directly from KAS:
+- Total key requests
+- Denied requests
+- Federation requests
+- OPA evaluations
+
+#### `kas audit [--last N]` - Query Audit Logs
+
+Query KAS audit logs for key access events.
+
+```bash
+# Default: last 50 events
+./dive kas audit
+
+# Last 100 events
+./dive kas audit --last 100
+
+# Spoke audit logs
+./dive kas audit fra --last 200
+```
+
+Shows:
+- KEY_RELEASED events (green)
+- KEY_DENIED events (red)
+- JWT verification events
+- Policy evaluation events
+
+### KAS Usage Examples
+
+```bash
+# Quick status check
+./dive kas status
+
+# Full health assessment
+./dive kas health
+
+# View real-time logs
+./dive kas logs -f
+
+# Check all registered KAS instances
+./dive kas registry list
+
+# Verify federation is working
+./dive kas federation verify
+
+# Test specific federation path
+./dive kas federation test usa-kas fra-kas
+
+# View cache statistics
+./dive kas cache status
+
+# Monitor with Prometheus metrics
+./dive kas metrics
+
+# Review audit trail
+./dive kas audit --last 100
+
+# Dry run mode for testing
+./dive --dry-run kas status
 ```
 
 ## Environment Helpers
