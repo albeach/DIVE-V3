@@ -25,6 +25,9 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load environment variables for Redis access
+load_gcp_secrets "${INSTANCE:-usa}" 2>/dev/null || true
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -96,6 +99,9 @@ get_redis_container() {
     if [ "$instance" = "usa" ]; then
         # Hub Redis container
         echo "dive-hub-redis"
+    elif [ "$instance" = "blacklist" ]; then
+        # Shared blacklist Redis container
+        echo "dive-v3-blacklist-redis"
     else
         # Spoke Redis container (format: dive-{instance}-redis)
         echo "dive-${instance}-redis"
@@ -108,13 +114,13 @@ get_redis_password() {
 
     case "$instance" in
         usa)
-            # Hub Redis password
-            echo "${REDIS_PASSWORD_USA:-${REDIS_PASSWORD:-}}"
+            # Hub Redis password (same default as docker-compose)
+            echo "${REDIS_PASSWORD_USA:-${REDIS_PASSWORD:-dive-redis-dev-password}}"
             ;;
         blacklist)
             # Shared blacklist Redis password
             echo "${REDIS_PASSWORD_BLACKLIST:-${REDIS_PASSWORD:-}}"
-            ;;
+            ;; 
         *)
             # Spoke Redis password (from instance .env)
             local env_file="${DIVE_ROOT}/instances/${instance}/.env"
@@ -527,7 +533,8 @@ redis_blacklist_status() {
     echo ""
 
     # Check if blacklist Redis is running
-    local container="dive-hub-redis-blacklist"
+    local container
+    container="$(get_redis_container "blacklist")"
 
     if ! docker ps --format "table {{.Names}}" | grep -q "^${container}$"; then
         log_error "Blacklist Redis container '$container' not running"
