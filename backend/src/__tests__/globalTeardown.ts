@@ -63,8 +63,26 @@ export default async function globalTeardown() {
     // Give MongoDB driver time to clean up internal connections
     // MongoDB NodeJS driver uses connection pooling which takes time to fully close
     // Best practice: Allow sufficient time for graceful shutdown
-    const delay = process.env.CI ? 1000 : 500;
+    // In CI, allow more time for cleanup to prevent hanging processes
+    const delay = process.env.CI ? 3000 : 500;
     await new Promise(resolve => setTimeout(resolve, delay));
+
+    // Additional cleanup for CI environments
+    if (process.env.CI) {
+        try {
+            // Force kill any remaining child processes
+            const { execSync } = require('child_process');
+            try {
+                // Kill any remaining Node.js processes from tests
+                execSync('pkill -f "jest-worker" || true', { timeout: 5000 });
+                execSync('pkill -f "mongodb-memory-server" || true', { timeout: 5000 });
+            } catch {
+                // Ignore cleanup errors
+            }
+        } catch {
+            // execSync not available, skip
+        }
+    }
 
     console.log('✅ Global teardown complete - all connections closed');
     
