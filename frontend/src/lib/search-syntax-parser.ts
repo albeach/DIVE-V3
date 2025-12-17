@@ -118,7 +118,7 @@ const COMPARISON_OPERATORS: Record<string, IFieldFilter['operator']> = {
 // Tokenizer
 // ============================================
 
-function tokenize(input: string): IToken[] {
+export function tokenize(input: string): IToken[] {
   const tokens: IToken[] = [];
   let position = 0;
   const chars = input.split('');

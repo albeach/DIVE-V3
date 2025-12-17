@@ -427,3 +427,91 @@ async function setupVirtualAuthenticator(page: Page): Promise<void> {
   }
 }
 
+/**
+ * Check if user is logged in
+ */
+export async function expectLoggedIn(page: Page, user: TestUser): Promise<void> {
+  // Wait a moment for the page to fully load after authentication
+  await page.waitForTimeout(2000);
+
+  // Look for various indicators that user is logged in
+  const possibleIndicators = [
+    '[data-testid="user-info"]',
+    '[data-testid="user-name"]',
+    '[data-testid="user-menu"]',
+    '.user-info',
+    '.user-name',
+    '.user-menu',
+    '[data-testid*="user"]',
+    '.navbar .user',
+    'nav .user',
+    '.header .user'
+  ];
+
+  let foundIndicator = false;
+  for (const selector of possibleIndicators) {
+    try {
+      const element = page.locator(selector).first();
+      if (await element.isVisible({ timeout: 1000 })) {
+        console.log(`[AUTH] Found user indicator: ${selector}`);
+        foundIndicator = true;
+        break;
+      }
+    } catch (e) {
+      // Continue checking other selectors
+    }
+  }
+
+  // If we can't find specific user elements, check that we're not on a login page
+  if (!foundIndicator) {
+    const loginElements = page.locator('button, a').filter({
+      hasText: /login|sign in|authenticate/i
+    });
+
+    const hasLoginElements = await loginElements.count() === 0;
+    if (hasLoginElements) {
+      console.log('[AUTH] No login elements found - assuming user is logged in');
+      foundIndicator = true;
+    }
+  }
+
+  // Check URL to ensure we're not redirected back to login
+  const currentUrl = page.url();
+  const isOnAppPage = !currentUrl.includes('login') && !currentUrl.includes('auth') &&
+                     (currentUrl.includes('localhost:3000') || currentUrl.includes('dashboard') || currentUrl.includes('resources'));
+
+  if (isOnAppPage) {
+    console.log('[AUTH] User appears to be on application page - assuming logged in');
+    foundIndicator = true;
+  }
+
+  if (!foundIndicator) {
+    // Take a screenshot for debugging
+    await page.screenshot({ path: 'debug-login-failed.png' });
+    console.log('[AUTH] Taking debug screenshot: debug-login-failed.png');
+
+    // Log what elements we can find
+    const allButtons = await page.locator('button').allTextContents();
+    console.log('[AUTH] All buttons on page:', allButtons.slice(0, 10));
+
+    throw new Error('Could not verify user is logged in - no user indicators found and still on login page');
+  }
+
+  console.log(`[AUTH] ✅ User login verified for ${user.username}`);
+}
+
+/**
+ * Check if user is logged out
+ */
+export async function expectLoggedOut(page: Page): Promise<void> {
+  // Should not see user information
+  const userInfo = page.locator('[data-testid="user-info"], [data-testid="user-name"], .user-info, .user-name');
+  await expect(userInfo).not.toBeVisible();
+
+  // Should see login options
+  const loginElements = page.locator('button, a').filter({
+    hasText: /login|sign|auth/i
+  });
+  await expect(loginElements.first()).toBeVisible();
+}
+

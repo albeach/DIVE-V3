@@ -40,10 +40,10 @@ describe('bookmarks.ts', () => {
         // Clear mock storage before each test
         localStorageMock = {};
 
-        // Mock localStorage
+        // Mock localStorage (correct pattern: direct function for getItem, jest.fn for setItem)
         Object.defineProperty(window, 'localStorage', {
             value: {
-                getItem: jest.fn((key: string) => localStorageMock[key] || null),
+                getItem: (key: string) => localStorageMock[key] || null,
                 setItem: jest.fn((key: string, value: string) => {
                     localStorageMock[key] = value;
                 }),

@@ -90,7 +90,7 @@ export const URLS = {
    * Base URL (from Playwright config or env var)
    * HTTP for local development (no certificates needed), HTTPS for CI/tunnel
    */
-  BASE: process.env.NEXT_PUBLIC_BASE_URL || (TEST_ENV.IS_CI ? 'https://dev-app.dive25.com' : 'http://localhost:3000'),
+  BASE: process.env.BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || (TEST_ENV.IS_CI ? 'https://dev-app.dive25.com' : 'http://localhost:3000'),
 
   /**
    * Backend API base URL

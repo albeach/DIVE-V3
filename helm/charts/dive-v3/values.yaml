@@ -1,0 +1,312 @@
+# =============================================================================
+# DIVE V3 Helm Chart - Default Values
+# =============================================================================
+# Default configuration for DIVE V3 deployment
+# Override in values-dev.yaml, values-staging.yaml, values-prod.yaml
+# =============================================================================
+
+# Global settings
+global:
+  imageRegistry: "us-east4-docker.pkg.dev/dive25/dive-v3-repo"
+  imagePullSecrets: []
+  namespace: "dive-v3"
+  instance: "usa"
+
+# Frontend configuration
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: dive-v3-frontend
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 3000
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - host: dive-v3.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: dive-v3-tls
+        hosts:
+          - dive-v3.example.com
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Backend configuration
+backend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: dive-v3-backend
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 4000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Keycloak configuration
+keycloak:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: dive-v3-keycloak
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    httpPort: 8080
+    httpsPort: 8443
+    managementPort: 9000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  livenessProbe:
+    httpGet:
+      path: /health/live
+      port: 9000
+      scheme: HTTPS
+    initialDelaySeconds: 120
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health/ready
+      port: 9000
+      scheme: HTTPS
+    initialDelaySeconds: 90
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  startupProbe:
+    httpGet:
+      path: /health/started
+      port: 9000
+      scheme: HTTPS
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# OPA configuration
+opa:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: openpolicyagent/opa
+    tag: "0.68.0"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8181
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 500Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# PostgreSQL configuration (using Bitnami chart)
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""  # From GCP Secret Manager
+    database: "dive_v3_app"
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+# MongoDB configuration (using Bitnami chart)
+mongodb:
+  enabled: true
+  auth:
+    rootPassword: ""  # From GCP Secret Manager
+    database: "dive_v3"
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+# Redis configuration (using Bitnami chart)
+redis:
+  enabled: true
+  auth:
+    password: ""  # From GCP Secret Manager
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi
+
+# OPAL Server configuration
+opal:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: authorizon/opal-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 7002
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Secrets configuration (GCP Secret Manager)
+secrets:
+  gcpProjectId: "dive25"
+  useGcpSecrets: true
+  secretNames:
+    mongodb: "dive-v3-mongodb-{instance}"
+    postgres: "dive-v3-postgres-{instance}"
+    keycloak: "dive-v3-keycloak-{instance}"
+    redis: "dive-v3-redis-blacklist"
+    authSecret: "dive-v3-auth-secret-{instance}"
+    keycloakClientSecret: "dive-v3-keycloak-client-secret"
+
+# Blue-green deployment configuration
+blueGreen:
+  enabled: false
+  activeColor: "blue"
+  previewColor: "green"
+  previewReplicas: 1
+  autoPromotion:
+    enabled: false
+    promotionDelaySeconds: 300
+
+# Service mesh configuration (Istio)
+istio:
+  enabled: false
+  virtualService:
+    enabled: false
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    scrapeInterval: 30s
+  grafana:
+    enabled: true
+    dashboards:
+      - dive-v3-overview
+      - authorization-decisions
+      - federation-metrics
+      - cache-performance
+      - compliance-overview
+
+# Network policies
+networkPolicy:
+  enabled: false
+  defaultDeny: true
+
+# Pod disruption budgets
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Node selectors and affinity
+nodeSelector: {}
+tolerations: []
+affinity: {}
+

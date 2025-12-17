@@ -186,7 +186,7 @@ export function performanceHeadersMiddleware(req: Request, res: Response, next: 
         }
 
         // Call original end method
-        // @ts-ignore - args is dynamically typed based on how res.end() is called
+        // @ts-expect-error - args is dynamically typed based on how res.end() is called
         return originalEnd.apply(this, args);
     };
 

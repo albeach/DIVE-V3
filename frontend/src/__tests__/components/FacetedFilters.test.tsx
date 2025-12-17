@@ -85,13 +85,19 @@ describe('FacetedFilters', () => {
 
     it('should render filter options with counts', () => {
       render(<FacetedFilters {...defaultProps} />);
-      
-      // Check for classification options
-      expect(screen.getByText('UNCLASSIFIED')).toBeInTheDocument();
-      expect(screen.getByText('25')).toBeInTheDocument();
-      
-      expect(screen.getByText('SECRET')).toBeInTheDocument();
-      expect(screen.getByText('10')).toBeInTheDocument();
+
+      // Check for classification options (using labels from mock data)
+      expect(screen.getByText('Unclassified')).toBeInTheDocument();
+      expect(screen.getByText('Secret')).toBeInTheDocument();
+
+      // Check that counts are rendered (look for specific count values within their contexts)
+      const unclassifiedButton = screen.getByText('Unclassified').closest('button');
+      expect(unclassifiedButton).toBeInTheDocument();
+      expect(within(unclassifiedButton!).getByText('25')).toBeInTheDocument();
+
+      const secretButton = screen.getByText('Secret').closest('button');
+      expect(secretButton).toBeInTheDocument();
+      expect(within(secretButton!).getByText('10')).toBeInTheDocument();
     });
 
     it('should show loading skeleton when loading', () => {

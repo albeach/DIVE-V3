@@ -1,9 +1,9 @@
 /**
  * VirtualResourceList Component Tests
- * 
+ *
  * Tests for @/components/resources/virtual-resource-list.tsx
  * Phase 1: Performance Foundation
- * 
+ *
  * Coverage targets:
  * - Virtualized rendering
  * - View mode switching (grid/list/compact)
@@ -13,10 +13,38 @@
  * - Accessibility
  */
 
+// Mock IntersectionObserver globally before any imports
+const mockObserve = jest.fn();
+const mockUnobserve = jest.fn();
+const mockDisconnect = jest.fn();
+
+const mockIntersectionObserver = jest.fn().mockImplementation((callback: IntersectionObserverCallback) => {
+  const observer = {
+    observe: mockObserve,
+    unobserve: mockUnobserve,
+    disconnect: mockDisconnect,
+    callback,
+    // Helper to trigger intersection
+    trigger: (isIntersecting: boolean) => {
+      callback([{ isIntersecting } as IntersectionObserverEntry], observer as unknown as IntersectionObserver);
+    },
+  };
+  return observer;
+});
+
+global.IntersectionObserver = mockIntersectionObserver as unknown as typeof IntersectionObserver;
+
+// Mock ResizeObserver globally
+global.ResizeObserver = jest.fn().mockImplementation(() => ({
+  observe: jest.fn(),
+  unobserve: jest.fn(),
+  disconnect: jest.fn(),
+}));
+
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { VirtualResourceList } from '@/components/resources/virtual-resource-list';
+import VirtualResourceList from '@/components/resources/virtual-resource-list';
 
 // Mock framer-motion
 jest.mock('framer-motion', () => ({
@@ -27,23 +55,7 @@ jest.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: React.PropsWithChildren<object>) => <>{children}</>,
 }));
 
-// Mock IntersectionObserver
-const mockIntersectionObserver = jest.fn();
-mockIntersectionObserver.mockReturnValue({
-  observe: jest.fn(),
-  unobserve: jest.fn(),
-  disconnect: jest.fn(),
-});
-window.IntersectionObserver = mockIntersectionObserver;
-
-// Mock ResizeObserver
-const mockResizeObserver = jest.fn();
-mockResizeObserver.mockReturnValue({
-  observe: jest.fn(),
-  unobserve: jest.fn(),
-  disconnect: jest.fn(),
-});
-window.ResizeObserver = mockResizeObserver;
+// Mocks are set up globally at the top of the file
 
 // Generate mock resources
 const generateMockResources = (count: number) => 
@@ -78,7 +90,6 @@ const defaultProps = {
 describe('VirtualResourceList', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockIntersectionObserver.mockClear();
   });
 
   describe('rendering', () => {
@@ -244,74 +255,71 @@ describe('VirtualResourceList', () => {
   });
 
   describe('infinite scroll', () => {
+    beforeEach(() => {
+      mockObserve.mockClear();
+      mockUnobserve.mockClear();
+      mockDisconnect.mockClear();
+    });
+
     it('should setup IntersectionObserver for sentinel', () => {
       render(<VirtualResourceList {...defaultProps} />);
       
       expect(mockIntersectionObserver).toHaveBeenCalled();
+      expect(mockObserve).toHaveBeenCalled();
     });
 
     it('should call onLoadMore when sentinel is visible', async () => {
-      // Get the callback passed to IntersectionObserver
-      let observerCallback: IntersectionObserverCallback;
-      mockIntersectionObserver.mockImplementation((callback) => {
-        observerCallback = callback;
-        return {
-          observe: jest.fn(),
-          unobserve: jest.fn(),
-          disconnect: jest.fn(),
-        };
-      });
+      const onLoadMore = jest.fn();
+      const { container } = render(<VirtualResourceList {...defaultProps} onLoadMore={onLoadMore} />);
       
-      render(<VirtualResourceList {...defaultProps} />);
+      // Get the observer instance that was created
+      const observerInstance = (mockIntersectionObserver.mock.results[0]?.value as any);
+      expect(observerInstance).toBeDefined();
       
       // Simulate sentinel becoming visible
-      observerCallback!([
-        { isIntersecting: true } as IntersectionObserverEntry
-      ], {} as IntersectionObserver);
+      if (observerInstance?.trigger) {
+        observerInstance.trigger(true);
+      }
       
       await waitFor(() => {
-        expect(defaultProps.onLoadMore).toHaveBeenCalled();
-      });
+        expect(onLoadMore).toHaveBeenCalled();
+      }, { timeout: 1000 });
     });
 
     it('should not call onLoadMore when hasMore is false', async () => {
-      let observerCallback: IntersectionObserverCallback;
-      mockIntersectionObserver.mockImplementation((callback) => {
-        observerCallback = callback;
-        return {
-          observe: jest.fn(),
-          unobserve: jest.fn(),
-          disconnect: jest.fn(),
-        };
-      });
+      const onLoadMore = jest.fn();
+      render(<VirtualResourceList {...defaultProps} hasMore={false} onLoadMore={onLoadMore} />);
       
-      render(<VirtualResourceList {...defaultProps} hasMore={false} />);
+      // Get the observer instance
+      const observerInstance = (mockIntersectionObserver.mock.results[0]?.value as any);
       
-      observerCallback!([
-        { isIntersecting: true } as IntersectionObserverEntry
-      ], {} as IntersectionObserver);
+      // Simulate sentinel becoming visible
+      if (observerInstance?.trigger) {
+        observerInstance.trigger(true);
+      }
       
-      expect(defaultProps.onLoadMore).not.toHaveBeenCalled();
+      // Wait a bit to ensure it doesn't call
+      await waitFor(() => {
+        expect(onLoadMore).not.toHaveBeenCalled();
+      }, { timeout: 500 });
     });
 
     it('should not call onLoadMore while already loading', async () => {
-      let observerCallback: IntersectionObserverCallback;
-      mockIntersectionObserver.mockImplementation((callback) => {
-        observerCallback = callback;
-        return {
-          observe: jest.fn(),
-          unobserve: jest.fn(),
-          disconnect: jest.fn(),
-        };
-      });
+      const onLoadMore = jest.fn();
+      render(<VirtualResourceList {...defaultProps} isLoadingMore onLoadMore={onLoadMore} />);
       
-      render(<VirtualResourceList {...defaultProps} isLoadingMore />);
+      // Get the observer instance
+      const observerInstance = (mockIntersectionObserver.mock.results[0]?.value as any);
       
-      observerCallback!([
-        { isIntersecting: true } as IntersectionObserverEntry
-      ], {} as IntersectionObserver);
+      // Simulate sentinel becoming visible
+      if (observerInstance?.trigger) {
+        observerInstance.trigger(true);
+      }
       
-      expect(defaultProps.onLoadMore).not.toHaveBeenCalled();
+      // Wait a bit to ensure it doesn't call
+      await waitFor(() => {
+        expect(onLoadMore).not.toHaveBeenCalled();
+      }, { timeout: 500 });
     });
 
     it('should render sentinel element', () => {
@@ -399,6 +407,32 @@ describe('VirtualResourceList', () => {
       // Check for aria-live region or aria-busy
       const loadingRegion = document.querySelector('[aria-live], [aria-busy="true"]');
       expect(loadingRegion).toBeInTheDocument();
+    });
+
+    it('should have proper ARIA attributes', () => {
+      const { container } = render(<VirtualResourceList {...defaultProps} />);
+      
+      const list = screen.getByRole('list');
+      expect(list).toHaveAttribute('aria-label', expect.stringContaining('resource'));
+    });
+
+    it('should support keyboard navigation', async () => {
+      const user = userEvent.setup();
+      render(<VirtualResourceList {...defaultProps} />);
+      
+      const items = screen.getAllByRole('article');
+      if (items.length > 0) {
+        items[0].focus();
+        await user.keyboard('{ArrowDown}');
+        expect(document.activeElement).toBe(items[1] || items[0]);
+      }
+    });
+
+    it('should have proper focus management', () => {
+      render(<VirtualResourceList {...defaultProps} focusedIndex={0} />);
+      
+      const items = screen.getAllByRole('article');
+      expect(items[0]).toHaveAttribute('data-focused', 'true');
     });
   });
 

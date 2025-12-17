@@ -21,7 +21,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.FRONTEND_URL || 'https://localhost:3000',
+    baseURL: process.env.FRONTEND_URL || (process.env.CI ? 'https://localhost:3000' : 'http://localhost:3000'),
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

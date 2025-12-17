@@ -61,7 +61,7 @@ export const mockGenerators = {
     const roles = ['user', 'admin', 'security_admin', 'auditor'];
     const clearances = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
     const countries = ['USA', 'GBR', 'FRA', 'DEU', 'CAN'];
-    
+
     return Array.from({ length: count }, (_, i) => ({
       id: generateId(),
       username: `user-${i + 1}`,
@@ -193,7 +193,7 @@ export const mockGenerators = {
     }),
 
     complianceTrends: () => ({
-      dates: Array.from({ length: 7 }, (_, i) => 
+      dates: Array.from({ length: 7 }, (_, i) =>
         new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       ),
       acp240: Array.from({ length: 7 }, () => 85 + Math.random() * 15),
@@ -250,11 +250,11 @@ export async function withMockFallback<T>(
     return await apiCall();
   } catch (error) {
     console.warn('[API Mock] Backend unavailable, using mock data');
-    
+
     if (delay) {
       await simulateDelay();
     }
-    
+
     return mockData();
   }
 }
@@ -264,9 +264,9 @@ export async function withMockFallback<T>(
  */
 export function createMockResponse<T>(
   data: T,
-  options: { status?: number; total?: number; page?: number; pageSize?: number } = {}
+  options: { status?: number; total?: number; page?: number; pageSize?: number; pendingCount?: number } = {}
 ) {
-  const { status = 200, total, page, pageSize } = options;
+  const { status = 200, total, page, pageSize, pendingCount } = options;
 
   return {
     success: status >= 200 && status < 300,
@@ -274,6 +274,7 @@ export function createMockResponse<T>(
     ...(total !== undefined && { total }),
     ...(page !== undefined && { page }),
     ...(pageSize !== undefined && { pageSize }),
+    ...(pendingCount !== undefined && { pendingCount }),
     timestamp: now(),
     mock: true,
   };
@@ -285,7 +286,7 @@ export function createMockResponse<T>(
 
 export const mockHandlers = {
   users: {
-    list: (params?: { page?: number; limit?: number }) => 
+    list: (params?: { page?: number; limit?: number }) =>
       createMockResponse(mockGenerators.users(params?.limit || 25), {
         total: 150,
         page: params?.page || 1,

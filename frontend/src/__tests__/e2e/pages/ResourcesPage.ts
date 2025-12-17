@@ -315,5 +315,40 @@ export class ResourcesPage {
     
     await expect(deniedMessage).toBeVisible({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
   }
+
+  /**
+   * Enable federated search across instances
+   */
+  async enableFederatedSearch() {
+    const federatedToggle = this.page.getByRole('checkbox', { name: /federated|cross-instance/i })
+      .or(this.page.locator('[data-testid="federated-search-toggle"]'));
+    
+    const isChecked = await federatedToggle.isChecked().catch(() => false);
+    if (!isChecked) {
+      await federatedToggle.check();
+      await this.page.waitForTimeout(TEST_CONFIG.TIMEOUTS.DEBOUNCE);
+    }
+  }
+
+  /**
+   * Export resources to specified format
+   * 
+   * @param format Export format ('csv', 'json', 'excel')
+   */
+  async exportResources(format: 'csv' | 'json' | 'excel' = 'csv') {
+    const exportButton = this.page.getByRole('button', { name: /export/i });
+    await exportButton.click();
+    
+    // Select format
+    const formatButton = this.page.getByRole('button', { name: new RegExp(format, 'i') });
+    await formatButton.click();
+    
+    // Trigger download
+    const downloadButton = this.page.getByRole('button', { name: /download|export now/i });
+    await downloadButton.click();
+    
+    // Wait for download to start
+    await this.page.waitForTimeout(1000);
+  }
 }
 

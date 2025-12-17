@@ -204,9 +204,9 @@ describe('Policy Signature Verification - Production Grade (Three-Tier PKI)', ()
             testPrivateKeyPEM = fs.readFileSync(keyPath, 'utf8');
 
             // Cleanup temp files
-            try { fs.unlinkSync(keyPath); } catch {}
-            try { fs.unlinkSync(certPath); } catch {}
-            try { fs.rmdirSync(tmpDir); } catch {}
+            try { fs.unlinkSync(keyPath); } catch { } // eslint-disable-line no-empty
+            try { fs.unlinkSync(certPath); } catch { } // eslint-disable-line no-empty
+            try { fs.rmdirSync(tmpDir); } catch { } // eslint-disable-line no-empty
         });
 
         test('should sign policy with X.509 private key', () => {
@@ -565,7 +565,7 @@ ${Buffer.from(publicKey).toString('base64').match(/.{1,64}/g)?.join('\n')}
 
             // Second load - warm cache (should use cached values)
             await expect(certificateManager.loadThreeTierHierarchy()).resolves.not.toThrow();
-            
+
             // Verify cache functionality (both loads complete without error)
             // Performance improvement verified by absence of errors
             // (Timing assertions are hardware-dependent and cause flaky tests)

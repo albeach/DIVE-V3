@@ -38,7 +38,7 @@ async function initMongoDB(): Promise<void> {
     try {
         const MONGODB_URL = getMongoDBUrl(); // Read at runtime
         const DB_NAME = getMongoDBName();
-        
+
         mongoClient = new MongoClient(MONGODB_URL);
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);
@@ -389,6 +389,80 @@ export function logDataSharedEvent(params: {
     };
 
     logACP240Event(event);
+}
+
+/**
+ * Log FEDERATION_AUTH event (cross-instance authentication)
+ */
+export function logFederationAuthEvent(params: {
+    requestId: string;
+    subject: string;
+    sourceInstance: string;
+    targetInstance: string;
+    outcome: 'ALLOW' | 'DENY';
+    reason?: string;
+    subjectAttributes?: {
+        clearance?: string;
+        countryOfAffiliation?: string;
+        acpCOI?: string[];
+        aal_level?: string;
+    };
+    latencyMs?: number;
+}): Promise<void> {
+    const event: IACP240AuditEvent = {
+        eventType: 'DATA_SHARED', // Federation is a form of data sharing
+        timestamp: new Date().toISOString(),
+        requestId: params.requestId,
+        subject: params.subject,
+        action: 'federation_auth',
+        resourceId: `${params.sourceInstance}→${params.targetInstance}`,
+        outcome: params.outcome,
+        reason: params.reason || `Federation authentication from ${params.sourceInstance} to ${params.targetInstance}`,
+        subjectAttributes: params.subjectAttributes,
+        context: {
+            sourceIP: params.sourceInstance,
+        },
+        latencyMs: params.latencyMs
+    };
+
+    return logACP240Event(event);
+}
+
+/**
+ * Log authentication event (login)
+ */
+export function logAuthenticationEvent(params: {
+    requestId: string;
+    subject: string;
+    outcome: 'ALLOW' | 'DENY';
+    reason?: string;
+    subjectAttributes?: {
+        clearance?: string;
+        countryOfAffiliation?: string;
+        aal_level?: string;
+        amr?: string[];
+        acr?: string;
+    };
+    authMethod?: string;
+    latencyMs?: number;
+}): Promise<void> {
+    const event: IACP240AuditEvent = {
+        eventType: 'ACCESS_MODIFIED', // Authentication modifies access state
+        timestamp: new Date().toISOString(),
+        requestId: params.requestId,
+        subject: params.subject,
+        action: 'authenticate',
+        resourceId: 'session',
+        outcome: params.outcome,
+        reason: params.reason || `Authentication ${params.outcome.toLowerCase()}`,
+        subjectAttributes: params.subjectAttributes,
+        context: {
+            sourceIP: params.authMethod,
+        },
+        latencyMs: params.latencyMs
+    };
+
+    return logACP240Event(event);
 }
 
 /**

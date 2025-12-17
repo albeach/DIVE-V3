@@ -18,7 +18,7 @@ export interface IAdminUser {
   emailVerified?: boolean;
   createdAt: string;
   lastLogin?: string | null;
-  
+
   // DIVE-specific attributes
   uniqueID?: string;
   clearance?: ClearanceLevel;
@@ -26,7 +26,7 @@ export interface IAdminUser {
   acpCOI?: string[];
   organization?: string;
   organizationType?: string;
-  
+
   // Roles
   roles?: string[];
   adminRoles?: AdminRole[];
@@ -34,13 +34,13 @@ export interface IAdminUser {
   clientRoles?: Record<string, string[]>;
 }
 
-export type ClearanceLevel = 
+export type ClearanceLevel =
   | 'UNCLASSIFIED'
   | 'CONFIDENTIAL'
   | 'SECRET'
   | 'TOP_SECRET';
 
-export type AdminRole = 
+export type AdminRole =
   | 'super_admin'
   | 'admin'
   | 'security_admin'
@@ -134,6 +134,7 @@ export interface IAuditStats {
 // ============================================
 
 export type IdPType = 'oidc' | 'saml';
+export type IdPProtocol = IdPType; // Alias for backward compatibility
 export type IdPStatus = 'enabled' | 'disabled';
 export type TrustLevel = 'national' | 'bilateral' | 'partner' | 'development';
 
@@ -144,16 +145,21 @@ export interface IIdentityProvider {
   enabled: boolean;
   trustLevel?: TrustLevel;
   firstBrokerLoginFlowAlias?: string;
-  
+
   config: IIdPConfig;
-  
+
   createdAt?: string;
   lastSync?: string;
-  
+
   // Health metrics
   healthy?: boolean;
   lastHealthCheck?: string;
   avgResponseTime?: number;
+
+  // Validation results
+  validationResults?: any[];
+  criticalFailures?: number;
+  preliminaryScore?: number;
 }
 
 export interface IIdPConfig {
@@ -167,19 +173,25 @@ export interface IIdPConfig {
   clientId?: string;
   clientSecret?: string;
   defaultScope?: string;
-  
+
   // SAML
   singleSignOnServiceUrl?: string;
   singleLogoutServiceUrl?: string;
   signingCertificate?: string;
   entityId?: string;
   nameIDPolicyFormat?: string;
-  
+  signatureAlgorithm?: string;
+  wantAssertionsSigned?: boolean;
+  wantAuthnRequestsSigned?: boolean;
+
   // Common
   syncMode?: string;
   validateSignature?: string;
   useJwksUrl?: string;
 }
+
+export type IOIDCConfig = IIdPConfig; // Alias for backward compatibility
+export type ISAMLConfig = IIdPConfig; // Alias for backward compatibility
 
 export interface IIdPHealthStatus {
   alias: string;
@@ -189,6 +201,34 @@ export interface IIdPHealthStatus {
   lastChecked: string;
   error?: string;
 }
+
+export interface IIdPListItem {
+  alias: string;
+  displayName: string;
+  providerId: IdPType;
+  enabled: boolean;
+  trustLevel?: TrustLevel;
+  healthy?: boolean;
+  lastHealthCheck?: string;
+  createdAt?: string;
+  protocol: IdPType;
+}
+
+export interface IAttributeMapping {
+  source: string;
+  target: string;
+  required: boolean;
+  description?: string;
+}
+
+export interface IIdPTestResult {
+  success: boolean;
+  message: string;
+  details?: Record<string, unknown>;
+  timestamp: string;
+}
+
+export type IAdminAPIResponse<T> = IApiResponse<T>; // Alias for backward compatibility
 
 // ============================================
 // Session Types
@@ -413,7 +453,27 @@ export interface IIdPFormData {
   providerId: IdPType;
   enabled: boolean;
   trustLevel: TrustLevel;
-  config: Partial<IIdPConfig>;
+  config?: Partial<IIdPConfig>;
+
+  // Additional properties for form management
+  protocol?: IdPType;
+  oidcConfig?: Partial<IIdPConfig>;
+  samlConfig?: Partial<IIdPConfig>;
+  attributeMappings?: IAttributeMapping[];
+  description?: string;
+  operationalData?: Record<string, unknown>;
+  complianceDocuments?: {
+    mfaPolicy?: string;
+    acp240Certificate?: string;
+    stanag4774Certification?: string;
+    auditPlan?: string;
+  };
+  metadata?: Record<string, unknown>;
+  useAuth0?: boolean;
+
+  // Auth0-specific properties
+  auth0Protocol?: string;
+  auth0AppType?: string;
 }
 
 // ============================================

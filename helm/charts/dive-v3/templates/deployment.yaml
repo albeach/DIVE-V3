@@ -1,0 +1,227 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dive-v3.fullname" . }}-frontend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "dive-v3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      app: frontend
+      {{- include "dive-v3.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: frontend
+        {{- include "dive-v3.selectorLabels" . | nindent 8 }}
+        version: {{ .Values.frontend.image.tag | default .Chart.AppVersion }}
+    spec:
+      serviceAccountName: {{ include "dive-v3.fullname" . }}-frontend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: frontend
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.frontend.service.port }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "{{ .Values.frontend.service.port }}"
+            {{- if .Values.secrets.useGcpSecrets }}
+            - name: USE_GCP_SECRETS
+              value: "true"
+            - name: GCP_PROJECT_ID
+              value: "{{ .Values.secrets.gcpProjectId }}"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          {{- if .Values.frontend.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.frontend.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.frontend.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.frontend.readinessProbe | nindent 12 }}
+          {{- end }}
+{{- end }}
+
+{{- if .Values.backend.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dive-v3.fullname" . }}-backend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "dive-v3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.backend.replicaCount }}
+  selector:
+    matchLabels:
+      app: backend
+      {{- include "dive-v3.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: backend
+        {{- include "dive-v3.selectorLabels" . | nindent 8 }}
+        version: {{ .Values.backend.image.tag | default .Chart.AppVersion }}
+    spec:
+      serviceAccountName: {{ include "dive-v3.fullname" . }}-backend
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: backend
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.service.port }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "{{ .Values.backend.service.port }}"
+            {{- if .Values.secrets.useGcpSecrets }}
+            - name: USE_GCP_SECRETS
+              value: "true"
+            - name: GCP_PROJECT_ID
+              value: "{{ .Values.secrets.gcpProjectId }}"
+            {{- end }}
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          {{- if .Values.backend.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.backend.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.backend.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.backend.readinessProbe | nindent 12 }}
+          {{- end }}
+{{- end }}
+
+{{- if .Values.keycloak.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dive-v3.fullname" . }}-keycloak
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "dive-v3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+spec:
+  replicas: {{ .Values.keycloak.replicaCount }}
+  selector:
+    matchLabels:
+      app: keycloak
+      {{- include "dive-v3.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: keycloak
+        {{- include "dive-v3.selectorLabels" . | nindent 8 }}
+        version: {{ .Values.keycloak.image.tag | default .Chart.AppVersion }}
+    spec:
+      serviceAccountName: {{ include "dive-v3.fullname" . }}-keycloak
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: keycloak
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.keycloak.image.repository }}:{{ .Values.keycloak.image.tag }}"
+          imagePullPolicy: {{ .Values.keycloak.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.keycloak.service.httpPort }}
+            - name: https
+              containerPort: {{ .Values.keycloak.service.httpsPort }}
+            - name: management
+              containerPort: {{ .Values.keycloak.service.managementPort }}
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+          {{- if .Values.keycloak.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.keycloak.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.keycloak.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.keycloak.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.keycloak.startupProbe }}
+          startupProbe:
+            {{- toYaml .Values.keycloak.startupProbe | nindent 12 }}
+          {{- end }}
+{{- end }}
+
+{{- if .Values.opa.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dive-v3.fullname" . }}-opa
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "dive-v3.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opa
+spec:
+  replicas: {{ .Values.opa.replicaCount }}
+  selector:
+    matchLabels:
+      app: opa
+      {{- include "dive-v3.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: opa
+        {{- include "dive-v3.selectorLabels" . | nindent 8 }}
+        version: {{ .Values.opa.image.tag | default .Chart.AppVersion }}
+    spec:
+      serviceAccountName: {{ include "dive-v3.fullname" . }}-opa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: opa
+          image: "{{ .Values.opa.image.repository }}:{{ .Values.opa.image.tag }}"
+          imagePullPolicy: {{ .Values.opa.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.opa.service.port }}
+          resources:
+            {{- toYaml .Values.opa.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health?bundles
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+{{- end }}
+
