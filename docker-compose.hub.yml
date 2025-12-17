@@ -100,7 +100,7 @@ services:
       REDIS_PASSWORD_USA: ${REDIS_PASSWORD_USA}
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - shared-network
     volumes:
       - hub_redis_data:/data
     healthcheck:
@@ -162,7 +162,7 @@ services:
       - ./keycloak/themes:/opt/keycloak/themes:ro
     networks:
       - hub-internal
-      - dive-v3-shared-network  # Required for federation (Keycloak needs to reach spoke Keycloaks)
+      - shared-network  # Required for federation (Keycloak needs to reach spoke Keycloaks)
     depends_on:
       postgres:
         condition: service_healthy
@@ -254,7 +254,7 @@ services:
       - ./config:/app/config:ro
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - shared-network
     depends_on:
       keycloak:
         condition: service_healthy

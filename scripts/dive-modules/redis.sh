@@ -101,7 +101,7 @@ get_redis_container() {
         echo "dive-hub-redis"
     elif [ "$instance" = "blacklist" ]; then
         # Shared blacklist Redis container
-        echo "dive-v3-blacklist-redis"
+        echo "shared-blacklist-redis"
     else
         # Spoke Redis container (format: dive-{instance}-redis)
         echo "dive-${instance}-redis"
