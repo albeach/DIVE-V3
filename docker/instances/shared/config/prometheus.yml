@@ -95,6 +95,55 @@ scrape_configs:
           instance: 'shared'
           redis_type: 'blacklist'
 
+  # KAS (Key Access Service) Instances
+  - job_name: 'usa-kas'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['dive-hub-kas:8080']
+        labels:
+          instance: 'usa'
+          realm: 'USA'
+          service: 'kas'
+
+  - job_name: 'fra-kas'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['dive-fra-kas:8080']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+          service: 'kas'
+
+  - job_name: 'gbr-kas'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['dive-gbr-kas:8080']
+        labels:
+          instance: 'gbr'
+          realm: 'GBR'
+          service: 'kas'
+
+  - job_name: 'deu-kas'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['dive-deu-kas:8080']
+        labels:
+          instance: 'deu'
+          realm: 'DEU'
+          service: 'kas'
+
 
 
 

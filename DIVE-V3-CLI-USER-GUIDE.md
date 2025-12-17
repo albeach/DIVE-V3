@@ -1883,6 +1883,25 @@ Shows metrics from Prometheus (if available) and directly from KAS:
 - Federation requests
 - OPA evaluations
 
+#### `kas alerts` - Show KAS Alert Status
+
+Display configured KAS alerts and current alert status.
+
+```bash
+./dive kas alerts
+```
+
+Shows:
+- All configured KAS alert rules with severity levels
+- Current active alerts from Prometheus
+- Alertmanager and Grafana dashboard URLs
+- Alert rule file locations
+
+**Alert Categories:**
+- 🔴 Critical: `KASInstanceDown`, `KASCircuitBreakerOpen`
+- 🟠 Warning: `KASHighDenialRate`, `KASHighLatency`, `KASFederationFailures`
+- 🔵 Info: `KASLowCacheHitRate`, `KASNoTraffic`
+
 #### `kas audit [--last N]` - Query Audit Logs
 
 Query KAS audit logs for key access events.
