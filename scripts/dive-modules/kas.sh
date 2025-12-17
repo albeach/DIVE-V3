@@ -1161,6 +1161,389 @@ kas_audit() {
 }
 
 # =============================================================================
+# SECURITY AUDIT COMMANDS
+# =============================================================================
+
+# Security audit for KAS configuration
+kas_security_audit() {
+    echo -e "${BOLD}KAS Security Audit${NC}"
+    echo ""
+
+    local issues_found=0
+    local warnings_found=0
+
+    echo -e "${BOLD}1. GCP Secrets Check:${NC}"
+    echo ""
+
+    # Check if GCP secrets exist
+    local secrets=("dive-v3-kas-signing-key" "dive-v3-kas-encryption-key")
+    for secret in "${secrets[@]}"; do
+        echo -n "  $secret: "
+        if gcloud secrets describe "$secret" --project=dive25 >/dev/null 2>&1; then
+            log_success_inline "EXISTS"
+        else
+            log_error_inline "MISSING"
+            ((issues_found++))
+        fi
+        echo ""
+    done
+
+    echo ""
+    echo -e "${BOLD}2. Hardcoded Credentials Check:${NC}"
+    echo ""
+
+    # Check for hardcoded passwords in common locations
+    local check_files=(
+        "${DIVE_ROOT}/kas/src/server.ts"
+        "${DIVE_ROOT}/docker-compose.hub.yml"
+        "${DIVE_ROOT}/kas/.env"
+        "${DIVE_ROOT}/kas/.env.local"
+    )
+
+    local patterns=("password.*=.*['\"][^'\"]{8,}" "secret.*=.*['\"][^'\"]{8,}" "DivePilot" "admin123" "password123")
+
+    for file in "${check_files[@]}"; do
+        if [ -f "$file" ]; then
+            echo -n "  $(basename "$file"): "
+            local found_issues=false
+            for pattern in "${patterns[@]}"; do
+                if grep -qiE "$pattern" "$file" 2>/dev/null; then
+                    found_issues=true
+                    break
+                fi
+            done
+            if [ "$found_issues" = true ]; then
+                log_warn_inline "REVIEW NEEDED"
+                ((warnings_found++))
+            else
+                log_success_inline "CLEAN"
+            fi
+            echo ""
+        fi
+    done
+
+    echo ""
+    echo -e "${BOLD}3. Certificate Check:${NC}"
+    echo ""
+
+    local kas_cert_dir="${DIVE_ROOT}/kas/certs"
+    echo -n "  Certificate file: "
+    if [ -f "$kas_cert_dir/certificate.pem" ]; then
+        log_success_inline "EXISTS"
+        echo ""
+        
+        # Check certificate expiry
+        echo -n "  Certificate expiry: "
+        local expiry
+        expiry=$(openssl x509 -enddate -noout -in "$kas_cert_dir/certificate.pem" 2>/dev/null | cut -d= -f2)
+        if [ -n "$expiry" ]; then
+            local expiry_epoch
+            expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry" "+%s" 2>/dev/null || date -d "$expiry" "+%s" 2>/dev/null || echo "0")
+            local now_epoch
+            now_epoch=$(date "+%s")
+            local days_remaining=$(( (expiry_epoch - now_epoch) / 86400 ))
+            
+            if [ "$days_remaining" -lt 0 ]; then
+                log_error_inline "EXPIRED"
+                ((issues_found++))
+            elif [ "$days_remaining" -lt 30 ]; then
+                log_warn_inline "EXPIRING SOON ($days_remaining days)"
+                ((warnings_found++))
+            else
+                log_success_inline "$days_remaining days remaining"
+            fi
+        else
+            log_warn_inline "Could not parse expiry"
+        fi
+        echo ""
+    else
+        log_error_inline "MISSING"
+        ((issues_found++))
+        echo ""
+    fi
+
+    echo -n "  Private key: "
+    if [ -f "$kas_cert_dir/key.pem" ]; then
+        log_success_inline "EXISTS"
+    else
+        log_error_inline "MISSING"
+        ((issues_found++))
+    fi
+    echo ""
+
+    echo ""
+    echo -e "${BOLD}4. Environment Variables Check:${NC}"
+    echo ""
+
+    local required_vars=("OPA_URL" "KEYCLOAK_REALM" "MONGODB_DATABASE")
+    local container
+    container="$(get_kas_container "usa")"
+
+    if docker ps --format "{{.Names}}" | grep -q "^${container}$" 2>/dev/null; then
+        for var in "${required_vars[@]}"; do
+            echo -n "  $var: "
+            if docker exec "$container" printenv "$var" >/dev/null 2>&1; then
+                log_success_inline "SET"
+            else
+                log_warn_inline "NOT SET"
+                ((warnings_found++))
+            fi
+            echo ""
+        done
+    else
+        log_warn "KAS container not running, cannot check environment"
+    fi
+
+    echo ""
+    echo -e "${BOLD}5. Network Security Check:${NC}"
+    echo ""
+
+    echo -n "  HTTPS enabled: "
+    if [ "$DRY_RUN" != true ] && docker ps --format "{{.Names}}" | grep -q "^${container}$" 2>/dev/null; then
+        if docker exec "$container" printenv HTTPS_ENABLED 2>/dev/null | grep -qi "true"; then
+            log_success_inline "YES"
+        else
+            log_warn_inline "NO"
+            ((warnings_found++))
+        fi
+    else
+        log_warn_inline "CANNOT CHECK"
+    fi
+    echo ""
+
+    # Summary
+    echo ""
+    echo -e "${BOLD}Audit Summary:${NC}"
+    echo "  Critical Issues: $issues_found"
+    echo "  Warnings: $warnings_found"
+    echo ""
+
+    if [ "$issues_found" -gt 0 ]; then
+        log_error "Security audit found $issues_found critical issue(s)"
+        echo ""
+        echo "Fix critical issues before production deployment."
+        return 1
+    elif [ "$warnings_found" -gt 0 ]; then
+        log_warn "Security audit found $warnings_found warning(s)"
+        echo ""
+        echo "Review warnings before production deployment."
+        return 0
+    else
+        log_success "Security audit passed - no issues found"
+        return 0
+    fi
+}
+
+# =============================================================================
+# CERTIFICATE MANAGEMENT
+# =============================================================================
+
+# Rotate KAS certificates
+kas_certs_rotate() {
+    local instance="${1:-usa}"
+
+    echo -e "${BOLD}Rotate KAS Certificates - ${instance^^}${NC}"
+    echo ""
+
+    local kas_cert_dir="${DIVE_ROOT}/kas/certs"
+    local backup_dir="${kas_cert_dir}/backup-$(date +%Y%m%d-%H%M%S)"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would backup current certificates to $backup_dir"
+        log_dry "Would generate new self-signed certificates"
+        log_dry "Would restart KAS container"
+        return 0
+    fi
+
+    # Backup existing certificates
+    if [ -f "$kas_cert_dir/certificate.pem" ]; then
+        log_info "Backing up current certificates to $backup_dir"
+        mkdir -p "$backup_dir"
+        cp "$kas_cert_dir/certificate.pem" "$backup_dir/"
+        cp "$kas_cert_dir/key.pem" "$backup_dir/" 2>/dev/null || true
+        log_success "Certificates backed up"
+    fi
+
+    # Generate new certificates
+    log_info "Generating new self-signed certificates..."
+    mkdir -p "$kas_cert_dir"
+    
+    openssl req -x509 -newkey rsa:4096 \
+        -keyout "$kas_cert_dir/key.pem" \
+        -out "$kas_cert_dir/certificate.pem" \
+        -days 365 -nodes \
+        -subj "/CN=kas.dive25.com/O=DIVE V3/C=US/ST=Virginia/L=Arlington" \
+        -addext "subjectAltName=DNS:kas.dive25.com,DNS:localhost,DNS:kas,IP:127.0.0.1" \
+        2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        log_success "New certificates generated"
+        
+        # Show certificate info
+        echo ""
+        echo -e "${BOLD}New Certificate Info:${NC}"
+        openssl x509 -noout -subject -enddate -in "$kas_cert_dir/certificate.pem" | sed 's/^/  /'
+        
+        # Restart KAS if running
+        local container
+        container="$(get_kas_container "$instance")"
+        if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+            echo ""
+            log_info "Restarting KAS to use new certificates..."
+            kas_restart "$instance"
+        else
+            echo ""
+            log_info "Start KAS to use new certificates: ./dive hub deploy"
+        fi
+    else
+        log_error "Failed to generate certificates"
+        return 1
+    fi
+}
+
+# Show KAS certificate status
+kas_certs_status() {
+    local instance="${1:-usa}"
+
+    echo -e "${BOLD}KAS Certificate Status - ${instance^^}${NC}"
+    echo ""
+
+    local kas_cert_dir="${DIVE_ROOT}/kas/certs"
+
+    if [ ! -f "$kas_cert_dir/certificate.pem" ]; then
+        log_error "KAS certificate not found at $kas_cert_dir/certificate.pem"
+        echo ""
+        echo "Generate certificates with: ./dive kas certs rotate"
+        return 1
+    fi
+
+    echo -e "${BOLD}Certificate Details:${NC}"
+    openssl x509 -noout -text -in "$kas_cert_dir/certificate.pem" 2>/dev/null | \
+        grep -E "Subject:|Issuer:|Not Before|Not After|DNS:|IP Address:" | \
+        sed 's/^[[:space:]]*/  /'
+
+    echo ""
+    echo -e "${BOLD}Validity:${NC}"
+    local expiry
+    expiry=$(openssl x509 -enddate -noout -in "$kas_cert_dir/certificate.pem" 2>/dev/null | cut -d= -f2)
+    echo "  Expires: $expiry"
+
+    # Calculate days remaining
+    local expiry_epoch now_epoch days_remaining
+    expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry" "+%s" 2>/dev/null || date -d "$expiry" "+%s" 2>/dev/null || echo "0")
+    now_epoch=$(date "+%s")
+    days_remaining=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+    if [ "$days_remaining" -lt 0 ]; then
+        log_error "Certificate has EXPIRED!"
+    elif [ "$days_remaining" -lt 30 ]; then
+        log_warn "Certificate expires in $days_remaining days - consider rotating"
+    else
+        log_success "Certificate valid for $days_remaining more days"
+    fi
+
+    echo ""
+    echo -e "${BOLD}Private Key:${NC}"
+    if [ -f "$kas_cert_dir/key.pem" ]; then
+        echo -n "  Status: "
+        log_success_inline "EXISTS"
+        echo ""
+        echo "  Type: $(openssl rsa -in "$kas_cert_dir/key.pem" -text -noout 2>/dev/null | head -1 | sed 's/^//')"
+    else
+        echo -n "  Status: "
+        log_error_inline "MISSING"
+        echo ""
+    fi
+
+    echo ""
+    echo -e "${BOLD}Backup Certificates:${NC}"
+    local backups
+    backups=$(ls -d "$kas_cert_dir"/backup-* 2>/dev/null | wc -l | tr -d ' ')
+    echo "  Available backups: $backups"
+    if [ "$backups" -gt 0 ]; then
+        ls -dt "$kas_cert_dir"/backup-* 2>/dev/null | head -3 | while read -r dir; do
+            echo "    - $(basename "$dir")"
+        done
+    fi
+}
+
+# Certificate command dispatcher
+kas_certs() {
+    local subcommand="${1:-status}"
+    shift || true
+
+    case "$subcommand" in
+        status)
+            kas_certs_status "$@"
+            ;;
+        rotate)
+            kas_certs_rotate "$@"
+            ;;
+        *)
+            echo -e "${BOLD}KAS Certificate Commands:${NC}"
+            echo ""
+            echo "Usage: ./dive kas certs <command>"
+            echo ""
+            echo "Commands:"
+            echo "  status    Show certificate status and expiry"
+            echo "  rotate    Generate new certificates (with backup)"
+            ;;
+    esac
+}
+
+# =============================================================================
+# TEST COMMANDS
+# =============================================================================
+
+# Run KAS test suite
+kas_test() {
+    echo -e "${BOLD}KAS Test Suite${NC}"
+    echo ""
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would run KAS test suite"
+        return 0
+    fi
+
+    local kas_dir="${DIVE_ROOT}/kas"
+
+    if [ ! -d "$kas_dir" ]; then
+        log_error "KAS directory not found: $kas_dir"
+        return 1
+    fi
+
+    log_info "Running KAS tests..."
+    echo ""
+
+    cd "$kas_dir"
+    
+    if [ -f "package.json" ]; then
+        # Check if node_modules exists
+        if [ ! -d "node_modules" ]; then
+            log_info "Installing dependencies..."
+            npm install --silent 2>/dev/null
+        fi
+
+        # Run tests
+        npm test 2>&1
+
+        local exit_code=$?
+        echo ""
+
+        if [ $exit_code -eq 0 ]; then
+            log_success "All KAS tests passed"
+        else
+            log_error "Some KAS tests failed"
+        fi
+
+        return $exit_code
+    else
+        log_error "No package.json found in KAS directory"
+        return 1
+    fi
+}
+
+# =============================================================================
 # HELP FUNCTION
 # =============================================================================
 
@@ -1196,6 +1579,12 @@ ${BOLD}MONITORING COMMANDS:${NC}
   metrics [instance]          Show KAS Prometheus metrics
   alerts                      Show KAS alert status and configured rules
   audit [--last N]            Query KAS audit logs (default: last 50)
+
+${BOLD}SECURITY COMMANDS:${NC}
+  security-audit              Run comprehensive security audit
+  certs status                Show certificate status and expiry
+  certs rotate                Rotate certificates (with backup)
+  test                        Run KAS test suite
 
 ${BOLD}INSTANCES:${NC}
   usa, fra, gbr, deu, can, ita, esp, nld, bel, dnk, nor, swe, pol, rou, cze, hun,
@@ -1324,6 +1713,21 @@ module_kas() {
             ;;
         audit)
             kas_audit "${INSTANCE:-usa}" "$@"
+            ;;
+
+        # Security commands
+        security-audit|security|audit-security)
+            kas_security_audit "$@"
+            ;;
+
+        # Certificate commands
+        certs|certificates)
+            kas_certs "$@"
+            ;;
+
+        # Test command
+        test)
+            kas_test "$@"
             ;;
 
         # Help

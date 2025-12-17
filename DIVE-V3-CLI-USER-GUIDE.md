@@ -1923,6 +1923,65 @@ Shows:
 - JWT verification events
 - Policy evaluation events
 
+### Security Commands
+
+#### `kas security-audit` - Run Security Audit
+
+Perform comprehensive security audit of KAS configuration.
+
+```bash
+./dive kas security-audit
+```
+
+Checks:
+1. **GCP Secrets**: Verifies `dive-v3-kas-signing-key` and `dive-v3-kas-encryption-key` exist
+2. **Hardcoded Credentials**: Scans for hardcoded passwords in configuration files
+3. **Certificates**: Checks certificate existence and expiry
+4. **Environment Variables**: Verifies required environment variables are set
+5. **Network Security**: Confirms HTTPS is enabled
+
+Returns success only if no critical issues found.
+
+#### `kas certs status` - Certificate Status
+
+Show KAS certificate details and expiry information.
+
+```bash
+./dive kas certs status
+```
+
+Displays:
+- Certificate subject and issuer
+- Validity period and days remaining
+- Private key status
+- Available backup certificates
+
+#### `kas certs rotate` - Rotate Certificates
+
+Generate new KAS certificates with automatic backup.
+
+```bash
+./dive kas certs rotate
+```
+
+Performs:
+- Backs up existing certificates to timestamped directory
+- Generates new 4096-bit RSA self-signed certificate
+- Restarts KAS to use new certificates
+
+#### `kas test` - Run Test Suite
+
+Execute the KAS test suite.
+
+```bash
+./dive kas test
+```
+
+Runs all 59 KAS unit tests:
+- DEK generation tests (14 tests)
+- JWT verification tests (13 tests)
+- KAS federation tests (32 tests)
+
 ### KAS Usage Examples
 
 ```bash
