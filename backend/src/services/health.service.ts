@@ -161,6 +161,7 @@ class HealthService {
 
         // Check Redis health
         const redisHealth = await this.checkRedis();
+        const blacklistRedisHealth = await this.checkBlacklistRedis();
 
         // Check cache health
         const cacheHealthCheck = authzCacheService.isHealthy();
@@ -190,6 +191,8 @@ class HealthService {
             mongoHealth.status === 'degraded' ||
             opaHealth.status === 'degraded' ||
             keycloakHealth.status === 'degraded' ||
+            redisHealth.status === 'down' ||
+            blacklistRedisHealth.status === 'down' ||
             !cacheHealthCheck.healthy
         ) {
             status = HealthStatus.DEGRADED;
@@ -204,6 +207,7 @@ class HealthService {
                 opa: opaHealth,
                 keycloak: keycloakHealth,
                 redis: redisHealth,
+                blacklistCache: blacklistRedisHealth,
                 kas: kasHealth,
                 cache: cacheHealth,
             },
@@ -599,6 +603,83 @@ class HealthService {
                 error: errorMessage,
                 details: {
                     reason: 'Redis connection failed',
+                },
+            };
+        } finally {
+            if (redisClient) {
+                try {
+                    redisClient.disconnect();
+                } catch (err) {
+                    // Ignore disconnect errors
+                }
+            }
+        }
+    }
+
+    /**
+     * Check blacklist Redis health
+     */
+    private async checkBlacklistRedis(): Promise<IServiceHealth> {
+        const startTime = Date.now();
+
+        let redisClient: Redis | null = null;
+
+        try {
+            const redisUrl = process.env.BLACKLIST_REDIS_URL || 'redis://redis-blacklist:6380';
+
+            // Create a temporary Redis client for health check
+            redisClient = new Redis(redisUrl, {
+                connectTimeout: 5000,
+                commandTimeout: 5000,
+                maxRetriesPerRequest: 1,
+                lazyConnect: false,
+            });
+
+            // Wait for connection
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Blacklist Redis connection timeout'));
+                }, 5000);
+
+                redisClient!.once('ready', () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+
+                redisClient!.once('error', (err) => {
+                    clearTimeout(timeout);
+                    reject(err);
+                });
+            });
+
+            // Ping test
+            await redisClient.ping();
+
+            const responseTime = Date.now() - startTime;
+
+            return {
+                status: 'up',
+                responseTime,
+                details: {
+                    mode: 'standalone',
+                    message: 'Blacklist Redis ping successful',
+                },
+            };
+        } catch (error) {
+            const responseTime = Date.now() - startTime;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown Blacklist Redis error';
+
+            logger.error('Blacklist Redis health check failed', {
+                error: errorMessage,
+                responseTime,
+            });
+
+            return {
+                status: 'down',
+                responseTime,
+                error: errorMessage,
+                details: {
+                    reason: 'Blacklist Redis connection failed',
                 },
             };
         } finally {
