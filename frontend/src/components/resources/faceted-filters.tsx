@@ -668,6 +668,20 @@ export function MobileFilterDrawer({ isOpen, onClose, ...props }: MobileFilterDr
     };
   }, [isOpen]);
 
+  // Handle escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -696,6 +710,7 @@ export function MobileFilterDrawer({ isOpen, onClose, ...props }: MobileFilterDr
             <button
               onClick={onClose}
               className="absolute top-4 right-4 p-2 bg-white dark:bg-gray-800 rounded-full shadow-lg z-10"
+              aria-label="Close filters"
             >
               <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
