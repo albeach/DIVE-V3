@@ -9,7 +9,7 @@
 #   docker compose up -d
 # =============================================================================
 
-name: dive-v3-shared
+name: shared
 
 services:
   # ---------------------------------------------------------------------------
@@ -17,7 +17,7 @@ services:
   # ---------------------------------------------------------------------------
   hub-redis-exporter:
     image: oliver006/redis_exporter:latest
-    container_name: dive-v3-hub-redis-exporter
+    container_name: shared-hub-redis-exporter
     restart: unless-stopped
     environment:
       REDIS_ADDR: dive-hub-redis:6379
@@ -39,7 +39,7 @@ services:
   # ---------------------------------------------------------------------------
   blacklist-redis:
     image: redis:7-alpine
-    container_name: dive-v3-blacklist-redis
+    container_name: shared-blacklist-redis
     restart: unless-stopped
     command: >
       redis-server
@@ -70,7 +70,7 @@ services:
   # ---------------------------------------------------------------------------
   blacklist-redis-exporter:
     image: oliver006/redis_exporter:latest
-    container_name: dive-v3-blacklist-redis-exporter
+    container_name: shared-blacklist-redis-exporter
     restart: unless-stopped
     environment:
       REDIS_ADDR: blacklist-redis:6379
@@ -94,7 +94,7 @@ services:
   # ---------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:latest
-    container_name: dive-v3-prometheus
+    container_name: shared-prometheus
     restart: unless-stopped
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -118,7 +118,7 @@ services:
   # ---------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:latest
-    container_name: dive-v3-grafana
+    container_name: shared-grafana
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -144,7 +144,7 @@ services:
   # ---------------------------------------------------------------------------
   alertmanager:
     image: prom/alertmanager:latest
-    container_name: dive-v3-alertmanager
+    container_name: shared-alertmanager
     restart: unless-stopped
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
@@ -176,10 +176,10 @@ networks:
 # -----------------------------------------------------------------------------
 volumes:
   prometheus_data:
-    name: dive-v3-prometheus-data
+    name: shared-prometheus-data
   grafana_data:
-    name: dive-v3-grafana-data
+    name: shared-grafana-data
   alertmanager_data:
-    name: dive-v3-alertmanager-data
+    name: shared-alertmanager-data
   blacklist_redis_data:
-    name: dive-v3-blacklist-redis-data
+    name: shared-blacklist-redis-data
