@@ -140,29 +140,28 @@ services:
       retries: 3
 
   # ---------------------------------------------------------------------------
-  # Alertmanager - Alert Routing (Disabled due to Docker clustering issues)
-  # To enable: Uncomment below and fix cluster configuration
+  # Alertmanager - Alert Routing
   # ---------------------------------------------------------------------------
-  # alertmanager:
-  #   image: prom/alertmanager:latest
-  #   container_name: shared-alertmanager
-  #   restart: unless-stopped
-  #   command:
-  #     - '--config.file=/etc/alertmanager/alertmanager.yml'
-  #     - '--storage.path=/alertmanager'
-  #     - '--cluster.advertise-address=alertmanager:9093'
-  #   ports:
-  #     - "9093:9093"
-  #   volumes:
-  #     - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-  #     - alertmanager_data:/alertmanager
-  #   networks:
-  #     - shared
-  #   healthcheck:
-  #     test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: shared-alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--cluster.listen-address=0.0.0.0:0'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - shared
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 # -----------------------------------------------------------------------------
 # Networks
