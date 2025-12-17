@@ -169,7 +169,7 @@ services:
 # -----------------------------------------------------------------------------
 networks:
   shared:
-    name: dive-v3-shared-network
+    name: shared-network
     driver: bridge
     external: true
 
