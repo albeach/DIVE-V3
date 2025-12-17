@@ -9,11 +9,23 @@
 
 # Environment files
 .env
+.env.*
 .env.local
 .env*.local
 .env.production
 .env.development
 !.env.example
+# Instance-specific environment files and certificates
+instances/*/.env
+instances/*/.env.*
+instances/*/certs/
+instances/*/certs/*.pem
+instances/*/certs/*.key
+instances/*/certs/*.crt
+instances/*/certs/*.bak*
+# Temporary instance directories
+instances/rou/
+instances/tmp*/
 
 # Logs
 logs/
@@ -110,18 +122,40 @@ temp-ref/
 *.pem
 *.p12
 *.pfx
+*.crt
+*.cer
 secrets/
 .secrets/
 
-# Ignore all PEM/keys/certs (do not track real certs)
+# Certificate and key files (all variations)
 *.pem
 *.key
+*.crt
+*.cer
 *.p12
 *.pfx
-# Ignore backup/self-signed certificate copies
-keycloak/certs/*.bak*
-keycloak/certs/*certificate.pem.bak*
-keycloak/certs/*key.pem.bak*
+*.jks
+*.p7b
+*.p7c
+
+# Certificate backups and temporary files
+*.bak
+*.bak*
+*.backup
+*certificate.pem.bak*
+*key.pem.bak*
+*certificate.crt.bak*
+*key.key.bak*
+
+# Timestamped backup files
+*.bak.20*
+*certificate.pem.bak.20*
+*key.pem.bak.20*
+*tunnel-credentials.json.bak*
+*key.pem.bak.20*
+
+# Files with timestamp patterns
+*20[0-9][0-9][0-1][0-9][0-3][0-9]*
 
 # OPA bundles
 bundle.tar.gz
@@ -188,6 +222,19 @@ docs/**/*.md
 # One-off scripts and test payloads
 test-download-simple.js
 test-opa-decision.json
+scripts/fix-*.js
+scripts/fix-*.sh
+scripts/clean-*.sh
+scripts/set-*.js
+scripts/*-theme.js
+
+# Temporary instance flags
+instances/*/.initialized
+instances/*/.env.*
+
+# Shared secrets scripts (sensitive)
+docker/instances/shared/load-secrets.sh
+docker/instances/shared/start-redis.sh
 
 *.bak
 *.bak2

@@ -313,7 +313,8 @@ load_gcp_secrets() {
     [ -n "$AUTH_SECRET" ] && eval "export AUTH_SECRET_${inst_uc}='${AUTH_SECRET}'"
     [ -n "$KEYCLOAK_CLIENT_SECRET" ] && eval "export KEYCLOAK_CLIENT_SECRET_${inst_uc}='${KEYCLOAK_CLIENT_SECRET}'"
     [ -n "$REDIS_PASSWORD" ] && eval "export REDIS_PASSWORD_${inst_uc}='${REDIS_PASSWORD}'"
-    
+    [ -n "$REDIS_PASSWORD" ] && export REDIS_PASSWORD_BLACKLIST="${REDIS_PASSWORD}"
+
     # Make secrets available to child processes (docker compose, terraform)
     export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
     

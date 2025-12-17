@@ -81,6 +81,41 @@ router.get('/live', (_req: Request, res: Response) => {
 });
 
 /**
+ * GET /health/redis
+ * Redis-specific health check
+ */
+router.get('/redis', async (_req: Request, res: Response) => {
+    try {
+        const detailedHealth = await healthService.detailedHealthCheck();
+        const redisHealth = detailedHealth.services.redis;
+
+        if (!redisHealth) {
+            res.status(503).json({
+                status: 'unhealthy',
+                message: 'Redis service not configured',
+                timestamp: new Date().toISOString(),
+            });
+            return;
+        }
+
+        const statusCode = redisHealth.status === 'up' ? 200 : 503;
+        res.status(statusCode).json({
+            status: redisHealth.status,
+            responseTime: redisHealth.responseTime,
+            timestamp: new Date().toISOString(),
+            details: redisHealth.details,
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'unhealthy',
+            message: 'Redis health check failed',
+            error: error instanceof Error ? error.message : 'Unknown error',
+            timestamp: new Date().toISOString(),
+        });
+    }
+});
+
+/**
  * GET /health/policy-version
  * Phase 4, Task 3.1: Returns OPA policy version for drift detection
  * Used by policy drift monitor to verify consistency across instances

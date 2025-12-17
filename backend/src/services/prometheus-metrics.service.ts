@@ -88,6 +88,11 @@ class PrometheusMetricsService {
   // KAS Metrics
   private kasKeyOperations!: Counter;
   private kasLatency!: Histogram;
+
+  // Rate Limit Metrics
+  private rateLimitHits!: Counter;
+  private rateLimitBlocks!: Counter;
+  private rateLimitActiveKeys!: Gauge;
   
   // Audit Metrics
   private auditEntriesLogged!: Counter;
@@ -143,6 +148,7 @@ class PrometheusMetricsService {
     this.initializeComplianceMetrics();
     this.initializeHealthMetrics();
     this.initializeOPALMetrics();
+    this.initializeRateLimitMetrics();
     
     logger.info('Prometheus metrics service initialized', {
       prefix: this.prefix,
@@ -467,6 +473,32 @@ class PrometheusMetricsService {
     this.opaTestsFailed = new Gauge({
       name: `${this.prefix}_opa_test_failed`,
       help: 'Number of OPA policy tests failed',
+      registers: [this.registry]
+    });
+  }
+
+  private initializeRateLimitMetrics(): void {
+    // Rate limit hits counter
+    this.rateLimitHits = new Counter({
+      name: `${this.prefix}_rate_limit_hits_total`,
+      help: 'Total rate limit hits (successful requests within limits)',
+      labelNames: ['limiter_type'],
+      registers: [this.registry]
+    });
+
+    // Rate limit blocks counter
+    this.rateLimitBlocks = new Counter({
+      name: `${this.prefix}_rate_limit_blocks_total`,
+      help: 'Total rate limit blocks (requests exceeding limits)',
+      labelNames: ['limiter_type'],
+      registers: [this.registry]
+    });
+
+    // Active rate limit keys gauge
+    this.rateLimitActiveKeys = new Gauge({
+      name: `${this.prefix}_rate_limit_active_keys`,
+      help: 'Number of active rate limit keys being tracked',
+      labelNames: ['limiter_type'],
       registers: [this.registry]
     });
   }
@@ -888,7 +920,28 @@ class PrometheusMetricsService {
     this.opaTestsPassed.set(params.passed);
     this.opaTestsFailed.set(params.failed);
   }
-  
+
+  /**
+   * Record rate limit block
+   */
+  recordRateLimitBlock(limiterType: string): void {
+    this.rateLimitBlocks.inc({ limiter_type: limiterType });
+  }
+
+  /**
+   * Record rate limit hit (successful request within limits)
+   */
+  recordRateLimitHit(limiterType: string): void {
+    this.rateLimitHits.inc({ limiter_type: limiterType });
+  }
+
+  /**
+   * Update active rate limit keys count
+   */
+  setRateLimitActiveKeys(limiterType: string, count: number): void {
+    this.rateLimitActiveKeys.set({ limiter_type: limiterType }, count);
+  }
+
   // ============================================
   // EXPORT METHODS
   // ============================================
