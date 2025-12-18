@@ -15,9 +15,25 @@ on:
       - 'frontend/**'
       - 'policies/**'
       - 'k8s/**'
+      - 'docker-compose*.yml'
+      - 'instances/**'
+      - 'scripts/**'
       - '.github/workflows/ci-pr.yml'
 
 jobs:
+  # Security: Check for hardcoded secrets
+  secrets-lint:
+    name: Secrets Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Lint for Hardcoded Secrets
+        run: ./scripts/lint-secrets.sh --ci
+  
   # Fast feedback: TypeScript compilation and linting
   quick-checks:
     name: Quick Checks (TypeScript, Linting)
@@ -197,7 +213,7 @@ jobs:
   pr-summary:
     name: PR Test Summary
     runs-on: ubuntu-latest
-    needs: [quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation]
+    needs: [secrets-lint, quick-checks, backend-tests, frontend-tests, opa-tests, k8s-validation]
     if: always()
     
     steps:
@@ -207,6 +223,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Secrets Lint | ${{ needs.secrets-lint.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Quick Checks | ${{ needs.quick-checks.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Backend Tests | ${{ needs.backend-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Frontend Tests | ${{ needs.frontend-tests.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
@@ -214,7 +231,8 @@ jobs:
           echo "| K8s Validation | ${{ needs.k8s-validation.result == 'success' && '✅' || '⚠️' || '⏭️' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          if [[ "${{ needs.quick-checks.result }}" == "success" && \
+          if [[ "${{ needs.secrets-lint.result }}" == "success" && \
+                "${{ needs.quick-checks.result }}" == "success" && \
                 "${{ needs.backend-tests.result }}" == "success" && \
                 "${{ needs.frontend-tests.result }}" == "success" && \
                 "${{ needs.opa-tests.result }}" == "success" ]]; then
@@ -222,6 +240,7 @@ jobs:
           else
             echo "❌ **Some tests failed** - Please review and fix issues" >> $GITHUB_STEP_SUMMARY
           fi
+
 
 
 

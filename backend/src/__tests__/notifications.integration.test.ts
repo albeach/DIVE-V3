@@ -1,10 +1,12 @@
 /**
  * Notification Integration Tests
  * Tests end-to-end notification creation workflow from audit events
+ * 
+ * SKIPPED: Depends on notification service infrastructure
+ * These tests require MongoDB and notification service to be running.
  */
 
-// Temporarily skip this test - depends on notification service infrastructure
-describe.skip('Notification Integration Tests', () => {
+// Imports must be at top level
 import { MongoClient, Db } from 'mongodb';
 import { auditService } from '../services/audit.service';
 import { notificationService } from '../services/notification.service';
@@ -26,7 +28,8 @@ jest.mock('../utils/logger', () => ({
     }
 }));
 
-describe('Notification Integration Tests', () => {
+// Temporarily skip this test - depends on notification service infrastructure
+describe.skip('Notification Integration Tests', () => {
     let mongoClient: MongoClient;
     let db: Db;
 

@@ -798,7 +798,8 @@ cmd_logs() {
 
 cmd_ps() {
     echo -e "${CYAN}Running DIVE Containers:${NC}"
-    docker ps --filter "name=dive" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "No containers running"
+    # Show all containers with DIVE-related names (hub and spokes)
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null | grep -E "(^dive|^[a-z]{3}-)" || echo "No DIVE containers running"
 }
 
 cmd_exec() {

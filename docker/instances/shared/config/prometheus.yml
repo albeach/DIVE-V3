@@ -1,7 +1,16 @@
+# =============================================================================
 # DIVE V3 Prometheus Configuration
+# =============================================================================
+# Phase 4: Fixed target scraping using host.docker.internal
+# Uses host gateway to reach services on localhost ports
+# =============================================================================
+
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  external_labels:
+    cluster: 'dive-v3-federation'
+    environment: 'local'
 
 rule_files:
   - rules/*.yml
@@ -12,75 +21,82 @@ alerting:
         - targets: ['alertmanager:9093']
 
 scrape_configs:
-  # Prometheus self-monitoring
+  # ===========================================================================
+  # SELF-MONITORING
+  # ===========================================================================
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # USA Instance
-  - job_name: 'usa-backend'
+  # ===========================================================================
+  # HUB SERVICES (via host.docker.internal - localhost ports)
+  # ===========================================================================
+  
+  - job_name: 'hub-backend'
     scheme: https
     tls_config:
       insecure_skip_verify: true
+    metrics_path: /metrics
     static_configs:
-      - targets: ['dive-v3-usa-backend:4000']
+      - targets: ['host.docker.internal:4000']
         labels:
-          instance: 'usa'
+          instance: 'hub'
           realm: 'USA'
+          service: 'backend'
 
-  - job_name: 'usa-opa'
+  - job_name: 'hub-opa'
     scheme: https
     tls_config:
       insecure_skip_verify: true
+    metrics_path: /metrics
     static_configs:
-      - targets: ['dive-v3-usa-opa:8182']
+      - targets: ['host.docker.internal:8181']
         labels:
-          instance: 'usa'
+          instance: 'hub'
           realm: 'USA'
+          service: 'opa'
 
-  # FRA Instance
-  - job_name: 'fra-backend'
+  - job_name: 'hub-keycloak'
     scheme: https
     tls_config:
       insecure_skip_verify: true
+    metrics_path: /metrics
     static_configs:
-      - targets: ['dive-v3-fra-backend:4000']
+      - targets: ['host.docker.internal:9000']
         labels:
-          instance: 'fra'
-          realm: 'FRA'
+          instance: 'hub'
+          realm: 'USA'
+          service: 'keycloak'
 
-  - job_name: 'fra-opa'
+  # NOTE: OPAL Server does not expose /metrics endpoint
+  # Use /healthcheck for basic availability monitoring instead
+  # - job_name: 'hub-opal-server'
+  #   scheme: https
+  #   tls_config:
+  #     insecure_skip_verify: true
+  #   metrics_path: /healthcheck
+  #   static_configs:
+  #     - targets: ['host.docker.internal:7002']
+  #       labels:
+  #         instance: 'hub'
+  #         service: 'opal-server'
+
+  - job_name: 'hub-kas'
     scheme: https
     tls_config:
       insecure_skip_verify: true
+    metrics_path: /metrics
     static_configs:
-      - targets: ['dive-v3-fra-opa:8182']
+      - targets: ['host.docker.internal:8085']
         labels:
-          instance: 'fra'
-          realm: 'FRA'
+          instance: 'hub'
+          realm: 'USA'
+          service: 'kas'
 
-  # GBR Instance
-  - job_name: 'gbr-backend'
-    scheme: https
-    tls_config:
-      insecure_skip_verify: true
-    static_configs:
-      - targets: ['dive-v3-gbr-backend:4000']
-        labels:
-          instance: 'gbr'
-          realm: 'GBR'
-
-  - job_name: 'gbr-opa'
-    scheme: https
-    tls_config:
-      insecure_skip_verify: true
-    static_configs:
-      - targets: ['dive-v3-gbr-opa:8182']
-        labels:
-          instance: 'gbr'
-          realm: 'GBR'
-
-  # Redis Exporters - Hub Redis and Blacklist Redis
+  # ===========================================================================
+  # REDIS EXPORTERS (within shared-network)
+  # ===========================================================================
+  
   - job_name: 'redis-hub'
     static_configs:
       - targets: ['hub-redis-exporter:9121']
@@ -90,71 +106,111 @@ scrape_configs:
 
   - job_name: 'redis-blacklist'
     static_configs:
-      - targets: ['blacklist-redis-exporter:9122']
+      - targets: ['blacklist-redis-exporter:9121']
         labels:
           instance: 'shared'
           redis_type: 'blacklist'
 
-  # KAS (Key Access Service) Instances
-  - job_name: 'usa-kas'
+  # ===========================================================================
+  # SPOKE INSTANCES (if running on standard spoke ports)
+  # Estonia (EST) - Ports: 3008/4008/8448/8188
+  # ===========================================================================
+  
+  - job_name: 'est-backend'
     scheme: https
     tls_config:
       insecure_skip_verify: true
     metrics_path: /metrics
     static_configs:
-      - targets: ['dive-hub-kas:8080']
+      - targets: ['host.docker.internal:4008']
         labels:
-          instance: 'usa'
-          realm: 'USA'
-          service: 'kas'
+          instance: 'est'
+          realm: 'EST'
+          service: 'backend'
 
-  - job_name: 'fra-kas'
+  - job_name: 'est-opa'
     scheme: https
     tls_config:
       insecure_skip_verify: true
     metrics_path: /metrics
     static_configs:
-      - targets: ['dive-fra-kas:8080']
+      - targets: ['host.docker.internal:8188']
         labels:
-          instance: 'fra'
-          realm: 'FRA'
-          service: 'kas'
+          instance: 'est'
+          realm: 'EST'
+          service: 'opa'
 
-  - job_name: 'gbr-kas'
+  # GBR - Ports: 3002/4002/8445/8283
+  - job_name: 'gbr-backend'
     scheme: https
     tls_config:
       insecure_skip_verify: true
     metrics_path: /metrics
     static_configs:
-      - targets: ['dive-gbr-kas:8080']
+      - targets: ['host.docker.internal:4002']
         labels:
           instance: 'gbr'
           realm: 'GBR'
-          service: 'kas'
+          service: 'backend'
 
-  - job_name: 'deu-kas'
+  - job_name: 'gbr-opa'
     scheme: https
     tls_config:
       insecure_skip_verify: true
     metrics_path: /metrics
     static_configs:
-      - targets: ['dive-deu-kas:8080']
+      - targets: ['host.docker.internal:8283']
+        labels:
+          instance: 'gbr'
+          realm: 'GBR'
+          service: 'opa'
+
+  # FRA - Ports: 3001/4001/8444/8182
+  - job_name: 'fra-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4001']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+          service: 'backend'
+
+  - job_name: 'fra-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8182']
+        labels:
+          instance: 'fra'
+          realm: 'FRA'
+          service: 'opa'
+
+  # DEU - Ports: 3003/4003/8446/8284
+  - job_name: 'deu-backend'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:4003']
         labels:
           instance: 'deu'
           realm: 'DEU'
-          service: 'kas'
+          service: 'backend'
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  - job_name: 'deu-opa'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:8284']
+        labels:
+          instance: 'deu'
+          realm: 'DEU'
+          service: 'opa'

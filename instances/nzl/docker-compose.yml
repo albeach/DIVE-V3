@@ -1,252 +1,176 @@
 # =============================================================================
-# DIVE V3 Spoke Instance: NZL (New Zealand Defence Force)
+# DIVE V3 - NZL Instance (New Zealand)
 # =============================================================================
-# Generated: 2025-12-12T07:32:45Z
-# Spoke ID: spoke-nzl-2a76bd42
-# =============================================================================
-# STANDALONE SPOKE - Completely isolated from Hub
-# Ports offset by +10000 to avoid conflicts with Hub
+# Spoke instance using extends pattern from base services.
+# Regenerate with: ./dive spoke init NZL "New Zealand"
 # =============================================================================
 
-# Project name ensures complete Docker isolation from Hub
 name: dive-spoke-nzl
-
-version: '3.8'
 
 networks:
   dive-nzl-network:
     driver: bridge
+  dive-v3-shared-network:
+    external: true
 
 volumes:
   nzl_postgres_data:
   nzl_mongodb_data:
   nzl_redis_data:
-  nzl_opal_cache:
   nzl_frontend_modules:
   nzl_frontend_next:
+  nzl_opa_cache:
+  nzl_opal_cache:
   nzl_backend_node_modules:
   nzl_backend_logs:
-  nzl_kas_logs:
 
 services:
-  # ==========================================================================
-  # DATABASE SERVICES
-  # ==========================================================================
-
   postgres-nzl:
-    image: postgres:15-alpine
+    extends:
+      file: ../../docker/base/services.yml
+      service: postgres-base
+    container_name: dive-spoke-nzl-postgres
     environment:
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_NZL:?set POSTGRES_PASSWORD_NZL}
     volumes:
       - nzl_postgres_data:/var/lib/postgresql/data
     networks:
       - dive-nzl-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
 
   mongodb-nzl:
-    image: mongo:7-jammy
+    extends:
+      file: ../../docker/base/services.yml
+      service: mongodb-base
+    container_name: dive-spoke-nzl-mongodb
     environment:
       MONGO_INITDB_DATABASE: dive-v3-nzl
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_NZL:?set MONGO_PASSWORD_NZL}
     volumes:
       - nzl_mongodb_data:/data/db
     networks:
       - dive-nzl-network
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
 
   redis-nzl:
-    image: redis:alpine
+    extends:
+      file: ../../docker/base/services.yml
+      service: redis-base
+    container_name: dive-spoke-nzl-redis
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD_NZL:?set REDIS_PASSWORD_NZL}
     volumes:
       - nzl_redis_data:/data
     networks:
       - dive-nzl-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # ==========================================================================
-  # IDENTITY & ACCESS MANAGEMENT
-  # ==========================================================================
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_NZL}", "ping"]
 
   keycloak-nzl:
-    build:
-      context: ../../keycloak
-      dockerfile: Dockerfile
-    entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
-    command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
+    extends:
+      file: ../../docker/base/services.yml
+      service: keycloak-base
+    container_name: dive-spoke-nzl-keycloak
     environment:
-      KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-nzl:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_NZL:?set POSTGRES_PASSWORD_NZL}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_NZL:?set KEYCLOAK_ADMIN_PASSWORD_NZL}
       KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: "18443"
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: xforwarded
-      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_URL: https://localhost:18443
+      KC_HOSTNAME_ADMIN_URL: https://localhost:18443
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
-      KC_HTTPS_PORT: "8443"
-      KC_LOG_LEVEL: info
-      KC_FEATURES: scripts
-      KC_HEALTH_ENABLED: "true"
-      KC_METRICS_ENABLED: "true"
-      # Realm import configuration (MUST match frontend KEYCLOAK_CLIENT_SECRET)
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      APP_URL: https://localhost:13000
-      API_URL: https://localhost:14000
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
-      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
-      INSTANCE_CODE: NZL
     ports:
       - "18443:8443"
       - "18080:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
-      - ../../keycloak/realms:/opt/keycloak/realm-templates:ro
     depends_on:
       postgres-nzl:
         condition: service_healthy
     networks:
       - dive-nzl-network
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/master HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 'HTTP/1.1 200'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
-    restart: unless-stopped
-
-  # ==========================================================================
-  # POLICY ENGINE
-  # ==========================================================================
+      - dive-v3-shared-network
 
   opa-nzl:
-    image: openpolicyagent/opa:latest
-    command:
-      - run
-      - --server
-      - --addr=0.0.0.0:8181
-      - --log-level=info
-      # NOTE: No --bundle flag - OPAL pushes policies dynamically
-      # This allows OPAL to manage policies and data
+    extends:
+      file: ../../docker/base/services.yml
+      service: opa-base
+    container_name: dive-spoke-nzl-opa
     ports:
       - "18181:8181"
     volumes:
       - ../../policies:/policies:ro
-      - ./cache/policies:/var/opa/cache
     networks:
       - dive-nzl-network
-    healthcheck:
-      test: ["CMD", "/opa", "eval", "true"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
 
   opal-client-nzl:
-    build:
-      context: ../../docker
-      dockerfile: opal-client.Dockerfile
+    extends:
+      file: ../../docker/base/services.yml
+      service: opal-client-base
+    container_name: dive-spoke-nzl-opal-client
     environment:
-      # Hub OPAL Server URL - from environment variable
-      OPAL_SERVER_URL: ${HUB_OPAL_URL}
-      # OPAL Authentication
-      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN}
-      OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
-      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: http://opa-nzl:8181
-      OPAL_SUBSCRIPTION_ID: spoke-nzl-2a76bd42
-      # Data topics to subscribe to (must match server topics)
-      OPAL_DATA_TOPICS: policy_data
-      OPAL_LOG_LEVEL: INFO
-      OPAL_KEEP_ALIVE_TIMEOUT: 60
-      OPAL_RECONNECT_INTERVAL: 5
-      OPAL_RECONNECT_MAX_INTERVAL: 300
-      # Enable policy updater - Hub distributes policies from Git repo
-      OPAL_POLICY_UPDATER_ENABLED: "true"
-      # Local OPA policy/data store - OPAL adds /v1/policies and /v1/data automatically
+      OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-nzl-default}
       OPAL_POLICY_STORE_URL: http://opa-nzl:8181
+      OPAL_DATA_TOPICS: policy:base,policy:nzl,data:federation_matrix,data:trusted_issuers
     volumes:
       - nzl_opal_cache:/var/opal/cache
       - ./certs:/var/opal/certs:ro
-    extra_hosts:
-      - "localhost:host-gateway"
     depends_on:
       opa-nzl:
         condition: service_healthy
     networks:
       - dive-nzl-network
-    healthcheck:
-      # Check root endpoint for OPAL client (returns 200 when healthy, 503 when unavailable)
-      test: ["CMD", "curl", "-sf", "http://localhost:7000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: unless-stopped
-    # NO profiles restriction - ALWAYS start for policy data sync
 
-  # ==========================================================================
-  # BACKEND API
-  # ==========================================================================
+  kas-nzl:
+    extends:
+      file: ../../docker/base/services.yml
+      service: kas-base
+    container_name: dive-spoke-nzl-kas
+    environment:
+      KEYCLOAK_URL: https://keycloak-nzl:8443
+      KEYCLOAK_REALM: dive-v3-broker-nzl
+      OPA_URL: http://opa-nzl:8181
+      INSTANCE_CODE: NZL
+    ports:
+      - "18085:8080"
+    volumes:
+      - ./certs:/app/certs:ro
+    depends_on:
+      keycloak-nzl:
+        condition: service_healthy
+      opa-nzl:
+        condition: service_healthy
+    networks:
+      - dive-nzl-network
 
   backend-nzl:
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile.dev
-    command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
+    extends:
+      file: ../../docker/base/services.yml
+      service: backend-base
+    container_name: dive-spoke-nzl-backend
     environment:
-      NODE_ENV: development
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      PORT: "4000"
       INSTANCE_CODE: NZL
-      INSTANCE_NAME: "New Zealand Defence Force"
-      SPOKE_ID: spoke-nzl-2a76bd42
-      SPOKE_MODE: "true"
-      # MongoDB (with alias for compatibility)
-      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD}@mongodb-nzl:27017/dive-v3-nzl?authSource=admin
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-nzl:27017/dive-v3-nzl?authSource=admin
+      INSTANCE_NAME: "New Zealand"
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_NZL:?set MONGO_PASSWORD_NZL}@mongodb-nzl:27017/dive-v3-nzl?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_NZL:?set MONGO_PASSWORD_NZL}@mongodb-nzl:27017/dive-v3-nzl?authSource=admin
       MONGODB_DATABASE: dive-v3-nzl
-      REDIS_URL: redis://redis-nzl:6379
-      # Keycloak (internal Docker network URL)
+      REDIS_URL: redis://:${REDIS_PASSWORD_NZL:?set REDIS_PASSWORD_NZL}@redis-nzl:6379
       KEYCLOAK_URL: https://keycloak-nzl:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_ISSUER: https://localhost:18443/realms/dive-v3-broker
-      TRUSTED_ISSUERS: https://localhost:18443/realms/dive-v3-broker,https://keycloak-nzl:8443/realms/dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-nzl
+      KEYCLOAK_ISSUER: https://localhost:18443/realms/dive-v3-broker-nzl
+      TRUSTED_ISSUERS: https://localhost:18443/realms/dive-v3-broker-nzl,https://keycloak-nzl:8443/realms/dive-v3-broker-nzl,https://nzl-idp.dive25.com/realms/dive-v3-broker-nzl
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # OPA
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_NZL:?set KEYCLOAK_ADMIN_PASSWORD_NZL}
       OPA_URL: http://opa-nzl:8181
-      # CORS - Include localhost for local development
-      NEXT_PUBLIC_BASE_URL: https://localhost:13000
-      CORS_ALLOWED_ORIGINS: https://localhost:13000,https://localhost:14000,https://localhost:18443,https://nzl-app.dive25.com,https://nzl-api.dive25.com
       FEDERATION_ALLOWED_ORIGINS: https://localhost:13000,https://localhost:14000,https://localhost:18443,https://nzl-app.dive25.com,https://nzl-api.dive25.com,https://nzl-idp.dive25.com
-      # Hub federation (localhost for local development)
-      HUB_URL: ${HUB_URL:-https://localhost:4000}
-      SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN}
-      SPOKE_CONFIG_PATH: /app/config/config.json
-      DIVE_POLICY_CACHE_PATH: /app/cache/policies
-      DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
+      CORS_ALLOWED_ORIGINS: https://localhost:13000,https://localhost:14000,https://localhost:18443,https://nzl-app.dive25.com,https://nzl-api.dive25.com,https://nzl-idp.dive25.com
     ports:
       - "14000:4000"
     volumes:
@@ -254,109 +178,51 @@ services:
       - nzl_backend_node_modules:/app/node_modules
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
-      - ./config.json:/app/config/config.json:ro
-      - ../../config:/app/config/shared:ro
-      - ./cache:/app/cache
+      - ../../config:/app/config:ro
       - nzl_backend_logs:/app/logs
     depends_on:
       mongodb-nzl:
         condition: service_healthy
-      opa-nzl:
+      redis-nzl:
+        condition: service_healthy
+      keycloak-nzl:
         condition: service_healthy
     networks:
       - dive-nzl-network
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "https://localhost:4000/health", "-k"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-
-  # ==========================================================================
-  # KAS - Key Access Service
-  # ==========================================================================
-
-  kas-nzl:
-    build:
-      context: ../../kas
-      dockerfile: Dockerfile
-    environment:
-      NODE_ENV: development
-      KAS_PORT: 8080
-      HTTPS_ENABLED: "true"
-      CERT_PATH: /opt/app/certs
-      KEY_FILE: key.pem
-      CERT_FILE: certificate.pem
-      BACKEND_URL: https://backend-nzl:4000
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      OPA_URL: http://opa-nzl:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-nzl:27017?authSource=admin
-      MONGODB_DATABASE: dive-v3-nzl
-      LOG_LEVEL: info
-      KEYCLOAK_URL: https://keycloak-nzl:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-    ports:
-      - "18085:8080"
-    depends_on:
-      opa-nzl:
-        condition: service_healthy
-      mongodb-nzl:
-        condition: service_healthy
-    networks:
-      - dive-nzl-network
-    volumes:
-      - ./certs:/opt/app/certs:ro
-      - ../../kas/src:/app/src
-      - nzl_kas_logs:/app/logs
-      - ../../config:/app/config:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    command: npm run dev
-    restart: unless-stopped
-
-  # ==========================================================================
-  # FRONTEND
-  # ==========================================================================
 
   frontend-nzl:
-    build:
-      context: ../../frontend
-      dockerfile: Dockerfile.dev
-    command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
+    extends:
+      file: ../../docker/base/services.yml
+      service: frontend-base
+    container_name: dive-spoke-nzl-frontend
     environment:
-      NODE_ENV: development
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
       NEXT_PUBLIC_INSTANCE: NZL
-      NEXT_PUBLIC_INSTANCE_NAME: "New Zealand Defence Force"
-      # Public URLs for client-side (browser) requests - localhost for dev
+      NEXT_PUBLIC_INSTANCE_NAME: "New Zealand"
       NEXT_PUBLIC_API_URL: https://localhost:14000
-      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:18443
-      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
       NEXT_PUBLIC_BACKEND_URL: https://localhost:14000
       NEXT_PUBLIC_BASE_URL: https://localhost:13000
-      # Internal URL for server-side (SSR) requests - Docker networking
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:18443
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-nzl
       BACKEND_URL: https://backend-nzl:4000
-      NEXTAUTH_URL: https://localhost:13000
-      NEXTAUTH_SECRET: ${AUTH_SECRET}
-      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_SECRET: ${NEXTAUTH_SECRET_NZL:?set NEXTAUTH_SECRET_NZL}
+      AUTH_KEYCLOAK_ID: dive-v3-client-nzl
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_NZL:?set KEYCLOAK_CLIENT_SECRET_NZL}
+      AUTH_KEYCLOAK_ISSUER: https://localhost:18443/realms/dive-v3-broker-nzl
       AUTH_TRUST_HOST: "true"
-      # Database for NextAuth sessions
-      DATABASE_URL: postgres://keycloak:${POSTGRES_PASSWORD}@postgres-nzl:5432/keycloak
-      # Keycloak OAuth config
-      KEYCLOAK_URL: https://localhost:18443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      KEYCLOAK_ISSUER: https://localhost:18443/realms/dive-v3-broker
-      # NextAuth v5 Keycloak provider
-      AUTH_KEYCLOAK_ID: dive-v3-client-broker
-      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ISSUER: https://localhost:18443/realms/dive-v3-broker
+      NEXTAUTH_URL: https://localhost:13000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_NZL:?set NEXTAUTH_SECRET_NZL}
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_NZL:?set POSTGRES_PASSWORD_NZL}@postgres-nzl:5432/keycloak
+      KEYCLOAK_URL: https://keycloak-nzl:8443
+      KEYCLOAK_REALM: dive-v3-broker-nzl
+      KEYCLOAK_CLIENT_ID: dive-v3-client-nzl
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_NZL:?set KEYCLOAK_CLIENT_SECRET_NZL}
+      AUTH_POST_LOGOUT_REDIRECT: https://nzl-app.dive25.com
+      AUTH_REDIRECT_URI: https://nzl-app.dive25.com/api/auth/callback/keycloak
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://nzl-app.dive25.com,https://nzl-api.dive25.com,https://nzl-idp.dive25.com,https://localhost:13000,https://localhost:14000,https://localhost:18443
+      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
+      NEXT_PUBLIC_THEME_PRIMARY: "#00247D"
+      NEXT_PUBLIC_THEME_SECONDARY: "#CC142B"
+      NEXT_PUBLIC_THEME_ACCENT: "#FFFFFF"
     ports:
       - "13000:3000"
     volumes:
@@ -365,11 +231,8 @@ services:
       - nzl_frontend_next:/app/.next
       - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
-    extra_hosts:
-      - "localhost:host-gateway"
     depends_on:
       backend-nzl:
         condition: service_healthy
     networks:
       - dive-nzl-network
-    restart: unless-stopped
