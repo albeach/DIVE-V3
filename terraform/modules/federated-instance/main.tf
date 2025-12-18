@@ -312,32 +312,20 @@ resource "keycloak_openid_user_realm_role_protocol_mapper" "realm_roles" {
   multivalued         = true
 }
 
-# ACR/AMR propagation for MFA context (passkey/WebAuthn)
-# These session-note mappers ensure acr/amr/auth_time are present in ID/Access tokens
-# so the frontend/backends can enforce AAL2/AAL3 in OPA and UI.
-resource "keycloak_openid_user_session_note_protocol_mapper" "acr" {
-  realm_id  = keycloak_realm.broker.id
-  client_id = keycloak_openid_client.broker_client.id
-  name      = "acr"
-
-  session_note        = "acr"
-  claim_name          = "acr"
-  claim_value_type    = "String"
-  add_to_id_token     = true
-  add_to_access_token = true
-}
-
-resource "keycloak_openid_user_session_note_protocol_mapper" "amr" {
-  realm_id  = keycloak_realm.broker.id
-  client_id = keycloak_openid_client.broker_client.id
-  name      = "amr"
-
-  session_note        = "amr"
-  claim_name          = "amr"
-  claim_value_type    = "String"
-  add_to_id_token     = true
-  add_to_access_token = true
-}
+# ============================================
+# ACR/AMR MAPPERS (Keycloak 26.4 Native)
+# ============================================
+# SSOT Note (v3.0.0): Using native oidc-amr-mapper and oidc-acr-mapper below.
+# Session note mappers for acr/amr are REMOVED to avoid duplicate claims.
+# 
+# The native mappers (oidc-amr-mapper, oidc-acr-mapper) automatically:
+# - Read AUTH_METHODS_REF session note set by authenticators
+# - Convert ACR level configuration to acr claim
+# - Emit RFC 8176 compliant amr arrays
+#
+# Legacy session note mappers REMOVED:
+# - keycloak_openid_user_session_note_protocol_mapper.acr (redundant)
+# - keycloak_openid_user_session_note_protocol_mapper.amr (redundant)
 
 resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   realm_id  = keycloak_realm.broker.id

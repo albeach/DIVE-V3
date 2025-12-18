@@ -713,7 +713,7 @@ hub_status() {
     
     # Service status
     echo -e "${CYAN}Services:${NC}"
-    _hub_check_service "Keycloak" "${HUB_KEYCLOAK_URL}/health"
+    _hub_check_service "Keycloak" "${HUB_KEYCLOAK_URL}/realms/master"
     _hub_check_service "Backend"  "${HUB_BACKEND_URL}/health"
     _hub_check_service "OPA"      "${HUB_OPA_URL}/health"
     _hub_check_service "OPAL"     "${HUB_OPAL_URL}/healthcheck"
@@ -987,11 +987,14 @@ hub_spokes_approve() {
             -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
             "${HUB_BACKEND_URL}/api/federation/spokes" 2>/dev/null | \
             jq ".spokes[] | select(.instanceCode == \"$(echo $spoke_id | tr '[:lower:]' '[:upper:]')\")" 2>/dev/null)
-        
+
         if [ -z "$spoke_details" ]; then
             log_error "Spoke not found: ${spoke_id}"
             return 1
         fi
+
+        # Extract the actual spokeId field for API calls
+        spoke_id=$(echo "$spoke_details" | jq -r '.spokeId // .spokeId // ._id // .id // "'$spoke_id'"' 2>/dev/null)
     fi
     
     # Extract spoke info

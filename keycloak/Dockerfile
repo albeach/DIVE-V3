@@ -70,12 +70,24 @@ RUN mkdir -p /opt/keycloak/data/import && \
     chmod +x /opt/keycloak/scripts/import-realm.sh
 
 # ============================================
-# v2.1.0 CHANGE: Re-enable custom SPI providers for AMR/ACR enrichment
+# v3.0.0 CHANGE: Remove custom SPI providers - Use Native Keycloak 26.4
 # ============================================
-# Native Keycloak mappers do not emit the enriched AMR/ACR we need for
-# coalition audit (OTP vs HWK). We restore the custom providers so the
-# listener can set session notes and emit proper claims.
-COPY --chown=1000:1000 providers/*.jar /opt/keycloak/providers/
+# SSOT Consolidation (December 2025): Custom SPIs REMOVED.
+# 
+# Native Keycloak 26.4 now provides all required AMR/ACR functionality:
+# - oidc-amr-mapper: Maps authentication methods to JWT 'amr' claim
+# - oidc-acr-mapper: Maps authentication context to JWT 'acr' claim
+# - Built-in ACR level configuration per authenticator
+# - Automatic AUTH_METHODS_REF session note tracking
+#
+# Previous custom SPIs (now archived in keycloak/extensions/archived/):
+# - AMREnrichmentEventListener: Replaced by native AMR tracking
+# - AMRProtocolMapper: Replaced by oidc-amr-mapper
+# - DirectGrantOTPAuthenticator: DEPRECATED - Direct Grant is not AAL2 compliant
+# - ConfigureOTPRequiredAction: Replaced by built-in CONFIGURE_TOTP
+#
+# Reference: docs/KEYCLOAK_REFACTORING_SESSION_PROMPT.md
+# NO CUSTOM JARS ARE DEPLOYED - Using native Keycloak features only
 
 # ============================================
 # Certificate Trust Configuration

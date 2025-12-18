@@ -17,6 +17,7 @@
 
 import * as tls from 'tls';
 import * as https from 'https';
+import * as fs from 'fs';
 import axios from 'axios';
 import { URL } from 'url';
 import { logger } from '../utils/logger';
@@ -64,17 +65,64 @@ class IdPValidationService {
   }
 
   /**
+   * Translate external URL to internal container address for validation
+   * In containerized environments, external localhost URLs need to be translated
+   * to internal container names for proper validation
+   *
+   * @param url - External URL to translate
+   * @param instanceCode - Instance code (e.g., 'PRT', 'FRA')
+   * @returns Translated URL for internal validation
+   */
+  private translateUrlForContainerValidation(url: string, instanceCode?: string): string {
+    // Check if we're in a containerized environment (has DIVE_CONTAINERIZED env var or is running in Docker)
+    const isContainerized = process.env.DIVE_CONTAINERIZED === 'true' ||
+                           fs.existsSync('/.dockerenv') ||
+                           process.env.HOSTNAME?.includes('dive-');
+
+    if (!isContainerized) {
+      return url; // Use original URL for non-containerized environments
+    }
+
+    try {
+      const parsedUrl = new URL(url);
+
+      // If it's localhost with a port that matches spoke Keycloak pattern (8xxx)
+      if (parsedUrl.hostname === 'localhost' && parsedUrl.port && instanceCode) {
+        const port = parseInt(parsedUrl.port);
+        // Spoke Keycloak ports are typically 8xxx (e.g., 8467 for PRT)
+        if (port >= 8000 && port < 9000) {
+          // Translate to internal container name: {instanceCode}-keycloak-{instanceCode}-1
+          const containerName = `${instanceCode.toLowerCase()}-keycloak-${instanceCode.toLowerCase()}-1`;
+          const internalUrl = `https://${containerName}:8443${parsedUrl.pathname}`;
+          logger.debug('Translated URL for container validation', {
+            original: url,
+            translated: internalUrl,
+            instanceCode,
+            containerName
+          });
+          return internalUrl;
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to translate URL for container validation', { url, error: error.message });
+    }
+
+    return url; // Fallback to original URL
+  }
+
+  /**
    * Validate TLS version and cipher strength
-   * 
+   *
    * @param url - The URL to check (IdP issuer or SSO endpoint)
+   * @param instanceCode - Optional instance code for container URL translation
    * @returns TLS validation results with scoring
-   * 
+   *
    * Scoring:
    * - TLS 1.3 = 15 points
    * - TLS 1.2 = 12 points
    * - TLS < 1.2 = 0 points (fail)
    */
-  async validateTLS(url: string): Promise<ITLSCheckResult> {
+  async validateTLS(url: string, instanceCode?: string): Promise<ITLSCheckResult> {
     const startTime = Date.now();
     logger.debug('Validating TLS for URL', { url });
 
@@ -89,10 +137,21 @@ class IdPValidationService {
     };
 
     try {
+      // Translate URL for containerized environments if needed
+      const translatedUrl = this.translateUrlForContainerValidation(url, instanceCode);
+
       // Parse URL to extract host and port
-      const parsedUrl = new URL(url);
+      const parsedUrl = new URL(translatedUrl);
       const host = parsedUrl.hostname;
       const port = parseInt(parsedUrl.port || '443', 10);
+
+      logger.debug('Validating TLS connection', {
+        originalUrl: url,
+        translatedUrl,
+        host,
+        port,
+        instanceCode
+      });
 
       // Perform TLS handshake
       const tlsResult = await this.performTLSHandshake(host, port);
