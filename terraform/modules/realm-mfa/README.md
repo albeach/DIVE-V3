@@ -108,6 +108,30 @@ Adds MFA enforcement to the direct grant (password) authentication flow.
 
 ## Important Notes
 
+### ACR/AMR Claims (v3.1.0 - December 2025)
+
+This module configures ACR (Authentication Context Class Reference) and AMR (Authentication Methods Reference) claims via:
+
+1. **Native oidc-acr-mapper and oidc-amr-mapper** - Protocol mappers on the broker client
+2. **dive-amr-enrichment event listener** - Custom SPI for WebAuthn/OTP credential detection
+3. **Authenticator execution configs** - Each authenticator has `acr_level` and `reference` set
+
+**ACR/AMR Mapping:**
+| Authentication Method | AMR Claims | ACR Level | AAL |
+|----------------------|------------|-----------|-----|
+| Password only | `["pwd"]` | `0` | AAL1 |
+| Password + OTP | `["pwd", "otp"]` | `1` | AAL2 |
+| Password + WebAuthn | `["pwd", "hwk"]` | `3` | AAL3 |
+
+**Common Issues:**
+- If tokens show `amr: ["pwd"]` and `acr: "1"` after WebAuthn login, ensure:
+  1. Native protocol mappers (`oidc-amr-mapper`, `oidc-acr-mapper`) are on the client
+  2. `dive-amr-enrichment` event listener is enabled in the realm
+  3. Authenticator execution configs have `acr_level` and `reference` set
+
+**Hub Configuration Note:**
+The hub uses only this `realm-mfa` module (not `federated-instance`), so AMR/ACR protocol mappers must be added separately in `terraform/hub/main.tf`.
+
 ### Federated User MFA
 
 For federated users (those who authenticate via a partner IdP), use the `simple_post_broker_otp_flow_alias` output and set it on the IdP broker configuration. Complex conditional flows **do not work** for federated users due to Keycloak limitations.
