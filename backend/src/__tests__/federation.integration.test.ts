@@ -1,16 +1,21 @@
 /**
  * DIVE V3 Federation Protocol Integration Tests
  * Tests federation metadata and resource exchange
+ * 
+ * SKIPPED: Depends on complex federation infrastructure
+ * These tests require the full federation stack to be running
  */
+
+// Imports must be at top level
+import request from 'supertest';
+import app from '../server';
+import { SPManagementService } from '../services/sp-management.service';
+import { getResourcesByQuery } from '../services/resource.service';
+import { clearResourceServiceCache } from '../services/resource.service';
+import { clearAuthzCaches } from '../middleware/authz.middleware';
 
 // Temporarily skip this test - depends on complex federation infrastructure
 describe.skip('DIVE V3 Federation Protocol Integration Tests', () => {
-    import request from 'supertest';
-    import app from '../server';
-    import { SPManagementService } from '../services/sp-management.service';
-    import { getResourcesByQuery } from '../services/resource.service';
-    import { clearResourceServiceCache } from '../services/resource.service';
-    import { clearAuthzCaches } from '../middleware/authz.middleware';
 
     // CRITICAL: Use var for hoisting (same pattern as SCIM)
     // eslint-disable-next-line no-var
@@ -729,3 +734,4 @@ describe.skip('DIVE V3 Federation Protocol Integration Tests', () => {
             });
         });
     });
+});

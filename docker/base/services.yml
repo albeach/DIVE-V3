@@ -1,0 +1,263 @@
+# =============================================================================
+# DIVE V3 - Base Docker Compose Service Templates
+# =============================================================================
+# This file contains reusable service definitions for use with docker compose
+# `extends` directive. Spoke and hub compose files extend these base services.
+#
+# Usage in spoke compose files:
+#   services:
+#     postgres-gbr:
+#       extends:
+#         file: ../../docker/base/services.yml
+#         service: postgres-base
+#       container_name: dive-spoke-gbr-postgres
+#       environment:
+#         POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_GBR:?required}
+#
+# Best Practice: DRY (Don't Repeat Yourself) - define once, use everywhere
+# =============================================================================
+
+# NOTE: This file defines actual services (not x- extensions) so they can be
+# used with the `extends` directive. Each spoke/hub inherits and overrides.
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL - Database Backend
+  # ---------------------------------------------------------------------------
+  postgres-base:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-keycloak}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # MongoDB - Resource Metadata Store
+  # ---------------------------------------------------------------------------
+  mongodb-base:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Redis - Session/Cache Store
+  # ---------------------------------------------------------------------------
+  redis-base:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Keycloak - Identity Provider/Broker
+  # ---------------------------------------------------------------------------
+  keycloak-base:
+    build:
+      context: ../../keycloak
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
+    environment:
+      KC_DB: postgres
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HTTPS_PORT: "8443"
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_FEATURES: scripts
+      KEYCLOAK_ADMIN: admin
+    healthcheck:
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # OPA - Open Policy Agent (Policy Decision Point)
+  # ---------------------------------------------------------------------------
+  opa-base:
+    image: openpolicyagent/opa:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "/policies"
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # KAS - Key Access Service
+  # ---------------------------------------------------------------------------
+  kas-base:
+    build:
+      context: ../../kas
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Backend API - Policy Enforcement Point
+  # ---------------------------------------------------------------------------
+  backend-base:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    command: ["/bin/sh", "-c", "mkdir -p /app/certs/crl && npm install && npm run dev"]
+    environment:
+      NODE_ENV: development
+      PORT: "4000"
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Frontend - Next.js Application
+  # ---------------------------------------------------------------------------
+  frontend-base:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    command: ["/bin/sh", "-c", "rm -f /app/.env.local && npm install && npm run dev"]
+    environment:
+      NODE_ENV: development
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+    extra_hosts:
+      - "localhost:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # OPAL Client - Policy Sync from Hub
+  # ---------------------------------------------------------------------------
+  opal-client-base:
+    image: permitio/opal-client:latest
+    restart: unless-stopped
+    environment:
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_LOG_LEVEL: ${OPAL_LOG_LEVEL:-INFO}
+      OPAL_KEEP_ALIVE_TIMEOUT: "60"
+      OPAL_RECONNECT_INTERVAL: "5"
+      OPAL_RECONNECT_MAX_INTERVAL: "300"
+      OPAL_POLICY_REFRESH_INTERVAL: "60"
+      OPAL_POLICY_STORE_TYPE: "OPA"
+      # SSL Certificate Configuration for HTTPS/WSS connections
+      # Point to mounted mkcert root CA for local development
+      SSL_CERT_FILE: /var/opal/certs/mkcert-rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/certs/mkcert-rootCA.pem
+      WEBSOCKET_SSL_CERT: /var/opal/certs/mkcert-rootCA.pem
+    # Note: Volumes are defined in spoke compose, includes ./certs:/var/opal/certs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Cloudflare Tunnel - Secure External Access
+  # ---------------------------------------------------------------------------
+  cloudflared-base:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

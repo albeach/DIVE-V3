@@ -13,13 +13,13 @@ RUN npm ci --only=production --no-audit --no-fund && \
 
 FROM base AS builder
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY src ./src
 
-ENV NODE_ENV=production
-RUN npm run build && \
+# Install all dependencies including dev dependencies for building
+RUN npm ci --no-audit --no-fund && \
+    npm run build && \
     npm prune --production && \
     npm cache clean --force
 

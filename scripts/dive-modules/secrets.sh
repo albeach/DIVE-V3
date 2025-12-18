@@ -91,6 +91,76 @@ secrets_export() {
     fi
 }
 
+secrets_lint() {
+    local verbose=""
+    local fix=""
+    
+    # Parse options
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --verbose|-v) verbose="--verbose" ;;
+            --fix) fix="--fix" ;;
+            --ci) verbose="--ci" ;;
+            *) ;;
+        esac
+        shift
+    done
+    
+    echo -e "${CYAN}Running secret lint scan...${NC}"
+    
+    local script_path
+    script_path="$(dirname "${BASH_SOURCE[0]}")/../lint-secrets.sh"
+    
+    if [ ! -x "$script_path" ]; then
+        log_error "Lint script not found: $script_path"
+        return 1
+    fi
+    
+    # Run lint script
+    "$script_path" $verbose $fix
+    return $?
+}
+
+secrets_verify_all() {
+    echo -e "${CYAN}Verifying secrets for all instances...${NC}"
+    echo ""
+    
+    local instances=("usa" "gbr" "fra" "deu" "dnk" "pol" "nor" "esp" "ita" "bel" "alb")
+    local failed=0
+    local passed=0
+    
+    for inst in "${instances[@]}"; do
+        local inst_uc
+        inst_uc=$(echo "$inst" | tr '[:lower:]' '[:upper:]')
+        
+        echo -e "${CYAN}Checking $inst_uc...${NC}"
+        
+        # Try to fetch required secrets
+        local missing=0
+        local secrets=("postgres-$inst" "mongodb-$inst" "keycloak-$inst")
+        
+        for secret in "${secrets[@]}"; do
+            if ! gcloud secrets versions access latest --secret="dive-v3-$secret" --project="$GCP_PROJECT" >/dev/null 2>&1; then
+                echo -e "  ${RED}✗${NC} dive-v3-$secret"
+                ((missing++))
+            else
+                echo -e "  ${GREEN}✓${NC} dive-v3-$secret"
+            fi
+        done
+        
+        if [ $missing -eq 0 ]; then
+            ((passed++))
+        else
+            ((failed++))
+        fi
+    done
+    
+    echo ""
+    echo -e "${CYAN}Summary:${NC} ${GREEN}$passed passed${NC}, ${RED}$failed failed${NC}"
+    
+    [ $failed -eq 0 ]
+}
+
 # =============================================================================
 # MODULE DISPATCH
 # =============================================================================
@@ -100,24 +170,28 @@ module_secrets() {
     shift || true
     
     case "$action" in
-        load)   secrets_load "$@" ;;
-        show)   secrets_show "$@" ;;
-        list)   secrets_list ;;
-        verify) secrets_verify "$@" ;;
-        export) secrets_export "$@" ;;
-        *)      module_secrets_help ;;
+        load)       secrets_load "$@" ;;
+        show)       secrets_show "$@" ;;
+        list)       secrets_list ;;
+        verify)     secrets_verify "$@" ;;
+        verify-all) secrets_verify_all ;;
+        export)     secrets_export "$@" ;;
+        lint)       secrets_lint "$@" ;;
+        *)          module_secrets_help ;;
     esac
 }
 
 module_secrets_help() {
     echo -e "${BOLD}Secrets Commands:${NC}"
-    echo "  load [instance]     Load secrets into environment"
-    echo "  show [instance]     Show secrets for instance"
-    echo "  list                List all DIVE secrets in GCP"
-    echo "  verify [instance]   Verify secrets can be accessed"
-    echo "  export [instance]   Export secrets as shell commands"
+    echo "  load [instance]        Load secrets into environment"
+    echo "  show [instance]        Show secrets for instance"
+    echo "  list                   List all DIVE secrets in GCP"
+    echo "  verify [instance]      Verify secrets can be accessed"
+    echo "  verify-all             Verify secrets for all instances"
+    echo "  export [--unsafe] [instance]  Export secrets as shell commands"
+    echo "  lint [--verbose|--fix] Lint codebase for hardcoded secrets"
     echo ""
-    echo "Usage: ./dive secrets [load|show|list|verify|export] [instance]"
+    echo "Usage: ./dive secrets [load|show|list|verify|verify-all|export|lint] [options]"
 }
 
 
