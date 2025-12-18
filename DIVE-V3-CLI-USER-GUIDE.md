@@ -586,6 +586,31 @@ Export secrets as export statements (safe mode by default).
 ./dive secrets export --unsafe     # Plain text output
 ```
 
+### `secrets lint` - Check for Hardcoded Secrets
+
+Scan codebase for hardcoded passwords and credentials.
+
+```bash
+./dive secrets lint                # Run secret lint check
+./dive secrets lint --verbose      # Detailed output
+./dive secrets lint --fix          # Auto-fix issues (where possible)
+./dive secrets lint --ci           # CI mode (exit 1 on violations)
+```
+
+**What it checks:**
+- Hardcoded passwords in compose files
+- Inline credentials in connection strings
+- Missing `${VAR:?required}` syntax for required env vars
+- Weak or default passwords
+
+### `secrets verify-all` - Verify All Instances
+
+Verify secret access for all configured instances.
+
+```bash
+./dive secrets verify-all
+```
+
 ## Pilot VM Commands
 
 Remote pilot VM management via GCP Compute Engine.
@@ -1454,7 +1479,33 @@ Retrieve local client secret from spoke's Keycloak.
 
 ## Testing Suite
 
-Phase 6 comprehensive testing framework with dynamic Playwright testing for hub-spoke architectures.
+Comprehensive testing framework with Docker phase tests, unit tests, and dynamic Playwright E2E testing for hub-spoke architectures.
+
+### Docker Phase Regression Tests
+
+Phase-based regression tests validate Docker infrastructure across all implementation phases.
+
+```bash
+# Run individual phase tests
+./tests/docker/phase0-baseline-tests.sh     # 9 tests - baseline infrastructure
+./tests/docker/phase1-compose-tests.sh      # 33 tests - compose consolidation
+./tests/docker/phase2-secrets-tests.sh      # 20 tests - secrets standardization
+./tests/docker/phase3-resilience-tests.sh   # 8 tests - service resilience
+./tests/docker/phase4-observability-tests.sh # 19 tests - monitoring/alerting
+./tests/docker/phase5-testing-tests.sh      # 19 tests - test infrastructure
+
+# Total: 108 regression tests
+```
+
+**Phase Test Summary:**
+| Phase | Focus Area | Tests |
+|-------|------------|-------|
+| Phase 0 | Baseline (Docker, networks, hub health) | 9 |
+| Phase 1 | Compose consolidation (extends, naming) | 33 |
+| Phase 2 | Secrets (GCP, lint, no hardcoding) | 20 |
+| Phase 3 | Resilience (restart policies, health checks) | 8 |
+| Phase 4 | Observability (Prometheus, Grafana, OPAL) | 19 |
+| Phase 5 | Testing infrastructure (Jest, OPA, CI) | 19 |
 
 ### `test federation` - Run Federation E2E Tests
 
@@ -1594,11 +1645,20 @@ Detailed health check of all services.
 
 ### `validate` - Validate Configuration
 
-Check prerequisites and configuration validity.
+Check prerequisites, compose configuration, and deployment readiness.
 
 ```bash
 ./dive validate
 ```
+
+**Validation checks:**
+- Required tools (docker, docker-compose, gcloud, terraform)
+- Docker networks (dive-v3-shared-network, shared-network)
+- GCP secrets access for current instance
+- Port availability (3000, 4000, 8443, etc.)
+- TLS certificates present and valid
+- Docker Compose configuration syntax for all compose files
+- Instance compose file validation with proper env vars
 
 ### `info` - Show Environment Information
 
@@ -1610,11 +1670,27 @@ Display current environment configuration.
 
 ### `diagnostics` - Comprehensive Diagnostics
 
-Full system diagnostic report.
+Full system diagnostic report with known issue detection and remediation suggestions.
 
 ```bash
 ./dive diagnostics
 ```
+
+**Diagnostic sections:**
+1. Container Health - Running/stopped status, health checks
+2. Network Configuration - Shared networks, connectivity
+3. Secrets Status - GCP secret access verification
+4. Policy Sync - OPAL server/client status
+5. Observability - Prometheus targets, Grafana dashboards
+6. Known Issues - Pattern detection with fix commands
+7. Resource Usage - Docker disk, memory consumption
+
+**Known issue detection:**
+- OPAL client waiting for hub token
+- Redis exporter connectivity issues
+- Backend health check failures
+- Prometheus scraping problems
+- Certificate expiration warnings
 
 ### `brief` - Brief Status Summary
 
@@ -2298,11 +2374,13 @@ Terraform Spoke Deployment:
   tf spoke destroy <CODE>  Destroy spoke resources
 
 Secrets:
-  secrets list    List all DIVE secrets in GCP
-  secrets show    Show secrets for instance
-  secrets load    Load secrets into environment
-  secrets verify  Verify secrets accessible
-  secrets export  Export secrets as shell commands
+  secrets list       List all DIVE secrets in GCP
+  secrets show       Show secrets for instance
+  secrets load       Load secrets into environment
+  secrets verify     Verify secrets accessible
+  secrets verify-all Verify all instances
+  secrets export     Export secrets as shell commands
+  secrets lint       Check for hardcoded secrets
 
 Pilot VM:
   pilot up        Start services on pilot VM
@@ -2391,6 +2469,14 @@ Testing:
   test instances [CODE]    Test all running hub-spoke instances (or specific NATO country)
   test all                 Run complete test suite (unit + e2e + playwright)
 
+Docker Phase Tests (run directly):
+  ./tests/docker/phase0-baseline-tests.sh     Baseline infrastructure (9 tests)
+  ./tests/docker/phase1-compose-tests.sh      Compose consolidation (33 tests)
+  ./tests/docker/phase2-secrets-tests.sh      Secrets standardization (20 tests)
+  ./tests/docker/phase3-resilience-tests.sh   Service resilience (8 tests)
+  ./tests/docker/phase4-observability-tests.sh Observability (19 tests)
+  ./tests/docker/phase5-testing-tests.sh      Test infrastructure (19 tests)
+
 Status:
   status                   Overall system status
   health                   Health check all services
@@ -2407,5 +2493,5 @@ Other:
 ---
 
 **DIVE V3 CLI Version:** Modular Unified Management Script (NATO 32-Country Edition)  
-**Last Updated:** December 16, 2025  
-**Documentation:** This guide covers all CLI functionality including NATO 32-country expansion, Certificate Management, and Federation Setup modules
+**Last Updated:** December 18, 2025  
+**Documentation:** This guide covers all CLI functionality including NATO 32-country expansion, Certificate Management, Federation Setup, and Phase 0-5 Docker regression tests (108 total tests)
