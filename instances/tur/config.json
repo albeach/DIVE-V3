@@ -1,0 +1,51 @@
+{
+  "identity": {
+    "spokeId": "spoke-tur-dbb4c824",
+    "instanceCode": "TUR",
+    "name": "Turkey",
+    "description": "DIVE V3 Spoke Instance for Turkey",
+    "country": "TUR",
+    "organizationType": "government",
+    "contactEmail": "admin@tur.gov"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3030",
+    "apiUrl": "https://localhost:4030",
+    "idpUrl": "https://localhost:8473",
+    "kasUrl": "https://localhost:9030"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tur/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tur/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tur/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tur/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "unregistered",
+    "requestedScopes": [
+      "policy:base",
+      "policy:tur",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ]
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tur/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tur/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-17T08:02:09Z",
+    "lastModified": "2025-12-17T08:02:09Z",
+    "configHash": ""
+  }
+}

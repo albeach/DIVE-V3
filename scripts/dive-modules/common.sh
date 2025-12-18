@@ -42,29 +42,43 @@ fi
 # NETWORK MANAGEMENT (LOCAL DEV ONLY)
 # =============================================================================
 
-# Ensure shared network exists for local cross-instance communication
+# Ensure shared networks exist for local cross-instance communication
 # Only used when hub + spokes run on same server (development)
 # In production, instances use external domains (no shared network needed)
 ensure_shared_network() {
-    # Only create shared network in local/dev environment
+    # Only create shared networks in local/dev environment
     if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ]; then
         # Skipping shared network (production uses external domains)
         return 0
     fi
     
-    local network_name="dive-v3-shared-network"
+    # Required networks for hub-spoke communication
+    local networks=("dive-v3-shared-network" "shared-network")
+    local created=0
     
-    if docker network ls --format '{{.Name}}' | grep -q "^${network_name}$"; then
-        # Shared network already exists
-        return 0
-    fi
+    for network_name in "${networks[@]}"; do
+        if docker network ls --format '{{.Name}}' | grep -q "^${network_name}$"; then
+            log_verbose "Network already exists: $network_name"
+            continue
+        fi
+        
+        log_step "Creating network: $network_name"
+        
+        if [ "$DRY_RUN" = true ]; then
+            log_dry "Would create network: $network_name"
+            continue
+        fi
+        
+        if docker network create "$network_name" >/dev/null 2>&1; then
+            log_success "Network created: $network_name"
+            ((created++))
+        else
+            log_warn "Could not create network: $network_name (may already exist)"
+        fi
+    done
     
-    log_info "Creating shared network for cross-instance communication..."
-    
-    if docker network create "$network_name" >/dev/null 2>&1; then
-        log_success "Shared network created: $network_name"
-    else
-        log_warn "Could not create shared network (may already exist)"
+    if [ $created -gt 0 ]; then
+        log_success "Created $created shared network(s)"
     fi
 }
 

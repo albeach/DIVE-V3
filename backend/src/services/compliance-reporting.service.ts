@@ -133,7 +133,7 @@ class ComplianceReportingService {
 
     // Check session timeout compliance
     const longSessions = logs.filter(log => {
-      const authTime = log.subjectAttributes?.auth_time;
+      // auth_time is logged for audit purposes, token_lifetime used for check
       const tokenLifetime = log.subjectAttributes?.token_lifetime;
       return tokenLifetime && tokenLifetime > 8 * 60 * 60; // 8 hours
     });
@@ -223,6 +223,53 @@ class ComplianceReportingService {
       });
     }
 
+    // ACP-240 Compliance: Check DECRYPT events are authorized
+    // Every DECRYPT should have a corresponding authorized access decision
+    const unauthorizedDecrypts = decryptEvents.filter(decryptEvent => {
+      const hasAuthorizedAccess = logs.some(log => 
+        log.resourceId === decryptEvent.resourceId &&
+        log.subject === decryptEvent.subject &&
+        log.outcome === 'ALLOW'
+      );
+      return !hasAuthorizedAccess;
+    });
+
+    if (unauthorizedDecrypts.length > 0) {
+      findings.push({
+        severity: 'critical',
+        category: 'Data Access Control',
+        description: 'DECRYPT events without corresponding authorization',
+        evidence: unauthorizedDecrypts.slice(0, 5).map(e => 
+          `Resource ${e.resourceId} decrypted by ${e.subject} without authorization`
+        ),
+        standard: 'NATO ACP-240',
+        requirement: 'All decryption operations must be preceded by explicit authorization'
+      });
+    }
+
+    // ACP-240 Compliance: Check DATA_SHARED events for coalition sharing rules
+    // Data shared across borders must have proper releasability markings
+    const improperSharing = dataSharedEvents.filter(shareEvent => {
+      const targetCountry = shareEvent.context?.targetCountry;
+      const releasability = shareEvent.resourceAttributes?.releasabilityTo || [];
+      // If sharing to a country not in releasability list, it's a violation
+      return targetCountry && !releasability.includes(targetCountry);
+    });
+
+    if (improperSharing.length > 0) {
+      findings.push({
+        severity: 'critical',
+        category: 'Coalition Data Sharing',
+        description: 'Data shared to countries not in releasability list',
+        evidence: improperSharing.slice(0, 5).map(e => 
+          `Resource ${e.resourceId} shared to ${e.context?.targetCountry}, ` +
+          `releasableTo: [${e.resourceAttributes?.releasabilityTo?.join(', ') || 'none'}]`
+        ),
+        standard: 'NATO ACP-240',
+        requirement: 'Data can only be shared with countries listed in releasabilityTo'
+      });
+    }
+
     // Check KAS integration
     const kasEvents = logs.filter(log => 
       log.resourceAttributes?.kas_actions &&
@@ -245,6 +292,9 @@ class ComplianceReportingService {
       });
     }
 
+    // Calculate violation count from critical findings
+    const criticalViolations = findings.filter(f => f.severity === 'critical').length;
+
     return {
       reportId: `nato-${Date.now()}`,
       reportType: 'NATO',
@@ -260,10 +310,10 @@ class ComplianceReportingService {
           log.subjectAttributes?.aal_level && 
           ['AAL2', 'AAL3'].includes(log.subjectAttributes.aal_level)
         ).length,
-        federationEvents: logs.filter(log => 
+        federationEvents: dataSharedEvents.length + logs.filter(log => 
           log.eventType === 'FEDERATION_AUTH'
         ).length,
-        violations: accessDenials.length
+        violations: criticalViolations + accessDenials.length
       },
       findings,
       recommendations: this.generateNATORecommendations(findings),
@@ -333,6 +383,14 @@ class ComplianceReportingService {
 
     if (findings.some(f => f.category === 'Data Protection')) {
       recommendations.push('Ensure all classified resources have ENCRYPT events logged');
+    }
+
+    if (findings.some(f => f.category === 'Data Access Control')) {
+      recommendations.push('Review authorization workflow to ensure all DECRYPT operations are preceded by explicit authorization decisions');
+    }
+
+    if (findings.some(f => f.category === 'Coalition Data Sharing')) {
+      recommendations.push('Enforce releasability checks before cross-border data sharing; update releasabilityTo markings as needed');
     }
 
     if (findings.some(f => f.category === 'Key Access Service')) {

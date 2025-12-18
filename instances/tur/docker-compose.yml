@@ -1,0 +1,244 @@
+# =============================================================================
+# DIVE V3 - TUR Instance (Turkey)
+# =============================================================================
+# Spoke instance using extends pattern from base services.
+# Regenerate with: ./dive spoke init TUR "Turkey"
+# =============================================================================
+
+name: dive-spoke-tur
+
+networks:
+  dive-tur-network:
+    driver: bridge
+  dive-v3-shared-network:
+    external: true
+
+volumes:
+  tur_postgres_data:
+  tur_mongodb_data:
+  tur_redis_data:
+  tur_frontend_modules:
+  tur_frontend_next:
+  tur_opa_cache:
+  tur_opal_cache:
+  tur_backend_node_modules:
+  tur_backend_logs:
+
+services:
+  postgres-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: postgres-base
+    container_name: dive-spoke-tur-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_TUR:?set POSTGRES_PASSWORD_TUR}
+    ports:
+      - "5462:5432"
+    volumes:
+      - tur_postgres_data:/var/lib/postgresql/data
+    networks:
+      - dive-tur-network
+
+  mongodb-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: mongodb-base
+    container_name: dive-spoke-tur-mongodb
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-tur
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_TUR:?set MONGO_PASSWORD_TUR}
+    ports:
+      - "27047:27017"
+    volumes:
+      - tur_mongodb_data:/data/db
+    networks:
+      - dive-tur-network
+
+  redis-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: redis-base
+    container_name: dive-spoke-tur-redis
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD_TUR:?set REDIS_PASSWORD_TUR}
+    ports:
+      - "6409:6379"
+    volumes:
+      - tur_redis_data:/data
+    networks:
+      - dive-tur-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_TUR}", "ping"]
+
+  keycloak-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: keycloak-base
+    container_name: dive-spoke-tur-keycloak
+    environment:
+      KC_DB_URL: jdbc:postgresql://postgres-tur:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_TUR:?set POSTGRES_PASSWORD_TUR}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_TUR:?set KEYCLOAK_ADMIN_PASSWORD_TUR}
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_URL: https://localhost:8473
+      KC_HOSTNAME_ADMIN_URL: https://localhost:8473
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+    ports:
+      - "8473:8443"
+      - "8110:8080"
+    volumes:
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      postgres-tur:
+        condition: service_healthy
+    networks:
+      - dive-tur-network
+      - dive-v3-shared-network
+
+  opa-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: opa-base
+    container_name: dive-spoke-tur-opa
+    ports:
+      - "8481:8181"
+    volumes:
+      - ../../policies:/policies:ro
+    networks:
+      - dive-tur-network
+
+  opal-client-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: opal-client-base
+    container_name: dive-spoke-tur-opal-client
+    environment:
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      OPAL_OPA_URL: http://opa-tur:8181
+      OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-tur-default}
+      OPAL_POLICY_STORE_URL: http://opa-tur:8181
+      OPAL_DATA_TOPICS: policy:base,policy:tur,data:federation_matrix,data:trusted_issuers
+    volumes:
+      - tur_opal_cache:/var/opal/cache
+      - ./certs:/var/opal/certs:ro
+    depends_on:
+      opa-tur:
+        condition: service_healthy
+    networks:
+      - dive-tur-network
+
+  kas-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: kas-base
+    container_name: dive-spoke-tur-kas
+    environment:
+      KEYCLOAK_URL: https://keycloak-tur:8443
+      KEYCLOAK_REALM: dive-v3-broker-tur
+      OPA_URL: http://opa-tur:8181
+      INSTANCE_CODE: TUR
+    ports:
+      - "9030:8080"
+    volumes:
+      - ./certs:/app/certs:ro
+    depends_on:
+      keycloak-tur:
+        condition: service_healthy
+      opa-tur:
+        condition: service_healthy
+    networks:
+      - dive-tur-network
+
+  backend-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: backend-base
+    container_name: dive-spoke-tur-backend
+    environment:
+      INSTANCE_CODE: TUR
+      INSTANCE_NAME: "Turkey"
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_TUR:?set MONGO_PASSWORD_TUR}@mongodb-tur:27017/dive-v3-tur?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_TUR:?set MONGO_PASSWORD_TUR}@mongodb-tur:27017/dive-v3-tur?authSource=admin
+      MONGODB_DATABASE: dive-v3-tur
+      REDIS_URL: redis://:${REDIS_PASSWORD_TUR:?set REDIS_PASSWORD_TUR}@redis-tur:6379
+      KEYCLOAK_URL: https://keycloak-tur:8443
+      KEYCLOAK_REALM: dive-v3-broker-tur
+      KEYCLOAK_ISSUER: https://localhost:8473/realms/dive-v3-broker-tur
+      TRUSTED_ISSUERS: https://localhost:8473/realms/dive-v3-broker-tur,https://keycloak-tur:8443/realms/dive-v3-broker-tur,https://tur-idp.dive25.com/realms/dive-v3-broker-tur
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_TUR:?set KEYCLOAK_ADMIN_PASSWORD_TUR}
+      OPA_URL: http://opa-tur:8181
+      FEDERATION_ALLOWED_ORIGINS: https://localhost:3030,https://localhost:4030,https://localhost:8473,https://tur-app.dive25.com,https://tur-api.dive25.com,https://tur-idp.dive25.com
+      CORS_ALLOWED_ORIGINS: https://localhost:3030,https://localhost:4030,https://localhost:8473,https://tur-app.dive25.com,https://tur-api.dive25.com,https://tur-idp.dive25.com
+    ports:
+      - "4030:4000"
+    volumes:
+      - ../../backend:/app
+      - tur_backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../config:/app/config:ro
+      - tur_backend_logs:/app/logs
+    depends_on:
+      mongodb-tur:
+        condition: service_healthy
+      redis-tur:
+        condition: service_healthy
+      keycloak-tur:
+        condition: service_healthy
+    networks:
+      - dive-tur-network
+
+  frontend-tur:
+    extends:
+      file: ../../docker/base/services.yml
+      service: frontend-base
+    container_name: dive-spoke-tur-frontend
+    environment:
+      NEXT_PUBLIC_INSTANCE: TUR
+      NEXT_PUBLIC_INSTANCE_NAME: "Turkey"
+      NEXT_PUBLIC_API_URL: https://localhost:4030
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4030
+      NEXT_PUBLIC_BASE_URL: https://localhost:3030
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8473
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-tur
+      BACKEND_URL: https://backend-tur:4000
+      AUTH_SECRET: ${NEXTAUTH_SECRET_TUR:?set NEXTAUTH_SECRET_TUR}
+      AUTH_KEYCLOAK_ID: dive-v3-client-tur
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_TUR:?set KEYCLOAK_CLIENT_SECRET_TUR}
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8473/realms/dive-v3-broker-tur
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://localhost:3030
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_TUR:?set NEXTAUTH_SECRET_TUR}
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_TUR:?set POSTGRES_PASSWORD_TUR}@postgres-tur:5432/keycloak
+      KEYCLOAK_URL: https://keycloak-tur:8443
+      KEYCLOAK_REALM: dive-v3-broker-tur
+      KEYCLOAK_CLIENT_ID: dive-v3-client-tur
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_TUR:?set KEYCLOAK_CLIENT_SECRET_TUR}
+      AUTH_POST_LOGOUT_REDIRECT: https://tur-app.dive25.com
+      AUTH_REDIRECT_URI: https://tur-app.dive25.com/api/auth/callback/keycloak
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://tur-app.dive25.com,https://tur-api.dive25.com,https://tur-idp.dive25.com,https://localhost:3030,https://localhost:4030,https://localhost:8473
+      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
+      NEXT_PUBLIC_THEME_PRIMARY: "#E30A17"
+      NEXT_PUBLIC_THEME_SECONDARY: "#FFFFFF"
+      NEXT_PUBLIC_THEME_ACCENT: "#000000"
+    ports:
+      - "3030:3000"
+    volumes:
+      - ../../frontend:/app
+      - tur_frontend_modules:/app/node_modules
+      - tur_frontend_next:/app/.next
+      - ./certs:/app/certs:ro
+      - ./certs:/opt/app/certs:ro
+    depends_on:
+      backend-tur:
+        condition: service_healthy
+    networks:
+      - dive-tur-network

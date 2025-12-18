@@ -1,0 +1,21 @@
+# =============================================================================
+# DIVE V3 Grafana Datasources Configuration
+# Phase 4: Prometheus datasource for hub monitoring
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.45.0
+

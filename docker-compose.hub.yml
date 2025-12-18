@@ -23,6 +23,10 @@ networks:
   shared-network:
     external: true
     name: shared-network
+  # Federation shared network for cross-instance communication (OPAL, Keycloak)
+  dive-v3-shared:
+    external: true
+    name: dive-v3-shared-network
 
 volumes:
   hub_postgres_data:
@@ -443,6 +447,7 @@ services:
       - "127.0.0.1:${OPAL_PORT:-7002}:7002"
     networks:
       - hub-internal
+      - dive-v3-shared  # Allow spoke OPAL clients to connect via federation network
     volumes:
       - ./policies:/policies:ro
       - ./opal-data-source:/opal-data-source:ro
