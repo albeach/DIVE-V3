@@ -291,29 +291,29 @@
           }
         },
         {
-          "name": "acr",
+          "name": "acr (authn context)",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "protocolMapper": "oidc-acr-mapper",
           "consentRequired": false,
           "config": {
-            "user.session.note": "acr",
             "id.token.claim": "true",
             "access.token.claim": "true",
-            "claim.name": "acr",
-            "jsonType.label": "String"
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true",
+            "claim.name": "acr"
           }
         },
         {
-          "name": "amr",
+          "name": "amr (auth methods reference)",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "protocolMapper": "oidc-amr-mapper",
           "consentRequired": false,
           "config": {
-            "user.session.note": "amr",
             "id.token.claim": "true",
             "access.token.claim": "true",
-            "claim.name": "amr",
-            "jsonType.label": "String"
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true",
+            "claim.name": "amr"
           }
         }
       ]

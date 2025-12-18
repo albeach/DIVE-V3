@@ -1,27 +1,35 @@
 # ============================================
-# Keycloak Event Listener Configuration (NATIVE v2.0.0)
+# Keycloak Event Listener Configuration (v3.1.0)
 # ============================================
-# AAL2/MFA Event Logging Using ONLY Native Keycloak Features
+# AAL2/MFA Event Logging with Custom AMR Enrichment
 #
-# KEY CHANGES (v2.0.0 - November 2025):
-# - ❌ REMOVED: Custom "dive-amr-enrichment" Event Listener SPI
-# - ✅ NATIVE: AMR is now automatically tracked by Keycloak 26.4
+# KEY CHANGES (v3.1.0 - December 2025):
+# - ✅ RE-ENABLED: "dive-amr-enrichment" Event Listener SPI
+# - ✅ NATIVE: oidc-amr-mapper and oidc-acr-mapper for JWT claims
 # - ✅ NATIVE: ACR is automatically set via authenticator execution config
 #
-# How Native AMR Works:
-# 1. Keycloak automatically sets AUTH_METHODS_REF session note
-# 2. Each authenticator adds its reference value (pwd, otp, etc.)
-# 3. oidc-usersessionmodel-note-mapper maps session note to JWT amr claim
+# Why dive-amr-enrichment is needed:
+# Keycloak 26.4 native authenticator ACR/AMR config ONLY works when the
+# authenticator execution config is properly set. The event listener provides
+# a fallback enrichment for WebAuthn/OTP credentials that ensures AMR claims
+# are properly set even when authentication flows don't set session notes.
 #
-# No custom Event Listener needed! 🎉
+# How it works:
+# 1. User authenticates (password + WebAuthn/OTP)
+# 2. dive-amr-enrichment event listener fires on LOGIN event
+# 3. Event listener checks user credentials and sets AUTH_METHODS_REF
+# 4. oidc-amr-mapper reads AUTH_METHODS_REF and adds to JWT
+# 5. oidc-acr-mapper reads authenticator ACR config and adds to JWT
 
 resource "keycloak_realm_events" "mfa_events" {
   realm_id = var.realm_id
 
-  # Enable event listeners (NATIVE only, no custom SPIs)
+  # Enable event listeners (includes custom AMR enrichment)
   # jboss-logging: Standard Keycloak event logging for security monitoring
+  # dive-amr-enrichment: Custom SPI for WebAuthn/OTP AMR enrichment
   events_listeners = [
-    "jboss-logging"
+    "jboss-logging",
+    "dive-amr-enrichment"
   ]
 
   # Enable user events for LOGIN tracking
