@@ -89,9 +89,10 @@ resource "keycloak_authentication_execution_config" "post_broker_condition_top_s
   execution_id = keycloak_authentication_execution.post_broker_condition_top_secret.id
   alias        = "POST BROKER TOP SECRET Check - ${var.realm_display_name}"
   config = {
-    attribute_name  = var.clearance_attribute_name
-    attribute_value = "^TOP_SECRET$" # Exact match
-    negate          = "false"
+    attribute_name           = var.clearance_attribute_name
+    attribute_expected_value = "^TOP_SECRET$" # Regex pattern for TOP_SECRET
+    regex                    = "true"         # CRITICAL: Enable regex matching!
+    not                      = "false"        # Do not negate the result
   }
 }
 
@@ -106,6 +107,18 @@ resource "keycloak_authentication_execution" "post_broker_webauthn_form" {
     keycloak_authentication_execution.post_broker_condition_top_secret,
     keycloak_authentication_execution_config.post_broker_condition_top_secret_config
   ]
+}
+
+# ACR/AMR Config for Post-Broker WebAuthn (AAL3)
+# CRITICAL FIX (December 2025): Ensures ACR/AMR claims are set for federated users
+resource "keycloak_authentication_execution_config" "post_broker_webauthn_acr" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.post_broker_webauthn_form.id
+  alias        = "Post Broker WebAuthn ACR AMR - ${var.realm_display_name}"
+  config = {
+    acr_level = "3"   # AAL3 for hardware key
+    reference = "hwk" # AMR reference: hardware key per RFC 8176
+  }
 }
 
 # ============================================
@@ -137,9 +150,10 @@ resource "keycloak_authentication_execution_config" "post_broker_condition_confi
   execution_id = keycloak_authentication_execution.post_broker_condition_clearance.id
   alias        = "POST BROKER CONFIDENTIAL SECRET Check - ${var.realm_display_name}"
   config = {
-    attribute_name  = var.clearance_attribute_name
-    attribute_value = "^(CONFIDENTIAL|SECRET)$" # Match both levels
-    negate          = "false"
+    attribute_name           = var.clearance_attribute_name
+    attribute_expected_value = "^(CONFIDENTIAL|SECRET)$" # Regex pattern for both levels
+    regex                    = "true"                    # CRITICAL: Enable regex matching!
+    not                      = "false"                   # Do not negate the result
   }
 }
 
@@ -154,6 +168,18 @@ resource "keycloak_authentication_execution" "post_broker_otp_form" {
     keycloak_authentication_execution.post_broker_condition_clearance,
     keycloak_authentication_execution_config.post_broker_condition_config
   ]
+}
+
+# ACR/AMR Config for Post-Broker OTP (AAL2)
+# CRITICAL FIX (December 2025): Ensures ACR/AMR claims are set for federated users
+resource "keycloak_authentication_execution_config" "post_broker_otp_acr" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.post_broker_otp_form.id
+  alias        = "Post Broker OTP ACR AMR - ${var.realm_display_name}"
+  config = {
+    acr_level = "1"   # AAL2 when OTP succeeds
+    reference = "otp" # AMR reference (RFC-8176 compliant)
+  }
 }
 
 # Optional: Update profile attributes
