@@ -2,10 +2,10 @@
 # DIVE V3 Git Ignore
 # ============================================
 
-# Root-level markdown files (local notes/status docs)
-/*.md
-!README.md
-!DIVE-V3-CLI-USER-GUIDE.md
+# Documentation files (moved to docs/ - keep local only)
+docs/*.md
+!docs/README.md
+docs/*.txt
 
 # Environment files
 .env
@@ -210,7 +210,7 @@ terraform/tfplan*
 /notes/
 /docs/notes/
 
-# Root doc/test archive
+# Archived directories and files (moved from root during cleanup)
 docs/archive/
 
 # Documentation files (keep local only)

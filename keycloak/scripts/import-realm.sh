@@ -1,24 +1,49 @@
 #!/bin/bash
-# DIVE V3 - Keycloak Realm Import Script
+# ============================================
+# DIVE V3 - Keycloak Realm Import Script (v3.0.0)
+# ============================================
 # 
-# This script processes realm JSON templates with environment variable substitution
-# and prepares them for Keycloak's native --import-realm feature.
+# SSOT NOTE (December 2025):
+# Terraform is the Single Source of Truth (SSOT) for all Keycloak configuration.
+# This script provides FALLBACK realm initialization for bootstrap scenarios.
 #
-# Usage: Called as entrypoint before Keycloak starts
+# BEHAVIOR:
+# - If SKIP_REALM_IMPORT=true: Skip JSON import entirely (Terraform-only mode)
+# - If realm already exists (created by Terraform): Keycloak skips JSON import
+# - If realm doesn't exist: JSON template provides initial bootstrap config
+#
+# RECOMMENDED FLOW:
+# 1. Start Keycloak without realm
+# 2. Run: ./dive tf apply pilot
+# 3. Terraform creates all configuration
+#
+# LEGACY FLOW (for quick demo/dev):
+# 1. Start Keycloak with JSON import (fallback bootstrap)
+# 2. Run Terraform to override/update configuration
 #
 # Environment Variables:
+#   SKIP_REALM_IMPORT - Set to "true" to skip JSON import (Terraform-only mode)
 #   KEYCLOAK_CLIENT_SECRET - Client secret for dive-v3-client-broker
-#   ADMIN_PASSWORD - Password for admin users (default: DiveAdmin2025!)
-#   TEST_USER_PASSWORD - Password for test users (default: DiveTest2025!)
-#   APP_URL - Frontend application URL (default: https://localhost:3000)
-#   API_URL - Backend API URL (default: https://localhost:4000)
-#   USA_IDP_URL - URL for USA IdP (default: https://keycloak:8443)
-#   USA_IDP_CLIENT_SECRET - Client secret for USA IdP federation
+#   ADMIN_PASSWORD - Password for admin users
+#   TEST_USER_PASSWORD - Password for test users
+#   APP_URL - Frontend application URL
+#   API_URL - Backend API URL
 #   INSTANCE_CODE - Instance code (USA, FRA, GBR, etc.)
 #
-# Best Practice: Keycloak's native import is idempotent and handles existing realms
+# Reference: docs/KEYCLOAK_REFACTORING_SESSION_PROMPT.md
 
 set -e
+
+# ============================================
+# SSOT Mode: Skip JSON Import if Terraform-Managed
+# ============================================
+if [ "${SKIP_REALM_IMPORT:-false}" = "true" ]; then
+    echo "[DIVE] SKIP_REALM_IMPORT=true - Terraform is the SSOT"
+    echo "[DIVE] Skipping JSON realm import - Keycloak will start empty"
+    echo "[DIVE] Run './dive tf apply pilot' to configure via Terraform"
+    echo "[DIVE] Starting Keycloak..."
+    exec /opt/keycloak/bin/kc.sh "$@"
+fi
 
 REALM_TEMPLATE_DIR="/opt/keycloak/realm-templates"
 REALM_IMPORT_DIR="/opt/keycloak/data/import"
@@ -26,6 +51,12 @@ REALM_TEMPLATE="${REALM_TEMPLATE_DIR}/dive-v3-broker.json"
 
 # Ensure import directory exists
 mkdir -p "${REALM_IMPORT_DIR}"
+
+echo "[DIVE] ============================================"
+echo "[DIVE] NOTE: JSON realm import is FALLBACK only"
+echo "[DIVE] SSOT: Terraform modules in terraform/modules/"
+echo "[DIVE] If realm exists, this import will be skipped"
+echo "[DIVE] ============================================"
 
 # Generate random secret (fallback if openssl not available)
 generate_secret() {

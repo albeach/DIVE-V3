@@ -1,0 +1,53 @@
+{
+  "identity": {
+    "spokeId": "spoke-prt-e4a21031",
+    "instanceCode": "PRT",
+    "name": "Portugal",
+    "description": "DIVE V3 Spoke Instance for Portugal",
+    "country": "PRT",
+    "organizationType": "government",
+    "contactEmail": "admin@portugal.mil",
+    "registeredSpokeId": "spoke-prt-790d4f8e"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3024",
+    "apiUrl": "https://localhost:4024",
+    "idpUrl": "https://localhost:8467",
+    "kasUrl": "https://localhost:9024"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/prt/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/prt/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/prt/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/prt/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "pending",
+    "requestedScopes": [
+      "policy:base",
+      "policy:prt",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-18T08:49:17Z"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/prt/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/prt/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-18T08:37:35Z",
+    "lastModified": "2025-12-18T08:37:35Z",
+    "configHash": ""
+  }
+}

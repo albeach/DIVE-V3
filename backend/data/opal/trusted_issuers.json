@@ -102,5 +102,14 @@
     "enabled": true,
     "protocol": "oidc",
     "federation_class": "LOCAL"
+  },
+  "https://localhost:8467/realms/dive-v3-broker-prt": {
+    "tenant": "PRT",
+    "name": "PRT Keycloak (Local Dev)",
+    "country": "PRT",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL"
   }
 }

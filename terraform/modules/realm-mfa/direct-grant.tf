@@ -1,23 +1,29 @@
 # ============================================
-# MFA Direct Grant Flow (DEPRECATED v2.0.0)
+# MFA Direct Grant Flow (ARCHIVED - v3.0.0)
 # ============================================
-# ⚠️ DEPRECATED: Direct Grant flow has been REMOVED in v2.0.0
+# ⚠️ ARCHIVED: This file is kept for reference only.
+# 
+# SSOT CONSOLIDATION (December 2025):
+# - Custom SPIs have been REMOVED from the Docker image
+# - The `direct-grant-otp-setup` authenticator is NO LONGER AVAILABLE
+# - Setting enable_direct_grant_mfa = true will cause Terraform to fail
+# - This file will be deleted in a future release
 #
 # REASON FOR DEPRECATION:
 # 1. Security: Direct Grant sends password via POST (not AAL2 compliant)
 # 2. Limitation: Keycloak does not support conditional MFA in Direct Grant natively
 # 3. Best Practice: NIST SP 800-63B recommends browser-based flows for AAL2
 # 4. Federation: Direct Grant bypasses IdP federation (breaks multi-realm)
-# 5. Custom SPI: Required custom DirectGrantOTPAuthenticator (maintenance burden)
+# 5. Custom SPI: Required custom DirectGrantOTPAuthenticator (now REMOVED)
 #
 # MIGRATION PATH:
 # - Use Authorization Code flow (browser-based) exclusively
-# - Update frontend to remove Direct Grant calls
-# - Use Keycloak-hosted login pages or custom themes
+# - All production deployments must use browser-based authentication
+# - Direct Grant (ROPC) should only be used for machine-to-machine (M2M)
 #
-# DEFAULT: This flow is DISABLED (enable_direct_grant_mfa = false by default)
+# DEFAULT: This flow is DISABLED and MUST remain disabled (enable_direct_grant_mfa = false)
 #
-# Reference: docs/NATIVE-KEYCLOAK-REFACTORING.md Section "Direct Grant Flow: DEPRECATED"
+# Reference: docs/KEYCLOAK_REFACTORING_SESSION_PROMPT.md
 
 resource "keycloak_authentication_flow" "direct_grant_mfa" {
   count       = var.enable_direct_grant_mfa ? 1 : 0

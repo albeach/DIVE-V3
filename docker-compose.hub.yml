@@ -20,11 +20,8 @@ networks:
     driver: bridge
   # Shared network for local dev only (when hub + spokes on same server)
   # In production, instances communicate via external domains
-  shared-network:
-    external: true
-    name: shared-network
   # Federation shared network for cross-instance communication (OPAL, Keycloak)
-  dive-v3-shared:
+  dive-v3-shared-network:
     external: true
     name: dive-v3-shared-network
 
@@ -104,7 +101,7 @@ services:
       REDIS_PASSWORD_USA: ${REDIS_PASSWORD_USA}
     networks:
       - hub-internal
-      - shared-network
+      - dive-v3-shared-network
     volumes:
       - hub_redis_data:/data
     healthcheck:
@@ -166,7 +163,7 @@ services:
       - ./keycloak/themes:/opt/keycloak/themes:ro
     networks:
       - hub-internal
-      - shared-network  # Required for federation (Keycloak needs to reach spoke Keycloaks)
+      - dive-v3-shared-network  # Required for federation (Keycloak needs to reach spoke Keycloaks)
     depends_on:
       postgres:
         condition: service_healthy
@@ -258,7 +255,7 @@ services:
       - ./config:/app/config:ro
     networks:
       - hub-internal
-      - shared-network
+      - dive-v3-shared-network
     depends_on:
       keycloak:
         condition: service_healthy
@@ -447,7 +444,7 @@ services:
       - "127.0.0.1:${OPAL_PORT:-7002}:7002"
     networks:
       - hub-internal
-      - dive-v3-shared  # Allow spoke OPAL clients to connect via federation network
+      - dive-v3-shared-network  # Allow spoke OPAL clients to connect via federation network
     volumes:
       - ./policies:/policies:ro
       - ./opal-data-source:/opal-data-source:ro

@@ -1,53 +1,68 @@
-# DEPRECATED: Custom Keycloak SPIs Removed
+# DEPRECATED: Custom Keycloak SPIs - REMOVED & ARCHIVED
 
-**Date:** November 4, 2025  
-**Version:** 2.0.0  
-**Status:** ❌ **REMOVED**
+**Date:** December 18, 2025  
+**Version:** 3.0.0  
+**Status:** ❌ **PERMANENTLY REMOVED**
+
+---
+
+## Version History
+
+| Version | Date | Status | Notes |
+|---------|------|--------|-------|
+| v1.x.x | Oct 2025 | ✅ Active | Custom SPIs in production |
+| v2.0.0 | Nov 4, 2025 | ⚠️ Deprecated | Marked as deprecated, JAR copy removed |
+| v2.1.0 | Nov 20, 2025 | ⚠️ Re-enabled | Temporarily re-enabled for AMR enrichment |
+| **v3.0.0** | **Dec 18, 2025** | ❌ **REMOVED** | **SSOT consolidation - Native only** |
 
 ---
 
 ## Notice
 
-This directory has been **DEPRECATED** and all custom Keycloak SPIs have been **REMOVED** in DIVE V3 v2.0.0.
+All custom Keycloak SPIs have been **PERMANENTLY REMOVED** in DIVE V3 v3.0.0 as part of the 
+SSOT (Single Source of Truth) consolidation effort.
 
 ### What Was Removed
 
-All custom Java SPIs that were previously in this directory:
+All custom Java SPIs have been **archived** to `keycloak/extensions/archived/`:
 
 1. **DirectGrantOTPAuthenticator.java** - Custom Direct Grant MFA authenticator
 2. **DirectGrantOTPAuthenticatorFactory.java** - Factory for Direct Grant authenticator
-3. **ConfigureOTPRequiredAction.java** - Custom OTP required action
-4. **ConfigureOTPRequiredActionFactory.java** - Factory for OTP required action
-5. **AMREnrichmentEventListener.java** - Custom AMR session note event listener
-6. **AMREnrichmentEventListenerFactory.java** - Factory for AMR event listener
-7. **AMRProtocolMapper.java** - Custom AMR protocol mapper
-8. **RedisOTPStore.java** - Redis-based OTP secret storage
+3. **DirectGrantOTPSimpleAuthenticator.java** - Simplified Direct Grant OTP
+4. **DirectGrantOTPSimpleAuthenticatorFactory.java** - Factory for simple variant
+5. **ConfigureOTPRequiredAction.java** - Custom OTP required action
+6. **ConfigureOTPRequiredActionFactory.java** - Factory for OTP required action
+7. **AMREnrichmentEventListener.java** - Custom AMR session note event listener
+8. **AMREnrichmentEventListenerFactory.java** - Factory for AMR event listener
+9. **AMRProtocolMapper.java** - Custom AMR protocol mapper
+10. **RedisOTPStore.java** - Redis-based OTP secret storage
 
 ### Why They Were Removed
 
 **Primary Reasons:**
-1. **Native Support:** Keycloak 26.4.2 includes built-in ACR/AMR tracking
-2. **Maintenance Burden:** Custom SPIs require updates with each KC version
-3. **Reliability:** Native features are better tested and more stable
-4. **Security:** Direct Grant flow is not AAL2 compliant
-5. **Complexity:** Custom code adds unnecessary complexity
+1. **Native Support:** Keycloak 26.4.2 includes built-in ACR/AMR tracking with full RFC 8176 compliance
+2. **Maintenance Burden:** Custom SPIs require updates with each Keycloak version upgrade
+3. **Reliability:** Native features are better tested and more stable than custom code
+4. **Security:** Direct Grant flow is not AAL2 compliant (NIST SP 800-63B)
+5. **SSOT:** Terraform is now the single source of truth for all Keycloak configuration
 
 ### Migration to Native Features
 
-All functionality has been **replaced with native Keycloak 26.4.2 features**:
+All functionality has been replaced with native Keycloak 26.4.2 features:
 
-| Custom SPI | Native Alternative | Status |
-|------------|-------------------|--------|
-| DirectGrantOTPAuthenticator | **DEPRECATED** - Use browser flows only | ✅ Removed |
-| ConfigureOTPRequiredAction | Built-in `CONFIGURE_TOTP` required action | ✅ Replaced |
-| AMREnrichmentEventListener | Automatic AMR tracking in KC 26.4 | ✅ Replaced |
-| AMRProtocolMapper | `oidc-usersessionmodel-note-mapper` | ✅ Replaced |
-| RedisOTPStore | Built-in KC credential storage | ✅ Removed |
+| Custom SPI | Native Alternative | Terraform Resource |
+|------------|-------------------|--------------------|
+| DirectGrantOTPAuthenticator | **DEPRECATED** - Use browser flows only | N/A |
+| ConfigureOTPRequiredAction | Built-in `CONFIGURE_TOTP` required action | ✅ Native |
+| AMREnrichmentEventListener | Automatic AMR tracking in KC 26.4 | ✅ Native |
+| AMRProtocolMapper | `oidc-amr-mapper` | `keycloak_generic_protocol_mapper` |
+| RedisOTPStore | Built-in KC credential storage | ✅ Native |
 
 ### How Native Features Work
 
 **ACR (Authentication Context Class Reference):**
 ```hcl
+# terraform/modules/realm-mfa/main.tf
 resource "keycloak_authentication_execution_config" "password_acr" {
   config = {
     acr_level = "0"      # AAL1
@@ -59,41 +74,84 @@ resource "keycloak_authentication_execution_config" "password_acr" {
 **AMR (Authentication Methods Reference):**
 - Keycloak automatically sets `AUTH_METHODS_REF` session note
 - Each authenticator adds its reference value (pwd, otp, hwk)
-- Protocol mapper reads session note and adds to JWT
+- Native `oidc-amr-mapper` reads session note and adds to JWT
+
+**Protocol Mappers (Terraform):**
+```hcl
+# terraform/modules/federated-instance/main.tf
+resource "keycloak_generic_protocol_mapper" "amr_mapper" {
+  protocol_mapper = "oidc-amr-mapper"
+  config = {
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "claim.name"           = "amr"
+  }
+}
+```
 
 **No custom code needed!** 🎉
 
-### References
+### Current Architecture (v3.0.0)
 
-- **Migration Guide:** `docs/NATIVE-KEYCLOAK-REFACTORING.md`
-- **Implementation Plan:** `docs/DIVE-V3-IMPLEMENTATION-PLAN.md`
-- **Keycloak Docs:** https://www.keycloak.org/docs/26.4/server_admin/
-
-### Rollback (Emergency Only)
-
-If you need to restore custom SPIs temporarily:
-
-```bash
-# Restore from Git history
-git checkout v1.x.x -- keycloak/extensions/
-git checkout v1.x.x -- keycloak/providers/
-
-# Rebuild SPIs
-cd keycloak/extensions
-mvn clean package
-cp target/dive-keycloak-extensions.jar ../providers/
-
-# Restart Keycloak
-docker compose restart keycloak
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SSOT: Terraform                          │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  terraform/modules/federated-instance/main.tf       │   │
+│  │  - Realm configuration                              │   │
+│  │  - Client configuration                             │   │
+│  │  - Protocol mappers (oidc-amr-mapper, oidc-acr)    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  terraform/modules/realm-mfa/main.tf                │   │
+│  │  - Browser authentication flow                      │   │
+│  │  - Conditional MFA (AAL1/AAL2/AAL3)                │   │
+│  │  - ACR level configuration                         │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                           ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Keycloak 26.4.2 (Native Only)                  │
+│  - NO custom JARs in /opt/keycloak/providers/              │
+│  - Built-in ACR/AMR tracking                               │
+│  - Native event listeners (jboss-logging)                  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Note:** Rollback is NOT recommended. Contact the team if you encounter issues.
+### Archived Source Code
+
+Source code is preserved for reference in `keycloak/extensions/archived/`:
+- `src/` - Java source files
+- `pom.xml` - Maven build configuration
+- `target/` - Compiled classes and JAR
+
+### Verification Commands
+
+```bash
+# Verify no custom JARs are deployed
+docker exec dive-hub-keycloak find /opt/keycloak/providers -name "dive*.jar"
+# Expected: No output
+
+# Verify no custom SPIs are loading
+docker logs dive-hub-keycloak 2>&1 | grep -i "dive"
+# Expected: Only import script messages, no SPI registrations
+
+# Check Terraform manages all configuration
+./dive tf plan pilot
+# Expected: No changes (clean state)
+```
+
+### References
+
+- **SSOT Refactoring:** `docs/KEYCLOAK_REFACTORING_SESSION_PROMPT.md`
+- **Implementation Plan:** `docs/DIVE-V3-IMPLEMENTATION-PLAN.md`
+- **Keycloak Docs:** https://www.keycloak.org/docs/26.4/server_admin/
+- **RFC 8176:** Authentication Methods Reference (AMR)
+- **NIST SP 800-63B:** Digital Identity Guidelines - Authentication
 
 ---
 
-**Last Custom SPI Version:** v1.5.0  
-**Removal Date:** November 4, 2025  
-**Removed By:** AI Expert - Keycloak Refactoring  
+**Last Custom SPI Version:** v2.1.0  
+**Removal Date:** December 18, 2025  
+**Removed By:** SSOT Consolidation - Keycloak Refactoring  
 **Approval:** Technical Lead
-
-
