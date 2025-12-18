@@ -58,7 +58,7 @@ variable "otp_policy" {
 }
 
 variable "enable_direct_grant_mfa" {
-  description = "⚠️ DEPRECATED: Enable MFA for Direct Grant (ROPC) flow. Default is FALSE (disabled). Use browser-based flows only. See docs/NATIVE-KEYCLOAK-REFACTORING.md"
+  description = "⛔ ARCHIVED (v3.0.0): Custom SPI removed. Setting this to true WILL FAIL. Direct Grant MFA is no longer supported. Use browser-based flows only."
   type        = bool
   default     = false # CHANGED in v2.0.0: Direct Grant is DEPRECATED
 }

@@ -401,7 +401,7 @@ class HubSpokeRegistryService {
     // Validate IdP endpoint if requested
     if (request.validateEndpoints !== false) {
       try {
-        const tlsResult = await idpValidationService.validateTLS(request.idpUrl);
+        const tlsResult = await idpValidationService.validateTLS(request.idpUrl, request.instanceCode);
         if (!tlsResult.pass) {
           logger.warn('Spoke IdP TLS validation failed', {
             instanceCode: request.instanceCode,

@@ -244,7 +244,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 idpUrl: request.idpUrl
             });
 
-            const tlsResult = await idpValidationService.validateTLS(request.idpUrl);
+            const tlsResult = await idpValidationService.validateTLS(request.idpUrl, request.instanceCode);
 
             if (!tlsResult.pass) {
                 res.status(400).json({
