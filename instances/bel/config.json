@@ -1,12 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-bel-a7551553",
+    "spokeId": "spoke-bel-7087143f",
     "instanceCode": "BEL",
-    "name": "Belgium",
-    "description": "DIVE V3 Spoke Instance for Belgium",
+    "name": "Belgian Ministry of Defence",
+    "description": "DIVE V3 Spoke Instance for Belgian Ministry of Defence",
     "country": "BEL",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@bel.dive25.com",
+    "registeredSpokeId": "spoke-bel-4db6030b"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,7 +15,8 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3002",
     "apiUrl": "https://localhost:4002",
-    "idpUrl": "https://localhost:8445",
+    "idpUrl": "https://dive-spoke-bel-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8445",
     "kasUrl": "https://localhost:9002"
   },
   "certificates": {
@@ -25,13 +27,15 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "approved",
     "requestedScopes": [
       "policy:base",
       "policy:bel",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2025-12-19T13:19:02Z",
+    "spokeToken": "8bLg8NcdPeN-3-P0p_Vwaan9bWO9vETZfzgqLpbcPOA"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -44,8 +48,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-14T00:47:29Z",
-    "lastModified": "2025-12-14T00:47:29Z",
+    "createdAt": "2025-12-19T13:17:33Z",
+    "lastModified": "2025-12-19T13:17:33Z",
     "configHash": ""
   }
 }

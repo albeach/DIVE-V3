@@ -1279,6 +1279,9 @@ _spoke_init_legacy() {
     local auth_secret=$(openssl rand -base64 32)
     local client_secret=$(openssl rand -base64 24 | tr -d '/+=')
 
+    # Generate default contact email based on instance code
+    local contact_email="admin@${code_lower}.dive25.com"
+
     print_header
     echo -e "${BOLD}Initializing DIVE V3 Spoke Instance:${NC} $code_upper"
     echo ""
@@ -1286,9 +1289,9 @@ _spoke_init_legacy() {
     echo -e "${YELLOW}     run: ./dive spoke init (without arguments)${NC}"
     echo ""
 
-    # Call internal init
+    # Call internal init with default contact email
     _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" \
-        "$hub_url" "" "" "$postgres_pass" "$mongo_pass" "$keycloak_pass" "$auth_secret" "$client_secret" "false"
+        "$hub_url" "$contact_email" "" "$postgres_pass" "$mongo_pass" "$keycloak_pass" "$auth_secret" "$client_secret" "false"
 }
 
 # =============================================================================

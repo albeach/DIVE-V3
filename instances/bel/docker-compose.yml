@@ -1,8 +1,9 @@
 # =============================================================================
-# DIVE V3 - BEL Instance (Belgium)
+# DIVE V3 - BEL Instance (Belgian Ministry of Defence)
 # =============================================================================
 # Spoke instance using extends pattern from base services.
-# Regenerate with: ./dive spoke init BEL "Belgium"
+# Regenerate with: ./dive spoke init BEL "Belgian Ministry of Defence"
+# Spoke ID: spoke-bel-7087143f
 # =============================================================================
 
 name: dive-spoke-bel
@@ -88,11 +89,13 @@ services:
       KC_HOSTNAME_ADMIN_URL: https://localhost:8445
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
     ports:
       - "8445:8443"
       - "8082:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres-bel:
@@ -119,14 +122,12 @@ services:
       service: opal-client-base
     container_name: dive-spoke-bel-opal-client
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-wss://dive-hub-opal-server:7002/ws}
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: http://opa-bel:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-bel-default}
       OPAL_POLICY_STORE_URL: http://opa-bel:8181
       OPAL_DATA_TOPICS: policy:base,policy:bel,data:federation_matrix,data:trusted_issuers
-      # SSL Certificate Configuration for HTTPS/WSS connections
-      OPAL_CLIENT_SSL_CONTEXT_TRUSTED_CA_FILE: /var/opal/certs/mkcert-rootCA.pem
     volumes:
       - bel_opal_cache:/var/opal/cache
       - ./certs:/var/opal/certs:ro
@@ -135,7 +136,6 @@ services:
         condition: service_healthy
     networks:
       - dive-bel-network
-      - dive-v3-shared-network  # Connect to hub OPAL server
 
   kas-bel:
     extends:
@@ -166,10 +166,9 @@ services:
     container_name: dive-spoke-bel-backend
     environment:
       INSTANCE_CODE: BEL
-      INSTANCE_NAME: "Belgium"
+      INSTANCE_NAME: "Belgian Ministry of Defence"
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_BEL:?set MONGO_PASSWORD_BEL}@mongodb-bel:27017/dive-v3-bel?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_BEL:?set MONGO_PASSWORD_BEL}@mongodb-bel:27017/dive-v3-bel?authSource=admin
-      MONGODB_DATABASE: dive-v3-bel
       REDIS_URL: redis://:${REDIS_PASSWORD_BEL:?set REDIS_PASSWORD_BEL}@redis-bel:6379
       KEYCLOAK_URL: https://keycloak-bel:8443
       KEYCLOAK_REALM: dive-v3-broker-bel
@@ -198,6 +197,7 @@ services:
         condition: service_healthy
     networks:
       - dive-bel-network
+      - dive-v3-shared-network
 
   frontend-bel:
     extends:
@@ -231,7 +231,8 @@ services:
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
       NEXT_PUBLIC_THEME_PRIMARY: "#000000"
       NEXT_PUBLIC_THEME_SECONDARY: "#FDDA24"
-      NEXT_PUBLIC_THEME_ACCENT: "#EF3340"
+      NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      TZ: "Europe/Brussels"
     ports:
       - "3002:3000"
     volumes:
