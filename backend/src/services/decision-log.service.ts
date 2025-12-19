@@ -564,4 +564,3 @@ class DecisionLogService {
 
 // Export singleton instance
 export const decisionLogService = new DecisionLogService();
-

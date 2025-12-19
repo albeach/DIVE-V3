@@ -24,6 +24,3 @@ export function groupRulesByCategory(rules: IExtractedRule[]): IRuleGroup[] {
 export function filterRules(rules: IExtractedRule[], _query: string, _category?: string): IExtractedRule[] {
     return rules;
 }
-
-
-

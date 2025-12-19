@@ -145,4 +145,3 @@ export function useShowInLens(requiredLens: '5663' | '240' | 'unified' | 'all'):
   
   return activeLens === requiredLens;
 }
-

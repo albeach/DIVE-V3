@@ -1231,4 +1231,3 @@ async function getCoiMembership(): Promise<Record<string, unknown>> {
 }
 
 export default router;
-

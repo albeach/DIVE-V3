@@ -597,4 +597,3 @@ Week 4 (Jan 8-14)     Week 5 (Jan 15-21)    Week 6 (Jan 22-28)
 │ Pilot rollback     ││ Auto-rollback      ││ 95% pass rate      │
 └────────────────────┘└────────────────────┘└────────────────────┘
 ```
-

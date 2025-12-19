@@ -541,4 +541,3 @@ export async function initializeCRLInfrastructure(): Promise<void> {
         throw error;
     }
 }
-

@@ -836,4 +836,3 @@ function createBasicSubmission(): any {
         description: 'Basic IdP with IAL1'
     };
 }
-

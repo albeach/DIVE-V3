@@ -766,5 +766,3 @@ export const mappings = {
     spanishCOI: SPANISH_COI_MAP,
     countryCodes: COUNTRY_CODE_MAP,
 };
-
-

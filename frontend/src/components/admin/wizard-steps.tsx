@@ -66,4 +66,3 @@ export default function WizardSteps({ currentStep, steps }: IWizardStepsProps) {
         </nav>
     );
 }
-

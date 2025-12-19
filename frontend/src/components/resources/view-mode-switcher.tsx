@@ -67,4 +67,3 @@ export default function ViewModeSwitcher({ viewMode, onChange }: ViewModeSwitche
     </div>
   );
 }
-

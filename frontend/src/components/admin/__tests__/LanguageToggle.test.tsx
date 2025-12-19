@@ -102,4 +102,3 @@ describe('LanguageToggle', () => {
         expect(localStorage.getItem(overrideKey)).toBe('true');
     });
 });
-

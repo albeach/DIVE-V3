@@ -193,4 +193,3 @@ create_template "Sweden" "SWE" "Swedish" "Nordic" "efternamn" "fornamn" "epost" 
 
 echo ""
 echo "✓ Created all 32 NATO nation mapper templates"
-

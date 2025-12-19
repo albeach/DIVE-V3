@@ -356,15 +356,3 @@ async function enableFederatedSearch(page: Page) {
         page.getByText(/Instances/i)
     )).toBeVisible({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
 }
-
-
-
-
-
-
-
-
-
-
-
-

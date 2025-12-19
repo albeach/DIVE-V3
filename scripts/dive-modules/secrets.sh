@@ -193,9 +193,3 @@ module_secrets_help() {
     echo ""
     echo "Usage: ./dive secrets [load|show|list|verify|verify-all|export|lint] [options]"
 }
-
-
-
-
-
-

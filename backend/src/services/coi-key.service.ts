@@ -364,4 +364,3 @@ export async function closeCOIKeyConnection(): Promise<void> {
         logger.info('Closed MongoDB connection (COI Keys)');
     }
 }
-

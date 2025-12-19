@@ -251,4 +251,3 @@ async function enforceUploadAuthorization(
         throw new ForbiddenError('Authorization service unavailable (fail-closed)');
     }
 }
-

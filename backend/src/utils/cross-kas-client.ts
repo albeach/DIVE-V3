@@ -134,5 +134,3 @@ export function isExternalKAS(kasUrl: string): boolean {
         return false;
     }
 }
-
-

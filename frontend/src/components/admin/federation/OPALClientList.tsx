@@ -424,4 +424,3 @@ export function OPALClientList({
 }
 
 export default OPALClientList;
-

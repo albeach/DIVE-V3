@@ -37,5 +37,3 @@ datasources:
           matcherRegex: "correlationId=([a-zA-Z0-9-]+)"
           name: correlationId
           url: '$${__value.raw}'
-
-

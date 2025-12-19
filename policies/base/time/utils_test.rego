@@ -249,4 +249,3 @@ test_is_after_with_clock_skew_beyond_tolerance if {
 	t2 := "2025-12-03T12:00:00Z"  # 10 minutes earlier
 	time.is_after(t1, t2)  # Beyond clock skew
 }
-

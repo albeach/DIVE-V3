@@ -156,4 +156,3 @@ export function isExternalIdP(idpAlias: string): boolean {
     const config = getExternalIdPConfig(idpAlias);
     return config !== null;
 }
-

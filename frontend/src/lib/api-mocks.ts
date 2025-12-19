@@ -367,4 +367,3 @@ export default {
   mockHandlers,
   ENABLE_MOCKS,
 };
-

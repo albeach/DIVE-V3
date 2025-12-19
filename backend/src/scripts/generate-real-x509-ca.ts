@@ -227,4 +227,3 @@ main().catch(error => {
     console.error('❌ Error generating CA hierarchy:', error);
     process.exit(1);
 });
-

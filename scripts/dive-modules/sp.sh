@@ -352,13 +352,3 @@ module_sp_help() {
     echo "  ./dive sp status sp-nzl-1234"
     echo "  ./dive sp credentials sp-nzl-1234"
 }
-
-
-
-
-
-
-
-
-
-

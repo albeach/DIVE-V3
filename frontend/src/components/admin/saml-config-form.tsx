@@ -403,4 +403,3 @@ export default function SAMLConfigForm({ config, onChange, errors = {}, accessTo
         </div>
     );
 }
-

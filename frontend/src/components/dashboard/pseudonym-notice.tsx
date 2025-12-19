@@ -139,4 +139,3 @@ export function PseudonymNotice({ user }: PseudonymNoticeProps) {
     </div>
   );
 }
-

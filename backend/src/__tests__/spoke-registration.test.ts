@@ -570,4 +570,3 @@ describe('Registration Flow', () => {
     // 4. After approval would be 'approved'
   });
 });
-

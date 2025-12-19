@@ -53,5 +53,3 @@ router.get('/certificates', getCertificateStatus);
 router.get('/nist-assurance', getNistAssurance);
 
 export default router;
-
-

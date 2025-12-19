@@ -584,8 +584,3 @@ export default function PilotOnboardingWizard({
     </div>
   );
 }
-
-
-
-
-

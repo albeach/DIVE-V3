@@ -285,4 +285,3 @@ export class DashboardPage {
     await this.page.waitForURL(/^\/$|\/login/, { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
   }
 }
-

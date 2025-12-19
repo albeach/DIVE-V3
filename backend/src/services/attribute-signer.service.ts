@@ -167,4 +167,3 @@ export class AttributeSignerService {
 }
 
 export const attributeSignerService = new AttributeSignerService();
-

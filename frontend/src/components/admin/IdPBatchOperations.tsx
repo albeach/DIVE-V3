@@ -415,4 +415,3 @@ function ConfirmationModal({ type, count, onConfirm, onCancel }: ConfirmationMod
         </motion.div>
     );
 }
-

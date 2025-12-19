@@ -358,7 +358,7 @@ export async function getResourceByIdLegacy(resourceId: string): Promise<IResour
 
 /**
  * Extract origin instance from resourceId pattern
- * Supports patterns like: doc-USA-seed-..., doc-FRA-seed-..., etc.
+ * Supports patterns like: doc-USA-seed-..., hun-comms-00596, etc.
  */
 export function extractOriginFromResourceId(resourceId: string): string | null {
     // Pattern: doc-{INSTANCE}-seed-{timestamp}-{index}
@@ -366,25 +366,33 @@ export function extractOriginFromResourceId(resourceId: string): string | null {
     if (match) {
         return match[1]; // Returns 'USA', 'FRA', 'GBR', 'DEU'
     }
-    
-    // Also check for instanceCode field pattern in other formats
-    const instanceMatch = resourceId.match(/^[a-z]+-([A-Z]{3})-/);
+
+    // Pattern: {instance}-{type}-{number} (e.g., hun-comms-00596)
+    const instanceMatch = resourceId.match(/^([a-z]{3})-[a-z]+-\d+$/);
     if (instanceMatch) {
-        return instanceMatch[1];
+        return instanceMatch[1].toUpperCase(); // Convert 'hun' to 'HUN'
     }
-    
+
+    // Also check for instanceCode field pattern in other formats (legacy)
+    const legacyMatch = resourceId.match(/^[a-z]+-([A-Z]{3})-/);
+    if (legacyMatch) {
+        return legacyMatch[1];
+    }
+
     return null;
 }
 
 /**
  * Federation instance API URLs
- * TODO: Move to federation-registry.json or environment config
+ * For local Docker development, use internal container names
+ * For production, use external domain names
  */
 export const FEDERATION_API_URLS: Record<string, string> = {
-    'USA': process.env.USA_API_URL || 'https://usa-api.dive25.com',
+    'USA': process.env.USA_API_URL || 'https://dive-hub-backend:4000',  // Docker internal for USA
     'FRA': process.env.FRA_API_URL || 'https://fra-api.dive25.com',
     'GBR': process.env.GBR_API_URL || 'https://gbr-api.dive25.com',
-    'DEU': process.env.DEU_API_URL || 'https://deu-api.dive25.com',
+    'DEU': process.env.DEU_API_URL || 'https://deu-api.prosecurity.biz',
+    'HUN': process.env.HUN_API_URL || 'https://hun-backend-hun-1:4000',  // Docker internal for HUN
 };
 
 /**
@@ -400,7 +408,7 @@ export async function getResourceByIdFederated(
     authToken?: string
 ): Promise<{ resource: IZTDFResource | null; source: 'local' | 'federated'; error?: string }> {
     const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
-    
+
     // Step 1: Try local MongoDB first
     try {
         const localResource = await getResourceById(resourceId);
@@ -409,52 +417,52 @@ export async function getResourceByIdFederated(
             return { resource: localResource, source: 'local' };
         }
     } catch (error) {
-        logger.warn('Error checking local resource, will try federation', { 
-            resourceId, 
-            error: error instanceof Error ? error.message : 'Unknown error' 
+        logger.warn('Error checking local resource, will try federation', {
+            resourceId,
+            error: error instanceof Error ? error.message : 'Unknown error'
         });
     }
-    
+
     // Step 2: Determine origin instance from resourceId
     const originInstance = extractOriginFromResourceId(resourceId);
-    
+
     if (!originInstance) {
         logger.debug('Could not determine origin instance from resourceId', { resourceId });
         return { resource: null, source: 'local', error: 'Resource not found locally and cannot determine origin' };
     }
-    
+
     if (originInstance === CURRENT_INSTANCE) {
         // Origin is local but not found - genuine 404
-        logger.debug('Resource belongs to current instance but not found', { 
-            resourceId, 
-            currentInstance: CURRENT_INSTANCE 
+        logger.debug('Resource belongs to current instance but not found', {
+            resourceId,
+            currentInstance: CURRENT_INSTANCE
         });
         return { resource: null, source: 'local', error: 'Resource not found' };
     }
-    
+
     // Step 3: Proxy request to origin instance
     const originApiUrl = FEDERATION_API_URLS[originInstance];
     if (!originApiUrl) {
         logger.error('No API URL configured for origin instance', { originInstance, resourceId });
         return { resource: null, source: 'federated', error: `Unknown federation instance: ${originInstance}` };
     }
-    
+
     if (!authToken) {
         logger.error('Auth token required for federated resource access', { resourceId, originInstance });
         return { resource: null, source: 'federated', error: 'Authentication required for cross-instance access' };
     }
-    
+
     logger.info('Fetching resource from federated instance', {
         resourceId,
         originInstance,
         currentInstance: CURRENT_INSTANCE,
         apiUrl: originApiUrl,
     });
-    
+
     try {
         // Import axios for federation requests
         const axios = (await import('axios')).default;
-        
+
         const response = await axios.get(`${originApiUrl}/api/resources/${resourceId}`, {
             headers: {
                 'Authorization': authToken, // Forward user's token
@@ -464,18 +472,18 @@ export async function getResourceByIdFederated(
             timeout: 10000, // 10 second timeout for federation
             validateStatus: (status) => status < 500, // Don't throw on 4xx
         });
-        
+
         if (response.status === 200) {
             logger.info('Successfully fetched resource from federated instance', {
                 resourceId,
                 originInstance,
             });
-            
+
             // Note: The response is the transformed resource from the origin instance
             // It may not include full ZTDF details for security reasons
             return { resource: response.data, source: 'federated' };
         }
-        
+
         if (response.status === 403) {
             logger.info('Federated resource access denied by origin instance', {
                 resourceId,
@@ -483,13 +491,13 @@ export async function getResourceByIdFederated(
                 status: response.status,
             });
             // Return the authorization error from the origin
-            return { 
-                resource: null, 
-                source: 'federated', 
-                error: response.data?.message || 'Access denied by origin instance' 
+            return {
+                resource: null,
+                source: 'federated',
+                error: response.data?.message || 'Access denied by origin instance'
             };
         }
-        
+
         if (response.status === 404) {
             logger.warn('Resource not found on origin instance', {
                 resourceId,
@@ -497,7 +505,7 @@ export async function getResourceByIdFederated(
             });
             return { resource: null, source: 'federated', error: 'Resource not found' };
         }
-        
+
         logger.error('Unexpected response from federated instance', {
             resourceId,
             originInstance,
@@ -505,7 +513,7 @@ export async function getResourceByIdFederated(
             data: response.data,
         });
         return { resource: null, source: 'federated', error: `Federation error: ${response.status}` };
-        
+
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown federation error';
         logger.error('Failed to fetch resource from federated instance', {
@@ -614,10 +622,10 @@ export async function getZTDFObject(resourceId: string): Promise<IZTDFObject | n
  * Query resources with flexible criteria (for federation)
  */
 export async function getResourcesByQuery(
-    query: any, 
-    options?: { 
-        limit?: number; 
-        offset?: number; 
+    query: any,
+    options?: {
+        limit?: number;
+        offset?: number;
         fields?: any;
     }
 ): Promise<any[]> {
@@ -634,7 +642,7 @@ export async function getResourcesByQuery(
 
         // Build MongoDB query
         const mongoQuery: any = {};
-        
+
         // Handle resourceId queries (single or array)
         if (query.resourceId) {
             if (typeof query.resourceId === 'string') {
@@ -714,4 +722,3 @@ process.on('SIGINT', async () => {
     }
     process.exit(0);
 });
-

@@ -445,4 +445,3 @@ export function ResponsiveTable<T extends Record<string, unknown>>({
 }
 
 export default ResponsiveTable;
-

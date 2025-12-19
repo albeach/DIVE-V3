@@ -566,15 +566,15 @@ describe('Federated Search - E2E Tests', () => {
     });
 
     describe('3.1 Document Count Validation', () => {
-        it('should have 7000+ documents per instance', async () => {
+        it('should have 5000 documents per instance', async () => {
             if (!RUN_E2E) return;
 
-            const expectedCountPerInstance = 7000;
+            const expectedCountPerInstance = 5000;
             const enabledPartners = getEnabledPartners();
 
             // Mock expected counts
             const expectedTotalDocuments = enabledPartners.length * expectedCountPerInstance;
-            expect(expectedTotalDocuments).toBeGreaterThanOrEqual(21000);
+            expect(expectedTotalDocuments).toBeGreaterThanOrEqual(15000);
         });
     });
 
@@ -687,7 +687,7 @@ describe('Federated Search - Performance Tests', () => {
     describe('4.2 Scalability', () => {
         it('should handle large result sets', () => {
             const MAX_RESULTS = 100;
-            const TOTAL_DOCUMENTS_PER_INSTANCE = 7000;
+            const TOTAL_DOCUMENTS_PER_INSTANCE = 5000;
             const enabledPartners = getEnabledPartners();
 
             // Total potential results before filtering
@@ -702,8 +702,8 @@ describe('Federated Search - Performance Tests', () => {
             const newPartnerCount = currentPartners + 2;
 
             // Adding partners should increase coverage proportionally
-            const currentCoverage = currentPartners * 7000;
-            const newCoverage = newPartnerCount * 7000;
+            const currentCoverage = currentPartners * 5000;
+            const newCoverage = newPartnerCount * 5000;
 
             expect(newCoverage).toBeGreaterThan(currentCoverage);
         });
@@ -918,4 +918,3 @@ describe('Federated Search - Test Coverage Summary', () => {
         expect(allCovered).toBe(true);
     });
 });
-

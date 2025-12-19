@@ -24,5 +24,3 @@ networks:
   dive-network:
     external: true
     name: dive-v3_dive-network
-
-

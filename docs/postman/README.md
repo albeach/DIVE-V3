@@ -586,4 +586,3 @@ DIVE V3 enforces PKCE with S256 method (SHA256 required, not plain).
 **Last Updated**: November 4, 2025  
 **Collection Version**: 2.0.0  
 **Compatible with**: DIVE V3 v2.0+
-

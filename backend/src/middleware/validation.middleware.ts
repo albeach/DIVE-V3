@@ -451,4 +451,3 @@ export const getValidationConfig = (): {
         maxStringLength: MAX_STRING_LENGTH,
     };
 };
-

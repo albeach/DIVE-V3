@@ -212,6 +212,3 @@ export async function teardownMongoDB(): Promise<void> {
     await helper.disconnect();
     globalHelper = null;
 }
-
-
-

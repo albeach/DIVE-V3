@@ -581,4 +581,3 @@ export function SpokeDetailPanel({
 }
 
 export default SpokeDetailPanel;
-

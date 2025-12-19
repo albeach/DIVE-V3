@@ -540,10 +540,3 @@ function NotificationsSkeleton() {
     </div>
   );
 }
-
-
-
-
-
-
-

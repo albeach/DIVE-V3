@@ -497,4 +497,3 @@ export async function updateCRL(req: Request, res: Response): Promise<void> {
         });
     }
 }
-

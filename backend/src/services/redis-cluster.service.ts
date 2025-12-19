@@ -691,5 +691,3 @@ class RedisClusterService extends EventEmitter {
 export const redisClusterService = new RedisClusterService();
 
 export default RedisClusterService;
-
-

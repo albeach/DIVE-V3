@@ -30,4 +30,3 @@ const router = Router();
 router.post('/', authenticateJWT, DecisionReplayController.replayDecision);
 
 export default router;
-

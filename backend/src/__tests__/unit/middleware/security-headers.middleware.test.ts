@@ -448,4 +448,3 @@ describe('Security Headers Middleware', () => {
         });
     });
 });
-

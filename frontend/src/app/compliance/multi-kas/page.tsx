@@ -650,4 +650,3 @@ export default function MultiKasPage() {
     </PageLayout>
   );
 }
-

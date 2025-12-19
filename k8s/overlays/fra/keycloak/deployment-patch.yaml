@@ -31,5 +31,3 @@ spec:
               value: "FRA"
             - name: INSTANCE_NAME
               value: "France"
-
-

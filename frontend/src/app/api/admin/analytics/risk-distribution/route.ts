@@ -58,5 +58,3 @@ export async function GET() {
         );
     }
 }
-
-

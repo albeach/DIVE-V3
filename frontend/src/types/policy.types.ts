@@ -18,5 +18,3 @@ export interface IPolicyStats {
   totalTests: number;
   lastUpdated: string;
 }
-
-

@@ -267,5 +267,3 @@ router.post('/reset', async (req: Request, res: Response, next: NextFunction) =>
 });
 
 export default router;
-
-

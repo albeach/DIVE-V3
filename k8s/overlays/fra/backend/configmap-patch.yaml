@@ -11,5 +11,3 @@ data:
   keycloak_url: "https://keycloak.dive-v3-fra.svc.cluster.local:8443"
   keycloak_realm: "dive-v3-broker-fra"
   opa_url: "http://opa.dive-v3-fra.svc.cluster.local:8181"
-
-

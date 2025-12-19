@@ -212,4 +212,3 @@ groups:
         annotations:
           summary: "Decision log collection size is growing (>10GB)"
           description: "TTL index may not be working. Manual cleanup may be required."
-

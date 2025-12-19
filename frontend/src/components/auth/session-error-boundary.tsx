@@ -184,4 +184,3 @@ export class SessionErrorBoundary extends Component<Props, State> {
         return this.props.children;
     }
 }
-

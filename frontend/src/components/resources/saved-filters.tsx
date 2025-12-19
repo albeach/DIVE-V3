@@ -287,4 +287,3 @@ export default function SavedFilters({ currentFilters, onApplyFilter }: SavedFil
     </div>
   );
 }
-

@@ -29,6 +29,3 @@ describe('IdentityDrawer', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
   });
 });
-
-
-

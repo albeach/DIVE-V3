@@ -294,5 +294,3 @@ router.post('/otp/setup', initiateOTPSetup);
 router.post('/otp/verify', verifyAndEnableOTP);
 
 export default router;
-
-

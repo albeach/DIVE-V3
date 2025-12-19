@@ -38,5 +38,3 @@
         <p>This security measure prevents accidental account mixing and session fixation attacks.</p>
     </#if>
 </@layout.registrationLayout>
-
-

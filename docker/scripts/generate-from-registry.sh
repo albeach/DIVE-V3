@@ -285,18 +285,3 @@ for inst in registry['instances']:
 }
 
 main "$@"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

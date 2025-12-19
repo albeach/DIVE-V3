@@ -1149,4 +1149,3 @@ describeIf(RUN_INTEGRATION)('ACR/AAL Integration Verification - Real Keycloak Au
 
 // Export for use in other test files
 export { authenticateUser, normalizeACR, normalizeAMR, INSTANCES };
-

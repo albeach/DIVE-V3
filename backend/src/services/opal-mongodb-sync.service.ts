@@ -598,4 +598,3 @@ class OPALMongoDBSyncService {
 export const opalMongoDBSyncService = new OPALMongoDBSyncService();
 
 export default OPALMongoDBSyncService;
-

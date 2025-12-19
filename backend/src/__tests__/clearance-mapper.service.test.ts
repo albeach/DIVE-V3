@@ -618,4 +618,3 @@ describe('Clearance Mapper Service', () => {
  * All 4 clearance levels tested: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
  * All 6 new NATO nations fully covered: DEU, GBR, ITA, ESP, POL, NLD
  */
-

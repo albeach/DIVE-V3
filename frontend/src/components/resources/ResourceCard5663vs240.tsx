@@ -233,4 +233,3 @@ function ObjectView({ resource, onClick }: IResourceCard5663vs240Props) {
     </div>
   );
 }
-

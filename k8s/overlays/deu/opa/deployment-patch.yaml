@@ -16,4 +16,3 @@ spec:
       labels:
         app: opa-deu
         app.kubernetes.io/instance: deu
-

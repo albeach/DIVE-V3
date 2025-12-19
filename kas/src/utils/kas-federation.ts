@@ -444,4 +444,3 @@ export const policyTranslator = new PolicyTranslator();
  * Global cross-KAS client instance
  */
 export const crossKASClient = new CrossKASClient(kasRegistry, policyTranslator);
-

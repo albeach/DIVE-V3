@@ -204,4 +204,3 @@ export const memoryConfig = {
     maxOldSpaceSize: 4096,  // 4GB
     maxSemiSpaceSize: 128,   // 128MB
 };
-

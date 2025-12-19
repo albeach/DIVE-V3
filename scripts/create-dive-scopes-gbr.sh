@@ -56,5 +56,3 @@ echo ""
 echo "✅ DIVE custom scopes created in GBR Keycloak"
 echo ""
 echo "Next: Assign these scopes to dive-v3-cross-border-client as optional scopes"
-
-

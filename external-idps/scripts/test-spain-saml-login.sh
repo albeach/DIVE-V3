@@ -90,5 +90,3 @@ echo ""
 echo "For automated testing, see:"
 echo "  backend/src/__tests__/integration/external-idp-spain-saml.test.ts"
 echo ""
-
-

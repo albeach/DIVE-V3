@@ -110,7 +110,7 @@ router.get('/federated-status', authenticateJWT, federatedStatusHandler);
  * 
  * IMPORTANT: This catch-all route MUST be LAST to avoid shadowing specific routes above
  */
-router.get('/:id', enrichmentMiddleware, authzMiddleware, enforceFederationAgreement, getResourceHandler);
+router.get('/:id', authenticateJWT, enrichmentMiddleware, authzMiddleware, enforceFederationAgreement, getResourceHandler);
 
 /**
  * POST /api/resources/request-key
@@ -121,4 +121,3 @@ router.get('/:id', enrichmentMiddleware, authzMiddleware, enforceFederationAgree
 router.post('/request-key', authenticateJWT, enforceFederationAgreement, requestKeyHandler);
 
 export default router;
-

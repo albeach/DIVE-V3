@@ -48,4 +48,3 @@ obligations := []
     expect(insights.hasAllowRule).toBe(true);
   });
 });
-

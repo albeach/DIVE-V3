@@ -51,13 +51,3 @@
         </div>
     </#if>
 </@layout.registrationLayout>
-
-
-
-
-
-
-
-
-
-

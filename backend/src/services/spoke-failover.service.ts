@@ -905,4 +905,3 @@ class SpokeFailoverService extends EventEmitter {
 export const spokeFailover = new SpokeFailoverService();
 
 export default SpokeFailoverService;
-

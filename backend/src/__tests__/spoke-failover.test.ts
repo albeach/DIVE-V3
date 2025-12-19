@@ -747,4 +747,3 @@ describe('SpokeFailoverService', () => {
         });
     });
 });
-

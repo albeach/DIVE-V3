@@ -407,7 +407,3 @@ describe('SpokeApprovalModal', () => {
     });
   });
 });
-
-
-
-

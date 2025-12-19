@@ -351,4 +351,3 @@ export class ResourcesPage {
     await this.page.waitForTimeout(1000);
   }
 }
-

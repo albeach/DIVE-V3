@@ -850,5 +850,3 @@
 </body>
 </html>
 </#macro>
-
-

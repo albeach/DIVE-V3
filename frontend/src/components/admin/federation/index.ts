@@ -22,4 +22,3 @@ export { TokenExpiryBadge } from './TokenExpiryBadge';
 export { OPALServerHealth } from './OPALServerHealth';
 export { OPALClientList } from './OPALClientList';
 export { OPALTransactionLog } from './OPALTransactionLog';
-

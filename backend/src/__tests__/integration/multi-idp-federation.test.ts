@@ -623,4 +623,3 @@ describe('Performance', () => {
         expect(duration).toBeLessThan(100);
     });
 });
-

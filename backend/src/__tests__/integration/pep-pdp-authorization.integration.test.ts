@@ -874,4 +874,3 @@ async function seedTestResources(db: any) {
 
     await db.collection('resources').insertMany(resources);
 }
-

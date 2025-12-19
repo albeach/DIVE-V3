@@ -230,4 +230,3 @@ export async function getCOIKeyStatisticsHandler(_req: Request, res: Response): 
         res.status(500).json({ error: 'Failed to retrieve COI Key statistics' });
     }
 }
-

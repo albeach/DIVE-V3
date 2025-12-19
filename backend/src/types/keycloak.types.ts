@@ -354,4 +354,3 @@ export interface IThemePreviewOptions {
     device: 'desktop' | 'tablet' | 'mobile';
     language?: string;
 }
-

@@ -404,4 +404,3 @@ function extractXACMLMetadata(parsed: any, _source: string): {
         }
     };
 }
-

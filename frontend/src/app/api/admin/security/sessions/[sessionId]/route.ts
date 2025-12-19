@@ -53,4 +53,3 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ success: false, error: 'Failed to terminate session' }, { status: 500 });
     }
 }
-

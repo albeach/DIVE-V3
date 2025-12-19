@@ -407,4 +407,3 @@ describe('Guardrail Rego Policy', () => {
     expect(true).toBe(true);
   });
 });
-

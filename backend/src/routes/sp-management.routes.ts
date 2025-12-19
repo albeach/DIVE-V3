@@ -115,14 +115,3 @@ router.post('/sps/:spId/regenerate-secret', regenerateSecret);
 router.get('/sps/:spId/activity', getSPActivity);
 
 export default router;
-
-
-
-
-
-
-
-
-
-
-

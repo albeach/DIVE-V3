@@ -123,4 +123,3 @@ See `PII_MINIMIZATION_POLICY.md` for complete policy and rationale.
 **Status:** Production-Ready  
 **Version:** 1.0.0  
 **Last Updated:** 2025-12-13
-

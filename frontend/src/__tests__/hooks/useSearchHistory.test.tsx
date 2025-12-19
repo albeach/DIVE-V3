@@ -730,15 +730,3 @@ describe('useSearchHistory', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

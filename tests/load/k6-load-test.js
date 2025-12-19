@@ -259,4 +259,3 @@ export function setup() {
 export function teardown(data) {
   console.log('Load test complete');
 }
-

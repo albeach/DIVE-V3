@@ -230,4 +230,3 @@ export class KMSService {
 
 // Export singleton instance
 export const kmsService = new KMSService();
-

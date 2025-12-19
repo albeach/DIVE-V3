@@ -85,5 +85,3 @@ function interpretAAL(acr: any, amr: any): string {
 
     return 'AAL1 (single factor)';
 }
-
-

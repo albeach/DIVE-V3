@@ -367,4 +367,3 @@ describe('Compression Middleware', () => {
         });
     });
 });
-

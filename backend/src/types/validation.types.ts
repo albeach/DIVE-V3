@@ -338,4 +338,3 @@ export interface IValidationConfig {
   /** Allow self-signed certificates (pilot mode) */
   allowSelfSigned: boolean;
 }
-

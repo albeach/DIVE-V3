@@ -23,7 +23,7 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 // Load SSL certificates (mkcert)
-const certPath = process.env.CERT_PATH || process.env.SSL_CERT_PATH || '/opt/app/certs';
+const certPath = process.env.CERT_PATH || process.env.SSL_CERT_PATH || path.join(__dirname, 'certs');
 
 let serverOptions;
 try {

@@ -189,5 +189,3 @@ export function initializeKASRegistry(): void {
         configPath,
     });
 }
-
-

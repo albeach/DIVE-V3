@@ -309,4 +309,3 @@ export default function IdPCard2025({
         </motion.div>
     );
 }
-

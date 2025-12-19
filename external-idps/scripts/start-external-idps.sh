@@ -128,5 +128,3 @@ echo "  3. Onboard IdPs via Admin → Identity Providers → Add New IdP"
 echo ""
 echo "  4. View logs: docker-compose logs -f [spain-saml|usa-oidc]"
 echo ""
-
-

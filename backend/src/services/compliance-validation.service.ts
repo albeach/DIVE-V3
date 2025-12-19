@@ -554,4 +554,3 @@ class ComplianceValidationService {
 
 // Export singleton instance
 export const complianceValidationService = new ComplianceValidationService();
-

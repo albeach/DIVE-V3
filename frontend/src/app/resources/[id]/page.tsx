@@ -1050,4 +1050,3 @@ export default function ResourceDetailPage() {
     </PageLayout>
   );
 }
-

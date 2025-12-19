@@ -990,5 +990,3 @@ class PrometheusMetricsService {
 export const prometheusMetrics = new PrometheusMetricsService();
 
 export default PrometheusMetricsService;
-
-

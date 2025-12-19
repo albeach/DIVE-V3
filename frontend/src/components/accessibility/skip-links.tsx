@@ -106,15 +106,3 @@ export function useSkipLinkTarget(id: string) {
 
   return ref;
 }
-
-
-
-
-
-
-
-
-
-
-
-

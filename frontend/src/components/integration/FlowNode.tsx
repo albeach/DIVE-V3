@@ -196,4 +196,3 @@ export function SharedNode({ data, selected }: NodeProps<NodeData>) {
     </div>
   );
 }
-

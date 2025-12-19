@@ -349,4 +349,3 @@ export const clearJWKSCache = (): void => {
     jwksCache.flushAll();
     kasLogger.info('JWKS cache cleared');
 };
-

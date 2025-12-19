@@ -100,5 +100,3 @@ export function removeRecentItem(id: string, type: 'document' | 'policy'): void 
     console.error('Failed to remove recent item:', error);
   }
 }
-
-

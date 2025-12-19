@@ -49,4 +49,3 @@ k6 run \
 
 echo ""
 echo "✅ Load tests complete!"
-

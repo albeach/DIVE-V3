@@ -107,11 +107,3 @@ After cluster creation:
 1. Install ArgoCD (Phase 2)
 2. Deploy DIVE V3 services (Phase 1 - K8s Manifests)
 3. Setup monitoring (Phase 3)
-
-
-
-
-
-
-
-

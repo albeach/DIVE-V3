@@ -381,4 +381,3 @@ describe('XACML Adapter', () => {
         });
     });
 });
-

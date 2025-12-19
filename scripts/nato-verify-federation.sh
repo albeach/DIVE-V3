@@ -346,4 +346,3 @@ echo "    1. Test SSO flow: Open https://localhost:3000 in browser"
 echo "    2. View spoke registry: ./dive hub spokes list"
 echo "    3. Deploy more spokes: ./scripts/nato-batch-deploy.sh <CODES>"
 echo ""
-

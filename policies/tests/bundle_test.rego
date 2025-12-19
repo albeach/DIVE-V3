@@ -268,13 +268,3 @@ token_violation_exists(violations) if {
 	some v in violations
 	v.code == "TOKEN_LIFETIME_TOO_LONG"
 }
-
-
-
-
-
-
-
-
-
-

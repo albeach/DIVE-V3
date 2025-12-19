@@ -305,5 +305,3 @@ KAS_METRICS_PORT=9090
 - ✅ Full audit trail for all operations
 - ✅ FIPS 140-2 Level 2 compliance (with HSM)
 - ✅ ISO 27001 alignment
-
-

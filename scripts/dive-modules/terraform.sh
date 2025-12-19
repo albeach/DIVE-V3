@@ -437,9 +437,3 @@ module_terraform_help() {
     echo "  ./dive tf fmt                       Format all Terraform files"
     echo ""
 }
-
-
-
-
-
-

@@ -137,4 +137,3 @@ embargo_msg(creation_date, current_time) := msg if {
 		remaining,
 	])
 }
-

@@ -277,4 +277,3 @@ export default function PerformanceMetrics({ dateRange, refreshTrigger }: Props)
         </div>
     );
 }
-

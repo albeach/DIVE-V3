@@ -426,4 +426,3 @@ export default {
   useUpdateIdP,
   adminQueryKeys,
 };
-

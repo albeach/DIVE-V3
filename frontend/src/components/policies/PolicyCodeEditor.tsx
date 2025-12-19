@@ -74,5 +74,3 @@ export function PolicyCodeEditor({ source, onSourceChange, lintMessages }: Polic
     </div>
   );
 }
-
-

@@ -107,4 +107,3 @@ function generateMockUsers() {
         { id: '7', username: 'testuser-fra-1', firstName: 'French', lastName: 'User', email: 'user@defense.gouv.fr', enabled: false, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 5, attributes: { clearance: ['CONFIDENTIAL'], countryOfAffiliation: ['FRA'], uniqueID: ['testuser-fra-1-001'] }, realmRoles: ['dive-user'] },
     ];
 }
-

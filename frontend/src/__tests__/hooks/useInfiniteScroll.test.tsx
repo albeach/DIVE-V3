@@ -614,15 +614,3 @@ describe('useInfiniteScroll', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

@@ -365,4 +365,3 @@ describe('Compression Middleware', () => {
         });
     });
 });
-

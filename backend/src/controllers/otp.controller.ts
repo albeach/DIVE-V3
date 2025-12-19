@@ -496,4 +496,3 @@ async function getAdminToken(): Promise<string> {
 
     return response.data.access_token;
 }
-

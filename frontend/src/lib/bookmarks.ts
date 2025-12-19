@@ -153,5 +153,3 @@ export function getBookmarkCount(): number {
 export function canAddBookmark(): boolean {
   return getBookmarkCount() < MAX_BOOKMARKS;
 }
-
-

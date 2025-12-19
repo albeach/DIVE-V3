@@ -1730,5 +1730,3 @@ export const previewThemeHandler = async (
         `);
     }
 };
-
-

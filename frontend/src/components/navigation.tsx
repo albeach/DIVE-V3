@@ -971,4 +971,3 @@ const SignOutIconButton = memo(function SignOutIconButton() {
         </button>
     );
 });
-

@@ -27,5 +27,3 @@ spec:
               value: "France"
             - name: MONGODB_DATABASE
               value: "dive-v3-fra"
-
-

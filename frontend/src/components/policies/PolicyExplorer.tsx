@@ -361,5 +361,3 @@ export default function PolicyExplorer({ policies }: PolicyExplorerProps) {
     </section>
   );
 }
-
-

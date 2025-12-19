@@ -762,4 +762,3 @@ describe('SCIM Utils', () => {
         });
     });
 });
-

@@ -600,15 +600,3 @@ export default {
   EmptyBookmarks,
   FederationUnavailable,
 };
-
-
-
-
-
-
-
-
-
-
-
-

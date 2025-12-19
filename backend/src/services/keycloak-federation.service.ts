@@ -1332,4 +1332,3 @@ export class KeycloakFederationService {
 
 // Singleton instance
 export const keycloakFederationService = new KeycloakFederationService();
-

@@ -340,4 +340,3 @@ class AuditLogService {
 
 // Export singleton instance
 export const auditLogService = new AuditLogService();
-

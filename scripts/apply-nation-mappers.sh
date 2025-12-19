@@ -210,4 +210,3 @@ else
   print_status "$RED" "⚠ Some mappers failed to apply"
   exit 1
 fi
-

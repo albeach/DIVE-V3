@@ -24,6 +24,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
+// Import trusted federation instances from authz middleware
+const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU', 'HUN'];
+
 /**
  * Email domain to country mapping
  * ISO 3166-1 alpha-3 country codes
@@ -228,24 +231,96 @@ export async function enrichmentMiddleware(
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
 
     try {
-        // Get JWT payload from req.user (set by earlier auth middleware)
-        // In DIVE V3, NextAuth passes JWT via Authorization header
-        const authHeader = req.headers.authorization;
+        let payload: any;
 
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            logger.error('enrichment', 'No JWT token in request', { requestId });
-            res.status(401).json({
-                error: 'Unauthorized',
-                message: 'Missing or invalid authorization token'
+        // Check if user is already authenticated (from authenticateJWT middleware)
+        if ((req as any).user) {
+            // User object already exists - use it directly
+            const user = (req as any).user;
+            payload = {
+                uniqueID: user.uniqueID,
+                clearance: user.clearance,
+                countryOfAffiliation: user.countryOfAffiliation,
+                acpCOI: user.acpCOI,
+                email: user.email || `${user.uniqueID}@local.example`
+            };
+
+            logger.debug('enrichment', 'Using existing authenticated user', {
+                requestId,
+                uniqueID: payload.uniqueID,
+                federated: !!user.federated
             });
-            return;
+
+        } else {
+            // Check for federated request from another instance
+            const federatedFrom = req.headers['x-federated-from'] as string;
+
+            if (federatedFrom && TRUSTED_FEDERATION_INSTANCES.includes(federatedFrom)) {
+                // This is a federated request - extract user info from token without full validation
+                const authHeader = req.headers.authorization;
+
+                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                    logger.error('enrichment', 'No JWT token in federated request', { requestId, federatedFrom });
+                    res.status(401).json({
+                        error: 'Unauthorized',
+                        message: 'Missing authorization token in federated request'
+                    });
+                    return;
+                }
+
+                const token = authHeader.substring(7);
+
+                // Decode JWT without verification (trust federated partner)
+                try {
+                    const jose = await import('jose');
+                    const decoded = jose.decodeJwt(token);
+
+                    payload = {
+                        uniqueID: (decoded as any).uniqueID || (decoded as any).preferred_username || decoded.sub || `federated-${federatedFrom}-user`,
+                        clearance: (decoded as any).clearance || 'UNCLASSIFIED',
+                        countryOfAffiliation: (decoded as any).countryOfAffiliation || federatedFrom,
+                        acpCOI: (decoded as any).acpCOI || [],
+                        email: (decoded as any).email || `${(decoded as any).uniqueID || 'user'}@federated.${federatedFrom.toLowerCase()}`
+                    };
+
+                    logger.debug('enrichment', 'Enriching federated request', {
+                        requestId,
+                        federatedFrom,
+                        uniqueID: payload.uniqueID
+                    });
+
+                } catch (decodeError) {
+                    logger.error('enrichment', 'Failed to decode federated JWT', {
+                        requestId,
+                        federatedFrom,
+                        error: decodeError instanceof Error ? decodeError.message : String(decodeError)
+                    });
+                    res.status(400).json({
+                        error: 'Bad Request',
+                        message: 'Invalid JWT in federated request'
+                    });
+                    return;
+                }
+
+            } else {
+                // Standard NextAuth flow - parse JWT token
+                const authHeader = req.headers.authorization;
+
+                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                    logger.error('enrichment', 'No JWT token in request', { requestId });
+                    res.status(401).json({
+                        error: 'Unauthorized',
+                        message: 'Missing or invalid authorization token'
+                    });
+                    return;
+                }
+
+                const token = authHeader.substring(7);
+
+                // Parse JWT without verification (already verified by authenticateJWT)
+                payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+            }
         }
-
-        const token = authHeader.substring(7);
-
-        // Parse JWT without verification (already verified by NextAuth)
-        // We just need the payload for enrichment
-        const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
 
         const originalClaims = {
             uniqueID: payload.uniqueID,
@@ -378,5 +453,3 @@ export async function enrichmentMiddleware(
         });
     }
 }
-
-

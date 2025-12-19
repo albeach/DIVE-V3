@@ -156,4 +156,3 @@ echo "$PROTOCOL_MAPPERS" | jq -r '.[] | select(.name | contains("name")) |
 ' | head -40
 
 log_debug "4" "Complete flow documented" "{}"
-

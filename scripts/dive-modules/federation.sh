@@ -12,6 +12,41 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load federation setup functions for admin token management
+if [ -z "$DIVE_FEDERATION_SETUP_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-setup.sh"
+    export DIVE_FEDERATION_SETUP_LOADED=1
+fi
+
+# =============================================================================
+# ADMIN TOKEN HELPERS
+# =============================================================================
+
+##
+# Get admin token for any instance (hub or spoke)
+# 
+# Arguments:
+#   $1 - Instance code (e.g., usa, alb, bel)
+# 
+# Outputs:
+#   Admin access token on stdout
+# 
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+get_instance_admin_token() {
+    local instance_code="${1:?Instance code required}"
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    
+    if [ "$code_upper" = "USA" ]; then
+        get_hub_admin_token
+    else
+        get_spoke_admin_token "$code_upper"
+    fi
+}
+
 # =============================================================================
 # FEDERATION COMMANDS
 # =============================================================================
@@ -138,10 +173,17 @@ federation_link() {
     local api_endpoint="${local_backend_url}/api/federation/link-idp"
     log_info "Calling: ${api_endpoint}"
     
+    # Get admin token for local instance
+    local admin_token
+    if ! admin_token=$(get_instance_admin_token "${local_code}"); then
+        log_error "Failed to get admin token for ${local_code}"
+        return 1
+    fi
+
     local response
     response=$(curl -sk -X POST "${api_endpoint}" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer admin-token" \
+        -H "Authorization: Bearer ${admin_token}" \
         -d "{
             \"localInstanceCode\": \"${local_code}\",
             \"remoteInstanceCode\": \"${remote_code}\",
@@ -162,10 +204,16 @@ federation_link() {
     
     api_endpoint="${remote_backend_url}/api/federation/link-idp"
     log_info "Calling: ${api_endpoint}"
-    
+
+    # Get admin token for remote instance
+    if ! admin_token=$(get_instance_admin_token "${remote_code}"); then
+        log_error "Failed to get admin token for ${remote_code}"
+        return 1
+    fi
+
     response=$(curl -sk -X POST "${api_endpoint}" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer admin-token" \
+        -H "Authorization: Bearer ${admin_token}" \
         -d "{
             \"localInstanceCode\": \"${remote_code}\",
             \"remoteInstanceCode\": \"${local_code}\",
@@ -215,9 +263,16 @@ federation_unlink() {
     # Call backend API to delete IdP
     local backend_url="${BACKEND_URL:-https://localhost:4000}"
     local api_endpoint="${backend_url}/api/federation/unlink-idp/${idp_alias}"
-    
+
+    # Get admin token for local instance (assuming USA/hub)
+    local admin_token
+    if ! admin_token=$(get_hub_admin_token); then
+        log_error "Failed to get admin token for hub"
+        return 1
+    fi
+
     response=$(curl -sk -X DELETE "${api_endpoint}" \
-        -H "Authorization: Bearer admin-token" 2>&1)
+        -H "Authorization: Bearer ${admin_token}" 2>&1)
     
     if echo "$response" | grep -q '"success":true'; then
         log_success "IdP unlinked successfully"
@@ -859,6 +914,36 @@ hub_bootstrap() {
 }
 
 # =============================================================================
+# FEDERATION REGISTRY - Add spoke to federation-registry.json
+# =============================================================================
+
+federation_register_spoke() {
+    local instance_code="${1:-}"
+    
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive federation register-spoke <CODE>"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive federation register-spoke HUN"
+        echo "  ./dive federation register-spoke POL"
+        return 1
+    fi
+    
+    local code_upper="${instance_code^^}"
+    local register_script="${DIVE_ROOT}/scripts/spoke-init/register-spoke-federation.sh"
+    
+    if [ ! -f "$register_script" ]; then
+        log_error "Federation registration script not found: $register_script"
+        return 1
+    fi
+    
+    log_info "Registering ${code_upper} in federation registry..."
+    bash "$register_script" "$code_upper"
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -869,6 +954,7 @@ module_federation() {
     case "$action" in
         status)        federation_status ;;
         register)      federation_register "$@" ;;
+        register-spoke) federation_register_spoke "$@" ;;
         sync-policies) federation_sync_policies ;;
         sync-idps)     federation_sync_idps ;;
         push-audit)    federation_push_audit ;;
@@ -912,6 +998,7 @@ module_federation_help() {
     echo ""
     echo "  ${CYAN}status${NC}               Show federation status"
     echo "  ${CYAN}register${NC} <url>       Register instance with hub"
+    echo "  ${CYAN}register-spoke${NC} <CODE> Add spoke to federation registry (federated search)"
     echo "  ${CYAN}sync-policies${NC}        Pull latest policies from hub"
     echo "  ${CYAN}sync-idps${NC}            Sync IdP metadata from hub"
     echo "  ${CYAN}push-audit${NC}           Push audit logs to hub"
@@ -930,6 +1017,7 @@ module_federation_help() {
     echo "  ./dive federation link GBR                       # Link GBR to USA Hub"
     echo "  ./dive --instance gbr federation link USA        # Link USA to GBR Spoke"
     echo "  ./dive federation list-idps                      # Show all IdPs"
+    echo "  ./dive federation register-spoke HUN             # Enable HUN federated search"
     echo ""
     echo "  ./dive federation mappers list                   # List all NATO nations"
     echo "  ./dive federation mappers show france            # Show France details"
@@ -945,6 +1033,3 @@ module_hub_help() {
     echo "  push-policy   Push policy update to all instances"
     echo "  bootstrap     Local/pilot hub bootstrap (certs, compose up, terraform, NextAuth DB)"
 }
-
-
-

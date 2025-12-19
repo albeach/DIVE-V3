@@ -797,4 +797,3 @@ class SpokeMetricsService extends EventEmitter {
 export const spokeMetrics = new SpokeMetricsService();
 
 export default SpokeMetricsService;
-

@@ -993,4 +993,3 @@ class SpokeTokenExchangeService extends EventEmitter {
 export const spokeTokenExchange = new SpokeTokenExchangeService();
 
 export default SpokeTokenExchangeService;
-

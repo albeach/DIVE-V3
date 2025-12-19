@@ -392,4 +392,3 @@ describe('Bundle Content', () => {
     expect(result.hash).toMatch(/^[a-f0-9]{64}$/);
   });
 });
-

@@ -44,18 +44,3 @@ If you have scripts referencing `instances/*/docker-compose.yml`, update them to
 
 **Deprecated Date:** 2025-11-30
 **Reason:** Security audit - hardcoded secrets, replaced by root-level files
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

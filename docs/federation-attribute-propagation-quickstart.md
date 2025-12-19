@@ -475,4 +475,3 @@ derived_coi := cois if {
 - ✅ Testing verified: 3 out of 4 attributes working
 
 **Next:** Implement acpCOI custom mapper (follow-up task)
-

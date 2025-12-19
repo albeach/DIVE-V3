@@ -254,4 +254,3 @@ export function FederationPanel() {
     </div>
   );
 }
-

@@ -349,6 +349,3 @@ else
     echo -e "${RED}❌ $TESTS_FAILED test(s) failed${NC}"
     exit 1
 fi
-
-
-

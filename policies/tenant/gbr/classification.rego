@@ -279,16 +279,3 @@ insufficient_clearance_msg(user_clearance, resource_classification) := msg if {
 # ============================================
 
 all_classifications := {c | classification_rank[c]}
-
-
-
-
-
-
-
-
-
-
-
-
-

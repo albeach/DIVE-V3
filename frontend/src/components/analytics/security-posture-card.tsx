@@ -209,4 +209,3 @@ export default function SecurityPostureCard({ data }: Props) {
         </div>
     );
 }
-

@@ -489,6 +489,3 @@ module_deploy_help() {
     echo "  ./dive rollback               # Restore from latest checkpoint"
     echo "  ./dive rollback 20251218_120000  # Restore specific checkpoint"
 }
-
-
-

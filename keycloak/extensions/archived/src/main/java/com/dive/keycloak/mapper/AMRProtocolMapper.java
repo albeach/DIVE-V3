@@ -128,14 +128,3 @@ public class AMRProtocolMapper extends AbstractOIDCProtocolMapper
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-

@@ -336,10 +336,3 @@ All files located in: `/home/mike/Desktop/DIVE-V3/DIVE-V3/backend/output/extract
 **Database:** MongoDB `dive-v3` database, `resources` collection  
 **Total Runtime:** ~2 seconds  
 **Status:** ✅ Complete
-
-
-
-
-
-
-

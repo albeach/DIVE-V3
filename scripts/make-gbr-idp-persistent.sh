@@ -188,4 +188,3 @@ echo "  2. Verify IdP appears: curl -sk https://localhost:8443/admin/realms/dive
 
 # Cleanup
 rm -f /tmp/gbr-idp-full.json /tmp/gbr-idp-mappers.json /tmp/realm-updated.json
-

@@ -96,4 +96,3 @@ spec:
         - name: policies-tar
           configMap:
             name: opa-policies
-

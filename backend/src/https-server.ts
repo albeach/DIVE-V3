@@ -41,4 +41,3 @@ process.on('SIGTERM', () => {
 });
 
 export { server };
-

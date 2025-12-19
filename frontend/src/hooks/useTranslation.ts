@@ -118,4 +118,3 @@ export function useAuthTranslation() {
 export function useAdminTranslation() {
     return useTranslation('admin');
 }
-

@@ -294,6 +294,3 @@ describe('ResultsComparator', () => {
     expect(screen.getByText('📄')).toBeInTheDocument();
   });
 });
-
-
-

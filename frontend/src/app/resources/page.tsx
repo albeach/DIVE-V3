@@ -35,6 +35,8 @@ import {
   MobileResourceDrawer,
 } from '@/components/resources';
 
+import { SmartFederationSelector } from '@/components/ui/smart-federation-selector';
+
 import type { IResourceCardData, ViewMode } from '@/components/resources/advanced-resource-card';
 
 import { 
@@ -125,10 +127,10 @@ export default function ResourcesPage() {
 
   // Infinite Scroll - only enabled when session is authenticated
   const isSessionReady = status === 'authenticated';
-  
+
   const {
     items: resources,
-    facets,
+    facets: apiFacets,
     isLoading,
     isLoadingMore,
     error,
@@ -154,6 +156,53 @@ export default function ResourcesPage() {
     // KEY FIX: Only enable fetching when session is authenticated
     enabled: isSessionReady,
   });
+
+  // CRITICAL FIX: Always calculate facets from currently loaded resources
+  // This ensures facets reflect the actual displayed data
+  const facets = useMemo(() => {
+    const facetCounts = {
+      classifications: {} as Record<string, number>,
+      countries: {} as Record<string, number>,
+      cois: {} as Record<string, number>,
+      encryptionStatus: {} as Record<string, number>,
+    };
+
+    // Count facets from currently loaded resources (these are already filtered by API)
+    resources.forEach(resource => {
+      // Classification facet
+      if (resource.classification) {
+        facetCounts.classifications[resource.classification] =
+          (facetCounts.classifications[resource.classification] || 0) + 1;
+      }
+
+      // Releasable To facet (countries)
+      if (resource.releasabilityTo && Array.isArray(resource.releasabilityTo)) {
+        resource.releasabilityTo.forEach(country => {
+          facetCounts.countries[country] = (facetCounts.countries[country] || 0) + 1;
+        });
+      }
+
+      // Communities of Interest facet
+      if (resource.COI && Array.isArray(resource.COI)) {
+        resource.COI.forEach(coi => {
+          facetCounts.cois[coi] = (facetCounts.cois[coi] || 0) + 1;
+        });
+      }
+
+      // Encryption status facet
+      const encryptionStatus = resource.encrypted ? 'encrypted' : 'unencrypted';
+      facetCounts.encryptionStatus[encryptionStatus] =
+        (facetCounts.encryptionStatus[encryptionStatus] || 0) + 1;
+    });
+
+    // Convert to the expected facet format
+    return {
+      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count })),
+      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count })),
+      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count })),
+      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count })),
+    };
+  }, [resources]);
 
   // Keyboard Navigation
   const [navState, navActions] = useKeyboardNavigation({
@@ -251,8 +300,20 @@ export default function ResourcesPage() {
     const newMode = !federatedMode;
     setFederatedMode(newMode);
     try { localStorage.setItem(FEDERATED_MODE_KEY, String(newMode)); } catch (e) {}
-    setFilters({ ...filters, instances: newMode ? selectedInstances : undefined });
-  }, [federatedMode, selectedInstances, filters, setFilters]);
+    
+    // When enabling federated mode, auto-include user's home country
+    // This ensures a HUN user sees HUN resources when federated mode is activated
+    let instancesToUse = selectedInstances;
+    if (newMode && session?.user?.countryOfAffiliation) {
+      const userCountry = session.user.countryOfAffiliation;
+      if (!selectedInstances.includes(userCountry)) {
+        instancesToUse = [...selectedInstances, userCountry];
+        setSelectedInstances(instancesToUse);
+      }
+    }
+    
+    setFilters({ ...filters, instances: newMode ? instancesToUse : undefined });
+  }, [federatedMode, selectedInstances, filters, setFilters, session?.user?.countryOfAffiliation]);
 
   const handleInstanceToggle = useCallback((instance: string) => {
     setSelectedInstances(prev => {
@@ -264,6 +325,20 @@ export default function ResourcesPage() {
       return newInstances;
     });
   }, [federatedMode, filters, setFilters]);
+
+  const handleFederationInstancesChange = useCallback((newInstances: string[]) => {
+    setSelectedInstances(newInstances);
+    // Also update selectedFilters to keep UI state in sync
+    setSelectedFilters(prev => ({
+      ...prev,
+      instances: newInstances
+    }));
+    if (federatedMode) {
+      setFilters({ ...filters, instances: newInstances.length > 0 ? newInstances : undefined });
+      // KEY FIX: Refresh data when federation instances change to recalculate facets
+      refresh();
+    }
+  }, [federatedMode, filters, setFilters, refresh]);
 
   const handleFilterChange = useCallback((newFilters: ISelectedFilters) => {
     setSelectedFilters(newFilters);
@@ -427,45 +502,28 @@ export default function ResourcesPage() {
           {/* Divider */}
           <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
 
-          {/* Instance Pills - Enhanced visibility */}
-          <div className="flex items-center gap-1.5">
-            {isLoadingIdPs ? (
-              <div className="flex items-center gap-1.5">
-                <div className="w-12 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
-                <div className="w-12 h-8 bg-gray-200 dark:bg-gray-700 rounded-lg animate-pulse" />
-              </div>
-            ) : (
-              federationInstances.map((instance) => {
-                const isSelected = selectedInstances.includes(instance);
-                const isCurrentInstance = instance === CURRENT_INSTANCE;
-                return (
-                  <button
-                    key={instance}
-                    onClick={() => handleInstanceToggle(instance)}
-                    disabled={!federatedMode && !isCurrentInstance}
-                    className={`relative px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-all duration-200 ${
-                      isSelected
-                        ? isCurrentInstance
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
-                          : 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30'
-                        : federatedMode
-                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300'
-                          : 'bg-gray-50 dark:bg-gray-800/50 text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                    }`}
-                    title={isCurrentInstance ? 'Current instance (always included)' : federatedMode ? 'Click to toggle' : 'Enable Federation mode to include'}
-                  >
-                    {instance}
-                    {isCurrentInstance && isSelected && (
-                      <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
+          {/* Smart Federation Instance Selector - 2025 Modern UX */}
+          {isLoadingIdPs ? (
+            <div className="flex items-center gap-1.5">
+              <div className="w-16 h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+              <div className="w-16 h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+              <div className="w-16 h-8 bg-gray-200 dark:bg-gray-700 rounded-full animate-pulse" />
+            </div>
+          ) : (
+            <SmartFederationSelector
+              instances={federationInstances}
+              selectedInstances={selectedInstances}
+              onSelectionChange={handleFederationInstancesChange}
+              disabled={!federatedMode}
+              maxPrimaryChips={federationInstances.length <= 6 ? federationInstances.length : 4}
+              showCounts={true}
+              instanceCounts={facets?.instances?.reduce((acc, instance) => ({
+                ...acc,
+                [instance.value]: instance.count
+              }), {}) || {}}
+              userCountry={session.user?.countryOfAffiliation}
+            />
+          )}
         </div>
 
         {/* Actions */}
@@ -510,21 +568,17 @@ export default function ResourcesPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Desktop Filters Sidebar */}
         <div className="hidden lg:block lg:col-span-3">
-          <div className="sticky top-4">
+          <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden">
             <FacetedFilters
               facets={{
-                classifications: CLASSIFICATION_OPTIONS.map(o => ({ 
-                  value: o.value, 
-                  label: o.label, 
-                  count: facets?.classifications?.find(c => c.value === o.value)?.count || 0 
+                classifications: CLASSIFICATION_OPTIONS.map(o => ({
+                  value: o.value,
+                  label: o.label,
+                  count: facets?.classifications?.find(c => c.value === o.value)?.count || 0
                 })),
                 countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
                 cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
-                instances: federationInstances.map(i => ({ 
-                  value: i, 
-                  label: i, 
-                  count: facets?.instances?.find(f => f.value === i)?.count || 0 
-                })),
+                // Removed instances from sidebar - handled by horizontal selector above
                 encryptionStatus: facets?.encryptionStatus?.map(e => ({
                   value: e.value,
                   label: e.value === 'encrypted' ? 'Encrypted (ZTDF)' : 'Unencrypted',
@@ -544,6 +598,12 @@ export default function ResourcesPage() {
                 country: session.user?.countryOfAffiliation,
                 coi: session.user?.acpCOI,
               }}
+              hasApproximateCounts={
+                facets?.classifications?.some(f => f.approximate) ||
+                facets?.countries?.some(f => f.approximate) ||
+                facets?.cois?.some(f => f.approximate) ||
+                facets?.encryptionStatus?.some(f => f.approximate)
+              }
             />
           </div>
         </div>
@@ -668,11 +728,7 @@ export default function ResourcesPage() {
           })),
           countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
           cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
-          instances: federationInstances.map(i => ({ 
-            value: i, 
-            label: i, 
-            count: facets?.instances?.find(f => f.value === i)?.count || 0 
-          })),
+          // Removed instances from sidebar - handled by horizontal selector above
           encryptionStatus: facets?.encryptionStatus?.map(e => ({
             value: e.value,
             label: e.value === 'encrypted' ? 'Encrypted' : 'Unencrypted',

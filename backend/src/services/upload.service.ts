@@ -437,4 +437,3 @@ export function sanitizeFilename(filename: string): string {
         .replace(/_{2,}/g, '_')            // Replace multiple underscores with single
         .substring(0, 100);                // Limit length
 }
-

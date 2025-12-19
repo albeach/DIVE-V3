@@ -532,4 +532,3 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
         </div>
     );
 }
-

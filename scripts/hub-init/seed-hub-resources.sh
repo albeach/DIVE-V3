@@ -127,4 +127,3 @@ log_success "Resources seeded"
 echo ""
 log_success "Hub resource seeding complete!"
 echo ""
-

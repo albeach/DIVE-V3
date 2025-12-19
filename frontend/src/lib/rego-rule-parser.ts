@@ -337,4 +337,3 @@ export function groupRulesByCategory(rules: IPolicyRule[]): IRuleCategory[] {
         return a.name.localeCompare(b.name);
     });
 }
-

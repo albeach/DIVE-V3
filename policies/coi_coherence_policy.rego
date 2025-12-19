@@ -285,4 +285,3 @@ permit_decision := {
 	"reason": "All COI coherence checks passed",
 	"coiOperator": input.resource.coiOperator,
 } if allow
-

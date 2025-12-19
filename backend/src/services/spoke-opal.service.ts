@@ -577,4 +577,3 @@ class SpokeOPALService extends EventEmitter {
 export const spokeOPAL = new SpokeOPALService();
 
 export default SpokeOPALService;
-

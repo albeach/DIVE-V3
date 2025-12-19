@@ -333,4 +333,3 @@ class OIDCDiscoveryService {
 
 // Export singleton instance
 export const oidcDiscoveryService = new OIDCDiscoveryService();
-

@@ -502,4 +502,3 @@ test_northcom_coi_members if {
 	"CAN" in coi_validation.coi_members["NORTHCOM"]
 	"MEX" in coi_validation.coi_members["NORTHCOM"]
 }
-

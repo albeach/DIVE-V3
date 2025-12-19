@@ -161,6 +161,12 @@
       "name": "PRT Keycloak (Local Dev)",
       "country": "PRT",
       "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8456/realms/dive-v3-broker-hun": {
+      "tenant": "HUN",
+      "name": "HUN Keycloak (Local Dev)",
+      "country": "HUN",
+      "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {
@@ -172,6 +178,7 @@
       "EST",
       "FRA",
       "GBR",
+      "HUN",
       "NOR",
       "POL",
       "PRT",
@@ -277,6 +284,12 @@
       "USA"
     ],
     "PRT": [
+      "DEU",
+      "FRA",
+      "GBR",
+      "USA"
+    ],
+    "HUN": [
       "DEU",
       "FRA",
       "GBR",
@@ -613,6 +626,18 @@
     "PRT": {
       "code": "PRT",
       "name": "PRT",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "HUN": {
+      "code": "HUN",
+      "name": "HUN",
       "locale": "en-US",
       "mfa_required_above": "UNCLASSIFIED",
       "max_session_hours": 8,

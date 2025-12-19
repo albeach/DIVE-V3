@@ -59,4 +59,3 @@ public class ConfigureOTPRequiredActionFactory implements RequiredActionFactory 
         // No cleanup needed
     }
 }
-

@@ -625,4 +625,3 @@ function ConfirmationDialog({
     </>
   );
 }
-

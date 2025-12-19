@@ -322,4 +322,3 @@ decision_reason := violation_message if {
 		is_coi_violation,
 	])
 }
-

@@ -18,14 +18,3 @@ data:
   keycloak_url: "https://auth.dive25.com"
   keycloak_realm: "dive-v3-broker"
   keycloak_client_id: "dive-v3-client-broker"
-
-
-
-
-
-
-
-
-
-
-

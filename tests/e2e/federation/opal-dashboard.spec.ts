@@ -409,4 +409,3 @@ test.describe('OPAL Dashboard UI Tests', () => {
     await expect(page.getByText('Auto-refresh 10s')).toBeVisible({ timeout: 10000 });
   });
 });
-

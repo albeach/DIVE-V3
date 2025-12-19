@@ -518,4 +518,3 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
         </div>
     );
 }
-

@@ -1361,4 +1361,3 @@ export default function NewIdPWizard() {
         </PageLayout>
     );
 }
-

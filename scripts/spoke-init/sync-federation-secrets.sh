@@ -224,4 +224,3 @@ echo ""
 echo "You can now authenticate:"
 echo "  • Hub → ${CODE_UPPER}: Go to https://localhost:3000, click ${CODE_UPPER}"
 echo "  • ${CODE_UPPER} → Hub: Go to spoke frontend, click USA"
-

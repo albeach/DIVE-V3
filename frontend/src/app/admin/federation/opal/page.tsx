@@ -376,4 +376,3 @@ export default function OPALDashboardPage() {
     </PageLayout>
   );
 }
-

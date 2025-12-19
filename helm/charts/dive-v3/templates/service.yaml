@@ -92,4 +92,3 @@ spec:
     app: opa
     {{- include "dive-v3.selectorLabels" . | nindent 4 }}
 {{- end }}
-

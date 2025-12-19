@@ -70,9 +70,3 @@ public class DirectGrantOTPSimpleAuthenticatorFactory implements AuthenticatorFa
         return PROVIDER_ID;
     }
 }
-
-
-
-
-
-

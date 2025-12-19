@@ -361,4 +361,3 @@ export function OPALServerHealth({
 }
 
 export default OPALServerHealth;
-

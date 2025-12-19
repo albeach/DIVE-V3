@@ -478,4 +478,3 @@ describe('Spoke Registration E2E Flow', () => {
         });
     });
 });
-

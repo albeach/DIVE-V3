@@ -514,6 +514,3 @@ cat backend/src/services/token-blacklist.service.ts
 **Document Version:** 1.0.0  
 **Created:** December 16, 2025  
 **Based on:** DIVE V3 Federation Integration Session
-
-
-

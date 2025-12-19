@@ -1739,7 +1739,7 @@ register_spoke_in_hub() {
     
     # Parse ports from docker-compose.yml
     eval "$(_get_spoke_ports_fed "$spoke")"
-    local kc_port="${SPOKE_KEYCLOAK_PORT:-8443}"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
     
     echo "  Spoke Ports:"
@@ -1800,17 +1800,50 @@ register_spoke_in_hub() {
         fi
     fi
     
-    # Get client UUID and secret
-    local client_uuid
-    client_uuid=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
+    # Get Hub client UUID (for reverse federation: spoke → hub)
+    local hub_client_uuid
+    hub_client_uuid=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
         -r "$HUB_REALM" -q "clientId=${spoke_client}" --fields id 2>/dev/null | jq -r '.[0].id')
     
-    local client_secret
-    client_secret=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
-        "clients/${client_uuid}/client-secret" -r "$HUB_REALM" 2>/dev/null | jq -r '.value')
+    local hub_client_secret
+    hub_client_secret=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
+        "clients/${hub_client_uuid}/client-secret" -r "$HUB_REALM" 2>/dev/null | jq -r '.value')
     
-    echo "        Client UUID: ${client_uuid}"
-    echo "        Client Secret: ${client_secret:0:8}..."
+    echo "        Client UUID: ${hub_client_uuid}"
+    echo "        Client Secret: ${hub_client_secret:0:8}..."
+    
+    # Get SPOKE client secret (for forward federation: hub → spoke)
+    # The Hub IdP needs the Spoke's client credentials to authenticate
+    local spoke_keycloak_container="${spoke_lower}-keycloak-${spoke_lower}-1"
+    local spoke_admin_pass=""
+    if [ -f "${spoke_dir}/.env" ]; then
+        spoke_admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD" "${spoke_dir}/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    spoke_admin_pass="${spoke_admin_pass:-admin}"
+    
+    # Get spoke client secret via curl (more reliable than kcadm across containers)
+    local spoke_token
+    spoke_token=$(docker exec "${spoke_lower}-backend-${spoke_lower}-1" curl -sk \
+        -X POST "http://keycloak-${spoke_lower}:8080/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" -d "client_id=admin-cli" -d "username=admin" \
+        -d "password=${spoke_admin_pass}" 2>/dev/null | jq -r '.access_token')
+    
+    local spoke_client_uuid
+    spoke_client_uuid=$(docker exec "${spoke_lower}-backend-${spoke_lower}-1" curl -sk \
+        "http://keycloak-${spoke_lower}:8080/admin/realms/${spoke_realm}/clients?clientId=${spoke_client}" \
+        -H "Authorization: Bearer ${spoke_token}" 2>/dev/null | jq -r '.[0].id')
+    
+    local client_secret
+    client_secret=$(docker exec "${spoke_lower}-backend-${spoke_lower}-1" curl -sk \
+        "http://keycloak-${spoke_lower}:8080/admin/realms/${spoke_realm}/clients/${spoke_client_uuid}/client-secret" \
+        -H "Authorization: Bearer ${spoke_token}" 2>/dev/null | jq -r '.value')
+    
+    if [ -z "$client_secret" ] || [ "$client_secret" = "null" ]; then
+        log_warn "Could not get spoke client secret, using hub client secret as fallback"
+        client_secret="$hub_client_secret"
+    else
+        echo "        Spoke Client Secret: ${client_secret:0:8}..."
+    fi
     
     # Step 3: Create or verify IdP in Hub
     echo -e "  ${BOLD}[3/7] Creating IdP in Hub: ${spoke_idp}...${NC}"
@@ -1864,36 +1897,84 @@ register_spoke_in_hub() {
     # Step 4: Create IdP mappers for DIVE attributes
     echo -e "  ${BOLD}[4/7] Creating IdP mappers for DIVE attributes...${NC}"
     
-    local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
+    local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI" "amr")
     local mapper_count=0
+    local existing_count=0
+    
+    # Use curl via backend container for more reliable API access
+    local hub_admin_token
+    hub_admin_token=$(docker exec "$HUB_BACKEND_CONTAINER" curl -sk \
+        -X POST "http://dive-hub-keycloak:8080/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" -d "client_id=admin-cli" -d "username=admin" \
+        -d "password=${hub_pass}" 2>/dev/null | jq -r '.access_token')
+    
+    if [ -z "$hub_admin_token" ] || [ "$hub_admin_token" = "null" ]; then
+        log_warn "Could not get Hub admin token for mapper creation"
+        # Fall back to kcadm approach
+        hub_admin_token=""
+    fi
     
     for mapper in "${mappers[@]}"; do
         # Check if mapper exists
         local existing_mapper
-        existing_mapper=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
-            "identity-provider/instances/${spoke_idp}/mappers" -r "$HUB_REALM" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty")
+        if [ -n "$hub_admin_token" ]; then
+            existing_mapper=$(docker exec "$HUB_BACKEND_CONTAINER" curl -sk \
+                "http://dive-hub-keycloak:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${spoke_idp}/mappers" \
+                -H "Authorization: Bearer ${hub_admin_token}" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty")
+        else
+            existing_mapper=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
+                "identity-provider/instances/${spoke_idp}/mappers" -r "$HUB_REALM" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty")
+        fi
         
         if [ -n "$existing_mapper" ]; then
+            existing_count=$((existing_count + 1))
             continue
         fi
         
-        # Create mapper
-        if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create \
-            "identity-provider/instances/${spoke_idp}/mappers" -r "$HUB_REALM" \
-            -s "name=${mapper}" \
-            -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
-            -s "identityProviderAlias=${spoke_idp}" \
-            -s "config.syncMode=FORCE" \
-            -s "config.claim=${mapper}" \
-            -s "config.user.attribute=${mapper}" 2>/dev/null; then
-            mapper_count=$((mapper_count + 1))
+        # Create mapper using curl (more reliable)
+        local mapper_json="{
+            \"name\": \"${mapper}\",
+            \"identityProviderMapper\": \"oidc-user-attribute-idp-mapper\",
+            \"identityProviderAlias\": \"${spoke_idp}\",
+            \"config\": {
+                \"syncMode\": \"FORCE\",
+                \"claim\": \"${mapper}\",
+                \"user.attribute\": \"${mapper}\"
+            }
+        }"
+        
+        local create_result
+        if [ -n "$hub_admin_token" ]; then
+            create_result=$(docker exec "$HUB_BACKEND_CONTAINER" curl -sk -o /dev/null -w "%{http_code}" \
+                -X POST "http://dive-hub-keycloak:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${spoke_idp}/mappers" \
+                -H "Authorization: Bearer ${hub_admin_token}" \
+                -H "Content-Type: application/json" \
+                -d "$mapper_json" 2>/dev/null)
+            if [ "$create_result" = "201" ]; then
+                mapper_count=$((mapper_count + 1))
+            fi
+        else
+            if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create \
+                "identity-provider/instances/${spoke_idp}/mappers" -r "$HUB_REALM" \
+                -s "name=${mapper}" \
+                -s "identityProviderMapper=oidc-user-attribute-idp-mapper" \
+                -s "identityProviderAlias=${spoke_idp}" \
+                -s "config.syncMode=FORCE" \
+                -s "config.claim=${mapper}" \
+                -s "config.user.attribute=${mapper}" 2>/dev/null; then
+                mapper_count=$((mapper_count + 1))
+            fi
         fi
     done
     
     if [ "$mapper_count" -gt 0 ]; then
         log_success "Created ${mapper_count} IdP mappers"
-    else
-        log_info "All IdP mappers already exist"
+    fi
+    if [ "$existing_count" -gt 0 ]; then
+        log_info "${existing_count} IdP mappers already exist"
+    fi
+    if [ "$mapper_count" -eq 0 ] && [ "$existing_count" -eq 0 ]; then
+        log_warn "No IdP mappers created - check IdP exists"
     fi
     
     # Step 5: Update spoke's client for bidirectional federation
@@ -2155,4 +2236,3 @@ module_federation_setup_help() {
     echo "  4. ./dive federation-setup verify <code>        # Verify setup"
     echo ""
 }
-

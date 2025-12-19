@@ -64,4 +64,3 @@ describe("ZTDFViewer", () => {
     expect(screen.getByText(/KAO 3/i)).toBeInTheDocument();
   });
 });
-

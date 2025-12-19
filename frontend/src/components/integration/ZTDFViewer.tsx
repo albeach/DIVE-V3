@@ -329,4 +329,3 @@ function DataRow({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

@@ -108,4 +108,3 @@ GBR_PID=$!
 trap "kill $USA_PID $GBR_PID 2>/dev/null; exit" INT TERM
 
 wait
-

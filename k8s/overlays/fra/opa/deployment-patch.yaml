@@ -16,14 +16,3 @@ spec:
       labels:
         app: opa-fra
         app.kubernetes.io/instance: fra
-
-
-
-
-
-
-
-
-
-
-

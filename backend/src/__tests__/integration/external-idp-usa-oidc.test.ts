@@ -357,4 +357,3 @@ describe('External IdP Integration - USA OIDC Live Tests', () => {
         expect(userinfo.email || userinfo.preferred_username).toBe(USERNAME);
     }, 30000);
 });
-

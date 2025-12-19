@@ -584,4 +584,3 @@ test_v1_check_authentication_strength_sufficient if {
 	}
 	result == true
 }
-
