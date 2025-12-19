@@ -1,8 +1,8 @@
 # DIVE V3 CLI Gap Analysis
 
-**Generated**: December 18, 2025  
-**Updated**: December 18, 2025 (Phase 3 Complete)  
-**Reference**: DIVE-V3-CLI-USER-GUIDE.md  
+**Generated**: December 18, 2025
+**Updated**: December 19, 2025 (Phase 3 Complete)
+**Reference**: DIVE-V3-CLI-USER-GUIDE.md
 **Scope**: Documented behavior vs actual implementation
 
 ---
@@ -11,12 +11,25 @@
 
 This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against the actual codebase implementation. We identified **18 gaps** across 5 categories:
 
-- **3 Blockers** - Prevent one-command deployment ✅ **2 RESOLVED**
-- **5 High severity** - Require manual intervention ✅ **4 RESOLVED**
-- **6 Medium severity** - Reduce reliability ✅ **1 RESOLVED**
-- **4 Low severity** - Quality of life improvements ✅ **1 RESOLVED**
+- **3 Blockers** - Prevent one-command deployment ✅ **ALL RESOLVED**
+- **5 High severity** - Require manual intervention ✅ **ALL RESOLVED**
+- **6 Medium severity** - Reduce reliability ✅ **6 RESOLVED**
+- **4 Low severity** - Quality of life improvements ✅ **3 RESOLVED**
 
-**Phase 1 Status**: 8 of 18 gaps resolved (44%)
+**Phase 3 Status**: 17 of 18 gaps resolved (94%)
+
+---
+
+## Reference Documentation
+
+| Document | Path | Description |
+|----------|------|-------------|
+| **AUDIT** | `docs/AUDIT.md` | Security audit and compliance requirements |
+| **GAP_ANALYSIS** | `docs/GAP_ANALYSIS.md` | Gap analysis with outstanding items (this document) |
+| **TARGET_ARCHITECTURE** | `docs/TARGET_ARCHITECTURE.md` | Target system architecture |
+| **IMPLEMENTATION_PLAN** | `docs/IMPLEMENTATION_PLAN.md` | Phased implementation plan |
+| **BACKLOG** | `docs/BACKLOG.md` | Detailed backlog items (DIVE-0xx tasks) |
+| **CI_CD_PLAN** | `docs/CI_CD_PLAN.md` | CI/CD pipeline configuration |
 
 ---
 
@@ -36,7 +49,87 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 | GAP-013 | Added `--json` flag to `cmd_health()` in `status.sh` | `./dive health --json | jq .` returns valid JSON ✅ |
 | GAP-018 | Completed dry-run implementation for `cmd_deploy()` | `./dive --dry-run deploy` shows full plan ✅ |
 
-### New Files Created
+---
+
+## Phase 2 Resolution Summary (December 19, 2025)
+
+### Resolved Gaps
+
+| Gap ID | Resolution | Verification |
+|--------|------------|--------------|
+| GAP-001 | Created `scripts/spoke-init/apply-user-profile.sh` for locale templates | `./scripts/spoke-init/apply-user-profile.sh FRA` ✅ |
+| GAP-004 | Verified auto-load spoke secrets via `load_gcp_secrets()` | Spoke lifecycle calls secrets automatically ✅ |
+| GAP-014 | Created `scripts/hub-init/` with 4 seed scripts | Directory exists with seed-hub-users.sh, seed-hub-resources.sh ✅ |
+| GAP-015 | Added health aggregation in `cmd_health()` | `./dive health` shows aggregate status ✅ |
+| GAP-016 | Extracted timeouts to environment variables | `KEYCLOAK_WAIT_TIMEOUT`, etc. configurable ✅ |
+| GAP-017 | Added semantic versioning in `dive-deploy.yml` | Images tagged with git SHA and version ✅ |
+
+---
+
+## Phase 3 Resolution Summary (December 19, 2025)
+
+### Resolved Gaps
+
+| Gap ID | Resolution | Verification |
+|--------|------------|--------------|
+| GAP-009 | Created `pilot deploy` with Terraform VM provisioning | `./dive --env gcp pilot deploy --provision` ✅ |
+| GAP-010 | Configured GCS backend for Terraform state | `terraform/pilot/backend.tf` uses `dive25-tfstate` ✅ |
+
+### Phase 3 Files Created/Modified
+
+- `terraform/pilot/backend.tf` - GCS backend configuration
+- `terraform/spoke/backend.tf` - GCS backend configuration  
+- `terraform/modules/compute-vm/main.tf` - VM provisioning module
+- `terraform/modules/compute-vm/variables.tf` - Module variables
+- `terraform/modules/compute-vm/outputs.tf` - Module outputs
+- `terraform/modules/compute-vm/startup-script.sh` - Docker installation script
+- `scripts/dive-modules/pilot.sh` - Enhanced with VM provisioning, --json health, destroy
+- `tests/gcp/phase3-pilot.sh` - 10 Phase 3 tests
+
+### New CLI Commands (Phase 3)
+
+```bash
+# VM Provisioning
+./dive --env gcp pilot deploy              # Full deployment (provisions if needed)
+./dive --env gcp pilot deploy --provision  # Force VM re-provisioning
+./dive --env gcp pilot provision           # Provision VM only
+./dive --env gcp pilot destroy             # Destroy VM (requires confirmation)
+
+# Health with JSON output
+./dive --env gcp pilot health --json       # Structured JSON for automation
+
+# Checkpoints to GCS
+./dive --env gcp pilot checkpoint create   # Save to gs://dive25-checkpoints/
+./dive --env gcp pilot checkpoint list     # List available checkpoints
+./dive --env gcp pilot rollback            # Restore from latest checkpoint
+```
+
+### Phase 2 Files Created/Modified
+
+- `scripts/spoke-init/apply-user-profile.sh` - Apply locale-specific user profiles
+- `scripts/spoke-init/configure-localized-mappers.sh` - Configure NATO attribute mappers
+- `scripts/spoke-init/init-keycloak.sh` - Enhanced with auto profile/mapper application
+- `scripts/hub-init/seed-hub-users.sh` - Hub user seeding
+- `scripts/hub-init/seed-hub-resources.sh` - Hub resource seeding
+- `scripts/verify-idps.sh` - IdP verification script (6 checks)
+- `tests/docker/phase2-idp-automation.sh` - 36 automated tests
+- `keycloak/realms/dive-v3-broker.json` - Removed hardcoded IdPs
+
+### New CLI Commands (Phase 2)
+
+```bash
+# User profile management
+./scripts/spoke-init/apply-user-profile.sh <CODE>  # Apply locale template
+
+# IdP verification
+./scripts/verify-idps.sh --all                      # Verify all IdPs
+./scripts/verify-idps.sh --spoke FRA                # Verify specific spoke
+
+# Localized mappers
+./scripts/spoke-init/configure-localized-mappers.sh <CODE>  # Configure mappers
+```
+
+### Phase 1 Files Created
 
 - `.github/workflows/dive-pr-checks.yml` - PR validation workflow
 - `.github/workflows/dive-deploy.yml` - Deployment with auto-rollback
@@ -44,7 +137,7 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 - `scripts/dynamic-test-runner.sh` - Playwright instance discovery
 - `tests/e2e/local-deploy.test.sh` - Full deployment lifecycle test
 
-### New CLI Commands
+### CLI Commands (Phase 1)
 
 ```bash
 # Checkpoint management
@@ -71,24 +164,24 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 
 | ID | Gap Description | Severity | Status | Impact | Proposed Fix | Effort | Phase |
 |----|-----------------|----------|--------|--------|--------------|--------|-------|
-| GAP-001 | Spoke user profile templates not auto-applied | **High** | 🔲 Pending | Locale-specific profiles require manual setup | Enhance spoke init to apply user-profile-templates | M | 2 |
-| GAP-002 | No rollback on deploy failure | **Blocker** | ✅ **RESOLVED** | Stuck state after partial deploy | Add checkpoint/restore in deploy.sh | M | 1 |
-| GAP-003 | `cmd_nuke` not fully idempotent | **Blocker** | ✅ **RESOLVED** | Orphaned resources on repeated runs | Add `docker system prune -af --volumes` | S | 1 |
-| GAP-004 | Spoke secrets not auto-loaded | High | 🔲 Pending | Manual `secrets load` required | Auto-call `load_gcp_secrets` in spoke lifecycle | S | 1 |
-| GAP-005 | Missing `--confirm` flag on destructive ops | High | ✅ **RESOLVED** | Accidental data loss | Add confirmation prompt to nuke/reset | S | 1 |
-| GAP-006 | Keycloak wait timeout too short | High | ✅ **RESOLVED** | Startup race condition | Increase timeout, add exponential backoff | S | 1 |
-| GAP-007 | No `pilot rollback` command | High | ✅ **RESOLVED** | Manual recovery required | Implement rollback in pilot.sh | M | 1 |
-| GAP-008 | Missing dynamic-test-runner.sh | High | ✅ **RESOLVED** | Playwright tests fail | Create missing script or update references | M | 1 |
-| GAP-009 | Missing GCP Compute Engine deploy automation | Medium | 🔲 Pending | Manual VM setup | Create `pilot deploy` workflow script | L | 3 |
-| GAP-010 | Terraform state not shared | Medium | 🔲 Pending | Drift between environments | Configure GCS backend (script ready) | M | 3 |
-| GAP-011 | No CI gate for local deployment | Medium | ✅ **RESOLVED** | Broken deploys reach main | Add `./dive deploy --dry-run` to PR checks | S | 4 |
+| GAP-001 | Spoke user profile templates not auto-applied | **High** | ✅ **RESOLVED** | ~~Locale-specific profiles require manual setup~~ | apply-user-profile.sh created | M | 2 |
+| GAP-002 | No rollback on deploy failure | **Blocker** | ✅ **RESOLVED** | ~~Stuck state after partial deploy~~ | Add checkpoint/restore in deploy.sh | M | 1 |
+| GAP-003 | `cmd_nuke` not fully idempotent | **Blocker** | ✅ **RESOLVED** | ~~Orphaned resources on repeated runs~~ | Add `docker system prune -af --volumes` | S | 1 |
+| GAP-004 | Spoke secrets not auto-loaded | High | ✅ **RESOLVED** | ~~Manual `secrets load` required~~ | Auto-call `load_gcp_secrets` verified | S | 2 |
+| GAP-005 | Missing `--confirm` flag on destructive ops | High | ✅ **RESOLVED** | ~~Accidental data loss~~ | Add confirmation prompt to nuke/reset | S | 1 |
+| GAP-006 | Keycloak wait timeout too short | High | ✅ **RESOLVED** | ~~Startup race condition~~ | Increase timeout, add exponential backoff | S | 1 |
+| GAP-007 | No `pilot rollback` command | High | ✅ **RESOLVED** | ~~Manual recovery required~~ | Implement rollback in pilot.sh | M | 1 |
+| GAP-008 | Missing dynamic-test-runner.sh | High | ✅ **RESOLVED** | ~~Playwright tests fail~~ | Create missing script or update references | M | 1 |
+| GAP-009 | Missing GCP Compute Engine deploy automation | Medium | ✅ **RESOLVED** | ~~Manual VM setup~~ | `pilot deploy` with Terraform | L | 3 |
+| GAP-010 | Terraform state not shared | Medium | ✅ **RESOLVED** | ~~Drift between environments~~ | GCS backend configured | M | 3 |
+| GAP-011 | No CI gate for local deployment | Medium | ✅ **RESOLVED** | ~~Broken deploys reach main~~ | Add `./dive deploy --dry-run` to PR checks | S | 1 |
 | GAP-012 | Test scripts reference missing fixtures | Medium | 🔲 Pending | E2E tests fail | Audit and create missing fixtures | M | 5 |
-| GAP-013 | No `--json` output for health commands | Medium | ✅ **RESOLVED** | Automation difficult | Add structured output option | S | 1 |
-| GAP-014 | Hub seed scripts directory missing | Medium | ✅ **RESOLVED** | `hub seed` may fail | Create `scripts/hub-init/` or update paths | S | 3 |
-| GAP-015 | No health check aggregation | Low | 🔲 Pending | Status requires manual inspection | Add aggregated health endpoint | S | 1 |
-| GAP-016 | Hardcoded timeouts throughout | Low | 🔲 Pending | Not configurable | Extract to environment variables | S | 1 |
-| GAP-017 | No semantic versioning for images | Low | 🔲 Pending | Deployment tracking difficult | Add git tag-based versioning | S | 4 |
-| GAP-018 | `deploy --dry-run` not fully implemented | Low | ✅ **RESOLVED** | Preview incomplete | Complete dry-run implementation | M | 1 |
+| GAP-013 | No `--json` output for health commands | Medium | ✅ **RESOLVED** | ~~Automation difficult~~ | Add structured output option | S | 1 |
+| GAP-014 | Hub seed scripts directory missing | Medium | ✅ **RESOLVED** | ~~`hub seed` may fail~~ | Created `scripts/hub-init/` | S | 2 |
+| GAP-015 | No health check aggregation | Low | ✅ **RESOLVED** | ~~Status requires manual inspection~~ | Health aggregation in cmd_health() | S | 2 |
+| GAP-016 | Hardcoded timeouts throughout | Low | ✅ **RESOLVED** | ~~Not configurable~~ | Environment variables added | S | 2 |
+| GAP-017 | No semantic versioning for images | Low | ✅ **RESOLVED** | ~~Deployment tracking difficult~~ | Git SHA tagging in dive-deploy.yml | S | 2 |
+| GAP-018 | `deploy --dry-run` not fully implemented | Low | ✅ **RESOLVED** | ~~Preview incomplete~~ | Complete dry-run implementation | M | 1 |
 
 ---
 
@@ -96,7 +189,7 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 
 ### GAP-001: Spoke User Profile Templates Not Auto-Applied
 
-**Severity**: High (downgraded from Blocker - workaround exists)  
+**Severity**: High (downgraded from Blocker - workaround exists)
 **Category**: Keycloak Bootstrap
 
 **User Guide Expectation**:
@@ -132,7 +225,7 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 
 ### GAP-002: No Rollback on Deploy Failure
 
-**Severity**: Blocker  
+**Severity**: Blocker
 **Category**: Deployment
 
 **User Guide Expectation**:
@@ -172,7 +265,7 @@ cmd_deploy() {
 
 ### GAP-003: `cmd_nuke` Not Fully Idempotent
 
-**Severity**: Blocker  
+**Severity**: Blocker
 **Category**: Deployment
 
 **User Guide Expectation**:
@@ -212,7 +305,7 @@ cmd_nuke() {
 
 ### GAP-004: Spoke Secrets Not Auto-Loaded
 
-**Severity**: High  
+**Severity**: High
 **Category**: Secrets Management
 
 **User Guide Expectation**:
@@ -246,7 +339,7 @@ cmd_nuke() {
 
 ### GAP-005: Missing `--confirm` Flag on Destructive Ops
 
-**Severity**: High  
+**Severity**: High
 **Category**: Safety
 
 **User Guide Expectation**:
@@ -284,7 +377,7 @@ cmd_nuke() {
 
 ### GAP-006: Keycloak Wait Timeout Too Short
 
-**Severity**: High  
+**Severity**: High
 **Category**: Reliability
 
 **User Guide Expectation**:
@@ -321,7 +414,7 @@ wait_for_keycloak() {
 
 ### GAP-007: No `pilot rollback` Command
 
-**Severity**: High  
+**Severity**: High
 **Category**: GCP Deployment
 
 **User Guide Expectation**:
@@ -355,7 +448,7 @@ wait_for_keycloak() {
 
 ### GAP-008: Missing dynamic-test-runner.sh
 
-**Severity**: High  
+**Severity**: High
 **Category**: Testing
 
 **User Guide Expectation**:
@@ -394,7 +487,7 @@ test_playwright() {
 
 ### GAP-009: Missing GCP Compute Engine Deploy Automation
 
-**Severity**: Medium  
+**Severity**: Medium
 **Category**: GCP Deployment
 
 **User Guide Expectation**:
@@ -428,7 +521,7 @@ test_playwright() {
 
 ### GAP-010: Terraform State Not Shared
 
-**Severity**: Medium  
+**Severity**: Medium
 **Category**: Infrastructure
 
 **User Guide Expectation**:
@@ -462,7 +555,7 @@ terraform/spoke/terraform.tfstate.d/  # Workspace state, local
 
 ### GAP-011: No CI Gate for Local Deployment
 
-**Severity**: Medium  
+**Severity**: Medium
 **Category**: CI/CD
 
 **User Guide Expectation**:
@@ -496,7 +589,7 @@ terraform/spoke/terraform.tfstate.d/  # Workspace state, local
 
 ### GAP-012: Test Scripts Reference Missing Fixtures
 
-**Severity**: Medium  
+**Severity**: Medium
 **Category**: Testing
 
 **User Guide Expectation**:
@@ -530,7 +623,7 @@ tests/fixtures/federation/certificates/   # Empty directory
 
 ### GAP-013: No `--json` Output for Health Commands
 
-**Severity**: Medium  
+**Severity**: Medium
 **Category**: Observability
 
 **User Guide Expectation**:
@@ -565,7 +658,7 @@ echo -e "  ${GREEN}✓${NC} $service healthy"
 
 ### GAP-014: Hub Seed Scripts Directory Missing
 
-**Severity**: Medium  
+**Severity**: Medium
 **Category**: Data Management
 
 **User Guide Expectation**:
@@ -604,7 +697,7 @@ hub_seed() {
 
 ### GAP-015: No Health Check Aggregation
 
-**Severity**: Low  
+**Severity**: Low
 **Category**: Observability
 
 **User Guide Expectation**:
@@ -626,7 +719,7 @@ hub_seed() {
 
 ### GAP-016: Hardcoded Timeouts Throughout
 
-**Severity**: Low  
+**Severity**: Low
 **Category**: Configurability
 
 **User Guide Expectation**:
@@ -648,7 +741,7 @@ hub_seed() {
 
 ### GAP-017: No Semantic Versioning for Images
 
-**Severity**: Low  
+**Severity**: Low
 **Category**: Release Management
 
 **User Guide Expectation**:
@@ -670,7 +763,7 @@ hub_seed() {
 
 ### GAP-018: `deploy --dry-run` Not Fully Implemented
 
-**Severity**: Low  
+**Severity**: Low
 **Category**: Deployment
 
 **User Guide Expectation**:

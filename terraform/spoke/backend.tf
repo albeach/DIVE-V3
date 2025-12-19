@@ -1,23 +1,33 @@
 # =============================================================================
 # DIVE V3 Spoke - Terraform Backend Configuration
 # =============================================================================
-# Uses local state per workspace. In production, use GCS backend.
+# Uses GCS backend for shared state management across team members.
+# State is stored per-workspace in gs://dive25-tfstate bucket.
 #
-# Usage with workspaces:
-#   ./dive tf workspace new pol
-#   ./dive tf spoke plan POL
-#   ./dive tf spoke apply POL
+# Setup (one-time):
+#   1. Create bucket: gsutil mb -p dive25 -l us-central1 gs://dive25-tfstate
+#   2. Enable versioning: gsutil versioning set on gs://dive25-tfstate
+#   3. Initialize: terraform init -reconfigure
+#   4. Create workspace: terraform workspace new <country_code>
 #
-# State files are stored in terraform.tfstate.d/<workspace>/
+# Workspace Usage:
+#   terraform workspace new pol
+#   terraform workspace select pol
+#   terraform plan -var-file=../countries/pol.tfvars
 # =============================================================================
 
 terraform {
-  backend "local" {}
+  # GCS Backend for Production/Team Use
+  # Each workspace stores state at: gs://dive25-tfstate/spoke/<workspace>/default.tfstate
+  backend "gcs" {
+    bucket = "dive25-tfstate"
+    prefix = "spoke"
+  }
 
-  # For production, use GCS backend:
-  # backend "gcs" {
-  #   bucket = "dive25-terraform-state"
-  #   prefix = "dive-v3/spokes"
+  # Local Backend for Isolated Development (uncomment if needed)
+  # backend "local" {
+  #   path = "terraform.tfstate"
   # }
-}
 
+  required_version = ">= 1.5.0"
+}
