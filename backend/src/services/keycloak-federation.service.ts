@@ -1178,6 +1178,19 @@ export class KeycloakFederationService {
         this.realm    // Hub's realm for broker endpoint
       );
 
+      // CRITICAL: Ensure the client for spoke users exists on the Hub (local)
+      // e.g., dive-v3-client-lva on Hub Keycloak for LVA spoke users
+      logger.info('Ensuring client exists on local Keycloak for remote users', {
+        clientId: clientForRemoteToLocal,
+        targetRealm: this.realm,
+      });
+      await this.ensureFederationClient(
+        clientForRemoteToLocal,
+        federationSecret,
+        remoteIdpUrl,  // Spoke's public URL for redirect
+        remoteRealm    // Spoke's realm for broker endpoint
+      );
+
       const localAlias = `${localInstanceCode.toLowerCase()}-idp`;
 
       // Determine local internal URL for backend communication
