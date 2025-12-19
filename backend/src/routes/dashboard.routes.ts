@@ -140,6 +140,166 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 });
 
 /**
+ * GET /api/dashboard/spokes
+ * Get spoke status for Hub dashboard (DIVE-022)
+ * Provides real-time status of all federated spoke instances
+ */
+router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const user = (req as any).user;
+
+    try {
+        // Check if user has admin role
+        const isAdmin = user?.roles?.includes('dive-admin') || 
+                        user?.realm_access?.roles?.includes('dive-admin') ||
+                        user?.resource_access?.['dive-v3-client-broker']?.roles?.includes('dive-admin');
+
+        if (!isAdmin) {
+            res.status(403).json({
+                success: false,
+                error: 'Admin access required'
+            });
+            return;
+        }
+
+        // Import hub spoke registry lazily
+        const { hubSpokeRegistry } = await import('../services/hub-spoke-registry.service');
+        const { policySyncService } = await import('../services/policy-sync.service');
+
+        // Get all spokes
+        const allSpokes = await hubSpokeRegistry.listAllSpokes();
+        const unhealthySpokes = await hubSpokeRegistry.getUnhealthySpokes();
+        const unhealthyIds = new Set(unhealthySpokes.map(s => s.spokeId));
+        const stats = await hubSpokeRegistry.getStatistics();
+
+        // Build dashboard-friendly spoke list
+        const spokeList = await Promise.all(
+            allSpokes.map(async (spoke) => {
+                const syncStatus = policySyncService.getSpokeStatus(spoke.spokeId);
+                const timeSinceHeartbeat = spoke.lastHeartbeat
+                    ? Math.floor((Date.now() - new Date(spoke.lastHeartbeat).getTime()) / 1000)
+                    : null;
+
+                // Determine status color ('approved' is the active status in ISpokeRegistration)
+                let statusColor: 'green' | 'yellow' | 'red' | 'gray' = 'gray';
+                if (spoke.status === 'approved') {
+                    if (unhealthyIds.has(spoke.spokeId)) {
+                        statusColor = 'red';
+                    } else if (syncStatus?.status === 'behind' || syncStatus?.status === 'stale') {
+                        statusColor = 'yellow';
+                    } else {
+                        statusColor = 'green';
+                    }
+                } else if (spoke.status === 'pending') {
+                    statusColor = 'yellow';
+                } else if (spoke.status === 'suspended' || spoke.status === 'revoked') {
+                    statusColor = 'gray';
+                }
+
+                return {
+                    spokeId: spoke.spokeId,
+                    instanceCode: spoke.instanceCode,
+                    name: spoke.name,
+                    status: spoke.status === 'approved' ? 'active' : spoke.status, // Map for UI
+                    statusColor,
+                    isHealthy: !unhealthyIds.has(spoke.spokeId),
+                    trustLevel: spoke.trustLevel || 'development',
+                    maxClassification: spoke.maxClassificationAllowed || 'UNCLASSIFIED',
+                    lastHeartbeat: spoke.lastHeartbeat,
+                    lastHeartbeatAgo: timeSinceHeartbeat,
+                    lastHeartbeatFormatted: timeSinceHeartbeat !== null
+                        ? timeSinceHeartbeat < 60 
+                            ? `${timeSinceHeartbeat}s ago`
+                            : timeSinceHeartbeat < 3600
+                                ? `${Math.floor(timeSinceHeartbeat / 60)}m ago`
+                                : `${Math.floor(timeSinceHeartbeat / 3600)}h ago`
+                        : 'Never',
+                    policyStatus: syncStatus?.status || 'unknown',
+                    policyVersion: syncStatus?.currentVersion || 'N/A',
+                    registeredAt: spoke.registeredAt,
+                    approvedAt: spoke.approvedAt
+                };
+            })
+        );
+
+        // Sort: active first, then by instance code
+        spokeList.sort((a, b) => {
+            const statusOrder: Record<string, number> = { active: 0, pending: 1, suspended: 2, revoked: 3 };
+            const aOrder = statusOrder[a.status] ?? 4;
+            const bOrder = statusOrder[b.status] ?? 4;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return a.instanceCode.localeCompare(b.instanceCode);
+        });
+
+        // Calculate summary cards for dashboard (use IHubStatistics property names)
+        const summaryCards = [
+            {
+                value: stats.activeSpokes.toString(),
+                label: 'Active Spokes',
+                sublabel: `of ${stats.totalSpokes} total`,
+                trend: stats.activeSpokes > 0 ? 'up' as const : 'neutral' as const,
+                color: 'green'
+            },
+            {
+                value: unhealthySpokes.length.toString(),
+                label: 'Unhealthy',
+                sublabel: unhealthySpokes.length > 0 ? 'Requires attention' : 'All healthy',
+                trend: unhealthySpokes.length > 0 ? 'down' as const : 'up' as const,
+                color: unhealthySpokes.length > 0 ? 'red' : 'green'
+            },
+            {
+                value: stats.pendingApprovals.toString(),
+                label: 'Pending Approval',
+                sublabel: stats.pendingApprovals > 0 ? 'Action required' : 'None pending',
+                trend: stats.pendingApprovals > 0 ? 'neutral' as const : 'up' as const,
+                color: stats.pendingApprovals > 0 ? 'yellow' : 'green'
+            },
+            {
+                value: policySyncService.getCurrentVersion().version,
+                label: 'Policy Version',
+                sublabel: 'Current Hub version',
+                trend: 'neutral' as const,
+                color: 'blue'
+            }
+        ];
+
+        logger.info('Dashboard spokes request', {
+            requestId,
+            user: user?.uniqueID,
+            totalSpokes: allSpokes.length,
+            activeSpokes: stats.activeSpokes
+        });
+
+        res.status(200).json({
+            success: true,
+            summary: summaryCards,
+            spokes: spokeList,
+            statistics: stats,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        logger.error('Failed to fetch dashboard spokes', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+
+        res.status(200).json({
+            success: true,
+            summary: [
+                { value: '0', label: 'Active Spokes', sublabel: 'Loading...', trend: 'neutral', color: 'gray' },
+                { value: '0', label: 'Unhealthy', sublabel: 'Loading...', trend: 'neutral', color: 'gray' },
+                { value: '0', label: 'Pending Approval', sublabel: 'Loading...', trend: 'neutral', color: 'gray' },
+                { value: 'N/A', label: 'Policy Version', sublabel: 'Loading...', trend: 'neutral', color: 'gray' }
+            ],
+            spokes: [],
+            statistics: { total: 0, active: 0, pending: 0, suspended: 0, revoked: 0 },
+            error: 'Spoke data temporarily unavailable'
+        });
+    }
+});
+
+/**
  * GET /api/dashboard/stats/public
  * Get public dashboard statistics (no authentication required)
  */
