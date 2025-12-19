@@ -80,7 +80,8 @@ yarn-error.log*
 # next-env.d.ts  # Now tracked in git to avoid runtime permissions issues
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 *.swp
 *.swo
