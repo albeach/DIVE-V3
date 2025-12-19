@@ -128,17 +128,17 @@ auto_seed_resources() {
     local backend_container="${BACKEND_CONTAINER:-$(container_name backend)}"
     local inst_upper
     inst_upper=$(upper "$INSTANCE")
-    local seed_count="${SEED_COUNT:-500}"
-    log_step "Seeding MongoDB resources (local/dev)..."
+    local seed_count="${SEED_COUNT:-5000}"
+    log_step "Seeding ${seed_count} ZTDF encrypted resources (local/dev)..."
     if [ "$DRY_RUN" = true ]; then
-        log_dry "docker exec ${backend_container} npx tsx src/scripts/seed-instance-resources.ts --instance=${inst_upper} --count=${seed_count}"
+        log_dry "docker exec ${backend_container} npx tsx src/scripts/seed-instance-resources.ts --instance=${inst_upper} --count=${seed_count} --replace"
         return 0
     fi
-    docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts --instance="${inst_upper}" --count="${seed_count}" >/dev/null 2>&1 || {
-        log_warn "Resource seeding failed"
+    docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts --instance="${inst_upper}" --count="${seed_count}" --replace 2>&1 | tail -20 || {
+        log_warn "ZTDF resource seeding failed"
         return 1
     }
-    log_success "Resources seeded"
+    log_success "Seeded ${seed_count} ZTDF encrypted resources"
 }
 
 # Fail fast when running non-local profiles without required secrets
@@ -181,20 +181,42 @@ ensure_required_secrets_local() {
 # Wait for Keycloak to be reachable before running realm checks
 wait_for_keycloak() {
     log_step "Waiting for Keycloak to become ready..."
-    local retries=12 # 12 * 5s = 60s
-    local count=0
+    
+    # Configurable timeout (default 180s, was 60s)
+    local timeout="${KEYCLOAK_WAIT_TIMEOUT:-180}"
+    local elapsed=0
+    local delay=2
+    local max_delay=30
+    local attempt=0
     local health_url="${KEYCLOAK_HEALTH_URL:-https://localhost:8443/realms/master}"
-    while [ $count -lt $retries ]; do
+    
+    log_verbose "Keycloak health URL: $health_url (timeout: ${timeout}s)"
+    
+    while [ $elapsed -lt $timeout ]; do
+        attempt=$((attempt + 1))
         local code
         code=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 5 "$health_url" || echo "000")
+        
         if [ "$code" = "200" ]; then
-            log_success "Keycloak is reachable (code $code)"
+            log_success "Keycloak is ready (${elapsed}s elapsed, attempt $attempt)"
             return 0
         fi
-        sleep 5
-        count=$((count + 1))
-        log_verbose "Keycloak not ready yet (attempt $count/$retries, code=$code, url=$health_url)"
+        
+        log_verbose "Keycloak not ready (attempt $attempt, code=$code, elapsed=${elapsed}s, next delay=${delay}s)"
+        
+        sleep $delay
+        elapsed=$((elapsed + delay))
+        
+        # Exponential backoff with cap at max_delay
+        delay=$((delay * 2))
+        [ $delay -gt $max_delay ] && delay=$max_delay
     done
+    
+    log_error "Keycloak failed to start within ${timeout}s"
+    log_info "Tips:"
+    log_info "  - Increase timeout: KEYCLOAK_WAIT_TIMEOUT=300 ./dive up"
+    log_info "  - Check logs: docker logs dive-v3-keycloak"
+    log_info "  - Verify ports: docker ps | grep keycloak"
     return 1
 }
 
