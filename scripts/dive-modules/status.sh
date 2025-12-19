@@ -239,10 +239,148 @@ cmd_status() {
 }
 
 # =============================================================================
-# HEALTH COMMAND
+# HEALTH COMMAND (with JSON output support)
 # =============================================================================
 
+# Internal function to check service health and return structured data
+_check_service_health() {
+    local svc="$1"
+    local instance_lower="$2"
+    local start_time
+    local end_time
+    local latency_ms
+    local healthy="false"
+    local status="unknown"
+    local container=""
+    
+    start_time=$(date +%s%N)
+    
+    # Find container
+    if [ "$instance_lower" = "usa" ] || [ "$instance_lower" = "hub" ]; then
+        container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "dive-(v3|hub|pilot)-${svc}$" | head -1)
+    else
+        container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${instance_lower}.*${svc}" | head -1)
+    fi
+    
+    if [ -z "$container" ]; then
+        status="not_running"
+    else
+        local health
+        health=$(container_health "$container" 2>/dev/null || echo "unknown")
+        
+        case "$health" in
+            healthy)
+                healthy="true"
+                status="healthy"
+                ;;
+            starting)
+                status="starting"
+                ;;
+            unhealthy)
+                status="unhealthy"
+                ;;
+            *)
+                local state
+                state=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "unknown")
+                if [ "$state" = "running" ]; then
+                    healthy="true"
+                    status="running"
+                else
+                    status="$state"
+                fi
+                ;;
+        esac
+    fi
+    
+    end_time=$(date +%s%N)
+    latency_ms=$(( (end_time - start_time) / 1000000 ))
+    
+    echo "${svc}|${healthy}|${status}|${latency_ms}|${container}"
+}
+
+# JSON output for health command
+cmd_health_json() {
+    local instance_lower
+    instance_lower=$(lower "$INSTANCE")
+    
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    
+    local all_healthy=true
+    local services_json=""
+    
+    # Check Docker daemon first
+    if ! docker info >/dev/null 2>&1; then
+        echo '{"status":"unhealthy","timestamp":"'"$timestamp"'","error":"Docker daemon not running","services":{}}'
+        return 2
+    fi
+    
+    local expected_services=("keycloak" "backend" "frontend" "opa" "postgres" "mongodb" "redis")
+    
+    for svc in "${expected_services[@]}"; do
+        local result
+        result=$(_check_service_health "$svc" "$instance_lower")
+        
+        local name healthy status latency_ms container
+        IFS='|' read -r name healthy status latency_ms container <<< "$result"
+        
+        if [ "$healthy" = "false" ]; then
+            all_healthy=false
+        fi
+        
+        if [ -n "$services_json" ]; then
+            services_json+=","
+        fi
+        services_json+="\"${name}\":{\"healthy\":${healthy},\"status\":\"${status}\",\"latency_ms\":${latency_ms}"
+        [ -n "$container" ] && services_json+=",\"container\":\"${container}\""
+        services_json+="}"
+    done
+    
+    local overall_status="healthy"
+    [ "$all_healthy" = false ] && overall_status="unhealthy"
+    
+    echo "{\"status\":\"${overall_status}\",\"timestamp\":\"${timestamp}\",\"instance\":\"${instance_lower}\",\"services\":{${services_json}}}"
+    
+    if [ "$all_healthy" = true ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 cmd_health() {
+    # Parse arguments for --json flag
+    local json_output=false
+    local quiet_mode=false
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --json|-j)
+                json_output=true
+                shift
+                ;;
+            --quiet|-q)
+                quiet_mode=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    # Handle JSON output mode
+    if [ "$json_output" = true ]; then
+        cmd_health_json
+        return $?
+    fi
+    
+    # Handle quiet mode (exit code only)
+    if [ "$quiet_mode" = true ]; then
+        cmd_health_json >/dev/null 2>&1
+        return $?
+    fi
+    
     local instance_lower
     instance_lower=$(lower "$INSTANCE")
     local instance_upper

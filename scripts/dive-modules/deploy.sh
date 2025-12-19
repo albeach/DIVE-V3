@@ -181,29 +181,264 @@ cmd_reset() {
     cmd_deploy local
 }
 
-cmd_nuke() {
-    log_warn "NUKING EVERYTHING (containers + volumes + networks)..."
+# =============================================================================
+# CHECKPOINT FUNCTIONS
+# =============================================================================
+
+CHECKPOINT_DIR="${DIVE_ROOT:-.}/.dive-checkpoint"
+
+checkpoint_create() {
+    local name="${1:-$(date +%Y%m%d_%H%M%S)}"
+    local checkpoint_path="${CHECKPOINT_DIR}/${name}"
     
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "docker compose -f docker-compose.yml down -v --remove-orphans"
-        log_dry "docker compose -f docker-compose.pilot.yml down -v --remove-orphans"
-        log_dry "docker volume rm dive-v3_postgres_data dive-v3_mongo_data dive-v3_redis_data"
-        log_dry "docker volume rm dive-v3_frontend_node_modules dive-v3_frontend_next"
-        log_dry "docker volume prune -f"
+    log_step "Creating checkpoint: ${name}"
+    
+    mkdir -p "${checkpoint_path}"
+    
+    # Save timestamp
+    date -u +%Y-%m-%dT%H:%M:%SZ > "${checkpoint_path}/timestamp"
+    
+    # Save compose state
+    docker compose ps --format json > "${checkpoint_path}/compose-state.json" 2>/dev/null || echo "[]" > "${checkpoint_path}/compose-state.json"
+    
+    # Backup volumes
+    local volumes=("dive-v3_postgres_data" "dive-v3_mongo_data" "dive-v3_redis_data")
+    for vol in "${volumes[@]}"; do
+        if docker volume inspect "$vol" >/dev/null 2>&1; then
+            log_verbose "Backing up volume: ${vol}"
+            docker run --rm \
+                -v "${vol}:/data:ro" \
+                -v "${checkpoint_path}:/backup" \
+                alpine tar czf "/backup/${vol}.tar.gz" -C /data . 2>/dev/null || true
+        fi
+    done
+    
+    # Save latest pointer
+    echo "$name" > "${CHECKPOINT_DIR}/latest"
+    
+    # Prune old checkpoints (keep last 3)
+    local count=0
+    # shellcheck disable=SC2012
+    for old_checkpoint in $(ls -t "${CHECKPOINT_DIR}" 2>/dev/null | grep -v '^latest$' | tail -n +4); do
+        rm -rf "${CHECKPOINT_DIR}/${old_checkpoint}"
+        count=$((count + 1))
+    done
+    [ $count -gt 0 ] && log_verbose "Pruned ${count} old checkpoint(s)"
+    
+    log_success "Checkpoint created: ${name}"
+}
+
+checkpoint_list() {
+    echo -e "${BOLD}Available Checkpoints:${NC}"
+    
+    if [ ! -d "${CHECKPOINT_DIR}" ]; then
+        echo "  No checkpoints found"
         return 0
     fi
+    
+    local latest=""
+    [ -f "${CHECKPOINT_DIR}/latest" ] && latest=$(cat "${CHECKPOINT_DIR}/latest")
+    
+    for checkpoint in "${CHECKPOINT_DIR}"/*/; do
+        [ ! -d "$checkpoint" ] && continue
+        local name=$(basename "$checkpoint")
+        local timestamp=""
+        [ -f "${checkpoint}/timestamp" ] && timestamp=$(cat "${checkpoint}/timestamp")
+        
+        if [ "$name" = "$latest" ]; then
+            echo -e "  ${GREEN}* ${name}${NC} (${timestamp}) [latest]"
+        else
+            echo "    ${name} (${timestamp})"
+        fi
+    done
+}
+
+cmd_rollback() {
+    local target="${1:-}"
+    
+    if [ -z "$target" ]; then
+        if [ -f "${CHECKPOINT_DIR}/latest" ]; then
+            target=$(cat "${CHECKPOINT_DIR}/latest")
+        else
+            log_error "No checkpoint specified and no 'latest' checkpoint found"
+            echo "Usage: ./dive rollback [checkpoint_name]"
+            checkpoint_list
+            return 1
+        fi
+    fi
+    
+    local checkpoint_path="${CHECKPOINT_DIR}/${target}"
+    
+    if [ ! -d "$checkpoint_path" ]; then
+        log_error "Checkpoint not found: ${target}"
+        checkpoint_list
+        return 1
+    fi
+    
+    log_step "Rolling back to checkpoint: ${target}"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker compose down"
+        log_dry "Restore volumes from ${checkpoint_path}"
+        log_dry "docker compose up -d"
+        return 0
+    fi
+    
+    # Stop current containers
+    log_verbose "Stopping containers..."
+    docker compose down 2>/dev/null || true
+    
+    # Restore volumes
+    local volumes=("dive-v3_postgres_data" "dive-v3_mongo_data" "dive-v3_redis_data")
+    for vol in "${volumes[@]}"; do
+        local backup_file="${checkpoint_path}/${vol}.tar.gz"
+        if [ -f "$backup_file" ]; then
+            log_verbose "Restoring volume: ${vol}"
+            # Remove existing volume
+            docker volume rm "$vol" 2>/dev/null || true
+            # Create new volume
+            docker volume create "$vol" >/dev/null
+            # Restore data
+            docker run --rm \
+                -v "${vol}:/data" \
+                -v "${checkpoint_path}:/backup:ro" \
+                alpine tar xzf "/backup/${vol}.tar.gz" -C /data 2>/dev/null || true
+        fi
+    done
+    
+    # Restart services
+    log_verbose "Starting containers..."
+    # shellcheck source=core.sh disable=SC1091
+    source "$(dirname "${BASH_SOURCE[0]}")/core.sh"
+    cmd_up
+    
+    log_success "Rollback complete to: ${target}"
+}
+
+# =============================================================================
+# NUKE COMMAND (FULLY IDEMPOTENT)
+# =============================================================================
+
+cmd_nuke() {
+    local confirm_flag=false
+    local force_flag=false
+    local keep_images=false
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --confirm|--yes|-y)
+                confirm_flag=true
+                shift
+                ;;
+            --force|-f)
+                force_flag=true
+                confirm_flag=true
+                shift
+                ;;
+            --keep-images)
+                keep_images=true
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
     
     ensure_dive_root
     cd "$DIVE_ROOT" || exit 1
     
-    docker compose -f docker-compose.yml down -v --remove-orphans 2>/dev/null || true
-    docker compose -f docker-compose.pilot.yml down -v --remove-orphans 2>/dev/null || true
-    # Explicitly remove named volumes to prevent stale credentials/config
-    docker volume rm dive-v3_postgres_data dive-v3_mongo_data dive-v3_redis_data dive-v3_frontend_node_modules dive-v3_frontend_next 2>/dev/null || true
-    docker volume prune -f 2>/dev/null || true
-    log_info "Removed volumes: dive-v3_postgres_data, dive-v3_mongo_data, dive-v3_redis_data, dive-v3_frontend_node_modules, dive-v3_frontend_next (if present)"
+    # Count resources to be removed
+    local container_count=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    local volume_count=$(docker volume ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    local network_count=$(docker network ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
     
-    log_success "Clean slate achieved"
+    echo ""
+    echo -e "${RED}⚠️  NUKE: This will destroy ALL DIVE resources${NC}"
+    echo ""
+    echo "  Resources to be removed:"
+    echo "    - Containers: ${container_count}"
+    echo "    - Volumes:    ${volume_count}"
+    echo "    - Networks:   ${network_count}"
+    if [ "$keep_images" = false ]; then
+        local image_count=$(docker images -q --filter 'reference=*dive*' 2>/dev/null | wc -l | tr -d ' ')
+        echo "    - Images:     ${image_count}"
+    fi
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker compose -f docker-compose.yml down -v --remove-orphans"
+        log_dry "docker compose -f docker-compose.hub.yml down -v --remove-orphans"
+        log_dry "docker compose -f docker-compose.pilot.yml down -v --remove-orphans"
+        log_dry "docker volume rm (all dive-* volumes)"
+        log_dry "docker network rm dive-v3-shared-network shared-network"
+        [ "$keep_images" = false ] && log_dry "docker image rm (all dive images)"
+        log_dry "docker system prune -f --volumes"
+        log_dry "rm -rf .dive-checkpoint/"
+        return 0
+    fi
+    
+    # Require confirmation unless --confirm or --force was passed
+    if [ "$confirm_flag" != true ]; then
+        echo -e "${YELLOW}This action cannot be undone.${NC}"
+        read -r -p "Type 'yes' to confirm destruction: " user_confirm
+        if [ "$user_confirm" != "yes" ]; then
+            log_info "Nuke cancelled"
+            return 1
+        fi
+    fi
+    
+    log_warn "NUKING EVERYTHING..."
+    
+    # Stop and remove containers from all compose files
+    for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml; do
+        if [ -f "$compose_file" ]; then
+            docker compose -f "$compose_file" down -v --remove-orphans 2>/dev/null || true
+        fi
+    done
+    
+    # Remove instance-specific containers
+    for instance_dir in instances/*/; do
+        if [ -f "${instance_dir}docker-compose.yml" ]; then
+            (cd "$instance_dir" && docker compose down -v --remove-orphans 2>/dev/null) || true
+        fi
+    done
+    
+    # Remove all dive-related volumes explicitly
+    for vol in $(docker volume ls -q --filter 'name=dive' 2>/dev/null); do
+        docker volume rm "$vol" 2>/dev/null || true
+    done
+    
+    # Remove dive-specific networks
+    docker network rm dive-v3-shared-network 2>/dev/null || true
+    docker network rm dive-v3-network 2>/dev/null || true
+    docker network rm shared-network 2>/dev/null || true
+    
+    # Remove dive images unless --keep-images
+    if [ "$keep_images" = false ]; then
+        for img in $(docker images -q --filter 'reference=*dive*' 2>/dev/null); do
+            docker image rm -f "$img" 2>/dev/null || true
+        done
+    fi
+    
+    # Final prune (removes any remaining dangling resources)
+    docker system prune -f --volumes 2>/dev/null || true
+    
+    # Remove checkpoint directory
+    rm -rf "${CHECKPOINT_DIR}"
+    
+    # Verify clean state
+    local remaining_containers=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    local remaining_volumes=$(docker volume ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    local remaining_networks=$(docker network ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    
+    if [ "$remaining_containers" -eq 0 ] && [ "$remaining_volumes" -eq 0 ] && [ "$remaining_networks" -eq 0 ]; then
+        log_success "Clean slate achieved ✓"
+    else
+        log_warn "Some resources may remain (containers: ${remaining_containers}, volumes: ${remaining_volumes}, networks: ${remaining_networks})"
+        log_info "Run './dive nuke --confirm' again if needed"
+    fi
 }
 
 # =============================================================================
@@ -215,19 +450,44 @@ module_deploy() {
     shift || true
     
     case "$action" in
-        deploy) cmd_deploy "$@" ;;
-        reset)  cmd_reset "$@" ;;
-        clean)  cmd_reset "$@" ;;
-        nuke)   cmd_nuke ;;
-        *)      module_deploy_help ;;
+        deploy)     cmd_deploy "$@" ;;
+        reset)      cmd_reset "$@" ;;
+        clean)      cmd_reset "$@" ;;
+        nuke)       cmd_nuke "$@" ;;
+        rollback)   cmd_rollback "$@" ;;
+        checkpoint) 
+            local sub="${1:-list}"
+            shift || true
+            case "$sub" in
+                create) checkpoint_create "$@" ;;
+                list)   checkpoint_list ;;
+                *)      checkpoint_list ;;
+            esac
+            ;;
+        *)          module_deploy_help ;;
     esac
 }
 
 module_deploy_help() {
     echo -e "${BOLD}Deployment Commands:${NC}"
+    echo ""
     echo "  deploy              Full deployment workflow"
     echo "  reset               Reset to clean state (nuke + deploy)"
-    echo "  nuke                Destroy everything (containers + volumes) [alias: ./dive nuke]"
+    echo "  nuke [options]      Destroy everything (containers + volumes + networks)"
+    echo "  rollback [name]     Restore from checkpoint"
+    echo "  checkpoint create   Create deployment checkpoint"
+    echo "  checkpoint list     List available checkpoints"
+    echo ""
+    echo -e "${BOLD}Nuke Options:${NC}"
+    echo "  --confirm, --yes    Skip confirmation prompt"
+    echo "  --force, -f         Force destruction (skip confirmation)"
+    echo "  --keep-images       Don't remove Docker images"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ./dive nuke --confirm         # Destroy all DIVE resources"
+    echo "  ./dive checkpoint create      # Save current state"
+    echo "  ./dive rollback               # Restore from latest checkpoint"
+    echo "  ./dive rollback 20251218_120000  # Restore specific checkpoint"
 }
 
 
