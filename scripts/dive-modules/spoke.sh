@@ -354,6 +354,7 @@ spoke_setup_wizard() {
     local base_url=""
     local api_url=""
     local idp_url=""
+    local idp_public_url=""
     local kas_url=""
     local needs_tunnel=false
 
@@ -361,7 +362,9 @@ spoke_setup_wizard() {
         1)
             base_url="https://${code_lower}-app.dive25.com"
             api_url="https://${code_lower}-api.dive25.com"
+            # For production: both URLs are the public domain
             idp_url="https://${code_lower}-idp.dive25.com"
+            idp_public_url="https://${code_lower}-idp.dive25.com"
             kas_url="https://${code_lower}-kas.dive25.com"
             needs_tunnel=true
             ;;
@@ -374,7 +377,9 @@ spoke_setup_wizard() {
             fi
             base_url="https://${code_lower}-app.${custom_domain}"
             api_url="https://${code_lower}-api.${custom_domain}"
+            # For custom domain: both URLs are the public domain
             idp_url="https://${code_lower}-idp.${custom_domain}"
+            idp_public_url="https://${code_lower}-idp.${custom_domain}"
             kas_url="https://${code_lower}-kas.${custom_domain}"
             ;;
         3)
@@ -397,7 +402,9 @@ spoke_setup_wizard() {
             kas_port="${kas_port:-8080}"
             base_url="https://${ip_or_host}:${frontend_port}"
             api_url="https://${ip_or_host}:${backend_port}"
-            idp_url="https://${ip_or_host}:${keycloak_https_port}"
+            # For localhost: idpUrl is Docker container, idpPublicUrl is browser-accessible
+            idp_url="https://dive-spoke-${code_lower}-keycloak:8443"
+            idp_public_url="https://${ip_or_host}:${keycloak_https_port}"
             kas_url="https://${ip_or_host}:${kas_port}"
             ;;
         *)
@@ -544,7 +551,7 @@ spoke_setup_wizard() {
     fi
 
     # Now call spoke_init with all the collected information
-    _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$kas_url" \
+    _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" \
         "$hub_url" "$contact_email" "$tunnel_token" "$postgres_pass" "$mongo_pass" \
         "$keycloak_pass" "$auth_secret" "$client_secret" "$setup_tunnel"
 }
@@ -556,16 +563,17 @@ _spoke_init_internal() {
     local base_url="$3"
     local api_url="$4"
     local idp_url="$5"
-    local kas_url="$6"
-    local hub_url="$7"
-    local contact_email="$8"
-    local tunnel_token="$9"
-    local postgres_pass="${10}"
-    local mongo_pass="${11}"
-    local keycloak_pass="${12}"
-    local auth_secret="${13}"
-    local client_secret="${14}"
-    local setup_tunnel="${15}"
+    local idp_public_url="$6"
+    local kas_url="$7"
+    local hub_url="$8"
+    local contact_email="$9"
+    local tunnel_token="${10}"
+    local postgres_pass="${11}"
+    local mongo_pass="${12}"
+    local keycloak_pass="${13}"
+    local auth_secret="${14}"
+    local client_secret="${15}"
+    local setup_tunnel="${16}"
 
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
@@ -610,6 +618,7 @@ _spoke_init_internal() {
     "baseUrl": "$base_url",
     "apiUrl": "$api_url",
     "idpUrl": "$idp_url",
+    "idpPublicUrl": "$idp_public_url",
     "kasUrl": "$kas_url"
   },
   "certificates": {
@@ -775,6 +784,20 @@ EOF
     fi
     chmod 600 "$spoke_dir/certs/key.pem"
     chmod 644 "$spoke_dir/certs/certificate.pem"
+
+    # Copy mkcert root CA for Keycloak truststore (required for federation)
+    if command -v mkcert &>/dev/null; then
+        local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
+        if [ -f "$mkcert_ca" ]; then
+            cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem"
+            cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
+            chmod 644 "$spoke_dir/certs/rootCA.pem"
+            chmod 644 "$spoke_dir/truststores/mkcert-rootCA.pem"
+            log_info "Copied mkcert root CA for federation truststore"
+        else
+            log_warn "mkcert root CA not found at $mkcert_ca"
+        fi
+    fi
 
     # Generate spoke mTLS certificates
     log_step "Generating spoke mTLS certificates"
@@ -1243,7 +1266,10 @@ _spoke_init_legacy() {
     # For production, use the interactive init with Cloudflare tunnel
     local base_url="https://localhost:${frontend_port}"
     local api_url="https://localhost:${backend_port}"
-    local idp_url="https://localhost:${keycloak_port}"
+    # idpUrl uses Docker container name for internal communication
+    # idpPublicUrl uses localhost for browser access
+    local idp_url="https://dive-spoke-${code_lower}-keycloak:8443"
+    local idp_public_url="https://localhost:${keycloak_port}"
     local kas_url="https://localhost:${kas_port}"
 
     # Generate secure passwords
@@ -1261,7 +1287,7 @@ _spoke_init_legacy() {
     echo ""
 
     # Call internal init
-    _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$kas_url" \
+    _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" \
         "$hub_url" "" "" "$postgres_pass" "$mongo_pass" "$keycloak_pass" "$auth_secret" "$client_secret" "false"
 }
 
