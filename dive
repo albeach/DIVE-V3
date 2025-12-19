@@ -109,7 +109,7 @@ case "$COMMAND" in
             exec)    cmd_exec "$@" ;;
         esac
         ;;
-    
+
     # Status commands (status.sh)
     status|health|validate|info|diagnostics|brief)
         source "${MODULES_DIR}/status.sh"
@@ -122,7 +122,7 @@ case "$COMMAND" in
             brief)    cmd_status_brief "$@" ;;
         esac
         ;;
-    
+
     # Deployment commands (deploy.sh)
     deploy|reset|clean|nuke|rollback|checkpoint)
         source "${MODULES_DIR}/deploy.sh"
@@ -135,7 +135,7 @@ case "$COMMAND" in
             checkpoint) module_deploy "checkpoint" "$@" ;;
         esac
         ;;
-    
+
     # Database commands (db.sh)
     seed|backup|restore)
         source "${MODULES_DIR}/db.sh"
@@ -145,73 +145,73 @@ case "$COMMAND" in
             restore) cmd_restore "$@" ;;
         esac
         ;;
-    
+
     # Terraform commands (terraform.sh)
     tf|terraform)
         source "${MODULES_DIR}/terraform.sh"
         module_terraform "$@"
         ;;
-    
+
     # Secrets commands (secrets.sh)
     secrets)
         source "${MODULES_DIR}/secrets.sh"
         module_secrets "$@"
         ;;
-    
+
     # Pilot VM commands (pilot.sh)
     pilot)
         source "${MODULES_DIR}/pilot.sh"
         module_pilot "$@"
         ;;
-    
+
     # Federation commands (federation.sh)
     federation|fed)
         source "${MODULES_DIR}/federation.sh"
         module_federation "$@"
         ;;
-    
+
     # Hub commands (hub.sh - Phase 3 enhanced spoke management)
     hub)
         source "${MODULES_DIR}/hub.sh"
         module_hub "$@"
         ;;
-    
+
     # Spoke commands (spoke.sh)
     spoke)
         source "${MODULES_DIR}/spoke.sh"
         module_spoke "$@"
         ;;
-    
+
     # SP Client commands (sp.sh)
     sp)
         source "${MODULES_DIR}/sp.sh"
         module_sp "$@"
         ;;
-    
+
     # Policy commands (policy.sh)
     policy)
         source "${MODULES_DIR}/policy.sh"
         module_policy "$@"
         ;;
-    
+
     # Certificate commands (certificates.sh)
     certs|certificates)
         source "${MODULES_DIR}/certificates.sh"
         module_certificates "$@"
         ;;
-    
+
     # Federation setup commands (federation-setup.sh)
     federation-setup|fed-setup)
         source "${MODULES_DIR}/federation-setup.sh"
         module_federation_setup "$@"
         ;;
-    
+
     # Test commands (test.sh) - Phase 6
     test)
         source "${MODULES_DIR}/test.sh"
         module_test "$@"
         ;;
-    
+
     # Verify commands - Phase 6
     verify)
         VERIFY_TARGET="${1:-help}"
@@ -242,7 +242,7 @@ case "$COMMAND" in
         source "${MODULES_DIR}/status.sh"
         cmd_env_print "$@"
         ;;
-    
+
     # Fix command - run federation fixes
     fix)
         FIX_TARGET="${1:-all}"
@@ -305,7 +305,7 @@ case "$COMMAND" in
         source "${MODULES_DIR}/help.sh"
         cmd_help
         ;;
-    
+
     # Unknown command
     *)
         log_error "Unknown command: $COMMAND"
@@ -314,4 +314,3 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
-

@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Hub-Spoke Registry Service
- * 
+ *
  * Central registry for managing federated spoke instances.
  * The Hub validates, authorizes, and tracks all spoke deployments.
- * 
+ *
  * Features:
  * - Spoke registration with certificate-based identity
  * - X.509 certificate validation and fingerprint tracking
@@ -11,13 +11,13 @@
  * - Policy scope assignment per spoke
  * - Health monitoring of spokes
  * - Audit logging of all federation events
- * 
+ *
  * Security:
  * - mTLS for spoke communication
  * - X.509 certificate validation (TLS, algorithm strength)
  * - JWT tokens with limited scope
  * - Bilateral trust establishment
- * 
+ *
  * @version 1.1.0
  * @date 2025-12-04
  */
@@ -77,6 +77,11 @@ export interface ISpokeRegistration {
   // Federation (Phase 3 Enhancement)
   federationIdPAlias?: string;  // IdP alias in hub Keycloak (e.g., 'gbr-idp')
 
+  // BIDIRECTIONAL FEDERATION CREDENTIALS
+  // Spoke's Keycloak admin password for creating reverse IdP
+  // NOTE: This is stored encrypted and cleared after bidirectional federation is established
+  keycloakAdminPassword?: string;  // Encrypted or base64-encoded
+
   // Rate Limiting
   rateLimit: {
     requestsPerMinute: number;
@@ -130,6 +135,10 @@ export interface IRegistrationRequest {
   requestedScopes: string[];
   contactEmail: string;
   validateEndpoints?: boolean;  // Whether to validate IdP endpoints
+
+  // CRITICAL FOR BIDIRECTIONAL FEDERATION:
+  // Spoke must provide its Keycloak admin credentials so Hub can create reverse IdP
+  keycloakAdminPassword?: string;  // Spoke's Keycloak admin password (for bidirectional federation)
 }
 
 export interface IHubStatistics {
@@ -358,8 +367,16 @@ class HubSpokeRegistryService {
   async registerSpoke(request: IRegistrationRequest): Promise<ISpokeRegistration> {
     // Check if instance code already registered
     const existing = await this.store.findByInstanceCode(request.instanceCode);
-    if (existing && existing.status !== 'revoked') {
-      throw new Error(`Instance ${request.instanceCode} is already registered`);
+    if (existing) {
+      if (existing.status !== 'revoked') {
+        throw new Error(`Instance ${request.instanceCode} is already registered`);
+      }
+      // Delete the revoked registration to allow re-registration
+      logger.info('Deleting revoked spoke to allow re-registration', {
+        spokeId: existing.spokeId,
+        instanceCode: existing.instanceCode,
+      });
+      await this.store.delete(existing.spokeId);
     }
 
     const spokeId = this.generateSpokeId(request.instanceCode);
@@ -470,7 +487,11 @@ class HubSpokeRegistryService {
       },
 
       // Default audit retention
-      auditRetentionDays: 90
+      auditRetentionDays: 90,
+
+      // BIDIRECTIONAL FEDERATION: Store spoke's Keycloak admin password
+      // This is REQUIRED for creating the reverse IdP (hub-idp in spoke Keycloak)
+      keycloakAdminPassword: request.keycloakAdminPassword,
     };
 
     await this.store.save(spoke);
@@ -482,7 +503,8 @@ class HubSpokeRegistryService {
       requestedScopes: request.requestedScopes,
       contactEmail: request.contactEmail,
       certificateProvided: !!request.certificatePEM,
-      certValidation: certValidation?.valid
+      certValidation: certValidation?.valid,
+      keycloakPasswordProvided: !!request.keycloakAdminPassword,
     });
 
     return spoke;
@@ -580,7 +602,7 @@ class HubSpokeRegistryService {
 
   /**
    * Approve a pending spoke registration
-   * 
+   *
    * Phase 3 Enhancement: Automatically creates Keycloak IdP federation
    * This enables cross-border SSO immediately upon approval.
    */
@@ -626,19 +648,52 @@ class HubSpokeRegistryService {
     await this.notifyOPALOfSpokeChange(spoke, 'approved');
 
     // AUTO-LINK IDENTITY PROVIDER (Phase 3 Enhancement)
-    // Create bidirectional Keycloak IdP trust for SSO
+    // Create BIDIRECTIONAL Keycloak IdP trust for SSO
+    //
+    // FAIL-FAST BEHAVIOR - BIDIRECTIONAL IS MANDATORY:
+    // - Both directions MUST succeed for approval to complete
+    // - Direction 1: Hub → Spoke (spoke-idp in Hub Keycloak)
+    // - Direction 2: Spoke → Hub (hub-idp in Spoke Keycloak)
+    // - If EITHER fails, suspend spoke and throw error
     if (options.autoLinkIdP !== false) {
       try {
         await this.createFederationIdP(spoke);
-      } catch (error) {
-        logger.error('Failed to auto-link IdP during spoke approval', {
+
+        // Store the IdP alias for reference
+        spoke.federationIdPAlias = `${spoke.instanceCode.toLowerCase()}-idp`;
+        await this.store.save(spoke);
+
+        // Clear the Keycloak password after successful federation (security best practice)
+        // The password was only needed for creating the reverse IdP
+        spoke.keycloakAdminPassword = undefined;
+        await this.store.save(spoke);
+
+        logger.info('BIDIRECTIONAL IdP federation established successfully', {
           spokeId,
           instanceCode: spoke.instanceCode,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          warning: 'Spoke approved but IdP not linked - use `dive federation link` manually'
+          hubIdpAlias: spoke.federationIdPAlias,
+          spokeIdpAlias: `${(process.env.INSTANCE_CODE || 'usa').toLowerCase()}-idp`,
+          bidirectional: true,
+          passwordCleared: true,
         });
-        // Don't fail spoke approval if IdP linking fails
-        // Admin can manually link later via CLI
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // BIDIRECTIONAL FEDERATION IS REQUIRED - any failure is critical
+        logger.error('CRITICAL: Bidirectional federation failed - suspending spoke', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          error: errorMessage,
+          impact: 'Cross-border SSO will NOT work in both directions',
+        });
+
+        // Suspend the spoke since bidirectional federation failed
+        await this.suspendSpoke(spokeId, `Bidirectional federation failed: ${errorMessage}`);
+
+        throw new Error(
+          `Spoke approval failed: Bidirectional federation is REQUIRED. ` +
+          `Spoke has been suspended. Error: ${errorMessage}`
+        );
       }
     }
 
@@ -661,15 +716,15 @@ class HubSpokeRegistryService {
 
   /**
    * Create Keycloak Identity Provider configuration for approved spoke
-   * 
+   *
    * This is called automatically during spoke approval.
    * Creates bidirectional OIDC trust: Hub ↔ Spoke
-   * 
+   *
    * What it does:
    * 1. Creates `{spoke}-idp` in Hub Keycloak → Points to Spoke Keycloak
    * 2. Configures protocol mappers for DIVE attributes
    * 3. Enables IdP immediately (shows in login page IdP selector)
-   * 
+   *
    * Example:
    * - Spoke: GBR
    * - Creates: `gbr-idp` in USA Hub Keycloak
@@ -678,10 +733,10 @@ class HubSpokeRegistryService {
    */
   private async createFederationIdP(spoke: ISpokeRegistration): Promise<void> {
     const { keycloakFederationService } = await import('./keycloak-federation.service');
-    
+
     const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
     const spokeInstanceCode = spoke.instanceCode;
-    
+
     logger.info('Auto-linking IdP for approved spoke', {
       spokeId: spoke.spokeId,
       hubInstance: hubInstanceCode,
@@ -706,11 +761,11 @@ class HubSpokeRegistryService {
     // Development: Internal Docker network + localhost
     // Production: External domains
     const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-    
+
     let spokeIdpUrlForValidation: string;
     let spokeIdpUrlForBrowser: string;
     let spokeKeycloakAdminUrl: string;
-    
+
     if (isDevelopment) {
       // Local dev: Use Docker internal names for Admin API, localhost for browser
       spokeIdpUrlForValidation = spoke.idpUrl;  // Internal (gbr-keycloak-gbr-1:8443)
@@ -722,7 +777,7 @@ class HubSpokeRegistryService {
       spokeIdpUrlForBrowser = spoke.idpPublicUrl || spoke.idpUrl;  // Same for browser
       spokeKeycloakAdminUrl = spoke.idpPublicUrl || spoke.idpUrl;  // Same for Admin API
     }
-    
+
     logger.info('Federation URL strategy', {
       environment: isDevelopment ? 'development' : 'production',
       validationUrl: spokeIdpUrlForValidation,
@@ -770,12 +825,12 @@ class HubSpokeRegistryService {
 
     // Fallback to KEYCLOAK_URL with localhost mapping
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
-    
+
     // Map container names to localhost for inter-spoke communication
     if (keycloakUrl.includes('keycloak:')) {
       return 'https://localhost:8443';  // USA Hub default (FIXED: was 8081)
     }
-    
+
     return keycloakUrl;
   }
 
@@ -794,41 +849,50 @@ class HubSpokeRegistryService {
   }
 
   /**
-   * Get spoke's Keycloak admin password from environment or GCP
-   * 
-   * Environment-aware:
-   * - Development: Uses environment variables with fallbacks
-   * - Production: Requires GCP Secret Manager (no fallbacks)
+   * Get spoke's Keycloak admin password
+   *
+   * Priority order:
+   * 1. Stored in spoke registration (provided during registration - PREFERRED)
+   * 2. Environment variable (KEYCLOAK_ADMIN_PASSWORD_{CODE})
+   * 3. GCP Secret Manager (production)
+   *
+   * CRITICAL: For bidirectional federation, the spoke MUST provide its
+   * Keycloak admin password during registration. Without it, we cannot
+   * create the reverse IdP (hub-idp in spoke Keycloak).
    */
   private async getSpokeKeycloakPassword(spokeInstanceCode: string): Promise<string> {
     const code = spokeInstanceCode.toUpperCase();
-    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-    
-    // Try environment variable first
+
+    // PRIORITY 1: Check if password was provided in spoke registration
+    const spoke = await this.store.findByInstanceCode(code);
+    if (spoke?.keycloakAdminPassword) {
+      logger.info('Using Keycloak password from spoke registration', {
+        spokeInstanceCode: code,
+        source: 'registration',
+      });
+      return spoke.keycloakAdminPassword;
+    }
+
+    // PRIORITY 2: Try environment variable
     const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
     if (process.env[envVar]) {
+      logger.info('Using Keycloak password from environment variable', {
+        spokeInstanceCode: code,
+        source: 'environment',
+      });
       return process.env[envVar];
     }
 
-    // Development: Allow fallback to shared password
-    if (isDevelopment) {
-      logger.warn('Using fallback password for development', {
-        spokeInstanceCode,
-        warning: 'NOT FOR PRODUCTION',
-      });
-      return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
-    }
-
-    // Production: Get from GCP Secret Manager (required!)
+    // PRIORITY 3 (Production): Get from GCP Secret Manager
     try {
       const { getSecret } = await import('../utils/gcp-secrets');
       const secretName = `keycloak-${code.toLowerCase()}` as any;
       const secret = await getSecret(secretName);
-      
+
       if (!secret) {
         throw new Error(`GCP secret ${secretName} returned null`);
       }
-      
+
       return secret;
     } catch (error) {
       logger.error('Failed to get spoke Keycloak password from GCP', {
@@ -845,13 +909,13 @@ class HubSpokeRegistryService {
 
   /**
    * Get spoke's public IdP URL (browser-accessible)
-   * 
+   *
    * This is different from the internal Docker network URL.
    * Used for federation redirects where user's browser needs access.
    */
   private getSpokePublicIdpUrl(spokeInstanceCode: string): string {
     const code = spokeInstanceCode.toUpperCase();
-    
+
     // Check environment variable first
     const envVar = `${code}_KEYCLOAK_PUBLIC_URL`;
     if (process.env[envVar]) {
@@ -1196,11 +1260,11 @@ class HubSpokeRegistryService {
 
   /**
    * Update OPA trusted issuers and federation matrix for a spoke
-   * 
+   *
    * This method dynamically updates OPA's policy data when:
    * - A spoke is approved: Add its Keycloak as a trusted issuer
    * - A spoke is suspended/revoked: Remove its Keycloak from trusted issuers
-   * 
+   *
    * This ensures federation tokens are immediately valid/invalid without
    * requiring manual policy file updates or container restarts.
    */
@@ -1209,13 +1273,13 @@ class HubSpokeRegistryService {
     action: 'add' | 'remove'
   ): Promise<void> {
     const instanceCode = spoke.instanceCode.toUpperCase();
-    
+
     // Determine the spoke's Keycloak issuer URL
     // Development: localhost with NATO port convention
     // Production: External domain
     const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
     let issuerUrl: string;
-    
+
     if (isDevelopment) {
       // Use NATO port convention for local development
       const portOffset = this.getPortOffsetForCountry(instanceCode);

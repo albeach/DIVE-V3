@@ -714,6 +714,153 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "esp": {
+      "code": "ESP",
+      "name": "Spain",
+      "locale": "es-ES",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.esp.yml",
+        "projectName": "esp"
+      },
+      "services": {
+        "_comment": "ESP uses esp- prefix on all service names",
+        "frontend": {
+          "name": "frontend-esp",
+          "containerName": "esp-frontend-esp-1",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "esp-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-esp",
+          "containerName": "esp-backend-esp-1",
+          "internalPort": 4000,
+          "externalPort": 4008,
+          "protocol": "https",
+          "hostname": "esp-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-esp",
+          "containerName": "esp-keycloak-esp-1",
+          "internalPort": 8443,
+          "externalPort": 8451,
+          "protocol": "https",
+          "hostname": "esp-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-esp",
+          "containerName": "esp-mongodb-esp-1",
+          "internalPort": 27017,
+          "externalPort": 27025,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "ita": {
+      "code": "ITA",
+      "name": "Italy",
+      "locale": "it-IT",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.ita.yml",
+        "projectName": "ita"
+      },
+      "services": {
+        "_comment": "ITA uses ita- prefix on all service names",
+        "frontend": {
+          "name": "frontend-ita",
+          "containerName": "ita-frontend-ita-1",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "ita-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-ita",
+          "containerName": "ita-backend-ita-1",
+          "internalPort": 4000,
+          "externalPort": 4025,
+          "protocol": "https",
+          "hostname": "ita-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-ita",
+          "containerName": "ita-keycloak-ita-1",
+          "internalPort": 8443,
+          "externalPort": 8468,
+          "protocol": "https",
+          "hostname": "ita-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-ita",
+          "containerName": "ita-mongodb-ita-1",
+          "internalPort": 27017,
+          "externalPort": 27042,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "lva": {
+      "code": "LVA",
+      "name": "Latvia",
+      "locale": "lv-LV",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.lva.yml",
+        "projectName": "lva"
+      },
+      "services": {
+        "_comment": "LVA uses lva- prefix on all service names",
+        "frontend": {
+          "name": "frontend-lva",
+          "containerName": "dive-spoke-lva-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "lva-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-lva",
+          "containerName": "dive-spoke-lva-backend",
+          "internalPort": 4000,
+          "externalPort": 4016,
+          "protocol": "https",
+          "hostname": "lva-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-lva",
+          "containerName": "dive-spoke-lva-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8459,
+          "protocol": "https",
+          "hostname": "lva-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-lva",
+          "containerName": "dive-spoke-lva-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27033,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
@@ -721,10 +868,13 @@
     "matrix": {
       "usa": [
         "deu",
+        "esp",
         "est",
         "fra",
         "gbr",
-        "hun"
+        "hun",
+        "ita",
+        "lva"
       ],
       "fra": [
         "usa",
@@ -748,6 +898,24 @@
         "usa"
       ],
       "est": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "esp": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "ita": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "lva": [
         "deu",
         "fra",
         "gbr",

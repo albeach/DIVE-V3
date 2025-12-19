@@ -3,6 +3,7 @@
 # =============================================================================
 # Spoke instance using extends pattern from base services.
 # Regenerate with: ./dive spoke init POL "Poland"
+# Spoke ID: spoke-pol-a06b2fe7
 # =============================================================================
 
 name: dive-spoke-pol
@@ -25,10 +26,6 @@ volumes:
   pol_backend_logs:
 
 services:
-  # ============================================================================
-  # DATABASE SERVICES
-  # ============================================================================
-  
   postgres-pol:
     extends:
       file: ../../docker/base/services.yml
@@ -76,14 +73,7 @@ services:
       - dive-pol-network
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_POL}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # ============================================================================
-  # IDENTITY & ACCESS MANAGEMENT
-  # ============================================================================
-  
   keycloak-pol:
     extends:
       file: ../../docker/base/services.yml
@@ -99,11 +89,13 @@ services:
       KC_HOSTNAME_ADMIN_URL: https://localhost:8466
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
     ports:
       - "8466:8443"
       - "8103:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres-pol:
@@ -112,10 +104,6 @@ services:
       - dive-pol-network
       - dive-v3-shared-network
 
-  # ============================================================================
-  # AUTHORIZATION
-  # ============================================================================
-  
   opa-pol:
     extends:
       file: ../../docker/base/services.yml
@@ -134,7 +122,7 @@ services:
       service: opal-client-base
     container_name: dive-spoke-pol-opal-client
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: http://opa-pol:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-pol-default}
@@ -149,10 +137,6 @@ services:
     networks:
       - dive-pol-network
 
-  # ============================================================================
-  # KEY ACCESS SERVICE
-  # ============================================================================
-  
   kas-pol:
     extends:
       file: ../../docker/base/services.yml
@@ -175,10 +159,6 @@ services:
     networks:
       - dive-pol-network
 
-  # ============================================================================
-  # BACKEND API
-  # ============================================================================
-  
   backend-pol:
     extends:
       file: ../../docker/base/services.yml
@@ -189,7 +169,6 @@ services:
       INSTANCE_NAME: "Poland"
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_POL:?set MONGO_PASSWORD_POL}@mongodb-pol:27017/dive-v3-pol?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_POL:?set MONGO_PASSWORD_POL}@mongodb-pol:27017/dive-v3-pol?authSource=admin
-      MONGODB_DATABASE: dive-v3-pol
       REDIS_URL: redis://:${REDIS_PASSWORD_POL:?set REDIS_PASSWORD_POL}@redis-pol:6379
       KEYCLOAK_URL: https://keycloak-pol:8443
       KEYCLOAK_REALM: dive-v3-broker-pol
@@ -218,11 +197,8 @@ services:
         condition: service_healthy
     networks:
       - dive-pol-network
+      - dive-v3-shared-network
 
-  # ============================================================================
-  # FRONTEND
-  # ============================================================================
-  
   frontend-pol:
     extends:
       file: ../../docker/base/services.yml
@@ -255,7 +231,8 @@ services:
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
       NEXT_PUBLIC_THEME_PRIMARY: "#DC143C"
       NEXT_PUBLIC_THEME_SECONDARY: "#FFFFFF"
-      NEXT_PUBLIC_THEME_ACCENT: "#000000"
+      NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      TZ: "Europe/Warsaw"
     ports:
       - "3023:3000"
     volumes:

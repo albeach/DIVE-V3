@@ -1,14 +1,14 @@
 /**
  * DIVE V3 - Federation API Routes
- * 
+ *
  * Hub-Spoke federation management endpoints.
- * 
+ *
  * Public endpoints (spoke → hub):
  * - POST /api/federation/register - Register new spoke
  * - POST /api/federation/heartbeat - Spoke heartbeat
  * - GET /api/federation/policy/version - Current policy version
  * - GET /api/federation/policy/bundle - Download policy bundle
- * 
+ *
  * Admin endpoints (hub management):
  * - GET /api/federation/spokes - List all spokes
  * - GET /api/federation/spokes/:spokeId - Get spoke details
@@ -17,7 +17,7 @@
  * - POST /api/federation/spokes/:spokeId/revoke - Revoke spoke
  * - POST /api/federation/spokes/:spokeId/token - Generate spoke token
  * - POST /api/federation/policy/push - Push policy update
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-04
  */
@@ -57,7 +57,12 @@ const registrationSchema = z.object({
     csrPEM: z.string().optional(),           // Base64-encoded CSR
     certificatePEM: z.string().optional(),   // Base64-encoded certificate
     requestedScopes: z.array(z.string()).min(1),
-    contactEmail: z.string().email()
+    contactEmail: z.string().email(),
+
+    // CRITICAL FOR BIDIRECTIONAL FEDERATION:
+    // Spoke must provide its Keycloak admin password so Hub can create reverse IdP
+    // This enables true bidirectional SSO (Hub users can login at Spoke)
+    keycloakAdminPassword: z.string().min(1).optional(),  // Required for bidirectional federation
 });
 
 const approvalSchema = z.object({
@@ -245,7 +250,7 @@ router.get('/instances', async (_req: Request, res: Response): Promise<void> => 
 
                 // Build URLs based on development/production
                 const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
-                
+
                 return {
                     code: inst.code || key.toUpperCase(),
                     name: inst.name || key,
@@ -254,13 +259,13 @@ router.get('/instances', async (_req: Request, res: Response): Promise<void> => 
                     flag: getCountryFlag(inst.code || key.toUpperCase()),
                     locale: inst.locale || 'en-US',
                     endpoints: {
-                        app: isDev 
+                        app: isDev
                             ? `https://localhost:${frontendService?.externalPort || 3000}`
                             : `https://${frontendService?.hostname || `${key}-app.dive25.com`}`,
-                        api: isDev 
+                        api: isDev
                             ? `https://localhost:${backendService?.externalPort || 4000}`
                             : `https://${backendService?.hostname || `${key}-api.dive25.com`}`,
-                        idp: isDev 
+                        idp: isDev
                             ? `https://localhost:${keycloakService?.externalPort || 8443}`
                             : `https://${keycloakService?.hostname || `${key}-idp.dive25.com`}`,
                     },
@@ -357,13 +362,63 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             });
         }
 
-        const spoke = await hubSpokeRegistry.registerSpoke(request);
+        let spoke = await hubSpokeRegistry.registerSpoke(request);
 
         logger.info('Spoke registration successful', {
             spokeId: spoke.spokeId,
             instanceCode: spoke.instanceCode,
             status: spoke.status
         });
+
+        // AUTO-APPROVAL FOR DEVELOPMENT MODE
+        // In development, automatically approve spokes with sensible defaults
+        // This enables rapid testing without manual admin intervention
+        const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+        const autoApprove = isDevelopment || process.env.AUTO_APPROVE_SPOKES === 'true';
+
+        let token = null;
+        if (autoApprove) {
+            try {
+                logger.info('Auto-approving spoke (development mode)', {
+                    spokeId: spoke.spokeId,
+                    instanceCode: spoke.instanceCode,
+                });
+
+                spoke = await hubSpokeRegistry.approveSpoke(
+                    spoke.spokeId,
+                    'auto-approval-system',
+                    {
+                        allowedScopes: request.requestedScopes,
+                        trustLevel: 'development',
+                        maxClassification: 'SECRET',
+                        dataIsolationLevel: 'filtered',
+                        autoLinkIdP: true,  // Create bidirectional IdP federation
+                    }
+                );
+
+                // Generate token for the spoke
+                const spokeToken = await hubSpokeRegistry.generateSpokeToken(spoke.spokeId);
+                token = {
+                    token: spokeToken.token,
+                    expiresAt: spokeToken.expiresAt,
+                    scopes: spokeToken.scopes,
+                };
+
+                logger.info('Spoke auto-approved with bidirectional federation', {
+                    spokeId: spoke.spokeId,
+                    instanceCode: spoke.instanceCode,
+                    status: spoke.status,
+                    federationIdPAlias: spoke.federationIdPAlias,
+                });
+            } catch (approvalError) {
+                logger.error('Auto-approval failed', {
+                    spokeId: spoke.spokeId,
+                    error: approvalError instanceof Error ? approvalError.message : 'Unknown error',
+                });
+                // Don't fail registration if auto-approval fails
+                // Spoke will remain in pending status for manual approval
+            }
+        }
 
         res.status(201).json({
             success: true,
@@ -372,8 +427,12 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 instanceCode: spoke.instanceCode,
                 name: spoke.name,
                 status: spoke.status,
-                message: 'Registration pending approval. You will receive a token once approved.'
-            }
+                federationIdPAlias: spoke.federationIdPAlias,
+                message: spoke.status === 'approved'
+                    ? 'Registration approved with bidirectional federation.'
+                    : 'Registration pending approval. You will receive a token once approved.'
+            },
+            token,  // Include token if auto-approved
         });
 
     } catch (error) {
@@ -1403,7 +1462,7 @@ router.get('/health/spokes', requireAdmin, async (_req: Request, res: Response):
         const averageLatency = spokeHealthStatus
             .filter(s => s.health.latencyMs > 0)
             .reduce((sum, s, _i, arr) => sum + s.health.latencyMs / arr.length, 0);
-        
+
         const policySyncSummary = {
             current: spokeHealthStatus.filter(s => s.policySync?.status === 'current').length,
             behind: spokeHealthStatus.filter(s => s.policySync?.status === 'behind').length,
@@ -1498,7 +1557,7 @@ const auditIngestionStats = {
 /**
  * POST /api/federation/audit/ingest
  * Receive audit logs from spokes (DIVE-020)
- * 
+ *
  * Spokes batch-send their audit logs to the Hub for centralized aggregation.
  * Authentication via spoke token.
  */
@@ -1571,7 +1630,7 @@ router.post('/audit/ingest', requireSpokeToken, async (req: Request, res: Respon
 
         // Update statistics
         auditIngestionStats.totalReceived += ingested;
-        auditIngestionStats.totalBySpoke[spokeId] = 
+        auditIngestionStats.totalBySpoke[spokeId] =
             (auditIngestionStats.totalBySpoke[spokeId] || 0) + ingested;
         auditIngestionStats.lastReceivedAt = receivedAt;
 
@@ -1733,7 +1792,7 @@ router.get('/audit/statistics', requireAdmin, async (_req: Request, res: Respons
         const classificationDist: Record<string, number> = {};
         for (const entry of aggregatedAuditLogs) {
             if (entry.resource?.classification) {
-                classificationDist[entry.resource.classification] = 
+                classificationDist[entry.resource.classification] =
                     (classificationDist[entry.resource.classification] || 0) + 1;
             }
         }
@@ -1742,7 +1801,7 @@ router.get('/audit/statistics', requireAdmin, async (_req: Request, res: Respons
         const denyByResource: Record<string, number> = {};
         for (const entry of aggregatedAuditLogs.filter(e => e.decision === 'deny')) {
             if (entry.resource?.resourceId) {
-                denyByResource[entry.resource.resourceId] = 
+                denyByResource[entry.resource.resourceId] =
                     (denyByResource[entry.resource.resourceId] || 0) + 1;
             }
         }
@@ -2305,10 +2364,10 @@ router.post('/spokes/:spokeId/validate-certificate', requireAdmin, async (req: R
 
 /**
  * POST /api/federation/link-idp
- * 
+ *
  * Create Identity Provider configuration for cross-border SSO
  * This is called by `dive federation link <CODE>` CLI command
- * 
+ *
  * Automatically configures Keycloak IdP trust relationship
  */
 router.post('/link-idp', requireAdmin, async (req: Request, res: Response): Promise<void> => {
@@ -2358,18 +2417,18 @@ router.post('/link-idp', requireAdmin, async (req: Request, res: Response): Prom
         const { keycloakFederationService } = await import('../services/keycloak-federation.service');
 
         const remoteRealm = `dive-v3-broker-${remoteInstanceCode.toLowerCase()}`;
-        
+
         // Determine local details for bidirectional linking
         const localRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
         const localIdpUrl = getPublicIdpUrl(localInstanceCode);
         const localName = getInstanceDisplayName(localInstanceCode);
-        
+
         // Get remote Keycloak admin password
         const remoteKeycloakPassword = await getRemoteKeycloakPassword(remoteInstanceCode);
-        
+
         // Use PUBLIC URL for browser redirects (idpPublicUrl if available, else construct it)
         const remoteIdpUrl = remoteSpoke.idpPublicUrl || getPublicIdpUrl(remoteInstanceCode);
-        
+
         // Use INTERNAL URL for Admin API (container-to-container)
         const remoteKeycloakAdminUrl = remoteSpoke.idpUrl;  // Internal Docker network URL
 
@@ -2451,13 +2510,13 @@ function getInstanceDisplayName(instanceCode: string): string {
 
 /**
  * Helper: Get public (browser-accessible) IdP URL
- * 
+ *
  * Different from internal Docker network URL.
  * Used for browser redirects during federation authentication.
  */
 function getPublicIdpUrl(instanceCode: string): string {
     const code = instanceCode.toUpperCase();
-    
+
     // Check environment variable first
     const envVar = `${code}_KEYCLOAK_PUBLIC_URL`;
     if (process.env[envVar]) {
@@ -2494,7 +2553,7 @@ function getPublicIdpUrl(instanceCode: string): string {
  */
 async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> {
     const code = instanceCode.toUpperCase();
-    
+
     // Try environment variable
     const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
     if (process.env[envVar]) {
@@ -2522,7 +2581,7 @@ async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> 
 
 /**
  * DELETE /api/federation/unlink-idp/:alias
- * 
+ *
  * Remove Identity Provider configuration
  */
 router.delete('/unlink-idp/:alias', requireAdmin, async (req: Request, res: Response): Promise<void> => {

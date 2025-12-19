@@ -24,13 +24,13 @@ fi
 
 ##
 # Get admin token for any instance (hub or spoke)
-# 
+#
 # Arguments:
 #   $1 - Instance code (e.g., usa, alb, bel)
-# 
+#
 # Outputs:
 #   Admin access token on stdout
-# 
+#
 # Returns:
 #   0 - Success
 #   1 - Failed
@@ -39,7 +39,7 @@ get_instance_admin_token() {
     local instance_code="${1:?Instance code required}"
     local code_upper
     code_upper=$(upper "$instance_code")
-    
+
     if [ "$code_upper" = "USA" ]; then
         get_hub_admin_token
     else
@@ -57,11 +57,38 @@ federation_status() {
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would query hub API for registered instances"
     else
-        echo "  Registered Instances:"
-        echo "    USA: https://usa-app.dive25.com"
-        echo "    FRA: https://fra-app.dive25.com (pending)"
-        echo "    GBR: https://gbr-app.dive25.com (pending)"
-        echo "    DEU: https://deu-app.dive25.com (pending)"
+        # Environment-aware URLs
+        if [ "$ENVIRONMENT" = "local" ] || [ -z "$ENVIRONMENT" ]; then
+            echo "  ${CYAN}Environment: LOCAL${NC}"
+            echo ""
+            echo "  Registered Instances:"
+            echo "    USA (Hub): https://localhost:3000 ${GREEN}✓${NC}"
+
+            # Check for running spokes
+            if docker ps --format '{{.Names}}' | grep -q "dive-spoke-esp"; then
+                echo "    ESP (Spain): https://localhost:3008 ${GREEN}✓ running${NC}"
+            fi
+            if docker ps --format '{{.Names}}' | grep -q "dive-spoke-ita"; then
+                echo "    ITA (Italy): https://localhost:3025 ${GREEN}✓ running${NC}"
+            fi
+            if docker ps --format '{{.Names}}' | grep -q "dive-spoke-fra"; then
+                echo "    FRA (France): https://localhost:3001 ${YELLOW}(not running)${NC}"
+            fi
+            if docker ps --format '{{.Names}}' | grep -q "dive-spoke-gbr"; then
+                echo "    GBR (Britain): https://localhost:3002 ${YELLOW}(not running)${NC}"
+            fi
+            if docker ps --format '{{.Names}}' | grep -q "dive-spoke-deu"; then
+                echo "    DEU (Germany): https://localhost:3003 ${YELLOW}(not running)${NC}"
+            fi
+        else
+            echo "  ${CYAN}Environment: GCP/PILOT${NC}"
+            echo ""
+            echo "  Registered Instances:"
+            echo "    USA: https://usa-app.dive25.com"
+            echo "    FRA: https://fra-app.dive25.com (pending)"
+            echo "    GBR: https://gbr-app.dive25.com (pending)"
+            echo "    DEU: https://deu-app.dive25.com (pending)"
+        fi
     fi
 }
 
@@ -112,7 +139,7 @@ federation_sync_idps() {
 
 federation_link() {
     local remote_instance="${1:-}"
-    
+
     if [ -z "$remote_instance" ]; then
         log_error "Usage: ./dive federation link <INSTANCE_CODE>"
         echo ""
@@ -122,14 +149,14 @@ federation_link() {
         echo ""
         return 1
     fi
-    
+
     local remote_code="${remote_instance^^}"  # Uppercase
     local local_instance="${INSTANCE:-USA}"
     local local_code="${local_instance^^}"
-    
+
     log_step "Linking Identity Provider: ${remote_code} ↔ ${local_code}"
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would call backend API: POST /api/federation/link-idp"
         log_dry "  localInstance: ${local_code}"
@@ -137,7 +164,7 @@ federation_link() {
         log_dry "Would create ${remote_code}-idp in local Keycloak"
         return 0
     fi
-    
+
     # ==========================================================================
     # Determine backend URLs based on instance codes (local development ports)
     # ==========================================================================
@@ -151,7 +178,7 @@ federation_link() {
         NZL) local_backend_port=4005 ;;
         *)   local_backend_port=4000 ;;
     esac
-    
+
     case "${remote_code}" in
         USA) remote_backend_port=4000 ;;
         FRA) remote_backend_port=4001 ;;
@@ -161,18 +188,18 @@ federation_link() {
         NZL) remote_backend_port=4005 ;;
         *)   remote_backend_port=4000 ;;
     esac
-    
+
     local local_backend_url="https://localhost:${local_backend_port}"
     local remote_backend_url="https://localhost:${remote_backend_port}"
-    
+
     # ==========================================================================
     # Step 1: Add remote IdP to local Keycloak (via local backend)
     # ==========================================================================
     echo -e "${CYAN}Step 1: Adding ${remote_code} IdP to ${local_code} Keycloak${NC}"
-    
+
     local api_endpoint="${local_backend_url}/api/federation/link-idp"
     log_info "Calling: ${api_endpoint}"
-    
+
     # Get admin token for local instance
     local admin_token
     if ! admin_token=$(get_instance_admin_token "${local_code}"); then
@@ -189,19 +216,19 @@ federation_link() {
             \"remoteInstanceCode\": \"${remote_code}\",
             \"skipRemote\": true
         }" 2>&1)
-    
+
     if echo "$response" | grep -q '"success":true' || echo "$response" | grep -q 'already exists'; then
         log_success "${remote_code} IdP added to ${local_code}"
     else
         log_warn "Step 1 result: $response"
     fi
-    
+
     # ==========================================================================
-    # Step 2: Add local IdP to remote Keycloak (via remote backend)  
+    # Step 2: Add local IdP to remote Keycloak (via remote backend)
     # ==========================================================================
     echo ""
     echo -e "${CYAN}Step 2: Adding ${local_code} IdP to ${remote_code} Keycloak${NC}"
-    
+
     api_endpoint="${remote_backend_url}/api/federation/link-idp"
     log_info "Calling: ${api_endpoint}"
 
@@ -219,13 +246,13 @@ federation_link() {
             \"remoteInstanceCode\": \"${local_code}\",
             \"skipRemote\": true
         }" 2>&1)
-    
+
     if echo "$response" | grep -q '"success":true' || echo "$response" | grep -q 'already exists'; then
         log_success "${local_code} IdP added to ${remote_code}"
     else
         log_warn "Step 2 result: $response"
     fi
-    
+
     # ==========================================================================
     # Summary
     # ==========================================================================
@@ -244,22 +271,22 @@ federation_link() {
 
 federation_unlink() {
     local remote_instance="${1:-}"
-    
+
     if [ -z "$remote_instance" ]; then
         log_error "Usage: ./dive federation unlink <INSTANCE_CODE>"
         return 1
     fi
-    
+
     local remote_code="${remote_instance^^}"
     local idp_alias="${remote_code,,}-idp"  # Lowercase with -idp suffix
-    
+
     log_step "Unlinking Identity Provider: ${remote_code}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would delete IdP: ${idp_alias}"
         return 0
     fi
-    
+
     # Call backend API to delete IdP
     local backend_url="${BACKEND_URL:-https://localhost:4000}"
     local api_endpoint="${backend_url}/api/federation/unlink-idp/${idp_alias}"
@@ -273,7 +300,7 @@ federation_unlink() {
 
     response=$(curl -sk -X DELETE "${api_endpoint}" \
         -H "Authorization: Bearer ${admin_token}" 2>&1)
-    
+
     if echo "$response" | grep -q '"success":true'; then
         log_success "IdP unlinked successfully"
     else
@@ -285,11 +312,11 @@ federation_unlink() {
 federation_list_idps() {
     log_step "Listing configured Identity Providers..."
     echo ""
-    
+
     # Determine backend URL based on instance
     local backend_port=4000
     local inst_lc=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
-    
+
     # Calculate port offset for non-USA instances (NATO port allocation)
     if [[ "$inst_lc" != "usa" && -f "${DIVE_ROOT}/scripts/nato-countries.sh" ]]; then
         source "${DIVE_ROOT}/scripts/nato-countries.sh"
@@ -298,17 +325,17 @@ federation_list_idps() {
             backend_port=$((4000 + port_offset))
         fi
     fi
-    
+
     local backend_url="${BACKEND_URL:-https://localhost:${backend_port}}"
     local api_endpoint="${backend_url}/api/idps/public"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would call: GET ${api_endpoint}"
         return 0
     fi
-    
+
     response=$(curl -sk "${api_endpoint}" 2>&1)
-    
+
     if echo "$response" | grep -q '"success":true'; then
         echo "$response" | jq -r '.idps[] | "  [\(.enabled | if . then "✓" else " " end)] \(.displayName) (\(.alias))"'
     else
@@ -336,38 +363,38 @@ federation_push_audit() {
 federation_mappers_list() {
     ensure_dive_root
     local template_dir="${DIVE_ROOT}/keycloak/mapper-templates/reference/nato-nations"
-    
+
     echo -e "${RED}${BOLD}⚠️  PII MINIMIZATION WARNING ⚠️${NC}"
     echo -e "${YELLOW}These templates are for REFERENCE ONLY and contain PII.${NC}"
     echo -e "${YELLOW}DO NOT use in production. Use './dive federation mappers apply' instead.${NC}"
     echo ""
-    
+
     echo -e "${BOLD}NATO Nation Reference Templates (Documentation Only):${NC}"
     echo ""
-    
+
     if [ ! -d "$template_dir" ]; then
         log_error "Reference templates directory not found: $template_dir"
         return 1
     fi
-    
+
     echo -e "${CYAN}Nation${NC}                 ${CYAN}ISO${NC}  ${CYAN}Convention${NC}              ${CYAN}Attributes (PII)${NC}"
     echo "─────────────────────  ───  ─────────────────────  ──────────────────────"
-    
+
     for template in "$template_dir"/*.json; do
         [ "$template" = "$template_dir/_template.json" ] && continue
         [ ! -f "$template" ] && continue
-        
+
         local nation=$(jq -r '.nation.name' "$template" 2>/dev/null)
         local iso=$(jq -r '.nation.iso3166' "$template" 2>/dev/null)
         local conv=$(jq -r '.nation.attributeConvention' "$template" 2>/dev/null)
         local surname=$(jq -r '.attributes.profile.surname' "$template" 2>/dev/null)
         local givenname=$(jq -r '.attributes.profile.givenName' "$template" 2>/dev/null)
-        
+
         [ "$nation" = "null" ] && continue
-        
+
         printf "%-22s %-4s %-22s %s, %s\n" "$nation" "$iso" "$conv" "$surname" "$givenname"
     done
-    
+
     echo ""
     echo "Total reference templates: $(find "$template_dir" -name '*.json' ! -name '_template.json' | wc -l | tr -d ' ')"
     echo ""
@@ -376,7 +403,7 @@ federation_mappers_list() {
 
 federation_mappers_show() {
     local nation="${1:-}"
-    
+
     if [ -z "$nation" ]; then
         log_error "Usage: ./dive federation mappers show <nation>"
         echo ""
@@ -385,67 +412,67 @@ federation_mappers_show() {
         echo "  ./dive federation mappers show united-kingdom"
         return 1
     fi
-    
+
     ensure_dive_root
     local template_file="${DIVE_ROOT}/keycloak/mapper-templates/reference/nato-nations/${nation}.json"
-    
+
     if [ ! -f "$template_file" ]; then
         log_error "Template not found: $nation"
         echo ""
         echo "Run './dive federation mappers list' to see available nations."
         return 1
     fi
-    
+
     echo -e "${RED}${BOLD}⚠️  PII WARNING ⚠️${NC}"
     echo -e "${YELLOW}This template contains PII (names, emails, national IDs).${NC}"
     echo -e "${YELLOW}Reference only - NOT for production use.${NC}"
     echo ""
-    
+
     echo -e "${BOLD}NATO Nation Reference Template: $nation${NC}"
     echo ""
-    
+
     echo -e "${CYAN}Nation Information:${NC}"
     jq -r '.nation | "  Name:       \(.name)\n  ISO 3166:   \(.iso3166)\n  Language:   \(.language)\n  Convention: \(.attributeConvention)"' "$template_file"
     echo ""
-    
+
     echo -e "${CYAN}Locale-Specific Attributes (PII):${NC}"
     jq -r '.attributes.profile | "  Surname:    \(.surname)\n  Given Name: \(.givenName)\n  Email:      \(.email)"' "$template_file"
     echo ""
-    
+
     local nationalid_name=$(jq -r '.attributes.nationalId.name' "$template_file")
     local nationalid_desc=$(jq -r '.attributes.nationalId.description' "$template_file")
     echo -e "${CYAN}National Identifier (PII):${NC}"
     echo "  Name:        $nationalid_name"
     echo "  Description: $nationalid_desc"
     echo ""
-    
+
     echo -e "${CYAN}Protocol Mappers (9 total - includes PII):${NC}"
     jq -r '.protocolMappers[] | "  • \(.name): \(.config["user.attribute"]) → \(.config["claim.name"])"' "$template_file"
     echo ""
-    
+
     echo -e "${YELLOW}For production: ./dive federation mappers apply (uses PII-minimized template)${NC}"
 }
 
 federation_mappers_apply() {
     ensure_dive_root
-    
+
     # Use production template with 4 PII-minimized claims
     local template_file="${DIVE_ROOT}/keycloak/mapper-templates/production/dive-core-claims.json"
-    
+
     if [ ! -f "$template_file" ]; then
         log_error "Production template not found: $template_file"
         return 1
     fi
-    
+
     # Determine instance-specific parameters
     local instance_lower=$(lower "$INSTANCE")
     local instance_upper=$(upper "$INSTANCE")
-    
+
     # Map instance to Keycloak URL and realm
     local keycloak_url="localhost:8443"
     local realm="dive-v3-broker"
     local client_id="dive-v3-cross-border-client"
-    
+
     case "$instance_lower" in
         fra)
             keycloak_url="localhost:8447"
@@ -464,7 +491,7 @@ federation_mappers_apply() {
             realm="dive-v3-broker"
             ;;
     esac
-    
+
     log_step "Applying PII-minimized DIVE mappers to $instance_upper"
     echo ""
     echo -e "  ${GREEN}Template:${NC}        production/dive-core-claims.json"
@@ -475,69 +502,69 @@ federation_mappers_apply() {
     echo "  Target Realm:    $realm"
     echo "  Target Client:   $client_id"
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would apply 4 PII-minimized mappers from production template"
         log_dry "Would authenticate with Keycloak at $keycloak_url"
         log_dry "Would create/update mappers on client: $client_id"
         return 0
     fi
-    
+
     # Get admin password from instance env file
     local env_file="${DIVE_ROOT}/instances/${instance_lower}/.env"
     if [ ! -f "$env_file" ]; then
         log_error "Instance environment file not found: $env_file"
         return 1
     fi
-    
+
     source "$env_file"
     # Try instance-specific password first, then generic
     local password_var="KEYCLOAK_ADMIN_PASSWORD_${instance_upper}"
     local admin_pass="${!password_var:-$KEYCLOAK_ADMIN_PASSWORD}"
-    
+
     if [ -z "$admin_pass" ]; then
         log_error "KEYCLOAK_ADMIN_PASSWORD or KEYCLOAK_ADMIN_PASSWORD_${instance_upper} not found in $env_file"
         return 1
     fi
-    
+
     # Authenticate
     local token=$(curl -sk -X POST "https://${keycloak_url}/realms/master/protocol/openid-connect/token" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
         -d "password=${admin_pass}" \
         -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
-    
+
     if [ "$token" = "null" ] || [ -z "$token" ]; then
         log_error "Failed to authenticate with Keycloak"
         return 1
     fi
-    
+
     # Get client UUID
     local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
         "https://${keycloak_url}/admin/realms/${realm}/clients?clientId=$client_id" 2>/dev/null \
         | jq -r '.[0].id')
-    
+
     if [ "$client_uuid" = "null" ] || [ -z "$client_uuid" ]; then
         log_error "Client not found: $client_id"
         return 1
     fi
-    
+
     # Apply mappers from production template
     local mappers=$(jq '.protocolMappers' "$template_file")
     local mapper_count=$(echo "$mappers" | jq 'length')
-    
+
     log_info "Applying $mapper_count PII-minimized mappers..."
-    
+
     local success_count=0
     for i in $(seq 0 $((mapper_count - 1))); do
         local mapper=$(echo "$mappers" | jq ".[$i]")
         local mapper_name=$(echo "$mapper" | jq -r '.name')
-        
+
         # Check if mapper exists
         local existing=$(curl -sk -H "Authorization: Bearer $token" \
             "https://${keycloak_url}/admin/realms/${realm}/clients/$client_uuid/protocol-mappers/models" 2>/dev/null | \
             jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id')
-        
+
         if [ -n "$existing" ] && [ "$existing" != "null" ]; then
             # Update existing
             curl -sk -X PUT \
@@ -557,7 +584,7 @@ federation_mappers_apply() {
         fi
         ((success_count++))
     done
-    
+
     echo ""
     log_success "Applied $success_count PII-minimized mappers successfully!"
     echo ""
@@ -568,9 +595,9 @@ federation_mappers_verify() {
     ensure_dive_root
     local instance_lower=$(lower "$INSTANCE")
     local instance_upper=$(upper "$INSTANCE")
-    
+
     log_step "Verifying PII-minimized DIVE mappers on $instance_upper Keycloak"
-    
+
     # Determine Keycloak URL based on instance
     local keycloak_url="localhost:8443"
     case "$instance_lower" in
@@ -578,66 +605,66 @@ federation_mappers_verify() {
         gbr) keycloak_url="localhost:8446" ;;
         deu) keycloak_url="localhost:8448" ;;
     esac
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would check mappers on client: dive-v3-cross-border-client"
         log_dry "Would verify 4 required DIVE claims are present"
         log_dry "Would check optional pseudonym fields if present"
         return 0
     fi
-    
+
     # Get admin password
     local env_file="${DIVE_ROOT}/instances/${instance_lower}/.env"
     if [ ! -f "$env_file" ]; then
         log_error "Instance environment file not found: $env_file"
         return 1
     fi
-    
+
     source "$env_file"
     # Try instance-specific password first, then generic
     local password_var="KEYCLOAK_ADMIN_PASSWORD_${instance_upper}"
     local admin_pass="${!password_var:-$KEYCLOAK_ADMIN_PASSWORD}"
-    
+
     if [ -z "$admin_pass" ]; then
         log_error "KEYCLOAK_ADMIN_PASSWORD or KEYCLOAK_ADMIN_PASSWORD_${instance_upper} not found in $env_file"
         return 1
     fi
-    
+
     # Authenticate and get client mappers
     local token=$(curl -sk -X POST "https://${keycloak_url}/realms/master/protocol/openid-connect/token" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
         -d "password=${admin_pass}" \
         -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
-    
+
     if [ "$token" = "null" ] || [ -z "$token" ]; then
         log_error "Failed to authenticate with Keycloak"
         return 1
     fi
-    
+
     local realm="dive-v3-broker"
     [ "$instance_lower" != "usa" ] && realm="dive-v3-broker-${instance_lower}"
-    
+
     # Get client ID
     local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
         "https://${keycloak_url}/admin/realms/${realm}/clients?clientId=dive-v3-cross-border-client" 2>/dev/null \
         | jq -r '.[0].id')
-    
+
     if [ "$client_uuid" = "null" ] || [ -z "$client_uuid" ]; then
         log_error "Client not found: dive-v3-cross-border-client"
         return 1
     fi
-    
+
     # Get mappers
     local mappers=$(curl -sk -H "Authorization: Bearer $token" \
         "https://${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null)
-    
+
     echo ""
     echo -e "${CYAN}Required DIVE Claims (PII-Minimized):${NC}"
-    
+
     local required=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
     local found=0
-    
+
     for mapper in "${required[@]}"; do
         if echo "$mappers" | jq -e ".[] | select(.name==\"$mapper\")" >/dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} $mapper"
@@ -646,10 +673,10 @@ federation_mappers_verify() {
             echo -e "  ${RED}✗${NC} $mapper (missing)"
         fi
     done
-    
+
     echo ""
     echo -e "${CYAN}Optional Claims (if backend generates):${NC}"
-    
+
     local optional=("pseudonym" "pseudonymousIdentifier")
     for mapper in "${optional[@]}"; do
         if echo "$mappers" | jq -e ".[] | select(.name==\"$mapper\")" >/dev/null 2>&1; then
@@ -658,24 +685,24 @@ federation_mappers_verify() {
             echo -e "  ${GRAY}−${NC} $mapper (not present - OK)"
         fi
     done
-    
+
     echo ""
     echo -e "${CYAN}PII Minimization Check:${NC}"
-    
+
     local pii_fields=("family_name" "given_name" "email" "nationalId" "name" "phone_number")
     local pii_found=false
-    
+
     for field in "${pii_fields[@]}"; do
         if echo "$mappers" | jq -e ".[] | select(.name==\"$field\")" >/dev/null 2>&1; then
             echo -e "  ${RED}✗${NC} $field (PII VIOLATION!)"
             pii_found=true
         fi
     done
-    
+
     if [ "$pii_found" = false ]; then
         echo -e "  ${GREEN}✓${NC} No PII fields detected"
     fi
-    
+
     echo ""
     if [ $found -eq 4 ] && [ "$pii_found" = false ]; then
         log_success "All required mappers verified! PII minimization enforced."
@@ -919,7 +946,7 @@ hub_bootstrap() {
 
 federation_register_spoke() {
     local instance_code="${1:-}"
-    
+
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
         echo ""
@@ -930,15 +957,15 @@ federation_register_spoke() {
         echo "  ./dive federation register-spoke POL"
         return 1
     fi
-    
+
     local code_upper="${instance_code^^}"
     local register_script="${DIVE_ROOT}/scripts/spoke-init/register-spoke-federation.sh"
-    
+
     if [ ! -f "$register_script" ]; then
         log_error "Federation registration script not found: $register_script"
         return 1
     fi
-    
+
     log_info "Registering ${code_upper} in federation registry..."
     bash "$register_script" "$code_upper"
 }
@@ -950,7 +977,7 @@ federation_register_spoke() {
 module_federation() {
     local action="${1:-status}"
     shift || true
-    
+
     case "$action" in
         status)        federation_status ;;
         register)      federation_register "$@" ;;
@@ -969,7 +996,7 @@ module_federation() {
 federation_mappers_dispatch() {
     local subcommand="${1:-help}"
     shift || true
-    
+
     case "$subcommand" in
         list)    federation_mappers_list ;;
         show)    federation_mappers_show "$@" ;;
@@ -982,7 +1009,7 @@ federation_mappers_dispatch() {
 module_hub() {
     local action="${1:-help}"
     shift || true
-    
+
     case "$action" in
         start)       hub_start ;;
         status)      hub_status ;;

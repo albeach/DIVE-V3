@@ -8,7 +8,7 @@ Welcome to the DIVE V3 documentation. This index organizes all documentation by 
 
 | Document | Description |
 |----------|-------------|
-| [Hub-Spoke 101 Deployment](./HUB_SPOKE_101_DEPLOYMENT.md) | **Start here!** Step-by-step guide to deploy hub and spoke |
+| [Hub-Spoke 101 Deployment](./HUB_SPOKE_101_DEPLOYMENT.md) | **Start here!** Dynamic NATO coalition deployment guide |
 | [Hub-Spoke Quick Reference](./HUB_SPOKE_QUICK_REFERENCE.md) | Printable cheat sheet for operators |
 | [Pilot Quick Start](./PILOT-QUICK-START.md) | Quick start for pilot deployment |
 | [Browser Access Guide](./BROWSER_ACCESS_GUIDE.md) | How to access DIVE V3 services |

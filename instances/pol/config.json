@@ -1,12 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-pol-d6210783",
+    "spokeId": "spoke-pol-a06b2fe7",
     "instanceCode": "POL",
     "name": "Poland",
     "description": "DIVE V3 Spoke Instance for Poland",
     "country": "POL",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@pol.dive25.com",
+    "registeredSpokeId": "spoke-pol-42b66abe"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,8 +15,9 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3023",
     "apiUrl": "https://localhost:4023",
-    "idpUrl": "https://localhost:8466",
-    "kasUrl": "https://localhost:9023"
+    "idpUrl": "https://dive-spoke-pol-keycloak:8443",
+    "kasUrl": "https://localhost:9023",
+    "idpPublicUrl": "https://localhost:8466"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/pol/certs/spoke.crt",
@@ -25,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:pol",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2025-12-19T10:28:16Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -44,8 +47,12 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-14T00:41:34Z",
-    "lastModified": "2025-12-14T00:41:34Z",
+    "createdAt": "2025-12-19T09:33:13Z",
+    "lastModified": "2025-12-19T09:33:13Z",
     "configHash": ""
-  }
+  },
+  "contact": {
+    "email": "admin@pol.dive25.com"
+  },
+  "contactEmail": "admin@pol.dive25.com"
 }

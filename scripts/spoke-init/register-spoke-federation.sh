@@ -186,11 +186,11 @@ MONGODB_PORT=$(extract_port "mongodb-${INSTANCE_LOWER}" "27017" "27020")
 [[ "$KEYCLOAK_PORT" =~ ^[0-9]+$ ]] || KEYCLOAK_PORT="8456"
 [[ "$MONGODB_PORT" =~ ^[0-9]+$ ]] || MONGODB_PORT="27020"
 
-# Container names
-FRONTEND_CONTAINER="${INSTANCE_LOWER}-frontend-${INSTANCE_LOWER}-1"
-BACKEND_CONTAINER="${INSTANCE_LOWER}-backend-${INSTANCE_LOWER}-1"
-KEYCLOAK_CONTAINER="${INSTANCE_LOWER}-keycloak-${INSTANCE_LOWER}-1"
-MONGODB_CONTAINER="${INSTANCE_LOWER}-mongodb-${INSTANCE_LOWER}-1"
+# Container names (new naming pattern: dive-spoke-lva-backend)
+FRONTEND_CONTAINER="dive-spoke-${INSTANCE_LOWER}-frontend"
+BACKEND_CONTAINER="dive-spoke-${INSTANCE_LOWER}-backend"
+KEYCLOAK_CONTAINER="dive-spoke-${INSTANCE_LOWER}-keycloak"
+MONGODB_CONTAINER="dive-spoke-${INSTANCE_LOWER}-mongodb"
 
 log_info "Detected ports: Frontend=${FRONTEND_PORT}, Backend=${BACKEND_PORT}, Keycloak=${KEYCLOAK_PORT}"
 
@@ -302,13 +302,13 @@ CURRENT_ISSUERS=$(grep "TRUSTED_ISSUERS:" "$COMPOSE_FILE" | head -1 | sed 's/.*T
 
 if [[ "$CURRENT_ISSUERS" != *"https://localhost:8443/realms/dive-v3-broker"* ]]; then
     log_info "Adding Hub issuers to spoke's TRUSTED_ISSUERS..."
-    
+
     # Update the docker-compose file to include Hub issuers
     sed -i.bak "s|TRUSTED_ISSUERS: \(.*\)|TRUSTED_ISSUERS: \1,${HUB_ISSUERS}|" "$COMPOSE_FILE"
     rm -f "${COMPOSE_FILE}.bak"
-    
+
     log_success "Updated TRUSTED_ISSUERS in docker-compose.yml"
-    
+
     # Restart the spoke backend to pick up changes
     log_info "Restarting spoke backend to apply changes..."
     cd "$INSTANCE_DIR"

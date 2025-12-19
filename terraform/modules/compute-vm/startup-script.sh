@@ -131,7 +131,7 @@ check_service() {
     local name="$1"
     local url="$2"
     local timeout="${3:-10}"
-    
+
     if curl -sfk --max-time "$timeout" "$url" >/dev/null 2>&1; then
         RESULTS+=("{\"name\":\"$name\",\"healthy\":true}")
     else
@@ -150,7 +150,7 @@ if [ -f /opt/dive-v3/.env ]; then
     SPOKE_KC_PORT=$(grep SPOKE_KEYCLOAK_HTTPS_PORT /opt/dive-v3/.env | cut -d= -f2)
     SPOKE_API_PORT=$(grep SPOKE_BACKEND_PORT /opt/dive-v3/.env | cut -d= -f2)
     SPOKE_APP_PORT=$(grep SPOKE_FRONTEND_PORT /opt/dive-v3/.env | cut -d= -f2)
-    
+
     if [ -n "$SPOKE_KC_PORT" ]; then
         check_service "spoke-keycloak" "https://localhost:${SPOKE_KC_PORT}/realms/master"
         check_service "spoke-backend" "https://localhost:${SPOKE_API_PORT}/health"
@@ -201,12 +201,12 @@ get_secret() {
     local secret_name="$1"
     local env_var="$2"
     local value
-    
+
     value=$(gcloud secrets versions access latest --secret="$secret_name" --project="$PROJECT_ID" 2>/dev/null) || {
         echo "Warning: Could not load $secret_name" >&2
         return 1
     }
-    
+
     export "$env_var=$value"
     echo "  Loaded: $env_var"
 }

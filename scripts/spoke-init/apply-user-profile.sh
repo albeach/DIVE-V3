@@ -3,7 +3,7 @@
 # DIVE V3 - Apply User Profile Template to Spoke Keycloak
 # =============================================================================
 # Applies locale-specific user profile attributes from templates.
-# 
+#
 # Usage: ./apply-user-profile.sh <COUNTRY_CODE>
 # Example: ./apply-user-profile.sh FRA
 #
@@ -213,16 +213,16 @@ for i in $(seq 0 $((ATTR_COUNT - 1))); do
     ATTR_DISPLAY=$(echo "$ATTR" | jq -r '.displayName')
     ATTR_REQUIRED=$(echo "$ATTR" | jq -r '.required // false')
     ATTR_MULTIVALUED=$(echo "$ATTR" | jq -r '.multivalued // false')
-    
+
     # Check if attribute already exists in current profile
     EXISTS=$(echo "$CURRENT_PROFILE" | jq -r ".attributes[] | select(.name==\"${ATTR_NAME}\") | .name")
-    
+
     if [ -n "$EXISTS" ]; then
         echo "    ○ ${ATTR_NAME} (already exists)"
         ((SKIPPED++))
         continue
     fi
-    
+
     # Build attribute definition for Keycloak User Profile
     NEW_ATTR=$(jq -n \
         --arg name "$ATTR_NAME" \
@@ -236,7 +236,7 @@ for i in $(seq 0 $((ATTR_COUNT - 1))); do
             permissions: { view: ["admin", "user"], edit: ["admin"] },
             multivalued: $multivalued
         }')
-    
+
     NEW_ATTRS=$(echo "$NEW_ATTRS" | jq ". + [$NEW_ATTR]")
     echo "    + ${ATTR_NAME}"
     ((ADDED++))
@@ -248,22 +248,22 @@ if [ $ADDED -eq 0 ]; then
     log_info "All template attributes already exist in User Profile"
 else
     log_step "Adding ${ADDED} new attributes to User Profile..."
-    
+
     # Merge new attributes with existing profile
     UPDATED_PROFILE=$(echo "$CURRENT_PROFILE" | jq ".attributes += ${NEW_ATTRS}")
-    
+
     # Update User Profile in Keycloak
     RESPONSE=$(curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/profile" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d "$UPDATED_PROFILE" 2>&1)
-    
+
     if echo "$RESPONSE" | grep -q "error"; then
         log_error "Failed to update User Profile"
         echo "$RESPONSE"
         exit 1
     fi
-    
+
     log_success "User Profile updated with ${ADDED} new attributes"
 fi
 

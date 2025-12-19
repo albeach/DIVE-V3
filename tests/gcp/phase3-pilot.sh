@@ -3,7 +3,7 @@
 # DIVE V3 - Phase 3 GCP Pilot Tests
 # =============================================================================
 # Tests for Phase 3: Hub Enhanced Spoke Management
-# 
+#
 # Tests:
 #   1. Terraform GCS backend configuration
 #   2. Compute VM module exists
@@ -73,9 +73,9 @@ run_test() {
     local name="$1"
     local cmd="$2"
     ((TESTS_RUN++))
-    
+
     log_test "$name"
-    
+
     if eval "$cmd"; then
         log_pass "$name"
         return 0
@@ -91,14 +91,14 @@ run_test() {
 
 test_terraform_gcs_backend_pilot() {
     log_test "Terraform pilot backend uses GCS"
-    
+
     local backend_file="${DIVE_ROOT}/terraform/pilot/backend.tf"
-    
+
     if [ ! -f "$backend_file" ]; then
         log_fail "Backend file not found: $backend_file"
         return 1
     fi
-    
+
     if grep -q 'backend "gcs"' "$backend_file" && grep -q 'bucket = "dive25-tfstate"' "$backend_file"; then
         log_pass "Pilot backend configured for GCS (dive25-tfstate)"
         return 0
@@ -110,14 +110,14 @@ test_terraform_gcs_backend_pilot() {
 
 test_terraform_gcs_backend_spoke() {
     log_test "Terraform spoke backend uses GCS"
-    
+
     local backend_file="${DIVE_ROOT}/terraform/spoke/backend.tf"
-    
+
     if [ ! -f "$backend_file" ]; then
         log_fail "Backend file not found: $backend_file"
         return 1
     fi
-    
+
     if grep -q 'backend "gcs"' "$backend_file" && grep -q 'bucket = "dive25-tfstate"' "$backend_file"; then
         log_pass "Spoke backend configured for GCS (dive25-tfstate)"
         return 0
@@ -129,24 +129,24 @@ test_terraform_gcs_backend_spoke() {
 
 test_compute_vm_module_exists() {
     log_test "Compute VM module exists"
-    
+
     local module_dir="${DIVE_ROOT}/terraform/modules/compute-vm"
-    
+
     if [ ! -d "$module_dir" ]; then
         log_fail "Module directory not found: $module_dir"
         return 1
     fi
-    
+
     local required_files=("main.tf" "variables.tf" "outputs.tf" "startup-script.sh")
     local missing=0
-    
+
     for file in "${required_files[@]}"; do
         if [ ! -f "${module_dir}/${file}" ]; then
             echo "  Missing: ${file}"
             ((missing++))
         fi
     done
-    
+
     if [ $missing -eq 0 ]; then
         log_pass "Compute VM module has all required files"
         return 0
@@ -158,9 +158,9 @@ test_compute_vm_module_exists() {
 
 test_terraform_validate_pilot() {
     log_test "Terraform validate (pilot)"
-    
+
     cd "${DIVE_ROOT}/terraform/pilot"
-    
+
     # Initialize with local backend for validation only
     if terraform init -backend=false -input=false >/dev/null 2>&1; then
         if terraform validate >/dev/null 2>&1; then
@@ -169,7 +169,7 @@ test_terraform_validate_pilot() {
             return 0
         fi
     fi
-    
+
     log_fail "Pilot Terraform validation failed"
     cd "${DIVE_ROOT}"
     return 1
@@ -177,40 +177,40 @@ test_terraform_validate_pilot() {
 
 test_terraform_validate_compute_vm() {
     log_test "Terraform validate (compute-vm module)"
-    
+
     local module_dir="${DIVE_ROOT}/terraform/modules/compute-vm"
-    
+
     if [ ! -d "$module_dir" ]; then
         log_skip "Compute VM module not found"
         return 0
     fi
-    
+
     cd "$module_dir"
-    
+
     # Create a temporary test configuration
     local tmp_test=$(mktemp -d)
     cat > "${tmp_test}/main.tf" << 'EOF'
 module "test" {
   source = "../modules/compute-vm"
-  
+
   name       = "test-vm"
   project_id = "test-project"
   zone       = "us-central1-a"
 }
 EOF
-    
+
     mkdir -p "${tmp_test}/modules"
     cp -r "$module_dir" "${tmp_test}/modules/compute-vm"
-    
+
     cd "$tmp_test"
-    
+
     if terraform init -input=false >/dev/null 2>&1 && terraform validate >/dev/null 2>&1; then
         log_pass "Compute VM module is valid"
         rm -rf "$tmp_test"
         cd "${DIVE_ROOT}"
         return 0
     fi
-    
+
     log_fail "Compute VM module validation failed"
     rm -rf "$tmp_test"
     cd "${DIVE_ROOT}"
@@ -223,9 +223,9 @@ EOF
 
 test_pilot_deploy_dryrun() {
     log_test "Pilot deploy dry-run"
-    
+
     cd "${DIVE_ROOT}"
-    
+
     if ./dive --dry-run --env gcp pilot deploy 2>&1 | grep -qi "DRY-RUN\|dry"; then
         log_pass "Pilot deploy dry-run works"
         return 0
@@ -237,9 +237,9 @@ test_pilot_deploy_dryrun() {
 
 test_pilot_rollback_dryrun() {
     log_test "Pilot rollback dry-run"
-    
+
     cd "${DIVE_ROOT}"
-    
+
     if ./dive --dry-run --env gcp pilot rollback 2>&1 | grep -qi "DRY-RUN\|dry\|checkpoint"; then
         log_pass "Pilot rollback dry-run works"
         return 0
@@ -251,9 +251,9 @@ test_pilot_rollback_dryrun() {
 
 test_pilot_health_json() {
     log_test "Pilot health --json output format"
-    
+
     cd "${DIVE_ROOT}"
-    
+
     # Mock test - check that the function exists and handles --json flag
     if grep -q 'json_output' "${DIVE_ROOT}/scripts/dive-modules/pilot.sh"; then
         log_pass "Pilot health supports --json flag"
@@ -266,9 +266,9 @@ test_pilot_health_json() {
 
 test_pilot_checkpoint_commands() {
     log_test "Pilot checkpoint commands exist"
-    
+
     cd "${DIVE_ROOT}"
-    
+
     # Check checkpoint create exists
     if grep -q 'pilot_checkpoint_create' "${DIVE_ROOT}/scripts/dive-modules/pilot.sh"; then
         # Check checkpoint list exists
@@ -277,16 +277,16 @@ test_pilot_checkpoint_commands() {
             return 0
         fi
     fi
-    
+
     log_fail "Pilot checkpoint commands not found"
     return 1
 }
 
 test_pilot_provision_command() {
     log_test "Pilot provision command exists"
-    
+
     cd "${DIVE_ROOT}"
-    
+
     if grep -q 'pilot_provision_vm' "${DIVE_ROOT}/scripts/dive-modules/pilot.sh"; then
         log_pass "Pilot provision command exists"
         return 0
@@ -298,9 +298,9 @@ test_pilot_provision_command() {
 
 test_pilot_destroy_command() {
     log_test "Pilot destroy command exists"
-    
+
     cd "${DIVE_ROOT}"
-    
+
     if grep -q 'pilot_destroy' "${DIVE_ROOT}/scripts/dive-modules/pilot.sh"; then
         log_pass "Pilot destroy command exists"
         return 0
@@ -319,9 +319,9 @@ test_gcs_bucket_access() {
         log_skip "GCS bucket access (use --live to run)"
         return 0
     fi
-    
+
     log_test "GCS state bucket access"
-    
+
     if gsutil ls gs://dive25-tfstate/ >/dev/null 2>&1; then
         log_pass "GCS state bucket accessible"
         return 0
@@ -336,9 +336,9 @@ test_gcs_checkpoint_bucket() {
         log_skip "GCS checkpoint bucket (use --live to run)"
         return 0
     fi
-    
+
     log_test "GCS checkpoint bucket access"
-    
+
     if gsutil ls gs://dive25-checkpoints/ >/dev/null 2>&1; then
         log_pass "GCS checkpoint bucket accessible"
         return 0
@@ -353,9 +353,9 @@ test_gcp_project_access() {
         log_skip "GCP project access (use --live to run)"
         return 0
     fi
-    
+
     log_test "GCP project access"
-    
+
     if gcloud projects describe dive25 >/dev/null 2>&1; then
         log_pass "GCP project 'dive25' accessible"
         return 0
@@ -370,11 +370,11 @@ test_terraform_remote_state() {
         log_skip "Terraform remote state (use --live to run)"
         return 0
     fi
-    
+
     log_test "Terraform remote state initialization"
-    
+
     cd "${DIVE_ROOT}/terraform/pilot"
-    
+
     if terraform init -input=false >/dev/null 2>&1; then
         if terraform state list >/dev/null 2>&1; then
             log_pass "Terraform uses GCS remote state"
@@ -382,7 +382,7 @@ test_terraform_remote_state() {
             return 0
         fi
     fi
-    
+
     log_fail "Terraform remote state init failed"
     cd "${DIVE_ROOT}"
     return 1
