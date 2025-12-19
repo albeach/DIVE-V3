@@ -55,8 +55,8 @@ echo -e "${BOLD}║  Seeding Users with Localized Attributes for ${COUNTRY_NAME}
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Determine Keycloak container and port
-KEYCLOAK_CONTAINER="${COUNTRY_LOWER}-keycloak-${COUNTRY_LOWER}-1"
+# Determine Keycloak container and port (new naming pattern: dive-spoke-lva-keycloak)
+KEYCLOAK_CONTAINER="dive-spoke-${COUNTRY_LOWER}-keycloak"
 KEYCLOAK_PORT=$(docker port "$KEYCLOAK_CONTAINER" 8443 2>/dev/null | cut -d: -f2 || echo "8443")
 REALM="dive-v3-broker-${COUNTRY_LOWER}"
 KEYCLOAK_URL="https://localhost:${KEYCLOAK_PORT}"
@@ -124,20 +124,20 @@ create_or_update_user() {
     local clearance_val="$2"
     local firstname="$3"
     local lastname="$4"
-    
+
     # Check if user exists
     local user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
-    
+
     local unique_id="${username}-001"
     local email="${username}@${COUNTRY_LOWER}.dive25.com"
-    
+
     # Determine AMR based on clearance
     local amr_val='["pwd"]'
     if [ "$clearance_val" = "$CLEARANCE_TS" ]; then
         amr_val='["pwd","hwk"]'
     fi
-    
+
     # Build user JSON with localized attributes
     local user_json=$(cat <<EOF
 {
@@ -162,7 +162,7 @@ create_or_update_user() {
 }
 EOF
 )
-    
+
     if [ -n "$user_id" ]; then
         # Update existing user
         curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/${user_id}" \

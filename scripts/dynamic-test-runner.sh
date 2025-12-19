@@ -2,27 +2,37 @@
 # =============================================================================
 # DIVE V3 - Dynamic Test Runner
 # =============================================================================
-# Discovers running DIVE instances and runs Playwright tests against each.
+# Dynamically discovers and runs Playwright tests based on available instances
+#
+# Features:
+# - Auto-discovers running DIVE instances
+# - Generates Playwright configuration
+# - Runs tests in parallel across instances
+# - Provides comprehensive reporting
 #
 # Usage:
-#   ./scripts/dynamic-test-runner.sh [options]
+#   ./scripts/dynamic-test-runner.sh [options] [test-pattern]
 #
 # Options:
-#   --hub-only        Only test the hub instance
-#   --spokes-only     Only test spoke instances
-#   --instance <code> Test specific instance (e.g., fra, gbr)
-#   --parallel        Run tests in parallel (default: sequential)
-#   --report-dir <dir> Output directory for reports
-#   --verbose         Show detailed output
+#   --instances URL1,URL2,...    Override instance discovery
+#   --parallel N                 Number of parallel workers (default: auto)
+#   --timeout N                  Test timeout in seconds (default: 300)
+#   --retries N                  Number of retries on failure (default: 2)
+#   --verbose                    Show detailed output
+#   --dry-run                    Show what would be run without executing
+#   --report                     Generate HTML report
 #
-# The script:
-# 1. Discovers running hub and spoke instances via Docker
-# 2. Dynamically determines frontend URLs
-# 3. Runs Playwright tests against each
-# 4. Aggregates results
+# Examples:
+#   ./scripts/dynamic-test-runner.sh                        # Run all tests
+#   ./scripts/dynamic-test-runner.sh auth-flows.spec.ts     # Run specific test
+#   ./scripts/dynamic-test-runner.sh --instances https://usa-app.dive25.com,https://fra-app.dive25.com
 # =============================================================================
 
 set -e
+
+# ============================================================================
+# Configuration
+# ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIVE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -34,249 +44,348 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Options
-HUB_ONLY=false
-SPOKES_ONLY=false
-SPECIFIC_INSTANCE=""
-PARALLEL=false
-REPORT_DIR="${DIVE_ROOT}/test-results/playwright"
+# Default settings
+PARALLEL_WORKERS="auto"
+TEST_TIMEOUT=300
+RETRIES=2
 VERBOSE=false
-
-# Results
-INSTANCES_TESTED=0
-INSTANCES_PASSED=0
-INSTANCES_FAILED=0
+DRY_RUN=false
+GENERATE_REPORT=false
+CUSTOM_INSTANCES=""
 
 # ============================================================================
 # Argument Parsing
 # ============================================================================
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --hub-only)     HUB_ONLY=true; shift ;;
-        --spokes-only)  SPOKES_ONLY=true; shift ;;
-        --instance)     SPECIFIC_INSTANCE="$2"; shift 2 ;;
-        --parallel)     PARALLEL=true; shift ;;
-        --report-dir)   REPORT_DIR="$2"; shift 2 ;;
-        --verbose|-v)   VERBOSE=true; shift ;;
-        --help|-h)
-            echo "DIVE V3 Dynamic Test Runner"
-            echo ""
-            echo "Usage: $0 [options]"
-            echo ""
-            echo "Options:"
-            echo "  --hub-only        Only test the hub instance"
-            echo "  --spokes-only     Only test spoke instances"
-            echo "  --instance <code> Test specific instance (e.g., fra, gbr)"
-            echo "  --parallel        Run tests in parallel"
-            echo "  --report-dir <dir> Output directory for reports"
-            echo "  --verbose, -v     Show detailed output"
-            exit 0
-            ;;
-        *) shift ;;
-    esac
-done
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --instances)
+                CUSTOM_INSTANCES="$2"
+                shift 2
+                ;;
+            --parallel)
+                PARALLEL_WORKERS="$2"
+                shift 2
+                ;;
+            --timeout)
+                TEST_TIMEOUT="$2"
+                shift 2
+                ;;
+            --retries)
+                RETRIES="$2"
+                shift 2
+                ;;
+            --verbose|-v)
+                VERBOSE=true
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --report)
+                GENERATE_REPORT=true
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                TEST_PATTERN="$1"
+                shift
+                ;;
+        esac
+    done
+}
+
+show_help() {
+    cat << EOF
+DIVE V3 Dynamic Test Runner
+
+Dynamically discovers and runs Playwright tests based on available instances.
+
+USAGE:
+    $0 [OPTIONS] [TEST_PATTERN]
+
+OPTIONS:
+    --instances URL1,URL2,...    Override automatic instance discovery
+    --parallel N                 Number of parallel workers (default: auto)
+    --timeout N                  Test timeout in seconds (default: 300)
+    --retries N                  Number of retries on failure (default: 2)
+    --verbose, -v                Show detailed output
+    --dry-run                    Show what would be run without executing
+    --report                     Generate HTML report after tests
+    --help, -h                   Show this help
+
+EXAMPLES:
+    $0                             # Run all tests on discovered instances
+    $0 auth-flows.spec.ts         # Run specific test file
+    $0 --instances https://usa-app.dive25.com,https://fra-app.dive25.com
+    $0 --parallel 4 --verbose     # Run with 4 workers, verbose output
+
+EOF
+}
 
 # ============================================================================
-# Helper Functions
+# Instance Discovery
 # ============================================================================
 
-log_info()    { echo -e "${CYAN}[INFO]${NC} $*"; }
-log_success() { echo -e "${GREEN}[PASS]${NC} $*"; }
-log_fail()    { echo -e "${RED}[FAIL]${NC} $*"; }
-log_verbose() { [ "$VERBOSE" = true ] && echo -e "${CYAN}[DEBUG]${NC} $*"; }
-
-# Discover running instances by looking at Docker containers
 discover_instances() {
+    log_info "Discovering DIVE instances..."
+
     local instances=()
-    
-    # Look for frontend containers
-    for container in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -E 'dive.*frontend' | sort); do
-        local instance=""
-        
-        # Extract instance code from container name
-        if [[ "$container" =~ dive-v3-frontend ]]; then
-            instance="hub"
-        elif [[ "$container" =~ dive-hub-frontend ]]; then
-            instance="hub"
-        elif [[ "$container" =~ dive-pilot-frontend ]]; then
-            instance="hub"
-        elif [[ "$container" =~ dive-spoke-([a-z]+)-frontend ]]; then
-            instance="${BASH_REMATCH[1]}"
-        elif [[ "$container" =~ ([a-z]+).*frontend ]]; then
-            instance="${BASH_REMATCH[1]}"
+
+    # If custom instances provided, use them
+    if [ -n "$CUSTOM_INSTANCES" ]; then
+        IFS=',' read -ra instances <<< "$CUSTOM_INSTANCES"
+    else
+        # Auto-discover instances from fixtures
+        if [ -d "$DIVE_ROOT/tests/fixtures/federation/spoke-configs" ]; then
+            for config_file in "$DIVE_ROOT/tests/fixtures/federation/spoke-configs"/*.json; do
+                if [ -f "$config_file" ]; then
+                    local base_url=$(jq -r '.endpoints.baseUrl // empty' "$config_file" 2>/dev/null)
+                    if [ -n "$base_url" ] && [ "$base_url" != "null" ]; then
+                        instances+=("$base_url")
+                    fi
+                fi
+            done
         fi
-        
-        if [ -n "$instance" ]; then
-            instances+=("$instance")
+
+        # Add localhost if no instances found
+        if [ ${#instances[@]} -eq 0 ]; then
+            instances=("https://localhost:3000")
+        fi
+    fi
+
+    # Validate instances are accessible
+    local valid_instances=()
+    for instance in "${instances[@]}"; do
+        log_verbose "Checking instance: $instance"
+        if curl -k --max-time 10 --silent "$instance" >/dev/null 2>&1; then
+            valid_instances+=("$instance")
+            log_verbose "✓ Instance accessible: $instance"
+        else
+            log_verbose "✗ Instance not accessible: $instance"
         fi
     done
-    
-    # Deduplicate
-    printf '%s\n' "${instances[@]}" | sort -u
+
+    echo "${valid_instances[@]}"
 }
 
-# Get the frontend URL for an instance
-get_frontend_url() {
-    local instance="$1"
-    local url=""
-    
-    case "$instance" in
-        hub|usa)
-            # Try to find the hub frontend port
-            local port=$(docker port dive-v3-frontend 3000 2>/dev/null | head -1 | cut -d: -f2 || \
-                         docker port dive-hub-frontend 3000 2>/dev/null | head -1 | cut -d: -f2 || \
-                         docker port dive-pilot-frontend 3000 2>/dev/null | head -1 | cut -d: -f2 || \
-                         echo "3000")
-            url="https://localhost:${port}"
-            ;;
-        *)
-            # Look for spoke frontend
-            local container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "dive-spoke-${instance}-frontend|${instance}.*frontend" | head -1)
-            if [ -n "$container" ]; then
-                local port=$(docker port "$container" 3000 2>/dev/null | head -1 | cut -d: -f2 || echo "")
-                if [ -n "$port" ]; then
-                    url="https://localhost:${port}"
-                fi
-            fi
-            ;;
-    esac
-    
-    echo "$url"
+# ============================================================================
+# Playwright Configuration Generation
+# ============================================================================
+
+generate_playwright_config() {
+    local instances=("$@")
+    local config_file="/tmp/playwright-dynamic.config.ts"
+
+    log_info "Generating Playwright configuration..."
+
+    cat > "$config_file" << EOF
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Dynamic Playwright configuration generated by DIVE test runner
+ * Instances: ${instances[*]}
+ * Generated: $(date)
+ */
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  outputDir: './test-results',
+
+  /* Run tests in files in parallel */
+  fullyParallel: true,
+
+  /* Fail the build on CI if you accidentally left test.only in the source code. */
+  forbidOnly: !!process.env.CI,
+
+  /* Retry on CI only */
+  retries: ${RETRIES},
+
+  /* Opt out of parallel tests on CI. */
+  workers: '${PARALLEL_WORKERS}',
+
+  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
+  reporter: [
+    ['html', { outputFolder: 'playwright-report' }],
+    ['json', { outputFile: 'test-results.json' }],
+    ['line']
+  ],
+
+  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+  use: {
+    /* Base URL to use in actions like \`await page.goto('/')\`. */
+    baseURL: process.env.BASE_URL || '${instances[0]}',
+
+    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
+    trace: 'on-first-retry',
+
+    /* Take screenshot only when test fails */
+    screenshot: 'only-on-failure',
+
+    /* Record video only when test fails */
+    video: 'retain-on-failure',
+  },
+
+  /* Configure projects for major browsers */
+  projects: [
+EOF
+
+    # Add projects for each instance
+    local project_count=0
+    for instance in "${instances[@]}"; do
+        local instance_name=$(echo "$instance" | sed 's|https://||; s|http://||; s|[:/].*||')
+        local project_name="${instance_name:-instance$project_count}"
+
+        cat >> "$config_file" << EOF
+    {
+      name: '${project_name}',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: '${instance}',
+        /* Override environment-specific settings */
+        extraHTTPHeaders: {
+          'X-Test-Instance': '${project_name}',
+        },
+      },
+      testMatch: ${TEST_PATTERN:+['**/${TEST_PATTERN}**']},
+      timeout: ${TEST_TIMEOUT}000,
+    },
+EOF
+        ((project_count++))
+    done
+
+    cat >> "$config_file" << EOF
+  ],
+
+  /* Run your local dev server before starting the tests */
+  webServer: undefined, // We don't start servers, they should be running
+});
+EOF
+
+    echo "$config_file"
 }
 
-# Run Playwright tests for an instance
-run_playwright_tests() {
-    local instance="$1"
-    local url="$2"
-    local output_dir="${REPORT_DIR}/${instance}"
-    
-    log_info "Testing instance: ${instance} (${url})"
-    
-    mkdir -p "$output_dir"
-    
-    cd "${DIVE_ROOT}/frontend"
-    
-    # Check if Playwright is installed
-    if [ ! -d "node_modules/playwright" ] && [ ! -d "node_modules/@playwright" ]; then
-        log_info "Installing Playwright dependencies..."
-        npm install >/dev/null 2>&1
+# ============================================================================
+# Test Execution
+# ============================================================================
+
+run_tests() {
+    local config_file="$1"
+    shift
+    local instances=("$@")
+
+    if [ "$DRY_RUN" = true ]; then
+        log_info "DRY RUN - Would execute:"
+        echo "npx playwright test --config=\"$config_file\" ${TEST_PATTERN:+--grep=\"$TEST_PATTERN\"}"
+        return 0
     fi
-    
-    # Run tests
-    local result=0
+
+    log_info "Running Playwright tests..."
+    log_info "Instances: ${instances[*]}"
+    log_info "Workers: $PARALLEL_WORKERS"
+    log_info "Timeout: ${TEST_TIMEOUT}s"
+    log_info "Retries: $RETRIES"
+
+    local start_time=$(date +%s)
+
+    # Set environment variables for tests
+    export DIVE_TEST_ENV=dynamic
+    export DIVE_INSTANCES="${instances[*]}"
+
+    # Run playwright tests
     if [ "$VERBOSE" = true ]; then
-        BASE_URL="$url" npx playwright test \
-            --project=chromium \
-            --reporter=list \
-            --output="${output_dir}" \
-            || result=$?
+        npx playwright test --config="$config_file" ${TEST_PATTERN:+--grep="$TEST_PATTERN"}
     else
-        BASE_URL="$url" npx playwright test \
-            --project=chromium \
-            --reporter=dot \
-            --output="${output_dir}" \
-            2>&1 | tail -20 || result=$?
+        npx playwright test --config="$config_file" ${TEST_PATTERN:+--grep="$TEST_PATTERN"} 2>&1 | grep -E "(Running|passed|failed|✓|✗)"
     fi
-    
-    return $result
+
+    local exit_code=$?
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+
+    log_info "Tests completed in ${duration}s"
+
+    # Generate report if requested
+    if [ "$GENERATE_REPORT" = true ] && [ $exit_code -eq 0 ]; then
+        log_info "Generating HTML report..."
+        npx playwright show-report
+    fi
+
+    return $exit_code
 }
+
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
+log_info()    { echo -e "${CYAN}[INFO]${NC} $*" >&2; }
+log_success() { echo -e "${GREEN}[PASS]${NC} $*" >&2; }
+log_fail()    { echo -e "${RED}[FAIL]${NC} $*" >&2; }
+log_verbose() { [ "$VERBOSE" = true ] && echo -e "${CYAN}[DEBUG]${NC} $*" >&2; }
 
 # ============================================================================
 # Main
 # ============================================================================
 
-cd "$DIVE_ROOT"
+main() {
+    parse_args "$@"
 
-echo ""
-echo "=============================================="
-echo " DIVE V3 - Dynamic Test Runner"
-echo "=============================================="
-echo ""
-
-# Create report directory
-mkdir -p "$REPORT_DIR"
-
-# Discover instances
-log_info "Discovering running instances..."
-instances=($(discover_instances))
-
-if [ ${#instances[@]} -eq 0 ]; then
-    log_fail "No running DIVE instances found"
     echo ""
-    echo "Make sure you have started the stack:"
-    echo "  ./dive up          # For hub"
-    echo "  ./dive spoke up    # For spokes"
-    exit 1
-fi
+    echo "=============================================="
+    echo " DIVE V3 - Dynamic Test Runner"
+    echo "=============================================="
+    echo ""
 
-log_info "Found ${#instances[@]} instance(s): ${instances[*]}"
-echo ""
+    # Discover instances
+    local instances_string=$(discover_instances)
+    IFS=' ' read -ra instances <<< "$instances_string"
 
-# Filter instances based on options
-if [ -n "$SPECIFIC_INSTANCE" ]; then
-    instances=("$SPECIFIC_INSTANCE")
-elif [ "$HUB_ONLY" = true ]; then
-    instances=("hub")
-elif [ "$SPOKES_ONLY" = true ]; then
-    # Remove hub from list
-    instances=(${instances[@]/hub/})
-fi
-
-# Run tests for each instance
-for instance in "${instances[@]}"; do
-    [ -z "$instance" ] && continue
-    
-    url=$(get_frontend_url "$instance")
-    
-    if [ -z "$url" ]; then
-        log_fail "Could not determine URL for instance: ${instance}"
-        INSTANCES_FAILED=$((INSTANCES_FAILED + 1))
-        continue
+    if [ ${#instances[@]} -eq 0 ]; then
+        log_fail "No accessible instances found"
+        echo ""
+        echo "Troubleshooting:"
+        echo "  - Ensure DIVE instances are running"
+        echo "  - Check network connectivity"
+        echo "  - Use --instances to specify manually"
+        exit 1
     fi
-    
-    # Check if instance is reachable
-    if ! curl -sfk --max-time 5 "$url" >/dev/null 2>&1; then
-        log_fail "Instance ${instance} is not reachable at ${url}"
-        INSTANCES_FAILED=$((INSTANCES_FAILED + 1))
-        continue
+
+    log_success "Found ${#instances[@]} accessible instances:"
+    for instance in "${instances[@]}"; do
+        log_info "  - $instance"
+    done
+    echo ""
+
+    # Generate Playwright config
+    local config_file=$(generate_playwright_config "${instances[@]}")
+    log_success "Generated config: $config_file"
+    echo ""
+
+    # Run tests
+    run_tests "$config_file" "${instances[@]}"
+    local exit_code=$?
+
+    # Cleanup
+    if [ "$DRY_RUN" = false ]; then
+        rm -f "$config_file"
     fi
-    
-    INSTANCES_TESTED=$((INSTANCES_TESTED + 1))
-    
-    if run_playwright_tests "$instance" "$url"; then
-        log_success "Instance ${instance} - All tests passed"
-        INSTANCES_PASSED=$((INSTANCES_PASSED + 1))
+
+    echo ""
+    if [ $exit_code -eq 0 ]; then
+        log_success "All dynamic tests passed! ✓"
     else
-        log_fail "Instance ${instance} - Some tests failed"
-        INSTANCES_FAILED=$((INSTANCES_FAILED + 1))
+        log_fail "Some tests failed ✗"
     fi
-    
-    echo ""
-done
 
-# ============================================================================
-# Summary
-# ============================================================================
+    return $exit_code
+}
 
-echo "=============================================="
-echo " Test Summary"
-echo "=============================================="
-echo ""
-echo "  Instances tested: $INSTANCES_TESTED"
-echo -e "  ${GREEN}Passed:${NC}           $INSTANCES_PASSED"
-echo -e "  ${RED}Failed:${NC}           $INSTANCES_FAILED"
-echo ""
-echo "  Reports: ${REPORT_DIR}"
-echo ""
-
-if [ $INSTANCES_FAILED -eq 0 ] && [ $INSTANCES_TESTED -gt 0 ]; then
-    echo -e "${GREEN}✓ All instances passed!${NC}"
-    exit 0
-elif [ $INSTANCES_TESTED -eq 0 ]; then
-    echo -e "${YELLOW}⚠ No instances were tested${NC}"
-    exit 1
-else
-    echo -e "${RED}✗ Some instances failed${NC}"
-    exit 1
+# Run main if executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
 fi

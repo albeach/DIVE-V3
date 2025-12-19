@@ -7,7 +7,7 @@
 # Usage:
 #   module "pilot_vm" {
 #     source = "../modules/compute-vm"
-#     
+#
 #     name         = "dive-v3-pilot"
 #     project_id   = "dive25"
 #     zone         = "us-east4-c"
@@ -17,7 +17,7 @@
 
 terraform {
   required_version = ">= 1.5.0"
-  
+
   required_providers {
     google = {
       source  = "hashicorp/google"

@@ -1,77 +1,55 @@
 {
-  "spokeId": "spoke-gbr-001",
-  "instanceCode": "GBR",
-  "name": "United Kingdom",
-  "description": "DIVE V3 Spoke for United Kingdom coalition partner",
-  "hubUrl": "https://localhost:4000",
-  "baseUrl": "https://localhost:3003",
-  "apiUrl": "https://localhost:4003",
-  "idpUrl": "https://gbr-keycloak-gbr-1:8443",
-  "idpPublicUrl": "https://localhost:8446",
-  "contactEmail": "gbr-admin@dive-demo.example",
-  "locale": "en-GB",
-  "timezone": "Europe/London",
-  "opalConfig": {
-    "hubOpalServerUrl": "https://localhost:7002",
-    "spokeOpalToken": "dive-hub-master-token-2025",
-    "dataTopics": [
-      "policy_data"
-    ],
-    "pollInterval": 30
+  "identity": {
+    "spokeId": "spoke-gbr-6a1ecfe7",
+    "instanceCode": "GBR",
+    "name": "United Kingdom Ministry of Defence",
+    "description": "DIVE V3 Spoke Instance for United Kingdom Ministry of Defence",
+    "country": "GBR",
+    "organizationType": "government",
+    "contactEmail": "admin@gbr.dive25.com",
+    "registeredSpokeId": "spoke-gbr-5940b83a"
   },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3031",
+    "apiUrl": "https://localhost:4031",
+    "idpUrl": "https://dive-spoke-gbr-keycloak:8443",
+    "kasUrl": "https://localhost:9031",
+    "idpPublicUrl": "https://localhost:8474"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/certs/hub-ca.crt"
+  },
+  "authentication": {},
   "federation": {
-    "partners": [
-      "USA",
-      "FRA",
-      "DEU",
-      "CAN"
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:gbr",
+      "data:federation_matrix",
+      "data:trusted_issuers"
     ],
-    "trustModel": "bilateral",
-    "protocolMappers": true,
-    "status": "pending",
-    "registeredAt": "2025-12-13T05:45:01Z"
+    "registeredAt": "2025-12-19T10:30:29Z",
+    "spokeToken": "4SXoyuCaZC-smt2UnwfFZyKQWPV7NJlxY6zoFVUbyNk"
   },
-  "ports": {
-    "frontend": 3003,
-    "backend": 4003,
-    "keycloak_http": 8084,
-    "keycloak_https": 8446,
-    "mongodb": 27020,
-    "redis": 6382,
-    "opa": 8184,
-    "kas": 8093,
-    "postgres": 5436,
-    "cloudflared_metrics": 9129
-  },
-  "theme": {
-    "primary_color": "#012169",
-    "secondary_color": "#C8102E",
-    "accent_color": "#ffffff",
-    "keycloak_theme": "dive-v3-gbr"
-  },
-  "capabilities": {
-    "opa": true,
-    "opal": true,
-    "kas": true,
-    "authzforce": false,
-    "webauthn": true
-  },
-  "compliance": {
-    "standards": [
-      "ACP-240",
-      "STANAG-4774",
-      "STANAG-5636"
-    ],
-    "auditRetention": "90d",
-    "logLevel": "info"
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
   },
   "metadata": {
-    "createdAt": "2025-12-13T01:00:00Z",
-    "updatedAt": "2025-12-13T06:56:00Z",
-    "version": "3.1.0",
-    "deploymentModel": "spoke-in-a-box"
-  },
-  "identity": {
-    "registeredSpokeId": "spoke-gbr-785e4c52"
+    "version": "1.0.0",
+    "createdAt": "2025-12-19T04:13:58Z",
+    "lastModified": "2025-12-19T04:13:58Z",
+    "configHash": ""
   }
 }

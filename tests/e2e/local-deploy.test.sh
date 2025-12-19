@@ -93,7 +93,7 @@ wait_for_url() {
     local url="$1"
     local timeout="${2:-120}"
     local elapsed=0
-    
+
     while [ $elapsed -lt $timeout ]; do
         if curl -sfk --max-time 5 "$url" >/dev/null 2>&1; then
             return 0
@@ -102,7 +102,7 @@ wait_for_url() {
         elapsed=$((elapsed + 5))
         log_verbose "Waiting for $url... (${elapsed}s/${timeout}s)"
     done
-    
+
     return 1
 }
 

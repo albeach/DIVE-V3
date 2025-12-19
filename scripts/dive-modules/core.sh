@@ -86,13 +86,13 @@ cmd_up() {
     else
         log_verbose "Skipping mkcert generation for env ${ENVIRONMENT}"
     fi
-    
+
     log_step "Starting DIVE V3 Stack..."
-    
+
     # Choose compose file based on environment
     COMPOSE_FILE="docker-compose.yml"
     [ "$ENVIRONMENT" = "pilot" ] && COMPOSE_FILE="docker-compose.pilot.yml"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f $COMPOSE_FILE up -d"
         log_dry "Would verify Keycloak realm dive-v3-broker and bootstrap if missing"
@@ -111,7 +111,7 @@ cmd_up() {
         wait_for_frontend || { log_error "Frontend did not become ready"; exit 1; }
         auto_seed_resources || log_warn "Resource seeding skipped/failed (non-blocking)"
     fi
-    
+
     log_success "Stack started"
     echo ""
     echo "  Frontend: https://localhost:3000"
@@ -181,7 +181,7 @@ ensure_required_secrets_local() {
 # Wait for Keycloak to be reachable before running realm checks
 wait_for_keycloak() {
     log_step "Waiting for Keycloak to become ready..."
-    
+
     # Configurable timeout (default 180s, was 60s)
     local timeout="${KEYCLOAK_WAIT_TIMEOUT:-180}"
     local elapsed=0
@@ -189,29 +189,29 @@ wait_for_keycloak() {
     local max_delay=30
     local attempt=0
     local health_url="${KEYCLOAK_HEALTH_URL:-https://localhost:8443/realms/master}"
-    
+
     log_verbose "Keycloak health URL: $health_url (timeout: ${timeout}s)"
-    
+
     while [ $elapsed -lt $timeout ]; do
         attempt=$((attempt + 1))
         local code
         code=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 5 "$health_url" || echo "000")
-        
+
         if [ "$code" = "200" ]; then
             log_success "Keycloak is ready (${elapsed}s elapsed, attempt $attempt)"
             return 0
         fi
-        
+
         log_verbose "Keycloak not ready (attempt $attempt, code=$code, elapsed=${elapsed}s, next delay=${delay}s)"
-        
+
         sleep $delay
         elapsed=$((elapsed + delay))
-        
+
         # Exponential backoff with cap at max_delay
         delay=$((delay * 2))
         [ $delay -gt $max_delay ] && delay=$max_delay
     done
-    
+
     log_error "Keycloak failed to start within ${timeout}s"
     log_info "Tips:"
     log_info "  - Increase timeout: KEYCLOAK_WAIT_TIMEOUT=300 ./dive up"
@@ -650,7 +650,7 @@ ensure_idps_present() {
     local idp_list
     idp_list=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get identity-provider/instances \
         -r dive-v3-broker --fields alias 2>/dev/null || echo "[]")
-    
+
     local count
     count=$(echo "$idp_list" | grep -c '"alias"' 2>/dev/null || echo "0")
 
@@ -678,7 +678,7 @@ bootstrap_default_idp() {
     instance_lower=$(lower "${INSTANCE:-usa}")
     local idp_alias="${instance_lower}-idp"
     local idp_display_name
-    
+
     # Map instance codes to display names
     case "$instance_lower" in
         usa) idp_display_name="United States" ;;
@@ -716,7 +716,7 @@ bootstrap_default_idp() {
     local idp_client_id="dive-v3-${instance_lower}-idp-client"
     local idp_client_secret
     idp_client_secret=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
-    
+
     # Create IdP client in master realm if it doesn't exist
     docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create clients -r master \
         -s clientId="$idp_client_id" \
@@ -757,7 +757,7 @@ bootstrap_default_idp() {
     # Create a test user in master realm for this IdP (for local testing)
     local test_user="test-${instance_lower}"
     local test_password="${TF_VAR_test_user_password:-DiveTest2025!}"
-    
+
     # Check if user exists
     if ! docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get users -r master \
         -q username="$test_user" --fields id 2>/dev/null | grep -q '"id"'; then
@@ -769,11 +769,11 @@ bootstrap_default_idp() {
             -s lastName="$(upper "$instance_lower")" \
             -s enabled=true \
             -s emailVerified=true 2>/dev/null || true
-        
+
         # Set password
         docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh set-password -r master \
             --username "$test_user" --new-password "$test_password" 2>/dev/null || true
-        
+
         log_verbose "Created test user: $test_user (password: $test_password)"
     fi
 
@@ -782,7 +782,7 @@ bootstrap_default_idp() {
 
 cmd_down() {
     log_step "Stopping containers..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f docker-compose.yml down"
         log_dry "docker compose -f docker-compose.pilot.yml down"
@@ -790,13 +790,13 @@ cmd_down() {
         docker compose -f docker-compose.yml down 2>/dev/null || true
         docker compose -f docker-compose.pilot.yml down 2>/dev/null || true
     fi
-    
+
     log_success "Stack stopped"
 }
 
 cmd_restart() {
     local service="${1:-}"
-    
+
     if [ -n "$service" ]; then
         log_step "Restarting $service..."
         run docker compose restart "$service"
@@ -810,7 +810,7 @@ cmd_restart() {
 cmd_logs() {
     local service="${1:-}"
     local lines="${2:-100}"
-    
+
     if [ -n "$service" ]; then
         docker compose logs -f --tail="$lines" "$service"
     else
@@ -827,13 +827,13 @@ cmd_ps() {
 cmd_exec() {
     local container="$1"
     shift
-    
+
     if [ -z "$container" ]; then
         echo "Usage: ./dive exec <container> [command]"
         echo "Containers: frontend, backend, keycloak, postgres, mongo, redis, opa, opal-server"
         return 1
     fi
-    
+
     # Map short names to container names (prefer V3 naming, fall back to pilot)
     case "$container" in
         fe|frontend) container="${FRONTEND_CONTAINER:-dive-v3-frontend}";;
@@ -851,7 +851,7 @@ cmd_exec() {
     if [ "${NO_TTY:-}" = "1" ] || [ -n "${CI:-}" ]; then
         exec_opts=("-i")
     fi
-    
+
     if [ "$DRY_RUN" = true ]; then
         if [ "$#" -gt 0 ]; then
             log_dry "docker exec ${exec_opts[*]} $container $*"
@@ -874,7 +874,7 @@ cmd_exec() {
 module_core() {
     local action="${1:-help}"
     shift || true
-    
+
     case "$action" in
         up)      cmd_up "$@" ;;
         down)    cmd_down "$@" ;;

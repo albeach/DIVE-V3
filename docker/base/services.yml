@@ -28,14 +28,14 @@ services:
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-keycloak}
       POSTGRES_DB: ${POSTGRES_DB:-keycloak}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U keycloak || pg_isready -U postgres || pg_isready"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     logging:
       driver: json-file
       options:
@@ -149,12 +149,17 @@ services:
     environment:
       NODE_ENV: development
       PORT: "8080"
+      KAS_PORT: "8080"
+      HTTPS_ENABLED: "true"
+      CERT_PATH: "/app/certs"
+      KEY_FILE: "key.pem"
+      CERT_FILE: "certificate.pem"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
       interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     logging:
       driver: json-file
       options:
@@ -222,22 +227,25 @@ services:
       OPAL_INLINE_OPA_ENABLED: "false"
       OPAL_LOG_LEVEL: ${OPAL_LOG_LEVEL:-INFO}
       OPAL_KEEP_ALIVE_TIMEOUT: "60"
-      OPAL_RECONNECT_INTERVAL: "5"
+      OPAL_RECONNECT_INTERVAL: "10"
       OPAL_RECONNECT_MAX_INTERVAL: "300"
       OPAL_POLICY_REFRESH_INTERVAL: "60"
       OPAL_POLICY_STORE_TYPE: "OPA"
+      OPAL_WS_HEARTBEAT_TIMEOUT: "300"
       # SSL Certificate Configuration for HTTPS/WSS connections
       # Point to mounted mkcert root CA for local development
       SSL_CERT_FILE: /var/opal/certs/mkcert-rootCA.pem
       REQUESTS_CA_BUNDLE: /var/opal/certs/mkcert-rootCA.pem
       WEBSOCKET_SSL_CERT: /var/opal/certs/mkcert-rootCA.pem
+      # Extra CA bundle for self-signed certificates
+      NODE_EXTRA_CA_CERTS: /var/opal/certs/mkcert-rootCA.pem
     # Note: Volumes are defined in spoke compose, includes ./certs:/var/opal/certs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     logging:
       driver: json-file
       options:

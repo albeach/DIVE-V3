@@ -15,6 +15,9 @@ docs/*.txt
 .env.production
 .env.development
 !.env.example
+# Pilot spoke selection cache
+.pilot-spoke
+
 # Instance-specific environment files and certificates
 instances/*/.env
 instances/*/.env.*

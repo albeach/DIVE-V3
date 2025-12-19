@@ -120,5 +120,14 @@
     "enabled": true,
     "protocol": "oidc",
     "federation_class": "LOCAL"
+  },
+  "https://localhost:8459/realms/dive-v3-broker-lva": {
+    "tenant": "LVA",
+    "name": "LVA Keycloak (Local Dev)",
+    "country": "LVA",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL"
   }
 }

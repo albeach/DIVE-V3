@@ -1,7 +1,8 @@
 # DIVE V3 CLI Audit Report
 
-**Generated**: December 18, 2025  
-**Auditor**: Automated Codebase Analysis  
+**Generated**: December 18, 2025
+**Updated**: December 19, 2025 (Phase 2 Complete)
+**Auditor**: Automated Codebase Analysis
 **Scope**: DIVE V3 CLI (`./dive`) and supporting infrastructure
 
 ---
@@ -11,11 +12,27 @@
 The DIVE V3 CLI is a comprehensive modular management script for a coalition-friendly ICAM web application. It provides unified control over deployment, federation management, policy distribution, and operational monitoring across a hub-spoke architecture supporting all 32 NATO member countries.
 
 **Key Metrics**:
-- **19 CLI modules** totaling ~15,000+ lines of bash
-- **10+ Docker Compose configurations** for various deployment scenarios
-- **108 Docker phase tests** across 6 test suites
-- **20+ GitHub Actions workflows** for CI/CD
+- **19 CLI modules** totaling ~19,815 lines of bash
+- **20+ Docker Compose configurations** for various deployment scenarios
+- **9 Docker phase test suites** with comprehensive coverage
+- **18 active GitHub Actions workflows** for CI/CD (12 archived)
 - **40+ GCP secrets** managed via Secret Manager
+- **35 Keycloak themes** (per-country localization)
+- **32 user profile templates** for NATO nations
+- **20+ active spoke instances** configured
+
+---
+
+## Reference Documentation
+
+| Document | Path | Description |
+|----------|------|-------------|
+| **AUDIT** | `docs/AUDIT.md` | Security audit and compliance requirements (this document) |
+| **GAP_ANALYSIS** | `docs/GAP_ANALYSIS.md` | Gap analysis with outstanding items |
+| **TARGET_ARCHITECTURE** | `docs/TARGET_ARCHITECTURE.md` | Target system architecture |
+| **IMPLEMENTATION_PLAN** | `docs/IMPLEMENTATION_PLAN.md` | Phased implementation plan |
+| **BACKLOG** | `docs/BACKLOG.md` | Detailed backlog items (DIVE-0xx tasks) |
+| **CI_CD_PLAN** | `docs/CI_CD_PLAN.md` | CI/CD pipeline configuration |
 
 ---
 
@@ -37,27 +54,27 @@ The DIVE V3 CLI is a comprehensive modular management script for a coalition-fri
 
 | Module | Lines | Commands | Description |
 |--------|-------|----------|-------------|
-| `common.sh` | 503 | N/A | Shared utilities, secrets loading, network management |
-| `core.sh` | 879 | up, down, restart, logs, ps, exec | Container lifecycle management |
-| `deploy.sh` | 235 | deploy, reset, nuke | Full deployment workflows |
-| `hub.sh` | 1705 | hub deploy/init/up/down/status/verify/spokes/seed | Hub lifecycle and spoke management |
-| `spoke.sh` | 5029 | spoke init/up/down/status/register/list-countries | NATO 32-country spoke management |
-| `status.sh` | 1226 | status, health, validate, info, diagnostics, brief | System monitoring |
-| `secrets.sh` | 202 | secrets load/show/list/verify/export/lint | GCP Secret Manager integration |
-| `terraform.sh` | 446 | tf plan/apply/destroy/workspace/generate | Infrastructure as Code |
-| `federation.sh` | ~500 | federation status/register/link/unlink/mappers | Cross-instance federation |
-| `federation-setup.sh` | ~800 | federation-setup configure/register-hub/verify | Keycloak federation configuration |
-| `pilot.sh` | ~400 | pilot up/down/status/logs/ssh/deploy | Remote VM management |
-| `policy.sh` | 316 | policy build/push/status/test/version | OPA policy management |
-| `certificates.sh` | 812 | certs check/prepare-federation/verify/install | SSL certificate management |
-| `redis.sh` | 915 | redis status/health/flush/stats | Redis management |
-| `kas.sh` | 1748 | kas status/health/logs/registry/federation/cache | Key Access Service management |
-| `sp.sh` | 366 | sp register/status/list/credentials | OAuth client registration |
-| `db.sh` | 149 | seed, backup, restore | Database operations |
-| `test.sh` | 618 | test federation/unit/playwright/instances/all | Test suite execution |
-| `help.sh` | 181 | help | Command documentation |
+| `spoke.sh` | 5,028 | spoke init/up/down/status/register/list-countries | NATO 32-country spoke management |
+| `federation-setup.sh` | 2,238 | federation-setup configure/register-hub/verify | Keycloak federation configuration |
+| `kas.sh` | 1,746 | kas status/health/logs/registry/federation/cache | Key Access Service management |
+| `hub.sh` | 1,704 | hub deploy/init/up/down/status/verify/spokes/seed | Hub lifecycle and spoke management |
+| `status.sh` | 1,363 | status, health, validate, info, diagnostics, brief | System monitoring |
+| `federation.sh` | 1,035 | federation status/register/link/unlink/mappers | Cross-instance federation |
+| `redis.sh` | 914 | redis status/health/flush/stats | Redis management |
+| `core.sh` | 897 | up, down, restart, logs, ps, exec | Container lifecycle management |
+| `pilot.sh` | 851 | pilot up/down/status/logs/ssh/deploy/rollback | Remote VM management |
+| `certificates.sh` | 810 | certs check/prepare-federation/verify/install | SSL certificate management |
+| `test.sh` | 617 | test federation/unit/playwright/instances/all | Test suite execution |
+| `common.sh` | 500 | N/A | Shared utilities, secrets loading, network management |
+| `deploy.sh` | 491 | deploy, reset, nuke, rollback, checkpoint | Full deployment workflows |
+| `terraform.sh` | 439 | tf plan/apply/destroy/workspace/generate | Infrastructure as Code |
+| `sp.sh` | 354 | sp register/status/list/credentials | OAuth client registration |
+| `policy.sh` | 314 | policy build/push/status/test/version | OPA policy management |
+| `secrets.sh` | 195 | secrets load/show/list/verify/export/lint | GCP Secret Manager integration |
+| `help.sh` | 177 | help | Command documentation |
+| `db.sh` | 142 | seed, backup, restore | Database operations |
 
-**Total**: ~15,625 lines of bash across 19 modules
+**Total**: 19,815 lines of bash across 19 modules
 
 ---
 
@@ -194,18 +211,17 @@ ADMIN_PASSWORD, TEST_USER_PASSWORD, INSTANCE_CODE
 
 ### Identity Providers
 
-**Current State**: IdPs require manual post-import setup via `kcadm.sh`
+**Current State**: IdPs created dynamically via `./dive federation link` command
 
 | IdP Alias | Type | Status |
 |-----------|------|--------|
-| `usa-idp` | OIDC | Manual |
-| `gbr-idp` | OIDC | Manual |
-| `fra-idp` | OIDC/SAML | Manual |
-| `deu-idp` | OIDC | Manual |
-| `can-idp` | OIDC | Manual |
-| `industry-idp` | OIDC | Manual |
+| `usa-idp` | OIDC | ✅ Dynamic via federation link |
+| `gbr-idp` | OIDC | ✅ Dynamic via federation link |
+| `fra-idp` | OIDC | ✅ Dynamic via federation link |
+| `deu-idp` | OIDC | ✅ Dynamic via federation link |
+| All NATO | OIDC | ✅ Dynamic via federation link |
 
-**Gap Identified**: IdP definitions not in realm JSON, breaking one-command deploy.
+**Phase 2 Resolution**: Hardcoded IdPs removed from realm JSON. IdPs now created dynamically via federation commands with full automation support.
 
 ### Protocol Mappers
 
@@ -230,16 +246,19 @@ Configured via `ensure_webauthn_policy()` in `core.sh`:
 
 Located in `tests/docker/`:
 
-| Phase | File | Tests | Focus |
-|-------|------|-------|-------|
-| 0 | `phase0-baseline-tests.sh` | 9 | Baseline Docker integration |
-| 1 | `phase1-compose-tests.sh` | 33 | Compose consolidation |
-| 2 | `phase2-secrets-tests.sh` | 20 | Secrets standardization |
-| 3 | `phase3-resilience-tests.sh` | 8 | Service resilience |
-| 4 | `phase4-observability-tests.sh` | 19 | Monitoring/alerting |
-| 5 | `phase5-testing-tests.sh` | 19 | Test infrastructure |
+| Phase | File | Focus |
+|-------|------|-------|
+| 0 | `phase0-baseline-tests.sh` | Baseline Docker integration |
+| 1 | `phase1-compose-tests.sh` | Compose consolidation |
+| 2a | `phase2-secrets-tests.sh` | Secrets standardization |
+| 2b | `phase2-idp-automation.sh` | IdP automation (36 tests) |
+| 3a | `phase3-resilience-tests.sh` | Service resilience |
+| 3b | `phase3-hub-management.sh` | Hub spoke management |
+| 4a | `phase4-observability-tests.sh` | Monitoring/alerting |
+| 4b | `phase4-cicd.sh` | CI/CD pipeline validation |
+| 5 | `phase5-testing-tests.sh` | Test infrastructure |
 
-**Total**: 108 regression tests
+**Total**: 9 test suites with comprehensive coverage
 
 ### E2E Federation Tests
 
@@ -253,6 +272,15 @@ Located in `tests/e2e/federation/`:
 | `policy-sync.test.sh` | OPAL policy distribution |
 | `failover.test.sh` | Circuit breaker resilience |
 | `multi-spoke.test.sh` | Concurrent spoke testing |
+| `opal-dashboard.spec.ts` | OPAL dashboard E2E |
+| `token-rotation.spec.ts` | Token rotation E2E |
+
+### E2E Deployment Tests
+
+Located in `tests/e2e/`:
+- `local-deploy.test.sh` - Full local deployment lifecycle
+- `gcp-deploy.test.sh` - GCP pilot deployment lifecycle
+- `idp-login.test.sh` - IdP login flow validation
 
 ### Playwright Tests
 
@@ -260,7 +288,11 @@ Located in `tests/e2e/`:
 - `playwright.config.ts` - Configuration
 - `global-setup.ts` - Test setup
 - `auth-flows.test.ts` - Authentication E2E
-- `spoke-admin/*.spec.ts` - Admin UI tests
+- `spoke-admin/audit-page.spec.ts` - Audit page tests
+- `spoke-admin/failover-page.spec.ts` - Failover UI tests
+- `spoke-admin/maintenance-page.spec.ts` - Maintenance mode tests
+- `spoke-admin/policy-bundle.spec.ts` - Policy bundle tests
+- `spoke-admin/spoke-dashboard.spec.ts` - Dashboard tests
 
 ### Unit Tests
 
@@ -278,21 +310,31 @@ Located in `.github/workflows/`:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
+| `build-images.yml` | push | Docker image builds |
 | `ci-comprehensive.yml` | push to main, daily | Full test suite |
 | `ci-fast.yml` | PR | Quick validation |
 | `ci-pr.yml` | PR | PR checks |
 | `deploy-dev-server.yml` | manual | Dev deployment |
+| `deploy-gke-argocd.yml` | manual | GKE ArgoCD deployment |
 | `deploy-production.yml` | manual | Production deployment |
+| `dive-deploy.yml` | push to main | DIVE auto-deploy with rollback |
+| `dive-pr-checks.yml` | PR | DIVE-specific PR validation |
 | `policy-bundle.yml` | push to policies/ | OPA bundle build |
+| `policy-drift-check.yml` | schedule | Policy drift detection |
 | `policy-lint.yml` | PR | Rego linting |
+| `secret-rotation.yml` | schedule | Secret rotation automation |
+| `security.yml` | schedule | Security scanning |
+| `terraform-ci.yml` | PR | Terraform CI |
 | `terraform-validate.yml` | PR | Terraform validation |
 | `test-e2e.yml` | push | E2E tests |
-| `security.yml` | schedule | Security scanning |
+| `test-specialty.yml` | manual | Specialty tests |
+
+**Total**: 18 active workflows
 
 ### Archived Workflows
 
 Located in `.github/workflows/archive/`:
-- 12 legacy workflows for reference
+- 12 legacy workflows for reference (backend-ci, frontend-ci, e2e-tests, etc.)
 
 ### CI Performance Metrics
 
@@ -309,33 +351,33 @@ From `ci-comprehensive.yml`:
 
 ### Critical
 
-| Risk | Location | Impact |
-|------|----------|--------|
-| IdP manual setup | `core.sh:bootstrap_default_idp()` | Breaks one-command deploy |
-| No deploy rollback | `deploy.sh:cmd_deploy()` | Stuck state on failure |
+| Risk | Location | Impact | Status |
+|------|----------|--------|--------|
+| ~~IdP manual setup~~ | `core.sh:bootstrap_default_idp()` | ~~Breaks one-command deploy~~ | ✅ RESOLVED - Dynamic IdP creation |
+| ~~No deploy rollback~~ | `deploy.sh:cmd_deploy()` | ~~Stuck state on failure~~ | ✅ RESOLVED - Checkpoint/rollback added |
 
 ### High
 
-| Risk | Location | Impact |
-|------|----------|--------|
-| Non-idempotent nuke | `deploy.sh:cmd_nuke()` | Orphaned resources |
-| Keycloak wait race | `core.sh:wait_for_keycloak()` | 60s timeout may fail |
-| Spoke secrets manual | `spoke.sh` | Requires `secrets load` first |
+| Risk | Location | Impact | Status |
+|------|----------|--------|--------|
+| ~~Non-idempotent nuke~~ | `deploy.sh:cmd_nuke()` | ~~Orphaned resources~~ | ✅ RESOLVED - Full idempotency |
+| ~~Keycloak wait race~~ | `core.sh:wait_for_keycloak()` | ~~60s timeout may fail~~ | ✅ RESOLVED - 180s with backoff |
+| ~~Spoke secrets manual~~ | `spoke.sh` | ~~Requires `secrets load` first~~ | ✅ RESOLVED - Auto-load in spoke lifecycle |
 
 ### Medium
 
-| Risk | Location | Impact |
-|------|----------|--------|
-| Local Terraform state | `terraform/` | No state sharing |
-| Missing test fixtures | `tests/fixtures/` | E2E test failures |
-| No CI deploy gate | `.github/workflows/` | Broken deploys merge |
+| Risk | Location | Impact | Status |
+|------|----------|--------|--------|
+| Local Terraform state | `terraform/` | No state sharing | 🔲 Pending (GCS backend ready) |
+| ~~Missing test fixtures~~ | `tests/fixtures/` | ~~E2E test failures~~ | ✅ RESOLVED - Fixtures created |
+| ~~No CI deploy gate~~ | `.github/workflows/` | ~~Broken deploys merge~~ | ✅ RESOLVED - dive-pr-checks.yml |
 
 ### Low
 
-| Risk | Location | Impact |
-|------|----------|--------|
-| No health JSON output | `status.sh` | Manual inspection required |
-| Hardcoded timeouts | Various | Not configurable |
+| Risk | Location | Impact | Status |
+|------|----------|--------|--------|
+| ~~No health JSON output~~ | `status.sh` | ~~Manual inspection required~~ | ✅ RESOLVED - `--json` flag added |
+| ~~Hardcoded timeouts~~ | Various | ~~Not configurable~~ | ✅ RESOLVED - Environment variables |
 
 ---
 
@@ -470,23 +512,33 @@ KEYCLOAK_URL=https://<inst>-idp.dive25.com
 
 ## 12. Recommendations
 
-### Immediate (Phase 1)
+### ✅ Completed (Phase 1)
 
-1. **Make `cmd_nuke` idempotent** - Add `docker system prune -af --volumes`
-2. **Add deploy rollback** - Checkpoint state before destructive operations
-3. **Auto-load spoke secrets** - Call `load_gcp_secrets` in spoke lifecycle
+1. ~~**Make `cmd_nuke` idempotent**~~ - ✅ Added `docker system prune -af --volumes`
+2. ~~**Add deploy rollback**~~ - ✅ Checkpoint state before destructive operations
+3. ~~**Auto-load spoke secrets**~~ - ✅ Call `load_gcp_secrets` in spoke lifecycle
+4. ~~**Add health JSON output**~~ - ✅ `./dive health --json` implemented
+5. ~~**Increase Keycloak timeout**~~ - ✅ 180s with exponential backoff
 
-### Short-term (Phase 2-3)
+### ✅ Completed (Phase 2)
 
-4. **Automate IdP creation** - Add IdP definitions to realm JSON
-5. **Configure Terraform GCS backend** - Shared state across environments
-6. **Create pilot deploy script** - Full VM bootstrap automation
+6. ~~**Automate IdP creation**~~ - ✅ Dynamic IdP via `./dive federation link`
+7. ~~**Add IdP verification**~~ - ✅ `scripts/verify-idps.sh` created
+8. ~~**Apply user profiles**~~ - ✅ `scripts/spoke-init/apply-user-profile.sh` created
+9. ~~**Add CI deploy gate**~~ - ✅ `.github/workflows/dive-pr-checks.yml` added
 
-### Medium-term (Phase 4-5)
+### In Progress (Phase 3)
 
-7. **Add CI deploy gate** - Block broken deploys in PRs
-8. **Complete E2E test coverage** - Fill gaps in test fixtures
-9. **Implement auto-rollback** - CI/CD rollback on E2E failure
+10. **Hub spoke registry API** - Hub centralized spoke management
+11. **Hub health aggregation** - Aggregate health from all spokes
+12. **Policy distribution via OPAL** - Centralized policy push
+13. **Audit log aggregation** - Compliance logging at hub
+
+### Future (Phase 4+)
+
+14. **Configure Terraform GCS backend** - Shared state across environments (script ready)
+15. **KAS integration** - Key Access Service for encrypted resources
+16. **E2E demo scenarios** - Full federation demonstration
 
 ---
 
@@ -494,26 +546,37 @@ KEYCLOAK_URL=https://<inst>-idp.dive25.com
 
 ```
 DIVE-V3/
-├── dive                           # Main CLI entry point
+├── dive                           # Main CLI entry point (316 lines)
 ├── scripts/
-│   └── dive-modules/              # 19 CLI modules
+│   ├── dive-modules/              # 19 CLI modules (~19,815 lines total)
+│   ├── spoke-init/                # 13 spoke initialization scripts
+│   ├── hub-init/                  # 4 hub initialization scripts
+│   ├── verify-idps.sh             # IdP verification script
+│   └── dynamic-test-runner.sh     # Dynamic Playwright runner
 ├── docker-compose.yml             # Primary compose
 ├── docker-compose.hub.yml         # Hub deployment
-├── instances/                     # 32 NATO country configs
+├── docker-compose.pilot.yml       # Pilot VM deployment
+├── instances/                     # 20+ spoke instance configs
+│   ├── usa/                       # Hub instance
+│   ├── gbr/, fra/, deu/           # Major spokes
+│   └── <nato-code>/               # All NATO countries
 ├── keycloak/
 │   ├── Dockerfile
 │   ├── realms/                    # Realm JSON templates
 │   ├── scripts/                   # Import scripts
-│   └── themes/                    # Per-country themes
+│   ├── themes/                    # 35 per-country themes
+│   ├── user-profile-templates/    # 32 NATO user profiles
+│   └── mapper-templates/          # NATO attribute mappings
 ├── terraform/
-│   ├── pilot/                     # Hub terraform
-│   ├── spoke/                     # Spoke terraform
-│   ├── countries/                 # Generated tfvars
+│   ├── hub/                       # Hub terraform
+│   ├── pilot/                     # Pilot VM terraform
+│   ├── spoke/                     # Spoke deployments
+│   ├── countries/                 # 32 NATO tfvars
 │   └── modules/                   # Reusable modules
 ├── tests/
-│   ├── docker/                    # 108 phase tests
-│   └── e2e/                       # E2E tests
-├── .github/workflows/             # 20+ CI workflows
+│   ├── docker/                    # 9 phase test suites
+│   └── e2e/                       # E2E + Playwright tests
+├── .github/workflows/             # 18 active workflows (12 archived)
 ├── gcp/                           # Service account keys
 └── config/                        # Registry configs
 ```

@@ -60,12 +60,13 @@ INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-${!INSTANCE_PASSWORD_VAR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
 
 # Use backend container for API calls (has curl, on same network)
-PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
-API_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
-KC_CONTAINER="${PROJECT_PREFIX}-keycloak-${CODE_LOWER}-1"
+# New naming pattern: dive-spoke-lva-backend (not lva-backend-lva-1)
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-dive-spoke-${CODE_LOWER}}"
+API_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
+KC_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
 
 # Internal URL for API calls (via Docker network using Keycloak container name)
-KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
+KEYCLOAK_INTERNAL_URL="https://dive-spoke-${CODE_LOWER}-keycloak:8443"
 # Default public URL:
 # Determine the public Keycloak URL for frontendUrl (issuer in tokens)
 # Priority:
@@ -270,7 +271,7 @@ fi
 log_step "Initializing User Profile with multi-valued attributes..."
 
 # Call the TypeScript init script from backend
-BACKEND_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
+BACKEND_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
 USER_PROFILE_SCRIPT="/app/src/scripts/init-user-profiles.ts"
 
 # Check if backend container is running
@@ -296,7 +297,7 @@ for SCOPE in openid profile email; do
     SCOPE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/client-scopes" 2>/dev/null | \
         jq -r ".[] | select(.name==\"${SCOPE}\") | .name")
-    
+
     if [[ -z "$SCOPE_EXISTS" ]]; then
         kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/client-scopes" \
             -H "Authorization: Bearer $TOKEN" \
@@ -403,12 +404,12 @@ else
             },
             \"frontchannelLogout\": true
         }" 2>/dev/null
-    
+
     # Get client UUID
     CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" 2>/dev/null | \
         jq -r '.[0].id')
-    
+
     log_success "Client created: ${CLIENT_ID}"
 fi
 
@@ -421,7 +422,7 @@ for SCOPE in openid profile email; do
     SCOPE_ID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/client-scopes" 2>/dev/null | \
         jq -r ".[] | select(.name==\"${SCOPE}\") | .id")
-    
+
     if [[ -n "$SCOPE_ID" ]]; then
         kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/default-client-scopes/${SCOPE_ID}" \
             -H "Authorization: Bearer $TOKEN" 2>/dev/null
@@ -629,10 +630,12 @@ log_step "Ensuring USA hub IdP (usa-idp) is configured..."
 USA_IDP_ALIAS="usa-idp"
 USA_IDP_DISPLAY="United States"
 HUB_IDP_PUBLIC_URL="${HUB_IDP_URL:-https://localhost:8443}"
-HUB_IDP_INTERNAL_URL="${HUB_IDP_INTERNAL_URL:-${HUB_IDP_PUBLIC_URL}}"
+# For Docker internal communication, use dive-hub-keycloak:8443 (HTTPS) by default
+HUB_IDP_INTERNAL_URL="${HUB_IDP_INTERNAL_URL:-https://dive-hub-keycloak:8443}"
 HUB_IDP_DISABLE_TRUST="${HUB_IDP_DISABLE_TRUST:-true}"
-# Use the hub's cross-border client (must exist in USA Keycloak's dive-v3-broker realm)
-USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-cross-border-client}"
+# Use the spoke-specific client on Hub (must exist in USA Keycloak's dive-v3-broker realm)
+# Format: dive-v3-client-<spoke_code> (e.g., dive-v3-client-lva for Latvia)
+USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-client-${CODE_LOWER}}"
 # Allow multiple env var fallbacks for the client secret
 USA_IDP_CLIENT_SECRET="${USA_IDP_CLIENT_SECRET:-${CROSS_BORDER_CLIENT_SECRET:-${HUB_IDP_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-}}}}"
 
@@ -711,7 +714,7 @@ fi
 # Only apply localized mappers for non-USA spokes (USA uses standard English attributes)
 if [[ "${CODE_UPPER}" != "USA" ]]; then
     log_step "Configuring localized attribute mappers..."
-    
+
     if [[ -x "${SCRIPT_DIR_INIT}/configure-localized-mappers.sh" ]]; then
         export KEYCLOAK_ADMIN_PASSWORD="${ADMIN_PASSWORD}"
         "${SCRIPT_DIR_INIT}/configure-localized-mappers.sh" "${CODE_UPPER}" 2>/dev/null || {
@@ -767,7 +770,7 @@ fi
 # Seed resources (needs MONGO_PASSWORD from container)
 if [[ -x "${SCRIPT_DIR}/seed-resources.sh" ]]; then
     log_info "Running seed-resources.sh..."
-    MONGO_CONTAINER="${CODE_LOWER}-mongodb-${CODE_LOWER}-1"
+    MONGO_CONTAINER="dive-spoke-${CODE_LOWER}-mongodb"
     MONGO_PWD=$(docker exec "$MONGO_CONTAINER" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
     if [[ -n "$MONGO_PWD" ]]; then
         MONGO_PASSWORD="$MONGO_PWD" "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}" || {

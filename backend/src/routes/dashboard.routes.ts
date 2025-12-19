@@ -1,6 +1,6 @@
 /**
  * Dashboard Routes
- * 
+ *
  * Provides real-time statistics for the dashboard:
  * - Document count accessible to user
  * - Authorization success rate
@@ -51,7 +51,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
         // Get decision statistics (last 24 hours)
         const now = new Date();
         const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        
+
         let stats = {
             totalDecisions: 0,
             allowCount: 0,
@@ -80,8 +80,8 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 
         // Calculate changes
         const documentsChange = '+3 this week';
-        const authChange = stats.totalDecisions > 0 ? 
-            (authorizationRate >= 95 ? 'Stable' : authorizationRate >= 90 ? 'Slight decline' : 'Needs review') : 
+        const authChange = stats.totalDecisions > 0 ?
+            (authorizationRate >= 95 ? 'Stable' : authorizationRate >= 90 ? 'Slight decline' : 'Needs review') :
             'No data';
         const latencyChange = avgResponseTime > 0 ? `-${Math.floor(Math.random() * 20)}ms` : 'No data';
 
@@ -150,7 +150,7 @@ router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Prom
 
     try {
         // Check if user has admin role
-        const isAdmin = user?.roles?.includes('dive-admin') || 
+        const isAdmin = user?.roles?.includes('dive-admin') ||
                         user?.realm_access?.roles?.includes('dive-admin') ||
                         user?.resource_access?.['dive-v3-client-broker']?.roles?.includes('dive-admin');
 
@@ -208,7 +208,7 @@ router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Prom
                     lastHeartbeat: spoke.lastHeartbeat,
                     lastHeartbeatAgo: timeSinceHeartbeat,
                     lastHeartbeatFormatted: timeSinceHeartbeat !== null
-                        ? timeSinceHeartbeat < 60 
+                        ? timeSinceHeartbeat < 60
                             ? `${timeSinceHeartbeat}s ago`
                             : timeSinceHeartbeat < 3600
                                 ? `${Math.floor(timeSinceHeartbeat / 60)}m ago`
@@ -314,7 +314,7 @@ router.get('/stats/public', async (req: Request, res: Response): Promise<void> =
 
         const now = new Date();
         const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        
+
         let stats = { totalDecisions: 0, allowCount: 0, denyCount: 0, averageLatency: 0 };
         try {
             const fullStats = await decisionLogService.getStatistics(oneDayAgo, now);

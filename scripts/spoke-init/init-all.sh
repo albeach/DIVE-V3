@@ -28,11 +28,12 @@ fi
 
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
-PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-dive-spoke-${CODE_LOWER}}"
 
 container_name() {
     local service="$1"
-    echo "${PROJECT_PREFIX}-${service}-1"
+    # New naming pattern: dive-spoke-lva-postgres (not lva-postgres-lva-1)
+    echo "dive-spoke-${CODE_LOWER}-${service}"
 }
 
 echo ""
@@ -60,14 +61,15 @@ echo -e "${CYAN}  STEP 1/4: Waiting for services to be healthy...${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-SERVICES=("postgres-${CODE_LOWER}" "mongodb-${CODE_LOWER}" "keycloak-${CODE_LOWER}")
+# Service names (without instance suffix - the container_name function adds it)
+SERVICES=("postgres" "mongodb" "keycloak")
 MAX_WAIT=120
 WAITED=0
 
 for SERVICE in "${SERVICES[@]}"; do
     CONTAINER="$(container_name "${SERVICE}")"
     echo -n "  Waiting for ${CONTAINER}... "
-    
+
     while ! docker ps --format '{{.Names}} {{.Status}}' | grep -q "${CONTAINER}.*healthy"; do
         if [[ $WAITED -ge $MAX_WAIT ]]; then
             echo -e "${RED}TIMEOUT${NC}"
@@ -114,7 +116,7 @@ echo ""
 
 # Use the TypeScript ZTDF seeding script via docker exec
 # This creates properly encrypted resources with full ADatP-5663/ACP-240 compliance
-BACKEND_CONTAINER="${INSTANCE_CODE,,}-backend-${INSTANCE_CODE,,}-1"
+BACKEND_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
 if docker ps --format '{{.Names}}' | grep -q "^${BACKEND_CONTAINER}$"; then
     echo -e "${BLUE}ℹ${NC} Using ZTDF seeding script (npm run seed:instance)"
     docker exec "${BACKEND_CONTAINER}" npm run seed:instance -- --instance="${INSTANCE_CODE}" --count=5000 2>&1 || {
@@ -134,7 +136,7 @@ if docker ps --format '{{.Names}}' | grep -q 'dive-hub-keycloak'; then
     echo -e "${CYAN}  STEP 5/5: Syncing Federation Secrets with Hub${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    
+
     "${SCRIPT_DIR}/sync-federation-secrets.sh" "${INSTANCE_CODE}" || {
         echo -e "${YELLOW}⚠ Federation sync skipped (Hub IdP may not exist yet)${NC}"
         echo -e "${YELLOW}  Run './dive --instance ${INSTANCE_CODE} federation approve' after setup${NC}"

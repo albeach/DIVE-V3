@@ -2,7 +2,7 @@
 # ============================================
 # DIVE V3 - Keycloak Realm Import Script (v3.0.0)
 # ============================================
-# 
+#
 # SSOT NOTE (December 2025):
 # Terraform is the Single Source of Truth (SSOT) for all Keycloak configuration.
 # This script provides FALLBACK realm initialization for bootstrap scenarios.
@@ -95,11 +95,11 @@ if [ ! -f "${REALM_TEMPLATE}" ]; then
     echo "[DIVE] Skipping realm import - Keycloak will start with empty realm"
 else
     echo "[DIVE] Processing realm template..."
-    
+
     # Substitute environment variables in the template
     # Using sed with temp file approach (works on minimal containers)
     TEMP_FILE="${REALM_IMPORT_DIR}/realm.tmp"
-    
+
     # Read template, substitute variables, write to import location
     sed \
         -e "s|\${KEYCLOAK_CLIENT_SECRET}|${KEYCLOAK_CLIENT_SECRET}|g" \
@@ -110,7 +110,7 @@ else
         -e "s|\${USA_IDP_URL}|${USA_IDP_URL}|g" \
         -e "s|\${USA_IDP_CLIENT_SECRET}|${USA_IDP_CLIENT_SECRET}|g" \
         "${REALM_TEMPLATE}" > "${REALM_IMPORT_DIR}/dive-v3-broker.json"
-    
+
     echo "[DIVE] Realm template processed successfully"
     echo "[DIVE] Admin password length: ${#ADMIN_PASSWORD} chars"
     echo "[DIVE] Test password length: ${#TEST_USER_PASSWORD} chars"

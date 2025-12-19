@@ -195,13 +195,13 @@ echo ""
 # Initialize Terraform if requested
 if [ "$INIT_TERRAFORM" = true ]; then
     log_step "Initializing Terraform with new backend..."
-    
+
     echo ""
     log_warn "This will migrate existing state to GCS."
     log_warn "Make sure you have backed up any important state."
     echo ""
     read -r -p "Continue with terraform init? (y/N) " confirm
-    
+
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         # Initialize pilot
         if [ -d "${DIVE_ROOT}/terraform/pilot" ]; then
@@ -209,21 +209,21 @@ if [ "$INIT_TERRAFORM" = true ]; then
             (cd "${DIVE_ROOT}/terraform/pilot" && terraform init -migrate-state -input=false)
             log_success "Pilot initialized"
         fi
-        
+
         # Initialize spoke
         if [ -d "${DIVE_ROOT}/terraform/spoke" ]; then
             log_step "Initializing spoke terraform..."
             (cd "${DIVE_ROOT}/terraform/spoke" && terraform init -migrate-state -input=false)
             log_success "Spoke initialized"
         fi
-        
+
         # Initialize hub
         if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
             log_step "Initializing hub terraform..."
             (cd "${DIVE_ROOT}/terraform/hub" && terraform init -migrate-state -input=false)
             log_success "Hub initialized"
         fi
-        
+
         echo ""
         log_success "Terraform state migration complete!"
     else

@@ -39,14 +39,14 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Stage 1: Linting (Parallel)
   # ═══════════════════════════════════════════════════════════════════════════
-  
+
   lint-shell:
     name: ShellCheck
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
@@ -60,27 +60,27 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.0
-      
+
       - name: Terraform Format Check
         run: terraform fmt -check -recursive terraform/
         continue-on-error: true
-      
+
       - name: Terraform Validate (Pilot)
         run: |
           cd terraform/pilot
           terraform init -backend=false
           terraform validate
-      
+
       - name: Terraform Validate (Spoke)
         run: |
           cd terraform/spoke
           terraform init -backend=false
           terraform validate
-      
+
       - name: Terraform Validate (Hub)
         run: |
           cd terraform/hub
@@ -93,20 +93,20 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Validate docker-compose.yml
         run: docker compose -f docker-compose.yml config --quiet
-      
+
       - name: Validate docker-compose.hub.yml
         run: docker compose -f docker-compose.hub.yml config --quiet
-      
+
       - name: Validate docker-compose.pilot.yml
         run: docker compose -f docker-compose.pilot.yml config --quiet
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Stage 2: Unit Tests (Parallel)
   # ═══════════════════════════════════════════════════════════════════════════
-  
+
   test-backend-unit:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
@@ -114,16 +114,16 @@ jobs:
     needs: [lint-shell, lint-terraform, lint-compose]
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install Dependencies
         run: cd backend && npm ci
-      
+
       - name: Run Unit Tests
         run: cd backend && npm run test:unit -- --passWithNoTests
         env:
@@ -136,16 +136,16 @@ jobs:
     needs: [lint-shell, lint-terraform, lint-compose]
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      
+
       - name: Install Dependencies
         run: cd frontend && npm ci
-      
+
       - name: Run Unit Tests
         run: cd frontend && npm test -- --passWithNoTests
 
@@ -156,18 +156,18 @@ jobs:
     needs: [lint-shell, lint-terraform, lint-compose]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
         with:
           version: latest
-      
+
       - name: Run OPA Tests
         run: |
           cd policies
           opa test . -v --coverage --format=json > opa-coverage.json || true
           opa test . -v
-      
+
       - name: Check OPA Coverage
         run: |
           if [ -f policies/opa-coverage.json ]; then
@@ -179,7 +179,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Stage 3: Deploy Validation
   # ═══════════════════════════════════════════════════════════════════════════
-  
+
   test-deploy-dry-run:
     name: Deploy Dry Run
     runs-on: ubuntu-latest
@@ -187,7 +187,7 @@ jobs:
     needs: [test-backend-unit, test-frontend-unit, test-opa]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Deploy Dry Run
         run: ./dive deploy --dry-run
         env:
@@ -202,7 +202,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Stage 4: Docker Phase Tests (Optional - for comprehensive checks)
   # ═══════════════════════════════════════════════════════════════════════════
-  
+
   test-docker-phases:
     name: Docker Phase Tests
     runs-on: ubuntu-latest
@@ -210,7 +210,7 @@ jobs:
     needs: [test-deploy-dry-run]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Run Phase 0 Tests (Baseline)
         run: |
           chmod +x tests/docker/phase0-baseline-tests.sh
@@ -220,7 +220,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # Summary
   # ═══════════════════════════════════════════════════════════════════════════
-  
+
   pr-summary:
     name: PR Summary
     runs-on: ubuntu-latest
@@ -241,7 +241,7 @@ jobs:
           echo "| OPA Tests | ${{ needs.test-opa.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Deploy Dry-Run | ${{ needs.test-deploy-dry-run.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Overall result
           if [[ "${{ needs.lint-shell.result }}" == "success" && \
                 "${{ needs.lint-terraform.result }}" == "success" && \

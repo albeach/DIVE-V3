@@ -32,13 +32,14 @@ if [[ -z "$INSTANCE_CODE" ]]; then
 fi
 
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
-PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+
+# Container naming: dive-spoke-{code}-{service}
 container_name() {
     local service="$1"
-    echo "${PROJECT_PREFIX}-${service}-1"
+    echo "dive-spoke-${CODE_LOWER}-${service}"
 }
-POSTGRES_CONTAINER="$(container_name "postgres-${CODE_LOWER}")"
-MONGODB_CONTAINER="$(container_name "mongodb-${CODE_LOWER}")"
+POSTGRES_CONTAINER="$(container_name "postgres")"
+MONGODB_CONTAINER="$(container_name "mongodb")"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
@@ -122,30 +123,30 @@ log_step "Creating MongoDB collections..."
 
 docker exec "$MONGODB_CONTAINER" mongosh --quiet --eval "
     use('dive-v3-${CODE_LOWER}');
-    
+
     // Create collections if they don't exist
     if (!db.getCollectionNames().includes('resources')) {
         db.createCollection('resources');
         print('Created resources collection');
     }
-    
+
     if (!db.getCollectionNames().includes('decision_logs')) {
         db.createCollection('decision_logs');
         print('Created decision_logs collection');
     }
-    
+
     if (!db.getCollectionNames().includes('audit_logs')) {
         db.createCollection('audit_logs');
         print('Created audit_logs collection');
     }
-    
+
     // Create indexes
     db.resources.createIndex({resourceId: 1}, {unique: true, sparse: true});
     db.resources.createIndex({classification: 1});
     db.resources.createIndex({releasabilityTo: 1});
     db.decision_logs.createIndex({timestamp: -1});
     db.audit_logs.createIndex({timestamp: -1});
-    
+
     print('MongoDB initialization complete');
 " 2>/dev/null || log_warn "MongoDB initialization may have partial errors"
 

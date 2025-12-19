@@ -1,0 +1,36 @@
+# Tempo Configuration for DIVE V3
+# Distributed tracing backend for OpenTelemetry traces
+
+server:
+  http_listen_port: 3200
+  grpc_listen_port: 9095
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  trace_idle_period: 10s
+  max_block_bytes: 1_000_000
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    compacted_block_retention: 1h
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /tmp/tempo/traces
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+overrides:
+  per_tenant_override_config: /etc/overrides.yaml
