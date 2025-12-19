@@ -1,0 +1,257 @@
+# =============================================================================
+# DIVE V3 - PR Validation Workflow
+# =============================================================================
+# Runs fast checks on pull requests to validate code quality.
+# Target: < 5 minutes total execution time
+#
+# Checks:
+# - ShellCheck for bash scripts
+# - Terraform validate/format
+# - Docker Compose validation
+# - Backend/Frontend unit tests
+# - OPA policy tests
+# - Deploy dry-run validation
+# =============================================================================
+
+name: DIVE PR Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'scripts/**'
+      - 'docker-compose*.yml'
+      - 'terraform/**'
+      - 'backend/**'
+      - 'frontend/**'
+      - 'keycloak/**'
+      - 'policies/**'
+      - '.github/workflows/dive-pr-checks.yml'
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  DIVE_ENV: local
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 1: Linting (Parallel)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  lint-shell:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: './scripts'
+          severity: warning
+          format: gcc
+
+  lint-terraform:
+    name: Terraform Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+      
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive terraform/
+        continue-on-error: true
+      
+      - name: Terraform Validate (Pilot)
+        run: |
+          cd terraform/pilot
+          terraform init -backend=false
+          terraform validate
+      
+      - name: Terraform Validate (Spoke)
+        run: |
+          cd terraform/spoke
+          terraform init -backend=false
+          terraform validate
+      
+      - name: Terraform Validate (Hub)
+        run: |
+          cd terraform/hub
+          terraform init -backend=false
+          terraform validate
+
+  lint-compose:
+    name: Docker Compose Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate docker-compose.yml
+        run: docker compose -f docker-compose.yml config --quiet
+      
+      - name: Validate docker-compose.hub.yml
+        run: docker compose -f docker-compose.hub.yml config --quiet
+      
+      - name: Validate docker-compose.pilot.yml
+        run: docker compose -f docker-compose.pilot.yml config --quiet
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 2: Unit Tests (Parallel)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  test-backend-unit:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint-shell, lint-terraform, lint-compose]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd backend && npm ci
+      
+      - name: Run Unit Tests
+        run: cd backend && npm run test:unit -- --passWithNoTests
+        env:
+          NODE_ENV: test
+
+  test-frontend-unit:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint-shell, lint-terraform, lint-compose]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install Dependencies
+        run: cd frontend && npm ci
+      
+      - name: Run Unit Tests
+        run: cd frontend && npm test -- --passWithNoTests
+
+  test-opa:
+    name: OPA Policy Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [lint-shell, lint-terraform, lint-compose]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+      
+      - name: Run OPA Tests
+        run: |
+          cd policies
+          opa test . -v --coverage --format=json > opa-coverage.json || true
+          opa test . -v
+      
+      - name: Check OPA Coverage
+        run: |
+          if [ -f policies/opa-coverage.json ]; then
+            coverage=$(cat policies/opa-coverage.json | jq -r '.coverage // 0')
+            echo "OPA Policy Coverage: ${coverage}%"
+          fi
+        continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 3: Deploy Validation
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  test-deploy-dry-run:
+    name: Deploy Dry Run
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [test-backend-unit, test-frontend-unit, test-opa]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy Dry Run
+        run: ./dive deploy --dry-run
+        env:
+          DRY_RUN: "true"
+          POSTGRES_PASSWORD: test-password
+          KEYCLOAK_ADMIN_PASSWORD: test-password
+          MONGO_PASSWORD: test-password
+          AUTH_SECRET: test-secret-value-for-ci
+          KEYCLOAK_CLIENT_SECRET: test-client-secret
+          REDIS_PASSWORD: test-password
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Stage 4: Docker Phase Tests (Optional - for comprehensive checks)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  test-docker-phases:
+    name: Docker Phase Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test-deploy-dry-run]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Phase 0 Tests (Baseline)
+        run: |
+          chmod +x tests/docker/phase0-baseline-tests.sh
+          ./tests/docker/phase0-baseline-tests.sh --skip-lifecycle || true
+        continue-on-error: true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Summary
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  pr-summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [lint-shell, lint-terraform, lint-compose, test-backend-unit, test-frontend-unit, test-opa, test-deploy-dry-run]
+    if: always()
+    steps:
+      - name: Create Summary
+        run: |
+          echo "## 🚀 DIVE V3 PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ShellCheck | ${{ needs.lint-shell.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform | ${{ needs.lint-terraform.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Compose | ${{ needs.lint-compose.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Tests | ${{ needs.test-backend-unit.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Tests | ${{ needs.test-frontend-unit.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| OPA Tests | ${{ needs.test-opa.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Dry-Run | ${{ needs.test-deploy-dry-run.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Overall result
+          if [[ "${{ needs.lint-shell.result }}" == "success" && \
+                "${{ needs.lint-terraform.result }}" == "success" && \
+                "${{ needs.lint-compose.result }}" == "success" && \
+                "${{ needs.test-backend-unit.result }}" == "success" && \
+                "${{ needs.test-frontend-unit.result }}" == "success" && \
+                "${{ needs.test-opa.result }}" == "success" && \
+                "${{ needs.test-deploy-dry-run.result }}" == "success" ]]; then
+            echo "### ✅ All checks passed! Ready for review." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Some checks failed. Please review the details above." >> $GITHUB_STEP_SUMMARY
+          fi
+
