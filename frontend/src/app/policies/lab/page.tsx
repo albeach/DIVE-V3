@@ -133,6 +133,3 @@ export default function PoliciesLabPage() {
     </PageLayout>
   );
 }
-
-
-

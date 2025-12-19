@@ -347,15 +347,3 @@ spec:
     - parameter: password
       name: redis-secret
       key: password
-
-
-
-
-
-
-
-
-
-
-
-

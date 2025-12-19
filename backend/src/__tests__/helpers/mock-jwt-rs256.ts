@@ -163,4 +163,3 @@ export function getTestPublicKey(): string {
     const publicKeyPath = path.join(__dirname, '../keys/test-public-key.pem');
     return fs.readFileSync(publicKeyPath, 'utf8');
 }
-

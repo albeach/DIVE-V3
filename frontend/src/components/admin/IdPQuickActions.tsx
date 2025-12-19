@@ -210,4 +210,3 @@ export default function IdPQuickActions({ onRefresh, onExport }: IdPQuickActions
         </>
     );
 }
-

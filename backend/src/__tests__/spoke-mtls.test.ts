@@ -424,4 +424,3 @@ describe('mTLS Data Structures', () => {
     expect(configV13.minTLSVersion).toBe('TLSv1.3');
   });
 });
-

@@ -287,4 +287,3 @@ export function checkAccessibility(container: HTMLElement): {
     },
   };
 }
-

@@ -642,5 +642,3 @@ export const CURRENT_INSTANCE = INSTANCE_CONFIG[process.env.DIVE_INSTANCE || 'hu
 **Created:** November 16, 2025  
 **Last Updated:** November 16, 2025  
 **Status:** ✅ Ready for Use
-
-

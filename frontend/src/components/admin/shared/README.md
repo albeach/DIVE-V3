@@ -413,4 +413,3 @@ Use VirtualTable for datasets > 100 rows.
 ---
 
 *Last updated: December 14, 2025*
-

@@ -161,4 +161,3 @@ create_user_profile "United States" "USA" "lastName" "Last Name" "firstName" "Fi
 
 echo ""
 echo "✓ Created all 32 NATO nation user profile templates"
-

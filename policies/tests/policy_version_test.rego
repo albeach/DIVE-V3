@@ -191,15 +191,3 @@ test_meets_minimum_version_much_lower if {
 test_not_meets_minimum_version_higher if {
 	not dive.meets_minimum_version("3.0.0")
 }
-
-
-
-
-
-
-
-
-
-
-
-

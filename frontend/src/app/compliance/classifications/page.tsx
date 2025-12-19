@@ -473,5 +473,3 @@ export default function ClassificationsPage() {
     </PageLayout>
   );
 }
-
-

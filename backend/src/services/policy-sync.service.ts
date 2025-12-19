@@ -718,4 +718,3 @@ class PolicySyncService {
 export const policySyncService = new PolicySyncService();
 
 export default PolicySyncService;
-

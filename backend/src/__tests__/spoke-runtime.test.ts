@@ -532,4 +532,3 @@ describe('SpokeRuntimeService', () => {
     });
   });
 });
-

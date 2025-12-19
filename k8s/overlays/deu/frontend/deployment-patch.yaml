@@ -33,4 +33,3 @@ spec:
               value: "Germany"
             - name: NEXT_PUBLIC_LOCALE
               value: "de-DE"
-

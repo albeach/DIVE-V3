@@ -178,15 +178,3 @@ export default function DemoScenarioManager() {
         </div>
     );
 }
-
-
-
-
-
-
-
-
-
-
-
-

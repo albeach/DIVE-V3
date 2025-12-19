@@ -821,6 +821,3 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
         </div>
     );
 }
-
-
-

@@ -827,4 +827,3 @@ export async function initializeCertificateInfrastructure(): Promise<void> {
         throw error;
     }
 }
-

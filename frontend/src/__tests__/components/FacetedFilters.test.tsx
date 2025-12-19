@@ -632,15 +632,3 @@ describe('MobileFilterDrawer', () => {
     expect(dialog).toHaveAttribute('aria-label');
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

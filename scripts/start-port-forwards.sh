@@ -78,14 +78,3 @@ echo ""
 echo -e "${BLUE}💡 Tip: Keep this terminal open. Port forwards stop when you close it.${NC}"
 echo -e "${BLUE}💡 To stop: Run './scripts/stop-port-forwards.sh' or press Ctrl+C${NC}"
 echo ""
-
-
-
-
-
-
-
-
-
-
-

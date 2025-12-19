@@ -498,4 +498,3 @@ router.get('/opa/policy', getPolicyHandler);
 router.post('/opa/policy/toggle-rule', toggleRuleHandler);
 
 export default router;
-

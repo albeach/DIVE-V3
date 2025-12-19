@@ -57,4 +57,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Failed to log audit' }, { status: 500 });
     }
 }
-

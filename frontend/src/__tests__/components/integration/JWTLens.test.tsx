@@ -83,4 +83,3 @@ describe("JWTLens", () => {
     expect(derivedElements.length).toBeGreaterThan(0);
   });
 });
-

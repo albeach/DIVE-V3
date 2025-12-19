@@ -705,4 +705,3 @@ class IdPApprovalService {
 
 // Export singleton instance
 export const idpApprovalService = new IdPApprovalService();
-

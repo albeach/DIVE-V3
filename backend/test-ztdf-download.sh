@@ -258,4 +258,3 @@ echo "  - $RESOURCE_ID.ztdf (complete ZTDF file)"
 echo "  - manifest.json (extracted manifest)"
 echo "  - payload.bin (extracted encrypted payload)"
 echo ""
-

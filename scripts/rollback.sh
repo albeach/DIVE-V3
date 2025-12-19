@@ -48,4 +48,3 @@ echo "📉 Scaling down ${CURRENT_DEPLOYMENT}..."
 kubectl scale deployment "${CURRENT_DEPLOYMENT}" -n "${NAMESPACE}" --replicas=0
 
 echo "✅ Rollback complete: ${DEPLOYMENT} now using ${TARGET_COLOR} deployment"
-

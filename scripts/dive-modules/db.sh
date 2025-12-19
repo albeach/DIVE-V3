@@ -140,9 +140,3 @@ module_db_help() {
     echo "  backup              Create database backup"
     echo "  restore <dir>       Restore from backup"
 }
-
-
-
-
-
-

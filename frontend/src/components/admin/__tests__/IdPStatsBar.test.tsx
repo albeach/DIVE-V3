@@ -87,4 +87,3 @@ describe('IdPStatsBar', () => {
         expect(screen.getByText('Total IdPs')).toBeInTheDocument();
     });
 });
-

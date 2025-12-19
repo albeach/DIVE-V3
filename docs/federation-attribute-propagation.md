@@ -686,4 +686,3 @@ if (acpCOI && acpCOI.size() > 0) {
 - ✅ Testing verified: 3 out of 4 attributes working
 
 **Status:** Core functionality working, acpCOI requires follow-up implementation.
-

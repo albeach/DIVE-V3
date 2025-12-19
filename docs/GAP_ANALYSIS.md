@@ -734,4 +734,3 @@ unset POSTGRES_PASSWORD && ./dive --instance fra spoke up
 # Verify GAP-010 (remote state)
 cd terraform/pilot && terraform state list
 ```
-

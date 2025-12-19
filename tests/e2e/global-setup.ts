@@ -81,5 +81,3 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
   await browser.close();
   await api.dispose();
 }
-
-

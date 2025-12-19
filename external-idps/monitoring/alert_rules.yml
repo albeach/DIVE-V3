@@ -147,5 +147,3 @@ groups:
         annotations:
           summary: "Low disk space"
           description: "Only {{ $value | humanizePercentage }} disk space remaining"
-
-

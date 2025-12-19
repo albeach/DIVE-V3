@@ -341,4 +341,3 @@ describe('External IdP Integration - Spain SAML Live Tests', () => {
         expect(response.ok).toBe(true);
     }, 10000);
 });
-

@@ -120,4 +120,3 @@ echo "Security Note:"
 echo "  ⚠️  Version 2.4.3 includes fixes for CVE-2025-27773 (signature bypass)"
 echo "  🔒 Production deployments should use HTTPS and update admin password"
 echo ""
-

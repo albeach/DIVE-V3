@@ -111,5 +111,14 @@
     "enabled": true,
     "protocol": "oidc",
     "federation_class": "LOCAL"
+  },
+  "https://localhost:8456/realms/dive-v3-broker-hun": {
+    "tenant": "HUN",
+    "name": "HUN Keycloak (Local Dev)",
+    "country": "HUN",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL"
   }
 }

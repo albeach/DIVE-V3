@@ -345,4 +345,3 @@ describe('Connectivity Data Structures', () => {
     expect(config.spokeToken).toBe('my-secret-token');
   });
 });
-

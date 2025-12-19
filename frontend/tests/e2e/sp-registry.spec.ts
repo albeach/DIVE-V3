@@ -146,14 +146,3 @@ test.describe('SP Registry Management', () => {
  * npx playwright test --debug  # Run in debug mode
  * ```
  */
-
-
-
-
-
-
-
-
-
-
-

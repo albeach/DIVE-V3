@@ -263,5 +263,3 @@ router.post('/federated-reconnect', authenticateJWT, async (req: Request, res: R
 });
 
 export default router;
-
-

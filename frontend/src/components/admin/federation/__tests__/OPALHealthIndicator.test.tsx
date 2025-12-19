@@ -120,7 +120,3 @@ describe('OPALHealthIndicator', () => {
     });
   });
 });
-
-
-
-

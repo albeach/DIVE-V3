@@ -277,4 +277,3 @@ test_allow_eucom_with_usa_country if {
 4. **Database Audit**:
    - Verify all resources with EUCOM have correct country membership
    - Check for resources with incorrect COI/country combinations
-

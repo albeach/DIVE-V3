@@ -76,7 +76,3 @@ async function clearKeycloakSessions() {
 }
 
 clearKeycloakSessions().catch(console.error);
-
-
-
-

@@ -438,4 +438,3 @@ function mapXACMLDecision(xacmlDecision: string): DecisionType {
             return 'INDETERMINATE';
     }
 }
-

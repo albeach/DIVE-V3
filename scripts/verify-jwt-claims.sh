@@ -226,4 +226,3 @@ fi
 
 echo ""
 log_debug "complete" "Verification complete" "{}"
-

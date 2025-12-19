@@ -257,4 +257,3 @@ echo -e "${GREEN}║  Ready for final test!                                     
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "{\"runId\":\"fix3\",\"location\":\"fix-profile:277\",\"message\":\"All profile fixes complete\",\"data\":{\"gbr_client_mappers\":$MAPPER_COUNT,\"usa_idp_mappers\":$IDP_MAPPER_COUNT},\"timestamp\":$(date +%s)000}" >> "$LOG_FILE"
-

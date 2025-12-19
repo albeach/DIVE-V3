@@ -244,7 +244,3 @@ export function PolicySyncStatusCard({
 }
 
 export default PolicySyncStatusCard;
-
-
-
-

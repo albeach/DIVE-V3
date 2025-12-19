@@ -711,4 +711,3 @@ function createTestToken(payload: any): string {
     const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
     return `header.${base64Payload}.signature`;
 }
-

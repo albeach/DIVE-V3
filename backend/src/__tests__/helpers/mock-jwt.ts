@@ -200,5 +200,3 @@ export function verifyTestJWT(token: string): IJWTPayload {
 export function generateTestJWT(claims: Partial<IJWTPayload> = {}, secret: string = TEST_SECRET): Promise<string> {
     return Promise.resolve(createMockJWT(claims, secret));
 }
-
-

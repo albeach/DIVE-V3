@@ -670,4 +670,3 @@ export function IdpSelector() {
     </>
   );
 }
-

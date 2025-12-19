@@ -50,7 +50,7 @@ const INSTANCES: IInstanceConfig[] = [
         healthEndpoint: '/health',
         federatedSearchEndpoint: '/api/resources/federated-search',
         localResourcesEndpoint: '/api/resources',
-        expectedDocuments: 7000
+        expectedDocuments: 5000
     },
     {
         code: 'FRA',
@@ -59,7 +59,7 @@ const INSTANCES: IInstanceConfig[] = [
         healthEndpoint: '/health',
         federatedSearchEndpoint: '/api/resources/federated-search',
         localResourcesEndpoint: '/api/resources',
-        expectedDocuments: 7000
+        expectedDocuments: 5000
     },
     {
         code: 'GBR',
@@ -68,7 +68,7 @@ const INSTANCES: IInstanceConfig[] = [
         healthEndpoint: '/health',
         federatedSearchEndpoint: '/api/resources/federated-search',
         localResourcesEndpoint: '/api/resources',
-        expectedDocuments: 7000
+        expectedDocuments: 5000
     }
 ];
 
@@ -621,4 +621,3 @@ describeFn('Federated Search Performance Benchmarks', () => {
         expect(successful / concurrentRequests).toBeGreaterThanOrEqual(0.8);
     });
 });
-

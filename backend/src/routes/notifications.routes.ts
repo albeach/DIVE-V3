@@ -21,5 +21,3 @@ router.post('/preferences/me', authenticateJWT, updatePreferencesHandler);
 router.post('/seed', authenticateJWT, seedNotificationsHandler);
 
 export default router;
-
-

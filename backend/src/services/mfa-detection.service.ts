@@ -223,4 +223,3 @@ class MFADetectionService {
 
 // Export singleton instance
 export const mfaDetectionService = new MFADetectionService();
-

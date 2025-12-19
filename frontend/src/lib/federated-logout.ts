@@ -162,4 +162,3 @@ export async function federatedLogout(options: LogoutOptions = {}): Promise<void
 export async function localLogout(redirectUrl = '/'): Promise<void> {
   return federatedLogout({ skipKeycloakRedirect: true, redirectUrl, reason: 'local_cleanup' });
 }
-

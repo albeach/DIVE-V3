@@ -147,4 +147,3 @@ export async function mockKeycloakJWKSWithCustomKey(customJWK: any): Promise<voi
 export async function getTestJWK(): Promise<any> {
     return await convertPemToJWK();
 }
-

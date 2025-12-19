@@ -88,4 +88,3 @@ monitoring:
   enabled: true
   prometheus:
     scrapeInterval: 60s
-

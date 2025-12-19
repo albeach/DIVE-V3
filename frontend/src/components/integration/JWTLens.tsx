@@ -285,4 +285,3 @@ function ClaimRow({ label, value, source, specRef }: ClaimRowProps) {
     </div>
   );
 }
-

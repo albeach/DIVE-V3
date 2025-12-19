@@ -447,4 +447,3 @@ describe('ACP-240 Compliance - Multi-KAS Benefits', () => {
         expect(Object.keys(kasEndpoints).length).toBe(3);
     });
 });
-

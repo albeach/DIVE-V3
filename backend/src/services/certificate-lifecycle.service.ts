@@ -625,4 +625,3 @@ export async function initializeCertificateLifecycle(): Promise<void> {
         throw error;
     }
 }
-

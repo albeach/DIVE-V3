@@ -245,7 +245,8 @@ services:
       KEYCLOAK_URL: {{IDP_BASE_URL}}
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
-      TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      # CRITICAL: Include Hub issuer for cross-instance federation
+      TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # OPA

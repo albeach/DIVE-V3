@@ -486,12 +486,3 @@ describe('Policy Bundle Structure', () => {
     expect(bundle.signature?.keyId).toBe('key-001');
   });
 });
-
-
-
-
-
-
-
-
-

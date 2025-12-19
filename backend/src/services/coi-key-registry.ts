@@ -277,4 +277,3 @@ export function selectCOIForResource(releasabilityTo: string[], coiTags: string[
 export const __testing__ = {
     COIKeyRegistry
 };
-

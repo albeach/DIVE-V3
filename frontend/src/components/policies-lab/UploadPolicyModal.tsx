@@ -368,4 +368,3 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
     </Transition>
   );
 }
-

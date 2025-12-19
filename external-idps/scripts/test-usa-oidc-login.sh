@@ -143,5 +143,3 @@ echo ""
 echo "For automated testing, see:"
 echo "  backend/src/__tests__/integration/external-idp-usa-oidc.test.ts"
 echo ""
-
-

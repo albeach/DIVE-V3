@@ -3,8 +3,11 @@
  * 
  * Phase 1: Federation Discovery & Health
  * 
- * Server-side route that returns detailed information about
- * all federation instances including stats and status.
+ * Server-side route that DYNAMICALLY fetches federation instances
+ * from the backend's federation-registry.json via the API.
+ * 
+ * This ensures instances are never hardcoded and new spokes
+ * are automatically discovered.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,63 +18,56 @@ import { eq } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
 
-// Federation instance configuration
-const FEDERATION_INSTANCES = [
-  {
-    code: 'USA',
-    name: 'United States',
-    type: 'hub' as const,
-    country: 'USA',
-    flag: '🇺🇸',
-    endpoints: {
-      app: process.env.USA_APP_URL || 'https://usa-app.dive25.com',
-      api: process.env.USA_API_URL || 'https://usa-api.dive25.com',
-      idp: process.env.USA_IDP_URL || 'https://usa-idp.dive25.com',
-    },
-  },
-  {
-    code: 'FRA',
-    name: 'France',
-    type: 'spoke' as const,
-    country: 'FRA',
-    flag: '🇫🇷',
-    endpoints: {
-      app: process.env.FRA_APP_URL || 'https://fra-app.dive25.com',
-      api: process.env.FRA_API_URL || 'https://fra-api.dive25.com',
-      idp: process.env.FRA_IDP_URL || 'https://fra-idp.dive25.com',
-    },
-  },
-  {
-    code: 'GBR',
-    name: 'United Kingdom',
-    type: 'spoke' as const,
-    country: 'GBR',
-    flag: '🇬🇧',
-    endpoints: {
-      app: process.env.GBR_APP_URL || 'https://gbr-app.dive25.com',
-      api: process.env.GBR_API_URL || 'https://gbr-api.dive25.com',
-      idp: process.env.GBR_IDP_URL || 'https://gbr-idp.dive25.com',
-    },
-  },
-  {
-    code: 'DEU',
-    name: 'Germany',
-    type: 'spoke' as const,
-    country: 'DEU',
-    flag: '🇩🇪',
-    endpoints: {
-      app: process.env.DEU_APP_URL || 'https://deu-app.prosecurity.biz',
-      api: process.env.DEU_API_URL || 'https://deu-api.prosecurity.biz',
-      idp: process.env.DEU_IDP_URL || 'https://deu-idp.prosecurity.biz',
-    },
-  },
-];
+// Backend API URL - uses internal Docker network or localhost
+const BACKEND_API_URL = process.env.BACKEND_URL || 'https://localhost:4000';
+
+interface IFederationInstance {
+  code: string;
+  name: string;
+  type: 'hub' | 'spoke';
+  country: string;
+  flag: string;
+  locale?: string;
+  endpoints: {
+    app: string;
+    api: string;
+    idp: string;
+  };
+  federationStatus: 'approved' | 'pending' | 'suspended';
+}
 
 interface IInstanceStats {
   activeUsers: number;
   recentDecisions: number;
   resourceCount: number;
-  lastActivity: string;
+  lastActivity: string | null;
+}
+
+/**
+ * Fetch federation instances dynamically from backend
+ */
+async function fetchFederationInstances(): Promise<IFederationInstance[]> {
+  try {
+    // Fetch from backend's dynamic instances endpoint
+    const response = await fetch(`${BACKEND_API_URL}/api/federation/instances`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      console.warn(`[FederationInstances] Backend returned ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.instances || [];
+  } catch (error) {
+    console.error('[FederationInstances] Failed to fetch from backend:', error);
+    return [];
+  }
 }
 
 /**
@@ -85,30 +81,29 @@ async function fetchInstanceStats(
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    
+
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
-    
+
     // Try to fetch stats from the backend
     const response = await fetch(`${apiUrl}/api/federation/stats`, {
       method: 'GET',
       headers,
       cache: 'no-store',
     });
-    
+
     if (response.ok) {
       return await response.json();
     }
-    
+
     // Fallback: try health endpoint for basic info
     const healthResponse = await fetch(`${apiUrl}/health`, {
       method: 'GET',
       cache: 'no-store',
     });
-    
+
     if (healthResponse.ok) {
-      // Return estimated stats based on health response
       return {
         activeUsers: 0,
         recentDecisions: 0,
@@ -116,7 +111,7 @@ async function fetchInstanceStats(
         lastActivity: new Date().toISOString(),
       };
     }
-    
+
     return null;
   } catch (error) {
     console.error(`[FederationInstances] Failed to fetch stats from ${apiUrl}:`, error);
@@ -127,6 +122,7 @@ async function fetchInstanceStats(
 /**
  * GET /api/admin/federation/instances
  * Returns detailed information about all federation instances
+ * DYNAMICALLY loaded from backend's federation-registry.json
  */
 export async function GET(request: NextRequest) {
   try {
@@ -138,7 +134,7 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    
+
     // Get access token for backend requests
     let accessToken: string | undefined;
     try {
@@ -147,17 +143,24 @@ export async function GET(request: NextRequest) {
         .from(accounts)
         .where(eq(accounts.userId, session.user.id))
         .limit(1);
-      
+
       accessToken = accountResults[0]?.access_token || undefined;
     } catch (dbError) {
       console.warn('[FederationInstances] Could not get access token:', dbError);
     }
-    
+
+    // DYNAMIC: Fetch instances from backend's federation-registry
+    const federationInstances = await fetchFederationInstances();
+
+    if (federationInstances.length === 0) {
+      console.warn('[FederationInstances] No instances found - check backend connectivity');
+    }
+
     // Fetch stats for all instances in parallel
     const instancesWithStats = await Promise.all(
-      FEDERATION_INSTANCES.map(async (instance) => {
+      federationInstances.map(async (instance) => {
         const stats = await fetchInstanceStats(instance.endpoints.api, accessToken);
-        
+
         return {
           code: instance.code,
           name: instance.name,
@@ -171,11 +174,11 @@ export async function GET(request: NextRequest) {
             resourceCount: 0,
             lastActivity: null,
           },
-          federationStatus: 'approved' as const, // All configured instances are approved
+          federationStatus: instance.federationStatus || 'approved',
         };
       })
     );
-    
+
     // Calculate totals
     const totalStats = instancesWithStats.reduce(
       (acc, inst) => ({
@@ -185,13 +188,14 @@ export async function GET(request: NextRequest) {
       }),
       { totalUsers: 0, totalDecisions: 0, totalResources: 0 }
     );
-    
+
     return NextResponse.json({
       instances: instancesWithStats,
       totals: totalStats,
       timestamp: new Date().toISOString(),
+      source: 'dynamic', // Indicates instances were fetched dynamically
     });
-    
+
   } catch (error) {
     console.error('[FederationInstances] Error:', error);
     return NextResponse.json(
@@ -203,11 +207,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
-
-
-
-
-
-
-

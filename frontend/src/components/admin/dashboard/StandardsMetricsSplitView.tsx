@@ -138,4 +138,3 @@ function MetricCard({ label, value, trend }: { label: string; value: string; tre
     </div>
   );
 }
-

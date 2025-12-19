@@ -42,15 +42,3 @@ export default function PolicyEditorPage() {
     </PageLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

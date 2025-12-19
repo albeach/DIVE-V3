@@ -206,4 +206,3 @@ echo -e "${GREEN}║  Ready for browser test!                                   
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "Verification log: $LOG_FILE"
-

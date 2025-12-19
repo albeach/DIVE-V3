@@ -132,4 +132,3 @@ export function CompactProfile({ user }: CompactProfileProps) {
     </div>
   );
 }
-

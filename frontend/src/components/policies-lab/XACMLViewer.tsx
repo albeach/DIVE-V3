@@ -254,6 +254,3 @@ export default function XACMLViewer({ policyId, source }: XACMLViewerProps) {
     </div>
   );
 }
-
-
-

@@ -136,4 +136,3 @@ export {
   default as MobileResourceDrawer,
   useSwipeToOpen
 } from './mobile-resource-drawer';
-

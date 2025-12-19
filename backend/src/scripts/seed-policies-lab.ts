@@ -348,4 +348,3 @@ if (require.main === module) {
 }
 
 export { seedPoliciesLab };
-

@@ -363,4 +363,3 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
         </div>
     );
 }
-

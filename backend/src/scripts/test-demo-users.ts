@@ -209,4 +209,3 @@ if (require.main === module) {
 }
 
 export { testInstance };
-

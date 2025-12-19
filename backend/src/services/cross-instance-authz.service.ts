@@ -1027,5 +1027,3 @@ export class CrossInstanceAuthzService {
 
 // Export singleton instance
 export const crossInstanceAuthzService = new CrossInstanceAuthzService();
-
-

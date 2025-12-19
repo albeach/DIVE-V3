@@ -473,4 +473,3 @@ export function getEquivalencyTable(): IClassificationEquivalency[] {
 export const __testing__ = {
     CLASSIFICATION_EQUIVALENCY_TABLE
 };
-

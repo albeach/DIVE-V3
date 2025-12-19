@@ -89,4 +89,3 @@ export interface ISessionInfo {
     countryOfAffiliation?: string;
     clearance?: string;
 }
-

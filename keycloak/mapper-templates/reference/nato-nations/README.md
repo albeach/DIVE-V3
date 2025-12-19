@@ -204,4 +204,3 @@ To add a new nation:
 - Templates are JSON for easy parsing and automation
 - Mappers include all three token types (ID, access, userinfo)
 - National IDs follow principle of data minimization (access token only)
-

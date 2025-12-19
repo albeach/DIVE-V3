@@ -139,4 +139,3 @@ services:
     depends_on:
       - spain-saml
       - usa-oidc
-

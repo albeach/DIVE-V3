@@ -687,6 +687,43 @@ else
 fi
 
 # =============================================================================
+# AUTO-APPLY USER PROFILE TEMPLATE (Phase 2 - GAP-001)
+# =============================================================================
+log_step "Applying locale-specific user profile template..."
+
+SCRIPT_DIR_INIT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Apply user profile template for this nation (non-blocking)
+if [[ -x "${SCRIPT_DIR_INIT}/apply-user-profile.sh" ]]; then
+    # Export Keycloak credentials for the script
+    export KEYCLOAK_ADMIN_PASSWORD="${ADMIN_PASSWORD}"
+    "${SCRIPT_DIR_INIT}/apply-user-profile.sh" "${CODE_UPPER}" 2>/dev/null || {
+        log_warn "User profile template application skipped (may already be applied)"
+    }
+else
+    log_warn "apply-user-profile.sh not found or not executable"
+    log_info "Run manually: ./scripts/spoke-init/apply-user-profile.sh ${CODE_UPPER}"
+fi
+
+# =============================================================================
+# AUTO-CONFIGURE LOCALIZED MAPPERS (Phase 2 - GAP-001)
+# =============================================================================
+# Only apply localized mappers for non-USA spokes (USA uses standard English attributes)
+if [[ "${CODE_UPPER}" != "USA" ]]; then
+    log_step "Configuring localized attribute mappers..."
+    
+    if [[ -x "${SCRIPT_DIR_INIT}/configure-localized-mappers.sh" ]]; then
+        export KEYCLOAK_ADMIN_PASSWORD="${ADMIN_PASSWORD}"
+        "${SCRIPT_DIR_INIT}/configure-localized-mappers.sh" "${CODE_UPPER}" 2>/dev/null || {
+            log_warn "Localized mappers configuration skipped (may already be configured)"
+        }
+    else
+        log_warn "configure-localized-mappers.sh not found or not executable"
+        log_info "Run manually: ./scripts/spoke-init/configure-localized-mappers.sh ${CODE_UPPER}"
+    fi
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""
@@ -744,4 +781,3 @@ else
 fi
 
 log_info "Keycloak initialization complete for ${INSTANCE_CODE}"
-

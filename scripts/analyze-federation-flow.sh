@@ -45,4 +45,3 @@ jq -r '"\(.timestamp) | \(.location | ljust(20)) | \(.message)"' "$LOG_FILE" 2>/
 
 echo ""
 echo "Complete log file: $LOG_FILE"
-

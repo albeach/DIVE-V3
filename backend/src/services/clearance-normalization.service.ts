@@ -473,5 +473,3 @@ export const ClearanceNormalizationService = {
 };
 
 export default ClearanceNormalizationService;
-
-

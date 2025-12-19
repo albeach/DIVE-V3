@@ -251,6 +251,3 @@ default allow := false
     </div>
   );
 }
-
-
-

@@ -593,10 +593,3 @@ function ActivitySkeleton() {
     </div>
   );
 }
-
-
-
-
-
-
-

@@ -527,4 +527,3 @@ services:
     # Expose metrics for monitoring (optional - access at localhost:9126)
     ports:
       - "9126:9126"
-

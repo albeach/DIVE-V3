@@ -285,4 +285,3 @@ function Sparkline({ data, width, height, color }: SparklineProps) {
         </svg>
     );
 }
-

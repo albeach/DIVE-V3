@@ -70,11 +70,11 @@ hub_init() {
     
     # 2. Generate secrets if not present
     log_step "Checking secrets..."
-    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ] || [ -z "$POSTGRES_PASSWORD" ]; then
+    if [ ! -f "${DIVE_ROOT}/.env.hub" ]; then
         log_info "Generating ephemeral secrets for hub..."
         _hub_generate_secrets
     else
-        log_success "Secrets already configured"
+        log_success "Secrets already configured (using existing .env.hub)"
     fi
     
     # 3. Generate certificates if not present
@@ -124,6 +124,9 @@ _hub_generate_secrets() {
     export AUTH_SECRET="${AUTH_SECRET:-$(openssl rand -base64 32)}"
     export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -base64 24 | tr -d '/+=')}"
     export FEDERATION_ADMIN_KEY="${FEDERATION_ADMIN_KEY:-$(openssl rand -base64 24 | tr -d '/+=')}"
+    export REDIS_PASSWORD_USA="${REDIS_PASSWORD_USA:-$(openssl rand -base64 16 | tr -d '/+=')}"
+    export REDIS_PASSWORD_BLACKLIST="${REDIS_PASSWORD_BLACKLIST:-$(openssl rand -base64 16 | tr -d '/+=')}"
+    export OPAL_AUTH_MASTER_TOKEN="${OPAL_AUTH_MASTER_TOKEN:-$(openssl rand -base64 32 | tr -d '/+=')}"
     
     # Save to .env.hub for reference (do not commit)
     cat > "${DIVE_ROOT}/.env.hub" << EOF
@@ -134,6 +137,9 @@ MONGO_PASSWORD=${MONGO_PASSWORD}
 AUTH_SECRET=${AUTH_SECRET}
 KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
 FEDERATION_ADMIN_KEY=${FEDERATION_ADMIN_KEY}
+REDIS_PASSWORD_USA=${REDIS_PASSWORD_USA}
+REDIS_PASSWORD_BLACKLIST=${REDIS_PASSWORD_BLACKLIST}
+OPAL_AUTH_MASTER_TOKEN=${OPAL_AUTH_MASTER_TOKEN}
 EOF
     chmod 600 "${DIVE_ROOT}/.env.hub"
     log_info "Secrets saved to .env.hub (gitignored)"
@@ -283,16 +289,16 @@ hub_deploy() {
     
     # Step 5: Apply Terraform (if available)
     log_step "Step 5/7: Applying Keycloak configuration..."
-    if [ -d "${DIVE_ROOT}/terraform/pilot" ]; then
+    if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
         _hub_apply_terraform || log_warn "Terraform apply skipped or failed"
     else
         log_info "No Terraform config found, skipping"
     fi
     
     # Step 6: Seed test users and resources
-    log_step "Step 6/7: Seeding test users and resources..."
+    log_step "Step 6/7: Seeding test users and 5000 ZTDF resources..."
     if [ -d "${DIVE_ROOT}/scripts/hub-init" ]; then
-        hub_seed 200 || log_warn "Seeding failed - you can run './dive hub seed' later"
+        hub_seed 5000 || log_warn "Seeding failed - you can run './dive hub seed' later"
     else
         log_info "Hub seed scripts not found, skipping"
     fi
@@ -331,11 +337,12 @@ hub_up() {
     
     log_step "Starting DIVE Hub services..."
     if [ "$DRY_RUN" = true ]; then
-        log_dry "docker compose -f ${HUB_COMPOSE_FILE} up -d"
+        log_dry "docker compose -f ${HUB_COMPOSE_FILE} --env-file .env.hub up -d"
         return 0
     fi
     
-    docker compose -f "$HUB_COMPOSE_FILE" up -d || {
+    # Use --env-file to ensure all environment variables are passed to docker compose
+    docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d || {
         log_error "Failed to start hub services"
         return 1
     }
@@ -367,7 +374,7 @@ hub_down() {
 _hub_wait_all_healthy() {
     local timeout=180
     local elapsed=0
-    local services=("keycloak" "backend" "opal-server" "opa" "mongodb" "postgres" "redis")
+    local services=("keycloak" "backend" "opal-server" "opa" "mongodb" "postgres" "redis" "redis-blacklist")
     
     log_info "Waiting for all services to be healthy (up to ${timeout}s)..."
     
@@ -399,7 +406,7 @@ _hub_wait_all_healthy() {
 }
 
 _hub_apply_terraform() {
-    local tf_dir="${DIVE_ROOT}/terraform/pilot"
+    local tf_dir="${DIVE_ROOT}/terraform/hub"
     
     if [ ! -d "$tf_dir" ]; then
         log_info "No Terraform directory found at ${tf_dir}"
@@ -416,11 +423,16 @@ _hub_apply_terraform() {
     (
         cd "$tf_dir"
         [ ! -d ".terraform" ] && terraform init -input=false
-        TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}" \
-        TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}" \
-        KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}" \
-        KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}" \
-        terraform apply -input=false -auto-approve
+        
+        # Export secrets as TF_VAR_ environment variables
+        export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}"
+        export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}"
+        export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-DiveTestSecure2025!}"
+        export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
+        export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
+        export KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
+        
+        terraform apply -var-file=hub.tfvars -input=false -auto-approve
     ) || {
         log_warn "Terraform apply failed"
         return 1
@@ -501,9 +513,9 @@ hub_verify() {
     
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
     
-    # Check 1: Docker containers running (7 services)
-    printf "  %-35s" "1. Docker Containers (7 services):"
-    local expected_services=("keycloak" "backend" "opa" "opal-server" "mongodb" "postgres" "redis")
+    # Check 1: Docker containers running (8 services)
+    printf "  %-35s" "1. Docker Containers (8 services):"
+    local expected_services=("keycloak" "backend" "opa" "opal-server" "mongodb" "postgres" "redis" "redis-blacklist")
     local running_count=0
     local missing_services=""
     
@@ -518,11 +530,11 @@ hub_verify() {
         fi
     done
     
-    if [ $running_count -ge 5 ]; then
-        echo -e "${GREEN}✓ ${running_count}/7 running${NC}"
+    if [ $running_count -ge 6 ]; then
+        echo -e "${GREEN}✓ ${running_count}/8 running${NC}"
         ((checks_passed++))
     else
-        echo -e "${RED}✗ ${running_count}/7 running (missing:${missing_services})${NC}"
+        echo -e "${RED}✗ ${running_count}/8 running (missing:${missing_services})${NC}"
         ((checks_failed++))
     fi
     
@@ -1553,10 +1565,12 @@ hub_logs() {
 # =============================================================================
 
 hub_seed() {
-    local resource_count="${1:-200}"
+    local resource_count="${1:-5000}"
     
     print_header
     echo -e "${BOLD}Seeding Hub (USA) with Test Data${NC}"
+    echo ""
+    echo "  Target: ${resource_count} ZTDF encrypted resources"
     echo ""
     
     # Check for seed scripts
@@ -1568,7 +1582,7 @@ hub_seed() {
     fi
     
     # Step 1: Seed users (includes User Profile configuration)
-    log_step "Seeding test users..."
+    log_step "Step 1/2: Seeding test users..."
     if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-users.sh" ]; then
         if [ "$DRY_RUN" = true ]; then
             log_dry "Would run: ${SEED_SCRIPTS_DIR}/seed-hub-users.sh"
@@ -1580,24 +1594,46 @@ hub_seed() {
         return 1
     fi
     
-    # Step 2: Seed resources
-    log_step "Seeding resources..."
-    if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" ]; then
-        if [ "$DRY_RUN" = true ]; then
-            log_dry "Would run: ${SEED_SCRIPTS_DIR}/seed-hub-resources.sh ${resource_count}"
-        else
-            "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" "$resource_count"
-        fi
+    # Step 2: Seed ZTDF encrypted resources using TypeScript seeder
+    log_step "Step 2/2: Seeding ${resource_count} ZTDF encrypted resources..."
+    local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker exec ${backend_container} npx tsx src/scripts/seed-instance-resources.ts --instance=USA --count=${resource_count} --replace"
     else
-        log_error "seed-hub-resources.sh not found or not executable"
-        return 1
+        # Check if backend container is running
+        if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+            log_error "Backend container '${backend_container}' is not running"
+            log_info "Falling back to shell script seeder..."
+            if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" ]; then
+                "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" "$resource_count"
+            fi
+            return 0
+        fi
+        
+        # Use ZTDF seeder via TypeScript
+        docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
+            --instance=USA \
+            --count="${resource_count}" \
+            --replace 2>&1 || {
+            log_warn "ZTDF seeding failed, trying fallback..."
+            if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" ]; then
+                "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" "$resource_count"
+            fi
+        }
     fi
     
     echo ""
     log_success "Hub seeding complete!"
     echo ""
     echo "  Test users: testuser-usa-{1-4}, admin-usa"
-    echo "  Resources:  ${resource_count} (evenly distributed across classifications)"
+    echo "  Resources:  ${resource_count} ZTDF encrypted documents"
+    echo ""
+    echo "  Distribution:"
+    echo "    - Classifications: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET"
+    echo "    - COIs: 28+ templates (NATO, FVEY, bilateral, multi-COI)"
+    echo "    - Releasability: Instance-specific and coalition-wide"
+    echo "    - All documents have full ZTDF policy structure"
     echo ""
     echo "  ABAC is now functional - users see resources based on clearance level"
 }
@@ -1639,7 +1675,7 @@ module_hub_help() {
     echo "  init                Initialize hub directories and config"
     echo "  up, start           Start hub services"
     echo "  down, stop          Stop hub services"
-    echo "  seed [count]        Seed test users and resources (default: 200 resources)"
+    echo "  seed [count]        Seed test users and ZTDF resources (default: 5000)"
     echo ""
     echo -e "${CYAN}Status & Verification:${NC}"
     echo "  status              Show comprehensive hub status"

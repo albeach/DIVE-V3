@@ -184,4 +184,3 @@ test.describe('Integration: Federation vs Object', () => {
         expect(h2Headings.length).toBeGreaterThan(5);  // Multiple sections
     });
 });
-

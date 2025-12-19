@@ -195,4 +195,3 @@ function FactorRow({ factor }: { factor: RiskFactor }) {
         </details>
     );
 }
-

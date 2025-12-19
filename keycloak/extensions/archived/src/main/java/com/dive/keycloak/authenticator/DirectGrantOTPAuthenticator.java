@@ -610,4 +610,3 @@ public class DirectGrantOTPAuthenticator implements Authenticator {
         }
     }
 }
-

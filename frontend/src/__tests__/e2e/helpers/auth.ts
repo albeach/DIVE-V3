@@ -514,4 +514,3 @@ export async function expectLoggedOut(page: Page): Promise<void> {
   });
   await expect(loginElements.first()).toBeVisible();
 }
-

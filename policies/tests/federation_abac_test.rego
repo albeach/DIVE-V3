@@ -655,4 +655,3 @@ test_decision_includes_federated_fields if {
     d.federatedSearchAllowed == true
     d.federatedResourceAllowed == true
 }
-

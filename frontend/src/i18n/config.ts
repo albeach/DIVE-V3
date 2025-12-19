@@ -152,4 +152,3 @@ export function getLocaleFromIdP(idpAlias: string): Locale {
     // Fall back to stored or default
     return getStoredLocale();
 }
-

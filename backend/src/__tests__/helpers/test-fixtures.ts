@@ -430,4 +430,3 @@ export function generateTestRequestId(): string {
 export function generateTestResourceId(): string {
     return `doc-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
-

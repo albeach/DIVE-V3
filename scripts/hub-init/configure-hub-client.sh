@@ -131,4 +131,3 @@ echo "  - https://*.prosecurity.biz/*"
 echo ""
 echo "Federated logout will now properly terminate Keycloak SSO sessions."
 echo ""
-

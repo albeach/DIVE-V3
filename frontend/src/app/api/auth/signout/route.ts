@@ -63,5 +63,3 @@ export async function GET(request: NextRequest) {
     // Support GET for direct browser access if needed
     return POST(request);
 }
-
-

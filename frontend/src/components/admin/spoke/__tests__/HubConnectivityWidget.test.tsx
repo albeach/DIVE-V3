@@ -195,7 +195,3 @@ describe('HubConnectivityWidget', () => {
     });
   });
 });
-
-
-
-

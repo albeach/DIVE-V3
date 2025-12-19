@@ -838,4 +838,3 @@ echo "=== All checks passed! ==="
 | `.github/branch-protection.yml` | Branch rules (IaC) |
 | `scripts/ci-local.sh` | Local CI simulation |
 | `.husky/pre-commit` | Pre-commit hooks |
-

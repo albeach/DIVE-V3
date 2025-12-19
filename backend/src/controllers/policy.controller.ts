@@ -168,4 +168,3 @@ function validateOPAInput(input: IOPAInput): void {
         throw new ValidationError('Missing required field: input.context.requestId');
     }
 }
-

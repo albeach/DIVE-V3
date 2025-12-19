@@ -178,8 +178,3 @@ echo -e "${GREEN}║    See output above for generated passwords                
 echo -e "${GREEN}║                                                                          ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-
-
-
-
-

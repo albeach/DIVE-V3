@@ -221,4 +221,3 @@ fi
 echo ""
 echo "Simulation log: $LOG_FILE"
 echo "Run: ./scripts/analyze-federation-flow.sh to see detailed analysis"
-

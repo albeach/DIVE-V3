@@ -16,5 +16,3 @@ data:
   keycloak_realm: "dive-v3-broker-fra"
   keycloak_client_id: "dive-v3-client-broker"
   keycloak_issuer: "https://keycloak.dive-v3-fra.svc.cluster.local:8443/realms/dive-v3-broker-fra"
-
-

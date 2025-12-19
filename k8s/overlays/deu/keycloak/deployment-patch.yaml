@@ -31,4 +31,3 @@ spec:
               value: "DEU"
             - name: INSTANCE_NAME
               value: "Germany"
-

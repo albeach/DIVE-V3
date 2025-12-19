@@ -286,4 +286,3 @@ export default {
   tw,
   gradients,
 };
-

@@ -119,5 +119,3 @@ export default function PolicyComparisonView({ currentPolicy, modifiedPolicy, ru
         </div>
     );
 }
-
-

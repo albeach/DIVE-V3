@@ -200,4 +200,3 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║                     Debug Trace Complete                     ║${NC}"
 echo -e "${BLUE}║  All results logged to: ${LOG_FILE}${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
-

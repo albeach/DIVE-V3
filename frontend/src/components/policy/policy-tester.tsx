@@ -439,4 +439,3 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
     </div>
   );
 }
-

@@ -211,4 +211,3 @@ echo -e "${GREEN}║                                                            
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "See debug.log for complete trace evidence"
-

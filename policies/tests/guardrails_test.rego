@@ -423,4 +423,3 @@ test_zero_session_hours_no_violation if {
 	}
 	count({v | v := violations[_]; v.code == "SESSION_TOO_LONG"}) == 0
 }
-

@@ -588,5 +588,3 @@ export function useResourcePreview(resources: IResource[]) {
     navigatePreview,
   };
 }
-
-

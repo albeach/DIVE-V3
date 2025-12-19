@@ -31,4 +31,3 @@ spec:
               value: "GBR"
             - name: INSTANCE_NAME
               value: "United Kingdom"
-

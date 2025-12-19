@@ -1360,4 +1360,3 @@ class HubSpokeRegistryService {
 export const hubSpokeRegistry = new HubSpokeRegistryService();
 
 export default HubSpokeRegistryService;
-

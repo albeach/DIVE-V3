@@ -33,4 +33,3 @@ export function LoginButton({ idpHint }: LoginButtonProps) {
     </button>
   );
 }
-

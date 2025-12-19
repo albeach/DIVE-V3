@@ -79,4 +79,3 @@ spec:
     unhealthyThreshold: 3
     type: HTTP
     requestPath: /health
-

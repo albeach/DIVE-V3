@@ -73,4 +73,3 @@ router.put('/:coiId', updateCOIKeyHandler);
 router.delete('/:coiId', deprecateCOIKeyHandler);
 
 export default router;
-

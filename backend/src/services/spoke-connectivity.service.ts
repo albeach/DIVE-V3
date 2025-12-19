@@ -439,4 +439,3 @@ class SpokeConnectivityService extends EventEmitter {
 export const spokeConnectivity = new SpokeConnectivityService();
 
 export default SpokeConnectivityService;
-

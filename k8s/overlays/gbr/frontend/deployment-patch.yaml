@@ -33,4 +33,3 @@ spec:
               value: "United Kingdom"
             - name: NEXT_PUBLIC_LOCALE
               value: "en-GB"
-

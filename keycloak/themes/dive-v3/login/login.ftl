@@ -228,5 +228,3 @@
     </#if>
 
 </@layout.registrationLayout>
-
-

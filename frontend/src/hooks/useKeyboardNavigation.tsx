@@ -520,4 +520,3 @@ export function KeyboardShortcutsHelp() {
 }
 
 export default useKeyboardNavigation;
-

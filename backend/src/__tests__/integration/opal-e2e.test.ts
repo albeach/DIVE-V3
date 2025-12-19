@@ -263,4 +263,3 @@ if (process.env.RUN_STANDALONE === 'true') {
   console.log('Running OPAL E2E tests standalone...');
   // Tests will be run by Jest
 }
-

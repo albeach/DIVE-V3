@@ -245,4 +245,3 @@ if (require.main === module) {
 }
 
 export { migrateIdPThemes };
-

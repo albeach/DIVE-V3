@@ -114,4 +114,3 @@ export function StandardsIndicator({ standard }: { standard: '5663' | '240' | 'b
     </span>
   );
 }
-

@@ -373,4 +373,3 @@ export default {
   commonBulkActions,
   useBulkSelection,
 };
-

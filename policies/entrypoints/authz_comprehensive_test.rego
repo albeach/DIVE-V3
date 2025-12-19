@@ -407,4 +407,3 @@ test_federation_trusted_with_issuer if {
 	}
 	is_boolean(result)
 }
-

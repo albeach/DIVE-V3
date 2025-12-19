@@ -32,6 +32,8 @@ import { z } from 'zod';
 import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
 import { getResourcesByQuery } from '../services/resource.service';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 // Initialize SP Management Service
 const spManagement = new SPManagementService();
@@ -204,6 +206,97 @@ router.get('/metadata', async (_req: Request, res: Response): Promise<void> => {
         }
     });
 });
+
+/**
+ * GET /api/federation/instances
+ * Dynamically returns all federation instances from federation-registry.json
+ * Public endpoint (no auth) - used by frontend for federated search UI
+ */
+router.get('/instances', async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const registryPaths = [
+            path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
+            path.join(process.cwd(), 'config', 'federation-registry.json')
+        ];
+
+        let registry: any = null;
+        for (const registryPath of registryPaths) {
+            if (fs.existsSync(registryPath)) {
+                registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
+                break;
+            }
+        }
+
+        if (!registry?.instances) {
+            res.status(404).json({
+                error: 'Registry not found',
+                message: 'Federation registry not configured'
+            });
+            return;
+        }
+
+        // Map registry instances to frontend-friendly format
+        const instances = Object.entries(registry.instances)
+            .filter(([_key, inst]: [string, any]) => inst.enabled)
+            .map(([key, inst]: [string, any]) => {
+                const backendService = inst.services?.backend;
+                const frontendService = inst.services?.frontend;
+                const keycloakService = inst.services?.keycloak;
+
+                // Build URLs based on development/production
+                const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
+                
+                return {
+                    code: inst.code || key.toUpperCase(),
+                    name: inst.name || key,
+                    type: inst.primary ? 'hub' : 'spoke',
+                    country: inst.code || key.toUpperCase(),
+                    flag: getCountryFlag(inst.code || key.toUpperCase()),
+                    locale: inst.locale || 'en-US',
+                    endpoints: {
+                        app: isDev 
+                            ? `https://localhost:${frontendService?.externalPort || 3000}`
+                            : `https://${frontendService?.hostname || `${key}-app.dive25.com`}`,
+                        api: isDev 
+                            ? `https://localhost:${backendService?.externalPort || 4000}`
+                            : `https://${backendService?.hostname || `${key}-api.dive25.com`}`,
+                        idp: isDev 
+                            ? `https://localhost:${keycloakService?.externalPort || 8443}`
+                            : `https://${keycloakService?.hostname || `${key}-idp.dive25.com`}`,
+                    },
+                    federationStatus: 'approved'
+                };
+            });
+
+        res.json({
+            instances,
+            timestamp: new Date().toISOString(),
+            source: 'federation-registry.json'
+        });
+    } catch (error) {
+        logger.error('Failed to load federation instances', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to load federation instances'
+        });
+    }
+});
+
+// Helper function to get country flag emoji
+function getCountryFlag(countryCode: string): string {
+    const flags: Record<string, string> = {
+        USA: '🇺🇸', FRA: '🇫🇷', GBR: '🇬🇧', DEU: '🇩🇪', CAN: '🇨🇦',
+        AUS: '🇦🇺', NZL: '🇳🇿', ITA: '🇮🇹', ESP: '🇪🇸', NLD: '🇳🇱',
+        POL: '🇵🇱', BEL: '🇧🇪', PRT: '🇵🇹', GRC: '🇬🇷', TUR: '🇹🇷',
+        NOR: '🇳🇴', DNK: '🇩🇰', CZE: '🇨🇿', HUN: '🇭🇺', SVK: '🇸🇰',
+        SVN: '🇸🇮', HRV: '🇭🇷', ROU: '🇷🇴', BGR: '🇧🇬', EST: '🇪🇪',
+        LVA: '🇱🇻', LTU: '🇱🇹', ALB: '🇦🇱', MNE: '🇲🇪', MKD: '🇲🇰',
+        LUX: '🇱🇺', ISL: '🇮🇸', FIN: '🇫🇮', SWE: '🇸🇪'
+    };
+    return flags[countryCode] || '🏳️';
+}
 
 /**
  * POST /api/federation/register

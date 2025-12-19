@@ -599,4 +599,3 @@ describe('Federation Security', () => {
         });
     });
 });
-

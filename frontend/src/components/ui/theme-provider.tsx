@@ -798,4 +798,3 @@ export function getInstanceName(code: string): string {
 
 // Export the themes for use in other components
 export { INSTANCE_THEMES, INSTANCE_NAMES, INSTANCE_LOCALES, INSTANCE_STRINGS, COALITION_PARTNERS };
-

@@ -143,4 +143,3 @@ export default function SLAMetricsCard({ data }: Props) {
         </div>
     );
 }
-

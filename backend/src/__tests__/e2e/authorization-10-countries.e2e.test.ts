@@ -454,4 +454,3 @@ async function generateTestJWT(claims: any): Promise<string> {
     // Use the RS256 JWT generation logic for production-like testing
     return createE2EJWT(claims);
 }
-

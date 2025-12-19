@@ -62,4 +62,3 @@ describe('PolicyBuilderWizard helpers', () => {
     expect(summary).toContain('KAS key request');
   });
 });
-

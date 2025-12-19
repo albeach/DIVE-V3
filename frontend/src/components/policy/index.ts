@@ -17,15 +17,3 @@ export {
   PolicyGateUpload,
   type PolicyGateProps,
 } from './PolicyGate';
-
-
-
-
-
-
-
-
-
-
-
-

@@ -144,4 +144,3 @@ afterAll(async () => {
     // Final cleanup delay
     await new Promise(resolve => setTimeout(resolve, 200));
 }, 15000); // Reduced timeout since we have better cleanup
-

@@ -204,4 +204,3 @@ export function FederationPartnersRevamped({ user }: FederationPartnersRevampedP
     </div>
   );
 }
-

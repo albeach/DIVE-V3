@@ -392,4 +392,3 @@ class OPALClient {
 export const opalClient = new OPALClient();
 
 export default OPALClient;
-

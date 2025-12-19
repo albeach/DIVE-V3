@@ -258,4 +258,3 @@ export function LocalizedPilotCapabilities({ className = '' }: { className?: str
 }
 
 export default InstanceHeroBadge;
-

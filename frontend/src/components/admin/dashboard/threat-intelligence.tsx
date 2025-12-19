@@ -247,4 +247,3 @@ export default function ThreatIntelligence({ dateRange, refreshTrigger }: Props)
         </div>
     );
 }
-

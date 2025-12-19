@@ -574,4 +574,3 @@ describe('Policy Sync Service', () => {
     expect(true).toBe(true);
   });
 });
-

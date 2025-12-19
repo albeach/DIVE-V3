@@ -378,4 +378,3 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
     </>
   );
 }
-

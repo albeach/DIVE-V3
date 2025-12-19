@@ -744,4 +744,3 @@ export default function AdminCertificatesPage() {
     </PageLayout>
   );
 }
-

@@ -467,5 +467,3 @@ export default function CertificatesPage() {
     </PageLayout>
   );
 }
-
-

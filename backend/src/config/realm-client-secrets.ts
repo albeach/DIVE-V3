@@ -73,6 +73,3 @@ export function getConfiguredRealms(): string[] {
 export function hasRealmSecret(realmName: string): boolean {
     return realmName in REALM_CLIENT_SECRETS;
 }
-
-
-

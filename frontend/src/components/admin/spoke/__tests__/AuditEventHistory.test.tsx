@@ -470,7 +470,3 @@ describe('AuditEventHistory', () => {
     });
   });
 });
-
-
-
-

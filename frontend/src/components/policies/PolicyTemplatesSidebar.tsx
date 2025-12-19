@@ -94,5 +94,3 @@ export function PolicyTemplatesSidebar({
     </div>
   );
 }
-
-

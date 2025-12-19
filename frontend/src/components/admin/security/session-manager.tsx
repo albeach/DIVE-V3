@@ -531,4 +531,3 @@ function generateMockSessions(): ISession[] {
 }
 
 export default SessionManager;
-

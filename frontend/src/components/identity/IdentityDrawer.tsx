@@ -136,5 +136,3 @@ function Claim({ label, value, color }: { label: string; value: string; color?: 
     </div>
   );
 }
-
-

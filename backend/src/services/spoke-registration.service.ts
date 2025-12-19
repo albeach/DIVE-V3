@@ -762,4 +762,3 @@ class SpokeRegistrationService extends EventEmitter {
 export const spokeRegistration = new SpokeRegistrationService();
 
 export default SpokeRegistrationService;
-

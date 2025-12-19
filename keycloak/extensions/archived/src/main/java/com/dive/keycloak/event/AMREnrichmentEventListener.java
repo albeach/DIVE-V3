@@ -154,4 +154,3 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
         // Nothing to close
     }
 }
-

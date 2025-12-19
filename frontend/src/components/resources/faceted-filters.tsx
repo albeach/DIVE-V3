@@ -70,9 +70,10 @@ interface FacetedFiltersProps {
     classifications: FacetItem[];
     countries: FacetItem[];
     cois: FacetItem[];
-    instances: FacetItem[];
+    // instances removed - handled by horizontal selector
     encryptionStatus: FacetItem[];
   };
+  hasApproximateCounts?: boolean;
   selectedFilters: ISelectedFilters;
   onFilterChange: (filters: ISelectedFilters) => void;
   isLoading?: boolean;
@@ -119,6 +120,40 @@ const INSTANCE_FLAGS: Record<string, string> = {
   'DEU': '🇩🇪',
   'CAN': '🇨🇦',
   'AUS': '🇦🇺',
+  'ALB': '🇦🇱',
+  'BEL': '🇧🇪',
+  'DNK': '🇩🇰',
+  'ESP': '🇪🇸',
+  'EST': '🇪🇪',
+  'HUN': '🇭🇺',
+  'ITA': '🇮🇹',
+  'NOR': '🇳🇴',
+  'POL': '🇵🇱',
+  'PRT': '🇵🇹',
+  'ROU': '🇷🇴',
+  'TUR': '🇹🇷',
+  'BGR': '🇧🇬',
+  'HRV': '🇭🇷',
+  'CZE': '🇨🇿',
+  'SVK': '🇸🇰',
+  'NLD': '🇳🇱',
+  'SWE': '🇸🇪',
+  'FIN': '🇫🇮',
+  'IRL': '🇮🇪',
+  'AUT': '🇦🇹',
+  'CHE': '🇨🇭',
+  'LUX': '🇱🇺',
+  'SVN': '🇸🇮',
+  'HRV': '🇭🇷',
+  'BIH': '🇧🇦',
+  'SRB': '🇷🇸',
+  'MNE': '🇲🇪',
+  'MKD': '🇲🇰',
+  'ISL': '🇮🇸',
+  'LTU': '🇱🇹',
+  'LVA': '🇱🇻',
+  'MDA': '🇲🇩',
+  'UKR': '🇺🇦',
 };
 
 // ============================================
@@ -133,13 +168,14 @@ interface FacetSectionProps {
   isLoading?: boolean;
 }
 
-function FacetSection({ 
-  group, 
-  selectedValues, 
-  onToggle, 
+function FacetSection({
+  group,
+  selectedValues,
+  onToggle,
   userHighlight = [],
-  isLoading 
-}: FacetSectionProps) {
+  isLoading,
+  hasApproximateCounts = false
+}: FacetSectionProps & { hasApproximateCounts?: boolean }) {
   const [isExpanded, setIsExpanded] = useState(group.defaultExpanded ?? true);
   const [showAll, setShowAll] = useState(false);
   
@@ -157,23 +193,52 @@ function FacetSection({
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-all duration-200 group"
       >
-        <div className="flex items-center gap-3">
-          <div className="p-1 rounded-md bg-gray-100 dark:bg-gray-800/50 group-hover:bg-gray-200 dark:group-hover:bg-gray-700/50 transition-colors">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {/* Icon with dynamic styling */}
+          <div className={`p-1.5 rounded-lg transition-all duration-200 flex-shrink-0 ${
+            activeCount > 0
+              ? 'bg-blue-100 dark:bg-blue-900/30 shadow-sm'
+              : 'bg-gray-100 dark:bg-gray-800/50 group-hover:bg-gray-200 dark:group-hover:bg-gray-700/50'
+          }`}>
             {group.icon}
           </div>
-          <span className="text-sm font-bold text-gray-800 dark:text-gray-200 tracking-tight">
-            {group.label}
-          </span>
-          {activeCount > 0 && (
-            <span className="px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold rounded-full shadow-sm">
-              {activeCount}
-            </span>
-          )}
+
+          {/* Title and metadata */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-800 dark:text-gray-200 tracking-tight truncate">
+                {group.label}
+              </span>
+
+              {/* Active count badge */}
+              {activeCount > 0 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold rounded-full shadow-sm"
+                >
+                  {activeCount}
+                </motion.span>
+              )}
+
+              {/* Total count */}
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                {group.items.reduce((sum, item) => sum + item.count, 0).toLocaleString()}
+              </span>
+            </div>
+
+            {/* Contextual subtitle */}
+            {activeCount > 0 && (
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 truncate">
+                {activeCount === 1 ? '1 filter active' : `${activeCount} filters active`}
+              </div>
+            )}
+          </div>
         </div>
         <motion.div
           animate={{ rotate: isExpanded ? 180 : 0 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+          className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors flex-shrink-0 ml-2"
         >
           <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" strokeWidth={2.5} />
         </motion.div>
@@ -189,8 +254,11 @@ function FacetSection({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-5 pb-4 space-y-1.5">
-              {visibleItems.map((item) => {
+            <div className="px-5 pb-4">
+
+              {/* Filter items */}
+              <div className="space-y-1">
+                {visibleItems.map((item) => {
                 const isSelected = selectedValues.includes(item.value);
                 const isHighlighted = userHighlight.includes(item.value);
                 const itemColor = CLASSIFICATION_COLORS[item.value] || '';
@@ -306,11 +374,11 @@ function FacetSection({
                         )}
                       </div>
                       
-                      {/* Count badge - compact */}
+                        {/* Count badge - compact */}
                       <motion.div
                         className={`
                           ml-2 px-2 py-0.5 rounded-lg text-xs font-bold flex-shrink-0 min-w-[2.25rem] text-center
-                          ${isSelected 
+                          ${isSelected
                             ? hasColorCoding
                               ? 'bg-white/90 text-current shadow-sm'
                               : 'bg-blue-600/15 text-blue-700 dark:text-blue-300 shadow-sm'
@@ -336,8 +404,9 @@ function FacetSection({
                     )}
                   </motion.button>
                 );
-              })}
-              
+                })}
+              </div>
+
               {/* Show more/less - Enhanced */}
               {hasMore && (
                 <motion.button
@@ -383,7 +452,8 @@ export default function FacetedFilters({
   hideZeroCounts = false,
   showLiveCounts = true,
   onRefreshFacets,
-}: FacetedFiltersProps) {
+  hasApproximateCounts = false,
+}: FacetedFiltersProps & { hasApproximateCounts?: boolean }) {
   
   // Phase 2: Filter zero-count items if enabled
   const filterZeroCounts = useCallback((items: FacetItem[]): FacetItem[] => {
@@ -404,14 +474,6 @@ export default function FacetedFilters({
       label: 'Classification',
       icon: <Shield className="w-4 h-4" />,
       items: filterZeroCounts(facets.classifications),
-      type: 'multi' as const,
-      defaultExpanded: true,
-    },
-    {
-      id: 'instances',
-      label: 'Federation Instance',
-      icon: <Server className="w-4 h-4" />,
-      items: filterZeroCounts(facets.instances),
       type: 'multi' as const,
       defaultExpanded: true,
     },
@@ -473,7 +535,7 @@ export default function FacetedFilters({
       classifications: [],
       countries: [],
       cois: [],
-      instances: [],
+      instances: [], // Keep for compatibility with filtering logic
       encryptionStatus: '',
       dateRange: undefined,
     });
@@ -485,7 +547,6 @@ export default function FacetedFilters({
       selectedFilters.classifications.length +
       selectedFilters.countries.length +
       selectedFilters.cois.length +
-      selectedFilters.instances.length +
       (selectedFilters.encryptionStatus ? 1 : 0) +
       (selectedFilters.dateRange ? 1 : 0)
     );
@@ -504,9 +565,6 @@ export default function FacetedFilters({
     selectedFilters.cois.forEach(v => {
       chips.push({ label: v, group: 'cois', value: v });
     });
-    selectedFilters.instances.forEach(v => {
-      chips.push({ label: `${INSTANCE_FLAGS[v] || ''} ${v}`.trim(), group: 'instances', value: v });
-    });
     if (selectedFilters.encryptionStatus) {
       chips.push({ 
         label: selectedFilters.encryptionStatus === 'encrypted' ? '🔐 Encrypted' : '📄 Unencrypted', 
@@ -523,7 +581,6 @@ export default function FacetedFilters({
     classifications: userAttributes?.clearance ? [userAttributes.clearance] : [],
     countries: userAttributes?.country ? [userAttributes.country] : [],
     cois: userAttributes?.coi || [],
-    instances: [],
     encryptionStatus: [],
   }), [userAttributes]);
 
@@ -616,6 +673,7 @@ export default function FacetedFilters({
             onToggle={(value) => handleToggle(group.id, value)}
             userHighlight={(userHighlights as any)[group.id]}
             isLoading={isLoading}
+            hasApproximateCounts={hasApproximateCounts}
           />
         ))
         )}
@@ -762,4 +820,3 @@ export function FilterTriggerButton({ activeCount, onClick }: FilterTriggerButto
     </button>
   );
 }
-

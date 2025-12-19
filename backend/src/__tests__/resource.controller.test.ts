@@ -927,4 +927,3 @@ describe('Resource Controller', () => {
         });
     });
 });
-

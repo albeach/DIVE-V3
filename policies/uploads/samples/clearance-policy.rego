@@ -105,6 +105,3 @@ obligations := [
         }
     }
 ] if { allow }
-
-
-

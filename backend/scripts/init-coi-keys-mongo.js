@@ -39,4 +39,3 @@ print("\n📊 COI Keys:");
 db.coi_keys.find({}, {coiId: 1, name: 1, memberCountries: 1, _id: 0}).forEach(c => {
   print(`  ${c.icon || '🔑'} ${c.coiId}: ${c.name} (${c.memberCountries.length} countries)`);
 });
-

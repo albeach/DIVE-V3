@@ -395,5 +395,3 @@ export interface IRiskScoringConfig {
     /** Maximum patching window in days (default: 90) */
     maxPatchingDays: number;
 }
-
-

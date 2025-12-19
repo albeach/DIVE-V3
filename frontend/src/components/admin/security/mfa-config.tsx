@@ -589,4 +589,3 @@ export function MFAConfig() {
 }
 
 export default MFAConfig;
-

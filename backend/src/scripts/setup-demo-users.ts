@@ -530,4 +530,3 @@ if (require.main === module) {
 }
 
 export { setupInstance, printCredentialsList, INSTANCES, INSTANCE_CONFIG, REALM, DEMO_PASSWORD, SUPER_ADMIN_PASSWORD };
-

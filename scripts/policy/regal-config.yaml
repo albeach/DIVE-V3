@@ -256,15 +256,3 @@ project:
 # Output format for CI integration
 output:
   format: github  # or: json, sarif, pretty
-
-
-
-
-
-
-
-
-
-
-
-

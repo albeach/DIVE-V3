@@ -61,4 +61,3 @@ describe("DecisionReplay", () => {
     expect(playButton).not.toBeDisabled();
   });
 });
-

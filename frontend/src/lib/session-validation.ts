@@ -260,6 +260,3 @@ export function getValidationErrorMessage(error: SessionValidationError): string
             return 'Session validation failed.';
     }
 }
-
-
-

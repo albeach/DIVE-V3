@@ -215,4 +215,3 @@ test.describe('Complete User Journey - Mobile Responsiveness', () => {
     await expect(page.locator('[data-testid="search-results"]')).toBeVisible();
   });
 });
-

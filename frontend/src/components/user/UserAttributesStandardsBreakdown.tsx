@@ -168,4 +168,3 @@ function AttributeRow({ label, value, standard, specRef, description }: {
     </div>
   );
 }
-

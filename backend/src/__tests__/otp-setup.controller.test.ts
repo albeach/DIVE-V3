@@ -680,4 +680,3 @@ describe('Realm Mapping', () => {
         expect(adminCall[0]).toContain('/admin/realms/dive-v3-fra/users');
     });
 });
-

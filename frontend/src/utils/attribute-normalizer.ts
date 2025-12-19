@@ -52,5 +52,3 @@ export function normalizeUniqueID(uniqueID: string | string[] | null | undefined
     }
     return uniqueID;
 }
-
-

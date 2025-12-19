@@ -43,4 +43,3 @@ export const policyFormSchema = policyMetadataSchema.merge(policySourceSchema);
 export type PolicyMetadata = z.infer<typeof policyMetadataSchema>;
 export type PolicySource = z.infer<typeof policySourceSchema>;
 export type PolicyForm = z.infer<typeof policyFormSchema>;
-

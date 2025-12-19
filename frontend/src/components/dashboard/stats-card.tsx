@@ -47,4 +47,3 @@ export function StatsCard({ label, value, icon, delay = 0 }: StatsCardProps) {
     </div>
   );
 }
-

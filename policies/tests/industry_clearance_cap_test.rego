@@ -327,4 +327,3 @@ test_error_message_contains_details if {
     contains(msg, "SECRET")
     contains(msg, "USA")
 }
-

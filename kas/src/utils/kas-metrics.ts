@@ -470,9 +470,3 @@ export function getPrometheusMetrics(): string {
 export function getMetricsJSON(): Record<string, unknown> {
     return kasMetrics.toJSON();
 }
-
-
-
-
-
-

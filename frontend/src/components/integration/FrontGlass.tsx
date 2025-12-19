@@ -184,4 +184,3 @@ export function FrontGlass({ subject }: FrontGlassProps) {
     </div>
   );
 }
-

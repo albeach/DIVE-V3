@@ -193,4 +193,3 @@ export const clientIdSchema = z.string().regex(/^sp-[a-z]{3}-\d+$/, {
 export const spIdSchema = z.string().regex(/^SP-\d+-[A-F0-9]{8}$/, {
   message: 'Invalid SP ID format (expected: SP-timestamp-HEX)'
 });
-

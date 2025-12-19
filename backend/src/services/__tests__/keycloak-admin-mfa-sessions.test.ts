@@ -356,4 +356,3 @@ describe('Keycloak Admin Service - Session Management', () => {
         });
     });
 });
-

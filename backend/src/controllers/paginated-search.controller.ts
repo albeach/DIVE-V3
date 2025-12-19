@@ -930,4 +930,3 @@ export const getFacetsHandler = async (
     next(error);
   }
 };
-

@@ -553,4 +553,3 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
         });
     });
 });
-

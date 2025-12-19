@@ -33,15 +33,3 @@ export default async function ActivityPage() {
     </PageLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

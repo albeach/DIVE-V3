@@ -89,4 +89,3 @@ networkPolicy:
 podDisruptionBudget:
   enabled: true
   minAvailable: 2
-

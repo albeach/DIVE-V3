@@ -489,4 +489,3 @@ export default function SPDetailPage({ params }: SPDetailPageProps) {
     </PageLayout>
   );
 }
-

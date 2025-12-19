@@ -234,5 +234,3 @@ export const adminItems = [
         description: '5663 × 240 Interactive Tutorial'
     },
 ];
-
-

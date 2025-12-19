@@ -189,4 +189,3 @@ export const auth0Service = {
     generateAuth0CallbackUrls,
     generateAuth0LogoutUrls
 };
-

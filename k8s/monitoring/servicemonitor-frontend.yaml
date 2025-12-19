@@ -26,14 +26,3 @@ spec:
   namespaceSelector:
     matchNames:
       - dive-v3
-
-
-
-
-
-
-
-
-
-
-

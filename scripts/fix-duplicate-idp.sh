@@ -170,4 +170,3 @@ echo -e "${GREEN}║  Ready for re-test!                                        
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "{\"runId\":\"fix2\",\"location\":\"fix-duplicate:186\",\"message\":\"All fixes complete\",\"data\":{\"idp_count\":$GBR_COUNT,\"update_mode\":\"$UPDATE_MODE\",\"sync_mode\":\"$SYNC_MODE\"},\"timestamp\":$(date +%s)000}" >> "$LOG_FILE"
-

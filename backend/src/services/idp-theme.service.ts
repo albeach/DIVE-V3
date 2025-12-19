@@ -538,4 +538,3 @@ class IdPThemeService {
 // Export singleton instance
 export const idpThemeService = new IdPThemeService();
 export { IdPThemeService };
-

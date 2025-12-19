@@ -110,4 +110,3 @@ describe('IdPCard2025', () => {
         expect(screen.getByText('SAML')).toBeInTheDocument();
     });
 });
-

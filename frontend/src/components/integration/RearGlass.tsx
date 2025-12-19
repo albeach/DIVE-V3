@@ -213,4 +213,3 @@ export function RearGlass({ resource }: RearGlassProps) {
     </div>
   );
 }
-
