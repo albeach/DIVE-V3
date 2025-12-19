@@ -469,14 +469,17 @@ export class KeycloakFederationService {
     // Extract instance code from clientId (e.g., dive-v3-client-usa -> usa)
     const instanceCode = clientId.replace('dive-v3-client-', '').toUpperCase();
 
-    // Get the frontend port for this instance from the port map
-    const frontendPorts: Record<string, number> = {
-      'USA': 3000, 'FRA': 3001, 'BEL': 3002, 'CAN': 3003, 'DEU': 3004, 'EST': 3005,
-      'ESP': 3006, 'DNK': 3007, 'FIN': 3008, 'GBR': 3009, 'HUN': 3010, 'ITA': 3011,
-      'GRC': 3012, 'NLD': 3013, 'ISL': 3014, 'LUX': 3015, 'LVA': 3016, 'NOR': 3022,
-      'POL': 3017, 'PRT': 3018, 'ROU': 3019, 'SVK': 3020, 'SVN': 3021,
+    // Get the frontend port for this instance from the NATO database port offsets
+    // Each country has a unique offset: frontend = 3000 + offset, backend = 4000 + offset, keycloak = 8443 + offset
+    const natoOffsets: Record<string, number> = {
+      'USA': 0, 'ALB': 1, 'BEL': 2, 'BGR': 3, 'CAN': 4, 'HRV': 5, 'CZE': 6, 'DNK': 7,
+      'EST': 8, 'FIN': 9, 'FRA': 10, 'DEU': 11, 'GRC': 12, 'HUN': 13, 'ISL': 14,
+      'ITA': 15, 'LVA': 16, 'LTU': 17, 'LUX': 18, 'MNE': 19, 'NLD': 20, 'MKD': 21,
+      'NOR': 22, 'POL': 23, 'PRT': 24, 'ROU': 25, 'SVK': 26, 'SVN': 27, 'ESP': 28,
+      'SWE': 29, 'TUR': 30, 'GBR': 31,
     };
-    const frontendPort = frontendPorts[instanceCode] || 3001;
+    const offset = natoOffsets[instanceCode] ?? 1;
+    const frontendPort = 3000 + offset;
 
     try {
       const existingClients = await this.kcAdmin.clients.find({
