@@ -1,0 +1,38 @@
+{
+  "identity": {
+    "spokeId": "spoke-can-test",
+    "instanceCode": "CAN",
+    "name": "Canada Test Spoke",
+    "description": "Test fixture for Canada spoke"
+  },
+  "endpoints": {
+    "baseUrl": "https://can-app.dive25.com",
+    "apiUrl": "https://can-api.dive25.com",
+    "idpUrl": "https://can-idp.dive25.com",
+    "kasUrl": "https://can-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base",
+      "policy:can",
+      "policy:coalition",
+      "policy:fvey"
+    ],
+    "allowedScopes": [],
+    "trustLevel": "bilateral",
+    "maxClassification": "SECRET"
+  },
+  "contact": {
+    "email": "can-admin@dive25.com",
+    "organization": "Canada Department of National Defence"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Multi-spoke E2E testing"
+  }
+}
