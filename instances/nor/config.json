@@ -1,12 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-nor-2a5a930f",
+    "spokeId": "spoke-nor-9915a8f2",
     "instanceCode": "NOR",
-    "name": "Norway",
-    "description": "DIVE V3 Spoke Instance for Norway",
+    "name": "Norwegian Ministry of Defence",
+    "description": "DIVE V3 Spoke Instance for Norwegian Ministry of Defence",
     "country": "NOR",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@nor.dive25.com",
+    "registeredSpokeId": "spoke-nor-eb22bac1"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,7 +15,8 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3022",
     "apiUrl": "https://localhost:4022",
-    "idpUrl": "https://localhost:8465",
+    "idpUrl": "https://dive-spoke-nor-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8465",
     "kasUrl": "https://localhost:9022"
   },
   "certificates": {
@@ -25,13 +27,15 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "approved",
     "requestedScopes": [
       "policy:base",
       "policy:nor",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2025-12-19T13:38:53Z",
+    "spokeToken": "Cxbp_HHV1lf6_Sx8hT4hETKOjFy_CnhIexLAS9PgreQ"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -44,8 +48,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-14T00:43:50Z",
-    "lastModified": "2025-12-14T00:43:50Z",
+    "createdAt": "2025-12-19T13:33:26Z",
+    "lastModified": "2025-12-19T13:33:27Z",
     "configHash": ""
   }
 }
