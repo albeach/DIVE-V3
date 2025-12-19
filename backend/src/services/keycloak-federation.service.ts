@@ -469,6 +469,15 @@ export class KeycloakFederationService {
     // Extract instance code from clientId (e.g., dive-v3-client-usa -> usa)
     const instanceCode = clientId.replace('dive-v3-client-', '').toUpperCase();
 
+    // Get the frontend port for this instance from the port map
+    const frontendPorts: Record<string, number> = {
+      'USA': 3000, 'FRA': 3001, 'BEL': 3002, 'CAN': 3003, 'DEU': 3004, 'EST': 3005,
+      'ESP': 3006, 'DNK': 3007, 'FIN': 3008, 'GBR': 3009, 'HUN': 3010, 'ITA': 3011,
+      'GRC': 3012, 'NLD': 3013, 'ISL': 3014, 'LUX': 3015, 'LVA': 3016, 'NOR': 3022,
+      'POL': 3017, 'PRT': 3018, 'ROU': 3019, 'SVK': 3020, 'SVN': 3021,
+    };
+    const frontendPort = frontendPorts[instanceCode] || 3001;
+
     try {
       const existingClients = await this.kcAdmin.clients.find({
         realm: this.realm,
@@ -480,6 +489,9 @@ export class KeycloakFederationService {
         `${partnerIdpUrl}/realms/${partnerRealm}/broker/*-idp/endpoint/*`,
         `${partnerIdpUrl}/*`,
         'https://localhost:*/*',  // Development flexibility
+        `https://localhost:${frontendPort}/*`,  // Spoke frontend
+        `https://localhost:${frontendPort}/api/auth/callback/keycloak`,  // NextAuth callback
+        `https://${instanceCode.toLowerCase()}-app.dive25.com/*`,  // Production domain
       ];
 
       const webOrigins = [partnerIdpUrl, '+'];
