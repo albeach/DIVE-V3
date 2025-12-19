@@ -627,4 +627,3 @@ class SpokePolicyCacheService extends EventEmitter {
 export const spokePolicyCache = new SpokePolicyCacheService();
 
 export default SpokePolicyCacheService;
-

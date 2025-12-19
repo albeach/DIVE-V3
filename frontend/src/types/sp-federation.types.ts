@@ -261,14 +261,3 @@ export const ORGANIZATION_TYPES = [
   { value: 'CONTRACTOR', label: 'Contractor', description: 'Defense contractor' },
   { value: 'ACADEMIC', label: 'Academic', description: 'Academic institution' }
 ] as const;
-
-
-
-
-
-
-
-
-
-
-

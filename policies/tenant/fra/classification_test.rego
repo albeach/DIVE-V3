@@ -281,16 +281,3 @@ test_invalid_classification_message_french if {
 	msg := classification.invalid_classification_msg("UNKNOWN")
 	contains(msg, "française")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

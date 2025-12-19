@@ -242,5 +242,3 @@ export const backendCircuitBreaker = new CircuitBreaker('Backend', {
     recoveryTimeout: 30000,
     successThreshold: 2,
 });
-
-

@@ -668,4 +668,3 @@ equivalency_details := details if {
 		"resource_classification_nato": input.resource.classification,
 	}
 } else := {}
-

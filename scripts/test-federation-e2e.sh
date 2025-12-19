@@ -92,5 +92,3 @@ echo "  ✅ OAuth flow functional"
 echo "  ✅ No SSL errors"
 echo ""
 echo "Ready for browser test!"
-
-

@@ -26,15 +26,3 @@ export default async function NotificationsPage() {
     </PageLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

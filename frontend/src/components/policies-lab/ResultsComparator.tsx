@@ -305,6 +305,3 @@ export default function ResultsComparator({ result }: ResultsComparatorProps) {
     </div>
   );
 }
-
-
-

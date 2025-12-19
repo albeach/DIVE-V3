@@ -50,5 +50,3 @@ export function PolicyInsights({ lineCount, ruleCount, hasDefaultDeny, hasAllowR
     </div>
   );
 }
-
-

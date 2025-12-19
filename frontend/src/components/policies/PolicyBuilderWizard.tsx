@@ -692,5 +692,3 @@ export default function PolicyBuilderWizard({
     </div>
   );
 }
-
-

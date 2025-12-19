@@ -515,5 +515,3 @@ export function useDebouncedFilters(
 }
 
 export default useInfiniteScroll;
-
-

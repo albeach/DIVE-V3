@@ -256,4 +256,3 @@ groups:
         annotations:
           summary: "Disk space low on {{ $labels.instance }}"
           description: "Only {{ $value | humanizePercentage }} disk space remaining"
-

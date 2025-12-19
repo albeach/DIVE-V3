@@ -286,4 +286,3 @@ export const closeOTPRedisConnection = async (): Promise<void> => {
         logger.info('OTP Redis connection closed');
     }
 };
-

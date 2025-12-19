@@ -317,4 +317,3 @@ export async function clearTestData(mongoUrl: string): Promise<void> {
         await client.close();
     }
 }
-

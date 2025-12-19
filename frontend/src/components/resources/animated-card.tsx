@@ -435,15 +435,3 @@ export function AnimatedResourceGrid({
     </motion.div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-

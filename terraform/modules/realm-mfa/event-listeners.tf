@@ -24,12 +24,11 @@
 resource "keycloak_realm_events" "mfa_events" {
   realm_id = var.realm_id
 
-  # Enable event listeners (includes custom AMR enrichment)
+  # Enable event listeners
   # jboss-logging: Standard Keycloak event logging for security monitoring
-  # dive-amr-enrichment: Custom SPI for WebAuthn/OTP AMR enrichment
+  # NOTE: dive-amr-enrichment custom SPI removed - using native Keycloak ACR/AMR mappers instead
   events_listeners = [
-    "jboss-logging",
-    "dive-amr-enrichment"
+    "jboss-logging"
   ]
 
   # Enable user events for LOGIN tracking
@@ -41,7 +40,7 @@ resource "keycloak_realm_events" "mfa_events" {
 
   # Event types to capture for security monitoring
   enabled_event_types = [
-    "LOGIN",              # Track successful logins (AMR enrichment happens here)
+    "LOGIN",              # Track successful logins
     "LOGIN_ERROR",        # Track failed login attempts (brute force detection)
     "LOGOUT",             # Track session termination
     "UPDATE_TOTP",        # Track MFA enrollment/changes

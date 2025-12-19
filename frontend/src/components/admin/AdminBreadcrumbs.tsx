@@ -116,4 +116,3 @@ export default function AdminBreadcrumbs() {
         </nav>
     );
 }
-

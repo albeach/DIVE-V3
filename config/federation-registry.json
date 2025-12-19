@@ -665,15 +665,66 @@
         "usernameTemplate": "testuser-{code}-{level}",
         "emailDomain": "dive-demo.example"
       }
+    },
+    "est": {
+      "code": "EST",
+      "name": "Estonia",
+      "locale": "et-EE",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.est.yml",
+        "projectName": "est"
+      },
+      "services": {
+        "_comment": "EST uses est- prefix on all service names",
+        "frontend": {
+          "name": "frontend-est",
+          "containerName": "est-frontend-est-1",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "est-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-est",
+          "containerName": "est-backend-est-1",
+          "internalPort": 4000,
+          "externalPort": 4008,
+          "protocol": "https",
+          "hostname": "est-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-est",
+          "containerName": "est-keycloak-est-1",
+          "internalPort": 8443,
+          "externalPort": 8451,
+          "protocol": "https",
+          "hostname": "est-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-est",
+          "containerName": "est-mongodb-est-1",
+          "internalPort": 27017,
+          "externalPort": 27025,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
     "model": "hub-spoke",
     "matrix": {
       "usa": [
+        "deu",
+        "est",
         "fra",
         "gbr",
-        "deu"
+        "hun"
       ],
       "fra": [
         "usa",
@@ -689,6 +740,18 @@
         "usa",
         "fra",
         "gbr"
+      ],
+      "hun": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "est": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
       ]
     },
     "defaultEnabled": true,

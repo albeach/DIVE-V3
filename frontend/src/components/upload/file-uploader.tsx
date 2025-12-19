@@ -155,4 +155,3 @@ export default function FileUploader({ file, onFileSelect }: FileUploaderProps) 
     </div>
   );
 }
-

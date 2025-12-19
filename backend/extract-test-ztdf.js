@@ -231,4 +231,3 @@ createAndVerifyZTDF().then(ztdfFile => {
   console.error('Error:', err.message);
   process.exit(1);
 });
-

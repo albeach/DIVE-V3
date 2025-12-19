@@ -433,15 +433,3 @@ describe('ResourceComparisonView', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

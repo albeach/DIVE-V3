@@ -183,15 +183,3 @@ PASS  src/__tests__/acr-aal-integration-verification.test.ts
 Test Suites: 1 passed, 1 total
 Tests:       20+ passed, 20+ total
 ```
-
-
-
-
-
-
-
-
-
-
-
-

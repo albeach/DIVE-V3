@@ -348,15 +348,3 @@ describe('useColumnCustomizer', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

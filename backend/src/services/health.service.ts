@@ -695,4 +695,3 @@ class HealthService {
 
 // Export singleton instance
 export const healthService = new HealthService();
-

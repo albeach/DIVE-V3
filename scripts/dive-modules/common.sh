@@ -498,5 +498,3 @@ ensure_dive_root() {
         export DIVE_ROOT="$root_path"
     fi
 }
-
-

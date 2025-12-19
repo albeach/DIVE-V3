@@ -672,12 +672,3 @@ class SpokeConfigService {
 export const spokeConfigService = new SpokeConfigService();
 
 export default SpokeConfigService;
-
-
-
-
-
-
-
-
-

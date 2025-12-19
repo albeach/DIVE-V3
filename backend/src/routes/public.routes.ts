@@ -422,4 +422,3 @@ router.get('/public/sp-registration/:id', async (req: Request, res: Response): P
 });
 
 export default router;
-

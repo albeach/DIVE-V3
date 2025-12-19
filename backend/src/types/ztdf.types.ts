@@ -443,4 +443,3 @@ export function mapClassification(country: string, nationalLevel: string): Class
 
     return commonLevel as ClassificationLevel;
 }
-

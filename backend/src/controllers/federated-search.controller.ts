@@ -503,7 +503,7 @@ async function executeRemoteSearch(
         });
 
         const response = await federationAxios.get(
-            `${instance.apiUrl}/federation/resources/search`,
+            `${instance.apiUrl}/api/federation/search`,
             {
                 headers: {
                     'Authorization': authHeader,
@@ -668,4 +668,3 @@ export const federatedStatusHandler = async (
         next(error);
     }
 };
-

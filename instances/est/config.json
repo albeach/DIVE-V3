@@ -1,6 +1,6 @@
 {
   "identity": {
-    "spokeId": "spoke-est-4bf330ae",
+    "spokeId": "spoke-est-e4844d69",
     "instanceCode": "EST",
     "name": "Estonia",
     "description": "DIVE V3 Spoke Instance for Estonia",
@@ -44,8 +44,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-18T06:45:28Z",
-    "lastModified": "2025-12-18T06:45:28Z",
+    "createdAt": "2025-12-19T01:55:59Z",
+    "lastModified": "2025-12-19T01:55:59Z",
     "configHash": ""
   }
 }

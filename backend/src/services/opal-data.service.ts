@@ -667,4 +667,3 @@ class OPALDataService {
 export const opalDataService = new OPALDataService();
 
 export default OPALDataService;
-

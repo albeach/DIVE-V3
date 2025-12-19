@@ -112,4 +112,3 @@ export function ProfileBadge({ user }: ProfileBadgeProps) {
     </div>
   );
 }
-

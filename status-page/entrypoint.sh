@@ -470,5 +470,3 @@ run_health_checks &
 
 # Start nginx
 exec nginx -g 'daemon off;'
-
-

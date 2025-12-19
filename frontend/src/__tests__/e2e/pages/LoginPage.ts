@@ -211,4 +211,3 @@ export class LoginPage {
     await expect(button).toBeVisible({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
   }
 }
-

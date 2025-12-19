@@ -315,6 +315,3 @@ describe('UploadPolicyModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
-
-
-

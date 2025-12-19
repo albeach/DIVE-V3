@@ -590,5 +590,3 @@ class DecisionBatchService extends EventEmitter {
 export const decisionBatchService = new DecisionBatchService();
 
 export default DecisionBatchService;
-
-

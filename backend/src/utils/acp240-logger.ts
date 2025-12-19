@@ -482,4 +482,3 @@ export async function closeAuditLogConnection(): Promise<void> {
         }
     }
 }
-

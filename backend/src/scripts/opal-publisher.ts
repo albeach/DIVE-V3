@@ -271,4 +271,3 @@ async function main(): Promise<void> {
 
 // Run main
 main().catch(console.error);
-

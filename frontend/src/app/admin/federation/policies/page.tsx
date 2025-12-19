@@ -341,7 +341,3 @@ export default function FederationPoliciesPage() {
     </PageLayout>
   );
 }
-
-
-
-

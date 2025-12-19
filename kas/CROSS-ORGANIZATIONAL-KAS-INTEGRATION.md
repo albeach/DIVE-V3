@@ -326,5 +326,3 @@ For integration support:
 - Review `docs/KAS-FEDERATION-INTEGRATION-GUIDE.md`
 - Check `config/kas-registry.json.example`
 - Contact DIVE V3 team for assistance
-
-

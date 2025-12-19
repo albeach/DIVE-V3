@@ -177,4 +177,3 @@ export class ReplayProtection {
  * Global replay protection instance
  */
 export const replayProtection = new ReplayProtection();
-

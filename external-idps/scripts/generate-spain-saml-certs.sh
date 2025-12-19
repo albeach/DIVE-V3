@@ -84,5 +84,3 @@ echo "  1. Start external IdPs: docker-compose up -d"
 echo "  2. Verify SAML metadata: curl -k https://localhost:8443/simplesaml/saml2/idp/metadata.php"
 echo "  3. Onboard Spain IdP via DIVE V3 Super Admin wizard"
 echo ""
-
-

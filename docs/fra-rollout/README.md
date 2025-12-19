@@ -150,21 +150,3 @@ Distribution limited to authorized DIVE V3 federation partners
 
 ---
 *For questions or concerns, contact the DIVE V3 FRA rollout team*
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

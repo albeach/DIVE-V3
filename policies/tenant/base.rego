@@ -321,4 +321,3 @@ all_tenants := {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"}
 is_valid_tenant(tenant) if {
 	tenant in all_tenants
 }
-

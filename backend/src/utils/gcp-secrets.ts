@@ -489,4 +489,3 @@ logger.info('GCP Secret Manager configuration', {
                  GCP_MODE === 'disabled' ? 'GCP disabled - using env vars only' :
                  'Auto-detect - GCP if available, else env vars'
 });
-

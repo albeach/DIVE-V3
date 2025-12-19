@@ -147,4 +147,3 @@ export function getMongoMemoryUri(): string {
 export function isMongoMemoryServerRunning(): boolean {
     return mongoServer !== null && mongoDb !== null;
 }
-

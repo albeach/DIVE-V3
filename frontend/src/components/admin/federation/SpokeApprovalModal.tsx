@@ -367,4 +367,3 @@ export function SpokeApprovalModal({
 }
 
 export default SpokeApprovalModal;
-

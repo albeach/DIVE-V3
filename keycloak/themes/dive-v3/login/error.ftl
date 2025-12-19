@@ -219,4 +219,3 @@
         </div>
     </#if>
 </@layout.registrationLayout>
-

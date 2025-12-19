@@ -431,4 +431,3 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
         </div>
     );
 }
-

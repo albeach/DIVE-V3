@@ -105,4 +105,3 @@ export const VALID_CAVEATS = [
  * Maximum file size (bytes)
  */
 export const MAX_FILE_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE_MB || '10') * 1024 * 1024;
-

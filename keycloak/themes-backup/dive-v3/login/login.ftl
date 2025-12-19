@@ -139,5 +139,3 @@
     </#if>
 
 </@layout.registrationLayout>
-
-

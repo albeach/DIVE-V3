@@ -268,4 +268,3 @@ echo "  3. For curl/API testing, use the CA file:"
 echo "     curl --cacert \"$CAROOT/rootCA.pem\" https://localhost:8443/..."
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
-

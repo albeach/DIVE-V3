@@ -870,4 +870,3 @@ describe('IdP Validation Service', () => {
     });
   });
 });
-

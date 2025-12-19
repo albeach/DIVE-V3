@@ -201,4 +201,3 @@ export const COMPONENT_CHECKLIST = [
     '✅ Accessible color contrast',
     '✅ Touch targets min 44px',
 ];
-

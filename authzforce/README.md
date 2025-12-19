@@ -117,4 +117,3 @@ curl -X POST http://localhost:8282/authzforce-ce/domains/dive-lab/pdp \
 - [AuthzForce CE Server](https://github.com/authzforce/server)
 - [XACML 3.0 Specification](https://docs.oasis-open.org/xacml/3.0/xacml-3.0-core-spec-os-en.html)
 - [XACML JSON Profile](https://docs.oasis-open.org/xacml/xacml-json-http/v1.1/xacml-json-http-v1.1.html)
-

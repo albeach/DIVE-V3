@@ -311,7 +311,3 @@ test.describe('Error Handling', () => {
     await expect(page.getByRole('heading', { name: /Audit Queue Management/i })).toBeVisible();
   });
 });
-
-
-
-

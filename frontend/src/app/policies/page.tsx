@@ -134,4 +134,3 @@ export default async function PoliciesPage() {
     </PageLayout>
   );
 }
-

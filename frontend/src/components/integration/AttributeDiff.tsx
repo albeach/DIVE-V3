@@ -284,4 +284,3 @@ function AttributeRow({ label, value, highlight = false }: { label: string; valu
     </div>
   );
 }
-

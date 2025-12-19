@@ -231,7 +231,7 @@ const extractTenant = (token: IKeycloakToken, req: Request): string | undefined 
     if (token.countryOfAffiliation) {
         return token.countryOfAffiliation.toUpperCase();
     }
-    
+
     // Fallback to request header or default
     return (req.headers['x-tenant'] as string)?.toUpperCase() || 'USA';
 };
@@ -531,7 +531,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
             // Verify HS256 token with shared secret (test only)
             return new Promise((resolve, reject) => {
-            const payload = decoded.payload as any;
+                const payload = decoded.payload as any;
                 const verifyOptions: jwt.VerifyOptions = {
                     algorithms: ['HS256'],
                     ignoreExpiration: true, // tests control validity
@@ -584,22 +584,22 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Cloudflare Tunnel: Accept dev-auth.dive25.com (Nov 10, 2025)
         // USA IdP Domain: Accept usa-idp.dive25.com (Nov 29, 2025)
         // Spoke Deployments: Support TRUSTED_ISSUERS env var (Dec 6, 2025)
-        
+
         // Build dynamic issuers from TRUSTED_ISSUERS env var (comma-separated)
         const envIssuers: string[] = process.env.TRUSTED_ISSUERS
             ? process.env.TRUSTED_ISSUERS.split(',').map(s => s.trim()).filter(Boolean)
             : [];
-        
+
         // Add KEYCLOAK_ISSUER if set (primary issuer for this instance)
         if (process.env.KEYCLOAK_ISSUER) {
             envIssuers.unshift(process.env.KEYCLOAK_ISSUER.trim());
         }
-        
+
         // Accept multiple trusted issuers (may be empty if envIssuers is empty)
         const validIssuers: string[] = [
             // CRITICAL: Environment-configured issuers FIRST (for spoke deployments)
             ...envIssuers,
-            
+
             // Legacy pilot realm
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,    // Internal: dive-v3-broker
             'http://localhost:8081/realms/dive-v3-broker',          // External HTTP: dive-v3-broker
@@ -691,7 +691,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'http://localhost:8080/realms/dive-v3-esp',
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-esp',
             'https://dev-auth.dive25.com/realms/dive-v3-esp',
-            
+
             // Spoke pattern: dive-v3-broker-{country} (internal Docker URLs)
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-usa`,
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-fra`,
@@ -1098,7 +1098,7 @@ const getUserFriendlyDenialMessage = (
  * Valid federation instances that can make inter-instance requests
  * TODO: Move to configuration or verify via shared secrets
  */
-const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU'];
+const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU', 'HUN'];
 
 /**
  * JWT Authentication middleware (Week 3.2)
@@ -1121,7 +1121,7 @@ export const authenticateJWT = async (
     try {
         // Check for federated request from another instance
         const federatedFrom = req.headers['x-federated-from'] as string;
-        
+
         if (federatedFrom && TRUSTED_FEDERATION_INSTANCES.includes(federatedFrom)) {
             // This is a federated request from a trusted partner
             // Trust their authentication - they have already verified the user
@@ -1130,28 +1130,28 @@ export const authenticateJWT = async (
                 federatedFrom,
                 path: req.path,
             });
-            
+
             // For federated requests, we still need the token to extract user info
             // But we skip Keycloak validation since it's signed by the partner's Keycloak
             const authHeader = req.headers.authorization;
             if (authHeader && authHeader.startsWith('Bearer ')) {
                 const token = authHeader.substring(7);
-                
+
                 // Decode without verification (partner already verified)
                 try {
                     // Use jose to decode without validation
                     const jose = await import('jose');
                     const decoded = jose.decodeJwt(token);
-                    
+
                     // Extract attributes from the foreign token
-                    const uniqueID = (decoded as any).uniqueID || 
-                                     (decoded as any).preferred_username || 
-                                     decoded.sub || 
-                                     `federated-${federatedFrom}-user`;
+                    const uniqueID = (decoded as any).uniqueID ||
+                        (decoded as any).preferred_username ||
+                        decoded.sub ||
+                        `federated-${federatedFrom}-user`;
                     const clearance = (decoded as any).clearance || 'UNCLASSIFIED';
                     const countryOfAffiliation = (decoded as any).countryOfAffiliation || federatedFrom;
                     const acpCOI = (decoded as any).acpCOI || [];
-                    
+
                     // Attach federated user info to request
                     (req as any).user = {
                         uniqueID,
@@ -1161,9 +1161,9 @@ export const authenticateJWT = async (
                         federated: true,
                         federatedFrom,
                     };
-                    
+
                     (req as any).accessToken = token;
-                    
+
                     logger.info('Federated request authenticated via partner trust', {
                         requestId,
                         federatedFrom,
@@ -1171,7 +1171,7 @@ export const authenticateJWT = async (
                         clearance,
                         countryOfAffiliation,
                     });
-                    
+
                     next();
                     return;
                 } catch (decodeError) {
@@ -1183,7 +1183,7 @@ export const authenticateJWT = async (
                     // Fall through to normal auth if decode fails
                 }
             }
-            
+
             // If no valid token in federated request, reject
             res.status(401).json({
                 error: 'Unauthorized',
@@ -1193,7 +1193,7 @@ export const authenticateJWT = async (
             });
             return;
         }
-        
+
         // Standard JWT verification for non-federated requests
         // Extract JWT token from Authorization header
         const authHeader = req.headers.authorization;
@@ -1654,7 +1654,7 @@ export const authzMiddleware = async (
                 source,
                 error: fetchError,
             });
-            
+
             res.status(404).json({
                 error: 'Not Found',
                 message: fetchError || `Resource ${resourceId} not found`,
@@ -1665,7 +1665,7 @@ export const authzMiddleware = async (
             });
             return;
         }
-        
+
         // Log successful federation if applicable
         if (source === 'federated') {
             logger.info('Resource fetched via federation', {
@@ -1673,7 +1673,7 @@ export const authzMiddleware = async (
                 resourceId,
                 source,
             });
-            
+
             // ============================================
             // FEDERATED RESOURCE: Authorization already done by origin
             // ============================================
@@ -1682,13 +1682,13 @@ export const authzMiddleware = async (
             // Attach the resource to request and skip local OPA check.
             (req as any).resource = resource;
             (req as any).federatedSource = source;
-            
+
             logger.info('Federated authorization passed (delegated to origin)', {
                 requestId,
                 resourceId,
                 source,
             });
-            
+
             next();
             return;
         }
@@ -1815,10 +1815,10 @@ export const authzMiddleware = async (
         // ============================================
         // Step 4: Check decision cache (Phase 5: Classification-based TTL)
         // ============================================
-        
+
         // Phase 5: Extract tenant for multi-tenant cache isolation
         const tenant = decodedToken ? extractTenant(decodedToken, req) : undefined;
-        
+
         // In simplified test mode, use in-memory map to align with jest expectations
         const cacheKey = decisionCacheService.generateCacheKey({
             uniqueID,
@@ -1980,8 +1980,8 @@ export const authzMiddleware = async (
 
                 res.status(403).json({
                     error: 'Forbidden',
-                message: userFriendly.message,
-                reason: cachedDecision.reason || userFriendly.message,
+                    message: userFriendly.message,
+                    reason: cachedDecision.reason || userFriendly.message,
                     guidance: userFriendly.guidance,
                     // Keep technical details for debugging
                     technical_reason: cachedDecision.reason,
@@ -2105,7 +2105,7 @@ export const authzMiddleware = async (
         const acrForOPA = String(normalizedAAL); // OPA expects string format
 
         // Phase 5: Extract issuer for federation trust validation
-        const tokenIssuer = decodedToken 
+        const tokenIssuer = decodedToken
             ? (jwtService.decode(authHeader.substring(7), { complete: true }) as any)?.payload?.iss
             : undefined;
 
@@ -2421,7 +2421,7 @@ export const authzMiddleware = async (
                 {
                     classification,
                     releasabilityTo,
-                        COI: coi,
+                    COI: coi,
                     title: resource.title
                 },
                 {
@@ -2529,4 +2529,3 @@ export const authzMiddleware = async (
         });
     }
 };
-

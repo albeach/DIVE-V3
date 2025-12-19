@@ -53,11 +53,3 @@ Or run individual scripts:
 ./scripts/spoke-init/init-keycloak.sh FRA
 ./scripts/spoke-init/seed-resources.sh FRA
 ```
-
-
-
-
-
-
-
-

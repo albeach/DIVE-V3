@@ -319,4 +319,3 @@ echo "  3. Click 'United Kingdom' button"
 echo "  4. Login as testuser-gbr-1 / TestUser2025!Pilot"
 echo "  5. Verify: No 'Update Account' form appears"
 echo "  6. Verify: User profile shows clearance and country"
-

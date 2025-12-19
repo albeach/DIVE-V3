@@ -19,14 +19,3 @@ spec:
       name: postgres
   selector:
     app: postgres
-
-
-
-
-
-
-
-
-
-
-

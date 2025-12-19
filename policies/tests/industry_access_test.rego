@@ -505,4 +505,3 @@ test_decision_includes_industry_check if {
 	decision := authorization.decision with input as test_input
 	decision.allow == true
 }
-

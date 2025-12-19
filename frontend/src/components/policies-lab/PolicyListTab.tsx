@@ -289,4 +289,3 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
     </div>
   );
 }
-

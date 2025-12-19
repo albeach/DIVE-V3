@@ -645,4 +645,3 @@ export function migrateLegacyResourceToZTDF(resource: IResource): IZTDFObject {
         payload
     });
 }
-

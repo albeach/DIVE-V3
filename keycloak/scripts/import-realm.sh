@@ -77,9 +77,12 @@ export ADMIN_PASSWORD="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
 export TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-DiveTestSecure2025!}"
 export APP_URL="${APP_URL:-https://localhost:3000}"
 export API_URL="${API_URL:-https://localhost:4000}"
+export INSTANCE_CODE="${INSTANCE_CODE:-USA}"
+
+# Hub IdP federation (for USA hub to connect to spoke IdPs)
+# These are only used when INSTANCE_CODE=USA (hub mode)
 export USA_IDP_URL="${USA_IDP_URL:-https://keycloak:8443}"
 export USA_IDP_CLIENT_SECRET="${USA_IDP_CLIENT_SECRET:-$(generate_secret)}"
-export INSTANCE_CODE="${INSTANCE_CODE:-USA}"
 
 echo "[DIVE] Preparing realm import..."
 echo "[DIVE] Instance: ${INSTANCE_CODE}"

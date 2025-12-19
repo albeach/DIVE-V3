@@ -279,4 +279,3 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
         </div>
     );
 }
-

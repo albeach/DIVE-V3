@@ -283,4 +283,3 @@ export function SessionBar({ className = '' }: SessionBarProps) {
 }
 
 export default SessionCountdown;
-

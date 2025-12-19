@@ -38,4 +38,3 @@ router.get('/pending-secret/:userId', getPendingSecretHandler);
 router.delete('/pending-secret/:userId', removePendingSecretHandler);
 
 export default router;
-

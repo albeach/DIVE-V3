@@ -64,4 +64,3 @@ resources:
 commonLabels:
   app.kubernetes.io/part-of: dive-v3
   app.kubernetes.io/managed-by: kustomize
-

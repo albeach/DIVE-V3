@@ -594,12 +594,3 @@ if (require.main === module) {
 }
 
 export { setupSpokeKeycloak, KeycloakConfig };
-
-
-
-
-
-
-
-
-

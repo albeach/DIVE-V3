@@ -84,4 +84,3 @@ export function SecureLogoutButton({ compact = false }: SecureLogoutButtonProps)
     </button>
   );
 }
-

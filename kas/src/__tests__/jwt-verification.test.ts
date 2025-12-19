@@ -389,5 +389,3 @@ describe('Attack Scenarios Prevented', () => {
         await expect(verifyToken(crossRealmToken)).rejects.toThrow();
     });
 });
-
-

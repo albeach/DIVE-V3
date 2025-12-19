@@ -278,4 +278,3 @@ export const exportLogsHandler = async (
         res.status(500).json(response);
     }
 };
-

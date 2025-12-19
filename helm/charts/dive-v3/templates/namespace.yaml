@@ -5,4 +5,3 @@ metadata:
   labels:
     {{- include "dive-v3.labels" . | nindent 4 }}
     name: {{ .Values.global.namespace }}
-

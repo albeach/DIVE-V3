@@ -470,4 +470,3 @@ class FederationRegistryService {
 
 // Export singleton instance
 export const federationRegistryService = new FederationRegistryService();
-

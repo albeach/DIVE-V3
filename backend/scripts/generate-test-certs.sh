@@ -291,4 +291,3 @@ echo "     - $CRL_DIR/root-crl.pem ($(stat -c%s "$CRL_DIR/root-crl.pem" 2>/dev/n
 echo "     - $CRL_DIR/intermediate-crl.pem ($(stat -c%s "$CRL_DIR/intermediate-crl.pem" 2>/dev/null || echo "size unknown") bytes)"
 echo ""
 echo "🧪 Ready for testing!"
-

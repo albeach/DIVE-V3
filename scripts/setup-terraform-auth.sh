@@ -53,14 +53,3 @@ echo "   GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS"
 echo ""
 echo "To use in other shells, run:"
 echo "   export GOOGLE_APPLICATION_CREDENTIALS=\"$GOOGLE_APPLICATION_CREDENTIALS\""
-
-
-
-
-
-
-
-
-
-
-

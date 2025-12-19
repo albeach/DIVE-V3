@@ -260,4 +260,3 @@ highest_tier(country) := "TIER_2" if {
 highest_tier(country) := "TIER_1" if {
     can_access_tier("TIER_1", country)
 }
-

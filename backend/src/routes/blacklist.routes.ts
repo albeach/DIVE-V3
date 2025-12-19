@@ -139,4 +139,3 @@ router.post('/api/blacklist/check', async (req: Request, res: Response, next: Ne
 });
 
 export default router;
-

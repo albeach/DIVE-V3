@@ -149,4 +149,3 @@ else
   echo "Response:"
   echo "$TEST_RESULT" | jq '.'
 fi
-

@@ -59,4 +59,3 @@ router.get('/:id', getPolicyHandler);
 router.post('/:id/test', authenticateJWT, testDecisionHandler);
 
 export default router;
-

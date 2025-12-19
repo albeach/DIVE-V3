@@ -89,4 +89,3 @@ public class DirectGrantOTPAuthenticatorFactory implements AuthenticatorFactory 
         return PROVIDER_ID;
     }
 }
-

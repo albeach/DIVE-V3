@@ -348,4 +348,3 @@ function MobileFeatureCard({ feature, index, isActive }: { feature: Feature; ind
 }
 
 export default FeatureCarousel;
-

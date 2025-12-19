@@ -518,15 +518,3 @@ describe('VirtualResourceList', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

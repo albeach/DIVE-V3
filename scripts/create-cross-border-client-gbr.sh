@@ -42,5 +42,3 @@ echo ""
 echo "Client ID: dive-v3-cross-border-client"
 echo "Client Secret: $FEDERATION_SECRET"
 echo "Redirect URIs: https://localhost:8081/realms/dive-v3-broker/broker/gbr-idp/endpoint"
-
-

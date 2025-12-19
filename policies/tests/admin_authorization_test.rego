@@ -371,4 +371,3 @@ test_deny_empty_operation if {
         }
     }
 }
-

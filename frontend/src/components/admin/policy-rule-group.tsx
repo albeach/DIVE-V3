@@ -15,6 +15,3 @@ export function PolicyRuleGroup({ group }: Props) {
         </div>
     );
 }
-
-
-

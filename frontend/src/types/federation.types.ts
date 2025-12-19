@@ -620,4 +620,3 @@ export const DATA_ISOLATION_LEVELS: { id: DataIsolationLevel; label: string; des
   { id: 'filtered', label: 'Filtered', description: 'Access based on COI membership' },
   { id: 'minimal', label: 'Minimal', description: 'Only explicitly shared data' },
 ];
-

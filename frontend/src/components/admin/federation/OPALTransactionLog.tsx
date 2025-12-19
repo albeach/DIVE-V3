@@ -475,4 +475,3 @@ export function OPALTransactionLog({
 }
 
 export default OPALTransactionLog;
-

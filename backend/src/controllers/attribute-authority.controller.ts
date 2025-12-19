@@ -114,4 +114,3 @@ router.get('/.well-known/jwks.json', async (_req: Request, res: Response): Promi
 });
 
 export default router;
-

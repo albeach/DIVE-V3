@@ -231,4 +231,3 @@ defaultRules:
 
 # Additional scrape configs (for DIVE V3 services)
 additionalScrapeConfigs: []
-

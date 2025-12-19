@@ -9,4 +9,3 @@ metadata:
   namespace: dive-v3-gbr
   labels:
     app.kubernetes.io/instance: gbr
-

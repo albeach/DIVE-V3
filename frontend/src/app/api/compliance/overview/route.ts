@@ -141,4 +141,3 @@ function getNextMonday() {
   date.setHours(9, 0, 0, 0);
   return date;
 }
-

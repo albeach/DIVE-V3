@@ -286,13 +286,25 @@ class FederatedResourceService {
         // Build API URL for HTTP-based federation
         const backendService = inst.services?.backend;
         let apiUrl: string;
-        if (inst.type === 'remote') {
-            apiUrl = process.env[`${instanceCode}_API_URL`] ||
-                `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
+        
+        // Check environment for explicit URL override first
+        const envApiUrl = process.env[`${instanceCode}_API_URL`];
+        if (envApiUrl) {
+            apiUrl = envApiUrl;
+        } else if (inst.type === 'remote') {
+            // Remote instances use production hostnames
+            apiUrl = `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
         } else {
-            // Local instances go through Cloudflare tunnels when accessed from other instances
-            apiUrl = process.env[`${instanceCode}_API_URL`] ||
-                `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
+            // LOCAL instances in development: Use Docker internal hostname for inter-container communication
+            // This is CRITICAL for federated search to work between Hub and Spokes
+            const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+            if (isDevelopment && backendService?.containerName) {
+                // Use Docker internal hostname (container name) with internal port
+                apiUrl = `https://${backendService.containerName}:${backendService.internalPort || 4000}`;
+            } else {
+                // Production: Use hostname from registry
+                apiUrl = `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
+            }
         }
         
         // For MongoDB connection, use existing env var for current instance
@@ -921,4 +933,3 @@ class FederatedResourceService {
 // Singleton instance
 export const federatedResourceService = new FederatedResourceService();
 export default federatedResourceService;
-

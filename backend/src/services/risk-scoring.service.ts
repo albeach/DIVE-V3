@@ -692,4 +692,3 @@ class RiskScoringService {
 
 // Export singleton instance
 export const riskScoringService = new RiskScoringService();
-

@@ -551,4 +551,3 @@ export { AnalyticsService };
 
 // Export singleton instance
 export const analyticsService = new AnalyticsService();
-

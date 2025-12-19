@@ -16,4 +16,3 @@ spec:
       labels:
         app: opa-gbr
         app.kubernetes.io/instance: gbr
-

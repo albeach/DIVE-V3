@@ -107,4 +107,3 @@ public class DirectGrantOTPSimpleAuthenticator implements Authenticator {
         // no-op
     }
 }
-

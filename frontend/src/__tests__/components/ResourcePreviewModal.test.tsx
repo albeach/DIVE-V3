@@ -481,15 +481,3 @@ describe.skip('ResourcePreviewModal', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

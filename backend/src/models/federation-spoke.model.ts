@@ -282,4 +282,3 @@ export class MongoSpokeStore {
 export const mongoSpokeStore = new MongoSpokeStore();
 
 export default MongoSpokeStore;
-

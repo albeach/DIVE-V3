@@ -530,4 +530,3 @@ export function BookmarksTrigger({ onClick }: BookmarksTriggerProps) {
     </button>
   );
 }
-

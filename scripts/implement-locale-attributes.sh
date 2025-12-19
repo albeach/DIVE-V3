@@ -221,4 +221,3 @@ echo "Federation now showcases attribute normalization capability!"
 echo "═══════════════════════════════════════════════════════════════"
 
 log_debug "complete" "Locale implementation complete" "{\"uk_attributes\":true,\"normalization\":true}"
-

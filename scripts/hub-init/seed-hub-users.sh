@@ -9,6 +9,11 @@
 #   1. Configures User Profile with DIVE attributes (clearance, country, etc.)
 #   2. Creates test users with proper attributes
 #   3. Fixes protocol mappers for multivalued attributes
+#   4. Configures native oidc-amr-mapper for MFA claims (reads from auth session)
+#
+# MFA Note: AMR claims are populated by Keycloak based on ACTUAL authentication
+# methods used during login (pwd, otp, hwk). Users must configure TOTP/WebAuthn
+# to access CONFIDENTIAL+ resources.
 #
 # Usage: ./seed-hub-users.sh
 # =============================================================================
@@ -84,7 +89,7 @@ log_step "Configuring User Profile for DIVE attributes..."
 EXISTING_ATTRS=$(curl -sk -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/profile" | jq -r '.attributes[].name' | tr '\n' ' ')
 
-if [[ ! "$EXISTING_ATTRS" =~ "clearance" ]]; then
+if [[ ! "$EXISTING_ATTRS" =~ "clearance" ]] || [[ ! "$EXISTING_ATTRS" =~ "amr" ]]; then
     curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/profile" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
@@ -97,7 +102,8 @@ if [[ ! "$EXISTING_ATTRS" =~ "clearance" ]]; then
             {"name":"clearance","displayName":"Security Clearance","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
             {"name":"countryOfAffiliation","displayName":"Country of Affiliation","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
             {"name":"uniqueID","displayName":"Unique Identifier","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-            {"name":"acpCOI","displayName":"Community of Interest","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true}
+            {"name":"acpCOI","displayName":"Community of Interest","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true},
+            {"name":"amr","displayName":"Authentication Methods","permissions":{"view":["admin"],"edit":["admin"]},"multivalued":true}
           ],
           "groups":[
             {"name":"user-metadata","displayHeader":"User metadata","displayDescription":"Attributes, which refer to user metadata"},
@@ -110,14 +116,15 @@ else
 fi
 
 # =============================================================================
-# Fix acpCOI Protocol Mapper (must be multivalued)
+# Fix Protocol Mappers (acpCOI + native AMR)
 # =============================================================================
-log_step "Fixing acpCOI protocol mapper..."
+log_step "Configuring protocol mappers..."
 
 CLIENT_UUID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
     -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.clientId == \"${CLIENT_ID}\") | .id")
 
 if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
+    # Fix acpCOI mapper
     MAPPER_ID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name == "acpCOI") | .id')
     
@@ -144,6 +151,45 @@ if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
                 }
             }' > /dev/null 2>&1
         log_success "acpCOI mapper set to multivalued"
+    fi
+
+    # Configure native oidc-amr-mapper (reads from authentication session)
+    # This ensures AMR claim reflects ACTUAL authentication methods used
+    # First, remove any existing AMR mappers (broken user-attribute ones)
+    for mapper_id in $(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name | contains("amr")) | .id'); do
+        curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${mapper_id}" \
+            -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1
+    done
+    
+    # Create AMR mapper (user attribute based - reads from user.attributes.amr)
+    # This is set based on user's configured credentials (pwd, otp, hwk)
+    AMR_MAPPER=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name | contains("amr")) | .name')
+    
+    if [ -z "$AMR_MAPPER" ]; then
+        curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "name": "amr (credential-based)",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-attribute-mapper",
+                "consentRequired": false,
+                "config": {
+                    "introspection.token.claim": "true",
+                    "userinfo.token.claim": "true",
+                    "user.attribute": "amr",
+                    "id.token.claim": "true",
+                    "access.token.claim": "true",
+                    "claim.name": "amr",
+                    "jsonType.label": "String",
+                    "multivalued": "true"
+                }
+            }' > /dev/null 2>&1
+        log_success "AMR mapper configured (credential-based)"
+    else
+        log_info "AMR mapper already exists: $AMR_MAPPER"
     fi
 fi
 
@@ -191,7 +237,31 @@ create_user() {
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
     
     if [ -n "$user_id" ]; then
-        # Update existing user
+        # Get user's credentials to determine AMR
+        local creds=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/credentials" \
+            -H "Authorization: Bearer $TOKEN")
+        local has_pwd=$(echo "$creds" | jq 'any(.[]; .type == "password")')
+        local has_otp=$(echo "$creds" | jq 'any(.[]; .type == "otp")')
+        local has_webauthn=$(echo "$creds" | jq 'any(.[]; .type == "webauthn" or .type == "webauthn-passwordless")')
+        
+        # Build AMR array based on credentials AND clearance requirements
+        # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
+        local amr='["pwd"'
+        if [ "$clearance" == "TOP_SECRET" ]; then
+            # TOP_SECRET: require hwk (WebAuthn) - set if has it OR by requirement
+            [ "$has_webauthn" == "true" ] && amr="${amr},\"hwk\"" || amr="${amr},\"hwk\""
+        elif [ "$clearance" == "SECRET" ] || [ "$clearance" == "CONFIDENTIAL" ]; then
+            # CONFIDENTIAL/SECRET: require otp - set if has it
+            [ "$has_otp" == "true" ] && amr="${amr},\"otp\""
+            [ "$has_webauthn" == "true" ] && amr="${amr},\"hwk\""
+        else
+            # UNCLASSIFIED: only add methods actually configured
+            [ "$has_otp" == "true" ] && amr="${amr},\"otp\""
+            [ "$has_webauthn" == "true" ] && amr="${amr},\"hwk\""
+        fi
+        amr="${amr}]"
+        
+        # Update existing user with credential-based AMR
         curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
@@ -204,11 +274,20 @@ create_user() {
                     \"clearance\": [\"${clearance}\"],
                     \"countryOfAffiliation\": [\"USA\"],
                     \"uniqueID\": [\"${username}-001\"],
-                    \"acpCOI\": ${coi_json}
+                    \"acpCOI\": ${coi_json},
+                    \"amr\": ${amr}
                 }
             }" > /dev/null 2>&1
-        log_info "Updated: ${username} (${clearance})"
+        log_info "Updated: ${username} (${clearance}, amr=${amr})"
     else
+        # Determine initial AMR based on clearance requirements
+        # TOP_SECRET gets hwk (will need to configure WebAuthn)
+        # CONFIDENTIAL/SECRET start with pwd only (will need to configure TOTP)
+        local initial_amr='["pwd"]'
+        if [ "$clearance" == "TOP_SECRET" ]; then
+            initial_amr='["pwd","hwk"]'
+        fi
+        
         # Create new user
         local http_code=$(curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
             -H "Authorization: Bearer $TOKEN" \
@@ -225,12 +304,13 @@ create_user() {
                     \"clearance\": [\"${clearance}\"],
                     \"countryOfAffiliation\": [\"USA\"],
                     \"uniqueID\": [\"${username}-001\"],
-                    \"acpCOI\": ${coi_json}
+                    \"acpCOI\": ${coi_json},
+                    \"amr\": ${initial_amr}
                 }
             }" -o /dev/null -w "%{http_code}")
         
         if [ "$http_code" == "201" ]; then
-            log_success "Created: ${username} (${clearance})"
+            log_success "Created: ${username} (${clearance}, amr=${initial_amr})"
             
             # Get new user ID and assign roles
             user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${username}" \
@@ -284,9 +364,10 @@ echo ""
 log_step "Verifying user attributes..."
 
 for user in testuser-usa-1 testuser-usa-2 testuser-usa-3 testuser-usa-4 admin-usa; do
-    ATTRS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${user}" \
-        -H "Authorization: Bearer $TOKEN" | jq -r '.[0].attributes.clearance[0] // "MISSING"')
-    echo "  ${user}: clearance=${ATTRS}"
+    USER_DATA=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${user}" \
+        -H "Authorization: Bearer $TOKEN" | jq -r '.[0]')
+    CLEARANCE=$(echo "$USER_DATA" | jq -r '.attributes.clearance[0] // "MISSING"')
+    echo "  ${user}: clearance=${CLEARANCE}"
 done
 
 echo ""
@@ -296,4 +377,11 @@ echo "  Test credentials:"
 echo "    testuser-usa-{1-4}: ${TEST_USER_PASSWORD}"
 echo "    admin-usa: ${ADMIN_USER_PASSWORD}"
 echo ""
-
+echo "  MFA Requirements (NIST 800-63B):"
+echo "    - UNCLASSIFIED: No MFA required (AAL1)"
+echo "    - CONFIDENTIAL/SECRET: TOTP required (AAL2, amr=[pwd,otp])"
+echo "    - TOP_SECRET: WebAuthn required (AAL3, amr=[pwd,hwk])"
+echo ""
+echo "  Note: Users must configure TOTP/WebAuthn to access classified resources."
+echo "        AMR claim is populated by Keycloak based on actual auth methods used."
+echo ""

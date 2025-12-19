@@ -54,4 +54,3 @@ describe('Decision Replay API', () => {
     // Note: Full integration tests would require MongoDB and OPA running
     // These tests verify the controller structure and error handling
 });
-

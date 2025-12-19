@@ -675,5 +675,3 @@ export default function IdentityAssurancePage() {
     </PageLayout>
   );
 }
-
-

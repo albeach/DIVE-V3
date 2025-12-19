@@ -228,7 +228,3 @@ describe('SpokeRegistryTable', () => {
     });
   });
 });
-
-
-
-

@@ -89,4 +89,3 @@ export default async function globalTeardown() {
     // Clear the global mongo server reference
     delete (global as any).__MONGO_SERVER__;
 }
-

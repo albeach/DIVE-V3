@@ -1107,4 +1107,3 @@ export function DocumentSearchTrigger({ onClick }: { onClick?: () => void }) {
 
 // Legacy export name for backwards compatibility
 export { DocumentSearchTrigger as CommandPaletteSearchTrigger };
-

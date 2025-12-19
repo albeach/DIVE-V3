@@ -257,4 +257,3 @@ echo "    1. Approve pending spokes: ./dive hub spokes list"
 echo "    2. Verify connectivity: ./dive --instance <code> spoke verify"
 echo "    3. Test federation: ./dive test cross-border --from <code> --to usa"
 echo ""
-

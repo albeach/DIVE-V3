@@ -412,14 +412,3 @@ module_pilot_help() {
     echo "  ./dive --env gcp pilot checkpoint create  # Save state"
     echo "  ./dive --env gcp pilot rollback      # Restore latest"
 }
-
-
-
-
-
-
-
-
-
-
-

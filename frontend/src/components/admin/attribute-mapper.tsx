@@ -238,4 +238,3 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
         </div>
     );
 }
-

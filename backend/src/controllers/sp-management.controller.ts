@@ -400,4 +400,3 @@ export async function getSPActivity(req: IAuthenticatedRequest, res: Response): 
     });
   }
 }
-

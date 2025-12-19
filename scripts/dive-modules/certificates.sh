@@ -808,4 +808,3 @@ module_certificates_help() {
     echo "  ./dive certs verify-all                # Verify all spokes"
     echo ""
 }
-

@@ -25,5 +25,3 @@ export interface VisualPolicyArtifacts {
   code: string;
   summary: string;
 }
-
-

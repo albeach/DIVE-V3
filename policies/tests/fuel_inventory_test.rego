@@ -1080,5 +1080,3 @@ test_evaluation_details_present if {
     details.checks.authenticated == true
     details.checks.clearance_sufficient == true
 }
-
-

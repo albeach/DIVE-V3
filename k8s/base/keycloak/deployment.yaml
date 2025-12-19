@@ -139,4 +139,3 @@ spec:
         - name: keycloak-themes
           configMap:
             name: keycloak-themes
-

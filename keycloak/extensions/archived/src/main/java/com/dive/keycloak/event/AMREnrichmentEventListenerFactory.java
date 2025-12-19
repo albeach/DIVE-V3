@@ -38,4 +38,3 @@ public class AMREnrichmentEventListenerFactory implements EventListenerProviderF
         return PROVIDER_ID;
     }
 }
-

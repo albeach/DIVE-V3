@@ -65,5 +65,3 @@ describe('PolicyInsights', () => {
     expect(screen.getByLabelText('Allow rule missing')).toBeInTheDocument();
   });
 });
-
-

@@ -529,4 +529,3 @@ class SpokeTokenService extends EventEmitter {
 export const spokeToken = new SpokeTokenService();
 
 export default SpokeTokenService;
-

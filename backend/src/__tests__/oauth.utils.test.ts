@@ -657,4 +657,3 @@ describe('OAuth Utils', () => {
         });
     });
 });
-

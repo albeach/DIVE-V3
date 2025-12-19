@@ -329,16 +329,3 @@ test_invalid_classification_message_uk if {
 	msg := classification.invalid_classification_msg("UNKNOWN")
 	contains(msg, "Unrecognised")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -55,4 +55,3 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ success: false, error: 'Failed to reset password' }, { status: 500 });
     }
 }
-

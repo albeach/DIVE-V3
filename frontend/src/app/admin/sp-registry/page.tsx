@@ -330,14 +330,3 @@ export default function SPRegistryDashboard() {
     </PageLayout>
   );
 }
-
-
-
-
-
-
-
-
-
-
-

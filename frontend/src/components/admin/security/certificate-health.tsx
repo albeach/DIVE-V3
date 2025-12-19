@@ -478,4 +478,3 @@ function generateMockCertificates(): ICertificateInfo[] {
 }
 
 export default CertificateHealth;
-

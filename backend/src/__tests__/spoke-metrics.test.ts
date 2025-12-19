@@ -453,4 +453,3 @@ describe('SpokeMetricsService', () => {
         });
     });
 });
-

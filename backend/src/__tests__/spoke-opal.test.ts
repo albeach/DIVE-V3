@@ -402,12 +402,3 @@ describe('OPAL Integration Events', () => {
     expect(service.listenerCount('versionPoll')).toBe(1);
   });
 });
-
-
-
-
-
-
-
-
-

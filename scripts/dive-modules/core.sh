@@ -895,6 +895,3 @@ module_core_help() {
     echo "  ps                  List running containers"
     echo "  exec <svc> [cmd]    Execute command in container"
 }
-
-
-

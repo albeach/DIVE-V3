@@ -222,4 +222,3 @@ export const exportComplianceReportHandler = async (
     });
   }
 };
-

@@ -29,4 +29,3 @@ spec:
         - name: mongo-data
           persistentVolumeClaim:
             claimName: mongo-data
-

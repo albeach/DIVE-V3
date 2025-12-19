@@ -117,4 +117,3 @@ echo "Access Alertmanager:"
 echo "  kubectl port-forward -n $NAMESPACE svc/$RELEASE_NAME-alertmanager 9093:9093"
 echo "  Then visit: http://localhost:9093"
 echo ""
-

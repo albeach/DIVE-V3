@@ -387,6 +387,3 @@ describe('EvaluateTab', () => {
     });
   });
 });
-
-
-

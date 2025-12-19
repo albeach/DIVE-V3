@@ -18,4 +18,3 @@ datasources:
       manageAlerts: true
       prometheusType: Prometheus
       prometheusVersion: 2.45.0
-

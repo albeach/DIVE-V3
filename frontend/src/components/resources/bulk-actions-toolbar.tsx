@@ -353,5 +353,3 @@ export function SelectionIndicator({ count, onClear }: SelectionIndicatorProps) 
     </motion.div>
   );
 }
-
-

@@ -70,4 +70,3 @@ inhibit_rules:
       alertname: 'RedisDown'
     target_match:
       alertname: 'HighMFAEnrollmentFailures'
-

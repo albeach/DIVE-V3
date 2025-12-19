@@ -5,15 +5,15 @@
 #   Minimal hub footprint for policy distribution (OPAL Server) plus the
 #   supporting identity/policy services required to serve policy data.
 # Usage:
-#   ./dive hub start        # uses this compose file
-#   COMPOSE_PROJECT_NAME=custom ./dive hub start
+#   ./dive hub deploy       # uses this compose file
+#   ./dive hub up           # start services
 # Notes:
 #   - Secrets come from ./dive load_secrets (GCP or local defaults).
 #   - Certificates are expected in keycloak/certs (mkcert via ./dive up).
 #   - No spoke/partner services are included here.
 # =============================================================================
 
-name: dive-v3-hub
+name: dive-hub
 
 networks:
   hub-internal:
@@ -29,6 +29,7 @@ volumes:
   hub_postgres_data:
   hub_mongodb_data:
   hub_redis_data:
+  hub_redis_blacklist_data:
   hub_frontend_node_modules:
   hub_frontend_next:
   hub_authzforce_data:
@@ -106,6 +107,40 @@ services:
       - hub_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_USA}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis Blacklist - Shared token revocation across all instances (GAP-010)
+  # ---------------------------------------------------------------------------
+  redis-blacklist:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_BLACKLIST}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-keepalive 300
+      --timeout 0
+      --loglevel notice
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    environment:
+      REDIS_PASSWORD_BLACKLIST: ${REDIS_PASSWORD_BLACKLIST}
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
+    volumes:
+      - hub_redis_blacklist_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -263,6 +298,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      redis-blacklist:
+        condition: service_healthy
       opa:
         condition: service_healthy
     healthcheck:
@@ -343,10 +380,10 @@ services:
       - hub-internal
     volumes:
       - ./kas/certs:/opt/app/certs:ro
-      - ./kas/src:/app/src
       - ./kas/logs:/app/logs
       - ./config:/app/config:ro
-    command: npm run dev
+    # Use built version instead of dev mode
+    command: node dist/server.js
 
   # ---------------------------------------------------------------------------
   # Frontend - Next.js Application
@@ -460,5 +497,3 @@ services:
     depends_on:
       - opa
       - backend
-
-

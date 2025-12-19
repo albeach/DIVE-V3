@@ -288,5 +288,3 @@ test.describe('IdP Management - SP Registry (Refactored)', () => {
         });
     });
 });
-
-

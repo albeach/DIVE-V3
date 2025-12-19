@@ -33,5 +33,3 @@ spec:
               value: "France"
             - name: NEXT_PUBLIC_LOCALE
               value: "fr-FR"
-
-

@@ -488,4 +488,3 @@ export default function NewSPRegistrationPage() {
     </PageLayout>
   );
 }
-

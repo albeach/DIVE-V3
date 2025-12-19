@@ -556,15 +556,3 @@ describe('BulkActionsToolbar', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

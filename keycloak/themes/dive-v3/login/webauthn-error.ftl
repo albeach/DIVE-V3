@@ -82,6 +82,3 @@
 
     </#if>
 </@layout.registrationLayout>
-
-
-

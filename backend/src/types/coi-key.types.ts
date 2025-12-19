@@ -104,4 +104,3 @@ export interface ICOIKeyListResponse {
 export interface ICOIMembershipMap {
     [coiId: string]: Set<string>;
 }
-

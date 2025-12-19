@@ -3,101 +3,193 @@
     "name": "Hungary",
     "iso3166": "HUN"
   },
+  "comments": {
+    "description": "Hungarian localized attributes for DIVE V3 federation",
+    "mapping": {
+      "biztonsagi_szint": "clearance (DIVE V3)",
+      "allampolgarsag": "countryOfAffiliation (DIVE V3)",
+      "egyedi_azonosito": "uniqueID (DIVE V3)",
+      "erdekkozseg": "acpCOI (DIVE V3)"
+    }
+  },
   "attributes": [
     {
-      "name": "vezetéknév",
-      "displayName": "Vezetéknév",
+      "name": "csaladnev",
+      "displayName": "Családnév",
+      "description": "Family name (lastName in DIVE V3)",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin", "user"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
       },
       "validations": {
-        "length": {"min": 1, "max": 255}
+        "length": {
+          "min": 1,
+          "max": 255
+        }
       }
     },
     {
-      "name": "keresztnév",
+      "name": "keresztnev",
       "displayName": "Keresztnév",
+      "description": "Given name (firstName in DIVE V3)",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin", "user"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
       },
       "validations": {
-        "length": {"min": 1, "max": 255}
+        "length": {
+          "min": 1,
+          "max": 255
+        }
       }
     },
     {
       "name": "email",
-      "displayName": "Email",
+      "displayName": "E-mail cím",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin", "user"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
       },
       "validations": {
         "email": {}
       }
     },
     {
-      "name": "személyazonosító",
-      "displayName": "Személyazonosító",
-      "required": false,
+      "name": "biztonsagi_szint",
+      "displayName": "Biztonsági Szint",
+      "description": "Security clearance level - maps to 'clearance' in DIVE V3",
+      "required": true,
       "permissions": {
-        "view": ["admin"],
-        "edit": ["admin"]
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "length": {"max": 50}
+        "options": [
+          "NEM_MINOSITETT",
+          "BIZALMAS",
+          "TITKOS",
+          "SZIGORUAN_TITKOS"
+        ]
+      },
+      "mapping": {
+        "NEM_MINOSITETT": "UNCLASSIFIED",
+        "BIZALMAS": "CONFIDENTIAL",
+        "TITKOS": "SECRET",
+        "SZIGORUAN_TITKOS": "TOP_SECRET"
       }
     },
     {
-      "name": "countryOfAffiliation",
-      "displayName": "Country of Affiliation",
+      "name": "allampolgarsag",
+      "displayName": "Állampolgárság",
+      "description": "Country of affiliation - maps to 'countryOfAffiliation' in DIVE V3",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "length": {"min": 3, "max": 3},
+        "length": {
+          "min": 3,
+          "max": 3
+        },
         "pattern": "^[A-Z]{3}$"
       }
     },
     {
-      "name": "clearance",
-      "displayName": "Security Clearance",
+      "name": "egyedi_azonosito",
+      "displayName": "Egyedi Azonosító",
+      "description": "Unique identifier - maps to 'uniqueID' in DIVE V3",
       "required": true,
       "permissions": {
-        "view": ["admin"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "options": ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+        "length": {
+          "min": 1,
+          "max": 255
+        }
       }
     },
     {
-      "name": "uniqueID",
-      "displayName": "Unique Identifier",
-      "required": true,
-      "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin"]
-      },
-      "validations": {
-        "length": {"min": 1, "max": 255}
-      }
-    },
-    {
-      "name": "acpCOI",
-      "displayName": "Communities of Interest",
+      "name": "erdekkozseg",
+      "displayName": "Érdekközösség",
+      "description": "Communities of Interest - maps to 'acpCOI' in DIVE V3",
       "multivalued": true,
       "required": false,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       }
+    }
+  ],
+  "protocol_mappers": [
+    {
+      "comment": "These mappers transform Hungarian attributes to DIVE V3 standard claims",
+      "mappers": [
+        {
+          "local_attribute": "biztonsagi_szint",
+          "claim_name": "clearance",
+          "value_mapping": {
+            "NEM_MINOSITETT": "UNCLASSIFIED",
+            "BIZALMAS": "CONFIDENTIAL",
+            "TITKOS": "SECRET",
+            "SZIGORUAN_TITKOS": "TOP_SECRET"
+          }
+        },
+        {
+          "local_attribute": "allampolgarsag",
+          "claim_name": "countryOfAffiliation"
+        },
+        {
+          "local_attribute": "egyedi_azonosito",
+          "claim_name": "uniqueID"
+        },
+        {
+          "local_attribute": "erdekkozseg",
+          "claim_name": "acpCOI"
+        }
+      ]
     }
   ]
 }

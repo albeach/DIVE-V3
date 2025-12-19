@@ -27,4 +27,3 @@ export default RedisMock;
  * Also export as named export for compatibility
  */
 export const Redis = RedisMock;
-

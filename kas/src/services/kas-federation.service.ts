@@ -638,4 +638,3 @@ export class KASFederationService {
 
 // Export singleton instance
 export const kasFederationService = new KASFederationService();
-

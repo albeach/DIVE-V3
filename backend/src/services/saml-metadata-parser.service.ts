@@ -310,4 +310,3 @@ class SAMLMetadataParserService {
 
 // Export singleton instance
 export const samlMetadataParserService = new SAMLMetadataParserService();
-

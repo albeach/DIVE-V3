@@ -241,4 +241,3 @@ describe('Keycloak 26 Migration - Claims for Different Realms', () => {
 });
 
 export { };
-

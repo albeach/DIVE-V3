@@ -673,5 +673,3 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
     </div>
   );
 }
-
-

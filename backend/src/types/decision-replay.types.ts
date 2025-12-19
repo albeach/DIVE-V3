@@ -64,4 +64,3 @@ export interface IDecisionReplayResponse {
         resource?: Record<string, any>;
     };
 }
-

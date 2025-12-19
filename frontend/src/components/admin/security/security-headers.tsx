@@ -538,4 +538,3 @@ function generateMockEndpoints(): IEndpointHeaders[] {
 }
 
 export default SecurityHeaders;
-

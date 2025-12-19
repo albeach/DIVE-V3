@@ -228,5 +228,3 @@ export const seedNotificationsHandler = async (req: Request, res: Response): Pro
         res.status(500).json({ error: 'Failed to seed notifications', requestId });
     }
 };
-
-

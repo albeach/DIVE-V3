@@ -401,4 +401,3 @@ describe('IdP Theme Service', () => {
         });
     });
 });
-

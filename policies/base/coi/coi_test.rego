@@ -168,4 +168,3 @@ test_subset_superset_violation_any if {
 test_no_subset_superset_all_mode if {
 	not coi.subset_superset_violation(["CAN-US", "FVEY"], "ALL")
 }
-

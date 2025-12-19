@@ -703,4 +703,3 @@ export default function PolicyEditorPanel() {
     </section>
   );
 }
-

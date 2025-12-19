@@ -186,4 +186,3 @@ fi
 
 echo ""
 echo "Debug complete - check debug.log for evidence"
-

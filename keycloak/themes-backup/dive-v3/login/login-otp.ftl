@@ -50,5 +50,3 @@
     </#if>
 
 </@layout.registrationLayout>
-
-

@@ -167,4 +167,3 @@ If tokens show `amr: ["pwd"]` and `acr: "1"` after WebAuthn login:
 - Terraform Module: `terraform/modules/realm-mfa/`
 - Hub Deployment: `scripts/dive-modules/hub.sh`
 - Authentication Flow Design: `terraform/modules/realm-mfa/README.md`
-

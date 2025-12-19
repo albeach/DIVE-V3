@@ -447,4 +447,3 @@ export const clearAuthzCache = (): void => {
     authzCacheService.invalidateAll();
     authzCacheService.resetStats();
 };
-

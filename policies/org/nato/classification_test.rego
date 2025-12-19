@@ -298,15 +298,3 @@ test_insufficient_msg_format if {
 	contains(msg, "SECRET")
 	contains(msg, "USA")
 }
-
-
-
-
-
-
-
-
-
-
-
-

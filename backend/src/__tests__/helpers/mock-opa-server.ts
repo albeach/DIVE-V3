@@ -266,4 +266,3 @@ export function mockOPAAlwaysDeny(): void {
         }
     }));
 }
-

@@ -117,4 +117,3 @@ aal_insufficient_msg(user_aal, classification) := msg if {
 		required,
 	])
 }
-

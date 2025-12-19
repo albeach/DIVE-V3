@@ -613,16 +613,3 @@ export const AVAILABLE_FIELDS: { field: string; aliases: string[]; description: 
 ];
 
 export default parseSearchQuery;
-
-
-
-
-
-
-
-
-
-
-
-
-

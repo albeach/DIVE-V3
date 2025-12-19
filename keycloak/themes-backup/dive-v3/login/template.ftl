@@ -189,5 +189,3 @@
 </body>
 </html>
 </#macro>
-
-

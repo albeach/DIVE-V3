@@ -229,4 +229,3 @@ public class ConfigureOTPRequiredAction implements RequiredActionProvider {
         }
     }
 }
-

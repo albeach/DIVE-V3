@@ -288,4 +288,3 @@ export default function ComplianceOverview({ dateRange, refreshTrigger }: Props)
         </div>
     );
 }
-

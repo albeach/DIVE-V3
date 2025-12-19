@@ -315,4 +315,3 @@ export function VirtualTable<T extends Record<string, unknown>>({
 }
 
 export default VirtualTable;
-

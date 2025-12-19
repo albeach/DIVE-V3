@@ -76,8 +76,8 @@ class IdPValidationService {
   private translateUrlForContainerValidation(url: string, instanceCode?: string): string {
     // Check if we're in a containerized environment (has DIVE_CONTAINERIZED env var or is running in Docker)
     const isContainerized = process.env.DIVE_CONTAINERIZED === 'true' ||
-                           fs.existsSync('/.dockerenv') ||
-                           process.env.HOSTNAME?.includes('dive-');
+      fs.existsSync('/.dockerenv') ||
+      process.env.HOSTNAME?.includes('dive-');
 
     if (!isContainerized) {
       return url; // Use original URL for non-containerized environments
@@ -104,7 +104,7 @@ class IdPValidationService {
         }
       }
     } catch (error) {
-      logger.warn('Failed to translate URL for container validation', { url, error: error.message });
+      logger.warn('Failed to translate URL for container validation', { url, error: error instanceof Error ? error.message : 'Unknown error' });
     }
 
     return url; // Fallback to original URL
@@ -178,7 +178,7 @@ class IdPValidationService {
         );
       } else {
         result.pass = true;
-        
+
         // Score based on TLS version
         if (tlsVersionNum >= 1.3) {
           result.score = 15;
@@ -387,7 +387,7 @@ class IdPValidationService {
         result.score = 0;
         result.violations = deniedFound.map(alg => `Denied algorithm: ${alg}`);
         result.recommendations.push('Remove weak algorithms and use RS256, RS512, ES256, or PS256');
-        
+
         const duration = Date.now() - startTime;
         logger.warn('OIDC algorithms validation failed - denied algorithms found', {
           jwksUrl,
@@ -603,4 +603,3 @@ export { IdPValidationService };
 
 // Export singleton instance for production use
 export const idpValidationService = new IdPValidationService();
-

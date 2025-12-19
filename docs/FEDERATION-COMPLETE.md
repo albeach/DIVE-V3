@@ -429,4 +429,3 @@ if (acpCOI && acpCOI.size() > 0) {
 **Version:** 1.0.0  
 **Last Updated:** 2025-12-13  
 **Status:** ✅ Production Ready (with acpCOI limitation)
-

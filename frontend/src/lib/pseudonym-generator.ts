@@ -228,5 +228,3 @@ export function getAuditIdentity(uniqueID: string): {
  * UUID: "880gb733-e29b-41d4-a716-446655440000"
  * Pseudonym: different from all above
  */
-
-

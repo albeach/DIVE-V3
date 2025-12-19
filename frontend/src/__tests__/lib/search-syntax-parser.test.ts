@@ -464,15 +464,3 @@ describe('search-syntax-parser', () => {
     });
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-

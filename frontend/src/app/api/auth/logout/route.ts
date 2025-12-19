@@ -87,4 +87,3 @@ export async function GET() {
     // Support GET for compatibility
     return POST();
 }
-

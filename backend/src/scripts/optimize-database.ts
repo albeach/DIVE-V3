@@ -330,4 +330,3 @@ if (require.main === module) {
 }
 
 export { optimizeDatabase, INDEX_DEFINITIONS };
-

@@ -150,4 +150,3 @@ metadata := {
 	"immutable": true,
 	"description": "Hub-enforced guardrails that spokes cannot override",
 }
-

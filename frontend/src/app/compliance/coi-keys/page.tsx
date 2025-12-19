@@ -437,5 +437,3 @@ export default function CoiKeysPage() {
     </PageLayout>
   );
 }
-
-

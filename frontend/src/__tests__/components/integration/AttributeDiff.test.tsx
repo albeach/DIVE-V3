@@ -56,4 +56,3 @@ describe("AttributeDiff", () => {
     }, { timeout: 1000 });
   });
 });
-

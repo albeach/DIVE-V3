@@ -268,4 +268,3 @@ export function SpecReferenceModal({ node, onClose }: SpecReferenceModalProps) {
     </div>
   );
 }
-

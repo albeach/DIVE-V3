@@ -529,4 +529,3 @@ describe('COI Validation Service', () => {
         });
     });
 });
-

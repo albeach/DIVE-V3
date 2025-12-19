@@ -410,4 +410,3 @@ export function SpokeRegistryTable({
 }
 
 export default SpokeRegistryTable;
-

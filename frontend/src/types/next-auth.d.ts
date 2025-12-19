@@ -60,4 +60,3 @@ declare module "next-auth/jwt" {
         auth_time?: number;     // Unix timestamp of authentication event
     }
 }
-

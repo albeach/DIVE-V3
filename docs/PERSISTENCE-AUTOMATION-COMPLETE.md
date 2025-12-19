@@ -351,4 +351,3 @@ docker exec gbr-keycloak-gbr-1 /opt/keycloak/bin/kcadm.sh get-token \
 **Date:** 2025-12-13  
 **Commits:** f78d699, 9edd1ce, ee94e5a  
 **Status:** PRODUCTION READY ✅
-

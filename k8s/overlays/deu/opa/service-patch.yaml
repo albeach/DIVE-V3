@@ -10,4 +10,3 @@ metadata:
 spec:
   selector:
     app: opa-deu
-

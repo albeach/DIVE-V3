@@ -516,4 +516,3 @@ export function ResourceCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
     </div>
   );
 }
-

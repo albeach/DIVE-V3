@@ -74,15 +74,3 @@ export async function GET(
         );
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-

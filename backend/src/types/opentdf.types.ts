@@ -391,4 +391,3 @@ export interface IZTDFExportOptions {
     /** Whether to include legacy fields in assertions (default: false) */
     includeLegacyFields?: boolean;
 }
-

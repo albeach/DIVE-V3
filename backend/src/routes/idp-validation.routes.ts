@@ -56,4 +56,3 @@ router.post('/parse/oidc-metadata', parseOIDCMetadataHandler);
 router.post('/parse/saml-metadata', parseSAMLMetadataFileHandler);
 
 export default router;
-

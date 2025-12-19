@@ -466,4 +466,3 @@ export function getShortcutHelpSections(): Array<{
 }
 
 export default useKeyboardShortcuts;
-

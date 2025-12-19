@@ -103,4 +103,3 @@ export function logMongoDBConnection(context: string): void {
         environment: process.env.NODE_ENV
     });
 }
-

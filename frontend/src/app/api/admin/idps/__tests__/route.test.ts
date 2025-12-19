@@ -113,4 +113,3 @@ describe('POST /api/admin/idps (proxy)', () => {
         expect(json.message).toContain('Backend failure');
     });
 });
-

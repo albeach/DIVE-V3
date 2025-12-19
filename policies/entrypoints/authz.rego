@@ -274,6 +274,3 @@ is_industry_clearance_exceeded := acp240.is_industry_clearance_exceeded  # Phase
 is_coi_coherence_violation := acp240.is_coi_coherence_violation
 
 is_upload_not_releasable_to_uploader := acp240.is_upload_not_releasable_to_uploader
-
-
-

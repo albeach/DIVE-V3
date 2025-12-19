@@ -331,4 +331,3 @@ export default {
   assertRenderTime,
   testData,
 };
-

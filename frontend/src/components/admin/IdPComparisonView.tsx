@@ -344,4 +344,3 @@ function AddIdPModal({ availableIdPs, onAdd, onClose }: AddIdPModalProps) {
         </motion.div>
     );
 }
-

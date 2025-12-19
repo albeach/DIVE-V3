@@ -227,4 +227,3 @@ export default function AuthorizationAnalytics({ dateRange, refreshTrigger }: Pr
         </div>
     );
 }
-

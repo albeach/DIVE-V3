@@ -550,5 +550,3 @@ class BundleSignerService {
 export const bundleSignerService = new BundleSignerService();
 
 export default BundleSignerService;
-
-

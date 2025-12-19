@@ -228,4 +228,3 @@ export function SessionExpiryModal({
         </Transition.Root>
     );
 }
-

@@ -174,4 +174,3 @@ export function validateIdentifier(uniqueID: string): {
 
     return { valid: true, type: 'other' };
 }
-

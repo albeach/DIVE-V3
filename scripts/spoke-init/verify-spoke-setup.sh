@@ -230,4 +230,3 @@ if [[ "$INSTANCE_CODE" == "all" ]]; then
 else
     verify_spoke "$INSTANCE_CODE"
 fi
-

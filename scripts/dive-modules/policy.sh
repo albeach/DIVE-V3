@@ -312,4 +312,3 @@ module_policy_help() {
     echo "  ./dive policy test                    # Run OPA tests"
     echo "  ./dive policy status                  # Show OPAL status"
 }
-

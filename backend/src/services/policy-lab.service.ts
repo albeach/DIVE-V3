@@ -259,6 +259,3 @@ export function clearPolicyLabCache(): void {
     cachedClient = null;
     cachedDb = null;
 }
-
-
-

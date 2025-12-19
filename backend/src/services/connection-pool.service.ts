@@ -655,5 +655,3 @@ export const connectionPoolService = new ConnectionPoolService();
 export { HttpConnectionPool, ResourcePool };
 
 export default ConnectionPoolService;
-
-

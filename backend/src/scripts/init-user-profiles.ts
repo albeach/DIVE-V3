@@ -286,4 +286,3 @@ if (require.main === module) {
 }
 
 export { initUserProfile };
-

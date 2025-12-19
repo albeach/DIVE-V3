@@ -236,15 +236,3 @@ scrape_configs:
           format: RFC3339Nano
           fallback_formats:
             - RFC3339
-
-
-
-
-
-
-
-
-
-
-
-

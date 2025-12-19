@@ -282,4 +282,3 @@ export default function CategoryBrowser({ resources, onCategoryClick }: Category
     </div>
   );
 }
-
