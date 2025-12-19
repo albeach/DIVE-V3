@@ -1,7 +1,7 @@
 # DIVE V3 CLI Gap Analysis
 
 **Generated**: December 18, 2025  
-**Updated**: December 19, 2025 (Phase 1 Complete)  
+**Updated**: December 18, 2025 (Phase 3 Complete)  
 **Reference**: DIVE-V3-CLI-USER-GUIDE.md  
 **Scope**: Documented behavior vs actual implementation
 
@@ -84,7 +84,7 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 | GAP-011 | No CI gate for local deployment | Medium | ✅ **RESOLVED** | Broken deploys reach main | Add `./dive deploy --dry-run` to PR checks | S | 4 |
 | GAP-012 | Test scripts reference missing fixtures | Medium | 🔲 Pending | E2E tests fail | Audit and create missing fixtures | M | 5 |
 | GAP-013 | No `--json` output for health commands | Medium | ✅ **RESOLVED** | Automation difficult | Add structured output option | S | 1 |
-| GAP-014 | Hub seed scripts directory missing | Medium | 🔲 Pending | `hub seed` may fail | Create `scripts/hub-init/` or update paths | S | 1 |
+| GAP-014 | Hub seed scripts directory missing | Medium | ✅ **RESOLVED** | `hub seed` may fail | Create `scripts/hub-init/` or update paths | S | 3 |
 | GAP-015 | No health check aggregation | Low | 🔲 Pending | Status requires manual inspection | Add aggregated health endpoint | S | 1 |
 | GAP-016 | Hardcoded timeouts throughout | Low | 🔲 Pending | Not configurable | Extract to environment variables | S | 1 |
 | GAP-017 | No semantic versioning for images | Low | 🔲 Pending | Deployment tracking difficult | Add git tag-based versioning | S | 4 |
