@@ -1,8 +1,9 @@
 # =============================================================================
-# DIVE V3 - NOR Instance (Norway)
+# DIVE V3 - NOR Instance (Norwegian Ministry of Defence)
 # =============================================================================
 # Spoke instance using extends pattern from base services.
-# Regenerate with: ./dive spoke init NOR "Norway"
+# Regenerate with: ./dive spoke init NOR "Norwegian Ministry of Defence"
+# Spoke ID: spoke-nor-9915a8f2
 # =============================================================================
 
 name: dive-spoke-nor
@@ -88,11 +89,13 @@ services:
       KC_HOSTNAME_ADMIN_URL: https://localhost:8465
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
     ports:
       - "8465:8443"
       - "8102:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres-nor:
@@ -119,7 +122,7 @@ services:
       service: opal-client-base
     container_name: dive-spoke-nor-opal-client
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: http://opa-nor:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-nor-default}
@@ -163,10 +166,9 @@ services:
     container_name: dive-spoke-nor-backend
     environment:
       INSTANCE_CODE: NOR
-      INSTANCE_NAME: "Norway"
+      INSTANCE_NAME: "Norwegian Ministry of Defence"
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_NOR:?set MONGO_PASSWORD_NOR}@mongodb-nor:27017/dive-v3-nor?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_NOR:?set MONGO_PASSWORD_NOR}@mongodb-nor:27017/dive-v3-nor?authSource=admin
-      MONGODB_DATABASE: dive-v3-nor
       REDIS_URL: redis://:${REDIS_PASSWORD_NOR:?set REDIS_PASSWORD_NOR}@redis-nor:6379
       KEYCLOAK_URL: https://keycloak-nor:8443
       KEYCLOAK_REALM: dive-v3-broker-nor
@@ -195,6 +197,7 @@ services:
         condition: service_healthy
     networks:
       - dive-nor-network
+      - dive-v3-shared-network
 
   frontend-nor:
     extends:
@@ -226,9 +229,10 @@ services:
       AUTH_REDIRECT_URI: https://nor-app.dive25.com/api/auth/callback/keycloak
       NEXT_PUBLIC_EXTERNAL_DOMAINS: https://nor-app.dive25.com,https://nor-api.dive25.com,https://nor-idp.dive25.com,https://localhost:3022,https://localhost:4022,https://localhost:8465
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
-      NEXT_PUBLIC_THEME_PRIMARY: "#EF2B2D"
-      NEXT_PUBLIC_THEME_SECONDARY: "#002868"
-      NEXT_PUBLIC_THEME_ACCENT: "#FFFFFF"
+      NEXT_PUBLIC_THEME_PRIMARY: "#BA0C2F"
+      NEXT_PUBLIC_THEME_SECONDARY: "#00205B"
+      NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      TZ: "Europe/Oslo"
     ports:
       - "3022:3000"
     volumes:
