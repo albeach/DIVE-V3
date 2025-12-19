@@ -1,0 +1,6 @@
+{
+  "files.insertFinalNewline": false,
+  "files.trimTrailingWhitespace": true,
+  "editor.formatOnSave": false,
+  "editor.codeActionsOnSave": {}
+}
