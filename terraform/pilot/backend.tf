@@ -1,24 +1,27 @@
 # =============================================================================
 # DIVE V3 Pilot - Terraform Backend Configuration
 # =============================================================================
-# Uses local state for development. In production, use GCS backend.
+# Uses GCS backend for shared state management across team members.
+# State is stored in gs://dive25-tfstate bucket with versioning enabled.
+#
+# Setup (one-time):
+#   1. Create bucket: gsutil mb -p dive25 -l us-central1 gs://dive25-tfstate
+#   2. Enable versioning: gsutil versioning set on gs://dive25-tfstate
+#   3. Initialize: terraform init -reconfigure
 # =============================================================================
 
 terraform {
-  backend "local" {
-    path = "terraform.tfstate"
+  # GCS Backend for Production/Team Use
+  # Comment out and uncomment local backend below for isolated local development
+  backend "gcs" {
+    bucket = "dive25-tfstate"
+    prefix = "pilot"
   }
 
-  # For production, use GCS backend:
-  # backend "gcs" {
-  #   bucket  = "dive25-terraform-state"
-  #   prefix  = "dive-v3/pilot"
+  # Local Backend for Isolated Development (uncomment if needed)
+  # backend "local" {
+  #   path = "terraform.tfstate"
   # }
+
+  required_version = ">= 1.5.0"
 }
-
-
-
-
-
-
-

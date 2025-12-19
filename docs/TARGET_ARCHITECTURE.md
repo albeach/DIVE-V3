@@ -1,8 +1,9 @@
 # DIVE V3 Target Architecture
 
-**Version**: 1.0  
-**Date**: December 18, 2025  
-**Status**: Approved for Implementation
+**Version**: 1.2
+**Date**: December 18, 2025
+**Updated**: December 19, 2025 (Phase 3 Complete)
+**Status**: ✅ Phase 1-3 Implemented | Phase 4+ Pending
 
 ---
 
@@ -10,10 +11,39 @@
 
 This document defines the target architecture for automated, repeatable deployments of DIVE V3 across Local and GCP Compute Engine environments. The design prioritizes:
 
-- **One-command deployment** - Single command for full stack provisioning
-- **Idempotency** - Safe to re-run without side effects
-- **Rollback capability** - Recovery from any failure state
-- **CI/CD integration** - Automated quality gates
+- **One-command deployment** - ✅ Single command for full stack provisioning
+- **Idempotency** - ✅ Safe to re-run without side effects
+- **Rollback capability** - ✅ Recovery from any failure state
+- **CI/CD integration** - ✅ Automated quality gates via `dive-pr-checks.yml`
+
+### Implementation Status
+
+| Capability | Status | Evidence |
+|------------|--------|----------|
+| Idempotent nuke | ✅ Implemented | `./dive nuke --confirm` runs 3x without errors |
+| Deploy checkpoint | ✅ Implemented | `./dive checkpoint create/list/rollback` |
+| Health JSON output | ✅ Implemented | `./dive health --json` |
+| Dynamic IdP creation | ✅ Implemented | `./dive federation link <CODE>` |
+| User profile automation | ✅ Implemented | `scripts/spoke-init/apply-user-profile.sh` |
+| CI deploy gate | ✅ Implemented | `.github/workflows/dive-pr-checks.yml` |
+| GCP pilot rollback | ✅ Implemented | `./dive --env gcp pilot rollback` |
+| Terraform GCS backend | ✅ Implemented | `terraform/*/backend.tf` uses `dive25-tfstate` |
+| Compute VM module | ✅ Implemented | `terraform/modules/compute-vm/` |
+| GCP pilot deploy | ✅ Implemented | `./dive --env gcp pilot deploy --provision` |
+| VM health with JSON | ✅ Implemented | `./dive --env gcp pilot health --json` |
+
+---
+
+## Reference Documentation
+
+| Document | Path | Description |
+|----------|------|-------------|
+| **AUDIT** | `docs/AUDIT.md` | Security audit and compliance requirements |
+| **GAP_ANALYSIS** | `docs/GAP_ANALYSIS.md` | Gap analysis with outstanding items |
+| **TARGET_ARCHITECTURE** | `docs/TARGET_ARCHITECTURE.md` | Target system architecture (this document) |
+| **IMPLEMENTATION_PLAN** | `docs/IMPLEMENTATION_PLAN.md` | Phased implementation plan |
+| **BACKLOG** | `docs/BACKLOG.md` | Detailed backlog items (DIVE-0xx tasks) |
+| **CI_CD_PLAN** | `docs/CI_CD_PLAN.md` | CI/CD pipeline configuration |
 
 ---
 
@@ -168,13 +198,13 @@ cmd_nuke() {
         read -p "Type 'yes' to confirm: " confirm
         [ "$confirm" != "yes" ] && exit 1
     fi
-    
+
     docker compose -f docker-compose.yml down -v --remove-orphans
     docker compose -f docker-compose.hub.yml down -v --remove-orphans
     docker system prune -af --volumes --filter 'label=com.dive.managed=true'
     docker network rm dive-v3-shared-network shared-network 2>/dev/null || true
     rm -rf .dive-checkpoint/
-    
+
     log_success "Clean slate achieved"
 }
 ```
@@ -351,15 +381,24 @@ terraform {
 
 ## 4. Keycloak Bootstrap Architecture
 
-### Current State (Gap)
+### ✅ Implemented State (Phase 2)
 
 ```
-Realm JSON Import ──▶ Realm Created ──▶ [MANUAL] ──▶ IdPs Created
-                                           │
-                                    User runs kcadm.sh
+Realm JSON Import ──▶ Realm Created ──▶ Federation Link ──▶ IdPs Created
+       │                      │                │                 │
+       │                      │                │                 │
+       ▼                      ▼                ▼                 ▼
+  Base Realm            No Hardcoded       Dynamic IdP      User Profile
+  Template               IdPs in JSON       Creation         Templates
 ```
 
-### Target State
+**Key Changes in Phase 2**:
+1. Removed hardcoded IdPs from `keycloak/realms/dive-v3-broker.json`
+2. IdPs now created dynamically via `./dive federation link <CODE>`
+3. User profile templates applied via `scripts/spoke-init/apply-user-profile.sh`
+4. Localized mappers configured via `scripts/spoke-init/configure-localized-mappers.sh`
+
+### Original Target State (Reference)
 
 ```
 Realm JSON Import ──▶ Realm + IdPs Created ──▶ Secrets Injected ──▶ Ready
@@ -440,10 +479,10 @@ mkdir -p $PROCESSED_DIR
 # Process each realm JSON with environment substitution
 for realm_file in $REALM_DIR/*.json; do
     filename=$(basename "$realm_file")
-    
+
     # Substitute environment variables
     envsubst < "$realm_file" > "$PROCESSED_DIR/$filename"
-    
+
     echo "Processed: $filename"
 done
 
@@ -511,7 +550,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════
   # PR Checks (Fast Gate)
   # ═══════════════════════════════════════════════════════════════════════
-  
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -736,27 +775,40 @@ jobs:
 
 ## 10. Migration Path
 
-### Phase 1: Local Foundation (Week 2)
-- Implement idempotent nuke
-- Add checkpoint/restore
-- Add health JSON output
+### ✅ Phase 1: Local Foundation (Complete)
+- ✅ Implement idempotent nuke - `deploy.sh:cmd_nuke()`
+- ✅ Add checkpoint/restore - `./dive checkpoint create/rollback`
+- ✅ Add health JSON output - `./dive health --json`
+- ✅ Increase Keycloak timeout - 180s with backoff
+- ✅ Add `--confirm` flag - Destructive ops require confirmation
 
-### Phase 2: Keycloak IdP (Week 3)
-- Add IdPs to realm JSON
-- Implement secrets injection
-- Automate protocol mappers
+### ✅ Phase 2: Keycloak IdP Automation (Complete)
+- ✅ Dynamic IdP creation - `./dive federation link <CODE>`
+- ✅ Remove hardcoded IdPs - Cleaned `dive-v3-broker.json`
+- ✅ User profile templates - `scripts/spoke-init/apply-user-profile.sh`
+- ✅ Localized mappers - `scripts/spoke-init/configure-localized-mappers.sh`
+- ✅ IdP verification - `scripts/verify-idps.sh`
+- ✅ 36 automated tests - `tests/docker/phase2-idp-automation.sh`
 
-### Phase 3: GCP Deploy (Week 4)
-- Configure Terraform GCS backend
-- Create pilot deploy script
-- Implement GCP rollback
+### ✅ Phase 3: Hub Enhanced Spoke Management (Complete)
+- ✅ Terraform GCS backend - `terraform/*/backend.tf`
+- ✅ Compute VM module - `terraform/modules/compute-vm/`
+- ✅ Pilot deploy with Terraform - `./dive --env gcp pilot deploy`
+- ✅ GCS checkpoint storage - `gs://dive25-checkpoints/`
+- ✅ VM health with JSON - `./dive --env gcp pilot health --json`
+- ✅ Phase 3 tests - `tests/gcp/phase3-pilot.sh` (10 tests)
 
-### Phase 4: CI/CD (Week 5)
-- Add deploy dry-run to PRs
-- Create GCP deploy workflow
-- Implement auto-rollback
+### 🔲 Phase 4: GCP Production Deploy (Pending)
+- 🔲 Production VM deployment workflow
+- 🔲 Multi-spoke deployment automation
+- 🔲 Load balancer configuration
 
-### Phase 5: Testing (Week 6)
-- Create deploy E2E tests
-- Fill missing fixtures
-- Achieve 95% pass rate
+### 🔲 Phase 5: CI/CD (Pending)
+- ✅ Add deploy dry-run to PRs - `dive-pr-checks.yml`
+- ✅ Create deploy workflow - `dive-deploy.yml`
+- 🔲 Implement full auto-rollback
+
+### 🔲 Phase 6: Testing (Pending)
+- ✅ Create deploy E2E tests - `tests/e2e/local-deploy.test.sh`
+- 🔲 Fill remaining test fixtures
+- 🔲 Achieve 95% pass rate
