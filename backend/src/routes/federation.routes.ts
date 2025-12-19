@@ -1349,6 +1349,438 @@ router.get('/health', async (_req: Request, res: Response): Promise<void> => {
     }
 });
 
+/**
+ * GET /api/federation/health/spokes
+ * Enhanced spoke health aggregation for dashboard (DIVE-018)
+ * Returns detailed health status for all spokes with metrics
+ */
+router.get('/health/spokes', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+    const requestId = `health-${Date.now()}`;
+
+    try {
+        // Get all spokes with their status
+        const allSpokes = await hubSpokeRegistry.listAllSpokes();
+        const unhealthySpokes = await hubSpokeRegistry.getUnhealthySpokes();
+        const unhealthyIds = new Set(unhealthySpokes.map(s => s.spokeId));
+
+        // Build detailed health status for each spoke
+        const spokeHealthStatus = await Promise.all(
+            allSpokes.map(async (spoke) => {
+                const health = await hubSpokeRegistry.checkSpokeHealth(spoke.spokeId);
+                const syncStatus = policySyncService.getSpokeStatus(spoke.spokeId);
+
+                return {
+                    spokeId: spoke.spokeId,
+                    instanceCode: spoke.instanceCode,
+                    name: spoke.name,
+                    status: spoke.status,
+                    isHealthy: !unhealthyIds.has(spoke.spokeId),
+                    lastHeartbeat: spoke.lastHeartbeat,
+                    lastHeartbeatAgo: spoke.lastHeartbeat
+                        ? Math.floor((Date.now() - new Date(spoke.lastHeartbeat).getTime()) / 1000)
+                        : null,
+                    trustLevel: spoke.trustLevel || 'development',
+                    policySync: syncStatus ? {
+                        status: syncStatus.status,
+                        currentVersion: syncStatus.currentVersion,
+                        lastSuccess: syncStatus.lastAckTime,
+                        consecutiveFailures: syncStatus.pendingUpdates || 0
+                    } : null,
+                    health: {
+                        opaHealthy: health?.opaHealthy ?? false,
+                        opalConnected: health?.opalClientConnected ?? false,
+                        latencyMs: health?.latencyMs ?? 0
+                    },
+                    registeredAt: spoke.registeredAt,
+                    approvedAt: spoke.approvedAt
+                };
+            })
+        );
+
+        // Aggregate health metrics ('approved' is the active status in ISpokeRegistration)
+        const healthySpokeCount = spokeHealthStatus.filter(s => s.isHealthy && s.status === 'approved').length;
+        const totalActiveSpokes = spokeHealthStatus.filter(s => s.status === 'approved').length;
+        const averageLatency = spokeHealthStatus
+            .filter(s => s.health.latencyMs > 0)
+            .reduce((sum, s, _i, arr) => sum + s.health.latencyMs / arr.length, 0);
+        
+        const policySyncSummary = {
+            current: spokeHealthStatus.filter(s => s.policySync?.status === 'current').length,
+            behind: spokeHealthStatus.filter(s => s.policySync?.status === 'behind').length,
+            stale: spokeHealthStatus.filter(s => s.policySync?.status === 'stale').length,
+            offline: spokeHealthStatus.filter(s => s.policySync?.status === 'offline').length
+        };
+
+        const statusBreakdown = {
+            approved: spokeHealthStatus.filter(s => s.status === 'approved').length,
+            pending: spokeHealthStatus.filter(s => s.status === 'pending').length,
+            suspended: spokeHealthStatus.filter(s => s.status === 'suspended').length,
+            revoked: spokeHealthStatus.filter(s => s.status === 'revoked').length
+        };
+
+        logger.info('Spoke health aggregation requested', {
+            requestId,
+            totalSpokes: allSpokes.length,
+            healthySpokes: healthySpokeCount
+        });
+
+        res.json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            summary: {
+                totalSpokes: allSpokes.length,
+                healthySpokeCount,
+                totalActiveSpokes,
+                healthPercentage: totalActiveSpokes > 0
+                    ? Math.round((healthySpokeCount / totalActiveSpokes) * 100)
+                    : 100,
+                averageLatencyMs: Math.round(averageLatency),
+                policySync: policySyncSummary,
+                statusBreakdown
+            },
+            spokes: spokeHealthStatus,
+            currentPolicyVersion: policySyncService.getCurrentVersion().version
+        });
+
+    } catch (error) {
+        logger.error('Failed to aggregate spoke health', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to aggregate spoke health'
+        });
+    }
+});
+
+// ============================================
+// AUDIT LOG AGGREGATION ENDPOINTS (DIVE-020)
+// ============================================
+
+// In-memory store for aggregated audit logs (production would use MongoDB)
+interface IAggregatedAuditEntry {
+    id: string;
+    spokeId: string;
+    instanceCode: string;
+    timestamp: string;
+    eventType: string;
+    subject: {
+        uniqueID: string;
+        countryOfAffiliation: string;
+        clearance?: string;
+    };
+    resource?: {
+        resourceId: string;
+        classification?: string;
+        instanceId?: string;
+    };
+    action: string;
+    decision: 'allow' | 'deny' | 'error';
+    reason?: string;
+    context?: Record<string, unknown>;
+    offlineEntry: boolean;
+    receivedAt: string;
+}
+
+// Circular buffer for aggregated audit logs (max 10000 entries)
+const aggregatedAuditLogs: IAggregatedAuditEntry[] = [];
+const MAX_AGGREGATED_LOGS = 10000;
+
+// Audit ingestion statistics
+const auditIngestionStats = {
+    totalReceived: 0,
+    totalBySpoke: {} as Record<string, number>,
+    lastReceivedAt: null as string | null,
+    droppedDueToCapacity: 0
+};
+
+/**
+ * POST /api/federation/audit/ingest
+ * Receive audit logs from spokes (DIVE-020)
+ * 
+ * Spokes batch-send their audit logs to the Hub for centralized aggregation.
+ * Authentication via spoke token.
+ */
+router.post('/audit/ingest', requireSpokeToken, async (req: Request, res: Response): Promise<void> => {
+    const requestId = `audit-ingest-${Date.now()}`;
+    const spokeId = (req as any).spoke?.spokeId;
+    const instanceCode = (req as any).spoke?.instanceCode;
+
+    try {
+        const { entries } = req.body as { entries: Array<{
+            id: string;
+            timestamp: string;
+            eventType: string;
+            subject: { uniqueID: string; countryOfAffiliation: string; clearance?: string };
+            resource?: { resourceId: string; classification?: string; instanceId?: string };
+            action: string;
+            decision: 'allow' | 'deny' | 'error';
+            reason?: string;
+            context?: Record<string, unknown>;
+            offlineEntry: boolean;
+        }> };
+
+        if (!entries || !Array.isArray(entries)) {
+            res.status(400).json({
+                success: false,
+                error: 'Invalid request: entries array required'
+            });
+            return;
+        }
+
+        if (entries.length === 0) {
+            res.json({
+                success: true,
+                ingested: 0,
+                message: 'No entries to ingest'
+            });
+            return;
+        }
+
+        // Validate and ingest entries
+        const receivedAt = new Date().toISOString();
+        let ingested = 0;
+        let dropped = 0;
+
+        for (const entry of entries) {
+            // Basic validation
+            if (!entry.id || !entry.timestamp || !entry.eventType || !entry.action || !entry.decision) {
+                logger.warn('Skipping invalid audit entry', { requestId, entryId: entry.id });
+                continue;
+            }
+
+            // Check capacity
+            if (aggregatedAuditLogs.length >= MAX_AGGREGATED_LOGS) {
+                // Remove oldest entry
+                aggregatedAuditLogs.shift();
+                auditIngestionStats.droppedDueToCapacity++;
+                dropped++;
+            }
+
+            // Add to aggregated store
+            aggregatedAuditLogs.push({
+                ...entry,
+                spokeId,
+                instanceCode,
+                receivedAt
+            });
+
+            ingested++;
+        }
+
+        // Update statistics
+        auditIngestionStats.totalReceived += ingested;
+        auditIngestionStats.totalBySpoke[spokeId] = 
+            (auditIngestionStats.totalBySpoke[spokeId] || 0) + ingested;
+        auditIngestionStats.lastReceivedAt = receivedAt;
+
+        logger.info('Audit logs ingested from spoke', {
+            requestId,
+            spokeId,
+            instanceCode,
+            ingested,
+            dropped,
+            totalStored: aggregatedAuditLogs.length
+        });
+
+        res.json({
+            success: true,
+            ingested,
+            dropped,
+            message: `Ingested ${ingested} audit entries`
+        });
+
+    } catch (error) {
+        logger.error('Failed to ingest audit logs', {
+            requestId,
+            spokeId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to ingest audit logs'
+        });
+    }
+});
+
+/**
+ * GET /api/federation/audit/aggregated
+ * Query aggregated audit logs from all spokes (DIVE-020)
+ */
+router.get('/audit/aggregated', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    const requestId = `audit-query-${Date.now()}`;
+
+    try {
+        const {
+            spokeId,
+            instanceCode,
+            eventType,
+            decision,
+            startTime,
+            endTime,
+            limit = '100',
+            offset = '0'
+        } = req.query;
+
+        let filtered = [...aggregatedAuditLogs];
+
+        // Apply filters
+        if (spokeId) {
+            filtered = filtered.filter(e => e.spokeId === spokeId);
+        }
+        if (instanceCode) {
+            filtered = filtered.filter(e => e.instanceCode === instanceCode);
+        }
+        if (eventType) {
+            filtered = filtered.filter(e => e.eventType === eventType);
+        }
+        if (decision) {
+            filtered = filtered.filter(e => e.decision === decision);
+        }
+        if (startTime) {
+            filtered = filtered.filter(e => e.timestamp >= startTime);
+        }
+        if (endTime) {
+            filtered = filtered.filter(e => e.timestamp <= endTime);
+        }
+
+        // Sort by timestamp descending (most recent first)
+        filtered.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+        // Paginate
+        const limitNum = Math.min(parseInt(limit as string) || 100, 500);
+        const offsetNum = parseInt(offset as string) || 0;
+        const paginated = filtered.slice(offsetNum, offsetNum + limitNum);
+
+        // Calculate statistics
+        const stats = {
+            totalEntries: aggregatedAuditLogs.length,
+            filteredCount: filtered.length,
+            byDecision: {
+                allow: filtered.filter(e => e.decision === 'allow').length,
+                deny: filtered.filter(e => e.decision === 'deny').length,
+                error: filtered.filter(e => e.decision === 'error').length
+            },
+            bySpoke: {} as Record<string, number>,
+            byEventType: {} as Record<string, number>
+        };
+
+        for (const entry of filtered) {
+            stats.bySpoke[entry.spokeId] = (stats.bySpoke[entry.spokeId] || 0) + 1;
+            stats.byEventType[entry.eventType] = (stats.byEventType[entry.eventType] || 0) + 1;
+        }
+
+        logger.info('Aggregated audit logs queried', {
+            requestId,
+            filteredCount: filtered.length,
+            returnedCount: paginated.length
+        });
+
+        res.json({
+            success: true,
+            entries: paginated,
+            pagination: {
+                total: filtered.length,
+                limit: limitNum,
+                offset: offsetNum,
+                hasMore: offsetNum + limitNum < filtered.length
+            },
+            statistics: stats,
+            ingestionStats: auditIngestionStats
+        });
+
+    } catch (error) {
+        logger.error('Failed to query aggregated audit logs', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to query aggregated audit logs'
+        });
+    }
+});
+
+/**
+ * GET /api/federation/audit/statistics
+ * Get audit aggregation statistics (DIVE-020)
+ */
+router.get('/audit/statistics', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+    try {
+        // Calculate time-based statistics
+        const now = new Date();
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+        const last24h = aggregatedAuditLogs.filter(e => new Date(e.timestamp) >= oneDayAgo);
+        const lastHour = aggregatedAuditLogs.filter(e => new Date(e.timestamp) >= oneHourAgo);
+
+        // Decision distribution
+        const decisionDist = {
+            allow: aggregatedAuditLogs.filter(e => e.decision === 'allow').length,
+            deny: aggregatedAuditLogs.filter(e => e.decision === 'deny').length,
+            error: aggregatedAuditLogs.filter(e => e.decision === 'error').length
+        };
+
+        // Event type distribution
+        const eventTypeDist: Record<string, number> = {};
+        for (const entry of aggregatedAuditLogs) {
+            eventTypeDist[entry.eventType] = (eventTypeDist[entry.eventType] || 0) + 1;
+        }
+
+        // Classification access distribution
+        const classificationDist: Record<string, number> = {};
+        for (const entry of aggregatedAuditLogs) {
+            if (entry.resource?.classification) {
+                classificationDist[entry.resource.classification] = 
+                    (classificationDist[entry.resource.classification] || 0) + 1;
+            }
+        }
+
+        // Top denied resources
+        const denyByResource: Record<string, number> = {};
+        for (const entry of aggregatedAuditLogs.filter(e => e.decision === 'deny')) {
+            if (entry.resource?.resourceId) {
+                denyByResource[entry.resource.resourceId] = 
+                    (denyByResource[entry.resource.resourceId] || 0) + 1;
+            }
+        }
+        const topDeniedResources = Object.entries(denyByResource)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 10)
+            .map(([resourceId, count]) => ({ resourceId, count }));
+
+        res.json({
+            success: true,
+            timestamp: now.toISOString(),
+            summary: {
+                totalEntries: aggregatedAuditLogs.length,
+                last24Hours: last24h.length,
+                lastHour: lastHour.length,
+                capacityUsed: Math.round((aggregatedAuditLogs.length / MAX_AGGREGATED_LOGS) * 100)
+            },
+            decisions: decisionDist,
+            eventTypes: eventTypeDist,
+            classifications: classificationDist,
+            topDeniedResources,
+            ingestionStats: auditIngestionStats,
+            spokeSummary: Object.entries(auditIngestionStats.totalBySpoke)
+                .map(([spokeId, count]) => ({ spokeId, totalReceived: count }))
+                .sort((a, b) => b.totalReceived - a.totalReceived)
+        });
+
+    } catch (error) {
+        logger.error('Failed to get audit statistics', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to get audit statistics'
+        });
+    }
+});
+
 // ============================================
 // CROSS-INSTANCE AUTHORIZATION ENDPOINTS
 // ============================================
