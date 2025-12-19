@@ -1,0 +1,38 @@
+{
+  "identity": {
+    "spokeId": "spoke-fra-test",
+    "instanceCode": "FRA",
+    "name": "France Test Spoke",
+    "description": "Test fixture for France spoke"
+  },
+  "endpoints": {
+    "baseUrl": "https://fra-app.dive25.com",
+    "apiUrl": "https://fra-api.dive25.com",
+    "idpUrl": "https://fra-idp.dive25.com",
+    "kasUrl": "https://fra-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base",
+      "policy:fra",
+      "policy:coalition",
+      "policy:fvey"
+    ],
+    "allowedScopes": [],
+    "trustLevel": "bilateral",
+    "maxClassification": "SECRET"
+  },
+  "contact": {
+    "email": "fra-admin@dive25.com",
+    "organization": "France Ministry of Defense"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Multi-spoke E2E testing"
+  }
+}

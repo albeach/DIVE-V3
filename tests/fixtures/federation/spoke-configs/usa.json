@@ -1,0 +1,43 @@
+{
+  "identity": {
+    "spokeId": "spoke-usa-hub",
+    "instanceCode": "USA",
+    "name": "United States Hub",
+    "description": "DIVE V3 Hub instance for United States"
+  },
+  "endpoints": {
+    "baseUrl": "https://usa-app.dive25.com",
+    "apiUrl": "https://usa-api.dive25.com",
+    "idpUrl": "https://usa-idp.dive25.com",
+    "kasUrl": "https://usa-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base",
+      "policy:usa",
+      "policy:coalition",
+      "policy:hub"
+    ],
+    "allowedScopes": [
+      "policy:base",
+      "policy:usa",
+      "policy:coalition",
+      "policy:hub"
+    ],
+    "trustLevel": "self",
+    "maxClassification": "TOP_SECRET"
+  },
+  "contact": {
+    "email": "usa-admin@dive25.com",
+    "organization": "United States Department of Defense"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Hub instance for federation testing"
+  }
+}

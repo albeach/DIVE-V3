@@ -1,0 +1,37 @@
+{
+  "identity": {
+    "spokeId": "spoke-deu-test",
+    "instanceCode": "DEU",
+    "name": "Germany Test Spoke",
+    "description": "Test fixture for Germany spoke"
+  },
+  "endpoints": {
+    "baseUrl": "https://deu-app.dive25.com",
+    "apiUrl": "https://deu-api.dive25.com",
+    "idpUrl": "https://deu-idp.dive25.com",
+    "kasUrl": "https://deu-kas.dive25.com"
+  },
+  "hub": {
+    "hubUrl": "https://usa-api.dive25.com",
+    "registeredAt": null,
+    "approvedAt": null
+  },
+  "federation": {
+    "requestedScopes": [
+      "policy:base",
+      "policy:deu",
+      "policy:coalition"
+    ],
+    "allowedScopes": [],
+    "trustLevel": "bilateral",
+    "maxClassification": "CONFIDENTIAL"
+  },
+  "contact": {
+    "email": "deu-admin@dive25.com",
+    "organization": "Germany Federal Ministry of Defence"
+  },
+  "test": {
+    "isFixture": true,
+    "purpose": "Multi-spoke E2E testing"
+  }
+}
