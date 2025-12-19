@@ -57,8 +57,8 @@ echo ""
 echo -e "Language: ${CYAN}${COUNTRY_LANG}${NC}"
 echo ""
 
-# Determine Keycloak container and port
-KEYCLOAK_CONTAINER="${COUNTRY_LOWER}-keycloak-${COUNTRY_LOWER}-1"
+# Determine Keycloak container and port (new naming pattern: dive-spoke-lva-keycloak)
+KEYCLOAK_CONTAINER="dive-spoke-${COUNTRY_LOWER}-keycloak"
 if [ "$COUNTRY_CODE" = "USA" ]; then
     KEYCLOAK_CONTAINER="dive-hub-keycloak"
     KEYCLOAK_PORT="8443"
@@ -182,14 +182,14 @@ create_mapper() {
     local local_attr="$1"
     local dive_claim="$2"
     local multivalued="${3:-false}"
-    
+
     local mapper_name="${local_attr} → ${dive_claim}"
-    
+
     local json_type="String"
     if [ "$multivalued" = "true" ]; then
         json_type="JSON"
     fi
-    
+
     curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
@@ -207,7 +207,7 @@ create_mapper() {
                 \"jsonType.label\": \"${json_type}\"
             }
         }" > /dev/null
-    
+
     log_success "Created: ${mapper_name}"
 }
 

@@ -1,395 +1,619 @@
-version: '3.8'
+# =============================================================================
+# DIVE V3 - Pilot Stack (Hub + Random NATO Spoke)
+# =============================================================================
+# Purpose:
+#   Demonstration deployment combining 1 Hub (USA) and 1 random NATO spoke.
+#   Spoke country is selected at runtime by pilot.sh from 31 NATO members.
+#
+# Usage:
+#   ./dive --env gcp pilot deploy   # Full deployment to GCP VM (random spoke)
+#   ./dive --env gcp pilot up       # Start services
+#   ./dive --env gcp pilot down     # Stop services
+#
+# Architecture:
+#   Hub (USA):  Frontend:3000, Backend:4000, Keycloak:8443, OPAL Server:7002
+#   Spoke:      Dynamic ports based on NATO country offset (see nato-countries.sh)
+#
+# Environment Variables (set by pilot.sh):
+#   SPOKE_CODE           - ISO 3166-1 alpha-3 code (e.g., GBR, FRA, DEU)
+#   SPOKE_CODE_LOWER     - Lowercase spoke code (e.g., gbr, fra, deu)
+#   SPOKE_NAME           - Full country name (e.g., "United Kingdom")
+#   SPOKE_FRONTEND_PORT  - Dynamically calculated port (3000 + offset)
+#   SPOKE_BACKEND_PORT   - Dynamically calculated port (4000 + offset)
+#   SPOKE_KEYCLOAK_HTTPS - Dynamically calculated port (8443 + offset)
+#   SPOKE_KEYCLOAK_HTTP  - Dynamically calculated port (8080 + offset)
+#   SPOKE_POSTGRES_PORT  - Dynamically calculated port (5432 + offset)
+#   SPOKE_MONGODB_PORT   - Dynamically calculated port (27017 + offset)
+#   SPOKE_REDIS_PORT     - Dynamically calculated port (6379 + offset)
+#   SPOKE_OPA_PORT       - Dynamically calculated port (8181 + offset*10)
+#   SPOKE_KAS_PORT       - Dynamically calculated port (9000 + offset)
+#   SPOKE_THEME_PRIMARY  - Country flag primary color
+#   SPOKE_THEME_SECONDARY- Country flag secondary color
+#   SPOKE_TIMEZONE       - Country timezone
+#
+# Notes:
+#   - Secrets loaded from GCP Secret Manager via ./dive secrets load
+#   - Certificates expected in keycloak/certs (mkcert or Let's Encrypt)
+#   - Shared network enables hub-spoke federation
+# =============================================================================
 
 name: dive-pilot
 
 networks:
-  dive-network:
+  # Hub internal network
+  hub-internal:
     driver: bridge
+  # Spoke internal network
+  spoke-internal:
+    driver: bridge
+  # Shared network for hub-spoke federation
+  dive-v3-shared-network:
+    driver: bridge
+    name: dive-v3-shared-network
 
 volumes:
-  postgres_data:
-  mongo_data:
-  redis_data:
-  frontend_node_modules:
-  frontend_next:
+  # Hub volumes
+  hub_postgres_data:
+  hub_mongodb_data:
+  hub_redis_data:
+  hub_redis_blacklist_data:
+  hub_frontend_modules:
+  hub_frontend_next:
+  # Spoke volumes (named with code for checkpoint/rollback)
+  spoke_postgres_data:
+  spoke_mongodb_data:
+  spoke_redis_data:
+  spoke_frontend_modules:
+  spoke_frontend_next:
+  spoke_backend_modules:
+  spoke_backend_logs:
+
+# =============================================================================
+# HUB SERVICES (USA - Port Offset 0)
+# =============================================================================
 
 services:
-  # =============================================================================
-  # CORE INFRASTRUCTURE
-  # =============================================================================
-  
-  postgres:
-    image: postgres:15-alpine
-    container_name: dive-pilot-postgres
-    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # HUB: PostgreSQL
+  # ---------------------------------------------------------------------------
+  hub-postgres:
+    extends:
+      file: docker/base/services.yml
+      service: postgres-base
+    container_name: dive-pilot-hub-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-DivePilot2025!}
       POSTGRES_DB: keycloak_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./dive secrets load first}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - hub_postgres_data:/var/lib/postgresql/data
       - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
-      - dive-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      - hub-internal
 
-  mongo:
-    image: mongo:7.0
-    container_name: dive-pilot-mongo
-    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # HUB: MongoDB
+  # ---------------------------------------------------------------------------
+  hub-mongodb:
+    extends:
+      file: docker/base/services.yml
+      service: mongodb-base
+    container_name: dive-pilot-hub-mongodb
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-DivePilot2025!}
       MONGO_INITDB_DATABASE: dive-v3
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?required}
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
+      - hub_mongodb_data:/data/db
     networks:
-      - dive-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - hub-internal
 
-  redis:
-    image: redis:7-alpine
-    container_name: dive-pilot-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
+  # ---------------------------------------------------------------------------
+  # HUB: Redis (Session Cache)
+  # ---------------------------------------------------------------------------
+  hub-redis:
+    extends:
+      file: docker/base/services.yml
+      service: redis-base
+    container_name: dive-pilot-hub-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD_USA:?required} --appendonly yes
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - hub_redis_data:/data
     networks:
-      - dive-network
+      - hub-internal
+      - dive-v3-shared-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_USA}", "ping"]
 
-  # =============================================================================
-  # IDENTITY & POLICY
-  # =============================================================================
+  # ---------------------------------------------------------------------------
+  # HUB: Redis Blacklist (Shared token revocation)
+  # ---------------------------------------------------------------------------
+  hub-redis-blacklist:
+    extends:
+      file: docker/base/services.yml
+      service: redis-base
+    container_name: dive-pilot-hub-redis-blacklist
+    command: redis-server --requirepass ${REDIS_PASSWORD_BLACKLIST:?required} --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - hub_redis_blacklist_data:/data
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
 
-  keycloak:
-    build:
-      context: ./keycloak
-      dockerfile: Dockerfile
-    container_name: dive-pilot-keycloak
-    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # HUB: Keycloak (Identity Broker)
+  # ---------------------------------------------------------------------------
+  hub-keycloak:
+    extends:
+      file: docker/base/services.yml
+      service: keycloak-base
+    container_name: dive-pilot-hub-keycloak
+    # Use standard Keycloak start-dev (no custom import script needed for pilot)
+    command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
+      KC_DB_URL: jdbc:postgresql://hub-postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-DivePilot2025!}
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_STRICT: false
-      KC_HTTP_ENABLED: true
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME: ${HUB_HOSTNAME:-usa-idp.dive25.com}
+      KC_HOSTNAME_URL: https://${HUB_HOSTNAME:-usa-idp.dive25.com}
+      KC_HOSTNAME_ADMIN_URL: https://${HUB_HOSTNAME:-usa-idp.dive25.com}
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
-      KC_HTTPS_PORT: 8443
-      KC_PROXY_HEADERS: xforwarded
-      # Health & Metrics (REQUIRED for health checks in Keycloak 26.x)
-      KC_HEALTH_ENABLED: "true"
-      KC_METRICS_ENABLED: "true"
-      # Admin User
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}
-      # Features
-      KC_FEATURES: scripts
-      KC_LOG_LEVEL: INFO
-    command: start-dev --import-realm --https-port=8443
-    depends_on:
-      postgres:
-        condition: service_healthy
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/certs/mkcert-rootCA.pem
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?required}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?required}
+      APP_URL: https://${HUB_APP_HOSTNAME:-usa-app.dive25.com}
+      API_URL: https://${HUB_API_HOSTNAME:-usa-api.dive25.com}
+      INSTANCE_CODE: USA
     ports:
-      - "8443:8443" # HTTPS
-      - "8081:8080" # HTTP Management
-      - "9000:9000" # Keycloak management/health
-    networks:
-      - dive-network
+      - "8443:8443"
+      - "8080:8080"
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
-    healthcheck:
-      # Keycloak 26.x serves health/metrics on management interface (port 9000)
-      test: ["CMD-SHELL", "curl -kfs https://localhost:9000/health/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
+    depends_on:
+      hub-postgres:
+        condition: service_healthy
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
 
-  opa:
-    image: openpolicyagent/opa:latest
-    container_name: dive-pilot-opa
-    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # HUB: OPA (Policy Decision Point)
+  # ---------------------------------------------------------------------------
+  hub-opa:
+    extends:
+      file: docker/base/services.yml
+      service: opa-base
+    container_name: dive-pilot-hub-opa
     command:
-      - "run"
-      - "--server"
-      - "--addr=0.0.0.0:8181"
-      - "--tls-cert-file=/certs/certificate.pem"
-      - "--tls-private-key-file=/certs/key.pem"
-      - "--log-level=info"
-      - "--log-format=json"
-      - "--set=decision_logs.console=true"
-      - "/policies/base"
-      - "/policies/org"
-      - "/policies/tenant"
-      - "/policies/entrypoints"
-      - "/policies/compat"
-      - "/policies/policy_data.json"
+      - run
+      - --server
+      - --addr=0.0.0.0:8181
+      - --tls-cert-file=/certs/certificate.pem
+      - --tls-private-key-file=/certs/key.pem
+      - --bundle
+      - /policies
+      - --log-level=info
     ports:
       - "8181:8181"
     volumes:
       - ./policies:/policies:ro
       - ./keycloak/certs:/certs:ro
     networks:
-      - dive-network
-    healthcheck:
-      test: ["CMD", "/opa", "health", "--addr=https://localhost:8181", "--skip-verify"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - hub-internal
 
-  # =============================================================================
-  # OPAL - Policy Distribution (Hub-Spoke Federation)
-  # =============================================================================
+  # ---------------------------------------------------------------------------
+  # HUB: Backend API
+  # ---------------------------------------------------------------------------
+  hub-backend:
+    extends:
+      file: docker/base/services.yml
+      service: backend-base
+    container_name: dive-pilot-hub-backend
+    environment:
+      INSTANCE_CODE: USA
+      INSTANCE_NAME: "United States (Hub)"
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@hub-mongodb:27017/dive-v3?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD_USA}@hub-redis:6379
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@hub-redis-blacklist:6379
+      KEYCLOAK_URL: https://hub-keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      OPA_URL: https://hub-opa:8181
+      OPAL_SERVER_URL: https://hub-opal-server:7002
+      # Spoke admin password for bidirectional federation (dynamic)
+      KEYCLOAK_ADMIN_PASSWORD_SPOKE: ${KEYCLOAK_ADMIN_PASSWORD_SPOKE:-}
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/package.json:/app/package.json:ro
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./policies:/app/policies:ro
+      - ./config:/app/config:ro
+    depends_on:
+      hub-keycloak:
+        condition: service_healthy
+      hub-mongodb:
+        condition: service_healthy
+      hub-redis:
+        condition: service_healthy
+      hub-opa:
+        condition: service_healthy
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
 
-  opal-server:
+  # ---------------------------------------------------------------------------
+  # HUB: Frontend
+  # ---------------------------------------------------------------------------
+  hub-frontend:
+    extends:
+      file: docker/base/services.yml
+      service: frontend-base
+    container_name: dive-pilot-hub-frontend
+    environment:
+      NEXT_PUBLIC_INSTANCE: USA
+      NEXT_PUBLIC_INSTANCE_NAME: "United States (Hub)"
+      NEXT_PUBLIC_API_URL: https://${HUB_API_HOSTNAME:-usa-api.dive25.com}
+      NEXT_PUBLIC_BASE_URL: https://${HUB_APP_HOSTNAME:-usa-app.dive25.com}
+      NEXT_PUBLIC_KEYCLOAK_URL: https://${HUB_HOSTNAME:-usa-idp.dive25.com}
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      BACKEND_URL: https://hub-backend:4000
+      AUTH_SECRET: ${AUTH_SECRET:?required}
+      AUTH_KEYCLOAK_ID: dive-v3-client-broker
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      AUTH_KEYCLOAK_ISSUER: https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://${HUB_APP_HOSTNAME:-usa-app.dive25.com}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@hub-postgres:5432/dive_v3_app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - hub_frontend_modules:/app/node_modules
+      - hub_frontend_next:/app/.next
+      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./keycloak/certs:/opt/app/certs:ro
+    depends_on:
+      hub-backend:
+        condition: service_healthy
+    networks:
+      - hub-internal
+
+  # ---------------------------------------------------------------------------
+  # HUB: OPAL Server (Policy Distribution)
+  # ---------------------------------------------------------------------------
+  hub-opal-server:
     build:
       context: ./docker
       dockerfile: opal-server.Dockerfile
-    container_name: dive-pilot-opal-server
+    container_name: dive-pilot-hub-opal-server
     restart: unless-stopped
-    stop_grace_period: 30s
     environment:
-      # Server Configuration
-      OPAL_BROADCAST_URI: https://opal-server:7002
-      
-      # Policy source - no git repo, local directory only
-      OPAL_POLICY_REPO_URL: ""
-      OPAL_POLICY_REPO_POLLING_INTERVAL: 0
-      
-      # Data topics for policy data distribution
+      OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@hub-redis:6379
+      OPAL_REPO_WATCHER_ENABLED: "true"
+      OPAL_POLICY_REPO_URL: https://github.com/albeach/dive-v3-policies.git
+      OPAL_POLICY_REPO_MAIN_BRANCH: master
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30
+      OPAL_POLICY_SOURCE_DIRS: base,org,tenant,entrypoints,compat
       OPAL_DATA_TOPICS_DEFAULT: policy_data
-      
-      # Inline OPA config disabled - we use standalone OPA
-      OPAL_INLINE_OPA_CONFIG: "false"
-      
-      # Logging - use text format to avoid JSON issues
       OPAL_LOG_LEVEL: INFO
-      OPAL_LOG_FORMAT: text
-      
-      # Server ports and workers
       UVICORN_PORT: 7002
       UVICORN_HOST: 0.0.0.0
-      OPAL_SERVER_WORKERS: 1
       UVICORN_SSL_CERTFILE: /certs/certificate.pem
       UVICORN_SSL_KEYFILE: /certs/key.pem
-      
-      # Statistics for monitoring
-      OPAL_STATISTICS_ENABLED: "true"
-      
-      # CORS for dashboard access
-      OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["http://localhost:3000","https://localhost:3000","http://localhost:7002"]'
-      
-      # Data configuration - fetch from backend
-      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"http://backend:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"/"}]}}'
+      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"https://hub-backend:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"dive/federation"}]}}'
+      OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
     ports:
       - "7002:7002"
-    networks:
-      - dive-network
     volumes:
-      # Mount policies for serving (read-only)
       - ./policies:/policies:ro
-      - ./opal-data-source:/opal-data-source:ro
       - ./keycloak/certs:/certs:ro
-    entrypoint: ["/bin/sh","-c"]
-    command:
-      - |
-        uvicorn opal_server.main:app \
-          --host 0.0.0.0 \
-          --port 7002 \
-          --ssl-certfile /certs/certificate.pem \
-          --ssl-keyfile /certs/key.pem
+    depends_on:
+      hub-opa:
+        condition: service_healthy
+      hub-backend:
+        condition: service_healthy
+    networks:
+      - hub-internal
+      - dive-v3-shared-network
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
       interval: 15s
       timeout: 10s
       retries: 5
       start_period: 60s
-    depends_on:
-      - opa
-      - backend
 
-  # =============================================================================
-  # APPLICATION SERVICES
-  # =============================================================================
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: dive-pilot-backend
-    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # HUB: KAS (Key Access Service)
+  # ---------------------------------------------------------------------------
+  hub-kas:
+    extends:
+      file: docker/base/services.yml
+      service: kas-base
+    container_name: dive-pilot-hub-kas
     environment:
-      NODE_ENV: development
-      PORT: 4000
-      # Service URLs (Internal Docker Network)
-      # Use HTTPS for Keycloak (port 8443) - matches frontend configuration
-      # Use localhost to match Keycloak hostname and issuer (pulled from GCP via ./dive)
-      KEYCLOAK_URL: ${KEYCLOAK_URL:-https://localhost:8443}
+      KEYCLOAK_URL: https://hub-keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
-      OPA_URL: https://opa:8181
-      REDIS_URL: redis://redis:6379
-      OPAL_SERVER_URL: https://opal-server:7002
-      OPAL_DATA_TOPICS: policy_data
-      # External URLs
-      API_URL: https://localhost:4000
-      NEXT_PUBLIC_BASE_URL: https://localhost:3000
-      # Secrets
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # Security
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      SSL_CERT_PATH: /app/certs
+      OPA_URL: http://hub-opa:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@hub-mongodb:27017?authSource=admin
+      INSTANCE_CODE: USA
     ports:
-      - "4000:4000"
-    depends_on:
-      - keycloak
-      - mongo
-      - opa
-      - redis
-    networks:
-      - dive-network
-    extra_hosts:
-      - "localhost:host-gateway"
+      - "8085:8080"
     volumes:
-      - ./backend/src:/app/src
-      - ./backend/certs:/app/certs:ro
-      - ./policies:/app/policies:ro
+      - ./kas/certs:/app/certs:ro
       - ./config:/app/config:ro
-    healthcheck:
-      test: ["CMD", "curl", "-kfs", "https://localhost:4000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    depends_on:
+      hub-keycloak:
+        condition: service_healthy
+      hub-opa:
+        condition: service_healthy
+    networks:
+      - hub-internal
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: dive-pilot-frontend
+# =============================================================================
+# SPOKE SERVICES (Dynamic NATO Country - Port Offset from nato-countries.sh)
+# =============================================================================
+# All spoke values are parameterized via environment variables set by pilot.sh
+# =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: PostgreSQL
+  # ---------------------------------------------------------------------------
+  spoke-postgres:
+    extends:
+      file: docker/base/services.yml
+      service: postgres-base
+    container_name: dive-pilot-spoke-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_SPOKE:?set by pilot.sh}
+    ports:
+      - "${SPOKE_POSTGRES_PORT:-5463}:5432"
+    volumes:
+      - spoke_postgres_data:/var/lib/postgresql/data
+    networks:
+      - spoke-internal
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: MongoDB
+  # ---------------------------------------------------------------------------
+  spoke-mongodb:
+    extends:
+      file: docker/base/services.yml
+      service: mongodb-base
+    container_name: dive-pilot-spoke-mongodb
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-${SPOKE_CODE_LOWER:-spoke}
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_SPOKE:?set by pilot.sh}
+    ports:
+      - "${SPOKE_MONGODB_PORT:-27048}:27017"
+    volumes:
+      - spoke_mongodb_data:/data/db
+    networks:
+      - spoke-internal
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: Redis
+  # ---------------------------------------------------------------------------
+  spoke-redis:
+    extends:
+      file: docker/base/services.yml
+      service: redis-base
+    container_name: dive-pilot-spoke-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD_SPOKE:?set by pilot.sh}
+    ports:
+      - "${SPOKE_REDIS_PORT:-6410}:6379"
+    volumes:
+      - spoke_redis_data:/data
+    networks:
+      - spoke-internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_SPOKE}", "ping"]
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: Keycloak
+  # ---------------------------------------------------------------------------
+  spoke-keycloak:
+    extends:
+      file: docker/base/services.yml
+      service: keycloak-base
+    container_name: dive-pilot-spoke-keycloak
+    environment:
+      KC_DB_URL: jdbc:postgresql://spoke-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_SPOKE}
+      KC_HOSTNAME: ${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}
+      KC_HOSTNAME_URL: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}
+      KC_HOSTNAME_ADMIN_URL: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_SPOKE:?set by pilot.sh}
+    ports:
+      - "${SPOKE_KEYCLOAK_HTTPS_PORT:-8474}:8443"
+      - "${SPOKE_KEYCLOAK_HTTP_PORT:-8111}:8080"
+    volumes:
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/opt/keycloak/certs:ro
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/truststores:/opt/keycloak/conf/truststores:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      spoke-postgres:
+        condition: service_healthy
+    networks:
+      - spoke-internal
+      - dive-v3-shared-network
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: OPA
+  # ---------------------------------------------------------------------------
+  spoke-opa:
+    extends:
+      file: docker/base/services.yml
+      service: opa-base
+    container_name: dive-pilot-spoke-opa
+    ports:
+      - "${SPOKE_OPA_PORT:-8491}:8181"
+    volumes:
+      - ./policies:/policies:ro
+    networks:
+      - spoke-internal
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: OPAL Client (Policy Sync from Hub)
+  # ---------------------------------------------------------------------------
+  spoke-opal-client:
+    image: permitio/opal-client:latest
+    container_name: dive-pilot-spoke-opal-client
     restart: unless-stopped
     environment:
-      NODE_ENV: development
-      HOSTNAME: "0.0.0.0"
-      # Client Side URLs (Browser Access)
-      NEXT_PUBLIC_API_URL: https://localhost:4000
-      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
-      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
-      # Server Side URLs (Docker Network)
-      BACKEND_URL: https://backend:4000
-      # Use localhost to match KC_HOSTNAME and discovery URLs
-      KEYCLOAK_URL: https://localhost:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      # Issuers (match KC hostname=localhost so discovery/tokens align)
-      KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      # Database (CRITICAL: Required for NextAuth adapter)
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-DivePilot2025!}@postgres:5432/dive_v3_app
-      # Auth
-      NEXTAUTH_URL: https://localhost:3000
-      # Auth.js / NextAuth secrets (pulled from GCP via ./dive)
-      AUTH_SECRET: ${AUTH_SECRET:-${NEXTAUTH_SECRET:-dive-v3-auth-secret}}
-      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-${AUTH_SECRET:-dive-v3-auth-secret}}
-      # Auth.js standard environment variables (per https://authjs.dev/getting-started/providers/keycloak)
-      AUTH_KEYCLOAK_ID: dive-v3-client-broker
-      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      # Use internal service name for server-side OIDC discovery to avoid ECONNREFUSED from inside container.
-      # KC_HOSTNAME is set to localhost so discovery still returns public https://localhost:8443 endpoints for the browser redirect.
-      AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
-      # Legacy variables (for backward compatibility)
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
-      AUTH_TRUST_HOST: "true"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
-      CERT_PATH: /certs
-    ports:
-      - "3000:3000"
+      OPAL_SERVER_URL: https://hub-opal-server:7002
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      OPAL_OPA_URL: http://spoke-opa:8181
+      OPAL_POLICY_STORE_URL: http://spoke-opa:8181
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_DATA_TOPICS: policy:base,policy:${SPOKE_CODE_LOWER:-spoke},data:federation_matrix,data:trusted_issuers
+      SSL_CERT_FILE: /var/opal/certs/mkcert-rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/certs/mkcert-rootCA.pem
+    volumes:
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/var/opal/certs:ro
     depends_on:
-      - backend
-      - keycloak
-      - postgres
+      spoke-opa:
+        condition: service_healthy
+      hub-opal-server:
+        condition: service_healthy
     networks:
-      - dive-network
+      - spoke-internal
+      - dive-v3-shared-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: Backend API
+  # ---------------------------------------------------------------------------
+  spoke-backend:
+    extends:
+      file: docker/base/services.yml
+      service: backend-base
+    container_name: dive-pilot-spoke-backend
+    environment:
+      INSTANCE_CODE: ${SPOKE_CODE:-GBR}
+      INSTANCE_NAME: "${SPOKE_NAME:-United Kingdom}"
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_SPOKE}@spoke-mongodb:27017/dive-v3-${SPOKE_CODE_LOWER:-spoke}?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD_SPOKE}@spoke-redis:6379
+      # Connect to hub's shared blacklist
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@hub-redis-blacklist:6379
+      KEYCLOAK_URL: https://spoke-keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      KEYCLOAK_ISSUER: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_SPOKE}
+      OPA_URL: http://spoke-opa:8181
+      # Trust hub and spoke issuers
+      TRUSTED_ISSUERS: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke},https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker
+    ports:
+      - "${SPOKE_BACKEND_PORT:-4031}:4000"
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/package.json:/app/package.json:ro
+      - spoke_backend_modules:/app/node_modules
+      - spoke_backend_logs:/app/logs
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/app/certs:ro
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/opt/keycloak/certs:ro
+      - ./config:/app/config:ro
+    depends_on:
+      spoke-mongodb:
+        condition: service_healthy
+      spoke-redis:
+        condition: service_healthy
+      spoke-keycloak:
+        condition: service_healthy
+    networks:
+      - spoke-internal
+      - dive-v3-shared-network
+
+  # ---------------------------------------------------------------------------
+  # SPOKE: Frontend
+  # ---------------------------------------------------------------------------
+  spoke-frontend:
+    extends:
+      file: docker/base/services.yml
+      service: frontend-base
+    container_name: dive-pilot-spoke-frontend
+    environment:
+      NEXT_PUBLIC_INSTANCE: ${SPOKE_CODE:-GBR}
+      NEXT_PUBLIC_INSTANCE_NAME: "${SPOKE_NAME:-United Kingdom}"
+      NEXT_PUBLIC_API_URL: https://${SPOKE_API_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-api.dive25.com}
+      NEXT_PUBLIC_BASE_URL: https://${SPOKE_APP_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-app.dive25.com}
+      NEXT_PUBLIC_KEYCLOAK_URL: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      NEXT_PUBLIC_THEME_PRIMARY: "${SPOKE_THEME_PRIMARY:-#012169}"
+      NEXT_PUBLIC_THEME_SECONDARY: "${SPOKE_THEME_SECONDARY:-#C8102E}"
+      BACKEND_URL: https://spoke-backend:4000
+      AUTH_SECRET: ${NEXTAUTH_SECRET_SPOKE:?set by pilot.sh}
+      AUTH_KEYCLOAK_ID: dive-v3-client-${SPOKE_CODE_LOWER:-spoke}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_SPOKE:?set by pilot.sh}
+      AUTH_KEYCLOAK_ISSUER: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://${SPOKE_APP_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-app.dive25.com}
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_SPOKE}@spoke-postgres:5432/keycloak
+      TZ: "${SPOKE_TIMEZONE:-UTC}"
+    ports:
+      - "${SPOKE_FRONTEND_PORT:-3031}:3000"
     volumes:
       - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-      - frontend_next:/app/.next
-      - ./frontend/certs:/certs:ro
-    # Allow container to reach Keycloak via host-published 8443 using hostname localhost
-    # so Auth.js issuer (https://localhost:8443) matches discovery output.
-    extra_hosts:
-      - "localhost:host-gateway"
-    healthcheck:
-      # Relaxed healthcheck for Next.js Dev Mode
-      test: ["CMD", "curl", "-kfsI", "--max-time", "5", "https://localhost:3000/"]
-      interval: 30s
-      timeout: 30s
-      retries: 10
-      start_period: 120s
-
-  # =============================================================================
-  # OPTIONAL / STRETCH SERVICES
-  # =============================================================================
-
-  kas:
-    build:
-      context: ./kas
-      dockerfile: Dockerfile.dev
-    container_name: dive-pilot-kas
-    restart: unless-stopped
-    environment:
-      NODE_ENV: development
-      KAS_PORT: 8080
-      HTTPS_ENABLED: "true"
-      OPA_URL: http://opa:8181
-      KEYCLOAK_URL: https://keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD:-DivePilot2025!}@mongo:27017?authSource=admin
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
-    ports:
-      - "8080:8080"
+      - spoke_frontend_modules:/app/node_modules
+      - spoke_frontend_next:/app/.next
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/app/certs:ro
     depends_on:
-      - opa
-      - mongo
+      spoke-backend:
+        condition: service_healthy
     networks:
-      - dive-network
-    volumes:
-      - ./kas/src:/app/src
-      - ./kas/certs:/opt/app/certs:ro
-    extra_hosts:
-      - "localhost:host-gateway"
+      - spoke-internal
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: dive-pilot-tunnel
-    restart: unless-stopped
-    command: tunnel --config /etc/cloudflared/config.yml run
+  # ---------------------------------------------------------------------------
+  # SPOKE: KAS
+  # ---------------------------------------------------------------------------
+  spoke-kas:
+    extends:
+      file: docker/base/services.yml
+      service: kas-base
+    container_name: dive-pilot-spoke-kas
+    environment:
+      KEYCLOAK_URL: https://spoke-keycloak:8443
+      KEYCLOAK_REALM: dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      OPA_URL: http://spoke-opa:8181
+      INSTANCE_CODE: ${SPOKE_CODE:-GBR}
+    ports:
+      - "${SPOKE_KAS_PORT:-9031}:8080"
     volumes:
-      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared/tunnel-credentials.json:/etc/cloudflared/tunnel-credentials.json:ro
+      - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/app/certs:ro
+      - ./config:/app/config:ro
+    depends_on:
+      spoke-keycloak:
+        condition: service_healthy
+      spoke-opa:
+        condition: service_healthy
     networks:
-      - dive-network
+      - spoke-internal

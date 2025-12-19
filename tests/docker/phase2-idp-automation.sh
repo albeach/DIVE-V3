@@ -3,7 +3,7 @@
 # DIVE V3 - Phase 2 IdP Automation Tests
 # =============================================================================
 # Tests for Keycloak IdP automation and locale-specific configuration.
-# 
+#
 # Run: ./tests/docker/phase2-idp-automation.sh
 #
 # Tests:
@@ -336,7 +336,7 @@ fi
 # Test 6.4: Realm has DIVE V3 client with protocol mappers
 if jq -e '.clients[] | select(.clientId=="dive-v3-client-broker")' "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
     pass "dive-v3-client-broker client defined"
-    
+
     # Check for DIVE mappers on client
     for attr in clearance countryOfAffiliation uniqueID acpCOI; do
         if jq -e ".clients[] | select(.clientId==\"dive-v3-client-broker\") | .protocolMappers[] | select(.name==\"${attr}\")" \

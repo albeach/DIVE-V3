@@ -3,10 +3,10 @@
 # DIVE V3 Spoke User Seeding
 # =============================================================================
 # Creates standardized test users with proper DIVE attributes and roles
-# 
+#
 # Users Created:
 #   - testuser-{country}-1  (UNCLASSIFIED)
-#   - testuser-{country}-2  (CONFIDENTIAL)  
+#   - testuser-{country}-2  (CONFIDENTIAL)
 #   - testuser-{country}-3  (SECRET)
 #   - testuser-{country}-4  (TOP_SECRET)
 #   - admin-{country}       (TOP_SECRET + admin role)
@@ -65,11 +65,11 @@ if [[ -f "${INSTANCE_DIR}/.env" ]]; then
 fi
 
 # Use backend container for API calls (has curl, on same network)
-# Force project prefix to match spoke instance (ignore hub's COMPOSE_PROJECT_NAME)
-PROJECT_PREFIX="${CODE_LOWER}"
-API_CONTAINER="${PROJECT_PREFIX}-backend-${CODE_LOWER}-1"
-KEYCLOAK_CONTAINER="${PROJECT_PREFIX}-keycloak-${CODE_LOWER}-1"
-KEYCLOAK_INTERNAL_URL="https://keycloak-${CODE_LOWER}:8443"
+# New naming pattern: dive-spoke-lva-backend (not lva-backend-lva-1)
+PROJECT_PREFIX="dive-spoke-${CODE_LOWER}"
+API_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
+KEYCLOAK_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
+KEYCLOAK_INTERNAL_URL="https://dive-spoke-${CODE_LOWER}-keycloak:8443"
 PUBLIC_KEYCLOAK_URL="${PUBLIC_KEYCLOAK_URL:-https://${CODE_LOWER}-idp.dive25.com}"
 
 # Get admin password from instance-specific variable or container environment
@@ -288,7 +288,7 @@ if [[ -n "$CLIENT_UUID" && "$CLIENT_UUID" != "null" ]]; then
     MAPPER_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" | \
         jq -r '.[] | select(.name=="realm roles") | .name')
-    
+
     if [[ -z "$MAPPER_EXISTS" ]]; then
         kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
             -H "Authorization: Bearer $TOKEN" \
@@ -309,10 +309,10 @@ if [[ -n "$CLIENT_UUID" && "$CLIENT_UUID" != "null" ]]; then
     else
         log_info "Role mapper exists"
     fi
-    
+
     # Configure native oidc-amr-mapper (reads from authentication session)
     log_step "Configuring native AMR mapper..."
-    
+
     # Remove existing AMR mappers (broken user-attribute ones)
     for mapper_id in $(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" | \
@@ -320,13 +320,13 @@ if [[ -n "$CLIENT_UUID" && "$CLIENT_UUID" != "null" ]]; then
         kc_curl -X DELETE "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${mapper_id}" \
             -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1
     done
-    
+
     # Create AMR mapper (user attribute based - reads from user.attributes.amr)
     # This is set based on user's configured credentials (pwd, otp, hwk)
     AMR_MAPPER=$(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" | \
         jq -r '.[] | select(.name | contains("amr")) | .name')
-    
+
     if [[ -z "$AMR_MAPPER" ]]; then
         kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
             -H "Authorization: Bearer $TOKEN" \
@@ -367,12 +367,12 @@ create_user() {
     local is_admin="$8"
     local acp_coi_json
     acp_coi_json=$(build_json_array "$coi")
-    
+
     # Check if user exists
     local user_exists=$(kc_curl -H "Authorization: Bearer $TOKEN" \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${username}" | \
         jq -r '.[0].id // empty')
-    
+
     if [[ -n "$user_exists" ]]; then
         # Get user's credentials to determine AMR
         local creds=$(kc_curl -H "Authorization: Bearer $TOKEN" \
@@ -380,7 +380,7 @@ create_user() {
         local has_pwd=$(echo "$creds" | jq 'any(.[]; .type == "password")')
         local has_otp=$(echo "$creds" | jq 'any(.[]; .type == "otp")')
         local has_webauthn=$(echo "$creds" | jq 'any(.[]; .type == "webauthn" or .type == "webauthn-passwordless")')
-        
+
         # Build AMR array based on credentials AND clearance requirements
         # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
         local amr='["pwd"'
@@ -397,7 +397,7 @@ create_user() {
             [[ "$has_webauthn" == "true" ]] && amr="${amr},\"hwk\""
         fi
         amr="${amr}]"
-        
+
         log_info "User exists: ${username} (updating with amr=${amr})"
         # Update attributes on existing user with credential-based AMR
         local attrs_update="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"], \"amr\": ${amr}"
@@ -417,7 +417,7 @@ create_user() {
             }" >/dev/null 2>&1 || true
         return 0
     fi
-    
+
     # Determine initial AMR based on clearance requirements
     # TOP_SECRET gets hwk (will need to configure WebAuthn)
     # CONFIDENTIAL/SECRET start with pwd only (will need to configure TOTP)
@@ -425,14 +425,14 @@ create_user() {
     if [[ "$clearance" == "TOP_SECRET" ]]; then
         initial_amr='["pwd","hwk"]'
     fi
-    
+
     # Build attributes JSON
     local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"], \"amr\": ${initial_amr}"
     if [[ -n "$acp_coi_json" ]]; then
         attrs="${attrs}, \"acpCOI\": ${acp_coi_json}"
     fi
     attrs="${attrs}}"
-    
+
     # Create user
     local http_code=$(kc_curl -w "%{http_code}" -o /dev/null -X POST \
         "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users" \
@@ -447,35 +447,35 @@ create_user() {
             \"lastName\": \"${last_name}\",
             \"attributes\": ${attrs}
         }")
-    
+
     if [[ "$http_code" == "201" || "$http_code" == "409" ]]; then
         # Get user ID
         local user_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
             "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users?username=${username}" | \
             jq -r '.[0].id')
-        
+
         # Set password
         kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/reset-password" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"type\": \"password\", \"value\": \"${password}\", \"temporary\": false}"
-        
+
         # Assign dive-user role
         local user_role_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
             "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-user" | jq -r '.id')
-        
+
         if [[ -n "$user_role_id" && "$user_role_id" != "null" ]]; then
             kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
                 -d "[{\"id\": \"${user_role_id}\", \"name\": \"dive-user\"}]"
         fi
-        
+
         # Assign dive-admin role if admin
         if [[ "$is_admin" == "true" ]]; then
             local admin_role_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
                 "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" | jq -r '.id')
-            
+
             if [[ -n "$admin_role_id" && "$admin_role_id" != "null" ]]; then
                 kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
                     -H "Authorization: Bearer $TOKEN" \
@@ -483,7 +483,7 @@ create_user() {
                     -d "[{\"id\": \"${admin_role_id}\", \"name\": \"dive-admin\"}]"
             fi
         fi
-        
+
         if [[ "$is_admin" == "true" ]]; then
             log_success "Created admin: ${username} (${clearance}, amr=${initial_amr})"
         else
@@ -516,7 +516,7 @@ for level in 1 2 3 4; do
     if [[ -z "$coi" ]]; then
         coi="$(map_clearance_coi "$level")"
     fi
-    
+
     # Determine first/last name based on level
     case $level in
         1) first_name="Unclassified"; last_name="User" ;;
@@ -524,7 +524,7 @@ for level in 1 2 3 4; do
         3) first_name="Secret"; last_name="Officer" ;;
         4) first_name="TopSecret"; last_name="Director" ;;
     esac
-    
+
     create_user "$username" "$email" "$first_name" "$last_name" "$clearance" "$coi" "$TEST_USER_PASSWORD" "false"
 done
 

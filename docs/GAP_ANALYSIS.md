@@ -78,7 +78,7 @@ This gap analysis compares the DIVE V3 CLI User Guide (source of truth) against 
 ### Phase 3 Files Created/Modified
 
 - `terraform/pilot/backend.tf` - GCS backend configuration
-- `terraform/spoke/backend.tf` - GCS backend configuration  
+- `terraform/spoke/backend.tf` - GCS backend configuration
 - `terraform/modules/compute-vm/main.tf` - VM provisioning module
 - `terraform/modules/compute-vm/variables.tf` - Module variables
 - `terraform/modules/compute-vm/outputs.tf` - Module outputs

@@ -119,7 +119,7 @@ services:
       service: opal-client-base
     container_name: dive-spoke-esp-opal-client
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: http://opa-esp:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-esp-default}
@@ -171,7 +171,7 @@ services:
       KEYCLOAK_URL: https://keycloak-esp:8443
       KEYCLOAK_REALM: dive-v3-broker-esp
       KEYCLOAK_ISSUER: https://localhost:8451/realms/dive-v3-broker-esp
-      TRUSTED_ISSUERS: https://localhost:8451/realms/dive-v3-broker-esp,https://keycloak-esp:8443/realms/dive-v3-broker-esp,https://esp-idp.dive25.com/realms/dive-v3-broker-esp
+      TRUSTED_ISSUERS: https://localhost:8451/realms/dive-v3-broker-esp,https://keycloak-esp:8443/realms/dive-v3-broker-esp,https://esp-idp.dive25.com/realms/dive-v3-broker-esp,https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_ESP:?set KEYCLOAK_ADMIN_PASSWORD_ESP}
       OPA_URL: http://opa-esp:8181

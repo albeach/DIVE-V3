@@ -55,7 +55,7 @@ fi
 
 # Source 2: Detect from running container port mapping
 if [[ -z "$SPOKE_KC_PORT" ]]; then
-    SPOKE_KC_PORT=$(docker port "${CODE_LOWER}-keycloak-${CODE_LOWER}-1" 8443/tcp 2>/dev/null | sed 's/.*://' | head -1)
+    SPOKE_KC_PORT=$(docker port "dive-spoke-${CODE_LOWER}-keycloak" 8443/tcp 2>/dev/null | sed 's/.*://' | head -1)
 fi
 
 # Source 3: Use nato-countries.sh port offsets
@@ -84,8 +84,8 @@ fi
 
 log_info "Using Keycloak port: ${SPOKE_KC_PORT}"
 
-# Container names
-SPOKE_KC_CONTAINER="${CODE_LOWER}-keycloak-${CODE_LOWER}-1"
+# Container names (new naming pattern: dive-spoke-lva-keycloak)
+SPOKE_KC_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
 HUB_BACKEND_CONTAINER="dive-hub-backend"
 
 # Get spoke admin password
@@ -192,21 +192,21 @@ HUB_CLIENT_UUID=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker/c
 if [[ -n "$HUB_CLIENT_UUID" && "$HUB_CLIENT_UUID" != "null" ]]; then
     HUB_SECRET=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker/clients/${HUB_CLIENT_UUID}/client-secret" \
         -H "Authorization: Bearer ${HUB_TOKEN}" | jq -r '.value')
-    
+
     if [[ -n "$HUB_SECRET" && "$HUB_SECRET" != "null" ]]; then
         # Update spoke's usa-idp
         SPOKE_USA_IDP=$(curl -sk "https://localhost:${SPOKE_KC_PORT}/admin/realms/${SPOKE_REALM}/identity-provider/instances/usa-idp" \
             -H "Authorization: Bearer ${SPOKE_TOKEN}")
-        
+
         if [[ -n "$SPOKE_USA_IDP" && $(echo "$SPOKE_USA_IDP" | jq -r '.alias // empty') != "" ]]; then
             UPDATED_USA_IDP=$(echo "$SPOKE_USA_IDP" | jq --arg secret "$HUB_SECRET" '.config.clientSecret = $secret')
-            
+
             HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT \
                 "https://localhost:${SPOKE_KC_PORT}/admin/realms/${SPOKE_REALM}/identity-provider/instances/usa-idp" \
                 -H "Authorization: Bearer ${SPOKE_TOKEN}" \
                 -H "Content-Type: application/json" \
                 -d "$UPDATED_USA_IDP")
-            
+
             if [[ "$HTTP_CODE" == "204" || "$HTTP_CODE" == "200" ]]; then
                 log_success "Updated spoke's usa-idp with Hub's client secret"
             else

@@ -901,32 +901,32 @@ pilot_deploy() {
 
 pilot_provision_vm() {
     log_step "Provisioning GCP Compute VM with Terraform..."
-    
+
     local tf_dir="${DIVE_ROOT}/terraform/pilot"
-    
+
     if [ ! -f "${tf_dir}/main.tf" ]; then
         log_error "Terraform configuration not found at ${tf_dir}"
         return 1
     fi
-    
+
     cd "${tf_dir}"
-    
+
     # Check if we need to use the compute-vm module
     if [ -f "${DIVE_ROOT}/terraform/modules/compute-vm/main.tf" ]; then
         log_verbose "Using compute-vm module for VM provisioning"
     fi
-    
+
     # Initialize Terraform with GCS backend
     log_verbose "Initializing Terraform..."
     if ! terraform init -input=false; then
         log_error "Terraform init failed"
         return 1
     fi
-    
+
     # Check for plan changes
     log_verbose "Planning Terraform changes..."
     terraform plan -out=tfplan -input=false
-    
+
     # Apply
     log_verbose "Applying Terraform..."
     if terraform apply -input=false tfplan; then
@@ -937,7 +937,7 @@ pilot_provision_vm() {
         rm -f tfplan
         return 1
     fi
-    
+
     cd "${DIVE_ROOT}"
 }
 
@@ -945,16 +945,16 @@ pilot_wait_for_vm() {
     local timeout="${PILOT_WAIT_TIMEOUT:-180}"
     local elapsed=0
     local delay=5
-    
+
     log_verbose "Waiting for VM to be ready (timeout: ${timeout}s)..."
-    
+
     while [ $elapsed -lt $timeout ]; do
         # Check if VM is running
         local status=$(gcloud compute instances describe "$PILOT_VM" \
             --zone="$PILOT_ZONE" \
             --project="$GCP_PROJECT" \
             --format='get(status)' 2>/dev/null)
-        
+
         if [ "$status" = "RUNNING" ]; then
             # Check if we can SSH
             if gcloud compute ssh "$PILOT_VM" \
@@ -966,19 +966,19 @@ pilot_wait_for_vm() {
                 return 0
             fi
         fi
-        
+
         sleep $delay
         elapsed=$((elapsed + delay))
         log_verbose "Waiting for VM... (${elapsed}s/${timeout}s) - status: ${status:-unknown}"
     done
-    
+
     log_error "VM did not become ready within ${timeout}s"
     return 1
 }
 
 pilot_destroy() {
     log_warn "Destroying pilot VM and all resources..."
-    
+
     # Require confirmation
     if [ "$FORCE" != true ]; then
         echo -e "${YELLOW}This will destroy:${NC}"
@@ -989,14 +989,14 @@ pilot_destroy() {
         read -p "Type 'yes' to confirm: " confirm
         [ "$confirm" != "yes" ] && exit 1
     fi
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "terraform destroy -auto-approve"
         return 0
     fi
-    
+
     local tf_dir="${DIVE_ROOT}/terraform/pilot"
-    
+
     if [ ! -f "${tf_dir}/main.tf" ]; then
         # Fallback to gcloud delete
         log_warn "No Terraform config, using gcloud to delete VM..."
@@ -1007,12 +1007,12 @@ pilot_destroy() {
             --quiet
         return $?
     fi
-    
+
     cd "${tf_dir}"
     terraform init -input=false
     terraform destroy -auto-approve
     cd "${DIVE_ROOT}"
-    
+
     log_success "Pilot VM destroyed"
 }
 

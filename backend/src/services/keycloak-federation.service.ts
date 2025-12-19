@@ -1,17 +1,17 @@
 /**
  * Keycloak Federation Service
- * 
+ *
  * Manages Identity Provider (IdP) configurations for cross-border federation.
  * Automatically creates bidirectional OIDC trust relationships between instances.
- * 
+ *
  * Phase 3 Enhancement: Auto-link IdPs during spoke approval
- * 
+ *
  * Security:
  * - Uses GCP Secret Manager for federation client secrets
  * - Validates IdP endpoints before configuration
  * - Configures protocol mappers for DIVE attributes
  * - Supports both OIDC and SAML protocols
- * 
+ *
  * @module keycloak-federation
  */
 
@@ -25,37 +25,37 @@ import { logger } from '../utils/logger';
 export interface IFederationConfig {
   /** Alias for the IdP (e.g., 'gbr-idp', 'fra-idp') */
   alias: string;
-  
+
   /** Display name shown to users (e.g., 'United Kingdom', 'France') */
   displayName: string;
-  
+
   /** Instance code (e.g., 'GBR', 'FRA', 'USA') */
   instanceCode: string;
-  
+
   /** Base URL of the IdP (e.g., 'https://localhost:8446') - for browser redirects */
   idpBaseUrl: string;
-  
+
   /** Internal URL for backend communication (e.g., 'https://gbr-keycloak-gbr-1:8443'). If not set, uses idpBaseUrl. */
   idpInternalUrl?: string;
-  
+
   /** Realm name on the IdP (e.g., 'dive-v3-broker-gbr') */
   idpRealm: string;
-  
+
   /** Protocol: 'oidc' or 'saml' */
   protocol: 'oidc' | 'saml';
-  
+
   /** OAuth client ID for cross-border federation */
   clientId: string;
-  
+
   /** OAuth client secret (from GCP Secret Manager) */
   clientSecret: string;
-  
+
   /** Enable immediately after creation */
   enabled?: boolean;
-  
+
   /** Store user in local database on first login */
   storeToken?: boolean;
-  
+
   /** Sync mode: 'IMPORT' (create local user) or 'FORCE' (use IdP as source of truth) */
   syncMode?: 'IMPORT' | 'FORCE';
 }
@@ -80,8 +80,10 @@ export interface IFederationResult {
 // ============================================
 
 export class KeycloakFederationService {
-  private kcAdmin: KcAdminClient | null = null;
-  private realm: string;
+  public kcAdmin: KcAdminClient | null = null;  // Public for remote service injection
+  public realm: string;                          // Public for remote service injection
+  public lastAuthTime: number = 0;               // Public for remote service injection
+  private readonly TOKEN_REFRESH_THRESHOLD_MS = 30000; // Re-auth if token older than 30 seconds
 
   constructor(realm?: string) {
     this.realm = realm || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
@@ -89,9 +91,20 @@ export class KeycloakFederationService {
 
   /**
    * Initialize Keycloak Admin Client
+   *
+   * Token Management:
+   * - Access tokens expire in 60 seconds (Keycloak default)
+   * - Re-authenticate if last auth was more than 30 seconds ago
+   * - This ensures we always have a valid token for API calls
    */
   private async initialize(): Promise<void> {
-    if (this.kcAdmin) return;
+    const now = Date.now();
+    const tokenAge = now - this.lastAuthTime;
+
+    // Re-authenticate if no client OR token is older than threshold
+    if (this.kcAdmin && tokenAge < this.TOKEN_REFRESH_THRESHOLD_MS) {
+      return;
+    }
 
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
     const adminUser = process.env.KEYCLOAK_ADMIN || 'admin';
@@ -101,33 +114,51 @@ export class KeycloakFederationService {
       throw new Error('KEYCLOAK_ADMIN_PASSWORD not configured');
     }
 
-    this.kcAdmin = new KcAdminClient({
-      baseUrl: keycloakUrl,
-      realmName: 'master',
-    });
+    // Create new client or reuse existing
+    if (!this.kcAdmin) {
+      this.kcAdmin = new KcAdminClient({
+        baseUrl: keycloakUrl,
+        realmName: 'master',
+      });
+    }
 
-    await this.kcAdmin.auth({
-      username: adminUser,
-      password: adminPassword,
-      grantType: 'password',
-      clientId: 'admin-cli',
-    });
+    try {
+      await this.kcAdmin.auth({
+        username: adminUser,
+        password: adminPassword,
+        grantType: 'password',
+        clientId: 'admin-cli',
+      });
 
-    // Set target realm
-    this.kcAdmin.setConfig({ realmName: this.realm });
+      this.lastAuthTime = Date.now();
 
-    logger.info('Keycloak Federation Service initialized', {
-      keycloakUrl,
-      realm: this.realm,
-    });
+      // Set target realm
+      this.kcAdmin.setConfig({ realmName: this.realm });
+
+      logger.info('Keycloak Federation Service initialized', {
+        keycloakUrl,
+        realm: this.realm,
+        tokenAgeMs: tokenAge,
+        refreshReason: tokenAge >= this.TOKEN_REFRESH_THRESHOLD_MS ? 'token_expired' : 'initial_auth',
+      });
+    } catch (error) {
+      // Reset client on auth failure to force full re-init next time
+      this.kcAdmin = null;
+      this.lastAuthTime = 0;
+      logger.error('Failed to authenticate to Keycloak', {
+        keycloakUrl,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
   }
 
   /**
    * Ensure DIVE custom client scopes exist in the realm
-   * 
+   *
    * These scopes are required for federation to work properly.
    * They allow the USA Hub's IdP to request DIVE-specific attributes.
-   * 
+   *
    * Required scopes:
    * - clearance: User's security clearance level
    * - countryOfAffiliation: User's country code
@@ -193,7 +224,7 @@ export class KeycloakFederationService {
             protocol: scopeConfig.protocol,
             attributes: scopeConfig.attributes,
           });
-          
+
           logger.info('Created DIVE client scope', {
             realm: this.realm,
             scope: scopeConfig.name,
@@ -220,11 +251,11 @@ export class KeycloakFederationService {
 
   /**
    * Ensure a client scope has a protocol mapper to include user attributes in tokens
-   * 
+   *
    * CRITICAL: Configuration for each attribute type:
-   * - Single-valued (clearance, countryOfAffiliation, uniqueID): 
+   * - Single-valued (clearance, countryOfAffiliation, uniqueID):
    *   aggregate.attrs=true, multivalued=false, jsonType=String
-   * - Multi-valued (acpCOI): 
+   * - Multi-valued (acpCOI):
    *   multivalued=true, jsonType=String (NO aggregate.attrs)
    *   Keycloak v26+ requires User Profile attribute to have multivalued=true
    */
@@ -237,20 +268,20 @@ export class KeycloakFederationService {
       // Get the scope
       const scopes = await this.kcAdmin.clientScopes.find({ realm: this.realm });
       const scope = scopes.find((s: any) => s.name === scopeName);
-      
+
       if (!scope || !scope.id) {
         logger.warn('Client scope not found for protocol mapper', { scopeName });
         return;
       }
 
       // Check if mapper already exists
-      const existingMappers = await this.kcAdmin.clientScopes.listProtocolMappers({ 
+      const existingMappers = await this.kcAdmin.clientScopes.listProtocolMappers({
         id: scope.id,
-        realm: this.realm 
+        realm: this.realm
       });
-      
+
       const mapperExists = existingMappers.some((m: any) => m.name === `${scopeName}-mapper`);
-      
+
       if (mapperExists) {
         logger.debug('Protocol mapper already exists for scope', { scopeName });
         return;
@@ -258,7 +289,7 @@ export class KeycloakFederationService {
 
       // Determine mapper configuration based on attribute type
       const isMultiValued = scopeName === 'acpCOI';
-      
+
       const mapperConfig: Record<string, string> = {
         'user.attribute': scopeName,
         'claim.name': scopeName,
@@ -305,7 +336,7 @@ export class KeycloakFederationService {
 
   /**
    * Ensure cross-border federation client exists in the realm
-   * 
+   *
    * This client is used by OTHER instances' Keycloak brokers when federating TO this instance.
    * Example: USA Hub's gbr-idp uses this client to connect to GBR Keycloak.
    */
@@ -328,6 +359,24 @@ export class KeycloakFederationService {
           clientId,
         });
 
+        // Build comprehensive redirect URIs for cross-border federation
+        // Must include all Keycloak broker endpoints AND frontend callback URLs
+        const redirectUris = [
+          // Keycloak broker endpoints (internal and external)
+          'https://localhost:*/realms/*/broker/*/endpoint',
+          'https://dive-hub-keycloak:*/realms/*/broker/*/endpoint',
+          'https://dive-spoke-*-keycloak:*/realms/*/broker/*/endpoint',
+          // Frontend OAuth callbacks (all possible ports)
+          'https://localhost:3000/*',   // Hub frontend
+          'https://localhost:300?/*',   // Spoke frontends 3001-3009
+          'https://localhost:30??/*',   // Spoke frontends 3010-3099
+          // Wild card for development flexibility
+          'https://localhost:*/*',
+          // Production URLs
+          'https://*-app.dive25.com/*',
+          'https://*-idp.dive25.com/*',
+        ];
+
         await this.kcAdmin.clients.create({
           realm: this.realm,
           clientId: clientId,
@@ -339,15 +388,8 @@ export class KeycloakFederationService {
           standardFlowEnabled: true,
           directAccessGrantsEnabled: false,
           serviceAccountsEnabled: false,
-          redirectUris: [
-            'https://*/realms/*/broker/*/endpoint',  // Wildcard for all broker callbacks
-          ],
-          webOrigins: [
-            'https://localhost:8443',  // USA Hub
-            'https://localhost:8446',  // GBR Spoke
-            'https://localhost:8444',  // FRA Spoke
-            'https://localhost:8447',  // DEU Spoke
-          ],
+          redirectUris,
+          webOrigins: ['+'],  // Allow all origins that match redirect URIs
           attributes: {
             'pkce.code.challenge.method': 'S256',
           },
@@ -358,10 +400,34 @@ export class KeycloakFederationService {
           clientId,
         });
       } else {
-        logger.debug('Cross-border federation client already exists', {
-          realm: this.realm,
-          clientId,
-        });
+        // Client exists - update redirect URIs to ensure they're comprehensive
+        const existingClient = existingClients[0];
+        if (existingClient.id) {
+          // Build comprehensive redirect URIs
+          const redirectUris = [
+            'https://localhost:*/realms/*/broker/*/endpoint',
+            'https://dive-hub-keycloak:*/realms/*/broker/*/endpoint',
+            'https://dive-spoke-*-keycloak:*/realms/*/broker/*/endpoint',
+            'https://localhost:3000/*',
+            'https://localhost:300?/*',
+            'https://localhost:30??/*',
+            'https://localhost:*/*',
+            'https://*-app.dive25.com/*',
+            'https://*-idp.dive25.com/*',
+          ];
+
+          await this.kcAdmin.clients.update(
+            { realm: this.realm, id: existingClient.id },
+            {
+              redirectUris,
+              webOrigins: ['+'],
+            }
+          );
+          logger.info('Cross-border federation client redirect URIs updated', {
+            realm: this.realm,
+            clientId,
+          });
+        }
       }
 
       // Assign DIVE scopes to the client
@@ -378,8 +444,112 @@ export class KeycloakFederationService {
   }
 
   /**
+   * Ensure a country-specific federation client exists on this realm
+   *
+   * This creates clients like dive-v3-client-usa on a spoke Keycloak
+   * for Hub users authenticating via federation.
+   *
+   * @param clientId - The client ID (e.g., dive-v3-client-usa)
+   * @param clientSecret - The shared secret for the client
+   * @param partnerIdpUrl - The partner's public Keycloak URL (for redirect URIs)
+   * @param partnerRealm - The partner's realm name (for broker endpoint)
+   */
+  async ensureFederationClient(
+    clientId: string,
+    clientSecret: string,
+    partnerIdpUrl: string,
+    partnerRealm: string
+  ): Promise<void> {
+    await this.initialize();
+
+    if (!this.kcAdmin) {
+      throw new Error('Keycloak Admin client not initialized');
+    }
+
+    // Extract instance code from clientId (e.g., dive-v3-client-usa -> usa)
+    const instanceCode = clientId.replace('dive-v3-client-', '').toUpperCase();
+
+    try {
+      const existingClients = await this.kcAdmin.clients.find({
+        realm: this.realm,
+        clientId: clientId,
+      });
+
+      const redirectUris = [
+        `${partnerIdpUrl}/realms/${partnerRealm}/broker/*-idp/endpoint`,
+        `${partnerIdpUrl}/realms/${partnerRealm}/broker/*-idp/endpoint/*`,
+        `${partnerIdpUrl}/*`,
+        'https://localhost:*/*',  // Development flexibility
+      ];
+
+      const webOrigins = [partnerIdpUrl, '+'];
+
+      if (!existingClients || existingClients.length === 0) {
+        logger.info('Creating federation client for partner', {
+          realm: this.realm,
+          clientId,
+          partnerIdpUrl,
+          partnerRealm,
+        });
+
+        await this.kcAdmin.clients.create({
+          realm: this.realm,
+          clientId,
+          name: `Federation Client for ${instanceCode}`,
+          enabled: true,
+          clientAuthenticatorType: 'client-secret',
+          secret: clientSecret,
+          protocol: 'openid-connect',
+          publicClient: false,
+          standardFlowEnabled: true,
+          directAccessGrantsEnabled: false,
+          serviceAccountsEnabled: false,
+          redirectUris,
+          webOrigins,
+          attributes: {
+            'pkce.code.challenge.method': 'S256',
+          },
+        });
+
+        logger.info('Federation client created', {
+          realm: this.realm,
+          clientId,
+        });
+      } else {
+        // Update existing client's redirect URIs
+        const existingClient = existingClients[0];
+        if (existingClient.id) {
+          await this.kcAdmin.clients.update(
+            { realm: this.realm, id: existingClient.id },
+            {
+              redirectUris,
+              webOrigins,
+              secret: clientSecret,
+            }
+          );
+          logger.info('Federation client updated', {
+            realm: this.realm,
+            clientId,
+          });
+        }
+      }
+
+      // Assign DIVE scopes to the client
+      await this.assignDiveScopesToClient(clientId);
+
+    } catch (error) {
+      logger.error('Failed to ensure federation client', {
+        realm: this.realm,
+        clientId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Assign DIVE custom scopes to a client
-   * 
+   *
    * This allows the client to request DIVE-specific attributes during authentication.
    */
   private async assignDiveScopesToClient(clientId: string): Promise<void> {
@@ -426,7 +596,7 @@ export class KeycloakFederationService {
               id: clientUuid,
               clientScopeId: scope.id,
             });
-            
+
             logger.info('Assigned DIVE scope to client as DEFAULT', {
               realm: this.realm,
               clientId,
@@ -460,7 +630,7 @@ export class KeycloakFederationService {
 
   /**
    * Create or update OIDC Identity Provider
-   * 
+   *
    * This establishes trust with another DIVE instance's Keycloak.
    * Users from the remote instance can authenticate here via federation.
    */
@@ -479,7 +649,7 @@ export class KeycloakFederationService {
 
     // Use internal URL for backend calls, public URL for browser redirects
     const backendUrl = idpInternalUrl || idpBaseUrl;
-    
+
     logger.info('Creating OIDC Identity Provider', {
       alias,
       displayName,
@@ -529,13 +699,13 @@ export class KeycloakFederationService {
         // OIDC Discovery (backend URL for API calls)
         useJwksUrl: 'true',
         discoveryEndpoint: discoveryUrl,
-        
+
         // Manual endpoint configuration
         // HYBRID URL STRATEGY (Critical for Docker environments):
         // - authorizationUrl: PUBLIC URL (browser redirects from host machine)
         // - issuer: PUBLIC URL (must match token's 'iss' claim from frontendUrl)
         // - tokenUrl, jwksUrl, userInfoUrl, logoutUrl: INTERNAL URL (backend-to-backend via Docker network)
-        // 
+        //
         // Why internal URLs for backend communication:
         // - Containers cannot reach localhost:8446 (host port mapping)
         // - Must use container hostnames (e.g., gbr-keycloak-gbr-1:8443)
@@ -546,30 +716,30 @@ export class KeycloakFederationService {
         userInfoUrl: `${backendUrl}/realms/${idpRealm}/protocol/openid-connect/userinfo`,
         jwksUrl: `${backendUrl}/realms/${idpRealm}/protocol/openid-connect/certs`,
         issuer: `${idpBaseUrl}/realms/${idpRealm}`,
-        
+
         // OAuth credentials
         clientId,
         clientSecret,
         clientAuthMethod: 'client_secret_post',
-        
+
         // Scopes - ONLY request standard OIDC scopes
-        // DIVE attributes (clearance, countryOfAffiliation, acpCOI, uniqueID) come from 
+        // DIVE attributes (clearance, countryOfAffiliation, acpCOI, uniqueID) come from
         // protocol mappers on the cross-border client, NOT from scope requests
         defaultScope: 'openid profile email',
-        
+
         // Token validation
         // In development: disable signature validation for self-signed certs
         // In production: enable signature validation
         validateSignature: process.env.NODE_ENV === 'production' ? 'true' : 'false',
         backchannelSupported: 'false',
-        
-        // Sync mode
-        syncMode: config.syncMode || 'IMPORT',
-        
+
+        // Sync mode - FORCE to always update user attributes from IdP
+        syncMode: config.syncMode || 'FORCE',
+
         // PKCE (Proof Key for Code Exchange) - Required for security
         pkceEnabled: 'true',
         pkceMethod: 'S256',
-        
+
         // UI hints
         guiOrder: '',
         hideOnLoginPage: 'false',
@@ -610,7 +780,7 @@ export class KeycloakFederationService {
 
   /**
    * Create protocol mappers for DIVE V3 attributes
-   * 
+   *
    * Maps claims from the federated IdP to user attributes:
    * - uniqueID → sub (or preferred_username)
    * - clearance → clearance
@@ -755,7 +925,8 @@ export class KeycloakFederationService {
   }
 
   /**
-   * Update existing Identity Provider
+   * Update existing Identity Provider with full configuration
+   * This method ensures all URL endpoints are updated when container names change
    */
   async updateIdentityProvider(alias: string, config: Partial<IFederationConfig>): Promise<void> {
     await this.initialize();
@@ -769,28 +940,56 @@ export class KeycloakFederationService {
       throw new Error(`Identity Provider not found: ${alias}`);
     }
 
+    // existing.config contains the full IdP configuration from Keycloak
+    const existingIdp = existing.config;
+
+    // Build complete updates including URL endpoints
     const updates: any = {
-      ...existing.config,
+      alias: existingIdp.alias,
+      providerId: existingIdp.providerId,
+      enabled: config.enabled !== undefined ? config.enabled : existingIdp.enabled,
+      displayName: config.displayName || existingIdp.displayName,
+      config: {
+        ...existingIdp.config,
+      },
     };
 
-    if (config.displayName) {
-      updates.displayName = config.displayName;
+    // Update client credentials if provided
+    if (config.clientId) {
+      updates.config.clientId = config.clientId;
     }
-
-    if (config.enabled !== undefined) {
-      updates.enabled = config.enabled;
-    }
-
     if (config.clientSecret) {
-      updates.config = {
-        ...updates.config,
-        clientSecret: config.clientSecret,
-      };
+      updates.config.clientSecret = config.clientSecret;
+    }
+
+    // Update ALL URL endpoints if idpBaseUrl or idpInternalUrl are provided
+    // This ensures container name changes are reflected
+    const idpBaseUrl = config.idpBaseUrl;
+    const idpInternalUrl = config.idpInternalUrl || idpBaseUrl;
+    const idpRealm = config.idpRealm;
+
+    if (idpBaseUrl && idpRealm) {
+      // Browser-facing URL (authorization, logout)
+      updates.config.authorizationUrl = `${idpBaseUrl}/realms/${idpRealm}/protocol/openid-connect/auth`;
+      updates.config.logoutUrl = `${idpBaseUrl}/realms/${idpRealm}/protocol/openid-connect/logout`;
+      updates.config.issuer = `${idpBaseUrl}/realms/${idpRealm}`;
+    }
+
+    if (idpInternalUrl && idpRealm) {
+      // Backend-to-backend URLs (token, userInfo, jwks)
+      updates.config.tokenUrl = `${idpInternalUrl}/realms/${idpRealm}/protocol/openid-connect/token`;
+      updates.config.userInfoUrl = `${idpInternalUrl}/realms/${idpRealm}/protocol/openid-connect/userinfo`;
+      updates.config.jwksUrl = `${idpInternalUrl}/realms/${idpRealm}/protocol/openid-connect/certs`;
     }
 
     await this.kcAdmin.identityProviders.update({ alias }, updates);
 
-    logger.info('Identity Provider updated', { alias });
+    logger.info('Identity Provider updated with full configuration', {
+      alias,
+      hasBaseUrl: !!idpBaseUrl,
+      hasInternalUrl: !!idpInternalUrl,
+      realm: idpRealm,
+    });
   }
 
   /**
@@ -830,16 +1029,16 @@ export class KeycloakFederationService {
 
   /**
    * Create bidirectional federation between two instances
-   * 
+   *
    * TRUE BIDIRECTIONAL: Creates IdPs in BOTH Keycloak instances.
-   * 
+   *
    * Direction 1 (Local → Remote): Create remote-idp in local Keycloak
    * Direction 2 (Remote → Local): Create local-idp in remote Keycloak
-   * 
+   *
    * Example: USA ↔ GBR
    *   - Creates gbr-idp in USA Hub Keycloak
    *   - Creates usa-idp in GBR Spoke Keycloak
-   * 
+   *
    * Result: Users from both instances can authenticate at either instance
    */
   async createBidirectionalFederation(options: {
@@ -853,7 +1052,7 @@ export class KeycloakFederationService {
     localRealm?: string;          // NEW: For reverse IdP realm
     remoteKeycloakAdminUrl?: string;  // NEW: Remote Keycloak Admin API
     remoteKeycloakAdminPassword?: string;  // NEW: Remote admin password
-    federationClientId?: string;
+    federationClientId?: string;  // DEPRECATED: Use country-specific clients instead
   }): Promise<{ local: IFederationResult; remote: IFederationResult }> {
     const {
       localInstanceCode,
@@ -861,8 +1060,14 @@ export class KeycloakFederationService {
       remoteName,
       remoteIdpUrl,
       remoteRealm,
-      federationClientId = 'dive-v3-cross-border-client',
     } = options;
+
+    // Use country-specific client IDs for federation
+    // Pattern: dive-v3-client-{requesting_country_code}
+    // - Direction 1 (lva-idp in Hub): Hub authenticates with LVA → uses client on LVA for Hub (dive-v3-client-usa)
+    // - Direction 2 (usa-idp in LVA): LVA authenticates with Hub → uses client on Hub for LVA (dive-v3-client-lva)
+    const clientForLocalToRemote = `dive-v3-client-${localInstanceCode.toLowerCase()}`;  // Client on remote Keycloak
+    const clientForRemoteToLocal = `dive-v3-client-${remoteInstanceCode.toLowerCase()}`; // Client on local Keycloak
 
     logger.info('Creating TRUE bidirectional federation', {
       localInstanceCode,
@@ -898,10 +1103,13 @@ export class KeycloakFederationService {
     // DIRECTION 1: Create remote IdP in LOCAL Keycloak
     // ============================================
     const remoteAlias = `${remoteInstanceCode.toLowerCase()}-idp`;
-    
+
     // Determine internal URL for backend communication
     const remoteInternalUrl = options.remoteKeycloakAdminUrl || this.getInternalKeycloakUrl(remoteInstanceCode, remoteIdpUrl);
-    
+
+    // Direction 1: Create IdP in local Keycloak to authenticate with remote
+    // The client used here must exist on the REMOTE Keycloak (e.g., dive-v3-client-usa on LVA)
+    // This client is created when the remote spoke registers with the Hub
     const localResult = await this.createOIDCIdentityProvider({
       alias: remoteAlias,
       displayName: remoteName,
@@ -910,11 +1118,11 @@ export class KeycloakFederationService {
       idpInternalUrl: remoteInternalUrl, // Internal URL for backend
       idpRealm: remoteRealm,
       protocol: 'oidc',
-      clientId: federationClientId,
+      clientId: clientForLocalToRemote,  // Client on remote Keycloak for local users
       clientSecret: federationSecret,
       enabled: true,
       storeToken: true,
-      syncMode: 'IMPORT',
+      syncMode: 'FORCE',  // Use FORCE to update user attributes from IdP on each login
     });
 
     logger.info('Direction 1 complete: Remote IdP created in local Keycloak', {
@@ -926,12 +1134,12 @@ export class KeycloakFederationService {
     // ============================================
     // DIRECTION 2: Create local IdP in REMOTE Keycloak
     // ============================================
-    
+
     // Determine local instance details
     const localName = options.localName || this.getInstanceName(localInstanceCode);
     const localIdpUrl = options.localIdpUrl || this.getLocalIdpUrl();
     const localRealm = options.localRealm || this.getLocalRealmName(localInstanceCode);
-    
+
     logger.info('Direction 2: Creating local IdP in remote Keycloak', {
       remoteInstanceCode,
       localInstanceCode,
@@ -943,13 +1151,13 @@ export class KeycloakFederationService {
     try {
       // Use remoteKeycloakAdminUrl if provided, otherwise use remoteIdpUrl
       const adminUrl = options.remoteKeycloakAdminUrl || remoteIdpUrl;
-      
+
       logger.debug('Connecting to remote Keycloak Admin API', {
         adminUrl,
         remoteIdpUrl,
         usesSeparateAdminUrl: !!options.remoteKeycloakAdminUrl,
       });
-      
+
       // Create separate Keycloak Admin client for REMOTE instance
       const remoteKeycloakService = await this.createRemoteKeycloakClient(
         adminUrl,  // Use admin URL for API connection
@@ -957,11 +1165,27 @@ export class KeycloakFederationService {
         options.remoteKeycloakAdminPassword
       );
 
+      // CRITICAL: Ensure the client for Hub users exists on the spoke
+      // e.g., dive-v3-client-usa on LVA Keycloak for USA Hub users
+      logger.info('Ensuring client exists on remote Keycloak for local users', {
+        clientId: clientForLocalToRemote,
+        targetRealm: remoteRealm,
+      });
+      await remoteKeycloakService.ensureFederationClient(
+        clientForLocalToRemote,
+        federationSecret,
+        localIdpUrl,  // Hub's public URL for redirect
+        this.realm    // Hub's realm for broker endpoint
+      );
+
       const localAlias = `${localInstanceCode.toLowerCase()}-idp`;
-      
+
       // Determine local internal URL for backend communication
       const localInternalUrl = this.getInternalKeycloakUrl(localInstanceCode, localIdpUrl);
-      
+
+      // Direction 2: Create IdP in remote Keycloak to authenticate with local
+      // The client used here must exist on the LOCAL Keycloak (e.g., dive-v3-client-lva on Hub)
+      // This client was created when the spoke registered with the Hub
       const remoteResult = await remoteKeycloakService.createOIDCIdentityProvider({
         alias: localAlias,
         displayName: localName,
@@ -970,7 +1194,7 @@ export class KeycloakFederationService {
         idpInternalUrl: localInternalUrl,  // Internal URL for backend
         idpRealm: localRealm,
         protocol: 'oidc',
-        clientId: federationClientId,
+        clientId: clientForRemoteToLocal,  // Client on local Keycloak for remote users
         clientSecret: federationSecret,
         enabled: true,
         storeToken: true,
@@ -991,7 +1215,7 @@ export class KeycloakFederationService {
       });
 
       return { local: localResult, remote: remoteResult };
-      
+
     } catch (error) {
       logger.error('Failed to create reverse IdP (direction 2)', {
         remoteInstanceCode,
@@ -999,7 +1223,7 @@ export class KeycloakFederationService {
         error: error instanceof Error ? error.message : 'Unknown error',
         warning: 'Federation is UNIDIRECTIONAL - only local→remote works',
       });
-      
+
       // Return partial success with remote as undefined
       // This maintains backward compatibility if remote creation fails
       throw new Error(
@@ -1013,35 +1237,35 @@ export class KeycloakFederationService {
 
   /**
    * Get internal Keycloak URL for backend-to-backend communication
-   * 
+   *
    * In local development: uses Docker container names (e.g., gbr-keycloak-gbr-1:8443)
    * In production: uses external domains (same as public URL)
    */
   private getInternalKeycloakUrl(instanceCode: string, publicUrl: string): string {
     const env = process.env.NODE_ENV || 'development';
     const code = instanceCode.toUpperCase();
-    
+
     if (env === 'development' || env === 'local') {
       // Local development: use Docker container names for internal communication
-      // Use HTTPS with self-signed certificates
-      const containerMap: Record<string, string> = {
-        'USA': 'https://dive-hub-keycloak:8080',     // USA Hub internal
-        'GBR': 'https://gbr-keycloak-gbr-1:8443',    // GBR Spoke internal
-        'FRA': 'https://fra-keycloak-fra-1:8443',    // FRA Spoke internal
-        'DEU': 'https://deu-keycloak-deu-1:8443',    // DEU Spoke internal
-      };
-      
-      const internalUrl = containerMap[code];
-      if (internalUrl) {
-        logger.debug('Using internal Docker URL for backend communication', {
-          instanceCode: code,
-          publicUrl,
-          internalUrl,
-        });
-        return internalUrl;
+      // Container naming convention: dive-spoke-{code}-keycloak (or dive-hub-keycloak for USA)
+      let internalUrl: string;
+
+      if (code === 'USA') {
+        // USA Hub uses dive-hub-keycloak with HTTPS on port 8443
+        internalUrl = 'https://dive-hub-keycloak:8443';
+      } else {
+        // All spokes use dive-spoke-{code}-keycloak with HTTPS on 8443
+        internalUrl = `https://dive-spoke-${code.toLowerCase()}-keycloak:8443`;
       }
+
+      logger.debug('Using internal Docker URL for backend communication', {
+        instanceCode: code,
+        publicUrl,
+        internalUrl,
+      });
+      return internalUrl;
     }
-    
+
     // Production or unknown instance: use public URL for everything
     logger.debug('Using public URL for backend communication (production mode)', {
       instanceCode: code,
@@ -1052,10 +1276,10 @@ export class KeycloakFederationService {
 
   /**
    * Create Keycloak Admin client for remote instance
-   * 
+   *
    * This allows us to create IdPs in the remote Keycloak, not just local.
    * For local development, tries common passwords.
-   * 
+   *
    * Environment-aware:
    * - Local dev: Uses Docker internal URLs (gbr-keycloak-gbr-1:8443)
    * - Production: Uses external domains (gbr-idp.dive25.com)
@@ -1067,15 +1291,15 @@ export class KeycloakFederationService {
   ): Promise<KeycloakFederationService> {
     // Extract base URL from IdP URL (remove /realms/... path)
     const baseUrl = remoteIdpUrl.replace(/\/realms\/.*$/, '');
-    
+
     // Get admin credentials
     const adminUsername = process.env.KEYCLOAK_ADMIN || 'admin';
-    
+
     // Determine password based on environment
     const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-    
+
     let passwordsToTry: string[];
-    
+
     if (isDevelopment) {
       // Local dev: Try multiple common passwords
       passwordsToTry = [
@@ -1105,7 +1329,7 @@ export class KeycloakFederationService {
     for (const password of passwordsToTry) {
       try {
         const remoteService = new KeycloakFederationService(remoteRealm);
-        
+
         remoteService.kcAdmin = new KcAdminClient({
           baseUrl,
           realmName: 'master',
@@ -1117,6 +1341,9 @@ export class KeycloakFederationService {
           grantType: 'password',
           clientId: 'admin-cli',
         });
+
+        // CRITICAL: Set lastAuthTime so initialize() won't re-authenticate with wrong password
+        remoteService.lastAuthTime = Date.now();
 
         remoteService.kcAdmin.setConfig({ realmName: remoteRealm });
         remoteService.realm = remoteRealm;
@@ -1167,10 +1394,10 @@ export class KeycloakFederationService {
     if (process.env.KEYCLOAK_PUBLIC_URL) {
       return process.env.KEYCLOAK_PUBLIC_URL;
     }
-    
+
     // Fallback: construct from KEYCLOAK_URL
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
-    
+
     // For local development, map internal URLs to external
     if (keycloakUrl.includes('keycloak:')) {
       // Container name → localhost mapping
@@ -1184,7 +1411,7 @@ export class KeycloakFederationService {
       const port = portMap[instance] || '8443';
       return `https://localhost:${port}`;
     }
-    
+
     return keycloakUrl;
   }
 
@@ -1193,27 +1420,27 @@ export class KeycloakFederationService {
    */
   private getLocalRealmName(instanceCode: string): string {
     const code = instanceCode.toLowerCase();
-    
+
     // USA uses base realm name, others have suffix
     if (code === 'usa') {
       return 'dive-v3-broker';
     }
-    
+
     return `dive-v3-broker-${code}`;
   }
 
   /**
    * Ensure remote Keycloak realm has frontendUrl set
-   * 
+   *
    * CRITICAL: This forces the remote realm to always return the public issuer URL,
    * regardless of whether it's accessed via internal Docker hostname or public URL.
-   * 
+   *
    * Why this matters:
    * - When USA Hub contacts GBR via internal hostname (gbr-keycloak-gbr-1:8443),
    *   GBR would normally return issuer: https://gbr-keycloak-gbr-1:8443/realms/...
    * - But USA Hub expects issuer: https://localhost:8446/realms/...
    * - By setting frontendUrl, GBR ALWAYS returns the public URL as issuer
-   * 
+   *
    * This enables the hybrid strategy:
    * - Backend communication: Internal hostnames (fast, Docker network)
    * - Token validation: Public issuer (consistent, matches browser flow)
@@ -1281,7 +1508,7 @@ export class KeycloakFederationService {
 
   /**
    * Get or create federation client secret
-   * 
+   *
    * Secrets are stored in GCP Secret Manager:
    * Format: dive-v3-federation-{from}-{to}
    * Example: dive-v3-federation-usa-gbr
@@ -1289,7 +1516,7 @@ export class KeycloakFederationService {
   private async getFederationSecret(fromInstance: string, toInstance: string): Promise<string> {
     const from = fromInstance.toLowerCase();
     const to = toInstance.toLowerCase();
-    
+
     // Federation secrets are bidirectional, use alphabetical order for consistency
     const instances = [from, to].sort();
     const secretName = `federation-${instances[0]}-${instances[1]}`;
@@ -1310,7 +1537,7 @@ export class KeycloakFederationService {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-    
+
     // Fallback: Use env var or well-known dev secret
     // CROSS_BORDER_CLIENT_SECRET should be set in .env for local dev
     const envSecret = process.env.CROSS_BORDER_CLIENT_SECRET;
@@ -1318,7 +1545,7 @@ export class KeycloakFederationService {
       logger.debug('Using CROSS_BORDER_CLIENT_SECRET from environment', { secretName });
       return envSecret;
     }
-    
+
     // Final fallback: standard dev secret (matches spoke init-keycloak.sh default)
     // In production, this MUST be overridden via GCP Secret Manager
     const fallbackSecret = 'cross-border-secret-2025';

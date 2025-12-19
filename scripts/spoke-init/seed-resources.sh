@@ -35,12 +35,13 @@ fi
 
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
-PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-$CODE_LOWER}"
+
+# Container naming: dive-spoke-{code}-{service}
 container_name() {
     local service="$1"
-    echo "${PROJECT_PREFIX}-${service}-1"
+    echo "dive-spoke-${CODE_LOWER}-${service}"
 }
-MONGODB_CONTAINER="$(container_name "mongodb-${CODE_LOWER}")"
+MONGODB_CONTAINER="$(container_name "mongodb")"
 DB_NAME="dive-v3-${CODE_LOWER}"
 
 # Load .env for credentials
@@ -165,43 +166,43 @@ const localeClassifications = {
     CAN: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
     AUS: { UNCLASSIFIED: 'OFFICIAL', CONFIDENTIAL: 'OFFICIAL:SENSITIVE', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
     NZL: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
-    
+
     // French-speaking nations
     FRA: { UNCLASSIFIED: 'NON PROTÉGÉ', CONFIDENTIAL: 'CONFIDENTIEL DÉFENSE', SECRET: 'SECRET DÉFENSE', TOP_SECRET: 'TRÈS SECRET DÉFENSE' },
     BEL: { UNCLASSIFIED: 'NON CLASSIFIÉ', CONFIDENTIAL: 'CONFIDENTIEL', SECRET: 'SECRET', TOP_SECRET: 'TRÈS SECRET' },
     LUX: { UNCLASSIFIED: 'NON CLASSIFIÉ', CONFIDENTIAL: 'CONFIDENTIEL', SECRET: 'SECRET', TOP_SECRET: 'TRÈS SECRET' },
-    
+
     // German-speaking nations
     DEU: { UNCLASSIFIED: 'OFFEN', CONFIDENTIAL: 'VS-VERTRAULICH', SECRET: 'GEHEIM', TOP_SECRET: 'STRENG GEHEIM' },
-    
+
     // Spanish-speaking nations
     ESP: { UNCLASSIFIED: 'SIN CLASIFICAR', CONFIDENTIAL: 'CONFIDENCIAL', SECRET: 'RESERVADO', TOP_SECRET: 'SECRETO' },
-    
+
     // Italian
     ITA: { UNCLASSIFIED: 'NON CLASSIFICATO', CONFIDENTIAL: 'RISERVATO', SECRET: 'SEGRETO', TOP_SECRET: 'SEGRETISSIMO' },
-    
+
     // Portuguese
     PRT: { UNCLASSIFIED: 'NÃO CLASSIFICADO', CONFIDENTIAL: 'CONFIDENCIAL', SECRET: 'SECRETO', TOP_SECRET: 'MUITO SECRETO' },
-    
+
     // Nordic countries
     NOR: { UNCLASSIFIED: 'UGRADERT', CONFIDENTIAL: 'FORTROLIG', SECRET: 'HEMMELIG', TOP_SECRET: 'STRENGT HEMMELIG' },
     DNK: { UNCLASSIFIED: 'UKLASSIFICERET', CONFIDENTIAL: 'FORTROLIGT', SECRET: 'HEMMELIGT', TOP_SECRET: 'YDERST HEMMELIGT' },
     SWE: { UNCLASSIFIED: 'ÖPPEN', CONFIDENTIAL: 'KONFIDENTIELLT', SECRET: 'HEMLIGT', TOP_SECRET: 'KVALIFICERAT HEMLIGT' },
     FIN: { UNCLASSIFIED: 'JULKINEN', CONFIDENTIAL: 'LUOTTAMUKSELLINEN', SECRET: 'SALAINEN', TOP_SECRET: 'ERITTÄIN SALAINEN' },
     ISL: { UNCLASSIFIED: 'ÓFLOKAÐ', CONFIDENTIAL: 'TRÚNAÐARMÁL', SECRET: 'LEYNDARMÁL', TOP_SECRET: 'MJÖG LEYNDARMÁL' },
-    
+
     // Central/Eastern Europe
     POL: { UNCLASSIFIED: 'JAWNE', CONFIDENTIAL: 'ZASTRZEŻONE', SECRET: 'POUFNE', TOP_SECRET: 'TAJNE' },
     CZE: { UNCLASSIFIED: 'NEUTAJOVANÉ', CONFIDENTIAL: 'DŮVĚRNÉ', SECRET: 'TAJNÉ', TOP_SECRET: 'PŘÍSNĚ TAJNÉ' },
     HUN: { UNCLASSIFIED: 'NYÍLT', CONFIDENTIAL: 'BIZALMAS', SECRET: 'TITKOS', TOP_SECRET: 'SZIGORÚAN TITKOS' },
     SVK: { UNCLASSIFIED: 'NEUTAJOVANÉ', CONFIDENTIAL: 'DÔVERNÉ', SECRET: 'TAJNÉ', TOP_SECRET: 'PRÍSNE TAJNÉ' },
     SVN: { UNCLASSIFIED: 'NEKLASIFICIRANO', CONFIDENTIAL: 'ZAUPNO', SECRET: 'TAJNO', TOP_SECRET: 'STROGO TAJNO' },
-    
+
     // Baltic states
     EST: { UNCLASSIFIED: 'AVALIK', CONFIDENTIAL: 'KONFIDENTSIAALNE', SECRET: 'SALAJANE', TOP_SECRET: 'TÄIESTI SALAJANE' },
     LVA: { UNCLASSIFIED: 'NEKLASIFICĒTA', CONFIDENTIAL: 'KONFIDENCIĀLA', SECRET: 'SLEPENA', TOP_SECRET: 'SEVIŠĶI SLEPENA' },
     LTU: { UNCLASSIFIED: 'NESLAPTA', CONFIDENTIAL: 'KONFIDENCIALI', SECRET: 'SLAPTA', TOP_SECRET: 'VISIŠKAI SLAPTA' },
-    
+
     // Southeastern Europe
     ALB: { UNCLASSIFIED: 'I PAKLASIFIKUAR', CONFIDENTIAL: 'KONFIDENCIAL', SECRET: 'SEKRET', TOP_SECRET: 'TEPER SEKRET' },
     HRV: { UNCLASSIFIED: 'NEKLASIFICIRANO', CONFIDENTIAL: 'POVJERLJIVO', SECRET: 'TAJNO', TOP_SECRET: 'VRLO TAJNO' },
@@ -210,10 +211,10 @@ const localeClassifications = {
     GRC: { UNCLASSIFIED: 'ΑΔΙΑΒΑΘΜΗΤΟ', CONFIDENTIAL: 'ΕΜΠΙΣΤΕΥΤΙΚΟ', SECRET: 'ΑΠΟΡΡΗΤΟ', TOP_SECRET: 'ΑΚΡΩΣ ΑΠΟΡΡΗΤΟ' },
     BGR: { UNCLASSIFIED: 'НEКЛАСИФИЦИРАНО', CONFIDENTIAL: 'ПОВЕРИТЕЛНО', SECRET: 'СЕКРЕТНО', TOP_SECRET: 'СТРОГО СЕКРЕТНО' },
     ROU: { UNCLASSIFIED: 'NECLASIFICAT', CONFIDENTIAL: 'CONFIDENȚIAL', SECRET: 'SECRET', TOP_SECRET: 'STRICT SECRET' },
-    
+
     // Turkey
     TUR: { UNCLASSIFIED: 'TASNIF DIŞI', CONFIDENTIAL: 'HİZMETE ÖZEL', SECRET: 'GİZLİ', TOP_SECRET: 'ÇOK GİZLİ' },
-    
+
     // Netherlands
     NLD: { UNCLASSIFIED: 'ONGERUBRICEERD', CONFIDENTIAL: 'VERTROUWELIJK', SECRET: 'GEHEIM', TOP_SECRET: 'ZEER GEHEIM' }
 };
@@ -239,21 +240,21 @@ for (let classIdx = 0; classIdx < classifications.length; classIdx++) {
     const classification = classifications[classIdx];
     const startIdx = classIdx * perClassification;
     const endIdx = (classIdx === classifications.length - 1) ? totalResources : startIdx + perClassification;
-    
+
     for (let i = startIdx; i < endIdx; i++) {
         resourceIndex++;
-        
+
         // Cycle through other attributes
         const docType = documentTypes[i % documentTypes.length];
         const releasability = releasabilityPatterns[i % releasabilityPatterns.length];
         const coi = coiPatterns[i % coiPatterns.length];
         const topic = topics[i % topics.length];
         const creator = creators[i % creators.length];
-        
+
         // Determine encryption (TOP_SECRET and SECRET with COSMIC are encrypted)
-        const encrypted = classification === 'TOP_SECRET' || 
+        const encrypted = classification === 'TOP_SECRET' ||
                          (classification === 'SECRET' && coi.includes('NATO-COSMIC'));
-        
+
         // Generate realistic file size based on type
         const baseSize = {
             'application/pdf': 1048576,    // 1MB base
@@ -261,13 +262,13 @@ for (let classIdx = 0; classIdx < classifications.length; classIdx++) {
             'text/plain': 32768            // 32KB base
         }[docType.contentType] || 524288;
         const size = Math.floor(baseSize * (0.5 + Math.random() * 2)); // 50% to 250% of base
-        
+
         // Create date variation (within last 365 days)
         const createdDate = new Date(now.getTime() - Math.floor(Math.random() * 365 * 24 * 60 * 60 * 1000));
-        
+
         // Get locale-specific classification term (ACP-240 Section 4.3)
         const originalClassification = getOriginalClassification(instanceCode, classification);
-        
+
         const resource = {
             resourceId: `${instanceCode.toLowerCase()}-${docType.prefix}-${String(resourceIndex).padStart(5, '0')}`,
             title: `${instanceCode} ${docType.title} - ${topic}`,
@@ -288,7 +289,7 @@ for (let classIdx = 0; classIdx < classifications.length; classIdx++) {
             category: docType.category,
             tags: [docType.category, classification.toLowerCase(), instanceCode.toLowerCase()]
         };
-        
+
         resources.push(resource);
     }
 }
@@ -317,7 +318,7 @@ for (let i = 0; i < resources.length; i += batchSize) {
     const batch = resources.slice(i, i + batchSize);
     const result = db.resources.insertMany(batch, { ordered: false });
     totalInserted += result.insertedCount;
-    
+
     const progress = Math.floor((i + batch.length) / resources.length * 100);
     print(`    Progress: ${progress}% (${totalInserted} inserted)`);
 }

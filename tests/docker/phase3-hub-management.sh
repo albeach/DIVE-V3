@@ -4,7 +4,7 @@
 # =============================================================================
 # Tests for Hub-Spoke federation management, health aggregation,
 # audit log aggregation, and dashboard enhancements.
-# 
+#
 # Run: ./tests/docker/phase3-hub-management.sh
 #
 # Tests:

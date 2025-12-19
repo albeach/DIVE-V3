@@ -54,9 +54,9 @@ hub_init() {
     print_header
     echo -e "${BOLD}Initializing DIVE Hub${NC}"
     echo ""
-    
+
     ensure_dive_root
-    
+
     # 1. Create hub data directories
     log_step "Creating hub directories..."
     if [ "$DRY_RUN" = true ]; then
@@ -67,7 +67,7 @@ hub_init() {
         mkdir -p "${HUB_LOGS_DIR}"
         log_success "Hub directories created"
     fi
-    
+
     # 2. Generate secrets if not present
     log_step "Checking secrets..."
     if [ ! -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -76,7 +76,7 @@ hub_init() {
     else
         log_success "Secrets already configured (using existing .env.hub)"
     fi
-    
+
     # 3. Generate certificates if not present
     log_step "Checking certificates..."
     if [ ! -f "${HUB_CERTS_DIR}/certificate.pem" ] || [ ! -f "${HUB_CERTS_DIR}/key.pem" ]; then
@@ -89,7 +89,7 @@ hub_init() {
     else
         log_success "TLS certificates present"
     fi
-    
+
     # 4. Create hub configuration file
     log_step "Creating hub configuration..."
     if [ "$DRY_RUN" = true ]; then
@@ -97,7 +97,7 @@ hub_init() {
     else
         _hub_create_config
     fi
-    
+
     # 5. Verify compose file
     log_step "Verifying docker-compose.hub.yml..."
     if [ ! -f "$HUB_COMPOSE_FILE" ]; then
@@ -106,7 +106,7 @@ hub_init() {
     else
         log_success "Compose file verified"
     fi
-    
+
     echo ""
     log_success "Hub initialization complete"
     echo ""
@@ -127,7 +127,7 @@ _hub_generate_secrets() {
     export REDIS_PASSWORD_USA="${REDIS_PASSWORD_USA:-$(openssl rand -base64 16 | tr -d '/+=')}"
     export REDIS_PASSWORD_BLACKLIST="${REDIS_PASSWORD_BLACKLIST:-$(openssl rand -base64 16 | tr -d '/+=')}"
     export OPAL_AUTH_MASTER_TOKEN="${OPAL_AUTH_MASTER_TOKEN:-$(openssl rand -base64 32 | tr -d '/+=')}"
-    
+
     # Save to .env.hub for reference (do not commit)
     cat > "${DIVE_ROOT}/.env.hub" << EOF
 # Hub Secrets (auto-generated, do not commit)
@@ -148,20 +148,20 @@ EOF
 _hub_generate_certs() {
     mkdir -p "${HUB_CERTS_DIR}"
     mkdir -p "${HUB_DATA_DIR}/truststores"
-    
+
     # Check for mkcert
     if command -v mkcert >/dev/null 2>&1; then
         log_info "Using mkcert for certificate generation..."
-        
+
         # Install mkcert CA if not already done
         mkcert -install 2>/dev/null || true
-        
+
         # Get all spoke hostnames for comprehensive SANs
         local spoke_sans=""
         for code in alb bel bgr can cze dnk est fra deu grc hun isl ita lva ltu lux mne nld mkd nor pol prt rou svk svn esp tur gbr nzl; do
             spoke_sans="$spoke_sans keycloak-${code} ${code}-keycloak-${code}-1 dive-${code}-keycloak"
         done
-        
+
         # Generate Hub certificate with all SANs (including spoke hostnames)
         (
             cd "${HUB_CERTS_DIR}"
@@ -175,7 +175,7 @@ _hub_generate_certs() {
                 2>/dev/null
         )
         log_success "Hub certificate generated with spoke SANs"
-        
+
         # Copy mkcert root CA to truststores directory
         local ca_root
         ca_root=$(mkcert -CAROOT 2>/dev/null)
@@ -203,7 +203,7 @@ _hub_generate_certs() {
 _hub_create_config() {
     local config_file="${HUB_DATA_DIR}/config/hub.json"
     local hub_id="hub-$(openssl rand -hex 4)"
-    
+
     cat > "$config_file" << EOF
 {
   "identity": {
@@ -248,7 +248,7 @@ _hub_create_config() {
   }
 }
 EOF
-    
+
     log_success "Hub configuration created: ${config_file}"
 }
 
@@ -260,14 +260,14 @@ hub_deploy() {
     print_header
     echo -e "${BOLD}DIVE Hub Deployment${NC}"
     echo ""
-    
+
     ensure_dive_root
     check_docker || return 1
-    
+
     # Step 1: Initialize
     log_step "Step 1/7: Initializing hub..."
     hub_init || return 1
-    
+
     # Step 2: Load secrets
     log_step "Step 2/7: Loading secrets..."
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -278,15 +278,15 @@ hub_deploy() {
     else
         load_secrets || return 1
     fi
-    
+
     # Step 3: Start services
     log_step "Step 3/7: Starting hub services..."
     hub_up || return 1
-    
+
     # Step 4: Wait for services
     log_step "Step 4/7: Waiting for services to be healthy..."
     _hub_wait_all_healthy || return 1
-    
+
     # Step 5: Apply Terraform (if available)
     log_step "Step 5/7: Applying Keycloak configuration..."
     if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
@@ -294,7 +294,7 @@ hub_deploy() {
     else
         log_info "No Terraform config found, skipping"
     fi
-    
+
     # Step 6: Seed test users and resources
     log_step "Step 6/7: Seeding test users and 5000 ZTDF resources..."
     if [ -d "${DIVE_ROOT}/scripts/hub-init" ]; then
@@ -302,11 +302,11 @@ hub_deploy() {
     else
         log_info "Hub seed scripts not found, skipping"
     fi
-    
+
     # Step 7: Verify deployment
     log_step "Step 7/7: Verifying deployment..."
     _hub_verify_deployment || log_warn "Some verification checks failed"
-    
+
     echo ""
     log_success "Hub deployment complete!"
     echo ""
@@ -316,37 +316,37 @@ hub_deploy() {
 hub_up() {
     ensure_dive_root
     check_docker || return 1
-    
+
     if [ ! -f "$HUB_COMPOSE_FILE" ]; then
         log_error "Hub compose file not found: ${HUB_COMPOSE_FILE}"
         log_info "Run 'hub init' first to set up the hub"
         return 1
     fi
-    
+
     # Ensure shared network exists (local dev only)
     ensure_shared_network
-    
+
     # Load secrets
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
         set -a
         source "${DIVE_ROOT}/.env.hub"
         set +a
     fi
-    
+
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
-    
+
     log_step "Starting DIVE Hub services..."
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f ${HUB_COMPOSE_FILE} --env-file .env.hub up -d"
         return 0
     fi
-    
+
     # Use --env-file to ensure all environment variables are passed to docker compose
     docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d || {
         log_error "Failed to start hub services"
         return 1
     }
-    
+
     log_success "Hub services started"
     echo ""
     echo "  Keycloak: ${HUB_KEYCLOAK_URL}"
@@ -358,15 +358,15 @@ hub_up() {
 hub_down() {
     ensure_dive_root
     check_docker || return 1
-    
+
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
-    
+
     log_step "Stopping DIVE Hub services..."
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f ${HUB_COMPOSE_FILE} down"
         return 0
     fi
-    
+
     docker compose -f "$HUB_COMPOSE_FILE" down
     log_success "Hub services stopped"
 }
@@ -375,55 +375,55 @@ _hub_wait_all_healthy() {
     local timeout=180
     local elapsed=0
     local services=("keycloak" "backend" "opal-server" "opa" "mongodb" "postgres" "redis" "redis-blacklist")
-    
+
     log_info "Waiting for all services to be healthy (up to ${timeout}s)..."
-    
+
     while [ $elapsed -lt $timeout ]; do
         local all_healthy=true
-        
+
         for service in "${services[@]}"; do
             local container="${COMPOSE_PROJECT_NAME:-dive-hub}-${service}"
             local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "not_found")
-            
+
             if [ "$health" != "healthy" ]; then
                 all_healthy=false
                 break
             fi
         done
-        
+
         if [ "$all_healthy" = true ]; then
             log_success "All services healthy"
             return 0
         fi
-        
+
         sleep 5
         elapsed=$((elapsed + 5))
         echo "  ${elapsed}s elapsed..."
     done
-    
+
     log_warn "Timeout waiting for services to be healthy"
     return 1
 }
 
 _hub_apply_terraform() {
     local tf_dir="${DIVE_ROOT}/terraform/hub"
-    
+
     if [ ! -d "$tf_dir" ]; then
         log_info "No Terraform directory found at ${tf_dir}"
         return 0
     fi
-    
+
     log_info "Applying Terraform configuration..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "cd ${tf_dir} && terraform init && terraform apply -auto-approve"
         return 0
     fi
-    
+
     (
         cd "$tf_dir"
         [ ! -d ".terraform" ] && terraform init -input=false
-        
+
         # Export secrets as TF_VAR_ environment variables
         export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}"
         export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}"
@@ -431,19 +431,19 @@ _hub_apply_terraform() {
         export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
         export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
         export KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
-        
+
         terraform apply -var-file=hub.tfvars -input=false -auto-approve
     ) || {
         log_warn "Terraform apply failed"
         return 1
     }
-    
+
     log_success "Terraform configuration applied"
 }
 
 _hub_verify_deployment() {
     local errors=0
-    
+
     # Check Keycloak
     if curl -kfs --max-time 5 "${HUB_KEYCLOAK_URL}/health" >/dev/null 2>&1; then
         log_success "Keycloak: healthy"
@@ -451,7 +451,7 @@ _hub_verify_deployment() {
         log_error "Keycloak: not responding"
         ((errors++))
     fi
-    
+
     # Check Backend
     if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/health" >/dev/null 2>&1; then
         log_success "Backend: healthy"
@@ -459,7 +459,7 @@ _hub_verify_deployment() {
         log_error "Backend: not responding"
         ((errors++))
     fi
-    
+
     # Check OPA
     if curl -kfs --max-time 5 "${HUB_OPA_URL}/health" >/dev/null 2>&1; then
         log_success "OPA: healthy"
@@ -467,21 +467,21 @@ _hub_verify_deployment() {
         log_error "OPA: not responding"
         ((errors++))
     fi
-    
+
     # Check OPAL
     if curl -kfs --max-time 5 "${HUB_OPAL_URL}/healthcheck" >/dev/null 2>&1; then
         log_success "OPAL Server: healthy"
     else
         log_warn "OPAL Server: not responding (may still be starting)"
     fi
-    
+
     # Check Federation API
     if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/api/federation/health" >/dev/null 2>&1; then
         log_success "Federation API: healthy"
     else
         log_warn "Federation API: not responding"
     fi
-    
+
     return $errors
 }
 
@@ -493,32 +493,32 @@ hub_verify() {
     print_header
     echo -e "${BOLD}🔍 Hub Verification (10-Point Check)${NC}"
     echo ""
-    
+
     ensure_dive_root
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would verify hub health (10 checks)"
         return 0
     fi
-    
+
     # Track results
     local checks_total=10
     local checks_passed=0
     local checks_failed=0
-    
+
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  Running 10-Point Hub Verification${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    
+
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
-    
+
     # Check 1: Docker containers running (8 services)
     printf "  %-35s" "1. Docker Containers (8 services):"
     local expected_services=("keycloak" "backend" "opa" "opal-server" "mongodb" "postgres" "redis" "redis-blacklist")
     local running_count=0
     local missing_services=""
-    
+
     for service in "${expected_services[@]}"; do
         local container="${COMPOSE_PROJECT_NAME}-${service}"
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "${container}"; then
@@ -529,7 +529,7 @@ hub_verify() {
             missing_services="${missing_services} ${service}"
         fi
     done
-    
+
     if [ $running_count -ge 6 ]; then
         echo -e "${GREEN}✓ ${running_count}/8 running${NC}"
         ((checks_passed++))
@@ -537,7 +537,7 @@ hub_verify() {
         echo -e "${RED}✗ ${running_count}/8 running (missing:${missing_services})${NC}"
         ((checks_failed++))
     fi
-    
+
     # Check 2: Keycloak health endpoint
     printf "  %-35s" "2. Keycloak Health:"
     # Try realm endpoint (always works), or /health
@@ -554,7 +554,7 @@ hub_verify() {
         echo -e "${RED}✗ Unhealthy${NC}"
         ((checks_failed++))
     fi
-    
+
     # Check 3: Backend API health endpoint
     printf "  %-35s" "3. Backend API Health:"
     if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/health" >/dev/null 2>&1; then
@@ -564,7 +564,7 @@ hub_verify() {
         echo -e "${RED}✗ Unhealthy${NC}"
         ((checks_failed++))
     fi
-    
+
     # Check 4: MongoDB connection
     printf "  %-35s" "4. MongoDB Connection:"
     local mongo_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "mongodb|mongo" | head -1)
@@ -580,7 +580,7 @@ hub_verify() {
         echo -e "${RED}✗ Not Found${NC}"
         ((checks_failed++))
     fi
-    
+
     # Check 5: Redis connection
     printf "  %-35s" "5. Redis Connection:"
     local redis_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "redis" | head -1)
@@ -596,7 +596,7 @@ hub_verify() {
         echo -e "${RED}✗ Not Found${NC}"
         ((checks_failed++))
     fi
-    
+
     # Check 6: OPAL Server health
     printf "  %-35s" "6. OPAL Server Health:"
     if curl -kfs --max-time 5 "${HUB_OPAL_URL}/healthcheck" >/dev/null 2>&1; then
@@ -609,7 +609,7 @@ hub_verify() {
         echo -e "${YELLOW}⚠ Not responding (may still be starting)${NC}"
         ((checks_passed++))  # OPAL is optional for basic hub operation
     fi
-    
+
     # Check 7: Policy bundle available
     printf "  %-35s" "7. Policy Bundle Available:"
     local bundle_status=$(curl -kfs --max-time 5 "${HUB_BACKEND_URL}/api/opal/version" 2>/dev/null)
@@ -621,7 +621,7 @@ hub_verify() {
         echo -e "${YELLOW}⚠ Version endpoint not responding${NC}"
         ((checks_passed++))  # Policy may not be built yet
     fi
-    
+
     # Check 8: Federation registry initialized
     printf "  %-35s" "8. Federation Registry:"
     local fed_status=$(curl -kfs --max-time 5 \
@@ -638,7 +638,7 @@ hub_verify() {
         echo -e "${YELLOW}⚠ Not responding${NC}"
         ((checks_passed++))  # May need admin key
     fi
-    
+
     # Check 9: Spoke registration endpoint accessible
     printf "  %-35s" "9. Registration Endpoint:"
     local reg_status=$(curl -ks -X POST --max-time 5 \
@@ -661,7 +661,7 @@ hub_verify() {
         echo -e "${RED}✗ Not Accessible${NC}"
         ((checks_failed++))
     fi
-    
+
     # Check 10: TLS certificates valid
     printf "  %-35s" "10. TLS Certificates:"
     local cert_file="${HUB_CERTS_DIR}/certificate.pem"
@@ -670,7 +670,7 @@ hub_verify() {
         local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
         local now_epoch=$(date +%s)
         local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
-        
+
         if [ $days_left -gt 30 ]; then
             echo -e "${GREEN}✓ Valid (${days_left} days left)${NC}"
             ((checks_passed++))
@@ -691,7 +691,7 @@ hub_verify() {
             ((checks_passed++))  # May be using HTTP
         fi
     fi
-    
+
     # Summary
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -702,7 +702,7 @@ hub_verify() {
     echo -e "  Passed:         ${GREEN}$checks_passed${NC}"
     echo -e "  Failed:         ${RED}$checks_failed${NC}"
     echo ""
-    
+
     if [ $checks_failed -eq 0 ]; then
         echo -e "${GREEN}✓ All hub verification checks passed!${NC}"
         echo ""
@@ -722,7 +722,7 @@ hub_status() {
     print_header
     echo -e "${BOLD}DIVE Hub Status${NC}"
     echo ""
-    
+
     # Service status
     echo -e "${CYAN}Services:${NC}"
     _hub_check_service "Keycloak" "${HUB_KEYCLOAK_URL}/realms/master"
@@ -730,17 +730,17 @@ hub_status() {
     _hub_check_service "OPA"      "${HUB_OPA_URL}/health"
     _hub_check_service "OPAL"     "${HUB_OPAL_URL}/healthcheck"
     echo ""
-    
+
     # Docker container status
     echo -e "${CYAN}Containers:${NC}"
     docker compose -f "$HUB_COMPOSE_FILE" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "  (compose not running)"
     echo ""
-    
+
     # Federation stats
     echo -e "${CYAN}Federation:${NC}"
     _hub_get_federation_stats
     echo ""
-    
+
     # Policy version
     echo -e "${CYAN}Policy:${NC}"
     _hub_get_policy_version
@@ -763,9 +763,9 @@ hub_status_brief() {
 _hub_check_service() {
     local name="$1"
     local url="$2"
-    
+
     local status_code=$(curl -kso /dev/null -w '%{http_code}' --max-time 3 "$url" 2>/dev/null || echo "000")
-    
+
     if [ "$status_code" = "200" ]; then
         echo -e "  ${name}: ${GREEN}healthy${NC} (${status_code})"
     elif [ "$status_code" = "000" ]; then
@@ -779,7 +779,7 @@ _hub_get_federation_stats() {
     local response=$(curl -kfs --max-time 5 \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/health" 2>/dev/null)
-    
+
     if [ -n "$response" ]; then
         echo "$response" | jq -r '
             "  Total Spokes: \(.statistics.totalSpokes // 0)",
@@ -795,7 +795,7 @@ _hub_get_federation_stats() {
 _hub_get_policy_version() {
     local response=$(curl -kfs --max-time 5 \
         "${HUB_BACKEND_URL}/api/federation/policy/version" 2>/dev/null)
-    
+
     if [ -n "$response" ]; then
         echo "$response" | jq -r '
             "  Version: \(.version // "unknown")",
@@ -809,15 +809,15 @@ _hub_get_policy_version() {
 hub_health() {
     echo -e "${BOLD}Hub Health Check${NC}"
     echo ""
-    
+
     local exit_code=0
-    
+
     # Check all services
     for service in keycloak backend opa opal-server mongodb postgres redis; do
         local container="${COMPOSE_PROJECT_NAME:-dive-hub}-${service}"
         local status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "not_found")
         local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "N/A")
-        
+
         if [ "$status" = "running" ] && [ "$health" = "healthy" ]; then
             echo -e "  ${service}: ${GREEN}✓${NC} running (healthy)"
         elif [ "$status" = "running" ]; then
@@ -827,7 +827,7 @@ hub_health() {
             exit_code=1
         fi
     done
-    
+
     return $exit_code
 }
 
@@ -838,7 +838,7 @@ hub_health() {
 hub_spokes() {
     local action="${1:-list}"
     shift || true
-    
+
     case "$action" in
         list)         hub_spokes_list "$@" ;;
         pending)      hub_spokes_pending "$@" ;;
@@ -855,21 +855,21 @@ hub_spokes() {
 hub_spokes_list() {
     echo -e "${BOLD}Registered Spokes${NC}"
     echo ""
-    
+
     local response=$(curl -kfs --max-time 10 \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/spokes" 2>/dev/null)
-    
+
     if [ -z "$response" ]; then
         log_error "Failed to fetch spokes (is the hub running?)"
         return 1
     fi
-    
+
     echo "$response" | jq -r '
-        .spokes[] | 
+        .spokes[] |
         "  \(.instanceCode)\t\(.status)\t\(.trustLevel // "N/A")\t\(.name)"
     ' 2>/dev/null | column -t -s $'\t' || echo "  (no spokes registered)"
-    
+
     echo ""
     echo "$response" | jq -r '
         .statistics |
@@ -880,29 +880,29 @@ hub_spokes_list() {
 hub_spokes_pending() {
     echo -e "${BOLD}Pending Spoke Registrations${NC}"
     echo ""
-    
+
     local response=$(curl -kfs --max-time 10 \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/pending" 2>/dev/null)
-    
+
     if [ -z "$response" ]; then
         log_error "Failed to fetch pending spokes (is the hub running?)"
         return 1
     fi
-    
+
     local count=$(echo "$response" | jq '.pending | length' 2>/dev/null || echo "0")
-    
+
     if [ "$count" = "0" ]; then
         echo -e "  ${GREEN}✓${NC} No pending approvals"
         return 0
     fi
-    
+
     echo -e "  ${YELLOW}$count pending approval(s)${NC}"
     echo ""
-    
+
     # Rich display for each pending spoke
     echo "$response" | jq -r '
-        .pending[] | 
+        .pending[] |
         "┌─────────────────────────────────────────────────────────────┐",
         "│ Spoke: \(.spokeId | .[0:50])",
         "├─────────────────────────────────────────────────────────────┤",
@@ -919,7 +919,7 @@ hub_spokes_pending() {
         "└─────────────────────────────────────────────────────────────┘",
         ""
     ' 2>/dev/null
-    
+
     echo ""
     echo -e "${CYAN}Actions:${NC}"
     echo "  Approve:  ./dive hub spokes approve <spoke-id>"
@@ -935,13 +935,13 @@ hub_spokes_pending() {
 hub_spokes_approve() {
     local spoke_id="$1"
     shift || true
-    
+
     # Parse options
     local scopes=""
     local trust_level=""
     local max_class=""
     local interactive=true
-    
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --scopes)
@@ -968,7 +968,7 @@ hub_spokes_approve() {
                 ;;
         esac
     done
-    
+
     if [ -z "$spoke_id" ]; then
         echo -e "${BOLD}Approve Spoke Registration${NC}"
         echo ""
@@ -985,14 +985,14 @@ hub_spokes_approve() {
         echo "  ./dive hub spokes approve spoke-nzl-abc123 --scopes 'policy:base,data:federation_matrix' --trust-level partner"
         return 1
     fi
-    
+
     # Fetch spoke details for display
     log_step "Fetching spoke details: ${spoke_id}"
-    
+
     local spoke_details=$(curl -kfs --max-time 10 \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}" 2>/dev/null)
-    
+
     if [ -z "$spoke_details" ] || echo "$spoke_details" | grep -q '"error"'; then
         # Try by instance code
         spoke_details=$(curl -kfs --max-time 10 \
@@ -1008,14 +1008,14 @@ hub_spokes_approve() {
         # Extract the actual spokeId field for API calls
         spoke_id=$(echo "$spoke_details" | jq -r '.spokeId // .spokeId // ._id // .id // "'$spoke_id'"' 2>/dev/null)
     fi
-    
+
     # Extract spoke info
     local spoke_name=$(echo "$spoke_details" | jq -r '.spoke.name // .name // "Unknown"' 2>/dev/null)
     local instance_code=$(echo "$spoke_details" | jq -r '.spoke.instanceCode // .instanceCode // "?"' 2>/dev/null)
     local requested_scopes=$(echo "$spoke_details" | jq -r '.spoke.requestedScopes // .requestedScopes // [] | join(", ")' 2>/dev/null)
     local contact=$(echo "$spoke_details" | jq -r '.spoke.contactEmail // .contactEmail // "Not provided"' 2>/dev/null)
     local has_cert=$(echo "$spoke_details" | jq -r 'if (.spoke.certificatePEM // .certificatePEM) then "✓" else "○" end' 2>/dev/null)
-    
+
     echo ""
     echo -e "${BOLD}Spoke Details:${NC}"
     echo "  Instance Code:     $instance_code"
@@ -1024,12 +1024,12 @@ hub_spokes_approve() {
     echo "  Certificate:       $has_cert"
     echo "  Requested Scopes:  $requested_scopes"
     echo ""
-    
+
     # Interactive mode: prompt for options
     if [ "$interactive" = true ]; then
         echo -e "${CYAN}Configure Approval:${NC}"
         echo ""
-        
+
         # Scope selection
         if [ -z "$scopes" ]; then
             echo "  Available scopes:"
@@ -1047,7 +1047,7 @@ hub_spokes_approve() {
                 scopes="policy:base,heartbeat:write"
             fi
         fi
-        
+
         # Trust level selection
         if [ -z "$trust_level" ]; then
             echo ""
@@ -1062,7 +1062,7 @@ hub_spokes_approve() {
                 trust_level="partner"
             fi
         fi
-        
+
         # Classification selection
         if [ -z "$max_class" ]; then
             echo ""
@@ -1077,7 +1077,7 @@ hub_spokes_approve() {
                 max_class="CONFIDENTIAL"
             fi
         fi
-        
+
         echo ""
         echo -e "${BOLD}Approval Summary:${NC}"
         echo "  Spoke:              $spoke_name ($instance_code)"
@@ -1096,9 +1096,9 @@ hub_spokes_approve() {
         trust_level="${trust_level:-partner}"
         max_class="${max_class:-CONFIDENTIAL}"
     fi
-    
+
     log_step "Approving spoke: ${spoke_id}"
-    
+
     local payload=$(cat << EOF
 {
     "allowedScopes": $(echo "$scopes" | jq -R 'split(",")'),
@@ -1108,35 +1108,35 @@ hub_spokes_approve() {
 }
 EOF
 )
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "POST ${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/approve"
         log_dry "Payload: ${payload}"
         return 0
     fi
-    
+
     local response=$(curl -kfs --max-time 10 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         -d "$payload" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/approve" 2>/dev/null)
-    
+
     if [ -z "$response" ]; then
         log_error "Failed to approve spoke (no response from hub)"
         return 1
     fi
-    
+
     local success=$(echo "$response" | jq -r '.success' 2>/dev/null)
-    
+
     if [ "$success" = "true" ]; then
         log_success "Spoke approved successfully!"
         echo ""
-        
+
         local token=$(echo "$response" | jq -r '.token.token' 2>/dev/null)
         local expires=$(echo "$response" | jq -r '.token.expiresAt' 2>/dev/null)
         local token_scopes=$(echo "$response" | jq -r '.token.scopes | join(", ")' 2>/dev/null)
-        
+
         echo -e "${BOLD}Token for Spoke Admin:${NC}"
         echo ""
         echo "┌─────────────────────────────────────────────────────────────┐"
@@ -1166,10 +1166,10 @@ EOF
 hub_spokes_reject() {
     local spoke_id="$1"
     shift || true
-    
+
     local reason=""
     local interactive=true
-    
+
     # Parse options
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1191,7 +1191,7 @@ hub_spokes_reject() {
                 ;;
         esac
     done
-    
+
     if [ -z "$spoke_id" ]; then
         echo -e "${BOLD}Reject Spoke Registration${NC}"
         echo ""
@@ -1202,14 +1202,14 @@ hub_spokes_reject() {
         echo "  --yes, -y        Skip confirmation prompt"
         return 1
     fi
-    
+
     # Interactive mode: prompt for reason
     if [ "$interactive" = true ]; then
         echo -e "${BOLD}Reject Spoke Registration${NC}"
         echo ""
         echo "  Spoke ID: $spoke_id"
         echo ""
-        
+
         if [ -z "$reason" ]; then
             echo "  Common rejection reasons:"
             echo "    1. Incomplete registration information"
@@ -1220,11 +1220,11 @@ hub_spokes_reject() {
             echo ""
             read -p "  Enter rejection reason: " reason
         fi
-        
+
         if [ -z "$reason" ]; then
             reason="Rejected by administrator"
         fi
-        
+
         echo ""
         echo "  Reason: $reason"
         read -p "  Proceed with rejection? (yes/no): " confirm
@@ -1235,22 +1235,22 @@ hub_spokes_reject() {
     else
         reason="${reason:-Rejected by administrator}"
     fi
-    
+
     log_step "Rejecting spoke: ${spoke_id}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "POST ${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke"
         log_dry "Reason: ${reason}"
         return 0
     fi
-    
+
     local response=$(curl -kfs --max-time 10 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         -d "{\"reason\": \"${reason}\"}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke" 2>/dev/null)
-    
+
     if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
         log_success "Spoke registration rejected"
         echo ""
@@ -1267,9 +1267,9 @@ hub_spokes_reject() {
 hub_spokes_rotate_token() {
     local spoke_id="$1"
     shift || true
-    
+
     local force=false
-    
+
     # Parse options
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1282,7 +1282,7 @@ hub_spokes_rotate_token() {
                 ;;
         esac
     done
-    
+
     if [ -z "$spoke_id" ]; then
         echo -e "${BOLD}Rotate Spoke Token${NC}"
         echo ""
@@ -1297,12 +1297,12 @@ hub_spokes_rotate_token() {
         echo "  3. Display the new token for the spoke admin"
         return 1
     fi
-    
+
     echo -e "${BOLD}Rotate Spoke Token${NC}"
     echo ""
     echo "  Spoke ID: $spoke_id"
     echo ""
-    
+
     if [ "$force" != true ]; then
         log_warn "This will revoke the current token. The spoke will lose access until the new token is configured."
         read -p "  Continue? (yes/no): " confirm
@@ -1311,43 +1311,43 @@ hub_spokes_rotate_token() {
             return 0
         fi
     fi
-    
+
     log_step "Revoking current token..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would revoke current token and generate new one"
         return 0
     fi
-    
+
     # First revoke existing tokens
     curl -kfs --max-time 10 \
         -X POST \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke-tokens" 2>/dev/null || true
-    
+
     log_step "Generating new token..."
-    
+
     # Generate new token
     local response=$(curl -kfs --max-time 10 \
         -X POST \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/token" 2>/dev/null)
-    
+
     if [ -z "$response" ]; then
         log_error "Failed to generate new token"
         return 1
     fi
-    
+
     local success=$(echo "$response" | jq -r '.success' 2>/dev/null)
-    
+
     if [ "$success" = "true" ]; then
         log_success "Token rotated successfully!"
         echo ""
-        
+
         local token=$(echo "$response" | jq -r '.token.token' 2>/dev/null)
         local expires=$(echo "$response" | jq -r '.token.expiresAt' 2>/dev/null)
         local scopes=$(echo "$response" | jq -r '.token.scopes | join(", ")' 2>/dev/null)
-        
+
         echo -e "${BOLD}New Token:${NC}"
         echo ""
         echo "┌─────────────────────────────────────────────────────────────┐"
@@ -1373,21 +1373,21 @@ hub_spokes_rotate_token() {
 hub_spokes_suspend() {
     local spoke_id="$1"
     local reason="${2:-Suspended by administrator}"
-    
+
     if [ -z "$spoke_id" ]; then
         echo "Usage: ./dive hub spokes suspend <spoke-id> [reason]"
         return 1
     fi
-    
+
     log_step "Suspending spoke: ${spoke_id}"
-    
+
     local response=$(curl -kfs --max-time 10 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         -d "{\"reason\": \"${reason}\"}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/suspend" 2>/dev/null)
-    
+
     if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
         log_success "Spoke suspended"
     else
@@ -1399,29 +1399,29 @@ hub_spokes_suspend() {
 hub_spokes_revoke() {
     local spoke_id="$1"
     local reason="${2:-Revoked by administrator}"
-    
+
     if [ -z "$spoke_id" ]; then
         echo "Usage: ./dive hub spokes revoke <spoke-id> [reason]"
         return 1
     fi
-    
+
     log_warn "This will permanently revoke the spoke. All tokens will be invalidated."
     read -p "Continue? (y/N) " confirm
-    
+
     if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
         echo "Cancelled"
         return 0
     fi
-    
+
     log_step "Revoking spoke: ${spoke_id}"
-    
+
     local response=$(curl -kfs --max-time 10 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         -d "{\"reason\": \"${reason}\"}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/revoke" 2>/dev/null)
-    
+
     if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
         log_success "Spoke revoked permanently"
     else
@@ -1432,26 +1432,26 @@ hub_spokes_revoke() {
 
 hub_spokes_token() {
     local spoke_id="$1"
-    
+
     if [ -z "$spoke_id" ]; then
         echo "Usage: ./dive hub spokes token <spoke-id>"
         return 1
     fi
-    
+
     log_step "Generating new token for spoke: ${spoke_id}"
-    
+
     local response=$(curl -kfs --max-time 10 \
         -X POST \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/token" 2>/dev/null)
-    
+
     if [ -z "$response" ]; then
         log_error "Failed to generate token"
         return 1
     fi
-    
+
     local success=$(echo "$response" | jq -r '.success' 2>/dev/null)
-    
+
     if [ "$success" = "true" ]; then
         log_success "New token generated"
         echo ""
@@ -1496,9 +1496,9 @@ hub_spokes_help() {
 hub_push_policy() {
     local layers="${1:-base,coalition,tenant}"
     local description="${2:-Manual policy push}"
-    
+
     log_step "Pushing policy update to all spokes..."
-    
+
     local payload=$(cat << EOF
 {
     "layers": $(echo "$layers" | jq -R 'split(",")'),
@@ -1507,27 +1507,27 @@ hub_push_policy() {
 }
 EOF
 )
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "POST ${HUB_BACKEND_URL}/api/federation/policy/push"
         log_dry "Payload: ${payload}"
         return 0
     fi
-    
+
     local response=$(curl -kfs --max-time 30 \
         -X POST \
         -H "Content-Type: application/json" \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
         -d "$payload" \
         "${HUB_BACKEND_URL}/api/federation/policy/push" 2>/dev/null)
-    
+
     if [ -z "$response" ]; then
         log_error "Failed to push policy update"
         return 1
     fi
-    
+
     local success=$(echo "$response" | jq -r '.success' 2>/dev/null)
-    
+
     if [ "$success" = "true" ]; then
         log_success "Policy update pushed"
         echo ""
@@ -1546,9 +1546,9 @@ EOF
 hub_logs() {
     local service="${1:-}"
     local follow="${2:-}"
-    
+
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
-    
+
     if [ -n "$service" ]; then
         if [ "$follow" = "-f" ] || [ "$follow" = "--follow" ]; then
             docker compose -f "$HUB_COMPOSE_FILE" logs -f "$service"
@@ -1566,21 +1566,21 @@ hub_logs() {
 
 hub_seed() {
     local resource_count="${1:-5000}"
-    
+
     print_header
     echo -e "${BOLD}Seeding Hub (USA) with Test Data${NC}"
     echo ""
     echo "  Target: ${resource_count} ZTDF encrypted resources"
     echo ""
-    
+
     # Check for seed scripts
     local SEED_SCRIPTS_DIR="${DIVE_ROOT}/scripts/hub-init"
-    
+
     if [ ! -d "$SEED_SCRIPTS_DIR" ]; then
         log_error "Hub seed scripts not found at $SEED_SCRIPTS_DIR"
         return 1
     fi
-    
+
     # Step 1: Seed users (includes User Profile configuration)
     log_step "Step 1/2: Seeding test users..."
     if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-users.sh" ]; then
@@ -1593,11 +1593,11 @@ hub_seed() {
         log_error "seed-hub-users.sh not found or not executable"
         return 1
     fi
-    
+
     # Step 2: Seed ZTDF encrypted resources using TypeScript seeder
     log_step "Step 2/2: Seeding ${resource_count} ZTDF encrypted resources..."
     local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker exec ${backend_container} npx tsx src/scripts/seed-instance-resources.ts --instance=USA --count=${resource_count} --replace"
     else
@@ -1610,7 +1610,7 @@ hub_seed() {
             fi
             return 0
         fi
-        
+
         # Use ZTDF seeder via TypeScript
         docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
             --instance=USA \
@@ -1622,7 +1622,7 @@ hub_seed() {
             fi
         }
     fi
-    
+
     echo ""
     log_success "Hub seeding complete!"
     echo ""
@@ -1645,7 +1645,7 @@ hub_seed() {
 module_hub() {
     local action="${1:-help}"
     shift || true
-    
+
     case "$action" in
         deploy)      hub_deploy "$@" ;;
         init)        hub_init "$@" ;;
@@ -1658,11 +1658,11 @@ module_hub() {
         spokes)      hub_spokes "$@" ;;
         push-policy) hub_push_policy "$@" ;;
         seed)        hub_seed "$@" ;;
-        
+
         # Legacy compatibility
         bootstrap)   hub_deploy "$@" ;;
         instances)   hub_spokes list "$@" ;;
-        
+
         help|*)      module_hub_help ;;
     esac
 }

@@ -33,26 +33,27 @@ log_info() { echo -e "  ${BLUE}ℹ${NC} $1"; }
 verify_spoke() {
     local CODE_LOWER=$(echo "$1" | tr '[:upper:]' '[:lower:]')
     local CODE_UPPER=$(echo "$1" | tr '[:lower:]' '[:upper:]')
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  🏴 ${CODE_UPPER} - Spoke Verification"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
+
     local ERRORS=0
     local WARNINGS=0
-    
+
     # =========================================================================
     # Check containers
     # =========================================================================
     echo ""
     echo "  📦 Containers:"
-    
-    local KC_CONTAINER="${CODE_LOWER}-keycloak-${CODE_LOWER}-1"
-    local MONGO_CONTAINER="${CODE_LOWER}-mongodb-${CODE_LOWER}-1"
-    local BACKEND_CONTAINER="${CODE_LOWER}-backend-${CODE_LOWER}-1"
-    local FRONTEND_CONTAINER="${CODE_LOWER}-frontend-${CODE_LOWER}-1"
-    
+
+    # New naming pattern: dive-spoke-lva-keycloak (not lva-keycloak-lva-1)
+    local KC_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
+    local MONGO_CONTAINER="dive-spoke-${CODE_LOWER}-mongodb"
+    local BACKEND_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
+    local FRONTEND_CONTAINER="dive-spoke-${CODE_LOWER}-frontend"
+
     for container in "$KC_CONTAINER" "$MONGO_CONTAINER" "$BACKEND_CONTAINER" "$FRONTEND_CONTAINER"; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             log_pass "$container running"
@@ -61,20 +62,20 @@ verify_spoke() {
             ERRORS=$((ERRORS + 1))
         fi
     done
-    
+
     # Skip further checks if Keycloak isn't running
     if ! docker ps --format '{{.Names}}' | grep -q "^${KC_CONTAINER}$"; then
         echo ""
         echo "  ❌ Cannot verify further - Keycloak not running"
         return 1
     fi
-    
+
     # =========================================================================
     # Check users
     # =========================================================================
     echo ""
     echo "  👥 Users:"
-    
+
     # Get Keycloak port
     local SPOKE_KC_PORT=$(docker port "${KC_CONTAINER}" 8443/tcp 2>/dev/null | sed 's/.*://' | head -1)
     if [[ -z "$SPOKE_KC_PORT" ]]; then
@@ -85,13 +86,13 @@ verify_spoke() {
             GBR) SPOKE_KC_PORT=8447 ;; DEU) SPOKE_KC_PORT=8448 ;; *) SPOKE_KC_PORT=8444 ;;
         esac
     fi
-    
+
     # Get admin token
     local KC_PASS=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
     local TOKEN=$(curl -sk -X POST "https://localhost:${SPOKE_KC_PORT}/realms/master/protocol/openid-connect/token" \
         -d "username=admin" -d "password=${KC_PASS}" \
         -d "grant_type=password" -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token')
-    
+
     if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
         log_fail "Could not authenticate with Keycloak"
         ERRORS=$((ERRORS + 1))
@@ -99,7 +100,7 @@ verify_spoke() {
         local REALM="dive-v3-broker-${CODE_LOWER}"
         local USERS=$(curl -sk "https://localhost:${SPOKE_KC_PORT}/admin/realms/${REALM}/users?max=10" \
             -H "Authorization: Bearer $TOKEN" 2>/dev/null)
-        
+
         # Check expected users
         local EXPECTED_USERS=("testuser-${CODE_LOWER}-1" "testuser-${CODE_LOWER}-2" "testuser-${CODE_LOWER}-3" "testuser-${CODE_LOWER}-4" "admin-${CODE_LOWER}")
         for user in "${EXPECTED_USERS[@]}"; do
@@ -112,21 +113,21 @@ verify_spoke() {
             fi
         done
     fi
-    
+
     # =========================================================================
     # Check resources
     # =========================================================================
     echo ""
     echo "  📄 Resources:"
-    
+
     local MONGO_PASS=$(docker exec "$MONGO_CONTAINER" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null)
     local DB_NAME="dive-v3-${CODE_LOWER}"
-    
+
     if [[ -n "$MONGO_PASS" ]]; then
         local RESOURCE_COUNT=$(docker exec "$MONGO_CONTAINER" mongosh --quiet \
             "mongodb://admin:${MONGO_PASS}@localhost:27017/${DB_NAME}?authSource=admin" \
             --eval "db.resources.countDocuments()" 2>/dev/null)
-        
+
         if [[ "$RESOURCE_COUNT" =~ ^[0-9]+$ ]] && [[ "$RESOURCE_COUNT" -gt 0 ]]; then
             log_pass "$RESOURCE_COUNT resources seeded"
         else
@@ -137,36 +138,36 @@ verify_spoke() {
         log_fail "Could not get MongoDB credentials"
         ERRORS=$((ERRORS + 1))
     fi
-    
+
     # =========================================================================
     # Check federation (if Hub is running)
     # =========================================================================
     echo ""
     echo "  🔗 Federation:"
-    
+
     if docker ps --format '{{.Names}}' | grep -q 'dive-hub-keycloak'; then
         # Get Hub token
         local HUB_PASS=$(docker exec dive-hub-backend printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
         local HUB_TOKEN=$(curl -sk -X POST "https://localhost:8443/realms/master/protocol/openid-connect/token" \
             -d "username=admin" -d "password=${HUB_PASS}" \
             -d "grant_type=password" -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token')
-        
+
         if [[ -n "$HUB_TOKEN" && "$HUB_TOKEN" != "null" ]]; then
             # Check if Hub has this spoke's IdP
             local IDP_EXISTS=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${CODE_LOWER}-idp" \
                 -H "Authorization: Bearer $HUB_TOKEN" 2>/dev/null | jq -r '.alias // empty')
-            
+
             if [[ -n "$IDP_EXISTS" ]]; then
                 log_pass "Hub has ${CODE_LOWER}-idp configured"
             else
                 log_warn "Hub missing ${CODE_LOWER}-idp - run: ./scripts/spoke-init/sync-federation-secrets.sh ${CODE_UPPER}"
                 WARNINGS=$((WARNINGS + 1))
             fi
-            
+
             # Check if spoke has usa-idp
             local SPOKE_USA_IDP=$(curl -sk "https://localhost:${SPOKE_KC_PORT}/admin/realms/${REALM}/identity-provider/instances/usa-idp" \
                 -H "Authorization: Bearer $TOKEN" 2>/dev/null | jq -r '.alias // empty')
-            
+
             if [[ -n "$SPOKE_USA_IDP" ]]; then
                 log_pass "Spoke has usa-idp configured"
             else
@@ -179,7 +180,7 @@ verify_spoke() {
     else
         log_info "Hub not running - skipping federation check"
     fi
-    
+
     # =========================================================================
     # Summary
     # =========================================================================
@@ -208,21 +209,21 @@ if [[ "$INSTANCE_CODE" == "all" ]]; then
     echo "╔══════════════════════════════════════════════════════════════╗"
     echo "║         DIVE V3 - All Spokes Verification                    ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
-    
+
     TOTAL_PASS=0
     TOTAL_FAIL=0
-    
-    # Find all running spoke Keycloak containers (pattern: xxx-keycloak-xxx-1)
-    for kc in $(docker ps --format '{{.Names}}' | grep -E '^[a-z]{3}-keycloak-[a-z]{3}-1$' | sort); do
-        CODE=$(echo "$kc" | sed 's/-keycloak-.*//')
-        # Skip USA (Hub is dive-hub-keycloak, not usa-keycloak-usa-1)
+
+    # Find all running spoke Keycloak containers (pattern: dive-spoke-xxx-keycloak)
+    for kc in $(docker ps --format '{{.Names}}' | grep -E '^dive-spoke-[a-z]{3}-keycloak$' | sort); do
+        CODE=$(echo "$kc" | sed 's/dive-spoke-//' | sed 's/-keycloak//')
+        # Skip USA (Hub is dive-hub-keycloak)
         if verify_spoke "$CODE"; then
             TOTAL_PASS=$((TOTAL_PASS + 1))
         else
             TOTAL_FAIL=$((TOTAL_FAIL + 1))
         fi
     done
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Summary: $TOTAL_PASS passed, $TOTAL_FAIL failed"

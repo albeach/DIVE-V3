@@ -1,9 +1,0 @@
-version: "3.8"
-
-# Pilot/VM override to avoid impacting local dev
-services:
-  # Prefer faster DNS for cloudflared inside the VM
-  cloudflared:
-    dns:
-      - 1.1.1.1
-      - 1.0.0.1

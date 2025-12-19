@@ -167,6 +167,12 @@
       "name": "HUN Keycloak (Local Dev)",
       "country": "HUN",
       "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8459/realms/dive-v3-broker-lva": {
+      "tenant": "LVA",
+      "name": "LVA Keycloak (Local Dev)",
+      "country": "LVA",
+      "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {
@@ -179,6 +185,7 @@
       "FRA",
       "GBR",
       "HUN",
+      "LVA",
       "NOR",
       "POL",
       "PRT",
@@ -290,6 +297,12 @@
       "USA"
     ],
     "HUN": [
+      "DEU",
+      "FRA",
+      "GBR",
+      "USA"
+    ],
+    "LVA": [
       "DEU",
       "FRA",
       "GBR",
@@ -638,6 +651,18 @@
     "HUN": {
       "code": "HUN",
       "name": "HUN",
+      "locale": "en-US",
+      "mfa_required_above": "UNCLASSIFIED",
+      "max_session_hours": 8,
+      "default_coi": [
+        "NATO"
+      ],
+      "allow_industry_access": true,
+      "industry_max_classification": "CONFIDENTIAL"
+    },
+    "LVA": {
+      "code": "LVA",
+      "name": "LVA",
       "locale": "en-US",
       "mfa_required_above": "UNCLASSIFIED",
       "max_session_hours": 8,

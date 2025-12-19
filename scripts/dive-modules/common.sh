@@ -51,24 +51,24 @@ ensure_shared_network() {
         # Skipping shared network (production uses external domains)
         return 0
     fi
-    
+
     # Required networks for hub-spoke communication
     local networks=("dive-v3-shared-network" "shared-network")
     local created=0
-    
+
     for network_name in "${networks[@]}"; do
         if docker network ls --format '{{.Name}}' | grep -q "^${network_name}$"; then
             log_verbose "Network already exists: $network_name"
             continue
         fi
-        
+
         log_step "Creating network: $network_name"
-        
+
         if [ "$DRY_RUN" = true ]; then
             log_dry "Would create network: $network_name"
             continue
         fi
-        
+
         if docker network create "$network_name" >/dev/null 2>&1; then
             log_success "Network created: $network_name"
             ((created++))
@@ -76,7 +76,7 @@ ensure_shared_network() {
             log_warn "Could not create network: $network_name (may already exist)"
         fi
     done
-    
+
     if [ $created -gt 0 ]; then
         log_success "Created $created shared network(s)"
     fi
@@ -272,9 +272,9 @@ load_gcp_secrets() {
 
     # Debug: show which project/instance we will query
     echo "[secrets-debug] project=${project} instance=${inst_lc}"
-    
+
     log_step "Loading secrets from GCP Secret Manager ($(upper "$instance"))..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would fetch: dive-v3-postgres-${instance}"
         log_dry "Would fetch: dive-v3-keycloak-${instance}"
@@ -286,9 +286,9 @@ load_gcp_secrets() {
         export KEYCLOAK_CLIENT_SECRET="<gcp-secret>"
         return 0
     fi
-    
+
     check_gcloud || { log_error "GCP authentication required for environment '$ENVIRONMENT'"; return 1; }
-    
+
     # Try secrets using documented naming; fall back to legacy variants if present.
     # CRITICAL: Do NOT overwrite existing values from .env if GCP fetch fails
     fetch_first_secret() {
@@ -317,7 +317,7 @@ load_gcp_secrets() {
     fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
     fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
     fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
-    
+
     # Export instance-suffixed variables for spoke docker-compose files
     # CRITICAL: Only overwrite if we have a non-empty value (preserve .env values)
     local inst_uc=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
@@ -331,7 +331,7 @@ load_gcp_secrets() {
 
     # Make secrets available to child processes (docker compose, terraform)
     export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
-    
+
     # For Hub deployment, also load spoke passwords for federation
     if [ "$inst_lc" = "usa" ] || [ "$inst_lc" = "hub" ]; then
         log_step "Loading spoke Keycloak passwords for federation..."
@@ -346,11 +346,11 @@ load_gcp_secrets() {
             fi
         done
     fi
-    
+
     # Align NextAuth/JWT to AUTH secret unless explicitly provided
     [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     [ -n "$AUTH_SECRET" ] && export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
-    
+
     # Terraform variables
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
     export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
@@ -367,7 +367,7 @@ load_gcp_secrets() {
     [ -z "$AUTH_SECRET" ] && log_warn "Missing: AUTH_SECRET" && ((missing++))
     [ -z "$KEYCLOAK_CLIENT_SECRET" ] && log_warn "Missing: KEYCLOAK_CLIENT_SECRET" && ((missing++))
     [ -z "$REDIS_PASSWORD" ] && log_warn "Missing: REDIS_PASSWORD" && ((missing++))
-    
+
     if [ $missing -gt 0 ]; then
         log_error "Failed to load $missing critical secret(s)"
         return 1
@@ -390,7 +390,7 @@ load_gcp_secrets() {
     map_if_empty "KEYCLOAK_ADMIN_PASSWORD_${inst_uc}" "$KEYCLOAK_ADMIN_PASSWORD"
     map_if_empty "KEYCLOAK_CLIENT_SECRET_${inst_uc}" "$KEYCLOAK_CLIENT_SECRET"
     map_if_empty "NEXTAUTH_SECRET_${inst_uc}" "$NEXTAUTH_SECRET"
-    
+
     log_success "Secrets loaded from GCP"
     return 0
 }
