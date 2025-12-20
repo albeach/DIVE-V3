@@ -446,10 +446,10 @@ export class KeycloakFederationService {
   /**
    * Ensure a country-specific federation client exists on this realm
    *
-   * This creates clients like dive-v3-client-usa on a spoke Keycloak
+   * This creates clients like dive-v3-broker-usa on a spoke Keycloak
    * for Hub users authenticating via federation.
    *
-   * @param clientId - The client ID (e.g., dive-v3-client-usa)
+   * @param clientId - The client ID (e.g., dive-v3-broker-usa)
    * @param clientSecret - The shared secret for the client
    * @param partnerIdpUrl - The partner's public Keycloak URL (for redirect URIs)
    * @param partnerRealm - The partner's realm name (for broker endpoint)
@@ -466,8 +466,8 @@ export class KeycloakFederationService {
       throw new Error('Keycloak Admin client not initialized');
     }
 
-    // Extract instance code from clientId (e.g., dive-v3-client-usa -> usa)
-    const instanceCode = clientId.replace('dive-v3-client-', '').toUpperCase();
+    // Extract instance code from clientId (e.g., dive-v3-broker-usa -> usa)
+    const instanceCode = clientId.replace('dive-v3-broker-', '').toUpperCase();
 
     // Get the frontend port for this instance from the NATO database port offsets
     // Each country has a unique offset: frontend = 3000 + offset, backend = 4000 + offset, keycloak = 8443 + offset
@@ -1078,11 +1078,11 @@ export class KeycloakFederationService {
     } = options;
 
     // Use country-specific client IDs for federation
-    // Pattern: dive-v3-client-{requesting_country_code}
-    // - Direction 1 (lva-idp in Hub): Hub authenticates with LVA → uses client on LVA for Hub (dive-v3-client-usa)
-    // - Direction 2 (usa-idp in LVA): LVA authenticates with Hub → uses client on Hub for LVA (dive-v3-client-lva)
-    const clientForLocalToRemote = `dive-v3-client-${localInstanceCode.toLowerCase()}`;  // Client on remote Keycloak
-    const clientForRemoteToLocal = `dive-v3-client-${remoteInstanceCode.toLowerCase()}`; // Client on local Keycloak
+    // Pattern: dive-v3-broker-{country_code} - matches realm naming convention
+    // - Direction 1 (lva-idp in Hub): Hub authenticates with LVA → uses client on LVA for Hub (dive-v3-broker-usa)
+    // - Direction 2 (usa-idp in LVA): LVA authenticates with Hub → uses client on Hub for LVA (dive-v3-broker-lva)
+    const clientForLocalToRemote = `dive-v3-broker-${localInstanceCode.toLowerCase()}`;  // Client on remote Keycloak
+    const clientForRemoteToLocal = `dive-v3-broker-${remoteInstanceCode.toLowerCase()}`; // Client on local Keycloak
 
     logger.info('Creating TRUE bidirectional federation', {
       localInstanceCode,
@@ -1123,7 +1123,7 @@ export class KeycloakFederationService {
     const remoteInternalUrl = options.remoteKeycloakAdminUrl || this.getInternalKeycloakUrl(remoteInstanceCode, remoteIdpUrl);
 
     // Direction 1: Create IdP in local Keycloak to authenticate with remote
-    // The client used here must exist on the REMOTE Keycloak (e.g., dive-v3-client-usa on LVA)
+    // The client used here must exist on the REMOTE Keycloak (e.g., dive-v3-broker-usa on LVA)
     // This client is created when the remote spoke registers with the Hub
     const localResult = await this.createOIDCIdentityProvider({
       alias: remoteAlias,
@@ -1181,7 +1181,7 @@ export class KeycloakFederationService {
       );
 
       // CRITICAL: Ensure the client for Hub users exists on the spoke
-      // e.g., dive-v3-client-usa on LVA Keycloak for USA Hub users
+      // e.g., dive-v3-broker-usa on LVA Keycloak for USA Hub users
       logger.info('Ensuring client exists on remote Keycloak for local users', {
         clientId: clientForLocalToRemote,
         targetRealm: remoteRealm,
@@ -1194,7 +1194,7 @@ export class KeycloakFederationService {
       );
 
       // CRITICAL: Ensure the client for spoke users exists on the Hub (local)
-      // e.g., dive-v3-client-lva on Hub Keycloak for LVA spoke users
+      // e.g., dive-v3-broker-lva on Hub Keycloak for LVA spoke users
       logger.info('Ensuring client exists on local Keycloak for remote users', {
         clientId: clientForRemoteToLocal,
         targetRealm: this.realm,
@@ -1212,7 +1212,7 @@ export class KeycloakFederationService {
       const localInternalUrl = this.getInternalKeycloakUrl(localInstanceCode, localIdpUrl);
 
       // Direction 2: Create IdP in remote Keycloak to authenticate with local
-      // The client used here must exist on the LOCAL Keycloak (e.g., dive-v3-client-lva on Hub)
+      // The client used here must exist on the LOCAL Keycloak (e.g., dive-v3-broker-lva on Hub)
       // This client was created when the spoke registered with the Hub
       const remoteResult = await remoteKeycloakService.createOIDCIdentityProvider({
         alias: localAlias,
