@@ -185,10 +185,9 @@ create_mapper() {
 
     local mapper_name="${local_attr} → ${dive_claim}"
 
+    # Always use "String" for jsonType, even for multivalued attributes
+    # Using "JSON" causes "cannot map type for token claim" errors in Keycloak v26
     local json_type="String"
-    if [ "$multivalued" = "true" ]; then
-        json_type="JSON"
-    fi
 
     curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
         -H "Authorization: Bearer $TOKEN" \
