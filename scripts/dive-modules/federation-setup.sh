@@ -37,6 +37,48 @@ HUB_BACKEND_CONTAINER="dive-hub-backend"
 HUB_REALM="dive-v3-broker"
 
 # =============================================================================
+# DYNAMIC CONTAINER RESOLUTION
+# =============================================================================
+
+##
+# Resolve spoke container name dynamically
+#
+# Arguments:
+#   $1 - Spoke code (e.g., lux, mne)
+#   $2 - Service name (e.g., backend, keycloak, frontend)
+#
+# Outputs:
+#   Container name on success
+#
+# Returns:
+#   0 - Container found
+#   1 - Container not found
+##
+resolve_spoke_container() {
+    local code_lower="$1"
+    local service="$2"
+
+    # Try multiple naming patterns in order of preference
+    local patterns=(
+        "dive-spoke-${code_lower}-${service}"      # New spoke-in-a-box pattern
+        "${code_lower}-${service}-${code_lower}-1"  # Legacy Docker Compose pattern
+        "dive-v3-${service}-${code_lower}"          # Alternative pattern
+        "${service}-${code_lower}"                  # Simple pattern
+    )
+
+    for pattern in "${patterns[@]}"; do
+        if docker ps --format '{{.Names}}' | grep -q "^${pattern}$"; then
+            echo "$pattern"
+            return 0
+        fi
+    done
+
+    log_error "No container found for ${code_lower} ${service}"
+    log_verbose "Tried patterns: ${patterns[*]}"
+    return 1
+}
+
+# =============================================================================
 # KEYCLOAK ADMIN API HELPERS
 # =============================================================================
 
@@ -256,7 +298,8 @@ get_spoke_local_client_secret() {
     local token
     token=$(get_spoke_admin_token "$spoke_code") || return 1
 
-    local backend_container="${code_lower}-backend-${code_lower}-1"
+    local backend_container
+    backend_container=$(resolve_spoke_container "$code_lower" "backend") || return 1
     local keycloak_host="keycloak-${code_lower}"
 
     # Get client UUID
@@ -320,7 +363,8 @@ configure_usa_idp_in_spoke() {
     local token
     token=$(get_spoke_admin_token "$spoke_code") || return 1
 
-    local backend_container="${code_lower}-backend-${code_lower}-1"
+    local backend_container
+    backend_container=$(resolve_spoke_container "$code_lower" "backend") || return 1
     local keycloak_host="keycloak-${code_lower}"
     local realm="dive-v3-broker-${code_lower}"
     local client_id="dive-v3-broker-${code_lower}"
@@ -461,8 +505,12 @@ recreate_spoke_frontend() {
         sleep 5
 
         # Verify the secret was loaded correctly
-        local container_secret
-        container_secret=$(docker exec "${code_lower}-frontend-${code_lower}-1" printenv KEYCLOAK_CLIENT_SECRET 2>/dev/null || echo "")
+        local frontend_container
+        frontend_container=$(resolve_spoke_container "$code_lower" "frontend" 2>/dev/null)
+        local container_secret=""
+        if [ -n "$frontend_container" ]; then
+            container_secret=$(docker exec "$frontend_container" printenv KEYCLOAK_CLIENT_SECRET 2>/dev/null || echo "")
+        fi
 
         if [ -n "$container_secret" ]; then
             log_verbose "Frontend now has secret: ${container_secret:0:8}..."
@@ -574,7 +622,8 @@ update_spoke_client_redirect_uris() {
     local token
     token=$(get_spoke_admin_token "$spoke_code") || return 1
 
-    local backend_container="${code_lower}-backend-${code_lower}-1"
+    local backend_container
+    backend_container=$(resolve_spoke_container "$code_lower" "backend") || return 1
     local keycloak_host="keycloak-${code_lower}"
     local realm="dive-v3-broker-${code_lower}"
     local client_id="dive-v3-broker-${code_lower}"
@@ -590,15 +639,19 @@ update_spoke_client_redirect_uris() {
         return 1
     fi
 
-    # Build redirect URIs array
+    # Build comprehensive redirect URIs array with NextAuth callbacks
+    # CRITICAL: Include specific NextAuth callback URIs to prevent "Invalid parameter: redirect_uri" errors
     local redirect_uris="[
-        \"https://${code_lower}-app.dive25.com/*\",
-        \"https://localhost:3000/*\",
-        \"https://localhost:3000\",
-        \"https://localhost:3000/api/auth/callback/keycloak\",
         \"https://localhost:${frontend_port}/*\",
+        \"https://localhost:${frontend_port}/api/auth/callback/keycloak\",
+        \"https://localhost:${frontend_port}/api/auth/callback/*\",
         \"https://localhost:${frontend_port}\",
-        \"https://localhost:${frontend_port}/api/auth/callback/keycloak\"
+        \"https://${code_lower}-app.dive25.com/*\",
+        \"https://${code_lower}-app.dive25.com/api/auth/callback/keycloak\",
+        \"https://localhost:3000/*\",
+        \"https://localhost:3000/api/auth/callback/keycloak\",
+        \"https://localhost:*/realms/*/broker/*/endpoint\",
+        \"https://dive-hub-keycloak:*/realms/*/broker/*/endpoint\"
     ]"
 
     # Update client
@@ -830,8 +883,9 @@ verify_spoke_federation() {
 
     # Check 2: Spoke Keycloak running
     echo -n "  Spoke Keycloak running:     "
-    local spoke_kc="${code_lower}-keycloak-${code_lower}-1"
-    if docker ps --format '{{.Names}}' | grep -q "^${spoke_kc}$"; then
+    local spoke_kc
+    spoke_kc=$(resolve_spoke_container "$code_lower" "keycloak" 2>/dev/null)
+    if [ -n "$spoke_kc" ]; then
         echo -e "${GREEN}✓${NC}"
         passed=$((passed + 1))
     else
@@ -937,8 +991,9 @@ verify_all_federation() {
             local status="${RED}FAIL${NC}"
 
             # Check spoke Keycloak running
-            local spoke_kc="${spoke}-keycloak-${spoke}-1"
-            if docker ps --format '{{.Names}}' | grep -q "^${spoke_kc}$"; then
+            local spoke_kc
+            spoke_kc=$(resolve_spoke_container "$spoke" "keycloak" 2>/dev/null)
+            if [ -n "$spoke_kc" ]; then
                 kc_ok="${GREEN}✓${NC}"
             fi
 
@@ -1007,8 +1062,9 @@ configure_all_federation() {
         # Skip hub and usa
         if [[ "$spoke" != "hub" && "$spoke" != "usa" && "$spoke" != "shared" && -d "$dir" ]]; then
             # Check if spoke Keycloak is running
-            local spoke_kc="${spoke}-keycloak-${spoke}-1"
-            if docker ps --format '{{.Names}}' | grep -q "^${spoke_kc}$"; then
+            local spoke_kc
+            spoke_kc=$(resolve_spoke_container "$spoke" "keycloak" 2>/dev/null)
+            if [ -n "$spoke_kc" ]; then
                 echo -e "${CYAN}>>> Processing: $(upper "$spoke")${NC}"
                 if configure_spoke_federation "$spoke" 2>&1 | sed 's/^/  /'; then
                     success=$((success + 1))
@@ -1174,8 +1230,9 @@ fix_all_realm_issuers() {
         # Skip hub and usa
         if [[ "$spoke" != "hub" && "$spoke" != "usa" && "$spoke" != "shared" && -d "$dir" ]]; then
             # Check if spoke Keycloak is running
-            local spoke_kc="${spoke}-keycloak-${spoke}-1"
-            if docker ps --format '{{.Names}}' | grep -q "^${spoke_kc}$"; then
+            local spoke_kc
+            spoke_kc=$(resolve_spoke_container "$spoke" "keycloak" 2>/dev/null)
+            if [ -n "$spoke_kc" ]; then
                 echo -e "${CYAN}>>> Processing: $(upper "$spoke")${NC}"
                 if fix_realm_issuer "$spoke" 2>&1 | sed 's/^/  /'; then
                     success=$((success + 1))
@@ -1336,8 +1393,9 @@ sync_all_opa_trusted_issuers() {
         # Skip hub and usa
         if [[ "$spoke" != "hub" && "$spoke" != "usa" && "$spoke" != "shared" && -d "$dir" ]]; then
             # Check if spoke Keycloak is running
-            local spoke_kc="${spoke}-keycloak-${spoke}-1"
-            if docker ps --format '{{.Names}}' | grep -q "^${spoke_kc}$"; then
+            local spoke_kc
+            spoke_kc=$(resolve_spoke_container "$spoke" "keycloak" 2>/dev/null)
+            if [ -n "$spoke_kc" ]; then
                 echo -e "${CYAN}>>> Processing: $(upper "$spoke")${NC}"
                 if sync_opa_trusted_issuers "$spoke" 2>&1 | sed 's/^/  /'; then
                     success=$((success + 1))
@@ -1816,7 +1874,8 @@ register_spoke_in_hub() {
 
     # Get SPOKE client secret (for forward federation: hub → spoke)
     # The Hub IdP needs the Spoke's client credentials to authenticate
-    local spoke_keycloak_container="${spoke_lower}-keycloak-${spoke_lower}-1"
+    local spoke_keycloak_container
+    spoke_keycloak_container=$(resolve_spoke_container "$spoke_lower" "keycloak") || return 1
     local spoke_admin_pass=""
     if [ -f "${spoke_dir}/.env" ]; then
         spoke_admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD" "${spoke_dir}/.env" 2>/dev/null | cut -d= -f2)
@@ -1824,19 +1883,21 @@ register_spoke_in_hub() {
     spoke_admin_pass="${spoke_admin_pass:-admin}"
 
     # Get spoke client secret via curl (more reliable than kcadm across containers)
+    local spoke_backend_container
+    spoke_backend_container=$(resolve_spoke_container "$spoke_lower" "backend") || return 1
     local spoke_token
-    spoke_token=$(docker exec "${spoke_lower}-backend-${spoke_lower}-1" curl -sk \
+    spoke_token=$(docker exec "$spoke_backend_container" curl -sk \
         -X POST "http://keycloak-${spoke_lower}:8080/realms/master/protocol/openid-connect/token" \
         -d "grant_type=password" -d "client_id=admin-cli" -d "username=admin" \
         -d "password=${spoke_admin_pass}" 2>/dev/null | jq -r '.access_token')
 
     local spoke_client_uuid
-    spoke_client_uuid=$(docker exec "${spoke_lower}-backend-${spoke_lower}-1" curl -sk \
+    spoke_client_uuid=$(docker exec "$spoke_backend_container" curl -sk \
         "http://keycloak-${spoke_lower}:8080/admin/realms/${spoke_realm}/clients?clientId=${spoke_client}" \
         -H "Authorization: Bearer ${spoke_token}" 2>/dev/null | jq -r '.[0].id')
 
     local client_secret
-    client_secret=$(docker exec "${spoke_lower}-backend-${spoke_lower}-1" curl -sk \
+    client_secret=$(docker exec "$spoke_backend_container" curl -sk \
         "http://keycloak-${spoke_lower}:8080/admin/realms/${spoke_realm}/clients/${spoke_client_uuid}/client-secret" \
         -H "Authorization: Bearer ${spoke_token}" 2>/dev/null | jq -r '.value')
 
@@ -2004,7 +2065,7 @@ register_spoke_in_hub() {
                 # This allows: Hub → Spoke Keycloak → callback to Hub broker
                 docker exec "$spoke_keycloak_container" /opt/keycloak/bin/kcadm.sh update "clients/${spoke_client_uuid}" \
                     -r "${spoke_realm}" \
-                    -s "redirectUris=[\"https://localhost:${frontend_port}/*\",\"https://localhost:${frontend_port}\",\"https://localhost:${frontend_port}/api/auth/callback/keycloak\",\"https://localhost:3000/*\",\"https://localhost:3000/api/auth/callback/keycloak\",\"https://localhost:8443/realms/dive-v3-broker/broker/${spoke_idp}/endpoint\",\"https://localhost:8443/*\",\"https://${spoke_lower}-app.dive25.com/*\"]" 2>/dev/null
+                    -s "redirectUris=[\"https://localhost:${frontend_port}/*\",\"https://localhost:${frontend_port}/api/auth/callback/keycloak\",\"https://localhost:${frontend_port}/api/auth/callback/*\",\"https://localhost:${frontend_port}\",\"https://${spoke_lower}-app.dive25.com/*\",\"https://${spoke_lower}-app.dive25.com/api/auth/callback/keycloak\",\"https://localhost:3000/*\",\"https://localhost:3000/api/auth/callback/keycloak\",\"https://localhost:8443/realms/dive-v3-broker/broker/${spoke_idp}/endpoint\",\"https://localhost:8443/*\"]" 2>/dev/null
                 log_success "Updated spoke client redirect URIs"
             else
                 log_warn "Could not find spoke client: ${spoke_client}"
