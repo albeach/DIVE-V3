@@ -268,6 +268,35 @@ else
 fi
 
 # =============================================================================
+# MAKE EMAIL/FIRSTNAME/LASTNAME NOT REQUIRED (PII MINIMIZATION)
+# =============================================================================
+
+log_step "Configuring PII minimization (making email/firstName/lastName not required)..."
+
+# Get the latest profile
+PROFILE_TO_UPDATE=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users/profile" \
+    -H "Authorization: Bearer $TOKEN")
+
+# Remove required constraint from email, firstName, lastName
+PROFILE_TO_UPDATE=$(echo "$PROFILE_TO_UPDATE" | jq '
+  .attributes = [.attributes[] | 
+    if .name == "email" or .name == "firstName" or .name == "lastName" then
+      del(.required)
+    else
+      .
+    end
+  ]
+')
+
+# Update User Profile
+curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM}/users/profile" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$PROFILE_TO_UPDATE" > /dev/null 2>&1
+
+log_success "PII fields (email/firstName/lastName) are now optional"
+
+# =============================================================================
 # SUMMARY
 # =============================================================================
 
