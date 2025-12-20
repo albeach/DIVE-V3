@@ -1565,9 +1565,10 @@ spoke_register() {
     # Get spoke's Keycloak admin password to include in registration
     # This allows Hub to create reverse IdP (hub-idp in spoke Keycloak)
     local keycloak_password=""
+    local code_upper=$(upper "$instance_code_config")
+    local keycloak_container="dive-spoke-${code_lower}-keycloak"
 
     # Try environment variable first (from .env file)
-    local code_upper=$(upper "$instance_code_config")
     local env_var_name="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
     if [ -n "${!env_var_name}" ]; then
         keycloak_password="${!env_var_name}"
@@ -1576,18 +1577,30 @@ spoke_register() {
         keycloak_password="$KEYCLOAK_ADMIN_PASSWORD"
         log_info "Using Keycloak password from KEYCLOAK_ADMIN_PASSWORD"
     else
-        # Try to get it from the running Keycloak container
-        local keycloak_container="dive-spoke-${code_lower}-keycloak"
+        # Try to get it from the running Keycloak container with retry
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$keycloak_container"; then
-            keycloak_password=$(docker exec "$keycloak_container" env 2>/dev/null | grep '^KEYCLOAK_ADMIN_PASSWORD=' | cut -d'=' -f2 | tr -d '\n\r')
-            if [ -n "$keycloak_password" ]; then
-                log_info "Retrieved Keycloak password from container $keycloak_container"
-            fi
+            log_info "Waiting for Keycloak container to be fully ready..."
+            
+            # Retry up to 10 times with 2 second delay
+            for attempt in {1..10}; do
+                # Use printenv which is more reliable than env
+                keycloak_password=$(docker exec "$keycloak_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+                
+                # Verify it's not a default/placeholder password
+                if [ -n "$keycloak_password" ] && [ ${#keycloak_password} -gt 10 ] && [[ ! "$keycloak_password" =~ ^(admin|password|KeycloakAdmin) ]]; then
+                    log_info "Retrieved Keycloak password from container $keycloak_container (attempt $attempt)"
+                    break
+                fi
+                
+                if [ $attempt -lt 10 ]; then
+                    sleep 2
+                fi
+            done
         fi
     fi
 
-    if [ -z "$keycloak_password" ]; then
-        log_warn "Could not retrieve Keycloak admin password"
+    if [ -z "$keycloak_password" ] || [ ${#keycloak_password} -lt 10 ]; then
+        log_warn "Could not retrieve valid Keycloak admin password"
         log_warn "Bidirectional federation may fail (Hub won't be able to create reverse IdP)"
         echo ""
         echo "  To fix: Set KEYCLOAK_ADMIN_PASSWORD_${code_upper} in .env"
