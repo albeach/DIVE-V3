@@ -30,7 +30,7 @@
             <script src="${url.resourcesPath}/${script}" type="text/javascript"></script>
         </#list>
     </#if>
-    
+
     <!-- Import Map for WebAuthn (rfc4648 module resolution) -->
     <script type="importmap">
         {
@@ -40,16 +40,16 @@
         }
     </script>
     <script src="${url.resourcesPath}/js/menu-button-links.js" type="module"></script>
-    
+
     <#if scripts??>
         <#list scripts as script>
             <script src="${script}" type="text/javascript"></script>
         </#list>
     </#if>
-    
+
     <!-- DIVE V3 Custom Styles -->
     <link href="${url.resourcesPath}/css/dive-v3.css" rel="stylesheet" />
-    
+
     <#-- ============================================ -->
     <#-- Detect HOST INSTANCE (before body for data attribute) -->
     <#-- ============================================ -->
@@ -57,12 +57,12 @@
     <#assign hostInstance = "">
     <#assign hostFlag = "🌐">
     <#assign hostCountryName = "">
-    
+
     <#-- Parse from realm displayName (e.g., "France", "Germany", "United States") -->
     <#-- Also check for realm name containing ISO code (e.g., "dive-v3-broker-alb") -->
     <#if realm?? && (realm.displayName?has_content || realm.name?has_content)>
         <#assign realmCheck = ((realm.displayName!'') + ' ' + (realm.name!''))?lower_case>
-        
+
         <#-- NATO Founding Members (1949) - 12 countries -->
         <#if realmCheck?contains("belgium") || realmCheck?contains("-bel")>
             <#assign hostInstance = "BEL"><#assign hostFlag = "🇧🇪"><#assign hostCountryName = "Belgium">
@@ -88,7 +88,7 @@
             <#assign hostInstance = "GBR"><#assign hostFlag = "🇬🇧"><#assign hostCountryName = "United Kingdom">
         <#elseif realmCheck?contains("united states") || realmCheck?contains("america") || realmCheck?contains("-usa")>
             <#assign hostInstance = "USA"><#assign hostFlag = "🇺🇸"><#assign hostCountryName = "United States">
-        
+
         <#-- Cold War Expansion (1952-1982) - 4 countries -->
         <#elseif realmCheck?contains("greece") || realmCheck?contains("hellas") || realmCheck?contains("-grc")>
             <#assign hostInstance = "GRC"><#assign hostFlag = "🇬🇷"><#assign hostCountryName = "Greece">
@@ -98,7 +98,7 @@
             <#assign hostInstance = "DEU"><#assign hostFlag = "🇩🇪"><#assign hostCountryName = "Germany">
         <#elseif realmCheck?contains("spain") || realmCheck?contains("españa") || realmCheck?contains("-esp")>
             <#assign hostInstance = "ESP"><#assign hostFlag = "🇪🇸"><#assign hostCountryName = "Spain">
-        
+
         <#-- Post-Cold War Expansion (1999) - 3 countries -->
         <#elseif realmCheck?contains("czechia") || realmCheck?contains("czech") || realmCheck?contains("-cze")>
             <#assign hostInstance = "CZE"><#assign hostFlag = "🇨🇿"><#assign hostCountryName = "Czechia">
@@ -106,7 +106,7 @@
             <#assign hostInstance = "HUN"><#assign hostFlag = "🇭🇺"><#assign hostCountryName = "Hungary">
         <#elseif realmCheck?contains("poland") || realmCheck?contains("polska") || realmCheck?contains("-pol")>
             <#assign hostInstance = "POL"><#assign hostFlag = "🇵🇱"><#assign hostCountryName = "Poland">
-        
+
         <#-- 2004 Expansion (Big Bang) - 7 countries -->
         <#elseif realmCheck?contains("bulgaria") || realmCheck?contains("-bgr")>
             <#assign hostInstance = "BGR"><#assign hostFlag = "🇧🇬"><#assign hostCountryName = "Bulgaria">
@@ -122,7 +122,7 @@
             <#assign hostInstance = "SVK"><#assign hostFlag = "🇸🇰"><#assign hostCountryName = "Slovakia">
         <#elseif realmCheck?contains("slovenia") || realmCheck?contains("-svn")>
             <#assign hostInstance = "SVN"><#assign hostFlag = "🇸🇮"><#assign hostCountryName = "Slovenia">
-        
+
         <#-- 2009-2020 Expansion - 4 countries -->
         <#elseif realmCheck?contains("albania") || realmCheck?contains("-alb")>
             <#assign hostInstance = "ALB"><#assign hostFlag = "🇦🇱"><#assign hostCountryName = "Albania">
@@ -132,13 +132,13 @@
             <#assign hostInstance = "MNE"><#assign hostFlag = "🇲🇪"><#assign hostCountryName = "Montenegro">
         <#elseif realmCheck?contains("north macedonia") || realmCheck?contains("macedonia") || realmCheck?contains("-mkd")>
             <#assign hostInstance = "MKD"><#assign hostFlag = "🇲🇰"><#assign hostCountryName = "North Macedonia">
-        
+
         <#-- Nordic Expansion (2023-2024) - 2 countries -->
         <#elseif realmCheck?contains("finland") || realmCheck?contains("suomi") || realmCheck?contains("-fin")>
             <#assign hostInstance = "FIN"><#assign hostFlag = "🇫🇮"><#assign hostCountryName = "Finland">
         <#elseif realmCheck?contains("sweden") || realmCheck?contains("sverige") || realmCheck?contains("-swe")>
             <#assign hostInstance = "SWE"><#assign hostFlag = "🇸🇪"><#assign hostCountryName = "Sweden">
-        
+
         <#-- Non-NATO Partners (FVEY) -->
         <#elseif realmCheck?contains("australia") || realmCheck?contains("-aus")>
             <#assign hostInstance = "AUS"><#assign hostFlag = "🇦🇺"><#assign hostCountryName = "Australia">
@@ -150,7 +150,7 @@
             <#assign hostInstance = "KOR"><#assign hostFlag = "🇰🇷"><#assign hostCountryName = "South Korea">
         </#if>
     </#if>
-    
+
     <#-- Fallback: Default to USA -->
     <#if !hostInstance?has_content>
         <#assign hostInstance = "USA"><#assign hostFlag = "🇺🇸"><#assign hostCountryName = "United States">
@@ -170,19 +170,19 @@
     <!-- FEDERATION HANDOFF BANNER                   -->
     <!-- Modern 2025 UX with clear user education   -->
     <!-- ============================================ -->
-    
+
     <#-- Detect USER'S HOME COUNTRY from federation context -->
     <#assign userHomeInstance = "">
     <#assign userHomeFlag = "🌐">
     <#assign userHomeCountryName = "Partner Nation">
     <#assign isFederatedLogin = false>
-    
+
     <#-- Check for brokerContext (user coming from external IdP) -->
     <#-- Uses IdP alias format: "{country-code}-idp" (e.g., "usa-idp", "pol-idp") -->
     <#if brokerContext?? && brokerContext.identityProviderAlias?has_content>
         <#assign isFederatedLogin = true>
         <#assign idpAlias = brokerContext.identityProviderAlias?lower_case>
-        
+
         <#-- NATO Founding Members (1949) -->
         <#if idpAlias?contains("bel")>
             <#assign userHomeInstance = "BEL"><#assign userHomeFlag = "🇧🇪"><#assign userHomeCountryName = "Belgium">
@@ -208,7 +208,7 @@
             <#assign userHomeInstance = "GBR"><#assign userHomeFlag = "🇬🇧"><#assign userHomeCountryName = "United Kingdom">
         <#elseif idpAlias?contains("usa")>
             <#assign userHomeInstance = "USA"><#assign userHomeFlag = "🇺🇸"><#assign userHomeCountryName = "United States">
-        
+
         <#-- Cold War Expansion -->
         <#elseif idpAlias?contains("grc")>
             <#assign userHomeInstance = "GRC"><#assign userHomeFlag = "🇬🇷"><#assign userHomeCountryName = "Greece">
@@ -218,7 +218,7 @@
             <#assign userHomeInstance = "DEU"><#assign userHomeFlag = "🇩🇪"><#assign userHomeCountryName = "Germany">
         <#elseif idpAlias?contains("esp")>
             <#assign userHomeInstance = "ESP"><#assign userHomeFlag = "🇪🇸"><#assign userHomeCountryName = "Spain">
-        
+
         <#-- Post-Cold War Expansion -->
         <#elseif idpAlias?contains("cze")>
             <#assign userHomeInstance = "CZE"><#assign userHomeFlag = "🇨🇿"><#assign userHomeCountryName = "Czechia">
@@ -226,7 +226,7 @@
             <#assign userHomeInstance = "HUN"><#assign userHomeFlag = "🇭🇺"><#assign userHomeCountryName = "Hungary">
         <#elseif idpAlias?contains("pol")>
             <#assign userHomeInstance = "POL"><#assign userHomeFlag = "🇵🇱"><#assign userHomeCountryName = "Poland">
-        
+
         <#-- 2004 Expansion -->
         <#elseif idpAlias?contains("bgr")>
             <#assign userHomeInstance = "BGR"><#assign userHomeFlag = "🇧🇬"><#assign userHomeCountryName = "Bulgaria">
@@ -242,7 +242,7 @@
             <#assign userHomeInstance = "SVK"><#assign userHomeFlag = "🇸🇰"><#assign userHomeCountryName = "Slovakia">
         <#elseif idpAlias?contains("svn")>
             <#assign userHomeInstance = "SVN"><#assign userHomeFlag = "🇸🇮"><#assign userHomeCountryName = "Slovenia">
-        
+
         <#-- 2009-2020 Expansion -->
         <#elseif idpAlias?contains("alb")>
             <#assign userHomeInstance = "ALB"><#assign userHomeFlag = "🇦🇱"><#assign userHomeCountryName = "Albania">
@@ -252,13 +252,13 @@
             <#assign userHomeInstance = "MNE"><#assign userHomeFlag = "🇲🇪"><#assign userHomeCountryName = "Montenegro">
         <#elseif idpAlias?contains("mkd")>
             <#assign userHomeInstance = "MKD"><#assign userHomeFlag = "🇲🇰"><#assign userHomeCountryName = "North Macedonia">
-        
+
         <#-- Nordic Expansion -->
         <#elseif idpAlias?contains("fin")>
             <#assign userHomeInstance = "FIN"><#assign userHomeFlag = "🇫🇮"><#assign userHomeCountryName = "Finland">
         <#elseif idpAlias?contains("swe")>
             <#assign userHomeInstance = "SWE"><#assign userHomeFlag = "🇸🇪"><#assign userHomeCountryName = "Sweden">
-        
+
         <#-- Non-NATO Partners -->
         <#elseif idpAlias?contains("aus")>
             <#assign userHomeInstance = "AUS"><#assign userHomeFlag = "🇦🇺"><#assign userHomeCountryName = "Australia">
@@ -270,7 +270,7 @@
             <#assign userHomeInstance = "KOR"><#assign userHomeFlag = "🇰🇷"><#assign userHomeCountryName = "South Korea">
         </#if>
     </#if>
-    
+
     <#-- Also check client ID for federation hints -->
     <#-- IMPORTANT: Client ID patterns have different meanings:
          - dive-v3-{source}-federation: Source is {source} (coming FROM that country)
@@ -286,7 +286,7 @@
         <#assign clientData = client.clientId?lower_case>
         <#if clientData?contains("federation") || clientData?contains("broker") || clientData?contains("cross-border") || clientData?contains("client-")>
             <#assign isFederatedLogin = true>
-            
+
             <#-- FIRST: Check if this is a reverse federation (Hub → Spoke) -->
             <#-- Patterns supported:
                  - dive-v3-client-{country}: OLD pattern where we ARE on that country's Keycloak
@@ -303,11 +303,11 @@
                     <#assign sourceCountryName = "United States">
                 </#if>
             </#if>
-            
+
             <#-- Only do country extraction from client ID if NOT reverse federation -->
             <#if !isReverseFedaration>
             <#-- Extract source country from client_id (e.g., dive-v3-usa-federation or dive-v3-client-alb) -->
-            
+
             <#-- NATO Founding Members -->
             <#if clientData?contains("-bel-")>
                 <#assign sourceInstance = "BEL"><#assign sourceFlag = "🇧🇪"><#assign sourceCountryName = "Belgium">
@@ -333,7 +333,7 @@
                 <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
             <#elseif clientData?contains("-usa-")>
                 <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
-            
+
             <#-- Cold War Expansion -->
             <#elseif clientData?contains("-grc-")>
                 <#assign sourceInstance = "GRC"><#assign sourceFlag = "🇬🇷"><#assign sourceCountryName = "Greece">
@@ -343,7 +343,7 @@
                 <#assign sourceInstance = "DEU"><#assign sourceFlag = "🇩🇪"><#assign sourceCountryName = "Germany">
             <#elseif clientData?contains("-esp-")>
                 <#assign sourceInstance = "ESP"><#assign sourceFlag = "🇪🇸"><#assign sourceCountryName = "Spain">
-            
+
             <#-- Post-Cold War Expansion -->
             <#elseif clientData?contains("-cze-")>
                 <#assign sourceInstance = "CZE"><#assign sourceFlag = "🇨🇿"><#assign sourceCountryName = "Czechia">
@@ -351,7 +351,7 @@
                 <#assign sourceInstance = "HUN"><#assign sourceFlag = "🇭🇺"><#assign sourceCountryName = "Hungary">
             <#elseif clientData?contains("-pol-")>
                 <#assign sourceInstance = "POL"><#assign sourceFlag = "🇵🇱"><#assign sourceCountryName = "Poland">
-            
+
             <#-- 2004 Expansion -->
             <#elseif clientData?contains("-bgr-")>
                 <#assign sourceInstance = "BGR"><#assign sourceFlag = "🇧🇬"><#assign sourceCountryName = "Bulgaria">
@@ -367,7 +367,7 @@
                 <#assign sourceInstance = "SVK"><#assign sourceFlag = "🇸🇰"><#assign sourceCountryName = "Slovakia">
             <#elseif clientData?contains("-svn-")>
                 <#assign sourceInstance = "SVN"><#assign sourceFlag = "🇸🇮"><#assign sourceCountryName = "Slovenia">
-            
+
             <#-- 2009-2020 Expansion -->
             <#elseif clientData?contains("-alb-")>
                 <#assign sourceInstance = "ALB"><#assign sourceFlag = "🇦🇱"><#assign sourceCountryName = "Albania">
@@ -377,13 +377,13 @@
                 <#assign sourceInstance = "MNE"><#assign sourceFlag = "🇲🇪"><#assign sourceCountryName = "Montenegro">
             <#elseif clientData?contains("-mkd-")>
                 <#assign sourceInstance = "MKD"><#assign sourceFlag = "🇲🇰"><#assign sourceCountryName = "North Macedonia">
-            
+
             <#-- Nordic Expansion -->
             <#elseif clientData?contains("-fin-")>
                 <#assign sourceInstance = "FIN"><#assign sourceFlag = "🇫🇮"><#assign sourceCountryName = "Finland">
             <#elseif clientData?contains("-swe-")>
                 <#assign sourceInstance = "SWE"><#assign sourceFlag = "🇸🇪"><#assign sourceCountryName = "Sweden">
-            
+
             <#-- Non-NATO Partners -->
             <#elseif clientData?contains("-aus-")>
                 <#assign sourceInstance = "AUS"><#assign sourceFlag = "🇦🇺"><#assign sourceCountryName = "Australia">
@@ -393,7 +393,7 @@
                 <#assign sourceInstance = "JPN"><#assign sourceFlag = "🇯🇵"><#assign sourceCountryName = "Japan">
             <#elseif clientData?contains("-kor-")>
                 <#assign sourceInstance = "KOR"><#assign sourceFlag = "🇰🇷"><#assign sourceCountryName = "South Korea">
-            
+
             <#-- Spoke-specific client pattern: dive-v3-client-{country} -->
             <#elseif clientData?contains("client-alb")>
                 <#assign sourceInstance = "ALB"><#assign sourceFlag = "🇦🇱"><#assign sourceCountryName = "Albania">
@@ -457,7 +457,7 @@
                 <#assign sourceInstance = "TUR"><#assign sourceFlag = "🇹🇷"><#assign sourceCountryName = "Turkey">
             <#elseif clientData?contains("client-gbr")>
                 <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
-            
+
             <#-- NEW PATTERN: dive-v3-broker-{country} for bidirectional federation -->
             <#-- When on Hub and spoke connects, source is the spoke country -->
             <#elseif clientData?ends_with("broker-alb")>
@@ -533,7 +533,7 @@
                 <#assign sourceInstance = "JPN"><#assign sourceFlag = "🇯🇵"><#assign sourceCountryName = "Japan">
             <#elseif clientData?ends_with("broker-kor")>
                 <#assign sourceInstance = "KOR"><#assign sourceFlag = "🇰🇷"><#assign sourceCountryName = "South Korea">
-            
+
             <#-- Legacy cross-border client (backward compatibility) -->
             <#elseif clientData?contains("cross-border")>
                 <#-- Fallback for old generic cross-border client - default to ALB -->
@@ -553,7 +553,7 @@
 
     <!-- Main Container -->
     <div class="dive-container">
-        
+
         <#-- Show Federation Handoff Banner when cross-border authentication detected -->
         <#-- This shows when: user comes from a different instance (sourceInstance != hostInstance) -->
         <#if isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance>
@@ -569,7 +569,7 @@
                         <span class="dive-handoff-country">${hostInstance}</span>
                     </div>
                 </div>
-                
+
                 <!-- Animated Flow Indicator -->
                 <div class="dive-handoff-flow">
                     <div class="dive-handoff-arrow-track">
@@ -577,7 +577,7 @@
                     </div>
                     <span class="dive-handoff-via">→</span>
                 </div>
-                
+
                 <!-- RIGHT: Destination Application (Where you want access) -->
                 <div class="dive-handoff-destination">
                     <div class="dive-handoff-flag-container dive-flag-pulse">
@@ -589,7 +589,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Policy Notice - Expandable -->
             <details class="dive-policy-notice">
                 <summary class="dive-policy-trigger">
@@ -604,7 +604,7 @@
                 <div class="dive-policy-content">
                     <p class="dive-policy-main">
                         <strong>🤝 Bilateral Trust Agreement</strong><br/>
-                        By authenticating through <strong>${hostCountryName}</strong> to access <strong>${sourceCountryName}</strong>'s resources, 
+                        By authenticating through <strong>${hostCountryName}</strong> to access <strong>${sourceCountryName}</strong>'s resources,
                         you agree to operate under ${sourceCountryName}'s data governance policies.
                     </p>
                     <ul class="dive-policy-list">
@@ -616,7 +616,7 @@
             </details>
         </div>
         </#if>
-        
+
         <!-- Split Layout -->
         <div class="dive-layout">
             <!-- LEFT: Login Form -->
@@ -684,19 +684,19 @@
             <#assign idpCodeVal = hostInstance!'USA'>
             <#assign idpCountryName = hostCountryName!'United States'>
             <#assign idpFlag = hostFlag!'🇺🇸'>
-            
+
             <#-- Override with userHomeInstance if this is a federation flow -->
             <#if isFederatedLogin && userHomeInstance?has_content>
                 <#assign idpCodeVal = userHomeInstance>
                 <#assign idpCountryName = userHomeCountryName>
                 <#assign idpFlag = userHomeFlag>
             </#if>
-            
+
             <#assign idpCountryCode = idpCodeVal>
-            
+
             <div class="dive-description-column">
                 <div class="dive-transparency-panel">
-                    
+
                     <!-- TEMP DEBUG: Show detection values -->
                     <div style="background: #1e3a5f; color: white; padding: 8px; margin-bottom: 10px; font-size: 11px; border-left: 3px solid #3b82f6;">
                         <strong>🔍 Detection:</strong><br/>
@@ -706,7 +706,7 @@
                         isFederated: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${isFederatedLogin?string('true','false')}</code><br/>
                         Match: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${(isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance)?string('true','false')}</code>
                     </div>
-                    
+
                     <!-- LEVEL 0: Trust Chain Summary (Always Visible) -->
                     <div class="dive-trust-summary">
                         <#-- Show different trust chains for federation vs direct login -->
@@ -780,7 +780,7 @@
                         <p class="dive-trust-tagline">${msg("dive.trust.tagline")}</p>
                         </#if>
                     </div>
-                    
+
                     <!-- LEVEL 1: "How does this work?" (Expandable) -->
                     <details class="dive-microprogression dive-level-1">
                         <summary class="dive-expand-trigger">
@@ -803,7 +803,7 @@
                             </ol>
                         </div>
                     </details>
-                    
+
                     <!-- LEVEL 2: "What gets shared?" (Auto-expanded) -->
                     <details class="dive-microprogression dive-level-2" open>
                         <summary class="dive-expand-trigger">
@@ -834,7 +834,7 @@
                             <p class="dive-attr-note">${msg("dive.attr.note")}</p>
                         </div>
                     </details>
-                    
+
                     <!-- LEVEL 3: "Technical Details" (Expandable) -->
                     <details class="dive-microprogression dive-level-3">
                         <summary class="dive-expand-trigger">
@@ -866,7 +866,7 @@
                             </div>
                         </div>
                     </details>
-                    
+
                     <!-- Help Notice (Generic) -->
                     <div class="dive-help-footer">
                         <button type="button" class="dive-help-trigger-small" onclick="document.getElementById('helpPanel').classList.toggle('dive-hidden')">
@@ -893,7 +893,7 @@
             const passwordInput = document.getElementById('password');
             const eyeIcon = document.getElementById('eye-icon');
             const eyeOffIcon = document.getElementById('eye-off-icon');
-            
+
             if (passwordInput.type === 'password') {
                 passwordInput.type = 'text';
                 eyeIcon.classList.add('dive-hidden');
@@ -904,12 +904,12 @@
                 eyeOffIcon.classList.add('dive-hidden');
             }
         }
-        
+
         // Toggle forgot password info panel (matches desktop behavior)
         function toggleForgotPasswordInfo() {
             const infoPanel = document.getElementById('forgot-password-info');
             const chevron = document.getElementById('forgot-chevron');
-            
+
             if (infoPanel.classList.contains('dive-hidden')) {
                 infoPanel.classList.remove('dive-hidden');
                 infoPanel.style.maxHeight = infoPanel.scrollHeight + 'px';
