@@ -1129,7 +1129,7 @@ services:
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-${code_lower}
       BACKEND_URL: https://backend-${code_lower}:4000
       AUTH_SECRET: \${NEXTAUTH_SECRET_${code_upper}:?set NEXTAUTH_SECRET_${code_upper}}
-      AUTH_KEYCLOAK_ID: dive-v3-client-${code_lower}
+      AUTH_KEYCLOAK_ID: dive-v3-broker-${code_lower}
       AUTH_KEYCLOAK_SECRET: \${KEYCLOAK_CLIENT_SECRET_${code_upper}:?set KEYCLOAK_CLIENT_SECRET_${code_upper}}
       AUTH_KEYCLOAK_ISSUER: https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower}
       AUTH_TRUST_HOST: "true"
@@ -1138,7 +1138,7 @@ services:
       DATABASE_URL: postgresql://keycloak:\${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}@postgres-${code_lower}:5432/keycloak
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      KEYCLOAK_CLIENT_ID: dive-v3-client-${code_lower}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-${code_lower}
       KEYCLOAK_CLIENT_SECRET: \${KEYCLOAK_CLIENT_SECRET_${code_upper}:?set KEYCLOAK_CLIENT_SECRET_${code_upper}}
       AUTH_POST_LOGOUT_REDIRECT: https://${code_lower}-app.dive25.com
       AUTH_REDIRECT_URI: https://${code_lower}-app.dive25.com/api/auth/callback/keycloak

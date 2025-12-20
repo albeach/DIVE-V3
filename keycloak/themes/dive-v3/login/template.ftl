@@ -288,10 +288,13 @@
             <#assign isFederatedLogin = true>
             
             <#-- FIRST: Check if this is a reverse federation (Hub → Spoke) -->
-            <#-- Pattern: dive-v3-client-{country} where we ARE on that country's Keycloak -->
-            <#-- Example: client=dive-v3-client-rou on ROU Keycloak means Hub is connecting TO us -->
-            <#if clientData?starts_with("dive-v3-client-") && hostInstance?has_content>
-                <#assign clientCountry = clientData?replace("dive-v3-client-", "")?upper_case>
+            <#-- Patterns supported:
+                 - dive-v3-client-{country}: OLD pattern where we ARE on that country's Keycloak
+                 - dive-v3-broker-{country}: NEW pattern for bidirectional federation
+                 Example: client=dive-v3-broker-swe on SWE Keycloak means Hub is connecting TO us
+                 Example: client=dive-v3-broker-usa on Hub means Spoke is connecting FROM that spoke -->
+            <#if (clientData?starts_with("dive-v3-client-") || clientData?starts_with("dive-v3-broker-")) && hostInstance?has_content>
+                <#assign clientCountry = clientData?replace("dive-v3-client-", "")?replace("dive-v3-broker-", "")?upper_case>
                 <#if clientCountry == hostInstance>
                     <#-- This is reverse federation! Source is the Hub (USA) -->
                     <#assign isReverseFedaration = true>
@@ -454,6 +457,82 @@
                 <#assign sourceInstance = "TUR"><#assign sourceFlag = "🇹🇷"><#assign sourceCountryName = "Turkey">
             <#elseif clientData?contains("client-gbr")>
                 <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
+            
+            <#-- NEW PATTERN: dive-v3-broker-{country} for bidirectional federation -->
+            <#-- When on Hub and spoke connects, source is the spoke country -->
+            <#elseif clientData?ends_with("broker-alb")>
+                <#assign sourceInstance = "ALB"><#assign sourceFlag = "🇦🇱"><#assign sourceCountryName = "Albania">
+            <#elseif clientData?ends_with("broker-bel")>
+                <#assign sourceInstance = "BEL"><#assign sourceFlag = "🇧🇪"><#assign sourceCountryName = "Belgium">
+            <#elseif clientData?ends_with("broker-bgr")>
+                <#assign sourceInstance = "BGR"><#assign sourceFlag = "🇧🇬"><#assign sourceCountryName = "Bulgaria">
+            <#elseif clientData?ends_with("broker-can")>
+                <#assign sourceInstance = "CAN"><#assign sourceFlag = "🇨🇦"><#assign sourceCountryName = "Canada">
+            <#elseif clientData?ends_with("broker-hrv")>
+                <#assign sourceInstance = "HRV"><#assign sourceFlag = "🇭🇷"><#assign sourceCountryName = "Croatia">
+            <#elseif clientData?ends_with("broker-cze")>
+                <#assign sourceInstance = "CZE"><#assign sourceFlag = "🇨🇿"><#assign sourceCountryName = "Czechia">
+            <#elseif clientData?ends_with("broker-dnk")>
+                <#assign sourceInstance = "DNK"><#assign sourceFlag = "🇩🇰"><#assign sourceCountryName = "Denmark">
+            <#elseif clientData?ends_with("broker-est")>
+                <#assign sourceInstance = "EST"><#assign sourceFlag = "🇪🇪"><#assign sourceCountryName = "Estonia">
+            <#elseif clientData?ends_with("broker-fin")>
+                <#assign sourceInstance = "FIN"><#assign sourceFlag = "🇫🇮"><#assign sourceCountryName = "Finland">
+            <#elseif clientData?ends_with("broker-fra")>
+                <#assign sourceInstance = "FRA"><#assign sourceFlag = "🇫🇷"><#assign sourceCountryName = "France">
+            <#elseif clientData?ends_with("broker-deu")>
+                <#assign sourceInstance = "DEU"><#assign sourceFlag = "🇩🇪"><#assign sourceCountryName = "Germany">
+            <#elseif clientData?ends_with("broker-grc")>
+                <#assign sourceInstance = "GRC"><#assign sourceFlag = "🇬🇷"><#assign sourceCountryName = "Greece">
+            <#elseif clientData?ends_with("broker-hun")>
+                <#assign sourceInstance = "HUN"><#assign sourceFlag = "🇭🇺"><#assign sourceCountryName = "Hungary">
+            <#elseif clientData?ends_with("broker-isl")>
+                <#assign sourceInstance = "ISL"><#assign sourceFlag = "🇮🇸"><#assign sourceCountryName = "Iceland">
+            <#elseif clientData?ends_with("broker-ita")>
+                <#assign sourceInstance = "ITA"><#assign sourceFlag = "🇮🇹"><#assign sourceCountryName = "Italy">
+            <#elseif clientData?ends_with("broker-lva")>
+                <#assign sourceInstance = "LVA"><#assign sourceFlag = "🇱🇻"><#assign sourceCountryName = "Latvia">
+            <#elseif clientData?ends_with("broker-ltu")>
+                <#assign sourceInstance = "LTU"><#assign sourceFlag = "🇱🇹"><#assign sourceCountryName = "Lithuania">
+            <#elseif clientData?ends_with("broker-lux")>
+                <#assign sourceInstance = "LUX"><#assign sourceFlag = "🇱🇺"><#assign sourceCountryName = "Luxembourg">
+            <#elseif clientData?ends_with("broker-mne")>
+                <#assign sourceInstance = "MNE"><#assign sourceFlag = "🇲🇪"><#assign sourceCountryName = "Montenegro">
+            <#elseif clientData?ends_with("broker-nld")>
+                <#assign sourceInstance = "NLD"><#assign sourceFlag = "🇳🇱"><#assign sourceCountryName = "Netherlands">
+            <#elseif clientData?ends_with("broker-mkd")>
+                <#assign sourceInstance = "MKD"><#assign sourceFlag = "🇲🇰"><#assign sourceCountryName = "North Macedonia">
+            <#elseif clientData?ends_with("broker-nor")>
+                <#assign sourceInstance = "NOR"><#assign sourceFlag = "🇳🇴"><#assign sourceCountryName = "Norway">
+            <#elseif clientData?ends_with("broker-pol")>
+                <#assign sourceInstance = "POL"><#assign sourceFlag = "🇵🇱"><#assign sourceCountryName = "Poland">
+            <#elseif clientData?ends_with("broker-prt")>
+                <#assign sourceInstance = "PRT"><#assign sourceFlag = "🇵🇹"><#assign sourceCountryName = "Portugal">
+            <#elseif clientData?ends_with("broker-rou")>
+                <#assign sourceInstance = "ROU"><#assign sourceFlag = "🇷🇴"><#assign sourceCountryName = "Romania">
+            <#elseif clientData?ends_with("broker-svk")>
+                <#assign sourceInstance = "SVK"><#assign sourceFlag = "🇸🇰"><#assign sourceCountryName = "Slovakia">
+            <#elseif clientData?ends_with("broker-svn")>
+                <#assign sourceInstance = "SVN"><#assign sourceFlag = "🇸🇮"><#assign sourceCountryName = "Slovenia">
+            <#elseif clientData?ends_with("broker-esp")>
+                <#assign sourceInstance = "ESP"><#assign sourceFlag = "🇪🇸"><#assign sourceCountryName = "Spain">
+            <#elseif clientData?ends_with("broker-swe")>
+                <#assign sourceInstance = "SWE"><#assign sourceFlag = "🇸🇪"><#assign sourceCountryName = "Sweden">
+            <#elseif clientData?ends_with("broker-tur")>
+                <#assign sourceInstance = "TUR"><#assign sourceFlag = "🇹🇷"><#assign sourceCountryName = "Turkey">
+            <#elseif clientData?ends_with("broker-gbr")>
+                <#assign sourceInstance = "GBR"><#assign sourceFlag = "🇬🇧"><#assign sourceCountryName = "United Kingdom">
+            <#elseif clientData?ends_with("broker-usa")>
+                <#assign sourceInstance = "USA"><#assign sourceFlag = "🇺🇸"><#assign sourceCountryName = "United States">
+            <#-- Non-NATO partners via broker pattern -->
+            <#elseif clientData?ends_with("broker-aus")>
+                <#assign sourceInstance = "AUS"><#assign sourceFlag = "🇦🇺"><#assign sourceCountryName = "Australia">
+            <#elseif clientData?ends_with("broker-nzl")>
+                <#assign sourceInstance = "NZL"><#assign sourceFlag = "🇳🇿"><#assign sourceCountryName = "New Zealand">
+            <#elseif clientData?ends_with("broker-jpn")>
+                <#assign sourceInstance = "JPN"><#assign sourceFlag = "🇯🇵"><#assign sourceCountryName = "Japan">
+            <#elseif clientData?ends_with("broker-kor")>
+                <#assign sourceInstance = "KOR"><#assign sourceFlag = "🇰🇷"><#assign sourceCountryName = "South Korea">
             
             <#-- Legacy cross-border client (backward compatibility) -->
             <#elseif clientData?contains("cross-border")>
@@ -621,11 +700,11 @@
                     <!-- TEMP DEBUG: Show detection values -->
                     <div style="background: #1e3a5f; color: white; padding: 8px; margin-bottom: 10px; font-size: 11px; border-left: 3px solid #3b82f6;">
                         <strong>🔍 Detection:</strong><br/>
-                        clientId: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${client.clientId!'NONE'}</code><br/>
+                        clientId: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${(client.clientId)!'NONE'}</code><br/>
                         sourceInstance: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${sourceInstance!'EMPTY'}</code><br/>
                         hostInstance: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${hostInstance!'EMPTY'}</code><br/>
-                        isFederated: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${isFederatedLogin?c!'false'}</code><br/>
-                        Match: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${(isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance)?c!'false'}</code>
+                        isFederated: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${isFederatedLogin?string('true','false')}</code><br/>
+                        Match: <code style="background: rgba(255,255,255,0.1); padding: 2px 4px;">${(isFederatedLogin && sourceInstance?has_content && sourceInstance != hostInstance)?string('true','false')}</code>
                     </div>
                     
                     <!-- LEVEL 0: Trust Chain Summary (Always Visible) -->
