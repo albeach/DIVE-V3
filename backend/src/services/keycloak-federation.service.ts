@@ -16,7 +16,14 @@
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
+import https from 'https';
 import { logger } from '../utils/logger';
+
+// Create HTTPS agent that accepts self-signed certificates
+// This is required for local development where mkcert certificates are used
+const httpsAgent = new https.Agent({
+  rejectUnauthorized: false, // Required for self-signed certs in Docker
+});
 
 // ============================================
 // TYPES
@@ -119,6 +126,9 @@ export class KeycloakFederationService {
       this.kcAdmin = new KcAdminClient({
         baseUrl: keycloakUrl,
         realmName: 'master',
+        requestOptions: {
+          httpsAgent, // Accept self-signed certs
+        },
       });
     }
 
@@ -1361,6 +1371,9 @@ export class KeycloakFederationService {
         remoteService.kcAdmin = new KcAdminClient({
           baseUrl,
           realmName: 'master',
+          requestOptions: {
+            httpsAgent, // Accept self-signed certs
+          },
         });
 
         await remoteService.kcAdmin.auth({
@@ -1484,6 +1497,9 @@ export class KeycloakFederationService {
       const remoteAdmin = new KcAdminClient({
         baseUrl: remoteKeycloakUrl,
         realmName: 'master',
+        requestOptions: {
+          httpsAgent, // Accept self-signed certs
+        },
       });
 
       await remoteAdmin.auth({
