@@ -1654,7 +1654,7 @@ spoke_register() {
                 fi
             done
         fi
-        
+
         # If still no password, try to read from the spoke's .env file
         if [ -z "$keycloak_password" ] || [ ${#keycloak_password} -lt 10 ]; then
             local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
@@ -2887,6 +2887,110 @@ spoke_deploy() {
     echo ""
 
     # ==========================================================================
+    # Step 10: Finalization (Ensure Client Configuration is Complete)
+    # This step runs AFTER registration to catch any config that failed earlier
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 10/10: Finalizing Client Configuration${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Wait specifically for Keycloak with extended timeout (may have just started)
+    local kc_container="dive-spoke-${code_lower}-keycloak"
+    log_step "Ensuring Keycloak is fully ready..."
+    local kc_ready=false
+    for attempt in {1..30}; do
+        if docker exec "$kc_container" curl -sf http://localhost:8080/health/ready &>/dev/null; then
+            log_success "Keycloak is ready (attempt $attempt)"
+            kc_ready=true
+            break
+        fi
+        echo -n "."
+        sleep 3
+    done
+
+    if [ "$kc_ready" = true ]; then
+        # Get token and sync client configuration
+        local kc_pass
+        kc_pass=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        
+        if [ -n "$kc_pass" ]; then
+            log_step "Syncing client configuration..."
+            
+            # Get admin token
+            local token
+            token=$(docker exec "$kc_container" curl -sf \
+                -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+                -d "grant_type=password" \
+                -d "username=admin" \
+                -d "password=${kc_pass}" \
+                -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+            
+            if [ -n "$token" ]; then
+                local realm="dive-v3-broker-${code_lower}"
+                local client_id="dive-v3-broker-${code_lower}"
+                
+                # Get client UUID
+                local client_uuid
+                client_uuid=$(docker exec "$kc_container" curl -sf \
+                    -H "Authorization: Bearer $token" \
+                    "http://localhost:8080/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
+                    grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+                
+                if [ -n "$client_uuid" ]; then
+                    # Read the expected secret from .env
+                    local env_file="${spoke_dir}/.env"
+                    local expected_secret
+                    expected_secret=$(grep "^AUTH_KEYCLOAK_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+                    
+                    if [ -n "$expected_secret" ]; then
+                        # Get frontend port from docker-compose
+                        local frontend_port
+                        frontend_port=$(grep -E "^\s+-\s+\"[0-9]+:3000\"" "${spoke_dir}/docker-compose.yml" | head -1 | sed 's/.*"\([0-9]*\):3000".*/\1/')
+                        frontend_port="${frontend_port:-3000}"
+                        
+                        # Update client with correct secret and redirect URIs
+                        local update_payload="{
+                            \"secret\": \"${expected_secret}\",
+                            \"redirectUris\": [
+                                \"https://localhost:${frontend_port}/*\",
+                                \"https://localhost:${frontend_port}/api/auth/callback/keycloak\",
+                                \"https://localhost:*/*\",
+                                \"*\"
+                            ],
+                            \"webOrigins\": [\"*\"]
+                        }"
+                        
+                        docker exec "$kc_container" curl -sf \
+                            -X PUT "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}" \
+                            -H "Authorization: Bearer $token" \
+                            -H "Content-Type: application/json" \
+                            -d "$update_payload" &>/dev/null
+                        
+                        if [ $? -eq 0 ]; then
+                            log_success "Client secret and redirect URIs synced"
+                        else
+                            log_warn "Failed to sync client configuration"
+                        fi
+                    else
+                        log_warn "Could not read expected secret from .env"
+                    fi
+                else
+                    log_warn "Client not found: ${client_id}"
+                fi
+            else
+                log_warn "Could not get admin token"
+            fi
+        fi
+    else
+        log_warn "Keycloak not ready after 90s - manual configuration may be needed"
+        echo ""
+        echo "  Run: ./scripts/spoke-init/init-keycloak.sh ${code_upper}"
+        echo "  Then: ./dive federation-setup configure ${code_lower}"
+    fi
+    echo ""
+
+    # ==========================================================================
     # Deployment Complete
     # ==========================================================================
     local end_time=$(date +%s)
@@ -2933,7 +3037,11 @@ _spoke_wait_for_services() {
     for service in "${services[@]}"; do
         echo -n "  Waiting for ${service}-${code_lower}... "
         local service_elapsed=0
-        local service_timeout=90  # Increased from 60s to 90s per service
+        # Keycloak needs more time than other services
+        local service_timeout=90
+        if [ "$service" = "keycloak" ]; then
+            service_timeout=180  # 3 minutes for Keycloak - it's slow to start
+        fi
 
         while [ $service_elapsed -lt $service_timeout ]; do
             # Try multiple container naming patterns (dive-spoke pattern is used by new spoke-in-a-box)
