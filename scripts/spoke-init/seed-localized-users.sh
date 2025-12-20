@@ -130,7 +130,12 @@ create_or_update_user() {
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
 
     local unique_id="${username}-001"
-    local email="${username}@${COUNTRY_LOWER}.dive25.com"
+    # PII Minimization: Use pseudonymized email and names
+    local pseudonym=$(echo -n "${username}-${COUNTRY_CODE}" | md5sum | cut -c1-8)
+    local email="${pseudonym}@pseudonym.dive25.mil"
+    # Use country code prefix for first/last names to minimize PII
+    firstname="${COUNTRY_CODE}-${firstname}"
+    lastname="Operator"
 
     # Determine AMR based on clearance
     local amr_val='["pwd"]'
@@ -139,6 +144,7 @@ create_or_update_user() {
     fi
 
     # Build user JSON with localized attributes
+    # Note: requiredActions=[] prevents the Verify Profile form from showing
     local user_json=$(cat <<EOF
 {
     "username": "${username}",
@@ -147,11 +153,12 @@ create_or_update_user() {
     "enabled": true,
     "firstName": "${firstname}",
     "lastName": "${lastname}",
+    "requiredActions": [],
     "attributes": {
         "${LOCAL_CLEARANCE}": ["${clearance_val}"],
         "${LOCAL_COUNTRY}": ["${COUNTRY_CODE}"],
         "${LOCAL_UNIQUEID}": ["${unique_id}"],
-        "${LOCAL_COI}": [],
+        "${LOCAL_COI}": ["NATO"],
         "amr": ${amr_val}
     },
     "credentials": [{
