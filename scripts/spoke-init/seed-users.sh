@@ -278,7 +278,7 @@ fi
 # =============================================================================
 log_step "Creating role mapper for client..."
 
-CLIENT_ID="dive-v3-client-${CODE_LOWER}"
+CLIENT_ID="dive-v3-broker-${CODE_LOWER}"
 CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CLIENT_ID}" | \
     jq -r '.[0].id')

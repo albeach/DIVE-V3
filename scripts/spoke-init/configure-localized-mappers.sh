@@ -68,7 +68,7 @@ else
     # Get port from docker inspect or use default pattern
     KEYCLOAK_PORT=$(docker port "$KEYCLOAK_CONTAINER" 8443 2>/dev/null | cut -d: -f2 || echo "8443")
     REALM="dive-v3-broker-${COUNTRY_LOWER}"
-    CLIENT_ID="dive-v3-client-${COUNTRY_LOWER}"
+    CLIENT_ID="dive-v3-broker-${COUNTRY_LOWER}"
 fi
 
 KEYCLOAK_URL="https://localhost:${KEYCLOAK_PORT}"

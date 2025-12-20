@@ -198,7 +198,7 @@ get_hub_client_secret() {
     local code_lower
     code_lower=$(lower "$spoke_code")
 
-    local client_id="dive-v3-client-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
 
     # Get admin token
     local token
@@ -249,7 +249,7 @@ get_spoke_local_client_secret() {
     local code_upper
     code_upper=$(upper "$spoke_code")
 
-    local client_id="dive-v3-client-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
     local realm="dive-v3-broker-${code_lower}"
 
     # Get admin token
@@ -323,7 +323,7 @@ configure_usa_idp_in_spoke() {
     local backend_container="${code_lower}-backend-${code_lower}-1"
     local keycloak_host="keycloak-${code_lower}"
     local realm="dive-v3-broker-${code_lower}"
-    local client_id="dive-v3-client-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
 
     # Step 3: Update usa-idp configuration
     log_verbose "Updating usa-idp configuration in spoke Keycloak..."
@@ -577,7 +577,7 @@ update_spoke_client_redirect_uris() {
     local backend_container="${code_lower}-backend-${code_lower}-1"
     local keycloak_host="keycloak-${code_lower}"
     local realm="dive-v3-broker-${code_lower}"
-    local client_id="dive-v3-client-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
 
     # Get client UUID
     local client_uuid
@@ -649,7 +649,7 @@ update_hub_client_redirect_uris() {
     local token
     token=$(get_hub_admin_token) || return 1
 
-    local client_id="dive-v3-client-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
 
     # Get client UUID from Hub
     local client_uuid
@@ -1377,7 +1377,7 @@ assign_hub_dive_scopes() {
 
     local spoke_upper=$(upper "$spoke")
     local spoke_lower=$(lower "$spoke")
-    local client_id="dive-v3-client-${spoke_lower}"
+    local client_id="dive-v3-broker-${spoke_lower}"
 
     echo -e "${BOLD}Assigning DIVE scopes to Hub client: ${client_id}${NC}"
     echo ""
