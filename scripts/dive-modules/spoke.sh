@@ -1279,32 +1279,32 @@ _spoke_init_legacy() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
     local has_stale_volumes=false
-    
+
     # Check for existing volumes (common naming patterns)
     local volume_patterns=(
         "${code_lower}_${code_lower}-postgres-data"
         "${code_lower}_${code_lower}_postgres_data"
         "dive-spoke-${code_lower}_${code_lower}-postgres-data"
     )
-    
+
     for pattern in "${volume_patterns[@]}"; do
         if docker volume ls -q 2>/dev/null | grep -q "^${pattern}$"; then
             has_stale_volumes=true
             break
         fi
     done
-    
+
     # Password generation strategy:
     # 1. If .env exists, reuse passwords (ensures consistency with existing volumes)
     # 2. If stale volumes exist but no .env, warn and clean volumes
     # 3. Otherwise, generate fresh passwords
-    
+
     local postgres_pass=""
     local mongo_pass=""
     local keycloak_pass=""
     local auth_secret=""
     local client_secret=""
-    
+
     if [ -f "$env_file" ]; then
         # Reuse existing passwords from .env file
         log_info "Found existing .env file - reusing passwords for volume consistency"
@@ -1321,12 +1321,12 @@ _spoke_init_legacy() {
         echo -e "${YELLOW}  Recommended: Clean up stale volumes first:${NC}"
         echo -e "    ./dive --instance ${code_lower} spoke clean"
         echo ""
-        
+
         # Auto-clean stale volumes for better UX
         log_info "Auto-cleaning stale volumes for fresh deployment..."
         docker volume ls -q 2>/dev/null | grep -E "^${code_lower}[_-]" | xargs -r docker volume rm 2>/dev/null || true
     fi
-    
+
     # Generate fresh passwords for any missing values
     [ -z "$postgres_pass" ] && postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
     [ -z "$mongo_pass" ] && mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
@@ -1623,14 +1623,16 @@ spoke_register() {
     local code_upper=$(upper "$instance_code_config")
     local keycloak_container="dive-spoke-${code_lower}-keycloak"
 
-    # Try environment variable first (from .env file)
+    # Priority order:
+    # 1. Instance-specific env var (KEYCLOAK_ADMIN_PASSWORD_CZE)
+    # 2. Container's actual password (from docker exec)
+    # 3. Spoke's .env file
+    # NEVER use the generic KEYCLOAK_ADMIN_PASSWORD as it's the Hub's default
+
     local env_var_name="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
     if [ -n "${!env_var_name}" ]; then
         keycloak_password="${!env_var_name}"
         log_info "Using Keycloak password from ${env_var_name}"
-    elif [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-        keycloak_password="$KEYCLOAK_ADMIN_PASSWORD"
-        log_info "Using Keycloak password from KEYCLOAK_ADMIN_PASSWORD"
     else
         # Try to get it from the running Keycloak container with retry
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$keycloak_container"; then
@@ -1651,6 +1653,17 @@ spoke_register() {
                     sleep 2
                 fi
             done
+        fi
+        
+        # If still no password, try to read from the spoke's .env file
+        if [ -z "$keycloak_password" ] || [ ${#keycloak_password} -lt 10 ]; then
+            local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+            if [ -f "$spoke_env" ]; then
+                keycloak_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+                if [ -n "$keycloak_password" ]; then
+                    log_info "Retrieved Keycloak password from spoke .env file"
+                fi
+            fi
         fi
     fi
 
@@ -3499,18 +3512,18 @@ spoke_clean() {
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    
+
     print_header
     echo -e "${BOLD}Cleaning Up Spoke Instance:${NC} ${code_upper}"
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would stop and remove all containers for $code_upper"
         log_dry "Would remove all Docker volumes matching: ${code_lower}*"
         log_dry "Would remove instance directory: $spoke_dir"
         return 0
     fi
-    
+
     # Step 1: Stop containers if running
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
         log_step "Stopping spoke services..."
@@ -3518,12 +3531,12 @@ spoke_clean() {
         cd "$spoke_dir"
         docker compose down --volumes --remove-orphans 2>/dev/null || true
     fi
-    
+
     # Step 2: Remove any orphaned containers
     log_step "Removing orphaned containers..."
     docker ps -a --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
     docker ps -a --filter "name=${code_lower}-" --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
-    
+
     # Step 3: Remove volumes with common naming patterns
     log_step "Removing Docker volumes..."
     local volume_count=0
@@ -3532,7 +3545,7 @@ spoke_clean() {
         "^dive-spoke-${code_lower}_"
         "^${code_lower}-"
     )
-    
+
     for pattern in "${volume_patterns[@]}"; do
         local volumes=$(docker volume ls -q 2>/dev/null | grep -E "$pattern" || true)
         if [ -n "$volumes" ]; then
@@ -3540,14 +3553,14 @@ spoke_clean() {
             volume_count=$((volume_count + $(echo "$volumes" | wc -l)))
         fi
     done
-    
+
     log_info "Removed $volume_count volumes"
-    
+
     # Step 4: Remove instance directory (optional - prompt user)
     if [ -d "$spoke_dir" ]; then
         echo ""
         echo -e "${YELLOW}Instance directory found: $spoke_dir${NC}"
-        
+
         # In non-interactive mode or if --force flag, just remove
         if [ "${FORCE_CLEAN:-false}" = true ]; then
             rm -rf "$spoke_dir"
@@ -3564,7 +3577,7 @@ spoke_clean() {
             fi
         fi
     fi
-    
+
     echo ""
     log_success "Cleanup complete for ${code_upper}"
     echo ""
