@@ -1,11 +1,11 @@
 /**
  * Federated Query Routes
  * Phase 3: Direct MongoDB Federation for high-performance cross-instance queries
- * 
+ *
  * Provides two modes of federated search:
  * 1. /api/resources/federated-search (HTTP relay - existing)
  * 2. /api/resources/federated-query (Direct MongoDB - new, faster for local instances)
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -34,7 +34,7 @@ federatedResourceService.initialize().catch(err => {
 /**
  * POST /api/resources/federated-query
  * Execute federated search using direct MongoDB connections
- * 
+ *
  * Request body:
  * {
  *   query?: string,           // Text search
@@ -74,7 +74,7 @@ router.post('/federated-query', authenticateJWT, async (req: Request, res: Respo
         // Build search options
         const searchOptions: IFederatedSearchOptions = {
             query: req.body.query,
-            classification: req.body.classification ? 
+            classification: req.body.classification ?
                 (Array.isArray(req.body.classification) ? req.body.classification : [req.body.classification]) :
                 undefined,
             releasableTo: req.body.releasableTo ?
@@ -118,11 +118,13 @@ router.post('/federated-query', authenticateJWT, async (req: Request, res: Respo
         logger.info('Federated query completed', {
             requestId,
             totalResults: response.totalResults,
+            totalAccessible: response.totalAccessible, // Sum of ABAC-accessible docs
             returnedResults: response.results.length,
             executionTimeMs: response.executionTimeMs,
             instanceResults: Object.entries(response.instanceResults).map(([k, v]) => ({
                 instance: k,
                 count: v.count,
+                accessibleCount: v.accessibleCount,  // Include accessibleCount
                 latencyMs: v.latencyMs,
                 error: v.error
             }))
@@ -164,7 +166,7 @@ router.get('/federated-query', authenticateJWT, async (req: Request, res: Respon
         // Parse query params
         const searchOptions: IFederatedSearchOptions = {
             query: req.query.query as string,
-            classification: req.query.classification ? 
+            classification: req.query.classification ?
                 (Array.isArray(req.query.classification) ? req.query.classification as string[] : [req.query.classification as string]) :
                 undefined,
             releasableTo: req.query.releasableTo ?

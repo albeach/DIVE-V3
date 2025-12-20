@@ -688,7 +688,8 @@ NEXTAUTH_SECRET_${code_upper}=$nextauth_secret
 BLACKLIST_REDIS_URL=redis://:${redis_pass}@dive-hub-redis-blacklist:6379
 
 # OPAL/Federation
-HUB_OPAL_URL=${hub_url//:4000/:7002}
+# For local Docker networking, use the container name instead of localhost
+HUB_OPAL_URL=https://dive-hub-opal-server:7002
 SPOKE_ID=$spoke_id
 SPOKE_OPAL_TOKEN=
 OPAL_LOG_LEVEL=INFO
@@ -793,6 +794,8 @@ EOF
             cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
             chmod 644 "$spoke_dir/certs/rootCA.pem"
             chmod 644 "$spoke_dir/truststores/mkcert-rootCA.pem"
+            # Create symlink for OPAL client SSL verification
+            ln -sf rootCA.pem "$spoke_dir/certs/mkcert-rootCA.pem"
             log_info "Copied mkcert root CA for federation truststore"
         else
             log_warn "mkcert root CA not found at $mkcert_ca"
@@ -1051,6 +1054,7 @@ services:
         condition: service_healthy
     networks:
       - dive-${code_lower}-network
+      - dive-v3-shared-network  # Required to reach Hub OPAL server
 
   kas-${code_lower}:
     extends:
@@ -1903,7 +1907,25 @@ _spoke_configure_token() {
     local config_file="$spoke_dir/config.json"
     local code_lower=$(basename "$spoke_dir")
 
-    log_step "Configuring OPAL token..."
+    log_step "Configuring Hub API token..."
+
+    # Save Hub API token as SPOKE_TOKEN
+    if [ -f "$env_file" ]; then
+        sed -i.bak '/^SPOKE_TOKEN=/d' "$env_file"
+        rm -f "$env_file.bak"
+    fi
+    echo "SPOKE_TOKEN=$token" >> "$env_file"
+    log_success "Hub API token configured"
+
+    # Also provision OPAL client JWT from OPAL server
+    log_step "Provisioning OPAL client JWT from server..."
+    if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+        "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null && \
+            log_success "OPAL client JWT provisioned" || \
+            log_warn "Could not provision OPAL JWT (spoke may need manual setup)"
+    fi
+
+    log_step "Configuring spoke settings..."
 
     # Update .env file
     if [ -f "$env_file" ]; then
@@ -1953,6 +1975,27 @@ _spoke_configure_token() {
 # =============================================================================
 # SPOKE TOKEN REFRESH (Phase 3)
 # =============================================================================
+
+spoke_opal_token() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+
+    print_header
+    echo -e "${BOLD}OPAL Token Provisioning${NC}"
+    echo ""
+    echo "This command obtains a JWT token from the Hub's OPAL server."
+    echo "The token allows the spoke's OPAL client to connect and receive policy updates."
+    echo ""
+
+    if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+        "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower"
+    else
+        log_error "Token provisioning script not found"
+        echo "  Expected: ${DIVE_ROOT}/scripts/provision-opal-tokens.sh"
+        return 1
+    fi
+}
 
 spoke_token_refresh() {
     ensure_dive_root
@@ -2581,6 +2624,24 @@ spoke_up() {
     # Ensure shared network exists (local dev only)
     ensure_shared_network
 
+    # Auto-provision OPAL JWT if missing or empty (resilience)
+    if [ -z "${SPOKE_OPAL_TOKEN:-}" ]; then
+        log_info "OPAL token not found, attempting to provision..."
+        if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+            if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" >/dev/null 2>&1; then
+                log_success "OPAL token provisioned automatically"
+                # Re-source .env to pick up the new token
+                set -a
+                source "$spoke_dir/.env"
+                set +a
+            else
+                log_warn "Could not provision OPAL token (Hub may not be reachable)"
+                echo "  OPAL client will retry connection after spoke starts"
+                echo "  Run manually: ./dive --instance $code_lower spoke opal-token"
+            fi
+        fi
+    fi
+
     # Try to load GCP secrets (will override local values if available)
     if ! load_gcp_secrets "$instance_code"; then
         log_warn "Falling back to local .env secrets for $instance_code"
@@ -2856,6 +2917,31 @@ spoke_deploy() {
     fi
 
     log_success "All core services healthy"
+    echo ""
+
+    # ==========================================================================
+    # Step 4b: Provision OPAL JWT (if not already done)
+    # ==========================================================================
+    local env_file="$spoke_dir/.env"
+    local opal_token=""
+    if [ -f "$env_file" ]; then
+        opal_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2)
+    fi
+
+    if [ -z "$opal_token" ]; then
+        log_step "Provisioning OPAL client JWT..."
+        if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+            if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
+                log_success "OPAL JWT provisioned"
+            else
+                log_warn "Could not provision OPAL JWT (Hub may not be reachable)"
+                echo "      Run manually after Hub is available:"
+                echo "      ./dive --instance $code_lower spoke opal-token"
+            fi
+        fi
+    else
+        log_info "OPAL token already configured"
+    fi
     echo ""
 
     # ==========================================================================
@@ -3392,20 +3478,35 @@ spoke_verify() {
         ((checks_failed++))
     fi
 
-    # Check 7: OPAL Client Status
+    # Check 7: OPAL Client Status (with JWT auth verification)
     printf "  %-35s" "7. OPAL Client:"
-    if curl -sf http://localhost:7000/health --max-time 5 >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ Healthy${NC}"
-        ((checks_passed++))
+    local opal_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "opal-client.*${code_lower}|${code_lower}.*opal-client" | head -1)
+    if [ -n "$opal_container" ]; then
+        # Check if connected to Hub's OPAL server
+        local opal_logs=$(docker logs "$opal_container" 2>&1 | tail -50)
+        if echo "$opal_logs" | grep -q "Connected to PubSub server"; then
+            echo -e "${GREEN}✓ Connected (JWT auth working)${NC}"
+            ((checks_passed++))
+        elif echo "$opal_logs" | grep -q "403\|Forbidden"; then
+            echo -e "${RED}✗ Auth Failed (need OPAL token)${NC}"
+            echo "      Run: ./dive --instance $code_lower spoke opal-token"
+            ((checks_failed++))
+        elif echo "$opal_logs" | grep -q "Connection refused\|failed to connect"; then
+            echo -e "${YELLOW}⚠ Hub Unreachable${NC}"
+            ((checks_passed++))  # Network issue, not spoke issue
+        else
+            echo -e "${YELLOW}⚠ Connecting...${NC}"
+            ((checks_passed++))  # In progress
+        fi
     else
-        # Check if OPAL is intentionally not running (federation profile)
-        local opal_container=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "opal.*${code_lower}|${code_lower}.*opal" | head -1)
-        if [ -n "$opal_container" ]; then
-            echo -e "${YELLOW}⚠ Not Running (needs token)${NC}"
+        # Container not running
+        local opal_stopped=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -E "opal-client.*${code_lower}|${code_lower}.*opal-client" | head -1)
+        if [ -n "$opal_stopped" ]; then
+            echo -e "${YELLOW}⚠ Not Running${NC}"
         else
             echo -e "${YELLOW}⚠ Not Started (federation profile)${NC}"
         fi
-        ((checks_passed++))  # Expected before token
+        ((checks_passed++))  # Expected before deployment
     fi
 
     # Check 8: Hub Connectivity (ping)
@@ -5461,6 +5562,7 @@ module_spoke() {
         init-keycloak)  spoke_init_keycloak ;;
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
+        opal-token)     spoke_opal_token "$@" ;;
         status)         spoke_status ;;
         health)         spoke_health ;;
         verify)         spoke_verify ;;
@@ -5534,7 +5636,8 @@ module_spoke_help() {
     echo -e "${CYAN}Registration (Phase 3):${NC}"
     echo "  register               Register this spoke with the Hub (includes CSR)"
     echo "  register --poll        Register and poll for approval (auto-configure token)"
-    echo "  token-refresh          Refresh spoke OPAL token before expiry"
+    echo "  token-refresh          Refresh spoke Hub API token before expiry"
+    echo "  opal-token             Provision OPAL client JWT from Hub's OPAL server"
     echo "  status                 Show spoke federation status (incl. token/cert info)"
     echo ""
 

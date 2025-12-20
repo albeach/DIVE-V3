@@ -42,6 +42,8 @@ import { policyVersionMonitor } from './services/policy-version-monitor.service'
 import { spokeFailover } from './services/spoke-failover.service';  // Phase 5: Circuit breaker
 import { spokeAuditQueue } from './services/spoke-audit-queue.service';  // Phase 5: Audit queue
 import { spokeHeartbeat } from './services/spoke-heartbeat.service';  // Phase 5: Heartbeat service
+import { federationBootstrap } from './services/federation-bootstrap.service';  // Phase 1 Fix: Federation cascade
+import { authzCacheService } from './services/authz-cache.service';  // Phase 2: Distributed cache invalidation
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -217,6 +219,58 @@ function startServer() {
     }, 5 * 60 * 1000); // 5 minutes
 
     logger.info('Periodic Keycloak configuration sync scheduled (every 5 minutes)');
+
+    // ============================================
+    // PHASE 1 FIX: Federation Cascade Bootstrap
+    // ============================================
+    // CRITICAL: This wires up the event-driven federation sync system
+    // When a spoke is approved/suspended/revoked, this ensures:
+    // - OPAL/OPA trusted issuers + federation matrix updated
+    // - MongoDB resources updated (releasabilityTo)
+    // - Redis authorization cache invalidated
+    // - Keycloak IdP created/disabled
+    const isHub = process.env.SPOKE_MODE !== 'true';
+    if (isHub) {
+      try {
+        logger.info('Initializing federation cascade system (Hub mode)');
+        await federationBootstrap.initialize();
+        const status = federationBootstrap.getStatus();
+        logger.info('Federation cascade system initialized successfully', {
+          ...status,
+          cascadeEnabled: true
+        });
+      } catch (error) {
+        logger.error('CRITICAL: Failed to initialize federation cascade', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          impact: 'Spoke approvals will NOT cascade to OPAL/MongoDB/Keycloak'
+        });
+        // Log but don't crash - federation will work but without automatic cascade
+      }
+    } else {
+      logger.info('Skipping federation cascade initialization (Spoke mode)');
+    }
+
+    // ============================================
+    // PHASE 2: Distributed Cache Invalidation via Redis Pub/Sub
+    // ============================================
+    // All backend instances (Hub and Spokes) should initialize pub/sub
+    // to receive cache invalidation events when federation changes
+    try {
+      logger.info('Initializing Redis pub/sub for distributed cache invalidation');
+      await authzCacheService.initializePubSub();
+      const pubSubHealth = authzCacheService.isPubSubHealthy();
+      if (pubSubHealth.healthy) {
+        logger.info('Redis pub/sub initialized successfully for cache invalidation');
+      } else {
+        logger.warn('Redis pub/sub not fully healthy', { reason: pubSubHealth.reason });
+      }
+    } catch (error) {
+      logger.warn('Failed to initialize Redis pub/sub (cache invalidation will be local only)', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Non-fatal: fall back to local cache invalidation
+    }
 
     // Phase 4: Initialize KAS Registry for cross-instance encrypted access
     try {

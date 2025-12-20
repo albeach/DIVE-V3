@@ -23,8 +23,12 @@ import { MongoClient, Db } from 'mongodb';
 import { logger } from '../utils/logger';
 import { opalDataService } from './opal-data.service';
 import { keycloakFederationService } from './keycloak-federation.service';
+import { authzCacheService } from './authz-cache.service';
+import { releasabilityComputeService } from './releasability-compute.service';
+import { federationAuditStore, IFederationAuditEntry } from '../models/federation-audit.model';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { ISpokeRegistration } from './hub-spoke-registry.service';
+import { invalidateSpokeInstancesCache } from '../controllers/federated-search.controller';
 
 // ============================================
 // TYPES
@@ -180,6 +184,41 @@ class FederationSyncService extends EventEmitter {
 
     result.success = result.errors!.length === 0;
 
+    // 6. Create audit trail entry (Phase 4)
+    try {
+      await this.createAuditEntry({
+        eventType: 'CASCADE_COMPLETED',
+        actorId: approvedBy,
+        actorInstance: process.env.INSTANCE_CODE || 'USA',
+        targetSpokeId: spoke.spokeId,
+        targetInstanceCode: instanceCode,
+        previousState: { status: 'pending' },
+        newState: {
+          status: 'approved',
+          trustLevel: spoke.trustLevel,
+          allowedScopes: spoke.allowedPolicyScopes
+        },
+        resourcesAffected: result.updates.resourceCount,
+        cascadeResult: {
+          opaUpdated: result.updates.opaUpdated,
+          keycloakUpdated: result.updates.keycloakUpdated,
+          resourcesUpdated: result.updates.resourcesUpdated,
+          cacheInvalidated: result.updates.cacheInvalidated,
+          webhooksSent: result.updates.webhooksSent,
+          errors: result.errors
+        },
+        correlationId,
+        timestamp: new Date(),
+        compliantWith: ['ACP-240', 'ADatP-5663']
+      });
+    } catch (error) {
+      logger.warn('Failed to create audit entry (non-blocking)', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+      // Non-blocking: don't fail cascade for audit
+    }
+
     this.emit('sync:completed', result);
 
     return result;
@@ -253,6 +292,36 @@ class FederationSyncService extends EventEmitter {
 
     result.success = result.errors!.length === 0;
 
+    // 4. Create audit trail entry (Phase 4)
+    try {
+      await this.createAuditEntry({
+        eventType: 'CASCADE_COMPLETED',
+        actorId: suspendedBy,
+        actorInstance: process.env.INSTANCE_CODE || 'USA',
+        targetSpokeId: spoke.spokeId,
+        targetInstanceCode: instanceCode,
+        previousState: { status: 'approved' },
+        newState: { status: 'suspended', reason },
+        cascadeResult: {
+          opaUpdated: result.updates.opaUpdated,
+          keycloakUpdated: result.updates.keycloakUpdated,
+          resourcesUpdated: result.updates.resourcesUpdated,
+          cacheInvalidated: result.updates.cacheInvalidated,
+          webhooksSent: result.updates.webhooksSent,
+          errors: result.errors
+        },
+        correlationId,
+        timestamp: new Date(),
+        compliantWith: ['ACP-240', 'ADatP-5663'],
+        metadata: { action: 'suspension', reason }
+      });
+    } catch (error) {
+      logger.warn('Failed to create audit entry for suspension (non-blocking)', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+    }
+
     this.emit('sync:completed', result);
 
     return result;
@@ -260,11 +329,53 @@ class FederationSyncService extends EventEmitter {
 
   /**
    * Handle spoke revocation event
-   * Permanent removal from federation
+   * Permanent removal from federation with audit trail
    */
   async onSpokeRevoked(event: ISpokeRevokedEvent): Promise<IFederationSyncResult> {
-    // Similar to suspension but with resource cleanup option
-    return this.onSpokeSuspended(event as any);
+    const { spoke, revokedBy, reason, correlationId } = event;
+    const instanceCode = spoke.instanceCode.toUpperCase();
+
+    logger.error('Processing spoke revocation cascade (permanent)', {
+      spokeId: spoke.spokeId,
+      instanceCode,
+      revokedBy,
+      reason,
+      correlationId
+    });
+
+    // Use suspension logic but with revocation audit
+    const result = await this.onSpokeSuspended({
+      spoke,
+      timestamp: new Date(),
+      suspendedBy: revokedBy,
+      reason,
+      correlationId
+    });
+
+    // Create additional revocation audit entry
+    try {
+      await this.createAuditEntry({
+        eventType: 'CASCADE_COMPLETED',
+        actorId: revokedBy,
+        actorInstance: process.env.INSTANCE_CODE || 'USA',
+        targetSpokeId: spoke.spokeId,
+        targetInstanceCode: instanceCode,
+        previousState: { status: 'suspended' },
+        newState: { status: 'revoked', reason },
+        cascadeResult: result.updates as any,
+        correlationId,
+        timestamp: new Date(),
+        compliantWith: ['ACP-240', 'ADatP-5663'],
+        metadata: { action: 'revocation', reason, permanent: true }
+      });
+    } catch (error) {
+      logger.warn('Failed to create audit entry for revocation (non-blocking)', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+    }
+
+    return result;
   }
 
   // ============================================
@@ -410,15 +521,42 @@ class FederationSyncService extends EventEmitter {
   }
 
   /**
-   * Invalidate Redis authorization cache
+   * Invalidate all caches across all backend instances
+   *
+   * Phase 2: Uses Redis pub/sub for distributed cache invalidation.
+   * Phase 3: Also invalidates releasability compute cache.
+   *
+   * When federation changes occur, ALL backend instances need to
+   * invalidate their local caches to prevent stale authorization decisions.
    */
   private async invalidateAuthzCache(): Promise<void> {
-    // Use Redis FLUSHDB or publish invalidation event
-    // For now, log - cache will expire naturally (60s TTL)
-    logger.info('Cache invalidation triggered (60s TTL will expire naturally)');
+    try {
+      // Phase 3: Invalidate releasability compute cache (local)
+      // This ensures dynamic releasability is recomputed with new federation state
+      releasabilityComputeService.invalidateCache();
 
-    // Future: Implement Redis pub/sub
-    // await redis.publish('authz:invalidate', JSON.stringify({ reason: 'federation_update' }));
+      // Phase 4: Invalidate federation instances cache (for federated search)
+      // This ensures new spokes are immediately queryable
+      invalidateSpokeInstancesCache();
+
+      // Phase 2: Use Redis pub/sub to broadcast invalidation to all instances
+      await authzCacheService.publishInvalidation('federation_update');
+
+      logger.info('All caches invalidated for federation update', {
+        reason: 'federation_update',
+        instanceCode: process.env.INSTANCE_CODE || 'USA',
+        caches: ['authz', 'releasability', 'federation-instances']
+      });
+    } catch (error) {
+      // Fallback: at least invalidate local caches
+      releasabilityComputeService.invalidateCache();
+      invalidateSpokeInstancesCache();
+      authzCacheService.invalidateAll();
+
+      logger.warn('Redis pub/sub failed, local caches cleared', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
 
   /**
@@ -480,6 +618,35 @@ class FederationSyncService extends EventEmitter {
     };
 
     return portOffsets[countryCode] || 99;
+  }
+
+  // ============================================
+  // PHASE 4: AUDIT TRAIL
+  // ============================================
+
+  /**
+   * Create an audit entry for federation changes
+   *
+   * Compliant with:
+   * - ACP-240 Section 5.3: Federation changes must be traceable
+   * - ADatP-5663 Section 6.8: All federation events must be audited
+   */
+  private async createAuditEntry(entry: Omit<IFederationAuditEntry, '_id'>): Promise<void> {
+    try {
+      await federationAuditStore.create(entry);
+      logger.debug('Audit entry created', {
+        eventType: entry.eventType,
+        correlationId: entry.correlationId,
+        targetInstanceCode: entry.targetInstanceCode
+      });
+    } catch (error) {
+      logger.error('Failed to create audit entry', {
+        eventType: entry.eventType,
+        correlationId: entry.correlationId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Don't rethrow - audit failures should not block cascade
+    }
   }
 }
 

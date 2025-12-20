@@ -1,0 +1,269 @@
+# =============================================================================
+# DIVE V3 - NLD Instance (Kingdom of the Netherlands)
+# =============================================================================
+# Spoke instance using extends pattern from base services.
+# Regenerate with: ./dive spoke init NLD "Kingdom of the Netherlands"
+# Spoke ID: spoke-nld-98b19d07
+# =============================================================================
+
+name: dive-spoke-nld
+
+networks:
+  dive-nld-network:
+    driver: bridge
+  dive-v3-shared-network:
+    external: true
+
+volumes:
+  nld_postgres_data:
+  nld_mongodb_data:
+  nld_redis_data:
+  nld_frontend_modules:
+  nld_frontend_next:
+  nld_opa_cache:
+  nld_opal_cache:
+  nld_backend_node_modules:
+  nld_backend_logs:
+
+services:
+  postgres-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: postgres-base
+    container_name: dive-spoke-nld-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_NLD:?set POSTGRES_PASSWORD_NLD}
+    ports:
+      - "5452:5432"
+    volumes:
+      - nld_postgres_data:/var/lib/postgresql/data
+    networks:
+      - dive-nld-network
+
+  mongodb-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: mongodb-base
+    container_name: dive-spoke-nld-mongodb
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-nld
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_NLD:?set MONGO_PASSWORD_NLD}
+    ports:
+      - "27037:27017"
+    volumes:
+      - nld_mongodb_data:/data/db
+    networks:
+      - dive-nld-network
+
+  redis-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: redis-base
+    container_name: dive-spoke-nld-redis
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD_NLD:?set REDIS_PASSWORD_NLD}
+    ports:
+      - "6399:6379"
+    volumes:
+      - nld_redis_data:/data
+    networks:
+      - dive-nld-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_NLD}", "ping"]
+
+  keycloak-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: keycloak-base
+    container_name: dive-spoke-nld-keycloak
+    environment:
+      KC_DB_URL: jdbc:postgresql://postgres-nld:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_NLD:?set POSTGRES_PASSWORD_NLD}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_NLD:?set KEYCLOAK_ADMIN_PASSWORD_NLD}
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_URL: https://localhost:8463
+      KC_HOSTNAME_ADMIN_URL: https://localhost:8463
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
+    ports:
+      - "8463:8443"
+      - "8100:8080"
+    volumes:
+      - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
+      - ../../keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      postgres-nld:
+        condition: service_healthy
+    networks:
+      - dive-nld-network
+      - dive-v3-shared-network
+
+  opa-nld:
+    image: openpolicyagent/opa:latest
+    container_name: dive-spoke-nld-opa
+    restart: unless-stopped
+    # OPAL-managed OPA: HTTPS only, policies from OPAL client
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--tls-cert-file=/certs/certificate.pem"
+      - "--tls-private-key-file=/certs/key.pem"
+      - "--log-level=info"
+    ports:
+      - "8381:8181"
+    volumes:
+      - ./certs:/certs:ro
+    networks:
+      - dive-nld-network
+    healthcheck:
+      test: ["CMD", "/opa", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  opal-client-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: opal-client-base
+    container_name: dive-spoke-nld-opal-client
+    environment:
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      # HTTPS for OPA policy store (cert now includes opa-nld hostname)
+      OPAL_OPA_URL: https://opa-nld:8181
+      OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-nld-default}
+      OPAL_POLICY_STORE_URL: https://opa-nld:8181
+      # Policies AND data from Hub
+      OPAL_DATA_TOPICS: policy:base,policy:nld,data:federation_matrix,data:trusted_issuers
+      # Trust mkcert CA for local OPA connection
+      SSL_CERT_FILE: /var/opal/certs/mkcert-rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/certs/mkcert-rootCA.pem
+    volumes:
+      - nld_opal_cache:/var/opal/cache
+      - ./certs:/var/opal/certs:ro
+    depends_on:
+      opa-nld:
+        condition: service_healthy
+    networks:
+      - dive-nld-network
+      - dive-v3-shared-network  # Required to reach Hub OPAL server
+
+  kas-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: kas-base
+    container_name: dive-spoke-nld-kas
+    environment:
+      KEYCLOAK_URL: https://keycloak-nld:8443
+      KEYCLOAK_REALM: dive-v3-broker-nld
+      OPA_URL: https://opa-nld:8181
+      INSTANCE_CODE: NLD
+    ports:
+      - "9020:8080"
+    volumes:
+      - ./certs:/app/certs:ro
+    depends_on:
+      keycloak-nld:
+        condition: service_healthy
+      opa-nld:
+        condition: service_healthy
+    networks:
+      - dive-nld-network
+
+  backend-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: backend-base
+    container_name: dive-spoke-nld-backend
+    environment:
+      INSTANCE_CODE: NLD
+      INSTANCE_NAME: "Kingdom of the Netherlands"
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_NLD:?set MONGO_PASSWORD_NLD}@mongodb-nld:27017/dive-v3-nld?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_NLD:?set MONGO_PASSWORD_NLD}@mongodb-nld:27017/dive-v3-nld?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD_NLD:?set REDIS_PASSWORD_NLD}@redis-nld:6379
+      KEYCLOAK_URL: https://keycloak-nld:8443
+      KEYCLOAK_REALM: dive-v3-broker-nld
+      KEYCLOAK_ISSUER: https://localhost:8463/realms/dive-v3-broker-nld
+      TRUSTED_ISSUERS: https://localhost:8463/realms/dive-v3-broker-nld,https://keycloak-nld:8443/realms/dive-v3-broker-nld,https://nld-idp.dive25.com/realms/dive-v3-broker-nld
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_NLD:?set KEYCLOAK_ADMIN_PASSWORD_NLD}
+      OPA_URL: https://opa-nld:8181
+      FEDERATION_ALLOWED_ORIGINS: https://localhost:3020,https://localhost:4020,https://localhost:8463,https://nld-app.dive25.com,https://nld-api.dive25.com,https://nld-idp.dive25.com
+      CORS_ALLOWED_ORIGINS: https://localhost:3020,https://localhost:4020,https://localhost:8463,https://nld-app.dive25.com,https://nld-api.dive25.com,https://nld-idp.dive25.com
+      # Federation Trust: Trust USA Hub and other NATO partners for cross-instance requests
+      TRUSTED_FEDERATION_INSTANCES: USA,FRA,GBR,DEU,HUN
+    ports:
+      - "4020:4000"
+    volumes:
+      - ../../backend:/app
+      - nld_backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../config:/app/config:ro
+      - nld_backend_logs:/app/logs
+    depends_on:
+      mongodb-nld:
+        condition: service_healthy
+      redis-nld:
+        condition: service_healthy
+      keycloak-nld:
+        condition: service_healthy
+    networks:
+      - dive-nld-network
+      - dive-v3-shared-network
+
+  frontend-nld:
+    extends:
+      file: ../../docker/base/services.yml
+      service: frontend-base
+    container_name: dive-spoke-nld-frontend
+    environment:
+      NEXT_PUBLIC_INSTANCE: NLD
+      NEXT_PUBLIC_INSTANCE_NAME: "Netherlands"
+      NEXT_PUBLIC_API_URL: https://localhost:4020
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4020
+      NEXT_PUBLIC_BASE_URL: https://localhost:3020
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8463
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-nld
+      BACKEND_URL: https://backend-nld:4000
+      AUTH_SECRET: ${NEXTAUTH_SECRET_NLD:?set NEXTAUTH_SECRET_NLD}
+      AUTH_KEYCLOAK_ID: dive-v3-broker-nld
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_NLD:?set KEYCLOAK_CLIENT_SECRET_NLD}
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8463/realms/dive-v3-broker-nld
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://localhost:3020
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_NLD:?set NEXTAUTH_SECRET_NLD}
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_NLD:?set POSTGRES_PASSWORD_NLD}@postgres-nld:5432/keycloak
+      KEYCLOAK_URL: https://keycloak-nld:8443
+      KEYCLOAK_REALM: dive-v3-broker-nld
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-nld
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_NLD:?set KEYCLOAK_CLIENT_SECRET_NLD}
+      AUTH_POST_LOGOUT_REDIRECT: https://nld-app.dive25.com
+      AUTH_REDIRECT_URI: https://nld-app.dive25.com/api/auth/callback/keycloak
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://nld-app.dive25.com,https://nld-api.dive25.com,https://nld-idp.dive25.com,https://localhost:3020,https://localhost:4020,https://localhost:8463
+      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
+      NEXT_PUBLIC_THEME_PRIMARY: "#AE1C28"
+      NEXT_PUBLIC_THEME_SECONDARY: "#21468B"
+      NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      TZ: "Europe/Amsterdam"
+    ports:
+      - "3020:3000"
+    volumes:
+      - ../../frontend:/app
+      - nld_frontend_modules:/app/node_modules
+      - nld_frontend_next:/app/.next
+      - ./certs:/app/certs:ro
+      - ./certs:/opt/app/certs:ro
+    depends_on:
+      backend-nld:
+        condition: service_healthy
+    networks:
+      - dive-nld-network

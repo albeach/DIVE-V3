@@ -72,13 +72,39 @@ const approvalSchema = z.object({
     dataIsolationLevel: z.enum(['full', 'filtered', 'minimal'])
 });
 
+// Heartbeat schema - accepts rich payload from spokes
+// Required: spokeId
+// Optional: policyVersion, services (with health info), metrics, queues
 const heartbeatSchema = z.object({
     spokeId: z.string(),
-    policyVersion: z.string().optional(),
+    instanceCode: z.string().optional(),
+    timestamp: z.string().optional(),
+    policyVersion: z.string().nullable().optional(),
+    // Legacy flat fields
     opaHealthy: z.boolean().optional(),
     opalClientConnected: z.boolean().optional(),
-    latencyMs: z.number().optional()
-});
+    latencyMs: z.number().optional(),
+    // Rich nested fields from spoke-heartbeat.service
+    services: z.object({
+        opa: z.object({ healthy: z.boolean(), lastCheck: z.string(), error: z.string().optional() }).optional(),
+        opalClient: z.object({ healthy: z.boolean(), lastCheck: z.string(), error: z.string().optional() }).optional(),
+        keycloak: z.object({ healthy: z.boolean(), lastCheck: z.string(), error: z.string().optional() }).optional(),
+        mongodb: z.object({ healthy: z.boolean(), lastCheck: z.string(), error: z.string().optional() }).optional(),
+        kas: z.object({ healthy: z.boolean(), lastCheck: z.string(), error: z.string().optional() }).optional(),
+    }).optional(),
+    metrics: z.object({
+        uptime: z.number().optional(),
+        requestsLastHour: z.number().optional(),
+        authDecisionsLastHour: z.number().optional(),
+        authDeniesLastHour: z.number().optional(),
+        errorRate: z.number().optional(),
+        avgLatencyMs: z.number().optional(),
+    }).optional(),
+    queues: z.object({
+        pendingAuditLogs: z.number().optional(),
+        pendingHeartbeats: z.number().optional(),
+    }).optional(),
+}).passthrough();
 
 // SP Client Registration Schema
 const spRegistrationSchema = z.object({
@@ -1021,16 +1047,22 @@ router.post('/heartbeat', requireSpokeToken, async (req: Request, res: Response)
 
         const spoke = (req as any).spoke;
 
+        // Extract health data from either flat fields or nested services
+        const opaHealthy = parsed.data.opaHealthy ?? parsed.data.services?.opa?.healthy;
+        const opalClientConnected = parsed.data.opalClientConnected ?? parsed.data.services?.opalClient?.healthy;
+        const latencyMs = parsed.data.latencyMs ?? parsed.data.metrics?.avgLatencyMs;
+
         // Record heartbeat
         await hubSpokeRegistry.recordHeartbeat(spoke.spokeId, {
-            opaHealthy: parsed.data.opaHealthy,
-            opalClientConnected: parsed.data.opalClientConnected,
-            latencyMs: parsed.data.latencyMs
+            opaHealthy,
+            opalClientConnected,
+            latencyMs
         });
 
-        // Record policy sync status
-        if (parsed.data.policyVersion) {
-            await policySyncService.recordSpokeSync(spoke.spokeId, parsed.data.policyVersion);
+        // Record policy sync status (policyVersion can be null or undefined)
+        const policyVersion = parsed.data.policyVersion;
+        if (policyVersion) {
+            await policySyncService.recordSpokeSync(spoke.spokeId, policyVersion);
         }
 
         // Get current version for comparison
@@ -1188,24 +1220,50 @@ router.post('/spokes/:spokeId/approve', requireAdmin, async (req: Request, res: 
             parsed.data
         );
 
-        // Generate initial token
-        const token = await hubSpokeRegistry.generateSpokeToken(spoke.spokeId);
+        // Generate Hub API token for spoke
+        const hubApiToken = await hubSpokeRegistry.generateSpokeToken(spoke.spokeId);
+
+        // Generate OPAL client JWT for spoke's OPAL client to connect
+        let opalClientToken = null;
+        try {
+            const { opalTokenService } = await import('../services/opal-token.service');
+            if (opalTokenService.isConfigured()) {
+                opalClientToken = await opalTokenService.generateClientToken(spoke.spokeId, spoke.instanceCode);
+                logger.info('OPAL client token generated for spoke', {
+                    spokeId: spoke.spokeId,
+                    opalTokenExpires: opalClientToken.expiresAt
+                });
+            } else {
+                logger.warn('OPAL token service not configured - spoke will need manual OPAL token');
+            }
+        } catch (opalError) {
+            logger.warn('Failed to generate OPAL client token', {
+                spokeId: spoke.spokeId,
+                error: opalError instanceof Error ? opalError.message : 'Unknown'
+            });
+        }
 
         logger.info('Spoke approved', {
             spokeId: spoke.spokeId,
             instanceCode: spoke.instanceCode,
             approvedBy,
-            allowedScopes: parsed.data.allowedScopes
+            allowedScopes: parsed.data.allowedScopes,
+            hasOpalToken: !!opalClientToken
         });
 
         res.json({
             success: true,
             spoke,
             token: {
-                token: token.token,
-                expiresAt: token.expiresAt,
-                scopes: token.scopes
-            }
+                token: hubApiToken.token,
+                expiresAt: hubApiToken.expiresAt,
+                scopes: hubApiToken.scopes
+            },
+            opalToken: opalClientToken ? {
+                token: opalClientToken.token,
+                expiresAt: opalClientToken.expiresAt,
+                type: 'opal_client'
+            } : null
         });
 
     } catch (error) {

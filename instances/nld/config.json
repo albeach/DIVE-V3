@@ -1,0 +1,55 @@
+{
+  "identity": {
+    "spokeId": "spoke-nld-98b19d07",
+    "instanceCode": "NLD",
+    "name": "Kingdom of the Netherlands",
+    "description": "DIVE V3 Spoke Instance for Kingdom of the Netherlands",
+    "country": "NLD",
+    "organizationType": "government",
+    "contactEmail": "admin@nld.dive25.com",
+    "registeredSpokeId": "spoke-nld-6712351e"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3020",
+    "apiUrl": "https://localhost:4020",
+    "idpUrl": "https://dive-spoke-nld-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8463",
+    "kasUrl": "https://localhost:9020"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:nld",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-20T12:40:31Z",
+    "spokeToken": "CnGltO2Ii2RDdgaE572uY1JRoJ2jzvdvg2_GD1JarVw"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-20T12:36:49Z",
+    "lastModified": "2025-12-20T12:36:49Z",
+    "configHash": ""
+  }
+}

@@ -58,6 +58,58 @@ router.get('/:id/download', authenticateJWT, downloadZTDFHandler);
 router.get('/:id/kas-flow', authenticateJWT, getKASFlowHandler);
 
 /**
+ * GET /api/resources/count
+ * Get count of accessible documents (for federated dashboard stats)
+ * Used by Hub to aggregate document counts across federation
+ */
+router.get('/count', async (req, res) => {
+    try {
+        const { releasableTo } = req.query;
+        const federatedFrom = req.headers['x-federated-from'] as string;
+
+        // Only allow from trusted federation partners
+        const trustedInstances = (process.env.TRUSTED_FEDERATION_INSTANCES || 'USA,FRA,GBR,DEU').split(',');
+        if (!federatedFrom || !trustedInstances.includes(federatedFrom.toUpperCase())) {
+            res.status(403).json({ error: 'Federated access required' });
+            return;
+        }
+
+        // Dynamically import to avoid circular dependencies
+        const { getMongoDBUrl, getMongoDBName } = await import('../utils/mongodb-config');
+        const { MongoClient } = await import('mongodb');
+
+        const client = new MongoClient(getMongoDBUrl());
+        await client.connect();
+
+        try {
+            const db = client.db(getMongoDBName());
+            const collection = db.collection('resources');
+
+            // Build filter based on releasability
+            const filter: any = {};
+            if (releasableTo) {
+                filter.releasabilityTo = releasableTo.toString().toUpperCase();
+            }
+
+            const count = await collection.countDocuments(filter);
+
+            res.status(200).json({
+                success: true,
+                count,
+                accessibleCount: count,
+                releasableTo: releasableTo || 'all',
+                instance: process.env.INSTANCE_CODE || 'USA'
+            });
+        } finally {
+            await client.close();
+        }
+    } catch (error) {
+        console.error('Error counting resources:', error);
+        res.status(500).json({ error: 'Internal server error', count: 0 });
+    }
+});
+
+/**
  * Phase 1: Performance Foundation - Paginated Search Routes
  * Server-side cursor pagination for 28K+ documents
  */
@@ -107,7 +159,7 @@ router.get('/federated-status', authenticateJWT, federatedStatusHandler);
  * Week 2: PEP middleware enforces ABAC authorization via OPA
  * Week 3: Enrichment middleware fills missing attributes BEFORE authz
  * Phase 4: Federation agreement enforcement for SP access
- * 
+ *
  * IMPORTANT: This catch-all route MUST be LAST to avoid shadowing specific routes above
  */
 router.get('/:id', authenticateJWT, enrichmentMiddleware, authzMiddleware, enforceFederationAgreement, getResourceHandler);

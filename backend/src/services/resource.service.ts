@@ -3,6 +3,7 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { IZTDFResource, IZTDFObject } from '../types/ztdf.types';
 import { validateZTDFIntegrity } from '../utils/ztdf.utils';
+import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
 // MongoDB connection configured at runtime via getMongoDBUrl/getMongoDBName() helpers
 const COLLECTION_NAME = 'resources';
@@ -441,7 +442,30 @@ export async function getResourceByIdFederated(
     }
 
     // Step 3: Proxy request to origin instance
-    const originApiUrl = FEDERATION_API_URLS[originInstance];
+    // First check static config, then check Hub-Spoke Registry for dynamic spokes
+    let originApiUrl = FEDERATION_API_URLS[originInstance];
+    
+    if (!originApiUrl) {
+        // Check Hub-Spoke Registry for dynamically registered spokes
+        try {
+            const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(originInstance);
+            if (spoke && spoke.status === 'approved') {
+                // Use internalApiUrl for Docker network access, fall back to apiUrl
+                originApiUrl = (spoke as any).internalApiUrl || spoke.apiUrl || '';
+                logger.info('Found spoke in Hub-Spoke Registry', {
+                    originInstance,
+                    apiUrl: originApiUrl,
+                    spokeId: spoke.spokeId
+                });
+            }
+        } catch (error) {
+            logger.warn('Error checking Hub-Spoke Registry', {
+                originInstance,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+    
     if (!originApiUrl) {
         logger.error('No API URL configured for origin instance', { originInstance, resourceId });
         return { resource: null, source: 'federated', error: `Unknown federation instance: ${originInstance}` };
