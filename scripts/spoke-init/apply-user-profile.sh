@@ -279,7 +279,7 @@ PROFILE_TO_UPDATE=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users/profil
 
 # Remove required constraint from email, firstName, lastName
 PROFILE_TO_UPDATE=$(echo "$PROFILE_TO_UPDATE" | jq '
-  .attributes = [.attributes[] | 
+  .attributes = [.attributes[] |
     if .name == "email" or .name == "firstName" or .name == "lastName" then
       del(.required)
     else
