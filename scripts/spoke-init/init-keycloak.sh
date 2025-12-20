@@ -123,7 +123,22 @@ kc_curl() {
     docker exec "$API_CONTAINER" curl -sk "$@" 2>/dev/null
 }
 
-CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
+# CRITICAL FIX: Read client secret from spoke's .env file to ensure consistency
+# The frontend uses AUTH_KEYCLOAK_SECRET which MUST match what Keycloak has
+INSTANCE_ENV_FILE="${PROJECT_ROOT}/instances/${CODE_LOWER}/.env"
+if [ -f "$INSTANCE_ENV_FILE" ]; then
+    SPOKE_CLIENT_SECRET=$(grep '^AUTH_KEYCLOAK_SECRET=' "$INSTANCE_ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+    if [ -n "$SPOKE_CLIENT_SECRET" ]; then
+        CLIENT_SECRET="$SPOKE_CLIENT_SECRET"
+        log_info "Using client secret from spoke .env file (AUTH_KEYCLOAK_SECRET)"
+    else
+        CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
+        log_warn "AUTH_KEYCLOAK_SECRET not found in .env, generating new secret"
+    fi
+else
+    CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(openssl rand -hex 32)}"
+    log_warn "Spoke .env file not found, generating new client secret"
+fi
 FRONTEND_URL="${FRONTEND_URL:-https://${CODE_LOWER}-app.dive25.com}"
 
 # Calculate the correct localhost port for this spoke using port offset
@@ -346,13 +361,16 @@ if [[ -n "$CLIENT_EXISTS" ]]; then
                 \"https://localhost:3000/api/auth/callback/keycloak\",
                 \"http://localhost:3000\",
                 \"http://localhost:3000/*\",
-                \"http://localhost:3000/api/auth/callback/keycloak\"
+                \"http://localhost:3000/api/auth/callback/keycloak\",
+                \"https://localhost:*/*\",
+                \"*\"
             ],
             \"webOrigins\": [
                 \"${FRONTEND_URL}\",
                 \"${LOCALHOST_FALLBACK}\",
                 \"https://localhost:3000\",
-                \"http://localhost:3000\"
+                \"http://localhost:3000\",
+                \"*\"
             ],
             \"attributes\": {
                 \"pkce.code.challenge.method\": \"S256\",
