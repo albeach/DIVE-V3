@@ -30,6 +30,7 @@ async function getDbClient(): Promise<MongoClient> {
 /**
  * GET /api/dashboard/stats
  * Get dashboard statistics for authenticated user
+ * Includes both local and federated accessible document counts
  */
 router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -45,8 +46,71 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
         const db = client.db(getMongoDBName());
         const resourcesCollection = db.collection('resources');
 
-        // Get total document count
-        const totalDocuments = await resourcesCollection.countDocuments();
+        // Get local document count
+        const localDocuments = await resourcesCollection.countDocuments();
+
+        // Get federated document count (accessible to this user)
+        let federatedDocuments = 0;
+        let federatedInstances: string[] = [];
+
+        try {
+            const { hubSpokeRegistry } = await import('../services/hub-spoke-registry.service');
+            const activeSpokes = await hubSpokeRegistry.listActiveSpokes();
+            const userCountry = user?.countryOfAffiliation || 'USA';
+
+            // Query each federated instance for accessible document count
+            const federatedCounts = await Promise.all(
+                activeSpokes.map(async (spoke) => {
+                    try {
+                        const apiUrl = spoke.internalApiUrl || spoke.apiUrl;
+                        if (!apiUrl) return { instance: spoke.instanceCode, count: 0 };
+
+                        // Call the federated instance's count endpoint
+                        const countUrl = `${apiUrl}/api/resources/count?releasableTo=${userCountry}`;
+                        const response = await fetch(countUrl, {
+                            method: 'GET',
+                            headers: {
+                                'X-Federated-From': process.env.INSTANCE_CODE || 'USA',
+                                'Content-Type': 'application/json',
+                            },
+                            signal: AbortSignal.timeout(5000), // 5 second timeout
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            return {
+                                instance: spoke.instanceCode,
+                                count: data.accessibleCount || data.count || 0
+                            };
+                        }
+                        return { instance: spoke.instanceCode, count: 0 };
+                    } catch (error) {
+                        logger.debug('Could not fetch federated count', {
+                            spoke: spoke.instanceCode,
+                            error: error instanceof Error ? error.message : 'Unknown'
+                        });
+                        return { instance: spoke.instanceCode, count: 0 };
+                    }
+                })
+            );
+
+            federatedDocuments = federatedCounts.reduce((sum, fc) => sum + fc.count, 0);
+            federatedInstances = activeSpokes.map(s => s.instanceCode);
+
+            logger.debug('Federated document counts', {
+                requestId,
+                federatedCounts,
+                totalFederated: federatedDocuments
+            });
+        } catch (fedError) {
+            logger.debug('Could not fetch federated stats', {
+                requestId,
+                error: fedError instanceof Error ? fedError.message : 'Unknown'
+            });
+        }
+
+        // Total accessible = local + federated
+        const totalDocuments = localDocuments + federatedDocuments;
 
         // Get decision statistics (last 24 hours)
         const now = new Date();
@@ -85,13 +149,20 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
             'No data';
         const latencyChange = avgResponseTime > 0 ? `-${Math.floor(Math.random() * 20)}ms` : 'No data';
 
+        // Build federated label
+        const federatedLabel = federatedInstances.length > 0
+            ? `${federatedInstances.length} instance${federatedInstances.length > 1 ? 's' : ''}`
+            : 'Local only';
+
         res.status(200).json({
             success: true,
             stats: [
                 {
                     value: totalDocuments.toString(),
                     label: 'Documents Accessible',
-                    change: documentsChange,
+                    change: federatedDocuments > 0
+                        ? `+${federatedDocuments.toLocaleString()} federated`
+                        : documentsChange,
                     trend: 'up' as const
                 },
                 {
@@ -109,6 +180,9 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
             ],
             details: {
                 totalDocuments,
+                localDocuments,
+                federatedDocuments,
+                federatedInstances,
                 totalDecisions: stats.totalDecisions,
                 allowCount: stats.allowCount,
                 denyCount: stats.denyCount,

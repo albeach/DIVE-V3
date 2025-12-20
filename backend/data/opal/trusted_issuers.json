@@ -1,23 +1,5 @@
 {
   "trusted_issuers": {
-    "https://esp-idp.dive25.com": {
-      "tenant": "ESP",
-      "name": "Spain Spoke Keycloak",
-      "country": "ESP",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
-    },
-    "https://idp.che.example.com": {
-      "tenant": "CHE",
-      "name": "Switzerland Test Spoke Keycloak",
-      "country": "CHE",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
-    },
     "https://idp.behind.example.com": {
       "tenant": "BHD",
       "name": "Behind Spoke Keycloak",
@@ -92,7 +74,7 @@
     }
   },
   "_metadata": {
-    "lastUpdated": "2025-12-18T07:51:40.510Z"
+    "lastUpdated": "2025-12-20T11:22:03.931Z"
   },
   "https://localhost:8451/realms/dive-v3-broker-est": {
     "tenant": "EST",

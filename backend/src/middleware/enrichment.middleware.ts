@@ -24,8 +24,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
-// Import trusted federation instances from authz middleware
-const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU', 'HUN'];
+// Import trusted federation instances - dynamic from environment
+const TRUSTED_FEDERATION_INSTANCES: string[] = (() => {
+    const envValue = process.env.TRUSTED_FEDERATION_INSTANCES;
+    if (envValue) {
+        return envValue.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+    }
+    // Default: Legacy hardcoded list for backward compatibility
+    return ['USA', 'FRA', 'GBR', 'DEU', 'HUN'];
+})();
 
 /**
  * Email domain to country mapping

@@ -1,10 +1,12 @@
 /**
  * Federated Search Controller
  * Phase 4, Task 3.2: Cross-Instance Resource Discovery
- * 
+ *
  * Enables unified search across all federated instances (USA, FRA, GBR, DEU).
  * Queries are executed in parallel with graceful degradation if instances are down.
- * 
+ *
+ * UPDATED: Now dynamically includes approved spokes from Hub-Spoke Registry
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -13,6 +15,7 @@ import axios from 'axios';
 import https from 'https';
 import { logger } from '../utils/logger';
 import { searchResources } from '../services/resource.service';
+import { hubSpokeRegistry } from '../services/hub-spoke-registry.service';
 
 // Create axios instance with custom HTTPS agent for self-signed certs in development
 const httpsAgent = new https.Agent({
@@ -125,12 +128,68 @@ function loadFederationInstances(): FederationInstance[] {
     ];
 }
 
-const FEDERATION_INSTANCES = loadFederationInstances();
+// Static instances from registry (loaded at startup)
+const STATIC_FEDERATION_INSTANCES = loadFederationInstances();
 const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
 // Phase 3: Increased timeout for remote instances (DEU)
 const FEDERATED_SEARCH_TIMEOUT_MS = parseInt(process.env.FEDERATED_SEARCH_TIMEOUT_MS || '5000');
 const REMOTE_INSTANCE_TIMEOUT_MS = parseInt(process.env.REMOTE_INSTANCE_TIMEOUT_MS || '8000');
 const MAX_FEDERATED_RESULTS = parseInt(process.env.MAX_FEDERATED_RESULTS || '100');
+
+// Cache for dynamic spoke instances (refreshed periodically)
+let cachedSpokeInstances: FederationInstance[] = [];
+let spokeInstancesCacheTime = 0;
+const SPOKE_CACHE_TTL_MS = 60000; // 1 minute cache
+
+/**
+ * Get all federation instances (static registry + dynamic approved spokes)
+ * This is the key function that enables querying approved spokes as federation endpoints
+ */
+async function getAllFederationInstances(): Promise<FederationInstance[]> {
+    const now = Date.now();
+
+    // Refresh spoke cache if stale
+    if (now - spokeInstancesCacheTime > SPOKE_CACHE_TTL_MS) {
+        try {
+            const approvedSpokes = await hubSpokeRegistry.listActiveSpokes();
+            cachedSpokeInstances = approvedSpokes
+                .filter(spoke => spoke.status === 'approved' && spoke.apiUrl)
+                .map(spoke => ({
+                    code: spoke.instanceCode,
+                    apiUrl: spoke.apiUrl!,
+                    type: 'remote' as const, // Treat spokes as remote (they're separate Docker stacks)
+                    enabled: true
+                }));
+            spokeInstancesCacheTime = now;
+
+            logger.info('Refreshed spoke instances cache', {
+                count: cachedSpokeInstances.length,
+                spokes: cachedSpokeInstances.map(s => s.code)
+            });
+        } catch (error) {
+            logger.warn('Failed to refresh spoke instances, using cache', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+
+    // Merge static registry with dynamic spokes (spokes override registry if same code)
+    const staticCodes = new Set(STATIC_FEDERATION_INSTANCES.map(i => i.code));
+    const combinedInstances = [
+        ...STATIC_FEDERATION_INSTANCES,
+        ...cachedSpokeInstances.filter(spoke => !staticCodes.has(spoke.code))
+    ];
+
+    return combinedInstances;
+}
+
+/**
+ * Invalidate the spoke instances cache (called when federation changes)
+ */
+export function invalidateSpokeInstancesCache(): void {
+    spokeInstancesCacheTime = 0;
+    logger.info('Spoke instances cache invalidated');
+}
 
 // Clearance hierarchy for filtering
 const CLEARANCE_HIERARCHY: Record<string, number> = {
@@ -230,11 +289,19 @@ export const federatedSearchHandler = async (
         const userCountry = user.countryOfAffiliation || INSTANCE_REALM;
         const userCOIs = user.acpCOI || [];
 
-        // Execute parallel search across all instances
+        // Execute parallel search across all instances (including approved spokes)
         const instanceResults: Record<string, { count: number; latencyMs: number; error?: string }> = {};
         const allResources: FederatedSearchResult[] = [];
 
-        const searchPromises = FEDERATION_INSTANCES
+        // Get all federation instances (static + dynamic spokes)
+        const federationInstances = await getAllFederationInstances();
+
+        logger.info('Federation instances for search', {
+            requestId,
+            instances: federationInstances.map(i => ({ code: i.code, type: i.type }))
+        });
+
+        const searchPromises = federationInstances
             .filter(instance => instance.enabled)
             .map(async (instance) => {
                 const instanceStart = Date.now();
@@ -304,7 +371,7 @@ export const federatedSearchHandler = async (
         // Note: Server-side authorization filtering is DISABLED to match local mode behavior.
         // The local /api/resources endpoint returns ALL resources and the UI shows "COI may be required" badges.
         // Authorization is enforced when user tries to ACCESS a specific resource (GET /api/resources/:id).
-        // 
+        //
         // If strict server-side filtering is needed, set enforceAuthorization=true in the request:
         const enforceAuthorization = req.body.enforceAuthorization === true || req.query.enforceAuthorization === 'true';
 
@@ -618,8 +685,11 @@ export const federatedStatusHandler = async (
     const startTime = Date.now();
 
     try {
+        // Get all federation instances (static + dynamic spokes)
+        const federationInstances = await getAllFederationInstances();
+
         const instanceChecks = await Promise.all(
-            FEDERATION_INSTANCES.map(async (instance) => {
+            federationInstances.map(async (instance) => {
                 const checkStart = Date.now();
                 try {
                     if (instance.code === INSTANCE_REALM) {
@@ -659,7 +729,7 @@ export const federatedStatusHandler = async (
             federatedSearchEnabled: true,
             instances: instanceChecks,
             availableInstances: availableCount,
-            totalInstances: FEDERATION_INSTANCES.length,
+            totalInstances: federationInstances.length,
             executionTimeMs: Date.now() - startTime,
             timestamp: new Date().toISOString()
         });

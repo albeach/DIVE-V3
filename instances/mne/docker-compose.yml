@@ -123,6 +123,7 @@ services:
     container_name: dive-spoke-mne-opal-client
     environment:
       OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
+      # JWT token obtained from OPAL server's /token endpoint using master token
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: http://opa-mne:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-mne-default}
@@ -136,6 +137,7 @@ services:
         condition: service_healthy
     networks:
       - dive-mne-network
+      - dive-v3-shared-network  # Connect to Hub OPAL server
 
   kas-mne:
     extends:
@@ -165,8 +167,14 @@ services:
       service: backend-base
     container_name: dive-spoke-mne-backend
     environment:
+      SPOKE_MODE: "true"
       INSTANCE_CODE: MNE
       INSTANCE_NAME: "Montenegro Armed Forces"
+      # Hub connection for heartbeats
+      HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
+      SPOKE_ID: ${SPOKE_ID:-spoke-mne-default}
+      SPOKE_OPAL_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_MNE:?set MONGO_PASSWORD_MNE}@mongodb-mne:27017/dive-v3-mne?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_MNE:?set MONGO_PASSWORD_MNE}@mongodb-mne:27017/dive-v3-mne?authSource=admin
       REDIS_URL: redis://:${REDIS_PASSWORD_MNE:?set REDIS_PASSWORD_MNE}@redis-mne:6379

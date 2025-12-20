@@ -1,17 +1,18 @@
 /**
  * Federated Resource Service
  * Phase 3, Task 3.1-3.4: Distributed Query Federation
- * 
+ *
  * Provides direct MongoDB connections to all federated instances for
  * high-performance cross-instance resource queries.
- * 
+ *
  * Features:
  * - Connection pooling to all federated instance MongoDBs
  * - Parallel query execution with timeout handling
  * - Circuit breaker pattern for unavailable instances
  * - ABAC filtering based on user attributes
  * - Result caching with Redis (optional)
- * 
+ * - **DYNAMIC SPOKE LOADING**: Approved spokes from Hub-Spoke Registry
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -22,6 +23,7 @@ import axios from 'axios';
 import https from 'https';
 import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
 // Create axios instance with custom HTTPS agent for self-signed certs
 const httpsAgent = new https.Agent({
@@ -139,7 +141,7 @@ class FederatedResourceService {
         // CRITICAL FIX: Use INSTANCE_CODE (which is set by spoke deployment)
         // Fall back to INSTANCE_REALM for backward compatibility, then to USA
         this.currentInstanceRealm = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
-        logger.info('FederatedResourceService using instance realm', { 
+        logger.info('FederatedResourceService using instance realm', {
             currentInstanceRealm: this.currentInstanceRealm,
             fromEnv: process.env.INSTANCE_CODE ? 'INSTANCE_CODE' : (process.env.INSTANCE_REALM ? 'INSTANCE_REALM' : 'default')
         });
@@ -148,7 +150,7 @@ class FederatedResourceService {
     /**
      * Initialize connections to all federated instances
      * Loads configuration from federation-registry.json
-     * 
+     *
      * CRITICAL FIX: If current instance is not in the registry (dynamic spoke),
      * automatically register it as a local instance with MongoDB connection.
      */
@@ -164,7 +166,7 @@ class FederatedResourceService {
 
         // Load federation registry
         const registry = await this.loadFederationRegistry();
-        
+
         // Initialize instances from registry (if available)
         if (registry?.instances) {
             for (const [key, instance] of Object.entries(registry.instances)) {
@@ -211,11 +213,11 @@ class FederatedResourceService {
     private async registerCurrentInstance(): Promise<void> {
         const instanceCode = this.currentInstanceRealm;
         const instanceName = process.env.INSTANCE_NAME || `${instanceCode} Instance`;
-        
+
         // Get MongoDB configuration from environment
         const mongoUrl = getMongoDBUrl();
         const mongoDatabase = getMongoDBName();
-        
+
         if (!mongoUrl) {
             logger.error(`Cannot register current instance ${instanceCode}: No MongoDB URL configured`);
             return;
@@ -242,6 +244,90 @@ class FederatedResourceService {
             database: mongoDatabase,
             hasMongoUrl: !!mongoUrl
         });
+    }
+
+    /**
+     * PHASE 4: Dynamically load approved spokes from Hub-Spoke Registry
+     * This enables querying spoke instances that aren't in the static registry
+     *
+     * Called before each federated search to ensure new spokes are immediately queryable
+     */
+    private spokeRefreshTimestamp = 0;
+    private readonly SPOKE_REFRESH_INTERVAL_MS = 60000; // 1 minute
+
+    async refreshApprovedSpokes(): Promise<void> {
+        const now = Date.now();
+
+        // Skip if recently refreshed
+        if (now - this.spokeRefreshTimestamp < this.SPOKE_REFRESH_INTERVAL_MS) {
+            return;
+        }
+
+        try {
+            const approvedSpokes = await hubSpokeRegistry.listActiveSpokes();
+            let addedCount = 0;
+
+            for (const spoke of approvedSpokes) {
+                // Skip if already registered or no API URL
+                if (this.instances.has(spoke.instanceCode) || !spoke.apiUrl) {
+                    continue;
+                }
+
+                // Use internalApiUrl if available (for Docker network access)
+                // Otherwise fall back to public apiUrl (works for local dev)
+                const spokeAny = spoke as any;
+                const effectiveApiUrl = spokeAny.internalApiUrl || spoke.apiUrl;
+
+                // Register spoke as API-mode instance (we don't have direct MongoDB access)
+                const federatedInstance: IFederatedInstance = {
+                    code: spoke.instanceCode,
+                    name: spoke.name,
+                    type: 'remote',
+                    enabled: spoke.status === 'approved',
+                    mongoUrl: '', // Not available for spokes - use API mode
+                    mongoDatabase: '',
+                    apiUrl: effectiveApiUrl,
+                    useApiMode: true, // Use HTTP API instead of direct MongoDB
+                    circuitBreaker: {
+                        state: 'closed',
+                        failures: 0
+                    }
+                };
+
+                this.instances.set(spoke.instanceCode, federatedInstance);
+                addedCount++;
+
+                logger.info(`Registered approved spoke as federation endpoint`, {
+                    code: spoke.instanceCode,
+                    name: spoke.name,
+                    apiUrl: effectiveApiUrl,
+                    publicApiUrl: spoke.apiUrl,
+                    useApiMode: true
+                });
+            }
+
+            this.spokeRefreshTimestamp = now;
+
+            if (addedCount > 0) {
+                logger.info('Refreshed approved spokes for federation', {
+                    addedCount,
+                    totalInstances: this.instances.size,
+                    instances: Array.from(this.instances.keys())
+                });
+            }
+        } catch (error) {
+            logger.warn('Failed to refresh approved spokes', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+
+    /**
+     * Invalidate spoke cache to force immediate refresh
+     */
+    invalidateSpokeCache(): void {
+        this.spokeRefreshTimestamp = 0;
+        logger.info('Spoke cache invalidated for FederatedResourceService');
     }
 
     /**
@@ -272,21 +358,21 @@ class FederatedResourceService {
     /**
      * Create instance configuration with MongoDB connection details
      * For non-current instances, uses API-based federation via Cloudflare tunnels
-     * 
+     *
      * FIX: For current instance, use existing MONGODB_URL environment variable
      * instead of building a new one (ensures consistency with paginated-search.controller.ts)
      */
     private async createInstanceConfig(key: string, inst: any): Promise<IFederatedInstance> {
         const instanceCode = key.toUpperCase();
         const isSameInstance = instanceCode === this.currentInstanceRealm;
-        
+
         // For different instances, use API-based federation (more reliable across networks)
         const useApiMode = !isSameInstance;
-        
+
         // Build API URL for HTTP-based federation
         const backendService = inst.services?.backend;
         let apiUrl: string;
-        
+
         // Check environment for explicit URL override first
         const envApiUrl = process.env[`${instanceCode}_API_URL`];
         if (envApiUrl) {
@@ -306,18 +392,18 @@ class FederatedResourceService {
                 apiUrl = `https://${backendService?.hostname || `${key.toLowerCase()}-api.dive25.com`}`;
             }
         }
-        
+
         // For MongoDB connection, use existing env var for current instance
         let mongoUrl: string = '';
         let mongoDatabase: string = '';
-        
+
         if (isSameInstance) {
             // FIX: Use the existing MONGODB_URL environment variable
             // This ensures consistency with paginated-search.controller.ts
             // The env var is already configured correctly in docker-compose
             mongoUrl = getMongoDBUrl();
             mongoDatabase = getMongoDBName();
-            
+
             logger.info(`Using existing MongoDB URL for ${instanceCode}`, {
                 database: mongoDatabase,
                 hasUrl: !!mongoUrl
@@ -433,16 +519,21 @@ class FederatedResourceService {
     /**
      * Execute federated search across all instances
      * Phase 3: Supports Redis caching for improved performance
+     * Phase 4: Dynamically includes approved spokes as queryable endpoints
      */
     async search(
         options: IFederatedSearchOptions,
         userAttributes: IUserAttributes
     ): Promise<IFederatedSearchResponse> {
         const startTime = Date.now();
-        
+
         if (!this.initialized) {
             await this.initialize();
         }
+
+        // Phase 4: Refresh approved spokes (cached for 1 minute)
+        // This ensures newly approved spokes are immediately queryable
+        await this.refreshApprovedSpokes();
 
         // Phase 3: Check cache first
         try {
@@ -464,7 +555,7 @@ class FederatedResourceService {
         }
 
         const targetInstances = options.instances?.length
-            ? Array.from(this.instances.entries()).filter(([key]) => 
+            ? Array.from(this.instances.entries()).filter(([key]) =>
                 options.instances!.map(i => i.toUpperCase()).includes(key))
             : Array.from(this.instances.entries());
 
@@ -526,6 +617,9 @@ class FederatedResourceService {
         // Deduplicate by resourceId (prefer local over federated)
         const deduped = this.deduplicateResults(filteredResults);
 
+        // Sort merged results by title for consistent ordering across instances
+        deduped.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+
         // Apply limit and offset
         const offset = options.offset || 0;
         const limit = options.limit || MAX_RESULTS_PER_INSTANCE;
@@ -570,7 +664,7 @@ class FederatedResourceService {
         if (instance.useApiMode && instance.apiUrl) {
             return this.searchInstanceViaApi(instance, options);
         }
-        
+
         // Direct MongoDB connection for local instance
         const db = await this.getConnection(instance);
         if (!db) {
@@ -589,13 +683,13 @@ class FederatedResourceService {
         const allowedClassifications = Object.entries(CLEARANCE_HIERARCHY)
             .filter(([_, level]) => level <= userClearanceLevel)
             .map(([name]) => name);
-        
+
         query.$and.push({
             $or: [
                 { classification: { $in: allowedClassifications } },
                 { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
                 // Allow null/missing classification (treat as UNCLASSIFIED)
-                { 
+                {
                     $and: [
                         { classification: { $exists: false } },
                         { 'ztdf.policy.securityLabel.classification': { $exists: false } }
@@ -666,13 +760,13 @@ class FederatedResourceService {
 
         // Execute query with timeout
         const timeoutMs = instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS;
-        
+
         // Final query filter (use $and if we have conditions)
         const finalQuery = query.$and.length > 0 ? query : {};
-        
+
         // Get total ABAC-accessible count
         const accessibleCount = await collection.countDocuments(finalQuery);
-        
+
         const cursor = collection.find(finalQuery)
             .limit(MAX_RESULTS_PER_INSTANCE)
             .maxTimeMS(timeoutMs);
@@ -689,7 +783,7 @@ class FederatedResourceService {
 
         // Transform to federated search result format
         const results = documents.map(doc => this.transformDocument(doc, instance.code));
-        
+
         return { results, accessibleCount };
     }
 
@@ -703,7 +797,7 @@ class FederatedResourceService {
         options: IFederatedSearchOptions
     ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number }> {
         const apiUrl = `${instance.apiUrl}/api/resources/search`;
-        
+
         logger.info(`Federated API search to ${instance.code}`, {
             apiUrl,
             query: options.query,
@@ -715,7 +809,7 @@ class FederatedResourceService {
             'Content-Type': 'application/json',
             'X-Federated-From': this.currentInstanceRealm,
         };
-        
+
         // Forward auth header if provided
         if (options.authHeader) {
             headers['Authorization'] = options.authHeader;
@@ -742,12 +836,12 @@ class FederatedResourceService {
             const responseResults = response.data.results || [];
             // Capture the ABAC-filtered totalCount from the remote instance
             const accessibleCount = response.data.pagination?.totalCount || responseResults.length;
-            
+
             logger.debug(`Federated API response from ${instance.code}`, {
                 resultsCount: responseResults.length,
                 accessibleCount,
             });
-            
+
             // Transform to federated search result format
             const results = responseResults.map((doc: any) => ({
                 resourceId: doc.resourceId,
@@ -775,7 +869,7 @@ class FederatedResourceService {
      */
     private transformDocument(doc: any, sourceInstance: string): IFederatedSearchResult {
         const ztdf = doc.ztdf;
-        
+
         if (ztdf) {
             return {
                 resourceId: doc.resourceId,
@@ -807,7 +901,7 @@ class FederatedResourceService {
 
     /**
      * Apply ABAC filtering based on user attributes
-     * 
+     *
      * Note: Results from remote instances (via API) are NOT re-filtered here
      * because the user already authenticated with the remote instance's ABAC.
      * Only local MongoDB results need filtering.
@@ -866,7 +960,7 @@ class FederatedResourceService {
                 // Prefer local (current instance) over federated
                 const isCurrentLocal = result.sourceInstance === this.currentInstanceRealm;
                 const isExistingLocal = existing.sourceInstance === this.currentInstanceRealm;
-                
+
                 if (isCurrentLocal && !isExistingLocal) {
                     seen.set(result.resourceId, result);
                 }
