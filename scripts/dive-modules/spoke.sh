@@ -1272,12 +1272,67 @@ _spoke_init_legacy() {
     local idp_public_url="https://localhost:${keycloak_port}"
     local kas_url="https://localhost:${kas_port}"
 
-    # Generate secure passwords
-    local postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
-    local mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
-    local keycloak_pass=$(openssl rand -base64 16 | tr -d '/+=')
-    local auth_secret=$(openssl rand -base64 32)
-    local client_secret=$(openssl rand -base64 24 | tr -d '/+=')
+    # ==========================================================================
+    # BEST PRACTICE: Check for stale volumes and reuse passwords if they exist
+    # This prevents database authentication failures on redeployment
+    # ==========================================================================
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local env_file="$spoke_dir/.env"
+    local has_stale_volumes=false
+    
+    # Check for existing volumes (common naming patterns)
+    local volume_patterns=(
+        "${code_lower}_${code_lower}-postgres-data"
+        "${code_lower}_${code_lower}_postgres_data"
+        "dive-spoke-${code_lower}_${code_lower}-postgres-data"
+    )
+    
+    for pattern in "${volume_patterns[@]}"; do
+        if docker volume ls -q 2>/dev/null | grep -q "^${pattern}$"; then
+            has_stale_volumes=true
+            break
+        fi
+    done
+    
+    # Password generation strategy:
+    # 1. If .env exists, reuse passwords (ensures consistency with existing volumes)
+    # 2. If stale volumes exist but no .env, warn and clean volumes
+    # 3. Otherwise, generate fresh passwords
+    
+    local postgres_pass=""
+    local mongo_pass=""
+    local keycloak_pass=""
+    local auth_secret=""
+    local client_secret=""
+    
+    if [ -f "$env_file" ]; then
+        # Reuse existing passwords from .env file
+        log_info "Found existing .env file - reusing passwords for volume consistency"
+        postgres_pass=$(grep "^POSTGRES_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+        mongo_pass=$(grep "^MONGO_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+        keycloak_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+        auth_secret=$(grep "^AUTH_SECRET=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+        client_secret=$(grep "^AUTH_KEYCLOAK_SECRET=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+    elif [ "$has_stale_volumes" = true ]; then
+        # Stale volumes exist but no .env - this will cause password mismatch!
+        log_warn "Stale Docker volumes detected for ${code_upper} but no .env file found"
+        log_warn "This will cause database authentication failures"
+        echo ""
+        echo -e "${YELLOW}  Recommended: Clean up stale volumes first:${NC}"
+        echo -e "    ./dive --instance ${code_lower} spoke clean"
+        echo ""
+        
+        # Auto-clean stale volumes for better UX
+        log_info "Auto-cleaning stale volumes for fresh deployment..."
+        docker volume ls -q 2>/dev/null | grep -E "^${code_lower}[_-]" | xargs -r docker volume rm 2>/dev/null || true
+    fi
+    
+    # Generate fresh passwords for any missing values
+    [ -z "$postgres_pass" ] && postgres_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    [ -z "$mongo_pass" ] && mongo_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    [ -z "$keycloak_pass" ] && keycloak_pass=$(openssl rand -base64 16 | tr -d '/+=')
+    [ -z "$auth_secret" ] && auth_secret=$(openssl rand -base64 32)
+    [ -z "$client_secret" ] && client_secret=$(openssl rand -base64 24 | tr -d '/+=')
 
     # Generate default contact email based on instance code
     local contact_email="admin@${code_lower}.dive25.com"
@@ -3434,6 +3489,90 @@ spoke_down() {
     log_success "Spoke services stopped"
 }
 
+# =============================================================================
+# SPOKE CLEAN - Remove all volumes and containers for a spoke instance
+# This is the recommended way to handle stale volume password mismatches
+# =============================================================================
+spoke_clean() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    print_header
+    echo -e "${BOLD}Cleaning Up Spoke Instance:${NC} ${code_upper}"
+    echo ""
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would stop and remove all containers for $code_upper"
+        log_dry "Would remove all Docker volumes matching: ${code_lower}*"
+        log_dry "Would remove instance directory: $spoke_dir"
+        return 0
+    fi
+    
+    # Step 1: Stop containers if running
+    if [ -f "$spoke_dir/docker-compose.yml" ]; then
+        log_step "Stopping spoke services..."
+        export COMPOSE_PROJECT_NAME="$code_lower"
+        cd "$spoke_dir"
+        docker compose down --volumes --remove-orphans 2>/dev/null || true
+    fi
+    
+    # Step 2: Remove any orphaned containers
+    log_step "Removing orphaned containers..."
+    docker ps -a --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=${code_lower}-" --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
+    
+    # Step 3: Remove volumes with common naming patterns
+    log_step "Removing Docker volumes..."
+    local volume_count=0
+    local volume_patterns=(
+        "^${code_lower}_"
+        "^dive-spoke-${code_lower}_"
+        "^${code_lower}-"
+    )
+    
+    for pattern in "${volume_patterns[@]}"; do
+        local volumes=$(docker volume ls -q 2>/dev/null | grep -E "$pattern" || true)
+        if [ -n "$volumes" ]; then
+            echo "$volumes" | xargs -r docker volume rm 2>/dev/null || true
+            volume_count=$((volume_count + $(echo "$volumes" | wc -l)))
+        fi
+    done
+    
+    log_info "Removed $volume_count volumes"
+    
+    # Step 4: Remove instance directory (optional - prompt user)
+    if [ -d "$spoke_dir" ]; then
+        echo ""
+        echo -e "${YELLOW}Instance directory found: $spoke_dir${NC}"
+        
+        # In non-interactive mode or if --force flag, just remove
+        if [ "${FORCE_CLEAN:-false}" = true ]; then
+            rm -rf "$spoke_dir"
+            log_info "Removed instance directory"
+        else
+            echo -e "  This contains config.json, .env, and certificates."
+            echo -e "  Remove it? (yes/no): "
+            read -r confirm
+            if [ "$confirm" = "yes" ] || [ "$confirm" = "y" ]; then
+                rm -rf "$spoke_dir"
+                log_info "Removed instance directory"
+            else
+                log_info "Kept instance directory (you can reuse existing configuration)"
+            fi
+        fi
+    fi
+    
+    echo ""
+    log_success "Cleanup complete for ${code_upper}"
+    echo ""
+    echo -e "${CYAN}Next steps:${NC}"
+    echo "  ./dive --instance ${code_lower} spoke deploy ${code_upper} 'Instance Name'"
+    echo ""
+}
+
 spoke_init_keycloak() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
@@ -5050,6 +5189,7 @@ module_spoke() {
         policy)         spoke_policy "$@" ;;
         up|start)       spoke_up ;;
         down|stop)      spoke_down ;;
+        clean|purge)    spoke_clean ;;
         logs)           spoke_logs "$@" ;;
         reset)          spoke_reset ;;
         teardown)       spoke_teardown "$@" ;;
@@ -5119,6 +5259,8 @@ module_spoke_help() {
     echo -e "${CYAN}Operations:${NC}"
     echo "  up                     Start spoke services"
     echo "  down                   Stop spoke services"
+    echo "  clean                  Remove all containers, volumes, and optionally config"
+    echo "                         (Use before redeploy to fix password mismatches)"
     echo "  logs [service]         View service logs"
     echo "  health                 Check service health"
     echo "  verify                 Run 8-point connectivity test"
