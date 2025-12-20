@@ -1580,18 +1580,18 @@ spoke_register() {
         # Try to get it from the running Keycloak container with retry
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$keycloak_container"; then
             log_info "Waiting for Keycloak container to be fully ready..."
-            
+
             # Retry up to 10 times with 2 second delay
             for attempt in {1..10}; do
                 # Use printenv which is more reliable than env
                 keycloak_password=$(docker exec "$keycloak_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-                
+
                 # Verify it's not a default/placeholder password
                 if [ -n "$keycloak_password" ] && [ ${#keycloak_password} -gt 10 ] && [[ ! "$keycloak_password" =~ ^(admin|password|KeycloakAdmin) ]]; then
                     log_info "Retrieved Keycloak password from container $keycloak_container (attempt $attempt)"
                     break
                 fi
-                
+
                 if [ $attempt -lt 10 ]; then
                     sleep 2
                 fi
