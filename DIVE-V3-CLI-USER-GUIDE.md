@@ -22,11 +22,14 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 - [Policy Management](#policy-management)
 - [Certificate Management](#certificate-management)
 - [Federation Setup](#federation-setup)
+- [Resilience & Failover](#resilience--failover)
+- [Fix Commands](#fix-commands)
 - [Testing Suite](#testing-suite)
 - [Status & Diagnostics](#status--diagnostics)
 - [Redis Management](#redis-management)
 - [KAS Management](#kas-management)
 - [Environment Helpers](#environment-helpers)
+- [Checkpoint & Rollback](#checkpoint--rollback)
 - [Troubleshooting](#troubleshooting)
 - [Architecture Reference](#architecture-reference)
 
@@ -258,9 +261,35 @@ Completely destroys all containers, volumes, and networks.
 
 ```bash
 ./dive nuke
+./dive nuke --confirm        # Skip confirmation prompt
+./dive nuke --force          # Force destruction
+./dive nuke --keep-images    # Don't remove Docker images
 ```
 
+**Options:**
+- `--confirm`, `--yes` - Skip confirmation prompt
+- `--force`, `-f` - Force destruction (skip confirmation)
+- `--keep-images` - Don't remove Docker images
+
 **Warning:** This permanently deletes all data and volumes.
+
+### `checkpoint` - Deployment Checkpoints
+
+Create and manage deployment checkpoints for rollback capability.
+
+```bash
+./dive checkpoint create [name]    # Create checkpoint with optional name
+./dive checkpoint list             # List available checkpoints
+```
+
+### `rollback [name]` - Restore from Checkpoint
+
+Restore system state from a previous checkpoint.
+
+```bash
+./dive rollback                    # Restore from latest checkpoint
+./dive rollback 20251220_120000    # Restore specific checkpoint
+```
 
 ### `validate` - Validate Prerequisites
 
@@ -857,16 +886,28 @@ Complete hub verification checklist (Phase 6).
 ```
 
 **10-point verification:**
-1. Docker containers running (7 services)
-2. Keycloak health
-3. Backend API health
-4. MongoDB connection
-5. Redis connection
-6. OPAL Server health
-7. Policy bundle available
-8. Federation registry initialized
-9. Registration endpoint accessible
-10. TLS certificates valid
+1. **Docker containers running** (8 services: keycloak, backend, opa, opal-server, mongodb, postgres, redis, redis-blacklist)
+2. **Keycloak health** (realm endpoint or /health/ready)
+3. **Backend API health** (/health endpoint)
+4. **MongoDB connection** (ping test via mongosh)
+5. **Redis connection** (ping test via redis-cli)
+6. **OPAL Server health** (/healthcheck endpoint)
+7. **Policy bundle available** (version endpoint with metadata)
+8. **Federation registry initialized** (health endpoint with spoke count)
+9. **Registration endpoint accessible** (POST test to /api/federation/register)
+10. **TLS certificates valid** (expiry check and connectivity test)
+
+Returns 0 if all checks pass, 1 if any fail.
+
+### `hub health` - Check Hub Health
+
+Quick health check of all hub services.
+
+```bash
+./dive hub health
+```
+
+Shows running status and health status for each service with container names.
 
 ### `hub spokes list` - List Registered Spokes
 
@@ -945,13 +986,55 @@ Generate development certificates for spoke services.
 ./dive --instance pol spoke generate-certs
 ```
 
+### `spoke deploy <code> [name]` - Full Automated Deployment
+
+**NEW!** Complete spoke deployment in a single command with 10-step automated process.
+
+```bash
+./dive spoke deploy POL "Poland Defence"
+./dive spoke deploy NZL "New Zealand Defence Force"
+./dive spoke deploy HUN "Hungary Ministry"
+```
+
+**10-step deployment process (completes in ~120 seconds):**
+1. **Initialize spoke configuration** - Create directories, config.json, docker-compose.yml
+2. **Prepare federation certificates** - mkcert CA installation, Hub SAN updates
+3. **Start Docker services** - All spoke containers with health checks
+4. **Wait for services to be healthy** - Extended timeout for Keycloak
+5. **Run post-deployment initialization** - Keycloak realm, client, users
+6. **Configure federation** - usa-idp setup, secret synchronization
+7. **Register spoke as IdP in Hub** - Bidirectional federation setup
+8. **Formal registration status check** - Optional production approval flow
+9. **Federation registry update** - Enable federated search capabilities
+10. **Finalize client configuration** - Sync secrets and restart frontend
+
+**Key benefits:**
+- **Zero manual intervention** for development deployments
+- **Automatic federation setup** (both directions: Hub↔Spoke)
+- **Certificate management** integrated
+- **GCP secret integration** with local fallback
+- **Auto-approval detection** for development environments
+
 ### `spoke register` - Register with Hub
 
-Register spoke with federation hub.
+Register spoke with federation hub including CSR and bidirectional setup.
 
 ```bash
 ./dive --instance pol spoke register
+./dive --instance pol spoke register --poll
+./dive --instance pol spoke register --poll-timeout 300
 ```
+
+**Enhanced registration features:**
+- **Automatic CSR generation** if certificates missing
+- **Bidirectional federation** support (includes Hub Keycloak password)
+- **Poll mode** for automatic approval handling
+- **Token auto-configuration** on approval
+
+**Poll options:**
+- `--poll` - Wait for approval and auto-configure token
+- `--poll-timeout <seconds>` - Timeout for polling (default: 600)
+- `--poll-interval <seconds>` - Poll interval (default: 30)
 
 ### `spoke status` - Show Spoke Status
 
@@ -1827,6 +1910,192 @@ All NATO 32 countries plus industry partners:
 ./dive --dry-run redis status fra
 ```
 
+## Resilience & Failover
+
+Spoke resilience features for network interruption and maintenance scenarios (Phase 5).
+
+### Spoke Failover Management
+
+Circuit breaker pattern for Hub connectivity.
+
+#### `spoke failover status` - Show Circuit Breaker State
+
+Display circuit breaker state and metrics.
+
+```bash
+./dive --instance pol spoke failover status
+```
+
+**Status information:**
+- Circuit breaker state (CLOSED/OPEN/HALF_OPEN)
+- Hub and OPAL connection health
+- Consecutive failures count
+- Total failures and recoveries
+- Uptime percentage
+- Maintenance mode status
+
+#### `spoke failover force-open` - Force Offline Mode
+
+Force circuit breaker to OPEN state (offline mode).
+
+```bash
+./dive --instance pol spoke failover force-open
+```
+
+**Offline mode behavior:**
+- Stops Hub synchronization
+- Uses cached policies for authorization
+- Queues audit logs for later sync
+- Continues local operations
+
+#### `spoke failover force-closed` - Force Normal Mode
+
+Force circuit breaker to CLOSED state (resume Hub connectivity).
+
+```bash
+./dive --instance pol spoke failover force-closed
+```
+
+#### `spoke failover reset` - Reset Circuit Breaker
+
+Reset circuit breaker metrics and return to CLOSED state.
+
+```bash
+./dive --instance pol spoke failover reset
+```
+
+### Maintenance Mode
+
+Planned maintenance with graceful Hub disconnection.
+
+#### `spoke maintenance enter [reason]` - Enter Maintenance Mode
+
+Enter maintenance mode with optional reason.
+
+```bash
+./dive --instance pol spoke maintenance enter
+./dive --instance pol spoke maintenance enter "Scheduled upgrade"
+```
+
+**Maintenance mode:**
+- Pauses Hub heartbeats
+- Suspends policy updates
+- Queues audit logs
+- Continues local authorization with cached policies
+
+#### `spoke maintenance exit` - Exit Maintenance Mode
+
+Exit maintenance mode and resume normal operation.
+
+```bash
+./dive --instance pol spoke maintenance exit
+```
+
+**Restoration:**
+- Resumes Hub sync automatically
+- Syncs queued audit logs
+- Updates to latest policies
+
+#### `spoke maintenance status` - Maintenance Status
+
+Show current maintenance mode status.
+
+```bash
+./dive --instance pol spoke maintenance status
+```
+
+### Audit Queue Management
+
+#### `spoke audit-status` - Show Audit Queue Status
+
+Display audit log queue status and sync statistics.
+
+```bash
+./dive --instance pol spoke audit-status
+```
+
+**Queue information:**
+- Pending entries count
+- Queue size in bytes with health indicator
+- Maximum queue size threshold
+- Sync statistics (total synced/failed)
+- Last sync timestamp and status
+
+### Policy Management (Spoke-Level)
+
+#### `spoke policy status` - Policy Sync Status
+
+Show policy version comparison between Hub and spoke.
+
+```bash
+./dive --instance pol spoke policy status
+```
+
+#### `spoke policy sync` - Force Policy Sync
+
+Force policy synchronization from Hub with verification.
+
+```bash
+./dive --instance pol spoke policy sync
+```
+
+#### `spoke policy verify` - Verify Policy Bundle
+
+Verify current policy bundle signature against Hub.
+
+```bash
+./dive --instance pol spoke policy verify
+```
+
+#### `spoke policy version` - Show Policy Version
+
+Display current policy version from Hub.
+
+```bash
+./dive --instance pol spoke policy version
+```
+
+## Fix Commands
+
+Automated fixes for common federation issues.
+
+### `fix federation` - Fix All Federation Issues
+
+Run comprehensive federation fixes for Hub and all spokes.
+
+```bash
+./dive fix federation                # Fix all federation issues
+./dive fix all                       # Same as federation
+```
+
+**Fixes applied:**
+1. Logout redirect to internal container names
+2. 'Invalid parameter: redirect_uri' errors
+3. Cross-border IdP loading issues
+4. Federation client configuration
+
+### `fix hub` - Fix Hub-Only Issues
+
+Fix Hub logout and redirect issues only.
+
+```bash
+./dive fix hub
+```
+
+### `fix spoke` - Fix Specific Spoke
+
+Fix federation issues for a specific spoke.
+
+```bash
+./dive --instance ALB fix spoke
+./dive fix spoke                     # Uses current --instance
+```
+
+**Automatic detection:**
+- Uses `scripts/fix-federation-issues.sh`
+- Converts instance codes to uppercase
+- Handles Hub-only or spoke-specific fixes
+
 ## KAS Management
 
 The KAS (Key Access Service) module provides comprehensive management for NATO ACP-240 compliant key access services across Hub and all Spoke instances. KAS implements policy-bound encryption with OPA re-evaluation before key release.
@@ -2149,6 +2418,59 @@ Runs all 59 KAS unit tests:
 - JWT verification tests (13 tests)
 - KAS federation tests (32 tests)
 
+### KAS Security Commands
+
+#### `kas security-audit` - Comprehensive Security Audit
+
+Perform security audit of KAS configuration.
+
+```bash
+./dive kas security-audit
+```
+
+**Security checks:**
+1. **GCP Secrets verification** - kas-signing-key, kas-encryption-key existence
+2. **Hardcoded credential detection** - Scans configuration files
+3. **Certificate existence and expiry** - TLS certificate validation
+4. **Environment variable validation** - Required variables check
+5. **HTTPS/TLS enforcement** - Network security verification
+
+#### `kas certs status` - Certificate Status
+
+Show KAS certificate details and expiration.
+
+```bash
+./dive kas certs status
+```
+
+Displays subject, issuer, validity period, and days remaining.
+
+#### `kas certs rotate` - Rotate Certificates
+
+Generate new KAS certificates with automatic backup.
+
+```bash
+./dive kas certs rotate
+```
+
+**Process:**
+- Backs up existing certificates to timestamped directory
+- Generates new 4096-bit RSA self-signed certificate
+- Restarts KAS automatically to use new certificates
+
+#### `kas test` - Run Test Suite
+
+Execute comprehensive KAS test suite.
+
+```bash
+./dive kas test
+```
+
+**59 tests total:**
+- DEK generation tests (14 tests)
+- JWT verification tests (13 tests)
+- KAS federation tests (32 tests)
+
 ### KAS Usage Examples
 
 ```bash
@@ -2164,6 +2486,9 @@ Runs all 59 KAS unit tests:
 # Check all registered KAS instances
 ./dive kas registry list
 
+# Show detailed KAS info
+./dive kas registry show fra-kas
+
 # Verify federation is working
 ./dive kas federation verify
 
@@ -2176,8 +2501,18 @@ Runs all 59 KAS unit tests:
 # Monitor with Prometheus metrics
 ./dive kas metrics
 
+# Security audit
+./dive kas security-audit
+
+# Certificate management
+./dive kas certs status
+./dive kas certs rotate
+
 # Review audit trail
 ./dive kas audit --last 100
+
+# Run test suite
+./dive kas test
 
 # Dry run mode for testing
 ./dive --dry-run kas status
@@ -2192,6 +2527,145 @@ Display resolved environment variables.
 ```bash
 ./dive env
 ```
+
+## Checkpoint & Rollback
+
+Deployment state management with automatic backup and restore capabilities.
+
+### Local Checkpoints
+
+Local checkpoints store deployment state on the filesystem for quick rollback.
+
+#### `checkpoint create [name]` - Create Local Checkpoint
+
+Create deployment checkpoint with volume backups.
+
+```bash
+./dive checkpoint create
+./dive checkpoint create pre-upgrade
+./dive checkpoint create "before-policy-change"
+```
+
+**Checkpoint contents:**
+- Timestamp metadata
+- Docker compose state (JSON format)
+- Complete volume backups (postgres, mongodb, redis)
+- Automatic pruning (keeps last 3 checkpoints)
+
+#### `checkpoint list` - List Available Checkpoints
+
+Show all available local checkpoints with details.
+
+```bash
+./dive checkpoint list
+```
+
+**Display format:**
+- Checkpoint name with timestamp
+- Latest checkpoint marker
+- Creation date and time
+
+#### `rollback [name]` - Restore from Checkpoint
+
+Restore system state from a previous checkpoint.
+
+```bash
+./dive rollback                    # Restore from latest checkpoint
+./dive rollback pre-upgrade        # Restore specific checkpoint
+./dive rollback 20251220_120000    # Restore by timestamp
+```
+
+**Restore process:**
+1. Stop current containers gracefully
+2. Restore data volumes from tarball backups
+3. Restart services with existing configuration
+4. Verify health and connectivity
+
+### Pilot VM Checkpoints (Google Cloud Storage)
+
+Pilot VM checkpoints provide enterprise-grade backup to GCS for the remote pilot environment.
+
+#### `pilot checkpoint create [name]` - Create GCS Checkpoint
+
+Create checkpoint on pilot VM stored in Google Cloud Storage.
+
+```bash
+./dive --env gcp pilot checkpoint create
+./dive --env gcp pilot checkpoint create pre-demo
+./dive --env gcp pilot checkpoint create weekly-backup
+```
+
+**Comprehensive backup:**
+- **Hub volumes:** hub_postgres_data, hub_mongodb_data, hub_redis_data, hub_redis_blacklist_data
+- **Spoke volumes:** spoke_postgres_data, spoke_mongodb_data, spoke_redis_data
+- **Spoke metadata:** Currently selected NATO country code
+- **Storage:** Uploads to `gs://dive25-checkpoints/pilot/` bucket
+
+#### `pilot checkpoint list` - List GCS Checkpoints
+
+List all available pilot VM checkpoints from Google Cloud Storage.
+
+```bash
+./dive --env gcp pilot checkpoint list
+```
+
+**Information shown:**
+- Available checkpoints from GCS bucket
+- Latest checkpoint recorded on VM
+- Current spoke configuration (country and details)
+
+#### `pilot rollback [name]` - Restore Pilot VM
+
+Restore entire pilot VM state from GCS checkpoint.
+
+```bash
+./dive --env gcp pilot rollback              # Latest checkpoint
+./dive --env gcp pilot rollback pre-demo     # Specific checkpoint
+```
+
+**Comprehensive restoration:**
+1. Stop Hub + Spoke services on pilot VM
+2. Download complete checkpoint from GCS
+3. Restore Hub volumes (postgres, mongodb, redis, blacklist)
+4. Restore Spoke volumes (postgres, mongodb, redis)
+5. Restart Hub + Spoke services
+6. Perform health verification
+
+**Use cases:**
+- Demo environment reset
+- Recovery from configuration errors
+- Testing rollback procedures
+- Weekly environment snapshots
+
+### Additional Pilot Features
+
+#### `pilot rotate` - Select New Random Spoke
+
+Select new random NATO spoke for fresh pilot deployment.
+
+```bash
+./dive --env gcp pilot rotate
+```
+
+**Features:**
+- Selects from 31 NATO countries (excluding USA Hub)
+- Updates cached spoke selection
+- Displays old and new spoke with flags
+- Requires reset to apply new spoke
+
+#### `pilot sync` - Sync Local Files to VM
+
+Sync essential local files to pilot VM.
+
+```bash
+./dive --env gcp pilot sync
+```
+
+**Synced files:**
+- Docker compose configurations
+- Base service definitions
+- NATO countries database
+- OPAL server configurations
 
 ## Troubleshooting
 
@@ -2324,13 +2798,20 @@ DIVE V3 follows a **hub-spoke federation model**:
 
 ### Federation Features
 
-- **NATO 32-Country Support:** All NATO member nations supported with unique port allocations
-- **Cross-border SSO:** Seamless authentication across instances
-- **Policy synchronization:** Real-time policy updates
-- **Audit aggregation:** Centralized security event logging
-- **Trust management:** Configurable trust levels between nations
-- **Automated Theme Generation:** Country-specific Keycloak themes from national colors
-- **Terraform IaC:** Pre-generated tfvars for all 32 NATO countries
+- **NATO 32-Country Support:** All NATO member nations with deterministic port allocations
+- **Automated Deployment:** Single-command spoke deployment in ~120 seconds
+- **Cross-border SSO:** Seamless authentication with bidirectional federation
+- **Policy synchronization:** Real-time updates via OPAL with signature verification
+- **Resilience & Failover:** Circuit breaker pattern with offline capability
+- **Maintenance Mode:** Graceful Hub disconnection for planned maintenance
+- **Audit aggregation:** Queued audit logs with automatic sync on recovery
+- **Trust management:** Configurable trust levels (development/partner/bilateral/national)
+- **Certificate Management:** Automated mkcert integration with truststore management
+- **Automated Theme Generation:** Country-specific Keycloak themes from national flag colors
+- **Terraform IaC:** Pre-generated tfvars for all 32 NATO countries with workspace management
+- **PII Minimization:** 4-core-claim protocol mappers with production compliance
+- **Comprehensive Testing:** Dynamic Playwright tests with auto-instance detection
+- **Fix Commands:** Automated remediation for common federation issues
 
 ## Command Reference
 
@@ -2347,9 +2828,12 @@ Core Commands:
 
 Deployment:
   deploy          Full deployment workflow
-  validate        Validate prerequisites
-  reset           Reset to clean state
-  nuke            Destroy everything
+  validate        Validate prerequisites and configuration
+  reset           Reset to clean state (nuke + deploy)
+  nuke [options]  Destroy everything (--confirm, --force, --keep-images)
+  checkpoint create [name] Create deployment checkpoint
+  checkpoint list List available checkpoints
+  rollback [name] Restore from checkpoint
 
 Database:
   seed [inst]     Seed database with test data
@@ -2391,58 +2875,126 @@ Secrets:
   secrets lint       Check for hardcoded secrets
 
 Pilot VM:
-  pilot up        Start services on pilot VM
+  pilot up        Start services on pilot VM (Hub + random NATO spoke)
   pilot down      Stop services on pilot VM
+  pilot deploy [--provision] Full deployment (with optional VM provisioning)
+  pilot provision  Provision VM with Terraform only
+  pilot destroy    Destroy VM and all resources
   pilot status    Show pilot VM status
-  pilot logs      View pilot VM logs
+  pilot health [--json] Check all endpoints (Hub + Spoke)
+  pilot logs [svc] View pilot VM logs
   pilot ssh       SSH into pilot VM
-  pilot reset     Reset pilot VM to clean state
-  pilot deploy    Full deployment to pilot VM
+  pilot reset     Reset pilot VM to clean state (same spoke)
+  pilot rotate    Select new random NATO spoke
+  pilot sync      Sync local files to pilot VM
+  pilot checkpoint create Create GCS checkpoint
+  pilot checkpoint list List available checkpoints
+  pilot rollback [name] Rollback to GCS checkpoint
 
 Federation:
   federation status       Show federation status
-  federation link <CODE>  Link IdP for cross-border SSO
+  federation register <url> Register instance with hub
+  federation register-spoke <CODE> Add spoke to federation registry
+  federation link <CODE>  Link IdP for cross-border SSO (bidirectional)
   federation unlink <CODE> Remove IdP link
-  federation list-idps    List configured IdPs
-  federation mappers apply Apply PII-minimized mappers
+  federation list-idps    List configured IdPs with status
+  federation mappers list List NATO nation templates (PII warning)
+  federation mappers show <nation> Show nation mapper details
+  federation mappers apply Apply PII-minimized mappers (4 core claims)
   federation mappers verify Verify mapper configuration
 
 Hub Management:
-  hub deploy              Full hub deployment (includes seeding)
-  hub seed [count]        Seed test users and resources (ABAC)
-  hub status              Show hub status
-  hub verify              10-point hub verification
-  hub spokes list         List registered spokes
-  hub spokes pending      Show pending approvals
-  hub spokes approve <id> Approve spoke registration
-  hub push-policy         Push policy to all spokes
+  hub deploy              Full hub deployment (7 steps + 5000 ZTDF seeding)
+  hub init                Initialize hub directories and config
+  hub up, start           Start hub services
+  hub down, stop          Stop hub services
+  hub seed [count]        Seed test users and ZTDF resources (default: 5000)
+  hub status              Show comprehensive hub status
+  hub health              Check all service health
+  hub verify              10-point hub verification check (Phase 6)
+  hub logs [service] [-f] View logs (optionally follow)
+  hub spokes list         List all registered spokes
+  hub spokes pending      Show pending approvals (rich display)
+  hub spokes approve <id> Approve spoke (interactive with scope selection)
+  hub spokes reject <id>  Reject spoke (with reason)
+  hub spokes suspend <id> Suspend spoke temporarily
+  hub spokes revoke <id>  Permanently revoke spoke
+  hub spokes token <id>   Generate new token for spoke
+  hub spokes rotate-token <id> Rotate (revoke + regenerate) spoke token
+  hub push-policy [layers] Push policy update to all spokes
 
 Spoke Management:
-  spoke init <code> <name> Initialize new spoke
-  spoke up                 Start spoke services
-  spoke status             Show spoke status
-  spoke health             Check spoke health
+  spoke init               Interactive setup wizard (recommended)
+  spoke init <code> <name> Quick initialization with defaults
+  spoke deploy <code> [name] Full automated deployment (120s, 10 steps)
+  spoke setup, wizard      Launch interactive setup wizard
+  spoke generate-certs     Generate X.509 certificates for mTLS
+  spoke rotate-certs       Rotate certificates (with backup)
+  spoke register           Register with Hub (includes CSR)
+  spoke register --poll    Register and poll for approval
+  spoke token-refresh      Refresh OPAL token before expiry
+  spoke up, start          Start spoke services
+  spoke down, stop         Stop spoke services
+  spoke reset              Reset to clean state (preserve config)
+  spoke teardown           Full removal (DESTRUCTIVE)
+  spoke clean              Remove volumes and containers
+  spoke status             Show federation status (token, certs)
+  spoke health             Check service health
+  spoke verify             12-point connectivity test (Phase 6)
   spoke sync               Force policy sync
+  spoke heartbeat          Send manual heartbeat to Hub
+  spoke logs [service]     View service logs
+  spoke init-keycloak      Configure Keycloak post-deployment
+
+Spoke Resilience & Policy (Phase 4-5):
+  spoke policy status      Show policy sync status and version
+  spoke policy sync        Force policy sync with verification
+  spoke policy verify      Verify policy bundle signature
+  spoke policy version     Show current policy version
+  spoke failover status    Show circuit breaker state
+  spoke failover force-open Force offline mode
+  spoke failover force-closed Force normal mode
+  spoke failover reset     Reset circuit breaker metrics
+  spoke maintenance enter [reason] Enter maintenance mode
+  spoke maintenance exit   Exit maintenance mode
+  spoke maintenance status Show maintenance status
+  spoke audit-status       Show audit queue status
 
 NATO Country Management:
   spoke list-countries     List all 32 NATO countries
+  spoke countries          Alias for list-countries
   spoke ports [CODE]       Show port assignments
   spoke country-info <CODE> Show detailed country info
-  spoke validate-country   Validate NATO country code
-  spoke generate-theme     Generate Keycloak theme for country
-  spoke batch-deploy       Deploy multiple countries
+  spoke validate-country <CODE> Validate NATO country code
+  spoke generate-theme <CODE> Generate Keycloak theme for country
+  spoke generate-theme --all Generate themes for all 32 countries
+  spoke batch-deploy <CODES> Deploy multiple countries
+  spoke batch-deploy --all Deploy all 32 countries
   spoke verify-federation  Verify federation health
+
+Spoke Localization (NATO Interoperability):
+  spoke localize <CODE>    Full localization: mappers + users
+  spoke localize-mappers <CODE> Configure protocol mappers
+  spoke localize-users <CODE> Seed users with localized attributes
+
+Spoke KAS Commands:
+  spoke kas init <code>    Initialize KAS for spoke
+  spoke kas status <code>  Show spoke KAS status
+  spoke kas health <code>  Detailed KAS health check
+  spoke kas register <code> Register in federation registry
+  spoke kas unregister <code> Remove from federation
+  spoke kas logs <code> [-f] View spoke KAS logs
 
 Certificate Management:
   certs check              Check mkcert prerequisites
-  certs prepare-federation <spoke>  Complete certificate setup
+  certs prepare-federation <spoke>  Complete 4-step certificate setup
   certs prepare-all        Batch setup for all spokes
-  certs verify <spoke>     Verify certificate configuration
-  certs verify-all         Batch verification
-  certs install-hub-ca     Install CA in Hub truststore
-  certs install-spoke-ca   Install CA in spoke truststore
-  certs update-hub-sans    Update Hub certificate SANs
-  certs generate-spoke     Generate spoke certificate
+  certs update-hub-sans    Update Hub cert with all spoke SANs
+  certs install-hub-ca     Install mkcert CA in Hub truststore
+  certs install-spoke-ca <spoke> Install mkcert CA in spoke truststore
+  certs generate-spoke <spoke> Generate spoke certificate
+  certs verify [spoke]     Verify certificate configuration
+  certs verify-all         Batch verification (tabular output)
 
 Federation Setup:
   federation-setup register-hub <spoke>   Register spoke as IdP in Hub
@@ -2465,10 +3017,12 @@ SP Client:
   sp list                  List registered clients
 
 Policy:
-  policy build [--sign]    Build OPA policy bundle
+  policy build [options]   Build OPA policy bundle (--sign, --no-sign, --scopes)
   policy push              Push to OPAL server
-  policy status            Show distribution status
+  policy status            Show distribution status (OPAL + bundle info)
   policy test [pattern]    Run OPA policy tests
+  policy version           Show current policy version
+  policy refresh           Trigger OPAL policy refresh
 
 Testing:
   test federation          Run federation E2E tests
@@ -2493,13 +3047,29 @@ Status:
   diagnostics              Comprehensive diagnostics
   brief                    Brief status summary
 
+Fix Commands:
+  fix federation           Fix all federation issues (hub + all spokes)
+  fix hub                  Fix hub logout/redirect issues only
+  fix spoke               Fix specific spoke federation
+  fix all                 Fix all (same as federation)
+
 Other:
-  env                      Show environment variables
-  help                     Show this help
+  env                     Show environment variables (organized sections)
+  help                    Show this help
 ```
 
 ---
 
-**DIVE V3 CLI Version:** Modular Unified Management Script (NATO 32-Country Edition)  
-**Last Updated:** December 18, 2025  
-**Documentation:** This guide covers all CLI functionality including NATO 32-country expansion, Certificate Management, Federation Setup, and Phase 0-5 Docker regression tests (108 total tests)
+**DIVE V3 CLI Version:** Modular Unified Management Script (NATO 32-Country Edition with Resilience)
+**Last Updated:** December 20, 2025
+**Documentation:** Complete CLI functionality including:
+- NATO 32-country expansion with automated deployment
+- Certificate Management with mkcert integration
+- Federation Setup with bidirectional trust
+- Hub-Spoke resilience (failover, maintenance mode, audit queuing)
+- Policy management with signature verification
+- Comprehensive monitoring (Redis, KAS, federation health)
+- Testing suite with dynamic Playwright E2E tests
+- Fix commands for common federation issues
+- Checkpoint/rollback system for deployment safety
+- Phase 0-6 implementation with 120+ tests total

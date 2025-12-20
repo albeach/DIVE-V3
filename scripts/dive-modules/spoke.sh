@@ -2317,6 +2317,150 @@ spoke_rotate_certs() {
 }
 
 # =============================================================================
+# SPOKE SECRET SYNCHRONIZATION
+# =============================================================================
+
+##
+# Synchronize spoke frontend secrets with Keycloak client secrets
+# Fixes NextAuth "Invalid client credentials" errors
+#
+# Arguments:
+#   $1 - Spoke code (optional, defaults to INSTANCE)
+#
+# Returns:
+#   0 - Secrets synchronized successfully
+#   1 - Failed to synchronize
+##
+spoke_sync_secrets() {
+    local code_lower="${1:-$(lower "${INSTANCE:-usa}")}"
+    local code_upper
+    code_upper=$(upper "$code_lower")
+
+    log_step "Synchronizing $code_upper frontend secrets with Keycloak..."
+
+    # Check if containers are running
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-frontend"; then
+        log_error "Frontend container not running for $code_upper"
+        return 1
+    fi
+
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-keycloak"; then
+        log_error "Keycloak container not running for $code_upper"
+        return 1
+    fi
+
+    # Get current frontend secret
+    local frontend_secret
+    frontend_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
+
+    if [ -z "$frontend_secret" ]; then
+        log_error "Could not get frontend secret for $code_upper"
+        return 1
+    fi
+
+    # Get Keycloak client secret
+    local admin_pass
+    admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KEYCLOAK_ADMIN_PASSWORD)
+
+    if [ -z "$admin_pass" ]; then
+        log_error "Could not get Keycloak admin password for $code_upper"
+        return 1
+    fi
+
+    # Authenticate to Keycloak
+    docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin --password "$admin_pass" >/dev/null 2>&1
+
+    # Get client secret from Keycloak
+    local keycloak_secret
+    keycloak_secret=$(docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh get clients \
+        -r "dive-v3-broker-${code_lower}" -q "clientId=dive-v3-broker-${code_lower}" \
+        --fields secret 2>/dev/null | jq -r '.[0].secret')
+
+    if [ -z "$keycloak_secret" ] || [ "$keycloak_secret" = "null" ]; then
+        log_error "Could not get Keycloak client secret for $code_upper"
+        return 1
+    fi
+
+    # Compare secrets
+    if [ "$frontend_secret" = "$keycloak_secret" ]; then
+        log_success "$code_upper secrets are synchronized"
+        return 0
+    fi
+
+    log_warn "$code_upper secret mismatch detected - fixing..."
+    log_verbose "Frontend: ${frontend_secret:0:8}..., Keycloak: ${keycloak_secret:0:8}..."
+
+    # Fix by updating .env and recreating frontend
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local env_file="$spoke_dir/.env"
+
+    if [ -f "$env_file" ]; then
+        # Update .env file with correct secret
+        if grep -q "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file"; then
+            sed -i.bak "s/^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*/KEYCLOAK_CLIENT_SECRET_${code_upper}=${keycloak_secret}/" "$env_file"
+        else
+            echo "KEYCLOAK_CLIENT_SECRET_${code_upper}=${keycloak_secret}" >> "$env_file"
+        fi
+        rm -f "$env_file.bak"
+    fi
+
+    # Recreate frontend container
+    (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="$code_lower" docker compose up -d --force-recreate "frontend-${code_lower}" >/dev/null 2>&1)
+
+    # Wait and verify
+    sleep 3
+    local new_secret
+    new_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
+
+    if [ "$new_secret" = "$keycloak_secret" ]; then
+        log_success "$code_upper frontend secrets synchronized!"
+        return 0
+    else
+        log_error "$code_upper secret synchronization failed"
+        return 1
+    fi
+}
+
+##
+# Sync all running spoke secrets
+##
+spoke_sync_all_secrets() {
+    local spokes=()
+
+    # Find all running spoke frontends
+    while IFS= read -r container; do
+        if [[ "$container" =~ dive-spoke-([a-z]+)-frontend ]]; then
+            local code="${BASH_REMATCH[1]}"
+            spokes+=("$code")
+        fi
+    done < <(docker ps --format '{{.Names}}' 2>/dev/null | grep "dive-spoke-.*-frontend")
+
+    if [ ${#spokes[@]} -eq 0 ]; then
+        log_warn "No running spoke frontends found"
+        return 0
+    fi
+
+    log_step "Synchronizing secrets for ${#spokes[@]} running spokes: ${spokes[*]}"
+
+    local success=0
+    local failed=0
+
+    for spoke in "${spokes[@]}"; do
+        if spoke_sync_secrets "$spoke"; then
+            success=$((success + 1))
+        else
+            failed=$((failed + 1))
+        fi
+    done
+
+    echo ""
+    log_success "Secret synchronization complete: $success succeeded, $failed failed"
+
+    [ $failed -eq 0 ]
+}
+
+# =============================================================================
 # SPOKE SYNC & HEARTBEAT
 # =============================================================================
 
@@ -2474,6 +2618,10 @@ spoke_up() {
         echo ""
         log_success "Spoke services started"
         echo ""
+
+        # Auto-sync secrets to prevent NextAuth "Invalid client credentials" errors
+        log_step "Checking frontend secret synchronization..."
+        spoke_sync_secrets "$instance_code" || log_warn "Secret sync had issues (non-blocking)"
 
         # Check if initialization has been done
         local init_marker="${spoke_dir}/.initialized"
@@ -2913,10 +3061,10 @@ spoke_deploy() {
         # Get token and sync client configuration
         local kc_pass
         kc_pass=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-        
+
         if [ -n "$kc_pass" ]; then
             log_step "Syncing client configuration..."
-            
+
             # Get admin token
             local token
             token=$(docker exec "$kc_container" curl -sf \
@@ -2925,30 +3073,41 @@ spoke_deploy() {
                 -d "username=admin" \
                 -d "password=${kc_pass}" \
                 -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-            
+
             if [ -n "$token" ]; then
                 local realm="dive-v3-broker-${code_lower}"
                 local client_id="dive-v3-broker-${code_lower}"
-                
+
                 # Get client UUID
                 local client_uuid
                 client_uuid=$(docker exec "$kc_container" curl -sf \
                     -H "Authorization: Bearer $token" \
                     "http://localhost:8080/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
                     grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
-                
+
                 if [ -n "$client_uuid" ]; then
-                    # Read the expected secret from .env
-                    local env_file="${spoke_dir}/.env"
+                    # Read the expected secret - try multiple sources
+                    # Priority: 1) Running frontend container, 2) .env file
                     local expected_secret
-                    expected_secret=$(grep "^AUTH_KEYCLOAK_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
-                    
+                    local frontend_container="dive-spoke-${code_lower}-frontend"
+
+                    # Try to get from running frontend container (most reliable)
+                    if docker ps --format '{{.Names}}' | grep -q "$frontend_container"; then
+                        expected_secret=$(docker exec "$frontend_container" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null | tr -d '\n\r')
+                    fi
+
+                    # Fallback to .env file with various key names
+                    if [ -z "$expected_secret" ]; then
+                        local env_file="${spoke_dir}/.env"
+                        expected_secret=$(grep -E "^(AUTH_KEYCLOAK_SECRET_${code_upper}|KEYCLOAK_CLIENT_SECRET_${code_upper}|KEYCLOAK_CLIENT_SECRET)=" "$env_file" 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d '\n\r"')
+                    fi
+
                     if [ -n "$expected_secret" ]; then
                         # Get frontend port from docker-compose
                         local frontend_port
                         frontend_port=$(grep -E "^\s+-\s+\"[0-9]+:3000\"" "${spoke_dir}/docker-compose.yml" | head -1 | sed 's/.*"\([0-9]*\):3000".*/\1/')
                         frontend_port="${frontend_port:-3000}"
-                        
+
                         # Update client with correct secret and redirect URIs
                         local update_payload="{
                             \"secret\": \"${expected_secret}\",
@@ -2960,13 +3119,13 @@ spoke_deploy() {
                             ],
                             \"webOrigins\": [\"*\"]
                         }"
-                        
+
                         docker exec "$kc_container" curl -sf \
                             -X PUT "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}" \
                             -H "Authorization: Bearer $token" \
                             -H "Content-Type: application/json" \
                             -d "$update_payload" &>/dev/null
-                        
+
                         if [ $? -eq 0 ]; then
                             log_success "Client secret and redirect URIs synced"
                         else
@@ -5317,6 +5476,8 @@ module_spoke() {
         failover)       spoke_failover "$@" ;;
         maintenance)    spoke_maintenance "$@" ;;
         audit-status)   spoke_audit_status ;;
+        sync-secrets)   spoke_sync_secrets "$@" ;;
+        sync-all-secrets) spoke_sync_all_secrets ;;
         list-countries) spoke_list_countries "$@" ;;
         countries)      spoke_list_countries "$@" ;;
         ports)          spoke_show_ports "$@" ;;
@@ -5395,6 +5556,8 @@ module_spoke_help() {
     echo -e "${CYAN}Federation:${NC}"
     echo "  sync                   Force policy sync from Hub"
     echo "  heartbeat              Send manual heartbeat to Hub"
+    echo "  sync-secrets           Synchronize frontend secrets with Keycloak"
+    echo "  sync-all-secrets       Synchronize secrets for all running spokes"
     echo ""
 
     echo -e "${CYAN}Policy Management (Phase 4):${NC}"
