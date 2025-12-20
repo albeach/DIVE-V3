@@ -129,5 +129,35 @@
     "enabled": true,
     "protocol": "oidc",
     "federation_class": "LOCAL"
+  },
+  "https://localhost:8462/realms/dive-v3-broker-mne": {
+    "tenant": "MNE",
+    "name": "Montenegro Keycloak (Local Dev)",
+    "country": "MNE",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL",
+    "jwks_uri": "https://localhost:8462/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
+  },
+  "https://keycloak-mne:8443/realms/dive-v3-broker-mne": {
+    "tenant": "MNE",
+    "name": "Montenegro Keycloak (Internal Docker)",
+    "country": "MNE",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL",
+    "jwks_uri": "https://keycloak-mne:8443/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
+  },
+  "https://mne-idp.dive25.com/realms/dive-v3-broker-mne": {
+    "tenant": "MNE",
+    "name": "Montenegro Keycloak (Production)",
+    "country": "MNE",
+    "trust_level": "HIGH",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "NATIONAL",
+    "jwks_uri": "https://mne-idp.dive25.com/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
   }
 }

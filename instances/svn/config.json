@@ -1,0 +1,55 @@
+{
+  "identity": {
+    "spokeId": "spoke-svn-de6aed9d",
+    "instanceCode": "SVN",
+    "name": "Slovenian Armed Forces",
+    "description": "DIVE V3 Spoke Instance for Slovenian Armed Forces",
+    "country": "SVN",
+    "organizationType": "government",
+    "contactEmail": "admin@svn.dive25.com",
+    "registeredSpokeId": "spoke-svn-9b137d68"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3027",
+    "apiUrl": "https://localhost:4027",
+    "idpUrl": "https://dive-spoke-svn-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8470",
+    "kasUrl": "https://localhost:9027"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svn/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svn/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svn/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svn/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:svn",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-20T07:32:00Z",
+    "spokeToken": "RbxWyeROxa2nvlzKdOAfI2Bg9VUDXiRqy9Ex4lg2LGQ"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svn/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svn/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-20T07:26:39Z",
+    "lastModified": "2025-12-20T07:26:39Z",
+    "configHash": ""
+  }
+}

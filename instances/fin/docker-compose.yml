@@ -1,0 +1,248 @@
+# =============================================================================
+# DIVE V3 - FIN Instance (Finnish Defence Forces)
+# =============================================================================
+# Spoke instance using extends pattern from base services.
+# Regenerate with: ./dive spoke init FIN "Finnish Defence Forces"
+# Spoke ID: spoke-fin-d466def3
+# =============================================================================
+
+name: dive-spoke-fin
+
+networks:
+  dive-fin-network:
+    driver: bridge
+  dive-v3-shared-network:
+    external: true
+
+volumes:
+  fin_postgres_data:
+  fin_mongodb_data:
+  fin_redis_data:
+  fin_frontend_modules:
+  fin_frontend_next:
+  fin_opa_cache:
+  fin_opal_cache:
+  fin_backend_node_modules:
+  fin_backend_logs:
+
+services:
+  postgres-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: postgres-base
+    container_name: dive-spoke-fin-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_FIN:?set POSTGRES_PASSWORD_FIN}
+    ports:
+      - "5441:5432"
+    volumes:
+      - fin_postgres_data:/var/lib/postgresql/data
+    networks:
+      - dive-fin-network
+
+  mongodb-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: mongodb-base
+    container_name: dive-spoke-fin-mongodb
+    environment:
+      MONGO_INITDB_DATABASE: dive-v3-fin
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_FIN:?set MONGO_PASSWORD_FIN}
+    ports:
+      - "27026:27017"
+    volumes:
+      - fin_mongodb_data:/data/db
+    networks:
+      - dive-fin-network
+
+  redis-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: redis-base
+    container_name: dive-spoke-fin-redis
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD_FIN:?set REDIS_PASSWORD_FIN}
+    ports:
+      - "6388:6379"
+    volumes:
+      - fin_redis_data:/data
+    networks:
+      - dive-fin-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_FIN}", "ping"]
+
+  keycloak-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: keycloak-base
+    container_name: dive-spoke-fin-keycloak
+    environment:
+      KC_DB_URL: jdbc:postgresql://postgres-fin:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_FIN:?set POSTGRES_PASSWORD_FIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FIN:?set KEYCLOAK_ADMIN_PASSWORD_FIN}
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_URL: https://localhost:8452
+      KC_HOSTNAME_ADMIN_URL: https://localhost:8452
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
+    ports:
+      - "8452:8443"
+      - "8089:8080"
+    volumes:
+      - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
+      - ../../keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      postgres-fin:
+        condition: service_healthy
+    networks:
+      - dive-fin-network
+      - dive-v3-shared-network
+
+  opa-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: opa-base
+    container_name: dive-spoke-fin-opa
+    ports:
+      - "8271:8181"
+    volumes:
+      - ../../policies:/policies:ro
+    networks:
+      - dive-fin-network
+
+  opal-client-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: opal-client-base
+    container_name: dive-spoke-fin-opal-client
+    environment:
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      OPAL_OPA_URL: http://opa-fin:8181
+      OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-fin-default}
+      OPAL_POLICY_STORE_URL: http://opa-fin:8181
+      OPAL_DATA_TOPICS: policy:base,policy:fin,data:federation_matrix,data:trusted_issuers
+    volumes:
+      - fin_opal_cache:/var/opal/cache
+      - ./certs:/var/opal/certs:ro
+    depends_on:
+      opa-fin:
+        condition: service_healthy
+    networks:
+      - dive-fin-network
+
+  kas-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: kas-base
+    container_name: dive-spoke-fin-kas
+    environment:
+      KEYCLOAK_URL: https://keycloak-fin:8443
+      KEYCLOAK_REALM: dive-v3-broker-fin
+      OPA_URL: http://opa-fin:8181
+      INSTANCE_CODE: FIN
+    ports:
+      - "9009:8080"
+    volumes:
+      - ./certs:/app/certs:ro
+    depends_on:
+      keycloak-fin:
+        condition: service_healthy
+      opa-fin:
+        condition: service_healthy
+    networks:
+      - dive-fin-network
+
+  backend-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: backend-base
+    container_name: dive-spoke-fin-backend
+    environment:
+      INSTANCE_CODE: FIN
+      INSTANCE_NAME: "Finnish Defence Forces"
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_FIN:?set MONGO_PASSWORD_FIN}@mongodb-fin:27017/dive-v3-fin?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_FIN:?set MONGO_PASSWORD_FIN}@mongodb-fin:27017/dive-v3-fin?authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD_FIN:?set REDIS_PASSWORD_FIN}@redis-fin:6379
+      KEYCLOAK_URL: https://keycloak-fin:8443
+      KEYCLOAK_REALM: dive-v3-broker-fin
+      KEYCLOAK_ISSUER: https://localhost:8452/realms/dive-v3-broker-fin
+      TRUSTED_ISSUERS: https://localhost:8452/realms/dive-v3-broker-fin,https://keycloak-fin:8443/realms/dive-v3-broker-fin,https://fin-idp.dive25.com/realms/dive-v3-broker-fin
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FIN:?set KEYCLOAK_ADMIN_PASSWORD_FIN}
+      OPA_URL: http://opa-fin:8181
+      FEDERATION_ALLOWED_ORIGINS: https://localhost:3009,https://localhost:4009,https://localhost:8452,https://fin-app.dive25.com,https://fin-api.dive25.com,https://fin-idp.dive25.com
+      CORS_ALLOWED_ORIGINS: https://localhost:3009,https://localhost:4009,https://localhost:8452,https://fin-app.dive25.com,https://fin-api.dive25.com,https://fin-idp.dive25.com
+    ports:
+      - "4009:4000"
+    volumes:
+      - ../../backend:/app
+      - fin_backend_node_modules:/app/node_modules
+      - ./certs:/app/certs:rw
+      - ./certs:/opt/keycloak/certs:ro
+      - ../../config:/app/config:ro
+      - fin_backend_logs:/app/logs
+    depends_on:
+      mongodb-fin:
+        condition: service_healthy
+      redis-fin:
+        condition: service_healthy
+      keycloak-fin:
+        condition: service_healthy
+    networks:
+      - dive-fin-network
+      - dive-v3-shared-network
+
+  frontend-fin:
+    extends:
+      file: ../../docker/base/services.yml
+      service: frontend-base
+    container_name: dive-spoke-fin-frontend
+    environment:
+      NEXT_PUBLIC_INSTANCE: FIN
+      NEXT_PUBLIC_INSTANCE_NAME: "Finland"
+      NEXT_PUBLIC_API_URL: https://localhost:4009
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4009
+      NEXT_PUBLIC_BASE_URL: https://localhost:3009
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8452
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-fin
+      BACKEND_URL: https://backend-fin:4000
+      AUTH_SECRET: ${NEXTAUTH_SECRET_FIN:?set NEXTAUTH_SECRET_FIN}
+      AUTH_KEYCLOAK_ID: dive-v3-client-fin
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_FIN:?set KEYCLOAK_CLIENT_SECRET_FIN}
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8452/realms/dive-v3-broker-fin
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://localhost:3009
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_FIN:?set NEXTAUTH_SECRET_FIN}
+      DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_FIN:?set POSTGRES_PASSWORD_FIN}@postgres-fin:5432/keycloak
+      KEYCLOAK_URL: https://keycloak-fin:8443
+      KEYCLOAK_REALM: dive-v3-broker-fin
+      KEYCLOAK_CLIENT_ID: dive-v3-client-fin
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_FIN:?set KEYCLOAK_CLIENT_SECRET_FIN}
+      AUTH_POST_LOGOUT_REDIRECT: https://fin-app.dive25.com
+      AUTH_REDIRECT_URI: https://fin-app.dive25.com/api/auth/callback/keycloak
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://fin-app.dive25.com,https://fin-api.dive25.com,https://fin-idp.dive25.com,https://localhost:3009,https://localhost:4009,https://localhost:8452
+      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
+      NEXT_PUBLIC_THEME_PRIMARY: "#002F6C"
+      NEXT_PUBLIC_THEME_SECONDARY: "#FFFFFF"
+      NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      TZ: "Europe/Helsinki"
+    ports:
+      - "3009:3000"
+    volumes:
+      - ../../frontend:/app
+      - fin_frontend_modules:/app/node_modules
+      - fin_frontend_next:/app/.next
+      - ./certs:/app/certs:ro
+      - ./certs:/opt/app/certs:ro
+    depends_on:
+      backend-fin:
+        condition: service_healthy
+    networks:
+      - dive-fin-network

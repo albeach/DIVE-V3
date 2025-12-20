@@ -1,0 +1,55 @@
+{
+  "identity": {
+    "spokeId": "spoke-swe-ffdb515a",
+    "instanceCode": "SWE",
+    "name": "Swedish Armed Forces",
+    "description": "DIVE V3 Spoke Instance for Swedish Armed Forces",
+    "country": "SWE",
+    "organizationType": "government",
+    "contactEmail": "admin@swe.dive25.com",
+    "registeredSpokeId": "spoke-swe-be80b2a8"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3029",
+    "apiUrl": "https://localhost:4029",
+    "idpUrl": "https://dive-spoke-swe-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8472",
+    "kasUrl": "https://localhost:9029"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/swe/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/swe/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/swe/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/swe/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:swe",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-20T03:33:34Z",
+    "spokeToken": "xCsJeDWgzKT4e35WHlbJQcl01Pfm_GzysqVbLwSHUuI"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/swe/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/swe/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-20T03:32:17Z",
+    "lastModified": "2025-12-20T03:32:17Z",
+    "configHash": ""
+  }
+}

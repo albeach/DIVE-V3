@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, TouchEvent } from 'react';
-import { Globe2, Target, Shield, MapPin, Users, Lock, ChevronLeft, ChevronRight, LucideIcon } from 'lucide-react';
+import { Globe2, Target, Shield, MapPin, Users, Lock, Network, ChevronLeft, ChevronRight, LucideIcon } from 'lucide-react';
 
 interface Feature {
   Icon: LucideIcon;
@@ -13,7 +13,8 @@ interface Feature {
 }
 
 const features: Feature[] = [
-  { Icon: Globe2, title: "Multi-IdP Federation", desc: "Seamless authentication across USA/NATO partners", color: "from-blue-500/10 to-cyan-500/10", accent: "#009ab3", iconColor: "text-[#009ab3]" },
+  { Icon: Network, title: "32-Nation Federation", desc: "Seamless identity federation across all NATO members", color: "from-blue-500/10 to-cyan-500/10", accent: "#009ab3", iconColor: "text-[#009ab3]" },
+  { Icon: Globe2, title: "Multi-IdP Support", desc: "OIDC and SAML protocols with cross-border authentication", color: "from-sky-500/10 to-blue-500/10", accent: "#0ea5e9", iconColor: "text-sky-500" },
   { Icon: Target, title: "ABAC Authorization", desc: "Attribute-based access control with OPA policies", color: "from-purple-500/10 to-pink-500/10", accent: "#9333ea", iconColor: "text-purple-600" },
   { Icon: Shield, title: "Clearance-Based Access", desc: "UNCLASSIFIED to TOP_SECRET enforcement", color: "from-red-500/10 to-orange-500/10", accent: "#dc2626", iconColor: "text-red-600" },
   { Icon: MapPin, title: "Coalition Releasability", desc: "Country-based information sharing controls", color: "from-green-500/10 to-emerald-500/10", accent: "#79d85a", iconColor: "text-[#79d85a]" },
@@ -23,7 +24,7 @@ const features: Feature[] = [
 
 /**
  * FeatureCarousel - Modern 2025 UX pattern
- * 
+ *
  * Mobile: Horizontal swipeable carousel with snap points
  * Desktop: 3-column grid layout
  */
@@ -59,7 +60,7 @@ export function FeatureCarousel() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [isMobile]);
 
-  // Touch handlers for swipe
+  // Touch handlers for swipe with haptic feedback
   const handleTouchStart = (e: TouchEvent) => {
     setTouchEnd(null);
     setTouchStart(e.targetTouches[0].clientX);
@@ -71,15 +72,23 @@ export function FeatureCarousel() {
 
   const handleTouchEnd = () => {
     if (!touchStart || !touchEnd) return;
-    
+
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > 50;
     const isRightSwipe = distance < -50;
 
     if (isLeftSwipe && activeIndex < features.length - 1) {
+      // Haptic feedback if supported
+      if ('vibrate' in navigator) {
+        navigator.vibrate(10);
+      }
       scrollToCard(activeIndex + 1);
     }
     if (isRightSwipe && activeIndex > 0) {
+      // Haptic feedback if supported
+      if ('vibrate' in navigator) {
+        navigator.vibrate(10);
+      }
       scrollToCard(activeIndex - 1);
     }
   };
@@ -87,7 +96,7 @@ export function FeatureCarousel() {
   const scrollToCard = (index: number) => {
     const container = scrollRef.current;
     if (!container) return;
-    
+
     const cardWidth = container.offsetWidth * 0.85;
     const gap = 16;
     container.scrollTo({
@@ -115,7 +124,7 @@ export function FeatureCarousel() {
       <div
         ref={scrollRef}
         className="flex gap-4 overflow-x-auto snap-x snap-mandatory scrollbar-hide pb-4"
-        style={{ 
+        style={{
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
           WebkitOverflowScrolling: 'touch'
@@ -126,7 +135,7 @@ export function FeatureCarousel() {
       >
         {/* Spacer for centering first card */}
         <div className="flex-shrink-0 w-[7.5%]" />
-        
+
         {features.map((feature, idx) => (
           <div
             key={idx}
@@ -135,7 +144,7 @@ export function FeatureCarousel() {
             <MobileFeatureCard feature={feature} index={idx} isActive={idx === activeIndex} />
           </div>
         ))}
-        
+
         {/* Spacer for centering last card */}
         <div className="flex-shrink-0 w-[7.5%]" />
       </div>
@@ -167,8 +176,8 @@ export function FeatureCarousel() {
             key={idx}
             onClick={() => scrollToCard(idx)}
             className={`transition-all duration-300 rounded-full ${
-              idx === activeIndex 
-                ? 'w-8 h-2 bg-gradient-to-r from-[#009ab3] to-[#79d85a]' 
+              idx === activeIndex
+                ? 'w-8 h-2 bg-gradient-to-r from-[#009ab3] to-[#79d85a]'
                 : 'w-2 h-2 bg-gray-300 hover:bg-gray-400'
             }`}
             aria-label={`Go to slide ${idx + 1}`}
@@ -178,9 +187,9 @@ export function FeatureCarousel() {
 
       {/* Swipe hint - shows briefly on first load */}
       <div className="absolute inset-x-0 bottom-12 flex justify-center pointer-events-none animate-pulse">
-        <div className="text-xs text-gray-400 flex items-center gap-1 opacity-60">
+        <div className="text-xs text-gray-400 flex items-center gap-1 opacity-60 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full">
           <ChevronLeft size={14} />
-          <span>Swipe to explore</span>
+          <span className="font-medium">Swipe to explore</span>
           <ChevronRight size={14} />
         </div>
       </div>
@@ -193,7 +202,7 @@ export function FeatureCarousel() {
  */
 function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
   return (
-    <div 
+    <div
       className="group relative p-4 bg-white rounded-xl border border-gray-200 hover:border-transparent transition-all duration-300 hover:shadow-xl hover:-translate-y-1 animate-fade-in-up overflow-hidden"
       style={{ animationDelay: `${0.9 + index * 0.08}s` }}
     >
@@ -210,11 +219,11 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
         {/* Animated icon */}
         <div className="mb-3 flex items-center justify-center">
           <div className="relative w-14 h-14 flex items-center justify-center">
-            <div 
+            <div
               className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-20 blur-lg transition-all duration-300"
               style={{ background: feature.accent }}
             />
-            <feature.Icon 
+            <feature.Icon
               className={`relative ${feature.iconColor} transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}
               size={32}
               strokeWidth={2}
@@ -235,7 +244,7 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
         </p>
 
         {/* Corner accent circle */}
-        <div 
+        <div
           className="absolute -bottom-4 -right-4 w-12 h-12 rounded-full opacity-0 group-hover:opacity-5 transition-opacity duration-300"
           style={{ background: feature.accent }}
         />
@@ -249,10 +258,10 @@ function FeatureCard({ feature, index }: { feature: Feature; index: number }) {
  */
 function MobileFeatureCard({ feature, index, isActive }: { feature: Feature; index: number; isActive: boolean }) {
   return (
-    <div 
+    <div
       className={`relative p-6 rounded-2xl border transition-all duration-500 overflow-hidden ${
-        isActive 
-          ? 'bg-white shadow-2xl border-transparent scale-100' 
+        isActive
+          ? 'bg-white shadow-2xl border-transparent scale-100'
           : 'bg-white/80 shadow-lg border-gray-200 scale-95 opacity-80'
       }`}
     >
@@ -261,9 +270,9 @@ function MobileFeatureCard({ feature, index, isActive }: { feature: Feature; ind
 
       {/* Animated border glow */}
       {isActive && (
-        <div 
+        <div
           className="absolute inset-0 rounded-2xl opacity-30"
-          style={{ 
+          style={{
             boxShadow: `0 0 30px ${feature.accent}40, inset 0 0 30px ${feature.accent}10`
           }}
         />
@@ -276,22 +285,22 @@ function MobileFeatureCard({ feature, index, isActive }: { feature: Feature; ind
           <div className="relative">
             {/* Pulsing ring */}
             {isActive && (
-              <div 
+              <div
                 className="absolute inset-0 rounded-full animate-ping opacity-20"
                 style={{ background: feature.accent }}
               />
             )}
             {/* Icon container */}
-            <div 
+            <div
               className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-500 ${
                 isActive ? 'rotate-3 scale-110' : ''
               }`}
-              style={{ 
+              style={{
                 background: `linear-gradient(135deg, ${feature.accent}20, ${feature.accent}05)`,
                 border: `1px solid ${feature.accent}30`
               }}
             >
-              <feature.Icon 
+              <feature.Icon
                 className={feature.iconColor}
                 size={32}
                 strokeWidth={2}
@@ -317,7 +326,7 @@ function MobileFeatureCard({ feature, index, isActive }: { feature: Feature; ind
         {/* Feature tags */}
         {isActive && (
           <div className="mt-4 flex justify-center gap-2 animate-fade-in">
-            <span 
+            <span
               className="px-3 py-1 rounded-full text-xs font-medium text-white"
               style={{ background: feature.accent }}
             >
@@ -331,13 +340,13 @@ function MobileFeatureCard({ feature, index, isActive }: { feature: Feature; ind
       </div>
 
       {/* Corner decorations */}
-      <div 
+      <div
         className={`absolute -top-8 -right-8 w-24 h-24 rounded-full transition-opacity duration-500 ${
           isActive ? 'opacity-10' : 'opacity-5'
         }`}
         style={{ background: feature.accent }}
       />
-      <div 
+      <div
         className={`absolute -bottom-6 -left-6 w-20 h-20 rounded-full transition-opacity duration-500 ${
           isActive ? 'opacity-10' : 'opacity-5'
         }`}
