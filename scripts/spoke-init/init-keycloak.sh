@@ -36,7 +36,7 @@ fi
 CODE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
 REALM_NAME="dive-v3-broker-${CODE_LOWER}"
-CLIENT_ID="dive-v3-client-${CODE_LOWER}"
+CLIENT_ID="dive-v3-broker-${CODE_LOWER}"
 
 # Load configuration from .env
 INSTANCE_DIR="instances/${CODE_LOWER}"
@@ -635,7 +635,7 @@ HUB_IDP_INTERNAL_URL="${HUB_IDP_INTERNAL_URL:-https://dive-hub-keycloak:8443}"
 HUB_IDP_DISABLE_TRUST="${HUB_IDP_DISABLE_TRUST:-true}"
 # Use the spoke-specific client on Hub (must exist in USA Keycloak's dive-v3-broker realm)
 # Format: dive-v3-client-<spoke_code> (e.g., dive-v3-client-lva for Latvia)
-USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-client-${CODE_LOWER}}"
+USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-broker-${CODE_LOWER}}"
 # Allow multiple env var fallbacks for the client secret
 USA_IDP_CLIENT_SECRET="${USA_IDP_CLIENT_SECRET:-${CROSS_BORDER_CLIENT_SECRET:-${HUB_IDP_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-}}}}"
 
