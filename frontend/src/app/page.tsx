@@ -2,12 +2,12 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { IdpSelector } from "@/components/auth/idp-selector";
 import { FeatureCarousel } from "@/components/ui/feature-carousel";
-import { 
-  InstanceHeroBadge, 
-  IdpSectionHeader, 
+import {
+  InstanceHeroBadge,
+  IdpSectionHeader,
   CoalitionPartnersFooter,
   LocalizedFeatureBadges,
-  LocalizedPilotCapabilities 
+  LocalizedPilotCapabilities
 } from "@/components/ui/instance-hero-badge";
 
 export default async function Home() {
@@ -15,7 +15,7 @@ export default async function Home() {
   let session;
   try {
     const authPromise = auth();
-    const timeoutPromise = new Promise((_, reject) => 
+    const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Auth timeout')), 5000)
     );
     session = await Promise.race([authPromise, timeoutPromise]) as Awaited<ReturnType<typeof auth>>;
@@ -24,7 +24,7 @@ export default async function Home() {
     console.warn('[Home] Auth check failed, showing login page:', error instanceof Error ? error.message : 'Unknown error');
     session = null;
   }
-  
+
   // If already logged in, redirect to dashboard
   if (session && 'user' in session && session.user) {
     redirect("/dashboard");
@@ -43,8 +43,11 @@ export default async function Home() {
         }}></div>
       </div>
 
-      {/* Animated Binary Code Rain */}
-      <div className="absolute inset-0 overflow-hidden opacity-10 font-mono text-[#79d85a] text-xs">
+      {/* Gradient overlay for depth */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/5 to-black/10 pointer-events-none" />
+
+      {/* Animated Binary Code Rain - Reduced opacity for cleaner look */}
+      <div className="absolute inset-0 overflow-hidden opacity-5 font-mono text-[#79d85a] text-xs">
         <div className="absolute animate-slide-down" style={{ left: '10%', animationDuration: '15s', animationDelay: '0s' }}>
           01001000 01100101 01101100 01101100 01101111<br/>
           01000100 01001001 01010110 01000101<br/>
@@ -71,13 +74,13 @@ export default async function Home() {
         </div>
       </div>
 
-      {/* Circuit Lines */}
-      <div className="absolute inset-0 opacity-10">
+      {/* Circuit Lines - More subtle */}
+      <div className="absolute inset-0 opacity-8">
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-          <line x1="0" y1="30%" x2="100%" y2="30%" stroke="#79d85a" strokeWidth="2" strokeDasharray="5,5">
+          <line x1="0" y1="30%" x2="100%" y2="30%" stroke="#79d85a" strokeWidth="1" strokeDasharray="5,5">
             <animate attributeName="stroke-dashoffset" from="0" to="10" dur="1s" repeatCount="indefinite" />
           </line>
-          <line x1="0" y1="60%" x2="100%" y2="60%" stroke="#009ab3" strokeWidth="2" strokeDasharray="5,5">
+          <line x1="0" y1="60%" x2="100%" y2="60%" stroke="#009ab3" strokeWidth="1" strokeDasharray="5,5">
             <animate attributeName="stroke-dashoffset" from="0" to="10" dur="1.5s" repeatCount="indefinite" />
           </line>
           <circle cx="20%" cy="30%" r="4" fill="#79d85a">
@@ -105,8 +108,8 @@ export default async function Home() {
         <div className="max-w-6xl w-full">
           {/* Main content card with glassmorphism */}
           <div className="bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 overflow-hidden animate-fade-in-up">
-            {/* Header section with logo - More Compact */}
-            <div className="relative px-4 py-3 md:px-6 md:py-4 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
+            {/* Header section with logo - Ultra Compact */}
+            <div className="relative px-3 py-2 md:px-4 md:py-2.5 overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
               {/* Digital Grid Pattern */}
               <div className="absolute inset-0 opacity-30" style={{
                 backgroundImage: `
@@ -154,48 +157,65 @@ export default async function Home() {
                 <div className="absolute bottom-10 left-20 w-1 h-1 bg-[#79d85a] rounded-full opacity-60 animate-pulse" style={{ animationDelay: '1s' }}></div>
                 <div className="absolute bottom-16 right-10 w-1 h-1 bg-[#009ab3] rounded-full opacity-60 animate-pulse" style={{ animationDelay: '1.5s' }}></div>
               </div>
-              
+
               {/* Animated accent lines */}
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#79d85a] to-transparent animate-shimmer"></div>
               <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#79d85a] to-transparent animate-shimmer" style={{ animationDelay: '1s' }}></div>
-              
-              {/* Flexbox Layout: Logo Left, Content Right - Compact */}
-              <div className="relative flex flex-col md:flex-row items-center gap-3 md:gap-5">
-                {/* Logo - Links to main DIVE25.COM portal */}
-                <div className="flex-shrink-0 animate-scale-in">
-                  <a href="https://dive25.com" title="Go to DIVE25 Portal" className="relative inline-block group">
-                    {/* Clean animated ring - no blur */}
-                    <div className="absolute inset-0 border-4 border-[#79d85a] rounded-full opacity-30 animate-ping"></div>
-                    <div className="absolute -inset-2 border-2 border-[#009ab3] rounded-full opacity-20 animate-pulse group-hover:opacity-40 transition-opacity"></div>
-                    <img 
-                      src="/DIVE-Logo.png" 
-                      alt="DIVE - Digital Interoperability Verification Experiment" 
-                      className="relative h-28 w-28 md:h-36 md:w-36 drop-shadow-2xl animate-float-logo hover:scale-110 transition-transform duration-500 cursor-pointer"
-                    />
-                  </a>
+
+              {/* 2025 Premium Design: DIVE Hero + Instance Corner */}
+              <div className="relative flex items-start justify-between gap-5">
+                {/* Left: Logo + Hero */}
+                <div className="flex items-center gap-5 flex-1 min-w-0">
+                  {/* Logo */}
+                  <div className="flex-shrink-0 animate-scale-in">
+                    <a href="https://dive25.com" title="Go to DIVE25 Portal" className="relative inline-block group">
+                      <div className="absolute inset-0 border-4 border-[#79d85a] rounded-full opacity-30 animate-ping"></div>
+                      <div className="absolute -inset-2 border-2 border-[#009ab3] rounded-full opacity-20 animate-pulse group-hover:opacity-40 transition-opacity"></div>
+                      <img
+                        src="/DIVE-Logo.png"
+                        alt="DIVE - Digital Interoperability Verification Experiment"
+                        className="relative h-20 w-20 md:h-24 md:w-24 drop-shadow-2xl animate-float-logo hover:scale-110 transition-transform duration-500 cursor-pointer"
+                      />
+                    </a>
+                  </div>
+
+                  {/* Hero Content */}
+                  <div className="flex-1 space-y-2 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+                    {/* Main Title Row */}
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white tracking-tight">
+                        DIVE
+                      </h1>
+                      <span className="text-lg md:text-xl text-white/90 font-medium">
+                        Digital Interoperability Verification Experiment
+                      </span>
+                    </div>
+
+                    {/* Feature Pills Row */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/20 backdrop-blur-sm rounded-full border border-emerald-400/30">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-xs font-semibold text-white">32 Coalition Partners</span>
+                      </div>
+                      <div className="hidden sm:block h-3 w-px bg-white/20"></div>
+                      <span className="text-xs text-white/70">🔐 Federated Auth</span>
+                      <div className="hidden sm:block h-3 w-px bg-white/20"></div>
+                      <span className="text-xs text-white/70">🛡️ ABAC Policy</span>
+                      <div className="hidden sm:block h-3 w-px bg-white/20"></div>
+                      <span className="text-xs text-white/70">📄 Secure Sharing</span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Content - Compact */}
-                <div className="flex-1 text-center md:text-left animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                  {/* Instance Badge with Flag */}
-                  <div className="mb-1">
-                    <InstanceHeroBadge size="md" className="justify-center md:justify-start" />
-                  </div>
-                  
-                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-0.5 tracking-tight">
-                    DIVE V3
-                  </h1>
-                  <div className="inline-block px-2.5 py-1 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 mb-1.5">
-                    <p className="text-xs md:text-sm text-white font-semibold">
-                      Digital Interoperability Verification Experiment
-                    </p>
-                  </div>
-                  <p className="text-white/90 text-[10px] md:text-xs leading-relaxed mb-1.5">
-                    Coalition Identity & Access Management Platform
-                  </p>
-                  
-                  {/* Localized Feature badges */}
-                  <LocalizedFeatureBadges />
+                {/* Divider */}
+                <div className="hidden md:block h-auto w-px bg-gradient-to-b from-transparent via-white/30 to-transparent self-stretch mx-2 animate-fade-in" style={{ animationDelay: '0.3s' }}></div>
+
+                {/* Right: Instance Badge - Prominent */}
+                <div className="flex-shrink-0 animate-fade-in-up hidden md:block pl-2" style={{ animationDelay: '0.3s' }}>
+                  <InstanceHeroBadge size="lg" className="" />
                 </div>
               </div>
             </div>
@@ -205,7 +225,7 @@ export default async function Home() {
               {/* Identity Provider Selection */}
               <div className="mb-8 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
                 <IdpSectionHeader />
-                
+
                 <IdpSelector />
               </div>
 

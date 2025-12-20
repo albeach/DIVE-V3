@@ -316,7 +316,7 @@ federation_denied_msg(subject_tenant, target_tenant) := msg if {
 # Tenant List
 # ============================================
 
-all_tenants := {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"}
+all_tenants := {"USA", "FRA", "GBR", "DEU", "MNE", "ALB", "BEL", "DNK", "NOR", "POL"}
 
 is_valid_tenant(tenant) if {
 	tenant in all_tenants

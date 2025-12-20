@@ -1,0 +1,55 @@
+{
+  "identity": {
+    "spokeId": "spoke-fin-d466def3",
+    "instanceCode": "FIN",
+    "name": "Finnish Defence Forces",
+    "description": "DIVE V3 Spoke Instance for Finnish Defence Forces",
+    "country": "FIN",
+    "organizationType": "government",
+    "contactEmail": "admin@fin.dive25.com",
+    "registeredSpokeId": "spoke-fin-7934a471"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3009",
+    "apiUrl": "https://localhost:4009",
+    "idpUrl": "https://dive-spoke-fin-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8452",
+    "kasUrl": "https://localhost:9009"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fin/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fin/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fin/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fin/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:fin",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-19T14:10:40Z",
+    "spokeToken": "a2n41BDS9nvO9U1oXfTH9ubc9hTKuIjcEauziDJwR-c"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fin/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fin/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-19T14:03:10Z",
+    "lastModified": "2025-12-19T14:03:10Z",
+    "configHash": ""
+  }
+}
