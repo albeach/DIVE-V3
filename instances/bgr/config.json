@@ -1,0 +1,54 @@
+{
+  "identity": {
+    "spokeId": "spoke-bgr-4dbd5eeb",
+    "instanceCode": "BGR",
+    "name": "Bulgaria",
+    "description": "DIVE V3 Spoke Instance for Bulgaria",
+    "country": "BGR",
+    "organizationType": "government",
+    "contactEmail": "admin@bgr.dive25.com",
+    "registeredSpokeId": "spoke-bgr-8121c88a"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3003",
+    "apiUrl": "https://localhost:4003",
+    "idpUrl": "https://dive-spoke-bgr-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8446",
+    "kasUrl": "https://localhost:9003"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bgr/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bgr/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bgr/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bgr/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "pending",
+    "requestedScopes": [
+      "policy:base",
+      "policy:bgr",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-20T04:19:17Z"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bgr/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/bgr/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-20T04:17:00Z",
+    "lastModified": "2025-12-20T04:17:00Z",
+    "configHash": ""
+  }
+}

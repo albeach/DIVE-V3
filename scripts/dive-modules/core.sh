@@ -785,8 +785,11 @@ cmd_down() {
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f docker-compose.yml down"
+        log_dry "docker compose -f docker-compose.hub.yml down"
         log_dry "docker compose -f docker-compose.pilot.yml down"
     else
+        # Stop all compose stacks (hub, default, pilot)
+        docker compose -f docker-compose.hub.yml down 2>/dev/null || true
         docker compose -f docker-compose.yml down 2>/dev/null || true
         docker compose -f docker-compose.pilot.yml down 2>/dev/null || true
     fi

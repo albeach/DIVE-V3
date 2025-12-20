@@ -956,6 +956,99 @@ body {
 }
 
 /* ============================================ */
+/* Landing Page 2025 - IdP Selector Animations */
+/* ============================================ */
+
+/* 3D card lift effect */
+@keyframes cardLift {
+    from {
+        transform: translateY(0) rotateX(0deg);
+    }
+
+    to {
+        transform: translateY(-8px) rotateX(2deg);
+    }
+}
+
+.animate-card-lift {
+    animation: cardLift 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Glow pulse for active cards */
+@keyframes glowPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px var(--accent-color, #009ab3);
+    }
+
+    50% {
+        box-shadow: 0 0 40px var(--accent-color, #009ab3);
+    }
+}
+
+.animate-glow-pulse {
+    animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* Staggered grid reveal */
+@keyframes gridReveal {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.animate-grid-reveal {
+    animation: gridReveal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+}
+
+/* Smooth scale on hover */
+.hover\:scale-102:hover {
+    transform: scale(1.02);
+}
+
+/* Transform GPU acceleration */
+.transform-gpu {
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+/* Gradient animation for text */
+@keyframes gradientX {
+
+    0%,
+    100% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+}
+
+.animate-gradient-x {
+    background-size: 200% auto;
+    animation: gradientX 3s ease infinite;
+}
+
+/* ============================================ */
 /* Phase 4: Enhanced Dark Mode Optimization */
 /* DIVE V3 - 2025 */
 /* ============================================ */

@@ -1,0 +1,55 @@
+{
+  "identity": {
+    "spokeId": "spoke-lux-499745e7",
+    "instanceCode": "LUX",
+    "name": "Luxembourg Armed Forces",
+    "description": "DIVE V3 Spoke Instance for Luxembourg Armed Forces",
+    "country": "LUX",
+    "organizationType": "government",
+    "contactEmail": "admin@lux.dive25.com",
+    "registeredSpokeId": "spoke-lux-04bc3482"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3018",
+    "apiUrl": "https://localhost:4018",
+    "idpUrl": "https://dive-spoke-lux-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8461",
+    "kasUrl": "https://localhost:9018"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "approved",
+    "requestedScopes": [
+      "policy:base",
+      "policy:lux",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-20T08:09:05Z",
+    "spokeToken": "WNVhoDdL-GE_gV9FDrFEywkGsXhonty_InqrkZJO-gY"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-20T08:07:40Z",
+    "lastModified": "2025-12-20T08:07:40Z",
+    "configHash": ""
+  }
+}

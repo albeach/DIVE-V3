@@ -333,7 +333,7 @@ function createSpokeStore(): ISpokeStore {
 // HUB-SPOKE REGISTRY SERVICE
 // ============================================
 
-class HubSpokeRegistryService {
+class HubSpokeRegistryService extends EventEmitter {
   private store: ISpokeStore;
   private readonly hubSecret: string;
   private tokenValidityMs: number;
@@ -636,16 +636,31 @@ class HubSpokeRegistryService {
 
     await this.store.save(spoke);
 
+    const correlationId = `spoke-approval-${uuidv4()}`;
+
     logger.info('Spoke approved', {
       spokeId,
       instanceCode: spoke.instanceCode,
       approvedBy,
       allowedScopes: options.allowedScopes,
-      trustLevel: options.trustLevel
+      trustLevel: options.trustLevel,
+      correlationId
     });
 
     // Notify OPAL to include this spoke in policy distribution
     await this.notifyOPALOfSpokeChange(spoke, 'approved');
+
+    // ============================================
+    // EVENT-DRIVEN CASCADE (Phase 1)
+    // ============================================
+    // Emit event for Federation Sync Service to cascade updates
+    // to OPAL/OPA, Keycloak, MongoDB resources, Redis cache, webhooks
+    this.emit('spoke:approved', {
+      spoke,
+      timestamp: new Date(),
+      approvedBy,
+      correlationId
+    });
 
     // AUTO-LINK IDENTITY PROVIDER (Phase 3 Enhancement)
     // Create BIDIRECTIONAL Keycloak IdP trust for SSO
