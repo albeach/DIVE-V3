@@ -1137,10 +1137,14 @@ EOF
         local expires=$(echo "$response" | jq -r '.token.expiresAt' 2>/dev/null)
         local token_scopes=$(echo "$response" | jq -r '.token.scopes | join(", ")' 2>/dev/null)
 
-        echo -e "${BOLD}Token for Spoke Admin:${NC}"
+        # Check for OPAL client token (new in Phase 2)
+        local opal_token=$(echo "$response" | jq -r '.opalToken.token // empty' 2>/dev/null)
+        local opal_expires=$(echo "$response" | jq -r '.opalToken.expiresAt // empty' 2>/dev/null)
+
+        echo -e "${BOLD}Hub API Token for Spoke:${NC}"
         echo ""
         echo "┌─────────────────────────────────────────────────────────────┐"
-        echo "│ Token (copy and provide to spoke admin):                    │"
+        echo "│ SPOKE_TOKEN (for Hub API access):                           │"
         echo "├─────────────────────────────────────────────────────────────┤"
         echo "│"
         echo "$token"
@@ -1149,9 +1153,34 @@ EOF
         echo ""
         echo "  Expires:  $expires"
         echo "  Scopes:   $token_scopes"
+
+        if [ -n "$opal_token" ]; then
+            echo ""
+            echo -e "${BOLD}OPAL Client JWT (for policy sync):${NC}"
+            echo ""
+            echo "┌─────────────────────────────────────────────────────────────┐"
+            echo "│ OPAL_CLIENT_JWT (for OPAL server connection):               │"
+            echo "├─────────────────────────────────────────────────────────────┤"
+            echo "│"
+            echo "${opal_token:0:80}..."
+            echo "│"
+            echo "└─────────────────────────────────────────────────────────────┘"
+            echo ""
+            echo "  Expires:  $opal_expires"
+            echo ""
+            echo -e "${GREEN}✓ Both tokens generated automatically!${NC}"
+        else
+            echo ""
+            echo -e "${YELLOW}⚠ OPAL token not generated (may require manual setup)${NC}"
+        fi
+
         echo ""
         echo -e "${CYAN}Instructions for Spoke Admin:${NC}"
-        echo "  1. Add token to spoke .env: SPOKE_OPAL_TOKEN=<token above>"
+        echo "  1. Add tokens to spoke .env:"
+        echo "     SPOKE_TOKEN=$token"
+        if [ -n "$opal_token" ]; then
+            echo "     OPAL_CLIENT_JWT=${opal_token:0:50}..."
+        fi
         echo "  2. Restart spoke services: ./dive --instance <code> spoke up"
         echo "  3. Verify connection: ./dive --instance <code> spoke verify"
         echo ""

@@ -1,13 +1,13 @@
 /**
  * Paginated Search API Proxy Route
- * 
+ *
  * Phase 1: Performance Foundation
  * Phase 4: Federation Support
- * 
+ *
  * Proxies search requests to backend:
  * - Local search: /api/resources/search (single instance)
  * - Federated search: /federated-query (multiple instances)
- * 
+ *
  * Security: Tokens accessed server-side only via session validation
  */
 
@@ -52,21 +52,27 @@ export async function POST(request: NextRequest) {
 
         // Step 3: Get request body
         const body = await request.json().catch(() => ({}));
-        
+
         // Step 4: Determine if federated search is needed
-        // Only use federated endpoint when MULTIPLE instances are actually selected
-        // Single instance (or no instances = local only) uses local search
+        // Use federated endpoint when:
+        // - Multiple instances are selected, OR
+        // - A single non-local instance is selected (e.g., NLD spoke)
+        // Local instance (USA/Hub) uses local search for best performance
         const instances = body.filters?.instances || [];
-        const isFederated = instances.length > 1;
-        
+        const currentInstance = process.env.INSTANCE_CODE || 'USA';
+
+        // Check if any selected instance is NOT the current (local) instance
+        const hasRemoteInstances = instances.some((inst: string) => inst !== currentInstance);
+        const isFederated = instances.length > 1 || hasRemoteInstances;
+
         const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
-        
+
         let backendResponse: Response;
-        
+
         if (isFederated) {
             // Federated search: Query all selected instances in parallel
             console.log('[SearchAPI] Using federated endpoint for instances:', instances);
-            
+
             // Transform request for federated-query endpoint
             const federatedBody = {
                 query: body.query || '',
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
                 sort: body.sort,
                 includeFacets: body.includeFacets !== false,
             };
-            
+
             backendResponse = await fetch(`${backendUrl}/api/resources/federated-query`, {
                 method: 'POST',
                 headers: {
@@ -96,7 +102,7 @@ export async function POST(request: NextRequest) {
         } else {
             // Local search: Query only local instance
             console.log('[SearchAPI] Using local search endpoint');
-            
+
             backendResponse = await fetch(`${backendUrl}/api/resources/search`, {
                 method: 'POST',
                 headers: {
@@ -110,7 +116,7 @@ export async function POST(request: NextRequest) {
 
         // Get the raw text first to see what we're dealing with
         const responseText = await backendResponse.text();
-        
+
         // Parse and forward
         let data;
         try {
@@ -139,15 +145,15 @@ export async function POST(request: NextRequest) {
             // Use totalAccessible (sum of ABAC-accessible docs from all instances)
             // Fall back to totalResults (deduplicated fetched results) if not available
             const totalCount = data.totalAccessible || data.totalResults || data.results?.length || 0;
-            
+
             // Build instance facets from instanceResults if available
-            const instanceFacets = data.instanceResults 
+            const instanceFacets = data.instanceResults
                 ? Object.entries(data.instanceResults).map(([instance, info]: [string, any]) => ({
                     value: instance,
                     count: info.accessibleCount || info.count || 0,
                   }))
                 : [];
-            
+
             const normalizedResponse = {
                 results: data.results.map((r: any) => ({
                     resourceId: r.resourceId,
@@ -180,14 +186,14 @@ export async function POST(request: NextRequest) {
                     totalMs: data.executionTimeMs || 0,
                 },
             };
-            
+
             console.log('[SearchAPI] Federated response normalized:', {
                 totalAccessible: data.totalAccessible,
                 totalResults: data.totalResults,
                 normalizedTotalCount: totalCount,
                 instanceResults: data.instanceResults,
             });
-            
+
             return NextResponse.json(normalizedResponse);
         }
 

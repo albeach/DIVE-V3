@@ -928,11 +928,14 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
  */
 const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
     try {
-        logger.debug('Calling OPA for decision', {
+        // DEBUG: Log full OPA input for troubleshooting 500 errors
+        logger.info('Calling OPA for decision', {
             endpoint: OPA_DECISION_ENDPOINT,
             subject: input.input.subject.uniqueID,
             resource: input.input.resource.resourceId,
             circuitState: opaCircuitBreaker.getState(),
+            // Full input for debugging
+            fullInput: JSON.stringify(input).substring(0, 2000),
         });
 
         // Circuit breaker wraps OPA call - fails fast if OPA is down
@@ -1096,9 +1099,27 @@ const getUserFriendlyDenialMessage = (
 
 /**
  * Valid federation instances that can make inter-instance requests
- * TODO: Move to configuration or verify via shared secrets
+ * 
+ * DYNAMIC CONFIGURATION:
+ * - TRUSTED_FEDERATION_INSTANCES env var: comma-separated list of trusted instance codes
+ * - Default includes USA (Hub), FRA, GBR, DEU for backward compatibility
+ * - For spokes: Set TRUSTED_FEDERATION_INSTANCES=USA to trust the Hub
+ * - For Hub: Dynamically includes all approved spokes (loaded separately)
  */
-const TRUSTED_FEDERATION_INSTANCES = ['USA', 'FRA', 'GBR', 'DEU', 'HUN'];
+const TRUSTED_FEDERATION_INSTANCES: string[] = (() => {
+    const envValue = process.env.TRUSTED_FEDERATION_INSTANCES;
+    if (envValue) {
+        return envValue.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+    }
+    // Default: Legacy hardcoded list for backward compatibility
+    return ['USA', 'FRA', 'GBR', 'DEU', 'HUN'];
+})();
+
+// Log trusted instances at startup
+logger.info('Trusted federation instances configured', {
+    instances: TRUSTED_FEDERATION_INSTANCES,
+    source: process.env.TRUSTED_FEDERATION_INSTANCES ? 'environment' : 'default'
+});
 
 /**
  * JWT Authentication middleware (Week 3.2)
@@ -1379,7 +1400,25 @@ export const authzMiddleware = async (
 
     try {
         // ============================================
-        // Step 1: Extract and validate JWT token
+        // Step 0: Check for federated request (skip JWT validation if trusted)
+        // ============================================
+        const federatedFrom = req.headers['x-federated-from'] as string;
+        const isFederatedRequest = federatedFrom && TRUSTED_FEDERATION_INSTANCES.includes(federatedFrom);
+        
+        if (isFederatedRequest && (req as any).user) {
+            // authenticateJWT already validated/decoded the token for federated requests
+            logger.info('Federated request - using pre-authenticated user from authenticateJWT', {
+                requestId,
+                federatedFrom,
+                uniqueID: (req as any).user?.uniqueID,
+                path: req.path
+            });
+            // Skip to OPA authorization with the user already set
+            // Fall through to Step 2 (OPA) using req.user from authenticateJWT
+        }
+
+        // ============================================
+        // Step 1: Extract and validate JWT token (skip for federated requests)
         // ============================================
 
         const authHeader = req.headers.authorization;
@@ -1427,44 +1466,69 @@ export const authzMiddleware = async (
         let decodedToken: IKeycloakToken | null = null;
         let isSPToken = false;
 
-        try {
-            decodedToken = await verifyToken(token);
-        } catch (userTokenError) {
-            // User token failed, try SP token
-            logger.debug('User token verification failed, trying SP token', {
+        // FEDERATION FIX: Skip JWT verification for federated requests from trusted partners
+        // authenticateJWT already decoded the token and set req.user
+        if (isFederatedRequest && (req as any).user) {
+            logger.info('Skipping JWT verification for federated request', {
                 requestId,
-                error: userTokenError instanceof Error ? userTokenError.message : 'Unknown error'
+                federatedFrom,
+                uniqueID: (req as any).user?.uniqueID
             });
-
-            const spContext = await validateSPToken(token);
-            if (spContext) {
-                // SP token is valid
-                (req as IRequestWithSP).sp = spContext;
-                isSPToken = true;
-
-                logger.info('Using SP token for authorization', {
+            // Create a synthetic decoded token from req.user for OPA
+            decodedToken = {
+                sub: (req as any).user.uniqueID || 'federated-user',
+                preferred_username: (req as any).user.uniqueID,
+                uniqueID: (req as any).user.uniqueID,
+                clearance: (req as any).user.clearance || 'UNCLASSIFIED',
+                countryOfAffiliation: (req as any).user.countryOfAffiliation || federatedFrom,
+                acpCOI: (req as any).user.acpCOI || [],
+                email: (req as any).user.email || `${(req as any).user.uniqueID}@federated.local`,
+                iss: `federated:${federatedFrom}`,
+                aud: 'dive-v3-client',
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                iat: Math.floor(Date.now() / 1000),
+            } as IKeycloakToken;
+        } else {
+            // Normal JWT verification for non-federated requests
+            try {
+                decodedToken = await verifyToken(token);
+            } catch (userTokenError) {
+                // User token failed, try SP token
+                logger.debug('User token verification failed, trying SP token', {
                     requestId,
-                    clientId: spContext.clientId,
-                    scopes: spContext.scopes
+                    error: userTokenError instanceof Error ? userTokenError.message : 'Unknown error'
                 });
-            } else {
-                // Neither user nor SP token is valid
-                logger.warn('Both user and SP token verification failed', {
-                    requestId,
-                    userError: userTokenError instanceof Error ? userTokenError.message : 'Unknown error',
-                    tokenLength: token.length,
-                    tokenHeader: tokenHeader,
-                    keycloakUrl: process.env.KEYCLOAK_URL,
-                    realm: process.env.KEYCLOAK_REALM,
-                });
-                res.status(401).json({
-                    error: 'Unauthorized',
-                    message: 'Invalid or expired JWT token',
-                    details: {
-                        reason: userTokenError instanceof Error ? userTokenError.message : 'Token verification failed',
-                    },
-                });
-                return;
+
+                const spContext = await validateSPToken(token);
+                if (spContext) {
+                    // SP token is valid
+                    (req as IRequestWithSP).sp = spContext;
+                    isSPToken = true;
+
+                    logger.info('Using SP token for authorization', {
+                        requestId,
+                        clientId: spContext.clientId,
+                        scopes: spContext.scopes
+                    });
+                } else {
+                    // Neither user nor SP token is valid
+                    logger.warn('Both user and SP token verification failed', {
+                        requestId,
+                        userError: userTokenError instanceof Error ? userTokenError.message : 'Unknown error',
+                        tokenLength: token.length,
+                        tokenHeader: tokenHeader,
+                        keycloakUrl: process.env.KEYCLOAK_URL,
+                        realm: process.env.KEYCLOAK_REALM,
+                    });
+                    res.status(401).json({
+                        error: 'Unauthorized',
+                        message: 'Invalid or expired JWT token',
+                        details: {
+                            reason: userTokenError instanceof Error ? userTokenError.message : 'Token verification failed',
+                        },
+                    });
+                    return;
+                }
             }
         }
 

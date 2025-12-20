@@ -1,4 +1,5 @@
 import NodeCache from 'node-cache';
+import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -93,9 +94,15 @@ class AuthzCacheService {
         unclassified: 0,
     };
 
+    // Redis pub/sub for distributed cache invalidation (Phase 2)
+    private publisher: Redis | null = null;
+    private subscriber: Redis | null = null;
+    private pubSubInitialized = false;
+    private static readonly INVALIDATION_CHANNEL = 'authz:invalidate';
+
     constructor() {
         const maxSize = parseInt(process.env.CACHE_MAX_SIZE || '10000', 10);
-        
+
         this.cache = new NodeCache({
             stdTTL: DEFAULT_TTL,
             checkperiod: 60, // Check for expired keys every 60 seconds
@@ -142,7 +149,7 @@ class AuthzCacheService {
      */
     private getTTL(classification: string): number {
         const normalizedClassification = classification.toUpperCase().replace(/\s+/g, '_');
-        
+
         const ttl = CLASSIFICATION_TTL_MAP[normalizedClassification] || DEFAULT_TTL;
 
         logger.debug('Determined TTL for classification', {
@@ -159,7 +166,7 @@ class AuthzCacheService {
      */
     private updateTTLStats(classification: string): void {
         const normalized = classification.toUpperCase();
-        
+
         if (normalized.includes('TOP') && normalized.includes('SECRET')) {
             this.ttlStats.topSecret++;
         } else if (normalized.includes('SECRET')) {
@@ -177,13 +184,13 @@ class AuthzCacheService {
      */
     getCachedDecision(key: ICacheKey): IOPADecision | null {
         const cacheKey = this.generateKey(key);
-        
+
         try {
             const cached = this.cache.get<ICacheEntry<IOPADecision>>(cacheKey);
 
             if (cached) {
                 this.hitCount++;
-                
+
                 logger.debug('Cache hit', {
                     key: cacheKey,
                     classification: cached.classification,
@@ -195,7 +202,7 @@ class AuthzCacheService {
                 return cached.data;
             } else {
                 this.missCount++;
-                
+
                 logger.debug('Cache miss', {
                     key: cacheKey,
                 });
@@ -308,7 +315,7 @@ class AuthzCacheService {
      */
     invalidateAll(): void {
         this.cache.flushAll();
-        
+
         logger.warn('All authorization cache entries invalidated');
     }
 
@@ -434,6 +441,202 @@ class AuthzCacheService {
         };
 
         logger.info('Cache statistics reset');
+    }
+
+    // ============================================
+    // PHASE 2: REDIS PUB/SUB FOR DISTRIBUTED CACHE
+    // ============================================
+
+    /**
+     * Initialize Redis pub/sub for distributed cache invalidation
+     *
+     * When federation changes occur (spoke approved/suspended/revoked),
+     * all backend instances need to invalidate their local caches.
+     *
+     * This uses Redis pub/sub to broadcast invalidation events.
+     */
+    async initializePubSub(): Promise<void> {
+        if (this.pubSubInitialized) {
+            logger.debug('Redis pub/sub already initialized');
+            return;
+        }
+
+        const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+        try {
+            // Create separate connections for publisher and subscriber
+            // (ioredis requires separate connections for pub/sub)
+            this.publisher = new Redis(redisUrl, {
+                lazyConnect: true,
+                maxRetriesPerRequest: 3,
+                retryStrategy: (times: number) => {
+                    if (times > 3) {
+                        logger.warn('Redis publisher connection failed after 3 retries');
+                        return null; // Stop retrying
+                    }
+                    return Math.min(times * 200, 2000);
+                }
+            });
+
+            this.subscriber = new Redis(redisUrl, {
+                lazyConnect: true,
+                maxRetriesPerRequest: 3,
+                retryStrategy: (times: number) => {
+                    if (times > 3) {
+                        logger.warn('Redis subscriber connection failed after 3 retries');
+                        return null; // Stop retrying
+                    }
+                    return Math.min(times * 200, 2000);
+                }
+            });
+
+            // Connect both clients
+            await Promise.all([
+                this.publisher.connect(),
+                this.subscriber.connect()
+            ]);
+
+            // Subscribe to invalidation channel
+            await this.subscriber.subscribe(AuthzCacheService.INVALIDATION_CHANNEL);
+
+            // Handle incoming invalidation messages
+            this.subscriber.on('message', (channel: string, message: string) => {
+                if (channel === AuthzCacheService.INVALIDATION_CHANNEL) {
+                    try {
+                        const event = JSON.parse(message);
+
+                        // Skip if this is our own message (prevent echo)
+                        const instanceCode = process.env.INSTANCE_CODE || 'UNKNOWN';
+                        if (event.source === instanceCode && event.echo === false) {
+                            return;
+                        }
+
+                        logger.info('Received cache invalidation from Redis pub/sub', {
+                            reason: event.reason,
+                            source: event.source,
+                            timestamp: event.timestamp
+                        });
+
+                        // Invalidate local cache
+                        this.invalidateAll();
+
+                    } catch (parseError) {
+                        logger.warn('Failed to parse invalidation message', {
+                            message,
+                            error: parseError instanceof Error ? parseError.message : 'Unknown'
+                        });
+                    }
+                }
+            });
+
+            // Handle connection errors
+            this.publisher.on('error', (error: Error) => {
+                logger.warn('Redis publisher error', { error: error.message });
+            });
+
+            this.subscriber.on('error', (error: Error) => {
+                logger.warn('Redis subscriber error', { error: error.message });
+            });
+
+            this.pubSubInitialized = true;
+
+            logger.info('Redis pub/sub initialized for distributed cache invalidation', {
+                channel: AuthzCacheService.INVALIDATION_CHANNEL,
+                redisUrl: redisUrl.replace(/:[^:@]+@/, ':***@') // Mask password
+            });
+
+        } catch (error) {
+            logger.warn('Failed to initialize Redis pub/sub (cache invalidation will be local only)', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                redisUrl: redisUrl.replace(/:[^:@]+@/, ':***@')
+            });
+            // Non-fatal: fall back to local cache invalidation
+        }
+    }
+
+    /**
+     * Publish cache invalidation event to all backend instances
+     *
+     * Call this when federation state changes:
+     * - Spoke approved
+     * - Spoke suspended
+     * - Spoke revoked
+     * - Policy updated
+     * - Federation matrix changed
+     */
+    async publishInvalidation(reason: string): Promise<void> {
+        const instanceCode = process.env.INSTANCE_CODE || 'UNKNOWN';
+        const event = {
+            reason,
+            timestamp: new Date().toISOString(),
+            source: instanceCode,
+            echo: false // Don't process our own message
+        };
+
+        if (this.publisher && this.pubSubInitialized) {
+            try {
+                await this.publisher.publish(
+                    AuthzCacheService.INVALIDATION_CHANNEL,
+                    JSON.stringify(event)
+                );
+
+                logger.info('Published cache invalidation via Redis pub/sub', {
+                    reason,
+                    channel: AuthzCacheService.INVALIDATION_CHANNEL
+                });
+
+            } catch (error) {
+                logger.warn('Failed to publish cache invalidation to Redis', {
+                    reason,
+                    error: error instanceof Error ? error.message : 'Unknown'
+                });
+                // Fall back to local invalidation
+                this.invalidateAll();
+            }
+        } else {
+            // Pub/sub not initialized, do local invalidation only
+            logger.info('Redis pub/sub not available, performing local cache invalidation', {
+                reason
+            });
+            this.invalidateAll();
+        }
+    }
+
+    /**
+     * Check if pub/sub is initialized and healthy
+     */
+    isPubSubHealthy(): { healthy: boolean; reason?: string } {
+        if (!this.pubSubInitialized) {
+            return { healthy: false, reason: 'Pub/sub not initialized' };
+        }
+
+        if (!this.publisher || this.publisher.status !== 'ready') {
+            return { healthy: false, reason: 'Publisher not ready' };
+        }
+
+        if (!this.subscriber || this.subscriber.status !== 'ready') {
+            return { healthy: false, reason: 'Subscriber not ready' };
+        }
+
+        return { healthy: true };
+    }
+
+    /**
+     * Gracefully close Redis connections
+     */
+    async closePubSub(): Promise<void> {
+        if (this.publisher) {
+            await this.publisher.quit();
+            this.publisher = null;
+        }
+
+        if (this.subscriber) {
+            await this.subscriber.quit();
+            this.subscriber = null;
+        }
+
+        this.pubSubInitialized = false;
+        logger.info('Redis pub/sub connections closed');
     }
 }
 

@@ -24,6 +24,8 @@
 
 import crypto from 'crypto';
 import { X509Certificate } from 'crypto';
+import { EventEmitter } from 'events';
+import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 import { opalClient } from './opal-client';
 import { opalDataService } from './opal-data.service';
@@ -339,6 +341,8 @@ class HubSpokeRegistryService extends EventEmitter {
   private tokenValidityMs: number;
 
   constructor(store?: ISpokeStore) {
+    super(); // Required for EventEmitter inheritance
+
     // Allow injecting a store for testing
     this.store = store || createSpokeStore();
     this.hubSecret = process.env.HUB_SPOKE_SECRET || crypto.randomBytes(32).toString('hex');
@@ -997,6 +1001,20 @@ class HubSpokeRegistryService extends EventEmitter {
       });
     }
 
+    // ============================================
+    // EVENT-DRIVEN CASCADE (Phase 1)
+    // ============================================
+    // Emit event for Federation Sync Service to cascade updates
+    // to OPAL/OPA removal, Keycloak IdP disable, cache invalidation
+    const correlationId = `spoke-suspension-${uuidv4()}`;
+    this.emit('spoke:suspended', {
+      spoke,
+      timestamp: new Date(),
+      suspendedBy: 'admin', // TODO: Pass actual admin from controller
+      reason,
+      correlationId
+    });
+
     return spoke;
   }
 
@@ -1034,6 +1052,20 @@ class HubSpokeRegistryService extends EventEmitter {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
+
+    // ============================================
+    // EVENT-DRIVEN CASCADE (Phase 1)
+    // ============================================
+    // Emit event for Federation Sync Service to cascade permanent removal
+    // Includes: OPAL/OPA removal, Keycloak IdP deletion, cache invalidation
+    const correlationId = `spoke-revocation-${uuidv4()}`;
+    this.emit('spoke:revoked', {
+      spoke,
+      timestamp: new Date(),
+      revokedBy: 'admin', // TODO: Pass actual admin from controller
+      reason,
+      correlationId
+    });
   }
 
   // ============================================
