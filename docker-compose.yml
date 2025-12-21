@@ -259,6 +259,8 @@ services:
       - ./backend/uploads:/app/uploads
       # Policies Lab: Upload directory for user policies
       - ./policies/uploads:/app/policies/uploads
+      # Docker socket for running OPA tests via docker exec
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
   frontend:
     build:

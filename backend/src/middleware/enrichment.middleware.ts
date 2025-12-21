@@ -1,9 +1,9 @@
 /**
  * Claim Enrichment Middleware (Week 3)
- * 
+ *
  * Enriches JWT tokens with missing identity attributes for non-standard IdPs (e.g., Industry).
  * Applied BEFORE authzMiddleware in resource routes to ensure all required attributes exist.
- * 
+ *
  * Enrichment Rules:
  * 1. countryOfAffiliation missing → Infer from email domain
  *    - @*.mil, @*.army.mil, @*.navy.mil, @*.af.mil → USA
@@ -11,13 +11,13 @@
  *    - @*.gc.ca, @*.forces.gc.ca → CAN
  *    - @*.mod.uk → GBR
  *    - Default: USA (with warning log)
- * 
+ *
  * 2. clearance missing → Default to UNCLASSIFIED (log enrichment)
- * 
+ *
  * 3. acpCOI missing → Default to empty array []
- * 
+ *
  * All enrichments are logged for audit trail compliance.
- * 
+ *
  * Security: Enrichment failures result in 403 Forbidden (fail-secure).
  */
 
@@ -37,7 +37,7 @@ const TRUSTED_FEDERATION_INSTANCES: string[] = (() => {
 /**
  * Email domain to country mapping
  * ISO 3166-1 alpha-3 country codes
- * 
+ *
  * Phase 3: Extended with comprehensive multi-IdP support
  * - Government/Military domains for all coalition partners
  * - Major defense contractors by headquarters country

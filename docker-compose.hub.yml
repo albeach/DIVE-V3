@@ -277,6 +277,9 @@ services:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"
       OPAL_SERVER_URL: https://opal-server:7002
       OPAL_DATA_TOPICS: policy_data
+      # Docker exec configuration for running OPA tests
+      OPA_CONTAINER: ${COMPOSE_PROJECT_NAME}-opa
+      OPA_POLICIES_PATH: /policies
     ports:
       - "127.0.0.1:${BACKEND_PORT:-4000}:4000"
     volumes:
@@ -288,6 +291,8 @@ services:
       - ./backend/certs:/app/certs:ro
       - ./backend/logs:/app/logs
       - ./config:/app/config:ro
+      # Docker socket for running OPA tests via docker exec
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - hub-internal
       - dive-v3-shared-network
