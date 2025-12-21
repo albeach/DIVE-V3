@@ -1,9 +1,10 @@
 /**
  * Policy Controller
  * Week 3.2: OPA Policy Viewer
- * 
+ * Enhanced with modular policy hierarchy support
+ *
  * REST API controllers for policy management (read-only)
- * Endpoints: GET /policies, GET /policies/:id, POST /policies/:id/test
+ * Endpoints: GET /policies, GET /policies/hierarchy, GET /policies/:id, POST /policies/:id/test
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -12,7 +13,10 @@ import {
     listPolicies,
     getPolicyById,
     testPolicyDecision,
-    getPolicyStats
+    getPolicyStats,
+    getPolicyHierarchy,
+    listPolicyUnitTests,
+    runPolicyUnitTests
 } from '../services/policy.service';
 import { IOPAInput } from '../types/policy.types';
 import { NotFoundError, ValidationError } from '../middleware/error.middleware';
@@ -38,6 +42,32 @@ export const listPoliciesHandler = async (
             policies,
             stats,
             count: policies.length,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Get policy hierarchy with dependency graph
+ * GET /api/policies/hierarchy
+ */
+export const getHierarchyHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+
+    try {
+        logger.info('Fetching policy hierarchy', { requestId });
+
+        const hierarchy = await getPolicyHierarchy();
+
+        res.json({
+            ...hierarchy,
             timestamp: new Date().toISOString()
         });
 
@@ -77,7 +107,7 @@ export const getPolicyHandler = async (
 /**
  * Test policy decision
  * POST /api/policies/:id/test
- * 
+ *
  * Body: IOPAInput
  * Returns: Decision with evaluation details
  */
@@ -106,6 +136,57 @@ export const testDecisionHandler = async (
         const result = await testPolicyDecision(opaInput);
 
         res.json(result);
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * List unit tests for a policy
+ * GET /api/policies/:id/unit-tests
+ */
+export const listUnitTestsHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+    const { id } = req.params;
+
+    try {
+        logger.info('Listing unit tests for policy', { requestId, policyId: id });
+
+        const unitTests = await listPolicyUnitTests(id);
+
+        res.json({
+            ...unitTests,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+/**
+ * Run unit tests for a policy
+ * POST /api/policies/:id/run-tests
+ */
+export const runUnitTestsHandler = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string;
+    const { id } = req.params;
+
+    try {
+        logger.info('Running unit tests for policy', { requestId, policyId: id });
+
+        const results = await runPolicyUnitTests(id);
+
+        res.json(results);
 
     } catch (error) {
         next(error);

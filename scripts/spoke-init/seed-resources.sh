@@ -1,11 +1,40 @@
 #!/usr/bin/env bash
 # =============================================================================
-# DIVE V3 Spoke Resource Seeding
+# DIVE V3 Spoke Resource Seeding (LEGACY - DEPRECATED)
 # =============================================================================
-# Seeds 5000 sample DIVE resources into MongoDB with even distribution
-# across classifications, releasability, and COIs
+# ⚠️  DEPRECATION NOTICE:
+#     This script creates LEGACY PLAINTEXT resources without ZTDF encryption.
+#     It is kept for backward compatibility only.
+#
+#     NEW DEPLOYMENTS SHOULD USE:
+#       npm run seed:instance -- --instance=<CODE> --count=5000
+#       OR
+#       ./dive --instance <code> seed 5000
+#
+#     Benefits of new seeding:
+#       ✓ Full ZTDF encryption with AES-256-GCM
+#       ✓ Locale-aware classification labels (ACP-240 Section 4.3)
+#       ✓ Multi-KAS key access objects
+#       ✓ COI-based community keys
+#       ✓ Policy-bound encryption
+#
 # Usage: ./seed-resources.sh <INSTANCE_CODE>
 # =============================================================================
+
+# Display deprecation warning
+echo ""
+echo "╔════════════════════════════════════════════════════════════════════╗"
+echo "║                     ⚠️  DEPRECATION WARNING ⚠️                      ║"
+echo "╠════════════════════════════════════════════════════════════════════╣"
+echo "║ This script creates PLAINTEXT resources (not ZTDF-encrypted)      ║"
+echo "║                                                                    ║"
+echo "║ For ACP-240 compliant ZTDF encryption, use:                       ║"
+echo "║   ./dive --instance <code> seed 5000                              ║"
+echo "║                                                                    ║"
+echo "║ Continuing in 5 seconds... (Ctrl+C to cancel)                    ║"
+echo "╚════════════════════════════════════════════════════════════════════╝"
+echo ""
+sleep 5
 
 set -e
 

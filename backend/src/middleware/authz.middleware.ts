@@ -19,7 +19,7 @@ import { auditService } from '../services/audit.service';
 // ============================================
 // Phase 5: Unified PEP using dive.authz entrypoint
 // Pattern: Validate JWT → Extract attributes → Fetch resource → Call OPA → Enforce decision
-// 
+//
 // Key Changes in Phase 5:
 // 1. Uses dive.authz endpoint (instead of dive.authorization)
 // 2. Tenant-aware context injection for multi-tenant isolation
@@ -389,7 +389,7 @@ const getRealmFromToken = (token: string): string => {
 /**
  * Get signing key from JWKS with multi-realm support
  * Uses direct JWKS fetch instead of jwks-rsa due to compatibility issues
- * 
+ *
  * Multi-Realm Migration (Oct 21, 2025):
  * - Dynamically determines JWKS URL based on token issuer
  * - Supports both dive-v3-broker and dive-v3-broker realms
@@ -505,7 +505,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 
 /**
  * Verify JWT token with dual-issuer support (multi-realm migration)
- * 
+ *
  * Multi-Realm Migration (Oct 21, 2025):
  * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
  * - Backward compatible: Existing tokens from dive-v3-broker still work
@@ -758,11 +758,11 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
 /**
  * Normalize ACR claim to numeric AAL level (Phase 1: Backward Compatibility)
- * 
+ *
  * Supports both formats during migration:
  * - Numeric format (new): 0=AAL1, 1=AAL2, 2=AAL3 (set by custom SPI session notes)
  * - URN format (legacy): urn:mace:incommon:iap:bronze/silver/gold (from hardcoded user attributes)
- * 
+ *
  * @param acr - ACR claim from JWT (string or number)
  * @returns Numeric AAL level (0 = AAL1, 1 = AAL2, 2 = AAL3)
  */
@@ -807,11 +807,11 @@ export function normalizeACR(acr: string | number | undefined): number {
 
 /**
  * Normalize AMR claim to array format (Phase 1: Backward Compatibility)
- * 
+ *
  * Supports both formats during migration:
  * - Array format (new): ["pwd", "otp"] (set by custom SPI session notes)
  * - JSON string format (legacy): "[\"pwd\",\"otp\"]" (from hardcoded user attributes)
- * 
+ *
  * @param amr - AMR claim from JWT (array or JSON string)
  * @returns Array of authentication methods
  */
@@ -847,23 +847,23 @@ export function normalizeAMR(amr: string | string[] | undefined): string[] {
 /**
  * Validate AAL2 (Authentication Assurance Level 2) requirements
  * Reference: docs/IDENTITY-ASSURANCE-LEVELS.md Lines 46-94
- * 
+ *
  * AAL2 Requirements (NIST SP 800-63B):
  * - Multi-factor authentication (MFA) required
  * - At least 2 authentication factors (something you know + something you have)
  * - ACR (Authentication Context Class Reference) indicates AAL2+
  * - AMR (Authentication Methods Reference) shows 2+ factors
- * 
+ *
  * Multi-Realm Note (Oct 21, 2025):
  * - Keycloak sets ACR to numeric values (0=AAL1, 1=AAL2, 2=AAL3)
  * - AMR may be JSON-encoded string from user attributes
  * - Must parse AMR before checking array length
- * 
+ *
  * Phase 1 (Oct 30, 2025):
  * - Uses normalizeACR() and normalizeAMR() for backward compatibility
  * - Supports both numeric and URN ACR formats
  * - Supports both array and JSON string AMR formats
- * 
+ *
  * @param token - Decoded Keycloak token
  * @param classification - Resource classification level
  * @throws Error if AAL2 requirements not met for classified resources
@@ -1099,7 +1099,7 @@ const getUserFriendlyDenialMessage = (
 
 /**
  * Valid federation instances that can make inter-instance requests
- * 
+ *
  * DYNAMIC CONFIGURATION:
  * - TRUSTED_FEDERATION_INSTANCES env var: comma-separated list of trusted instance codes
  * - Default includes USA (Hub), FRA, GBR, DEU for backward compatibility
@@ -1125,7 +1125,7 @@ logger.info('Trusted federation instances configured', {
  * JWT Authentication middleware (Week 3.2)
  * Verifies JWT token and attaches user info to request
  * Does NOT call OPA - use for endpoints that need auth but handle authz separately
- * 
+ *
  * Federation Support:
  * - When X-Federated-From header is present from a trusted instance,
  *   we verify the federation partner's token and trust their user attributes
@@ -1404,7 +1404,7 @@ export const authzMiddleware = async (
         // ============================================
         const federatedFrom = req.headers['x-federated-from'] as string;
         const isFederatedRequest = federatedFrom && TRUSTED_FEDERATION_INSTANCES.includes(federatedFrom);
-        
+
         if (isFederatedRequest && (req as any).user) {
             // authenticateJWT already validated/decoded the token for federated requests
             logger.info('Federated request - using pre-authenticated user from authenticateJWT', {

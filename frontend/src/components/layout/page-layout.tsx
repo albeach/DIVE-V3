@@ -1,16 +1,16 @@
 /**
  * Page Layout Component
- * 
+ *
  * Unified layout wrapper for all application pages
  * Includes: Navigation + Breadcrumbs + Main Content + Mobile Bottom Nav
- * 
+ *
  * 🎨 INSTANCE-THEMED: Uses CSS variables from InstanceThemeProvider
  * for country-specific styling (USA, FRA, DEU, GBR, etc.)
- * 
+ *
  * Usage:
  * ```tsx
- * <PageLayout 
- *   user={session.user} 
+ * <PageLayout
+ *   user={session.user}
  *   breadcrumbs={[{ label: 'Resources', href: '/resources' }]}
  * >
  *   <YourPageContent />
@@ -40,27 +40,30 @@ interface PageLayoutProps {
     children: React.ReactNode;
     maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | '6xl' | '7xl' | 'full';
     className?: string;
+    /** Remove default padding for full-bleed page designs */
+    noPadding?: boolean;
 }
 
-export default function PageLayout({ 
-    user = {}, 
-    breadcrumbs, 
-    children, 
+export default function PageLayout({
+    user = {},
+    breadcrumbs,
+    children,
     maxWidth = '7xl',
-    className = ''
+    className = '',
+    noPadding = false
 }: PageLayoutProps) {
-    const maxWidthClass = maxWidth === 'full' ? '' : `max-w-${maxWidth} mx-auto`;
+    const maxWidthClass = maxWidth === 'full' || noPadding ? '' : `max-w-${maxWidth} mx-auto`;
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const { instanceCode, instanceName } = useInstanceTheme();
 
     return (
         <div className="min-h-screen bg-gray-50 pb-24 lg:pb-0">
             {/* Instance-themed subtle background accent */}
-            <div 
+            <div
                 className="fixed top-0 left-0 right-0 h-1 z-[60]"
                 style={{ background: 'var(--instance-banner-bg)' }}
             />
-            
+
             {/* Navigation Bar */}
             <Navigation user={user} />
 
@@ -70,7 +73,7 @@ export default function PageLayout({
             )}
 
             {/* Main Content */}
-            <main className={`${maxWidthClass} px-4 sm:px-6 lg:px-8 py-8 ${className}`}>
+            <main className={`${maxWidthClass} ${noPadding ? '' : 'px-4 sm:px-6 lg:px-8 py-8'} ${className}`}>
                 {children}
             </main>
 
