@@ -6,11 +6,11 @@ import Link from 'next/link';
 import {
   Layers,
   GitBranch,
-  FlaskConical,
-  Edit3,
+  Sparkles,
   BookOpen,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ArrowRight
 } from 'lucide-react';
 import type { IPolicyHierarchy, PolicyLayer } from '@/types/policy.types';
 import { LAYER_CONFIGS } from '@/types/policy.types';
@@ -76,6 +76,10 @@ export default function PoliciesPageClient({ hierarchy }: PoliciesPageClientProp
         >
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-6">
             <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-teal-300 text-xs font-medium mb-3">
+                <BookOpen className="w-3 h-3" />
+                Policy Library
+              </div>
               <h1 className="text-3xl lg:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-100 to-gray-400 mb-3">
                 Authorization Policy Suite
               </h1>
@@ -85,22 +89,19 @@ export default function PoliciesPageClient({ hierarchy }: PoliciesPageClientProp
               </p>
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-2">
+            {/* CTA to Sandbox */}
+            <div className="flex flex-col gap-3">
               <Link
-                href="/policies/lab"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800/80 border border-slate-700/50 hover:border-teal-500/30 text-gray-200 text-sm font-medium transition-all hover:shadow-lg hover:shadow-teal-500/10"
+                href="/policies/sandbox"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white text-sm font-semibold transition-all hover:from-cyan-400 hover:to-purple-500 shadow-lg shadow-cyan-500/25 group"
               >
-                <FlaskConical className="w-4 h-4 text-teal-400" />
-                Policies Lab
+                <Sparkles className="w-5 h-5" />
+                Open Policy Sandbox
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
-              <Link
-                href="/policies/editor"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-500/10 border border-teal-500/30 hover:bg-teal-500/20 text-teal-300 text-sm font-medium transition-all"
-              >
-                <Edit3 className="w-4 h-4" />
-                Open Editor
-              </Link>
+              <p className="text-xs text-gray-500 text-center">
+                Create, test, and refine custom policies
+              </p>
             </div>
           </div>
 

@@ -35,11 +35,17 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
   const fetchPolicies = async () => {
     try {
       setLoading(true);
+      setError('');
       const response = await fetch('/api/policies-lab/list', {
         credentials: 'include', // Required for session cookies to be sent
       });
-      
+
       if (!response.ok) {
+        // Handle auth errors gracefully - just show empty state
+        if (response.status === 401 || response.status === 403) {
+          setPolicies([]);
+          return;
+        }
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to fetch policies');
       }
@@ -47,6 +53,13 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
       const data = await response.json();
       setPolicies(data.policies || []);
     } catch (err) {
+      // Don't show auth-related errors, just show empty state
+      const errorMessage = err instanceof Error ? err.message : '';
+      if (errorMessage.toLowerCase().includes('access token') ||
+          errorMessage.toLowerCase().includes('unauthorized')) {
+        setPolicies([]);
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to load policies');
     } finally {
       setLoading(false);
@@ -116,7 +129,7 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
       toast.success(`✅ Loaded ${data.count} sample policies`, {
         description: data.policies?.join(', ') || '',
       });
-      
+
       // Refresh list
       fetchPolicies();
     } catch (err) {
@@ -278,8 +291,8 @@ export default function PolicyListTab({ refreshTrigger }: PolicyListTabProps) {
       {policies.length >= 8 && (
         <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
           <p className="text-sm text-amber-800">
-            ⚠️ You have {policies.length}/10 policies uploaded. 
-            {policies.length >= 10 
+            ⚠️ You have {policies.length}/10 policies uploaded.
+            {policies.length >= 10
               ? ' Delete some policies to upload new ones.'
               : ` ${10 - policies.length} remaining.`
             }

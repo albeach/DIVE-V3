@@ -2,6 +2,13 @@
 # DIVE V3 Git Ignore
 # ============================================
 
+# Root-level markdown files (local notes, not tracked)
+/*.md
+!README.md
+
+# Root-level shell scripts (one-off fixes, not tracked)
+/*.sh
+
 # Documentation files (moved to docs/ - keep local only)
 docs/*.md
 !docs/README.md
