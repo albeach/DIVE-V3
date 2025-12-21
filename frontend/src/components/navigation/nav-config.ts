@@ -21,6 +21,9 @@ import {
     FlaskConical,
     Building2,
     FileEdit,
+    Sparkles,
+    Hammer,
+    FolderOpen,
     LucideIcon
 } from 'lucide-react';
 
@@ -143,19 +146,19 @@ export const navItems: NavItem[] = [
         hasMegaMenu: true,
         megaMenuItems: [
             {
-                category: 'Policy Management',
+                category: 'Explore',
                 items: [
-                    { name: 'Browse Policies', href: '/policies', icon: ScrollText },
-                    { name: 'Policy Editor', href: '/policies/editor', icon: FileEdit },
-                    { name: 'Policy Lab', href: '/policies/lab', icon: FlaskConical },
+                    { name: 'Policy Library', href: '/policies', icon: Library },
+                    { name: 'Policy Sandbox', href: '/policies/sandbox', icon: Sparkles },
                 ]
             },
             {
-                category: 'Lab Workspaces',
+                category: 'Sandbox Workspaces',
                 items: [
-                    { name: 'Evaluate', href: '/policies/lab?tab=evaluate', icon: ScrollText },
-                    { name: 'Compare', href: '/policies/lab?tab=compare', icon: CheckCircle2 },
-                    { name: 'Upload Policy', href: '/policies/lab?tab=upload', icon: ArrowUpCircle },
+                    { name: 'Builder', href: '/policies/sandbox?tab=builder', icon: Hammer },
+                    { name: 'My Policies', href: '/policies/sandbox?tab=policies', icon: FolderOpen },
+                    { name: 'Test', href: '/policies/sandbox?tab=test', icon: FlaskConical },
+                    { name: 'Reference', href: '/policies/sandbox?tab=reference', icon: BookOpen },
                 ]
             },
             {

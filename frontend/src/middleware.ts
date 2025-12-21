@@ -3,20 +3,20 @@ import type { NextRequest } from "next/server";
 
 /**
  * Edge Middleware for Security Headers
- * 
+ *
  * ✅ SECURITY: Configurable CSP for secure/air-gapped environments
  * - No hard-coded third-party dependencies
  * - External domains only included when explicitly configured
  * - Suitable for classified networks and restricted environments
- * 
- * NOTE: Edge Runtime CANNOT use auth() with database adapter  
+ *
+ * NOTE: Edge Runtime CANNOT use auth() with database adapter
  * (postgres-js requires Node.js 'net' module which Edge Runtime doesn't support)
- * 
+ *
  * Authentication/authorization is handled by:
  * 1. NextAuth route handlers (run in Node.js runtime, CAN access database)
  * 2. authorized() callback in auth.ts (called by route handlers, NOT middleware)
  * 3. Server components checking auth() in layouts/pages
- * 
+ *
  * This middleware ONLY sets security headers (CSP, etc.)
  */
 export function middleware(req: NextRequest) {
