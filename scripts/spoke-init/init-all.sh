@@ -117,16 +117,60 @@ echo ""
 # Use the TypeScript ZTDF seeding script via docker exec
 # This creates properly encrypted resources with full ADatP-5663/ACP-240 compliance
 BACKEND_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
-if docker ps --format '{{.Names}}' | grep -q "^${BACKEND_CONTAINER}$"; then
-    echo -e "${BLUE}ℹ${NC} Using ZTDF seeding script (npm run seed:instance)"
-    docker exec "${BACKEND_CONTAINER}" npm run seed:instance -- --instance="${INSTANCE_CODE}" --count=5000 2>&1 || {
-        echo -e "${YELLOW}⚠${NC} ZTDF seeding failed, falling back to basic seeding..."
-        "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}"
-    }
-else
-    echo -e "${YELLOW}⚠${NC} Backend container not running, using basic seeding..."
-    "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}"
+
+# Wait for backend container to be ready (up to 60 seconds)
+echo -e "${BLUE}ℹ${NC} Checking backend container availability..."
+for i in {1..60}; do
+    if docker ps --format '{{.Names}}' | grep -q "^${BACKEND_CONTAINER}$"; then
+        # Additional check: ensure node_modules are installed
+        if docker exec "${BACKEND_CONTAINER}" test -d /app/node_modules 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Backend container ready"
+            break
+        fi
+    fi
+
+    if [ $i -eq 60 ]; then
+        echo -e "${RED}✗${NC} Backend container not available after 60 seconds"
+        echo -e "${RED}✗${NC} Cannot seed resources without backend container"
+        echo -e "${YELLOW}⚠${NC} Please check: docker ps | grep ${BACKEND_CONTAINER}"
+        exit 1
+    fi
+
+    if [ $((i % 10)) -eq 0 ]; then
+        echo -e "${YELLOW}⏳${NC} Waiting for backend container... ($i/60s)"
+    fi
+    sleep 1
+done
+
+# Seed ZTDF-encrypted resources (REQUIRED - no fallback to plaintext)
+echo -e "${BLUE}ℹ${NC} Seeding 5000 ZTDF-encrypted resources with locale-aware classifications..."
+echo -e "${BLUE}ℹ${NC} This may take 2-3 minutes for full encryption and validation..."
+
+if ! docker exec "${BACKEND_CONTAINER}" npm run seed:instance -- \
+    --instance="${INSTANCE_CODE}" \
+    --count=5000 \
+    --replace 2>&1 | tee /tmp/seed-${CODE_LOWER}.log; then
+    echo -e "${RED}✗${NC} ZTDF seeding failed"
+    echo -e "${RED}✗${NC} Check logs: /tmp/seed-${CODE_LOWER}.log"
+    echo -e "${YELLOW}⚠${NC} All resources MUST be ZTDF-encrypted per ACP-240 compliance"
+    exit 1
 fi
+
+echo -e "${GREEN}✓${NC} ZTDF resources seeded successfully"
+
+# Verify ZTDF encryption
+echo -e "${BLUE}ℹ${NC} Verifying ZTDF encryption..."
+MONGO_CONTAINER="dive-spoke-${CODE_LOWER}-mongodb"
+ZTDF_COUNT=$(docker exec "${MONGO_CONTAINER}" mongosh --quiet \
+    "mongodb://admin:\${MONGO_INITDB_ROOT_PASSWORD}@localhost:27017/dive-v3-${CODE_LOWER}?authSource=admin" \
+    --eval "db.resources.countDocuments({ 'ztdf.manifest': { \$exists: true } })" 2>/dev/null | tail -1 || echo "0")
+
+if [ "${ZTDF_COUNT:-0}" -lt 4900 ]; then
+    echo -e "${RED}✗${NC} ZTDF verification failed: only ${ZTDF_COUNT} of 5000 resources are ZTDF-encrypted"
+    exit 1
+fi
+
+echo -e "${GREEN}✓${NC} Verified ${ZTDF_COUNT} ZTDF-encrypted resources"
 
 # =============================================================================
 # Step 5: Sync Federation Secrets (if Hub is running)

@@ -710,7 +710,14 @@ export const federatedStatusHandler = async (
                         available: true,
                         latencyMs: Date.now() - checkStart
                     };
-                } catch {
+                } catch (error: any) {
+                    logger.warn('Health check failed for instance', {
+                        instance: instance.code,
+                        apiUrl: instance.apiUrl,
+                        error: error.message,
+                        code: error.code,
+                        latencyMs: Date.now() - checkStart
+                    });
                     return {
                         code: instance.code,
                         apiUrl: instance.apiUrl,

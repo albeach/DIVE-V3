@@ -1,9 +1,9 @@
 /**
  * useInfiniteScroll Hook
- * 
+ *
  * Phase 1: Performance Foundation
  * Cursor-based infinite scroll for large datasets
- * 
+ *
  * Features:
  * - Cursor-based pagination (more efficient than offset)
  * - Intersection Observer for auto-loading
@@ -142,6 +142,8 @@ async function defaultFetchFn<T>(params: {
   federated?: boolean;
   signal?: AbortSignal;
 }): Promise<IPaginatedSearchResponse<T>> {
+  // The /api/resources/search endpoint automatically handles federated search
+  // based on the instances parameter - no need to call a separate endpoint
   const response = await fetch('/api/resources/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -203,7 +205,7 @@ export function useInfiniteScroll<T = any>({
   const [filters, setFiltersState] = useState<ISearchFilters>(initialFilters);
   const [sort, setSortState] = useState<ISortOptions>(initialSort);
   const [timing, setTiming] = useState<{ searchMs: number; facetMs: number; totalMs: number } | null>(null);
-  
+
   // Track if we've successfully fetched data at least once
   const [hasFetched, setHasFetched] = useState(false);
 
@@ -224,7 +226,7 @@ export function useInfiniteScroll<T = any>({
     currentSort: ISortOptions = sort
   ) => {
     console.log('[useInfiniteScroll] fetchData called:', { isInitial, loadingRef: loadingRef.current });
-    
+
     // Prevent concurrent requests; allow hard refresh (initial=true) to preempt
     if (loadingRef.current) {
       if (isInitial) {
@@ -267,9 +269,9 @@ export function useInfiniteScroll<T = any>({
         signal: abortControllerRef.current.signal,
       });
 
-      console.log('[useInfiniteScroll] Fetch success:', { 
-        resultCount: response.results?.length, 
-        totalCount: response.pagination?.totalCount 
+      console.log('[useInfiniteScroll] Fetch success:', {
+        resultCount: response.results?.length,
+        totalCount: response.pagination?.totalCount
       });
 
       // Update state
@@ -403,13 +405,13 @@ export function useInfiniteScroll<T = any>({
 
   useEffect(() => {
     console.log('[useInfiniteScroll] Initial load effect:', { enabled, hasFetched });
-    
+
     // Don't fetch until enabled (e.g., waiting for auth)
     if (!enabled) {
       console.log('[useInfiniteScroll] Not enabled, skipping fetch');
       return;
     }
-    
+
     // Only fetch if we haven't fetched yet
     if (!hasFetched) {
       console.log('[useInfiniteScroll] Triggering initial fetch');

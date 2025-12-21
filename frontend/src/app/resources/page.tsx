@@ -1,6 +1,6 @@
 /**
  * Resources Page - Clean Layout
- * 
+ *
  * Simplified layout with:
  * - Command palette search (press "/" to open)
  * - Horizontal filter pills (modern design)
@@ -39,8 +39,8 @@ import { SmartFederationSelector } from '@/components/ui/smart-federation-select
 
 import type { IResourceCardData, ViewMode } from '@/components/resources/advanced-resource-card';
 
-import { 
-  useInfiniteScroll, 
+import {
+  useInfiniteScroll,
   useKeyboardNavigation,
   useBookmarks,
 } from '@/hooks';
@@ -114,9 +114,9 @@ export default function ResourcesPage() {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [mobileDrawerResource, setMobileDrawerResource] = useState<IResourceCardData | null>(null);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
-  
+
   const { bookmarks, isItemBookmarked, toggle: toggleBookmark } = useBookmarks();
-  
+
   const [selectedFilters, setSelectedFilters] = useState<ISelectedFilters>({
     classifications: [],
     countries: [],
@@ -218,40 +218,44 @@ export default function ResourcesPage() {
     enableVimNavigation: true,
   });
 
-  // Load Federation IdPs from API
+  // Load Federation IdPs from API (with online status check)
   useEffect(() => {
     async function loadFederationIdPs() {
       setIsLoadingIdPs(true);
       try {
-        const response = await fetch('/api/idps/public');
-        if (response.ok) {
-          const data = await response.json();
-          // data can be { idps: [...] } or direct array
-          const idpList: IFederationIdP[] = Array.isArray(data) ? data : (data.idps || data.data || []);
-          
-          // Filter enabled IdPs and extract instance codes
-          const enabledIdPs = idpList.filter((idp: IFederationIdP) => idp.enabled);
-          setFederationIdPs(enabledIdPs);
-          
-          // Extract instance codes from aliases (e.g., "usa-idp" -> "USA")
-          const codes = enabledIdPs
-            .map((idp: IFederationIdP) => {
-              // Try instanceCode first, then extract from alias
-              if (idp.instanceCode) return idp.instanceCode.toUpperCase();
-              const match = idp.alias?.match(/^([a-z]{2,3})-idp$/i);
-              return match ? match[1].toUpperCase() : null;
-            })
-            .filter((code): code is string => code !== null);
-          
-          // Always include current instance
-          const uniqueCodes = Array.from(new Set([CURRENT_INSTANCE, ...codes]));
-          setFederationInstances(uniqueCodes);
-          
-          console.log('[Resources] Loaded federation IdPs:', uniqueCodes);
-        } else {
+        // Step 1: Get list of configured IdPs
+        const idpsResponse = await fetch('/api/idps/public');
+        if (!idpsResponse.ok) {
           console.warn('[Resources] Failed to load IdPs, using fallback');
           setFederationInstances([CURRENT_INSTANCE]);
+          setIsLoadingIdPs(false);
+          return;
         }
+
+        const idpsData = await idpsResponse.json();
+        const idpList: IFederationIdP[] = Array.isArray(idpsData) ? idpsData : (idpsData.idps || idpsData.data || []);
+        const enabledIdPs = idpList.filter((idp: IFederationIdP) => idp.enabled);
+        setFederationIdPs(enabledIdPs);
+
+        // Extract instance codes from aliases
+        const allCodes = enabledIdPs
+          .map((idp: IFederationIdP) => {
+            if (idp.instanceCode) return idp.instanceCode.toUpperCase();
+            const match = idp.alias?.match(/^([a-z]{2,3})-idp$/i);
+            return match ? match[1].toUpperCase() : null;
+          })
+          .filter((code): code is string => code !== null);
+
+        // Step 2: Always show all configured IdPs (health checks can timeout)
+        // The backend will handle unavailable instances gracefully during actual federated search
+        const uniqueCodes = Array.from(new Set([CURRENT_INSTANCE, ...allCodes]));
+        setFederationInstances(uniqueCodes);
+
+        console.log('[Resources] Loaded federation IdPs:', {
+          total: uniqueCodes.length,
+          instances: uniqueCodes
+        });
+
       } catch (error) {
         console.error('[Resources] Error loading federation IdPs:', error);
         setFederationInstances([CURRENT_INSTANCE]);
@@ -300,7 +304,7 @@ export default function ResourcesPage() {
     const newMode = !federatedMode;
     setFederatedMode(newMode);
     try { localStorage.setItem(FEDERATED_MODE_KEY, String(newMode)); } catch (e) {}
-    
+
     // When enabling federated mode, auto-include user's home country
     // This ensures a HUN user sees HUN resources when federated mode is activated
     let instancesToUse = selectedInstances;
@@ -311,7 +315,7 @@ export default function ResourcesPage() {
         setSelectedInstances(instancesToUse);
       }
     }
-    
+
     setFilters({ ...filters, instances: newMode ? instancesToUse : undefined });
   }, [federatedMode, selectedInstances, filters, setFilters, session?.user?.countryOfAffiliation]);
 
@@ -348,7 +352,7 @@ export default function ResourcesPage() {
       countries: newFilters.countries.length > 0 ? newFilters.countries : undefined,
       cois: newFilters.cois.length > 0 ? newFilters.cois : undefined,
       instances: federatedMode ? newFilters.instances : undefined,
-      encrypted: newFilters.encryptionStatus === 'encrypted' ? true : 
+      encrypted: newFilters.encryptionStatus === 'encrypted' ? true :
                  newFilters.encryptionStatus === 'unencrypted' ? false : undefined,
       dateRange: newFilters.dateRange,
     });
@@ -364,7 +368,7 @@ export default function ResourcesPage() {
   }, [setSort]);
 
   const handlePreviewNavigate = useCallback((direction: 'prev' | 'next') => {
-    const newIndex = direction === 'prev' 
+    const newIndex = direction === 'prev'
       ? Math.max(0, previewIndex - 1)
       : Math.min(resources.length - 1, previewIndex + 1);
     setPreviewIndex(newIndex);
@@ -389,8 +393,8 @@ export default function ResourcesPage() {
   }, [handleFilterChange]);
 
   // Derived state
-  const selectedResourcesForBulk = useMemo(() => 
-    resources.filter(r => navState.selectedKeys.has(r.resourceId)), 
+  const selectedResourcesForBulk = useMemo(() =>
+    resources.filter(r => navState.selectedKeys.has(r.resourceId)),
     [resources, navState.selectedKeys]
   );
 
@@ -472,8 +476,8 @@ export default function ResourcesPage() {
             <button
               onClick={() => !federatedMode || handleFederatedModeToggle()}
               className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                !federatedMode 
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' 
+                !federatedMode
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
@@ -486,8 +490,8 @@ export default function ResourcesPage() {
             <button
               onClick={() => federatedMode || handleFederatedModeToggle()}
               className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                federatedMode 
-                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
+                federatedMode
+                  ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
@@ -723,8 +727,8 @@ export default function ResourcesPage() {
         isOpen={showMobileFilters}
         onClose={() => setShowMobileFilters(false)}
         facets={{
-          classifications: CLASSIFICATION_OPTIONS.map(o => ({ 
-            value: o.value, label: o.label, count: facets?.classifications?.find(c => c.value === o.value)?.count || 0 
+          classifications: CLASSIFICATION_OPTIONS.map(o => ({
+            value: o.value, label: o.label, count: facets?.classifications?.find(c => c.value === o.value)?.count || 0
           })),
           countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],
           cois: facets?.cois?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],

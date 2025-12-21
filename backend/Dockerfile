@@ -35,6 +35,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Install Docker CLI for running OPA tests via docker exec
+RUN apk add --no-cache docker-cli
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 expressjs

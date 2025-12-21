@@ -3382,12 +3382,12 @@ spoke_verify() {
     fi
 
     # Track results
-    local checks_total=12
+    local checks_total=13
     local checks_passed=0
     local checks_failed=0
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  Running 12-Point Spoke Verification (Phase 6)${NC}"
+    echo -e "${CYAN}  Running 13-Point Spoke Verification (Phase 6 + ZTDF)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -3631,6 +3631,46 @@ spoke_verify() {
         fi
     fi
 
+    # Check 13: ZTDF Resource Encryption
+    printf "  %-35s" "13. ZTDF Resource Encryption:"
+    local mongo_container="dive-spoke-${code_lower}-mongodb"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$"; then
+        local mongo_pass
+        mongo_pass=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
+        local mongo_uri="mongodb://localhost:27017/dive-v3-${code_lower}?authSource=admin"
+
+        if [ -n "$mongo_pass" ]; then
+            mongo_uri="mongodb://admin:${mongo_pass}@localhost:27017/dive-v3-${code_lower}?authSource=admin"
+        fi
+
+        # Count ZTDF encrypted resources
+        local ztdf_count
+        ztdf_count=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+            --eval "db.resources.countDocuments({ 'ztdf.manifest': { \$exists: true } })" 2>/dev/null | tail -1 || echo "0")
+
+        # Count total resources
+        local total_count
+        total_count=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+            --eval "db.resources.countDocuments({})" 2>/dev/null | tail -1 || echo "0")
+
+        if [ "${total_count:-0}" -eq 0 ]; then
+            echo -e "${YELLOW}⚠ No resources (run: ./dive seed)${NC}"
+            ((checks_passed++))  # Not a failure, just empty
+        elif [ "${ztdf_count:-0}" -ge "$((total_count * 98 / 100))" ]; then
+            local pct=$((ztdf_count * 100 / total_count))
+            echo -e "${GREEN}✓ ${ztdf_count}/${total_count} (${pct}%)${NC}"
+            ((checks_passed++))
+        else
+            local pct=$((ztdf_count * 100 / total_count))
+            echo -e "${RED}✗ Only ${ztdf_count}/${total_count} (${pct}%)${NC}"
+            ((checks_failed++))
+        fi
+    else
+        echo -e "${RED}✗ MongoDB not running${NC}"
+        ((checks_failed++))
+    fi
+
     # Summary
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -3643,12 +3683,34 @@ spoke_verify() {
     echo ""
 
     if [ $checks_failed -eq 0 ]; then
-        echo -e "${GREEN}✓ All 12 verification checks passed!${NC}"
+        echo -e "${GREEN}✓ All 13 verification checks passed!${NC}"
         echo ""
         return 0
     else
         echo -e "${YELLOW}⚠ Some checks failed. See above for details.${NC}"
         echo ""
+
+        # Provide specific guidance for ZTDF failure
+        if docker ps --format '{{.Names}}' | grep -q "^dive-spoke-${code_lower}-mongodb$"; then
+            local mongo_container="dive-spoke-${code_lower}-mongodb"
+            local mongo_pass=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
+            local mongo_uri="mongodb://localhost:27017/dive-v3-${code_lower}?authSource=admin"
+            if [ -n "$mongo_pass" ]; then
+                mongo_uri="mongodb://admin:${mongo_pass}@localhost:27017/dive-v3-${code_lower}?authSource=admin"
+            fi
+
+            local ztdf_count=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+                --eval "db.resources.countDocuments({ 'ztdf.manifest': { \$exists: true } })" 2>/dev/null | tail -1 || echo "0")
+            local total_count=$(docker exec "$mongo_container" mongosh --quiet "$mongo_uri" \
+                --eval "db.resources.countDocuments({})" 2>/dev/null | tail -1 || echo "0")
+
+            if [ "${total_count:-0}" -gt 0 ] && [ "${ztdf_count:-0}" -lt "$((total_count * 98 / 100))" ]; then
+                echo -e "${YELLOW}💡 Tip:${NC} Found plaintext resources. Re-seed with ZTDF encryption:"
+                echo "      ./dive --instance ${code_lower} seed 5000"
+                echo ""
+            fi
+        fi
+
         return 1
     fi
 }

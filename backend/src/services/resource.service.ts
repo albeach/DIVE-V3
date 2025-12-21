@@ -214,7 +214,7 @@ export async function queryResources(
 /**
  * Search resources with filters
  * Phase 4, Task 3.2: Federated Resource Discovery
- * 
+ *
  * @param options Search options
  * @returns Matching resources
  */
@@ -399,7 +399,7 @@ export const FEDERATION_API_URLS: Record<string, string> = {
 /**
  * Get resource by ID with federation support
  * First checks local MongoDB, then queries origin instance if different
- * 
+ *
  * @param resourceId - The resource ID to fetch
  * @param authToken - Bearer token to forward to federated instance
  * @returns Resource data or null if not found/not authorized
@@ -444,7 +444,7 @@ export async function getResourceByIdFederated(
     // Step 3: Proxy request to origin instance
     // First check static config, then check Hub-Spoke Registry for dynamic spokes
     let originApiUrl = FEDERATION_API_URLS[originInstance];
-    
+
     if (!originApiUrl) {
         // Check Hub-Spoke Registry for dynamically registered spokes
         try {
@@ -465,7 +465,7 @@ export async function getResourceByIdFederated(
             });
         }
     }
-    
+
     if (!originApiUrl) {
         logger.error('No API URL configured for origin instance', { originInstance, resourceId });
         return { resource: null, source: 'federated', error: `Unknown federation instance: ${originInstance}` };

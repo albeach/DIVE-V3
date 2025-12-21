@@ -1,9 +1,9 @@
 /**
  * Paginated Search Controller
- * 
+ *
  * Phase 1: Performance Foundation
  * Server-side cursor-based pagination for 28K+ documents
- * 
+ *
  * Features:
  * - Cursor-based pagination (more efficient than offset for large datasets)
  * - Facet aggregation for filter counts
@@ -189,7 +189,7 @@ export const paginatedSearchHandler = async (
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
   const startTime = Date.now();
-  
+
   try {
     const body: IPaginatedSearchRequest = req.body;
     const {
@@ -242,7 +242,7 @@ export const paginatedSearchHandler = async (
     const allowedClassifications = Object.entries(CLEARANCE_ORDER)
       .filter(([_, level]) => level <= userClearanceLevel)
       .map(([name]) => name);
-    
+
     // Classification can be in top-level field OR nested in ztdf.policy.securityLabel
     mongoFilter.$and = mongoFilter.$and || [];
     mongoFilter.$and.push({
@@ -250,7 +250,7 @@ export const paginatedSearchHandler = async (
         { classification: { $in: allowedClassifications } },
         { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
         // Also allow null/missing classification (treat as UNCLASSIFIED)
-        { 
+        {
           $and: [
             { classification: { $exists: false } },
             { 'ztdf.policy.securityLabel.classification': { $exists: false } }
@@ -333,7 +333,7 @@ export const paginatedSearchHandler = async (
         mongoFilter.$and = mongoFilter.$and || [];
         advancedFilters.fieldFilters.forEach(filter => {
           const condition: any = {};
-          
+
           switch (filter.operator) {
             case '=':
               // Handle array fields
@@ -370,7 +370,7 @@ export const paginatedSearchHandler = async (
             default:
               condition[filter.field] = filter.value;
           }
-          
+
           mongoFilter.$and.push(condition);
         });
       }
@@ -411,8 +411,16 @@ export const paginatedSearchHandler = async (
     }
 
     // Instance/Origin filter
+    // Check multiple possible fields: originRealm, instanceCode, or instance
     if (filters.instances && filters.instances.length > 0) {
-      mongoFilter.originRealm = { $in: filters.instances };
+      mongoFilter.$and = mongoFilter.$and || [];
+      mongoFilter.$and.push({
+        $or: [
+          { originRealm: { $in: filters.instances } },
+          { instanceCode: { $in: filters.instances } },
+          { instance: { $in: filters.instances } }
+        ]
+      });
     }
 
     // Encryption filter
@@ -440,9 +448,9 @@ export const paginatedSearchHandler = async (
                       sort.field === 'resourceId' ? 'resourceId' :
                       sort.field === 'relevance' ? 'title' : 'title';
     const sortOrder = sort.order === 'desc' ? -1 : 1;
-    
+
     let sortCriteria: any;
-    
+
     if (useTextScore && sort.field === 'relevance') {
       // Sort by text search relevance score
       sortCriteria = { score: { $meta: 'textScore' }, _id: -1 };
@@ -462,13 +470,13 @@ export const paginatedSearchHandler = async (
         const cursorCondition = sortOrder === 1
           ? { $gt: cursorData.sortValue }
           : { $lt: cursorData.sortValue };
-        
+
         mongoFilter.$and = mongoFilter.$and || [];
         mongoFilter.$and.push({
           $or: [
             { [sortField]: cursorCondition },
-            { 
-              [sortField]: cursorData.sortValue, 
+            {
+              [sortField]: cursorData.sortValue,
               _id: { [sortOrder === 1 ? '$gt' : '$lt']: new ObjectId(cursorData.id) }
             }
           ]
@@ -480,12 +488,12 @@ export const paginatedSearchHandler = async (
     // Execute Search Query
     // ========================================
     const searchStart = Date.now();
-    
+
     // Build projection (include text score if using text search)
-    const projection = useTextScore 
-      ? { score: { $meta: 'textScore' } } 
+    const projection = useTextScore
+      ? { score: { $meta: 'textScore' } }
       : undefined;
-    
+
     // Fetch one extra to determine if there are more results
     const rawResults = await collection
       .find(mongoFilter, projection ? { projection } : undefined)
@@ -505,7 +513,7 @@ export const paginatedSearchHandler = async (
     const filteredResults = results.filter((resource: WithId<Document>) => {
       const resourceClassification = getClassification(resource);
       const resourceClearanceLevel = CLEARANCE_ORDER[resourceClassification] ?? 0;
-      
+
       // Safety check 1: Clearance level
       if (userClearanceLevel < resourceClearanceLevel) {
         logger.warn('ABAC safety filter caught unauthorized document', {
@@ -516,7 +524,7 @@ export const paginatedSearchHandler = async (
         });
         return false;
       }
-      
+
       // Safety check 2: Releasability (if user country known)
       if (userCountry) {
         const releasability = getReleasability(resource);
@@ -533,7 +541,7 @@ export const paginatedSearchHandler = async (
           return false;
         }
       }
-      
+
       return true;
     });
 
@@ -545,18 +553,18 @@ export const paginatedSearchHandler = async (
 
     if (includeFacets) {
       const facetStart = Date.now();
-      
+
       // Build ABAC-constrained base filter for facets
       // This ensures facet counts only include documents the user can access
       // But does NOT include user-selected filters (so they can see all options)
       const abacFilter: any = { $and: [] };
-      
+
       // ABAC: Clearance filter
       abacFilter.$and.push({
         $or: [
           { classification: { $in: allowedClassifications } },
           { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
-          { 
+          {
             $and: [
               { classification: { $exists: false } },
               { 'ztdf.policy.securityLabel.classification': { $exists: false } }
@@ -564,7 +572,7 @@ export const paginatedSearchHandler = async (
           }
         ]
       });
-      
+
       // ABAC: Releasability filter
       if (userCountry) {
         abacFilter.$and.push({
@@ -578,7 +586,7 @@ export const paginatedSearchHandler = async (
           ]
         });
       }
-      
+
       // Add text query if present
       if (query && query.trim()) {
         abacFilter.$and.push({
@@ -588,7 +596,7 @@ export const paginatedSearchHandler = async (
           ]
         });
       }
-      
+
       // Build facet aggregation pipeline with ABAC filter
       const facetPipeline = [
         // Match ABAC-constrained documents (user can access)
@@ -612,9 +620,9 @@ export const paginatedSearchHandler = async (
         {
           $facet: {
             classifications: [
-              { $group: { 
-                _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] }, 
-                count: { $sum: 1 } 
+              { $group: {
+                _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] },
+                count: { $sum: 1 }
               }},
               { $match: { _id: { $ne: null } } },
               { $sort: { count: -1 } }
@@ -638,9 +646,9 @@ export const paginatedSearchHandler = async (
               { $sort: { count: -1 } }
             ],
             encryptionStatus: [
-              { $group: { 
-                _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] }, 
-                count: { $sum: 1 } 
+              { $group: {
+                _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] },
+                count: { $sum: 1 }
               }},
               { $sort: { _id: 1 } }
             ],
@@ -657,25 +665,25 @@ export const paginatedSearchHandler = async (
       if (facetResults.length > 0) {
         const fr = facetResults[0];
         facets = {
-          classifications: (fr.classifications || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          classifications: (fr.classifications || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          countries: (fr.countries || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          countries: (fr.countries || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          cois: (fr.cois || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          cois: (fr.cois || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          instances: (fr.instances || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          instances: (fr.instances || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
         };
       }
@@ -686,7 +694,7 @@ export const paginatedSearchHandler = async (
     // ========================================
     // Build count filter with same ABAC constraints as search query
     const countFilter: any = { $and: [] };
-    
+
     // Text search filter (if provided)
     if (query && query.trim()) {
       countFilter.$and.push({
@@ -696,13 +704,13 @@ export const paginatedSearchHandler = async (
         ]
       });
     }
-    
+
     // ABAC: Classification filter
     countFilter.$and.push({
       $or: [
         { classification: { $in: allowedClassifications } },
         { 'ztdf.policy.securityLabel.classification': { $in: allowedClassifications } },
-        { 
+        {
           $and: [
             { classification: { $exists: false } },
             { 'ztdf.policy.securityLabel.classification': { $exists: false } }
@@ -710,7 +718,7 @@ export const paginatedSearchHandler = async (
         }
       ]
     });
-    
+
     // ABAC: Releasability filter
     if (userCountry) {
       countFilter.$and.push({
@@ -724,7 +732,7 @@ export const paginatedSearchHandler = async (
         ]
       });
     }
-    
+
     // Get ABAC-filtered total count
     const totalCount = await collection.countDocuments(
       countFilter.$and.length > 0 ? countFilter : {}
@@ -838,9 +846,9 @@ export const getFacetsHandler = async (
       {
         $facet: {
           classifications: [
-            { $group: { 
-              _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] }, 
-              count: { $sum: 1 } 
+            { $group: {
+              _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] },
+              count: { $sum: 1 }
             }},
             { $match: { _id: { $ne: null } } },
             { $sort: { count: -1 } }
@@ -864,9 +872,9 @@ export const getFacetsHandler = async (
             { $sort: { count: -1 } }
           ],
           encryptionStatus: [
-            { $group: { 
-              _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] }, 
-              count: { $sum: 1 } 
+            { $group: {
+              _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] },
+              count: { $sum: 1 }
             }},
             { $sort: { _id: 1 } }
           ],
@@ -884,25 +892,25 @@ export const getFacetsHandler = async (
       const fr = facetResults[0];
       res.json({
         facets: {
-          classifications: (fr.classifications || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          classifications: (fr.classifications || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          countries: (fr.countries || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          countries: (fr.countries || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          cois: (fr.cois || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          cois: (fr.cois || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          instances: (fr.instances || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          instances: (fr.instances || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
-          encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({ 
-            value: f._id, 
-            count: f.count 
+          encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({
+            value: f._id,
+            count: f.count
           })),
         },
         totalCount: fr.totalCount[0]?.count || 0,
