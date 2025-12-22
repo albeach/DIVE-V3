@@ -343,3 +343,4 @@ class FederationCacheService {
 // Singleton instance
 export const federationCacheService = new FederationCacheService();
 export default federationCacheService;
+

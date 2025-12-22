@@ -25,6 +25,25 @@ module "mfa" {
   enable_direct_grant_mfa   = false
 }
 
+# Set browser flow to the MFA flow using kcadm.sh (since realm already exists)
+resource "null_resource" "set_browser_flow" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin \
+        --password "${var.keycloak_admin_password}" >/dev/null 2>&1 && \
+      docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker \
+        -s browserFlow="${module.mfa.browser_flow_alias}" >/dev/null 2>&1
+    EOT
+  }
+
+  depends_on = [module.mfa]
+
+  triggers = {
+    flow_alias = module.mfa.browser_flow_alias
+  }
+}
+
 # Outputs
 output "realm_id" {
   value       = data.keycloak_realm.hub.id

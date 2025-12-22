@@ -73,3 +73,4 @@ async function verifyBrokerWebAuthn() {
 }
 
 verifyBrokerWebAuthn().catch(console.error);
+

@@ -7,6 +7,7 @@ terraform {
   }
 }
 
+# Keycloak provider - only initialize after VM is provisioned
 provider "keycloak" {
   client_id                = "admin-cli"
   username                 = var.keycloak_admin_username

@@ -729,3 +729,4 @@ export default function SPSelfServiceRegistration() {
         </div>
     );
 }
+

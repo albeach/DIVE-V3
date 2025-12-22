@@ -109,3 +109,4 @@ remaining=$(git status --porcelain | wc -l)
 if [ "$remaining" -gt 5 ]; then
     echo "... ($remaining total modified files)"
 fi
+

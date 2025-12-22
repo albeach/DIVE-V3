@@ -47,9 +47,8 @@ networks:
   spoke-internal:
     driver: bridge
   # Shared network for hub-spoke federation
-  dive-v3-shared-network:
+  dive-shared:
     driver: bridge
-    name: dive-v3-shared-network
 
 volumes:
   # Hub volumes
@@ -57,13 +56,13 @@ volumes:
   hub_mongodb_data:
   hub_redis_data:
   hub_redis_blacklist_data:
-  hub_frontend_modules:
+  hub_frontend_node_modules:
   hub_frontend_next:
   # Spoke volumes (named with code for checkpoint/rollback)
   spoke_postgres_data:
   spoke_mongodb_data:
   spoke_redis_data:
-  spoke_frontend_modules:
+  spoke_frontend_node_modules:
   spoke_frontend_next:
   spoke_backend_modules:
   spoke_backend_logs:
@@ -127,7 +126,7 @@ services:
       - hub_redis_data:/data
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - dive-shared
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_USA}", "ping"]
 
@@ -146,7 +145,7 @@ services:
       - hub_redis_blacklist_data:/data
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - dive-shared
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
 
@@ -186,7 +185,7 @@ services:
         condition: service_healthy
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - dive-shared
 
   # ---------------------------------------------------------------------------
   # HUB: OPA (Policy Decision Point)
@@ -256,7 +255,7 @@ services:
         condition: service_healthy
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - dive-shared
 
   # ---------------------------------------------------------------------------
   # HUB: Frontend
@@ -285,7 +284,7 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
-      - hub_frontend_modules:/app/node_modules
+      - hub_frontend_node_modules:/app/node_modules
       - hub_frontend_next:/app/.next
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/certs:/opt/app/certs:ro
@@ -331,7 +330,7 @@ services:
         condition: service_healthy
     networks:
       - hub-internal
-      - dive-v3-shared-network
+      - dive-shared
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
       interval: 15s
@@ -350,7 +349,7 @@ services:
     environment:
       KEYCLOAK_URL: https://hub-keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker
-      OPA_URL: http://hub-opa:8181
+      OPA_URL: https://hub-opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@hub-mongodb:27017?authSource=admin
       INSTANCE_CODE: USA
     ports:
@@ -459,7 +458,7 @@ services:
         condition: service_healthy
     networks:
       - spoke-internal
-      - dive-v3-shared-network
+      - dive-shared
 
   # ---------------------------------------------------------------------------
   # SPOKE: OPA
@@ -486,8 +485,8 @@ services:
     environment:
       OPAL_SERVER_URL: https://hub-opal-server:7002
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      OPAL_OPA_URL: http://spoke-opa:8181
-      OPAL_POLICY_STORE_URL: http://spoke-opa:8181
+      OPAL_OPA_URL: https://spoke-opa:8181
+      OPAL_POLICY_STORE_URL: https://spoke-opa:8181
       OPAL_INLINE_OPA_ENABLED: "false"
       OPAL_DATA_TOPICS: policy:base,policy:${SPOKE_CODE_LOWER:-spoke},data:federation_matrix,data:trusted_issuers
       SSL_CERT_FILE: /var/opal/certs/mkcert-rootCA.pem
@@ -501,7 +500,7 @@ services:
         condition: service_healthy
     networks:
       - spoke-internal
-      - dive-v3-shared-network
+      - dive-shared
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
       interval: 30s
@@ -529,7 +528,7 @@ services:
       KEYCLOAK_ISSUER: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_SPOKE}
-      OPA_URL: http://spoke-opa:8181
+      OPA_URL: https://spoke-opa:8181
       # Trust hub and spoke issuers
       TRUSTED_ISSUERS: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke},https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker
     ports:
@@ -551,7 +550,7 @@ services:
         condition: service_healthy
     networks:
       - spoke-internal
-      - dive-v3-shared-network
+      - dive-shared
 
   # ---------------------------------------------------------------------------
   # SPOKE: Frontend
@@ -583,7 +582,7 @@ services:
       - "${SPOKE_FRONTEND_PORT:-3031}:3000"
     volumes:
       - ./frontend:/app
-      - spoke_frontend_modules:/app/node_modules
+      - spoke_frontend_node_modules:/app/node_modules
       - spoke_frontend_next:/app/.next
       - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/app/certs:ro
     depends_on:
@@ -603,7 +602,7 @@ services:
     environment:
       KEYCLOAK_URL: https://spoke-keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
-      OPA_URL: http://spoke-opa:8181
+      OPA_URL: https://spoke-opa:8181
       INSTANCE_CODE: ${SPOKE_CODE:-GBR}
     ports:
       - "${SPOKE_KAS_PORT:-9031}:8080"

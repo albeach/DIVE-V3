@@ -464,3 +464,4 @@ describe('Token Data Structures', () => {
     expect(token.refreshToken).toBe('refresh-token');
   });
 });
+

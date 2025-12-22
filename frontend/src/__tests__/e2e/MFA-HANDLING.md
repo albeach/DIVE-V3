@@ -139,3 +139,4 @@ Virtual authenticator should work automatically. If it fails:
 1. Check browser console for errors
 2. Verify Playwright version supports virtual authenticators
 3. Check Keycloak WebAuthn configuration
+

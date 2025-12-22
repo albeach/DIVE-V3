@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # DIVE V3 Hub Client Configuration Script
-# 
+#
 # Purpose: Configure the dive-v3-client-broker with proper settings including:
 #   - post.logout.redirect.uris for federated logout
 #   - Other required OIDC settings
@@ -88,29 +88,25 @@ CLIENT_CONFIG=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${C
 CURRENT_LOGOUT_URIS=$(echo "$CLIENT_CONFIG" | jq -r '.attributes["post.logout.redirect.uris"] // "null"')
 log_info "Current post.logout.redirect.uris: ${CURRENT_LOGOUT_URIS}"
 
-# Update client with post_logout_redirect_uris if not set
-if [ "$CURRENT_LOGOUT_URIS" == "null" ] || [ -z "$CURRENT_LOGOUT_URIS" ]; then
-    log_step "Configuring post.logout.redirect.uris..."
-    
-    # Add post.logout.redirect.uris to attributes
-    # Keycloak uses ## as separator for multiple URIs
-    UPDATED_CONFIG=$(echo "$CLIENT_CONFIG" | jq '.attributes["post.logout.redirect.uris"] = "http://localhost:3000/*##https://localhost:3000/*##https://*.dive25.com/*##https://*.prosecurity.biz/*"')
-    
-    # Update client
-    HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
-        -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
-        -H "Authorization: Bearer ${TOKEN}" \
-        -H "Content-Type: application/json" \
-        -d "$UPDATED_CONFIG")
-    
-    if [ "$HTTP_CODE" == "204" ]; then
-        log_success "Client updated with post.logout.redirect.uris"
-    else
-        log_error "Failed to update client (HTTP $HTTP_CODE)"
-        exit 1
-    fi
+# Define required logout URIs (with wildcards for proper matching)
+REQUIRED_LOGOUT_URIS="http://localhost:3000/*##https://localhost:3000/*##https://*.dive25.com/*##https://*.prosecurity.biz/*"
+
+# Always update to ensure correct configuration (fixes missing wildcards or domains)
+log_step "Configuring post.logout.redirect.uris..."
+UPDATED_CONFIG=$(echo "$CLIENT_CONFIG" | jq --arg uris "$REQUIRED_LOGOUT_URIS" '.attributes["post.logout.redirect.uris"] = $uris')
+
+# Update client
+HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
+    -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "$UPDATED_CONFIG")
+
+if [ "$HTTP_CODE" == "204" ]; then
+    log_success "Client updated with post.logout.redirect.uris"
 else
-    log_success "post.logout.redirect.uris already configured"
+    log_error "Failed to update client (HTTP $HTTP_CODE)"
+    exit 1
 fi
 
 # Verify the update

@@ -1513,7 +1513,18 @@ async function createZTDFDocument(
     return {
         resourceId,
         title,
+        // Top-level fields for search/filter compatibility
+        classification,
+        releasabilityTo,
+        COI,
+        coiOperator,
+        encrypted: true,
+        encryptedContent: chunk.encryptedData,
+        releasableToIndustry: industryAllowed,
+        originRealm: instanceCode,
+        // ZTDF structure
         ztdf: ztdfObject,
+        // Legacy structure (kept for backwards compatibility)
         legacy: {
             classification,
             releasabilityTo,

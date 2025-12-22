@@ -394,3 +394,4 @@ test_caveat_equivalency_fvey if {
 test_caveat_equivalency_5_eyes if {
     fvey.caveat_equivalency["5-EYES"] == "AUS/CAN/NZL/UK/US EYES ONLY"
 }
+

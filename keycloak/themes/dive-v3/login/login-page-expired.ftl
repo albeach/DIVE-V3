@@ -41,3 +41,4 @@
         </div>
     </#if>
 </@layout.registrationLayout>
+

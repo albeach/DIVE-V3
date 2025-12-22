@@ -1,13 +1,13 @@
 /**
  * Advanced Resource Card Component (2025)
- * 
+ *
  * Features:
  * - Multiple view modes (Grid, List, Compact)
  * - Enhanced metadata visualization
  * - Quick actions and preview
  * - Accessibility optimized
  * - Skeleton loading states
- * 
+ *
  * IMPORTANT: Cards are NOT links by default.
  * - Single click: Select/focus the card
  * - Double click: Open preview modal
@@ -161,7 +161,7 @@ export default function AdvancedResourceCard({
   };
 
   const accessIndicator = getAccessIndicator(resource, userAttributes);
-  
+
   const handleOpenResource = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering parent's onClick (selection)
     router.push(`/resources/${resource.resourceId}`);
@@ -171,9 +171,9 @@ export default function AdvancedResourceCard({
   if (viewMode === 'grid') {
     // Check if multi-KAS (more than 1 KAO)
     const hasMultiKas = resource.encrypted && (resource.kaoCount || 0) > 1;
-    
+
     return (
-      <article 
+      <article
         className="block group h-full cursor-pointer"
         data-resource-id={resource.resourceId}
       >
@@ -185,17 +185,17 @@ export default function AdvancedResourceCard({
               <span className="mr-1">{classificationEmojis[resource.classification]}</span>
               {resource.classification.replace('_', ' ')}
             </div>
-            
+
             {/* Multi-KAS Badge - Only show if more than 1 KAO */}
             {hasMultiKas && (
               <div className="flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm">
                 🔐 {resource.kaoCount} KAS
               </div>
             )}
-            
+
             {/* Origin/Instance Badge */}
             {resource.originRealm && (
-              <div 
+              <div
                 className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
                 title={`Source: ${resource.originRealm} instance`}
               >
@@ -209,8 +209,8 @@ export default function AdvancedResourceCard({
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-xs font-semibold text-gray-500">COI:</span>
               <div className="flex flex-wrap gap-1">
-                {resource.COI.map(coi => (
-                  <span key={coi} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold border border-purple-200">
+                {resource.COI.map((coi, idx) => (
+                  <span key={`${coi}-${idx}`} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold border border-purple-200">
                     {coi}
                   </span>
                 ))}
@@ -222,8 +222,8 @@ export default function AdvancedResourceCard({
           <div className="flex items-center gap-1.5 mb-4">
             <span className="text-xs font-semibold text-gray-500">REL TO:</span>
             <div className="flex flex-wrap gap-1">
-              {resource.releasabilityTo.slice(0, 6).map(country => (
-                <span key={country} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold border border-blue-200">
+              {resource.releasabilityTo.slice(0, 6).map((country, idx) => (
+                <span key={`${country}-${idx}`} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold border border-blue-200">
                   {country}
                 </span>
               ))}
@@ -291,7 +291,7 @@ export default function AdvancedResourceCard({
   if (viewMode === 'list') {
     // Check if multi-KAS (more than 1 KAO)
     const hasMultiKas = resource.encrypted && (resource.kaoCount || 0) > 1;
-    
+
     return (
       <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
         <div className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-xl hover:border-blue-400 transition-all duration-200 hover:-translate-y-0.5">
@@ -304,17 +304,17 @@ export default function AdvancedResourceCard({
                 <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${classColors.bg} ${classColors.text} ${classColors.border}`}>
                   {classificationEmojis[resource.classification]} {resource.classification.replace('_', ' ')}
                 </div>
-                
+
                 {/* Multi-KAS Badge - Only if > 1 KAO */}
                 {hasMultiKas && (
                   <div className="px-2 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
                     🔐 {resource.kaoCount} KAS
                   </div>
                 )}
-                
+
                 {/* Origin Instance */}
                 {resource.originRealm && (
-                  <div 
+                  <div
                     className={`px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
                     title={`Source: ${resource.originRealm}`}
                   >
@@ -322,7 +322,7 @@ export default function AdvancedResourceCard({
                   </div>
                 )}
               </div>
-              
+
               {/* Title + ID */}
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
@@ -340,8 +340,8 @@ export default function AdvancedResourceCard({
               {resource.COI && resource.COI.length > 0 && (
                 <div className="hidden lg:flex items-center gap-1">
                   <span className="text-[10px] text-gray-500 font-semibold">COI:</span>
-                  {resource.COI.slice(0, 2).map(coi => (
-                    <span key={coi} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-semibold border border-purple-200">
+                  {resource.COI.slice(0, 2).map((coi, idx) => (
+                    <span key={`${coi}-${idx}`} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-semibold border border-purple-200">
                       {coi}
                     </span>
                   ))}
@@ -350,12 +350,12 @@ export default function AdvancedResourceCard({
                   )}
                 </div>
               )}
-              
+
               {/* REL TO countries */}
               <div className="hidden md:flex items-center gap-1">
                 <span className="text-[10px] text-gray-500 font-semibold">REL:</span>
-                {resource.releasabilityTo.slice(0, 3).map(country => (
-                  <span key={country} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold border border-blue-200">
+                {resource.releasabilityTo.slice(0, 3).map((country, idx) => (
+                  <span key={`${country}-${idx}`} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold border border-blue-200">
                     {country}
                   </span>
                 ))}
@@ -363,14 +363,14 @@ export default function AdvancedResourceCard({
                   <span className="text-[10px] text-gray-500">+{resource.releasabilityTo.length - 3}</span>
                 )}
               </div>
-              
+
               {/* Date */}
               {resource.creationDate && (
                 <span className="hidden xl:inline-block text-xs text-gray-500">
                   {formatDate(resource.creationDate)}
                 </span>
               )}
-              
+
               {/* Access Indicator */}
               <div className={`flex items-center gap-1.5 text-xs font-semibold ${
                 accessIndicator.status === 'likely' ? 'text-green-700' :
@@ -383,7 +383,7 @@ export default function AdvancedResourceCard({
                   'bg-red-500'
                 }`} />
               </div>
-              
+
               {/* Open Button */}
               <button
                 onClick={handleOpenResource}
@@ -405,7 +405,7 @@ export default function AdvancedResourceCard({
   // Compact View (Minimal, table-like)
   // Check if multi-KAS (more than 1 KAO)
   const hasMultiKasCompact = resource.encrypted && (resource.kaoCount || 0) > 1;
-  
+
   return (
     <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
       <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition-all duration-150">
@@ -436,11 +436,11 @@ export default function AdvancedResourceCard({
                 COI:{resource.COI.length}
               </span>
             )}
-            
+
             {/* REL TO Countries */}
             <div className="hidden sm:flex items-center gap-1">
-              {resource.releasabilityTo.slice(0, 3).map(country => (
-                <span key={country} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
+              {resource.releasabilityTo.slice(0, 3).map((country, idx) => (
+                <span key={`${country}-${idx}`} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
                   {country}
                 </span>
               ))}
@@ -448,14 +448,14 @@ export default function AdvancedResourceCard({
                 <span className="text-[10px] text-gray-400">+{resource.releasabilityTo.length - 3}</span>
               )}
             </div>
-            
+
             {/* Access dot */}
             <div className={`w-2 h-2 rounded-full ${
               accessIndicator.status === 'likely' ? 'bg-green-500' :
               accessIndicator.status === 'possible' ? 'bg-yellow-500' :
               'bg-red-500'
             }`} />
-            
+
             <button
               onClick={handleOpenResource}
               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"

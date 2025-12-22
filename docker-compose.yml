@@ -4,7 +4,7 @@ networks:
   dive-network:
     driver: bridge
     name: dive-v3-network
-  dive-v3-shared-network:
+  dive-shared:
     external: true
 
 volumes:
@@ -19,7 +19,7 @@ volumes:
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: dive-v3-postgres
+    container_name: dive-hub-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/sync-env.sh first}
@@ -41,7 +41,7 @@ services:
     build:
       context: ./keycloak
       dockerfile: Dockerfile
-    container_name: dive-v3-keycloak
+    container_name: dive-hub-keycloak
     extra_hosts:
       - "localhost:host-gateway"
     environment:
@@ -98,7 +98,7 @@ services:
       - "9000:9000"   # HTTPS Management (health checks, metrics)
     networks:
       - dive-network
-      - dive-v3-shared-network
+      - dive-shared
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro  # mkcert certificates
     healthcheck:
@@ -110,7 +110,7 @@ services:
 
   mongo:
     image: mongo:7.0
-    container_name: dive-v3-mongo
+    container_name: dive-hub-mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Run ./dive secrets load first}
@@ -129,7 +129,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: dive-v3-redis
+    container_name: dive-hub-redis
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
@@ -145,7 +145,7 @@ services:
 
   opa:
     image: openpolicyagent/opa:latest
-    container_name: dive-v3-opa
+    container_name: dive-hub-opa
     platform: linux/amd64
     command:
       - "run"
@@ -170,7 +170,7 @@ services:
 
   authzforce:
     image: authzforce/server:12.0.1
-    container_name: dive-v3-authzforce
+    container_name: dive-hub-authzforce
     ports:
       - "8282:8080"
     volumes:
@@ -193,7 +193,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev  # Development mode with hot reload
-    container_name: dive-v3-backend
+    container_name: dive-hub-backend
     healthcheck:
       # Use curl (installed in Dockerfile.dev) and skip cert validation for local mkcert
       test: ["CMD-SHELL", "curl -ksf https://localhost:4000/health >/dev/null || exit 1"]
@@ -216,7 +216,7 @@ services:
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs
       MONGODB_URL: ${MONGODB_URL:-mongodb://admin:${MONGO_PASSWORD:?Run ./dive secrets load first}@mongo:27017?authSource=admin}
       MONGODB_DATABASE: dive-v3
-      OPA_URL: http://opa:8181
+      OPA_URL: https://opa:8181
       KAS_URL: https://kas:8080
       AUTHZFORCE_URL: http://authzforce:8080/authzforce-ce
       LOG_LEVEL: info
@@ -266,7 +266,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev  # Development mode with hot reload
-    container_name: dive-v3-frontend
+    container_name: dive-hub-frontend
     healthcheck:
       # Use curl (installed in Dockerfile.dev). Frontend serves HTTPS (self-signed) in dev; skip cert validation.
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
@@ -338,7 +338,7 @@ services:
     build:
       context: ./kas
       dockerfile: Dockerfile
-    container_name: dive-v3-kas
+    container_name: dive-hub-kas
     healthcheck:
       # Zero Trust: HTTPS with mkcert CA validation
       test: ["CMD-SHELL", "wget --ca-certificate=/opt/app/certs/rootCA.pem -q -O- https://localhost:8080/health || exit 1"]
@@ -355,7 +355,7 @@ services:
       CERT_FILE: certificate.pem
       BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
       NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
-      OPA_URL: http://opa:8181
+      OPA_URL: https://opa:8181
       MONGODB_URL: ${MONGODB_URL:-mongodb://admin:${MONGO_PASSWORD:?Run ./dive secrets load first}@mongo:27017?authSource=admin}
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
@@ -367,7 +367,7 @@ services:
       # Change to http://backend:4000 when running backend in Docker
       # Currently: http://host.docker.internal:4000 (backend runs outside Docker)
     ports:
-      - "8080:8080"
+      - "8085:8080"
     depends_on:
       - opa
       - mongo
@@ -383,7 +383,7 @@ services:
 
   opal-server:
     image: permitio/opal-server:0.9.0
-    container_name: dive-v3-opal-server
+    container_name: dive-hub-opal-server
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
@@ -437,7 +437,7 @@ services:
 
   opal-client:
     image: permitio/opal-client:0.9.0
-    container_name: dive-v3-opal-client
+    container_name: dive-hub-opal-client
     restart: unless-stopped
     stop_grace_period: 30s
     environment:

@@ -1,6 +1,6 @@
 /**
  * Enhanced Access Denied Component - 2025 Edition
- * 
+ *
  * Modern, animated error page when authorization is denied
  * Features:
  * - Modern 2025 design patterns with animations
@@ -57,7 +57,7 @@ interface AccessDeniedProps {
 
 export default function AccessDenied({ resource, denial, userCountry, suggestedResources }: AccessDeniedProps) {
     const [isVisible, setIsVisible] = useState(false);
-    
+
     useEffect(() => {
         // Trigger entrance animation
         setTimeout(() => setIsVisible(true), 50);
@@ -108,10 +108,10 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
         // Pattern: Classification Equivalency Denial
         // "Insufficient clearance: DEU (GEHEIM clearance) insufficient for FRA (TRÈS SECRET DÉFENSE) document [NATO: SECRET < TOP_SECRET]"
         const equivalencyMatch = reason.match(/Insufficient clearance: (\w+) \(([^)]+) clearance\) insufficient for (\w+) \(([^)]+)\) document \[NATO: (\w+) < (\w+)\]/);
-        
+
         if (equivalencyMatch) {
             const [_, userCountry, userClearance, docCountry, docClassification, userNATO, docNATO] = equivalencyMatch;
-            
+
             return {
                 title: '🔒 Insufficient Security Clearance (Classification Equivalency)',
                 explanation: (
@@ -119,7 +119,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                         <p className="font-semibold text-white">
                             Your national security clearance level is not high enough for this document.
                         </p>
-                        
+
                         {/* Visual Comparison Card */}
                         <div className="bg-white/95 backdrop-blur rounded-xl p-6 space-y-4 shadow-lg">
                             <div className="flex items-center justify-between gap-4">
@@ -159,11 +159,11 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     <strong>💡 What does this mean?</strong>
                                 </p>
                                 <p className="text-sm text-blue-800 mt-2">
-                                    This document originated in <strong>{getCountryName(docCountry)}</strong> with classification <strong>{docClassification}</strong>, 
+                                    This document originated in <strong>{getCountryName(docCountry)}</strong> with classification <strong>{docClassification}</strong>,
                                     which is equivalent to NATO <strong>{docNATO}</strong> level.
                                 </p>
                                 <p className="text-sm text-blue-800 mt-2">
-                                    Your <strong>{getCountryName(userCountry)}</strong> clearance of <strong>{userClearance}</strong> (NATO <strong>{userNATO}</strong>) 
+                                    Your <strong>{getCountryName(userCountry)}</strong> clearance of <strong>{userClearance}</strong> (NATO <strong>{userNATO}</strong>)
                                     is not high enough to access this material.
                                 </p>
                             </div>
@@ -182,13 +182,13 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
 
         // Pattern: COI operator=ALL: user countries {...} do not cover required countries {...} (missing: {...}, user COI: [...], resource COI: [...])
         const coiCountryMatch = reason.match(/COI operator=(ALL|ANY): user countries {([^}]*)} do not cover required countries {([^}]*)} \(missing: {([^}]*)}, user COI: \[([^\]]*)\], resource COI: \[([^\]]*)\]\)/);
-        
+
         if (coiCountryMatch) {
             const [_, operator, userCountries, requiredCountries, missingCountries, userCOI, resourceCOI] = coiCountryMatch;
             const userCOIList = userCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
             const resourceCOIList = resourceCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
             const missingList = missingCountries.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
-            
+
             return {
                 title: '🌍 Community of Interest (COI) Country Requirement Not Met',
                 explanation: (
@@ -235,7 +235,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
             const [_, userCOI, resourceCOI] = coiIntersectionMatch;
             const userCOIList = userCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
             const resourceCOIList = resourceCOI.split(',').map(c => c.trim().replace(/"/g, '')).filter(c => c);
-            
+
             return {
                 title: '👥 Community of Interest (COI) Mismatch',
                 explanation: (
@@ -259,6 +259,140 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                     </div>
                 ),
                 shortMessage: `You need to be a member of: ${resourceCOIList.join(' or ')}`
+            };
+        }
+
+        // Pattern: NATO Classification Equivalency format from OPA
+        // "Insufficient clearance: CONFIDENTIAL (USA) < RESTRICTED (USA) [NATO: NATO_CONFIDENTIAL < null]"
+        const natoEquivalencyMatch = reason.match(/Insufficient clearance: ([\w\s_-]+) \((\w+)\) < ([\w\s_-]+) \((\w+)\) \[NATO: ([\w_]+|null) < ([\w_]+|null)\]/);
+        if (natoEquivalencyMatch) {
+            const [_, userClearance, userCountry, resourceClassification, resourceCountry, userNATO, resourceNATO] = natoEquivalencyMatch;
+
+            // Humanize NATO levels for display
+            const formatNATOLevel = (level: string) => {
+                if (!level || level === 'null') return 'Not Mapped';
+                return level.replace(/_/g, ' ').replace(/NATO /i, '');
+            };
+
+            // Determine if this is a classification mapping issue
+            const resourceHasNoNATOMapping = !resourceNATO || resourceNATO === 'null';
+
+            return {
+                title: '🔒 Insufficient Security Clearance',
+                explanation: (
+                    <div className="space-y-4">
+                        <p className="font-semibold text-white">
+                            Your security clearance level is not high enough to access this document.
+                        </p>
+
+                        {/* Visual Comparison Card */}
+                        <div className="bg-white/95 backdrop-blur rounded-xl p-6 space-y-4 shadow-lg">
+                            <div className="flex items-center justify-between gap-4">
+                                {/* User Clearance */}
+                                <div className="flex-1 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg p-4 text-center">
+                                    <div className="text-xs font-bold text-blue-700 uppercase mb-2">Your Clearance</div>
+                                    <div className="text-2xl mb-1">{getCountryFlag(userCountry)}</div>
+                                    <div className="font-bold text-blue-900 text-lg mb-1">{userClearance}</div>
+                                    <div className="text-xs text-blue-700 font-semibold">({getCountryName(userCountry)})</div>
+                                    <div className="mt-2 pt-2 border-t border-blue-300">
+                                        <div className="text-xs text-blue-600 font-semibold">NATO Equivalent</div>
+                                        <div className="text-sm font-bold text-blue-800">{formatNATOLevel(userNATO)}</div>
+                                    </div>
+                                </div>
+
+                                {/* Comparison Arrow */}
+                                <div className="flex flex-col items-center">
+                                    <div className="text-3xl text-red-600 font-bold">&lt;</div>
+                                    <div className="text-xs text-red-700 font-bold mt-1">Insufficient</div>
+                                </div>
+
+                                {/* Document Classification */}
+                                <div className="flex-1 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-400 rounded-lg p-4 text-center">
+                                    <div className="text-xs font-bold text-red-700 uppercase mb-2">Document Requires</div>
+                                    <div className="text-2xl mb-1">{getCountryFlag(resourceCountry)}</div>
+                                    <div className="font-bold text-red-900 text-lg mb-1">{resourceClassification}</div>
+                                    <div className="text-xs text-red-700 font-semibold">({getCountryName(resourceCountry)})</div>
+                                    <div className="mt-2 pt-2 border-t border-red-400">
+                                        <div className="text-xs text-red-600 font-semibold">NATO Equivalent</div>
+                                        <div className="text-sm font-bold text-red-800">
+                                            {resourceHasNoNATOMapping ? (
+                                                <span className="italic">National Only</span>
+                                            ) : (
+                                                formatNATOLevel(resourceNATO)
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {resourceHasNoNATOMapping ? (
+                                <div className="bg-amber-50 border-l-4 border-amber-400 p-4 rounded">
+                                    <p className="text-sm text-amber-900">
+                                        <strong>⚠️ National Classification Notice:</strong>
+                                    </p>
+                                    <p className="text-sm text-amber-800 mt-2">
+                                        The document uses <strong>{resourceClassification}</strong>, a national classification from <strong>{getCountryName(resourceCountry)}</strong> that
+                                        does not have a direct NATO equivalent. Your <strong>{userClearance}</strong> clearance
+                                        (NATO: {formatNATOLevel(userNATO)}) does not meet the access requirements.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded">
+                                    <p className="text-sm text-blue-900">
+                                        <strong>💡 What does this mean?</strong>
+                                    </p>
+                                    <p className="text-sm text-blue-800 mt-2">
+                                        This document is classified as <strong>{resourceClassification}</strong> by <strong>{getCountryName(resourceCountry)}</strong>,
+                                        which equals NATO <strong>{formatNATOLevel(resourceNATO)}</strong> level.
+                                    </p>
+                                    <p className="text-sm text-blue-800 mt-2">
+                                        Your <strong>{userClearance}</strong> clearance from {getCountryName(userCountry)} (NATO: <strong>{formatNATOLevel(userNATO)}</strong>)
+                                        is not sufficient to access this material.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded">
+                            <p className="text-sm text-yellow-900">
+                                <strong>📞 Need higher clearance?</strong> Contact your security officer to discuss upgrading your clearance
+                                if your role requires access to {resourceClassification} materials.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `${userClearance} clearance insufficient for ${resourceClassification} document`
+            };
+        }
+
+        // Pattern: Simple "Insufficient clearance: X < Y" format
+        // "Insufficient clearance: CONFIDENTIAL < SECRET"
+        const simpleInsufficientMatch = reason.match(/Insufficient clearance: ([\w\s_-]+) < ([\w\s_-]+)$/);
+        if (simpleInsufficientMatch) {
+            const [_, userClearance, requiredClearance] = simpleInsufficientMatch;
+            return {
+                title: '🔒 Insufficient Security Clearance',
+                explanation: (
+                    <div className="space-y-3">
+                        <p className="font-semibold">
+                            Your security clearance level is not high enough for this document.
+                        </p>
+                        <div className="bg-white/50 rounded-lg p-4 space-y-2">
+                            <p className="text-sm">
+                                <strong>Your clearance:</strong> <span className="font-mono">{userClearance}</span>
+                            </p>
+                            <p className="text-sm">
+                                <strong>Required clearance:</strong> <span className="font-mono text-red-700">{requiredClearance}</span>
+                            </p>
+                        </div>
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                            <p className="text-sm text-yellow-800">
+                                Contact your security officer to request a clearance upgrade if your role requires access to {requiredClearance} materials.
+                            </p>
+                        </div>
+                    </div>
+                ),
+                shortMessage: `Requires ${requiredClearance} clearance, you have ${userClearance}`
             };
         }
 
@@ -345,9 +479,9 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
     };
 
     const getClassificationStyle = (classification: string) => {
-        return classificationColors[classification] || { 
-            bg: 'bg-gray-100', 
-            border: 'border-gray-400', 
+        return classificationColors[classification] || {
+            bg: 'bg-gray-100',
+            border: 'border-gray-400',
             text: 'text-gray-900',
             glow: 'shadow-gray-200'
         };
@@ -397,7 +531,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
             <div className="relative bg-gradient-to-br from-red-50 via-red-50 to-pink-50 border-2 border-red-300 rounded-2xl p-8 shadow-2xl animate-pulse-glow overflow-hidden">
                 {/* Decorative background pattern */}
                 <div className="absolute inset-0 bg-gradient-to-br from-red-100/20 to-transparent pointer-events-none"></div>
-                
+
                 <div className="relative z-10">
                     {/* Header with animated icon */}
                     <div className="text-center mb-8 animate-shake">
@@ -423,7 +557,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                 Requested Resource
                             </h3>
                         </div>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Resource ID */}
                             <div className="group hover:scale-105 transition-transform duration-200">
@@ -432,7 +566,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     {displayResource.resourceId}
                                 </dd>
                             </div>
-                            
+
                             {/* Title */}
                             <div className="group hover:scale-105 transition-transform duration-200">
                                 <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Title</dt>
@@ -440,7 +574,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     {displayResource.title}
                                 </dd>
                             </div>
-                            
+
                             {/* Classification Badge */}
                             <div className="group hover:scale-105 transition-transform duration-200">
                                 <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Classification</dt>
@@ -453,7 +587,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     </span>
                                 </dd>
                             </div>
-                            
+
                             {/* Releasability */}
                             <div className="group hover:scale-105 transition-transform duration-200">
                                 <dt className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Releasable To</dt>
@@ -540,7 +674,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     <h3 className="text-lg font-bold text-red-900">Failed Checks</h3>
                                 </div>
                                 {failedChecks.map(([checkName, _], index) => (
-                                    <div 
+                                    <div
                                         key={checkName}
                                         className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-red-50 to-red-100 border-2 border-red-300 hover:border-red-400 transition-all duration-300 hover:scale-105 hover:shadow-lg animate-slide-in-left"
                                         style={{ animationDelay: `${index * 0.1}s` }}
@@ -567,7 +701,7 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     <h3 className="text-lg font-bold text-green-900">Passed Checks</h3>
                                 </div>
                                 {passedChecks.map(([checkName, _], index) => (
-                                    <div 
+                                    <div
                                         key={checkName}
                                         className="group flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300 hover:border-green-400 transition-all duration-300 hover:scale-105 hover:shadow-lg animate-slide-in-right"
                                         style={{ animationDelay: `${index * 0.1}s` }}
@@ -614,8 +748,8 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
                                     <div className="bg-white/60 backdrop-blur rounded-lg p-3">
                                         <dt className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-1">COI</dt>
                                         <dd className="font-mono text-xs text-gray-900">
-                                            {denial.details.subject.coi && denial.details.subject.coi.length > 0 
-                                                ? denial.details.subject.coi.join(', ') 
+                                            {denial.details.subject.coi && denial.details.subject.coi.length > 0
+                                                ? denial.details.subject.coi.join(', ')
                                                 : 'None'}
                                         </dd>
                                     </div>

@@ -10,7 +10,7 @@ name: dive-spoke-fra
 networks:
   dive-fra-network:
     driver: bridge
-  dive-v3-shared-network:
+  dive-shared:
     external: true
 
 volumes:
@@ -39,7 +39,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_FRA:?set POSTGRES_PASSWORD_FRA}
     ports:
-      - "5433:5432"
+      - "5442:5432"
     volumes:
       - fra_postgres_data:/var/lib/postgresql/data
     networks:
@@ -55,7 +55,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_FRA:?set MONGO_PASSWORD_FRA}
     ports:
-      - "27018:27017"
+      - "27027:27017"
     volumes:
       - fra_mongodb_data:/data/db
     networks:
@@ -69,7 +69,7 @@ services:
     command: >
       redis-server --requirepass ${REDIS_PASSWORD_FRA:?set REDIS_PASSWORD_FRA}
     ports:
-      - "6380:6379"
+      - "6389:6379"
     volumes:
       - fra_redis_data:/data
     networks:
@@ -95,13 +95,13 @@ services:
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD_FRA:?set POSTGRES_PASSWORD_FRA}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?set KEYCLOAK_ADMIN_PASSWORD_FRA}
       KC_HOSTNAME: localhost
-      KC_HOSTNAME_URL: https://localhost:8444
-      KC_HOSTNAME_ADMIN_URL: https://localhost:8444
+      KC_HOSTNAME_URL: https://localhost:8453
+      KC_HOSTNAME_ADMIN_URL: https://localhost:8453
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
     ports:
-      - "8444:8443"
-      - "8081:8080"
+      - "8453:8443"
+      - "8090:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
@@ -110,7 +110,7 @@ services:
         condition: service_healthy
     networks:
       - dive-fra-network
-      - dive-v3-shared-network
+      - dive-shared
 
   # ============================================================================
   # AUTHORIZATION
@@ -122,7 +122,7 @@ services:
       service: opa-base
     container_name: dive-spoke-fra-opa
     ports:
-      - "8382:8181"
+      - "8281:8181"
     volumes:
       - ../../policies:/policies:ro
     networks:
@@ -136,9 +136,9 @@ services:
     environment:
       OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      OPAL_OPA_URL: http://opa-fra:8181
+      OPAL_OPA_URL: https://opa-fra:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-fra-default}
-      OPAL_POLICY_STORE_URL: http://opa-fra:8181
+      OPAL_POLICY_STORE_URL: https://opa-fra:8181
       OPAL_DATA_TOPICS: policy:base,policy:fra,data:federation_matrix,data:trusted_issuers
     volumes:
       - fra_opal_cache:/var/opal/cache
@@ -161,10 +161,10 @@ services:
     environment:
       KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker-fra
-      OPA_URL: http://opa-fra:8181
+      OPA_URL: https://opa-fra:8181
       INSTANCE_CODE: FRA
     ports:
-      - "8091:8080"
+      - "9010:8080"
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -193,15 +193,15 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD_FRA:?set REDIS_PASSWORD_FRA}@redis-fra:6379
       KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker-fra
-      KEYCLOAK_ISSUER: https://localhost:8444/realms/dive-v3-broker-fra
-      TRUSTED_ISSUERS: https://localhost:8444/realms/dive-v3-broker-fra,https://keycloak-fra:8443/realms/dive-v3-broker-fra,https://fra-idp.dive25.com/realms/dive-v3-broker-fra
+      KEYCLOAK_ISSUER: https://localhost:8453/realms/dive-v3-broker-fra
+      TRUSTED_ISSUERS: https://localhost:8453/realms/dive-v3-broker-fra,https://keycloak-fra:8443/realms/dive-v3-broker-fra,https://fra-idp.dive25.com/realms/dive-v3-broker-fra,https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?set KEYCLOAK_ADMIN_PASSWORD_FRA}
-      OPA_URL: http://opa-fra:8181
-      FEDERATION_ALLOWED_ORIGINS: https://localhost:3001,https://localhost:4001,https://localhost:8444,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com
-      CORS_ALLOWED_ORIGINS: https://localhost:3001,https://localhost:4001,https://localhost:8444,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com
+      OPA_URL: https://opa-fra:8181
+      FEDERATION_ALLOWED_ORIGINS: https://localhost:3010,https://localhost:4010,https://localhost:8453,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com
+      CORS_ALLOWED_ORIGINS: https://localhost:3010,https://localhost:4010,https://localhost:8453,https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com
     ports:
-      - "4001:4000"
+      - "4010:4000"
     volumes:
       - ../../backend:/app
       - fra_backend_node_modules:/app/node_modules
@@ -218,6 +218,7 @@ services:
         condition: service_healthy
     networks:
       - dive-fra-network
+      - dive-shared
 
   # ============================================================================
   # FRONTEND
@@ -231,33 +232,33 @@ services:
     environment:
       NEXT_PUBLIC_INSTANCE: FRA
       NEXT_PUBLIC_INSTANCE_NAME: "France"
-      NEXT_PUBLIC_API_URL: https://localhost:4001
-      NEXT_PUBLIC_BACKEND_URL: https://localhost:4001
-      NEXT_PUBLIC_BASE_URL: https://localhost:3001
-      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8444
+      NEXT_PUBLIC_API_URL: https://localhost:4010
+      NEXT_PUBLIC_BACKEND_URL: https://localhost:4010
+      NEXT_PUBLIC_BASE_URL: https://localhost:3010
+      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8453
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-fra
       BACKEND_URL: https://backend-fra:4000
       AUTH_SECRET: ${NEXTAUTH_SECRET_FRA:?set NEXTAUTH_SECRET_FRA}
-      AUTH_KEYCLOAK_ID: dive-v3-client-fra
+      AUTH_KEYCLOAK_ID: dive-v3-broker-fra
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_FRA:?set KEYCLOAK_CLIENT_SECRET_FRA}
-      AUTH_KEYCLOAK_ISSUER: https://localhost:8444/realms/dive-v3-broker-fra
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8453/realms/dive-v3-broker-fra
       AUTH_TRUST_HOST: "true"
-      NEXTAUTH_URL: https://localhost:3001
+      NEXTAUTH_URL: https://localhost:3010
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET_FRA:?set NEXTAUTH_SECRET_FRA}
       DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_FRA:?set POSTGRES_PASSWORD_FRA}@postgres-fra:5432/keycloak
       KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker-fra
-      KEYCLOAK_CLIENT_ID: dive-v3-client-fra
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-fra
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_FRA:?set KEYCLOAK_CLIENT_SECRET_FRA}
       AUTH_POST_LOGOUT_REDIRECT: https://fra-app.dive25.com
       AUTH_REDIRECT_URI: https://fra-app.dive25.com/api/auth/callback/keycloak
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com,https://localhost:3001,https://localhost:4001,https://localhost:8444
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://fra-app.dive25.com,https://fra-api.dive25.com,https://fra-idp.dive25.com,https://localhost:3010,https://localhost:4010,https://localhost:8453
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
       NEXT_PUBLIC_THEME_PRIMARY: "#002395"
       NEXT_PUBLIC_THEME_SECONDARY: "#ED2939"
       NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
     ports:
-      - "3001:3000"
+      - "3010:3000"
     volumes:
       - ../../frontend:/app
       - fra_frontend_modules:/app/node_modules

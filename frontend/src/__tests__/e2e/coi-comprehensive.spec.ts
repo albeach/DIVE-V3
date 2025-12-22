@@ -415,3 +415,4 @@ function generateDenyReason(details: any): string {
 
   return failedChecks.join('; ');
 }
+

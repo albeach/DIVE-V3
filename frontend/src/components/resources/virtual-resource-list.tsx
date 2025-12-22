@@ -1,9 +1,9 @@
 /**
  * Virtual Resource List Component
- * 
+ *
  * Phase 1: Performance Foundation
  * Efficient rendering for 28K+ documents using windowing
- * 
+ *
  * Features:
  * - Virtual rendering (only renders visible items)
  * - Dynamic item heights for different view modes
@@ -11,26 +11,26 @@
  * - Auto-loading with intersection observer
  * - Keyboard navigation integration
  * - Accessibility compliant
- * 
+ *
  * Uses native DOM windowing for simplicity and React 19 compatibility
  */
 
 'use client';
 
-import React, { 
-  useState, 
-  useEffect, 
-  useRef, 
-  useCallback, 
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
   useMemo,
   forwardRef,
   useImperativeHandle
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import AdvancedResourceCard, { 
-  IResourceCardData, 
+import AdvancedResourceCard, {
+  IResourceCardData,
   ViewMode,
-  ResourceCardSkeleton 
+  ResourceCardSkeleton
 } from './advanced-resource-card';
 import { ResourceGridSkeleton, LoadingOverlay } from './skeleton-loading';
 import { Loader2 } from 'lucide-react';
@@ -157,7 +157,7 @@ const VirtualItem = React.memo(function VirtualItem({
           </svg>
         </div>
       )}
-      
+
       <AdvancedResourceCard
         resource={resource}
         viewMode={viewMode}
@@ -217,9 +217,9 @@ const VirtualResourceList = forwardRef<VirtualResourceListRef, VirtualResourceLi
       },
       scrollToBottom: () => {
         if (containerRef.current) {
-          containerRef.current.scrollTo({ 
-            top: containerRef.current.scrollHeight, 
-            behavior: 'smooth' 
+          containerRef.current.scrollTo({
+            top: containerRef.current.scrollHeight,
+            behavior: 'smooth'
           });
         }
       },
@@ -329,7 +329,7 @@ const VirtualResourceList = forwardRef<VirtualResourceListRef, VirtualResourceLi
     }
 
     return (
-      <div 
+      <div
         ref={containerRef}
         className={`relative ${className}`}
         role="listbox"
@@ -341,7 +341,7 @@ const VirtualResourceList = forwardRef<VirtualResourceListRef, VirtualResourceLi
           <AnimatePresence mode="popLayout">
             {resources.map((resource, index) => (
               <div
-                key={resource.resourceId}
+                key={`${resource.resourceId}-${resource.originRealm || 'local'}-${index}`}
                 ref={(el) => {
                   if (el) {
                     itemRefs.current.set(index, el);
@@ -368,7 +368,7 @@ const VirtualResourceList = forwardRef<VirtualResourceListRef, VirtualResourceLi
 
         {/* Load More Sentinel */}
         {hasMore && (
-          <div 
+          <div
             ref={sentinelRef}
             className="h-20 flex items-center justify-center mt-4"
           >
@@ -443,7 +443,7 @@ export const ResourceGrid = React.memo(function ResourceGrid({
     <div className={gridClasses}>
       {resources.map((resource, index) => (
         <VirtualItem
-          key={resource.resourceId}
+          key={`${resource.resourceId}-${resource.originRealm || 'local'}-${index}`}
           resource={resource}
           viewMode={viewMode}
           userAttributes={userAttributes}
@@ -456,3 +456,4 @@ export const ResourceGrid = React.memo(function ResourceGrid({
     </div>
   );
 });
+

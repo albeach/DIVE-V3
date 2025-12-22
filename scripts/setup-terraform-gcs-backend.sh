@@ -247,3 +247,4 @@ echo "3. To use the new backend, run:"
 echo "   ./dive tf pilot plan"
 echo "   ./dive tf pilot apply"
 echo ""
+

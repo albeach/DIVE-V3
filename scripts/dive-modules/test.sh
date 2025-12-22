@@ -82,7 +82,7 @@ test_log_result() {
     local failed="$3"
     local skipped="${4:-0}"
     local duration="${5:-0}"
-    
+
     if [ "$failed" -eq 0 ]; then
         echo -e "  ${GREEN}✓${NC} ${name}: ${GREEN}PASS${NC} (${passed} passed, ${skipped} skipped, ${duration}s)"
     else
@@ -92,15 +92,15 @@ test_log_result() {
 
 parse_test_output() {
     local output="$1"
-    
+
     # Try to extract pass/fail counts from test output
     # Format varies by test script, so we try multiple patterns
-    
-    # Pattern 1: "Passed: X", "Failed: Y"
-    local passed=$(echo "$output" | grep -oE 'Passed:[[:space:]]*[0-9]+' | tail -1 | grep -oE '[0-9]+')
-    local failed=$(echo "$output" | grep -oE 'Failed:[[:space:]]*[0-9]+' | tail -1 | grep -oE '[0-9]+')
-    local skipped=$(echo "$output" | grep -oE 'Skipped:[[:space:]]*[0-9]+' | tail -1 | grep -oE '[0-9]+')
-    
+
+    # Pattern 1: "Passed: X", "Failed: Y" (from hub-deployment.test.sh)
+    local passed=$(echo "$output" | grep -E 'Passed:[[:space:]]*[0-9]+' | sed -E 's/.*Passed:[[:space:]]*([0-9]+).*/\1/' | tail -1)
+    local failed=$(echo "$output" | grep -E 'Failed:[[:space:]]*[0-9]+' | sed -E 's/.*Failed:[[:space:]]*([0-9]+).*/\1/' | tail -1)
+    local skipped=$(echo "$output" | grep -E 'Skipped:[[:space:]]*[0-9]+' | sed -E 's/.*Skipped:[[:space:]]*([0-9]+).*/\1/' | tail -1)
+
     # Pattern 2: "[PASS]" and "[FAIL]" counts
     if [ -z "$passed" ]; then
         passed=$(echo "$output" | grep -c '\[PASS\]' || echo "0")
@@ -111,8 +111,13 @@ parse_test_output() {
     if [ -z "$skipped" ]; then
         skipped=$(echo "$output" | grep -c '\[SKIP\]' || echo "0")
     fi
-    
-    echo "${passed:-0}:${failed:-0}:${skipped:-0}"
+
+    # Ensure we have numeric values
+    passed=${passed:-0}
+    failed=${failed:-0}
+    skipped=${skipped:-0}
+
+    echo "${passed}:${failed}:${skipped}"
 }
 
 # =============================================================================
@@ -121,21 +126,21 @@ parse_test_output() {
 
 test_federation() {
     local start_time=$(date +%s)
-    
+
     test_log_header
-    
+
     echo -e "${CYAN}Configuration:${NC}"
     echo "  Tests Directory: ${E2E_FEDERATION_DIR}"
     echo "  Verbose: ${VERBOSE}"
     echo "  Fail Fast: ${FAIL_FAST}"
     echo ""
-    
+
     # Check if tests directory exists
     if [ ! -d "$E2E_FEDERATION_DIR" ]; then
         log_error "Federation tests directory not found: ${E2E_FEDERATION_DIR}"
         return 1
     fi
-    
+
     # Find all test scripts
     local test_files=(
         "hub-deployment.test.sh"
@@ -145,40 +150,40 @@ test_federation() {
         "failover.test.sh"
         "multi-spoke.test.sh"
     )
-    
+
     local available_tests=()
     for test_file in "${test_files[@]}"; do
         if [ -f "${E2E_FEDERATION_DIR}/${test_file}" ]; then
             available_tests+=("$test_file")
         fi
     done
-    
+
     if [ ${#available_tests[@]} -eq 0 ]; then
         log_error "No test files found in ${E2E_FEDERATION_DIR}"
         return 1
     fi
-    
+
     echo -e "${CYAN}Available Tests:${NC}"
     for test_file in "${available_tests[@]}"; do
         echo "  • ${test_file}"
     done
     echo ""
-    
+
     # Run each test
     local suite_passed=0
     local suite_failed=0
     local suite_results=()
-    
+
     for test_file in "${available_tests[@]}"; do
         local test_name="${test_file%.test.sh}"
         local test_path="${E2E_FEDERATION_DIR}/${test_file}"
-        
+
         test_log_section "Running: ${test_name}"
-        
+
         local test_start=$(date +%s)
         local output=""
         local exit_code=0
-        
+
         # Run the test
         if [ "$VERBOSE" = true ]; then
             # Show output in real-time
@@ -189,21 +194,21 @@ test_federation() {
             output=$(bash "$test_path" 2>&1)
             exit_code=$?
         fi
-        
+
         local test_end=$(date +%s)
         local test_duration=$((test_end - test_start))
-        
+
         # Parse results
         local results=$(parse_test_output "$output")
         local passed=$(echo "$results" | cut -d: -f1)
         local failed=$(echo "$results" | cut -d: -f2)
         local skipped=$(echo "$results" | cut -d: -f3)
-        
+
         # Update totals
         TOTAL_PASSED=$((TOTAL_PASSED + passed))
         TOTAL_FAILED=$((TOTAL_FAILED + failed))
         TOTAL_SKIPPED=$((TOTAL_SKIPPED + skipped))
-        
+
         # Record result
         if [ $exit_code -eq 0 ] && [ "$failed" -eq 0 ]; then
             ((suite_passed++))
@@ -211,12 +216,12 @@ test_federation() {
         else
             ((suite_failed++))
             suite_results+=("FAIL:${test_name}:${passed}:${failed}:${skipped}:${test_duration}")
-            
+
             # Show failure output if not verbose
             if [ "$VERBOSE" != true ]; then
                 echo "$output" | tail -30
             fi
-            
+
             # Stop if fail-fast
             if [ "$FAIL_FAST" = true ]; then
                 log_error "Stopping due to test failure (--fail-fast)"
@@ -224,17 +229,17 @@ test_federation() {
             fi
         fi
     done
-    
+
     # Summary
     local end_time=$(date +%s)
     local total_duration=$((end_time - start_time))
-    
+
     echo ""
     echo -e "${BOLD}╔════════════════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BOLD}║                           TEST SUMMARY                                 ║${NC}"
     echo -e "${BOLD}╚════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    
+
     echo -e "${CYAN}Suite Results:${NC}"
     for result in "${suite_results[@]}"; do
         local status=$(echo "$result" | cut -d: -f1)
@@ -243,10 +248,10 @@ test_federation() {
         local f=$(echo "$result" | cut -d: -f4)
         local s=$(echo "$result" | cut -d: -f5)
         local d=$(echo "$result" | cut -d: -f6)
-        
+
         test_log_result "$name" "$p" "$f" "$s" "$d"
     done
-    
+
     echo ""
     echo -e "${CYAN}Totals:${NC}"
     echo "  Total Duration: ${total_duration}s"
@@ -254,7 +259,7 @@ test_federation() {
     echo -e "  Tests Failed:   ${RED}${TOTAL_FAILED}${NC}"
     echo -e "  Tests Skipped:  ${YELLOW}${TOTAL_SKIPPED}${NC}"
     echo ""
-    
+
     if [ $suite_failed -eq 0 ]; then
         echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════════════════════${NC}"
         echo -e "${GREEN}${BOLD}  ✓ ALL ${suite_passed} TEST SUITES PASSED!${NC}"

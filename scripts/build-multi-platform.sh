@@ -89,3 +89,4 @@ echo ""
 echo -e "Images support both ${PLATFORMS}"
 echo -e "Kubernetes will automatically select the correct architecture"
 echo ""
+

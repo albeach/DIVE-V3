@@ -50,3 +50,4 @@ RUN_INTEGRATION_TESTS=true npm test -- acr-aal-integration-verification.test.ts
 
 echo ""
 echo "✅ Integration test complete!"
+

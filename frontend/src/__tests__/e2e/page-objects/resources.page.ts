@@ -174,3 +174,4 @@ export class ResourcesPage extends BasePage {
     }, { timeout: 10000 });
   }
 }
+
