@@ -1618,6 +1618,16 @@ spoke_register() {
     local idp_url=$(grep -o '"idpUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
     local idp_public_url=$(grep -o '"idpPublicUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
 
+    # For local development, use host.docker.internal so hub containers can reach spoke
+    if [ "$ENVIRONMENT" = "local" ] || [ -z "$ENVIRONMENT" ]; then
+        if [[ "$idp_public_url" == https://localhost:* ]]; then
+            # Convert localhost to host.docker.internal for container-to-host communication
+            local port=$(echo "$idp_public_url" | sed 's|https://localhost:\([0-9]*\)|\1|')
+            idp_public_url="https://host.docker.internal:$port"
+            log_info "Using host.docker.internal:$port for local development federation"
+        fi
+    fi
+
     # Use idpUrl as fallback if idpPublicUrl is not set
     if [ -z "$idp_public_url" ]; then
         idp_public_url="$idp_url"
@@ -2167,8 +2177,8 @@ spoke_health() {
         return 0
     fi
 
-    # Define services to check
-    local services=("OPA:8181/health" "OPAL-Client:7000/health" "Backend:4000/health" "Keycloak:8080/health")
+    # Define services to check (HTTPS for secured services)
+    local services=("OPA:8181/health" "Backend:4000/health" "Keycloak:8080/health")
     local all_healthy=true
 
     echo -e "${CYAN}Services:${NC}"
@@ -2176,9 +2186,9 @@ spoke_health() {
     for svc in "${services[@]}"; do
         local name="${svc%%:*}"
         local endpoint="${svc#*:}"
-        local url="http://localhost:${endpoint}"
-
-        local status_code=$(curl -s -o /dev/null -w '%{http_code}' "$url" --max-time 3 2>/dev/null || echo "000")
+        # Use HTTPS for services that require TLS (OPA, Backend, Keycloak)
+        local url="https://localhost:${endpoint}"
+        local status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 3 2>/dev/null || echo "000")
 
         if [ "$status_code" = "200" ]; then
             printf "  %-14s ${GREEN}✓ Healthy${NC}\n" "$name:"
@@ -2190,7 +2200,7 @@ spoke_health() {
 
     # Check MongoDB
     printf "  %-14s " "MongoDB:"
-    if docker exec dive-v3-mongodb-${code_lower} mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+    if docker exec "dive-spoke-${code_lower}-mongodb" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
         echo -e "${GREEN}✓ Healthy${NC}"
     else
         echo -e "${YELLOW}⚠ Not Running${NC}"
@@ -2198,10 +2208,18 @@ spoke_health() {
 
     # Check Redis
     printf "  %-14s " "Redis:"
-    if docker exec dive-v3-redis-${code_lower} redis-cli ping 2>/dev/null | grep -q "PONG"; then
+    # First try without auth (some configs don't require it)
+    if docker exec "dive-spoke-${code_lower}-redis" redis-cli ping 2>/dev/null | grep -q "PONG"; then
         echo -e "${GREEN}✓ Healthy${NC}"
     else
-        echo -e "${YELLOW}⚠ Not Running${NC}"
+        # Try with auth if password is available
+        local redis_password
+        redis_password=$(docker exec "dive-spoke-${code_lower}-redis" printenv REDIS_PASSWORD_EST 2>/dev/null || echo "")
+        if [ -n "$redis_password" ] && docker exec "dive-spoke-${code_lower}-redis" redis-cli -a "$redis_password" ping 2>/dev/null | grep -q "PONG"; then
+            echo -e "${GREEN}✓ Healthy${NC}"
+        else
+            echo -e "${YELLOW}⚠ Not Running${NC}"
+        fi
     fi
 
     echo ""
@@ -2454,6 +2472,161 @@ _spoke_apply_terraform() {
 # =============================================================================
 
 ##
+# Get the correct Keycloak client secret for a spoke instance
+# First tries GCP Secret Manager, then falls back to environment
+#
+# Arguments:
+#   $1 - Spoke code (e.g., "fra", "deu")
+#
+# Returns:
+#   Client secret on stdout, empty string on failure
+##
+get_keycloak_client_secret() {
+    local code_lower="${1:?Spoke code required}"
+    local code_upper
+    code_upper=$(upper "$code_lower")
+
+    # Try GCP first (authoritative source)
+    if [ "${USE_GCP_SECRETS:-false}" = "true" ]; then
+        local secret_name="dive-v3-keycloak-client-secret-${code_lower}"
+        local secret_value
+        if secret_value=$(gcloud secrets versions access latest --secret="$secret_name" --project="${GCP_PROJECT_ID:-dive25}" 2>/dev/null); then
+            echo "$secret_value"
+            return 0
+        fi
+    fi
+
+    # Fallback to environment variable
+    local env_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+    local env_value="${!env_var}"
+    if [ -n "$env_value" ]; then
+        echo "$env_value"
+        return 0
+    fi
+
+    # Last resort: check .env file
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local env_file="$spoke_dir/.env"
+    if [ -f "$env_file" ]; then
+        local file_value
+        file_value=$(grep "^${env_var}=" "$env_file" 2>/dev/null | cut -d'=' -f2-)
+        if [ -n "$file_value" ]; then
+            echo "$file_value"
+            return 0
+        fi
+    fi
+
+    # No secret found
+    echo ""
+    return 1
+}
+
+##
+# Automatically register spoke with federation hub
+# Ensures zero-touch federation deployment
+#
+# Arguments:
+#   $1 - Spoke code
+#
+# Returns:
+#   0 - Registration successful
+#   1 - Registration failed
+##
+spoke_register_with_hub() {
+    local code_lower="${1:?Spoke code required}"
+    local code_upper
+    code_upper=$(upper "$code_lower")
+
+    # Check if already registered
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local config_file="$spoke_dir/config.json"
+
+    if [ -f "$config_file" ]; then
+        local federation_status
+        federation_status=$(jq -r '.federation.status // "unregistered"' "$config_file" 2>/dev/null)
+        if [ "$federation_status" = "approved" ]; then
+            log_info "Spoke $code_upper already registered with federation hub"
+            return 0
+        fi
+    fi
+
+    log_info "Attempting automatic federation registration for $code_upper..."
+
+    # Ensure network connectivity for federation
+    ensure_federation_network_connectivity "$code_lower"
+
+    # Attempt registration
+    if spoke_register_federation "$code_lower" >/dev/null 2>&1; then
+        log_success "Spoke $code_upper automatically registered with federation hub"
+        return 0
+    else
+        log_warn "Automatic federation registration failed for $code_upper"
+        return 1
+    fi
+}
+
+##
+# Ensure network connectivity between hub and spoke for federation
+#
+# Arguments:
+#   $1 - Spoke code
+##
+ensure_federation_network_connectivity() {
+    local code_lower="${1:?Spoke code required}"
+
+    # Connect spoke services to hub network for federation validation
+    local keycloak_container="dive-spoke-${code_lower}-keycloak"
+    local backend_container="dive-spoke-${code_lower}-backend"
+    local hub_network="dive-hub_hub-internal"
+    local shared_network="dive-shared"
+
+    # Ensure hub network exists and connect Keycloak for federation validation
+    if docker network ls --format '{{.Name}}' | grep -q "^${hub_network}$"; then
+        if ! docker network inspect "$hub_network" | jq -r '.Containers | keys[]' | grep -q "$keycloak_container"; then
+            log_verbose "Connecting $keycloak_container to $hub_network for federation validation"
+            docker network connect "$hub_network" "$keycloak_container" >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # Ensure shared network connectivity for cross-service communication
+    if docker network ls --format '{{.Name}}' | grep -q "^${shared_network}$"; then
+        for container in "$keycloak_container" "$backend_container"; do
+            if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+                if ! docker network inspect "$shared_network" | jq -r '.Containers | keys[]' | grep -q "$container"; then
+                    log_verbose "Connecting $container to $shared_network"
+                    docker network connect "$shared_network" "$container" >/dev/null 2>&1 || true
+                fi
+            fi
+        done
+    fi
+
+    # Give networks time to establish
+    sleep 1
+}
+
+##
+# Perform federation registration for a spoke
+# Wrapper around spoke_register for automatic registration
+#
+# Arguments:
+#   $1 - Spoke code
+#
+# Returns:
+#   0 - Registration successful
+#   1 - Registration failed
+##
+spoke_register_federation() {
+    local code_lower="${1:?Spoke code required}"
+
+    # Use existing registration logic but with automatic polling
+    if INSTANCE="$code_lower" spoke_register --poll --poll-timeout=60 --poll-interval=5 >/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+##
 # Synchronize spoke frontend secrets with Keycloak client secrets
 # Fixes NextAuth "Invalid client credentials" errors
 #
@@ -2491,66 +2664,82 @@ spoke_sync_secrets() {
         return 1
     fi
 
-    # Get Keycloak client secret
-    local admin_pass
-    admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KEYCLOAK_ADMIN_PASSWORD)
+    # Get the correct client secret from GCP (authoritative source)
+    local correct_secret
+    correct_secret=$(get_keycloak_client_secret "$code_lower")
 
-    if [ -z "$admin_pass" ]; then
-        log_error "Could not get Keycloak admin password for $code_upper"
-        return 1
-    fi
+    if [ -z "$correct_secret" ]; then
+        log_error "Could not get correct client secret for $code_upper from GCP"
+        # Fallback: try to get from Keycloak if GCP fails
+        local admin_pass
+        admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KEYCLOAK_ADMIN_PASSWORD)
 
-    # Authenticate to Keycloak
-    docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 --realm master --user admin --password "$admin_pass" >/dev/null 2>&1
+        if [ -n "$admin_pass" ]; then
+            # Try kcadm approach as fallback
+            docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh config credentials \
+                --server https://localhost:8443 --realm master --user admin --password "$admin_pass" --insecure >/dev/null 2>&1
 
-    # Get client secret from Keycloak
-    local keycloak_secret
-    keycloak_secret=$(docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh get clients \
-        -r "dive-v3-broker-${code_lower}" -q "clientId=dive-v3-broker-${code_lower}" \
-        --fields secret 2>/dev/null | jq -r '.[0].secret')
+            local secret_response
+            secret_response=$(docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh get clients \
+                -r "dive-v3-broker-${code_lower}" -q "clientId=dive-v3-broker-${code_lower}" \
+                --fields secret 2>/dev/null)
 
-    if [ -z "$keycloak_secret" ] || [ "$keycloak_secret" = "null" ]; then
-        log_error "Could not get Keycloak client secret for $code_upper"
-        return 1
+            # Handle both array and single object responses
+            if echo "$secret_response" | jq -e '.[0]' >/dev/null 2>&1; then
+                # Response is an array
+                correct_secret=$(echo "$secret_response" | jq -r '.[0].secret // empty')
+            else
+                # Response is a single object
+                correct_secret=$(echo "$secret_response" | jq -r '.secret // empty')
+            fi
+        fi
+
+        if [ -z "$correct_secret" ] || [ "$correct_secret" = "null" ]; then
+            log_error "Could not get client secret for $code_upper from any source"
+            return 1
+        fi
     fi
 
     # Compare secrets
-    if [ "$frontend_secret" = "$keycloak_secret" ]; then
+    if [ "$frontend_secret" = "$correct_secret" ]; then
         log_success "$code_upper secrets are synchronized"
         return 0
     fi
 
     log_warn "$code_upper secret mismatch detected - fixing..."
-    log_verbose "Frontend: ${frontend_secret:0:8}..., Keycloak: ${keycloak_secret:0:8}..."
+    log_verbose "Frontend: ${frontend_secret:0:8}..., Correct: ${correct_secret:0:8}..."
 
-    # Fix by updating .env and recreating frontend
+    # Update .env file with correct secret
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
     if [ -f "$env_file" ]; then
         # Update .env file with correct secret
         if grep -q "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file"; then
-            sed -i.bak "s/^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*/KEYCLOAK_CLIENT_SECRET_${code_upper}=${keycloak_secret}/" "$env_file"
+            sed -i.bak "s/^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*/KEYCLOAK_CLIENT_SECRET_${code_upper}=${correct_secret}/" "$env_file"
         else
-            echo "KEYCLOAK_CLIENT_SECRET_${code_upper}=${keycloak_secret}" >> "$env_file"
+            echo "KEYCLOAK_CLIENT_SECRET_${code_upper}=${correct_secret}" >> "$env_file"
         fi
-        rm -f "$env_file.bak"
+        log_success "Updated $env_file with correct secret"
     fi
 
-    # Recreate frontend container
-    (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="$code_lower" docker compose up -d --force-recreate "frontend-${code_lower}" >/dev/null 2>&1)
-
-    # Wait and verify
-    sleep 3
-    local new_secret
-    new_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
-
-    if [ "$new_secret" = "$keycloak_secret" ]; then
-        log_success "$code_upper frontend secrets synchronized!"
-        return 0
+    # Restart frontend container to pick up new secret
+    log_info "Restarting $code_upper frontend container..."
+    if docker restart "dive-spoke-${code_lower}-frontend" >/dev/null 2>&1; then
+        log_success "$code_upper frontend restarted successfully"
+        # Verify the secret was updated
+        sleep 2
+        local new_secret
+        new_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
+        if [ "$new_secret" = "$correct_secret" ]; then
+            log_success "$code_upper secret synchronization complete"
+            return 0
+        else
+            log_error "Frontend secret was not updated correctly"
+            return 1
+        fi
     else
-        log_error "$code_upper secret synchronization failed"
+        log_error "Failed to restart $code_upper frontend"
         return 1
     fi
 }
@@ -2749,6 +2938,22 @@ spoke_up() {
         fi
     fi
 
+    # CRITICAL: Synchronize frontend secrets before starting containers
+    # This ensures NextAuth works immediately after startup
+    log_info "Ensuring frontend secrets are synchronized..."
+    if ! spoke_sync_secrets "$instance_code" >/dev/null 2>&1; then
+        log_warn "Secret synchronization failed - NextAuth may not work initially"
+        echo "  Run manually after startup: ./dive --instance $code_lower spoke sync-secrets"
+    fi
+
+    # CRITICAL: Auto-register with federation hub for zero-touch deployment
+    # This ensures the spoke is immediately available for cross-domain federation
+    log_info "Ensuring spoke is registered with federation hub..."
+    if ! spoke_register_with_hub "$instance_code" >/dev/null 2>&1; then
+        log_warn "Automatic federation registration failed - spoke may not be federated"
+        echo "  Run manually after startup: ./dive --instance $code_lower spoke register"
+    fi
+
     print_header
     echo -e "${BOLD}Starting Spoke Services:${NC} ${code_upper}"
     echo ""
@@ -2906,7 +3111,7 @@ spoke_deploy() {
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would deploy spoke: $code_upper ($instance_name)"
-        log_dry "Steps: init → certs → up → wait → init-all → federation → register"
+        log_dry "Steps: init → certs → up → wait → init-all → localize → federation → register → fed-registry"
         return 0
     fi
 
@@ -3074,10 +3279,44 @@ spoke_deploy() {
     fi
 
     # ==========================================================================
-    # Step 6: Configure Federation (NEW! - replaces fix-all-spokes-federation.sh)
+    # Step 6: Configure Localization (NATO Attributes)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 6/8: Configuring Federation${NC}"
+    echo -e "${CYAN}  STEP 6/9: Configuring NATO Localization${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    local localize_marker="$spoke_dir/.localized"
+
+    if [ -f "$localize_marker" ]; then
+        log_info "NATO localization already configured"
+        echo ""
+    else
+        # Check if this is a NATO country that supports localization
+        if is_nato_country "$code_upper" 2>/dev/null; then
+            log_step "Setting up localized protocol mappers and users..."
+
+            # Run localization
+            if spoke_localize_mappers "$code_lower" && spoke_localize_users "$code_lower"; then
+                touch "$localize_marker"
+                log_success "NATO localization complete!"
+            else
+                log_warn "Localization had issues (continuing anyway)"
+                echo ""
+                echo "  You can retry with:"
+                echo "  ./dive --instance $code_lower spoke localize"
+            fi
+        else
+            log_info "Not a NATO country - skipping localization"
+        fi
+        echo ""
+    fi
+
+    # ==========================================================================
+    # Step 7: Configure Federation (NEW! - replaces fix-all-spokes-federation.sh)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 7/9: Configuring Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -3115,10 +3354,10 @@ spoke_deploy() {
     fi
 
     # ==========================================================================
-    # Step 7: Register with Hub (BIDIRECTIONAL - spoke in Hub AND Hub in spoke)
+    # Step 8: Register with Hub (BIDIRECTIONAL - spoke in Hub AND Hub in spoke)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 7/8: Hub Registration (Bidirectional Federation)${NC}"
+    echo -e "${CYAN}  STEP 8/9: Hub Registration (Bidirectional Federation)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 

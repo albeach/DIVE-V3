@@ -304,9 +304,19 @@ get_spoke_local_client_secret() {
 
     # Get client UUID
     local client_uuid
-    client_uuid=$(docker exec "$backend_container" curl -s \
+    local client_response
+    client_response=$(docker exec "$backend_container" curl -s \
         "http://${keycloak_host}:8080/admin/realms/${realm}/clients?clientId=${client_id}" \
-        -H "Authorization: Bearer ${token}" 2>/dev/null | jq -r '.[0].id')
+        -H "Authorization: Bearer ${token}" 2>/dev/null)
+
+    # Handle both array and single object responses
+    if echo "$client_response" | jq -e '.[0]' >/dev/null 2>&1; then
+        # Response is an array
+        client_uuid=$(echo "$client_response" | jq -r '.[0].id')
+    else
+        # Response is a single object
+        client_uuid=$(echo "$client_response" | jq -r '.id')
+    fi
 
     if [ -z "$client_uuid" ] || [ "$client_uuid" = "null" ]; then
         log_error "Client not found in spoke: $client_id"
@@ -630,9 +640,19 @@ update_spoke_client_redirect_uris() {
 
     # Get client UUID
     local client_uuid
-    client_uuid=$(docker exec "$backend_container" curl -s \
+    local client_response
+    client_response=$(docker exec "$backend_container" curl -s \
         "http://${keycloak_host}:8080/admin/realms/${realm}/clients?clientId=${client_id}" \
-        -H "Authorization: Bearer ${token}" 2>/dev/null | jq -r '.[0].id')
+        -H "Authorization: Bearer ${token}" 2>/dev/null)
+
+    # Handle both array and single object responses
+    if echo "$client_response" | jq -e '.[0]' >/dev/null 2>&1; then
+        # Response is an array
+        client_uuid=$(echo "$client_response" | jq -r '.[0].id')
+    else
+        # Response is a single object
+        client_uuid=$(echo "$client_response" | jq -r '.id')
+    fi
 
     if [ -z "$client_uuid" ] || [ "$client_uuid" = "null" ]; then
         log_warn "Spoke client not found: $client_id"
@@ -2243,7 +2263,9 @@ module_federation_setup() {
             module_federation_setup_help
             ;;
     esac
-}module_federation_setup_help() {
+}
+
+module_federation_setup_help() {
     echo -e "${BOLD}Federation Setup Commands:${NC}"
     echo ""
     echo -e "  ${YELLOW}═══ HUB REGISTRATION (Bidirectional Federation) ═══${NC}"
