@@ -2166,6 +2166,7 @@ spoke_health() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -2177,8 +2178,24 @@ spoke_health() {
         return 0
     fi
 
+    # Get spoke configuration for correct ports
+    local keycloak_port backend_port opa_port
+
+    # For EST specifically, use known working ports from federation registry
+    if [ "$code_upper" = "EST" ]; then
+        keycloak_port=8451
+        backend_port=4008
+        opa_port=8261
+    else
+        # For other instances, use default ports (can be enhanced later)
+        keycloak_port=8443
+        backend_port=4000
+        opa_port=8181
+    fi
+
+
     # Define services to check (HTTPS for secured services)
-    local services=("OPA:8181/health" "Backend:4000/health" "Keycloak:8080/health")
+    local services=("OPA:${opa_port}/health" "Backend:${backend_port}/health" "Keycloak:${keycloak_port}/realms/dive-v3-broker-${code_lower}")
     local all_healthy=true
 
     echo -e "${CYAN}Services:${NC}"
@@ -2188,9 +2205,9 @@ spoke_health() {
         local endpoint="${svc#*:}"
         # Use HTTPS for services that require TLS (OPA, Backend, Keycloak)
         local url="https://localhost:${endpoint}"
-        local status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 3 2>/dev/null || echo "000")
+        local status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 5 2>/dev/null || echo "000")
 
-        if [ "$status_code" = "200" ]; then
+        if [ "$status_code" = "200" ] || [ "$status_code" = "204" ]; then
             printf "  %-14s ${GREEN}✓ Healthy${NC}\n" "$name:"
         else
             printf "  %-14s ${RED}✗ Unhealthy${NC} (HTTP $status_code)\n" "$name:"
@@ -2208,18 +2225,23 @@ spoke_health() {
 
     # Check Redis
     printf "  %-14s " "Redis:"
-    # First try without auth (some configs don't require it)
-    if docker exec "dive-spoke-${code_lower}-redis" redis-cli ping 2>/dev/null | grep -q "PONG"; then
-        echo -e "${GREEN}✓ Healthy${NC}"
-    else
-        # Try with auth if password is available
-        local redis_password
-        redis_password=$(docker exec "dive-spoke-${code_lower}-redis" printenv REDIS_PASSWORD_EST 2>/dev/null || echo "")
-        if [ -n "$redis_password" ] && docker exec "dive-spoke-${code_lower}-redis" redis-cli -a "$redis_password" ping 2>/dev/null | grep -q "PONG"; then
+    # Check if Redis container is running first
+    if docker ps --format '{{.Names}}' | grep -q "^dive-spoke-${code_lower}-redis$"; then
+        # Container is running, try to ping Redis
+        if docker exec "dive-spoke-${code_lower}-redis" redis-cli ping 2>/dev/null | grep -q "PONG"; then
             echo -e "${GREEN}✓ Healthy${NC}"
         else
-            echo -e "${YELLOW}⚠ Not Running${NC}"
+            # Try with auth if available
+            local redis_password
+            redis_password=$(docker exec "dive-spoke-${code_lower}-redis" printenv REDIS_PASSWORD_EST 2>/dev/null || echo "")
+            if [ -n "$redis_password" ] && docker exec "dive-spoke-${code_lower}-redis" redis-cli -a "$redis_password" ping 2>/dev/null | grep -q "PONG"; then
+                echo -e "${GREEN}✓ Healthy${NC}"
+            else
+                echo -e "${YELLOW}⚠ Auth Issue${NC}"
+            fi
         fi
+    else
+        echo -e "${YELLOW}⚠ Not Running${NC}"
     fi
 
     echo ""
