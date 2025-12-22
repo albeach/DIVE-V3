@@ -300,3 +300,4 @@ test_insufficient_clearance_message if {
 	contains(msg, "SECRET")
 	contains(msg, "TOP SECRET")
 }
+

@@ -209,3 +209,4 @@ export class ResourceFormPage extends BasePage {
     await this.fillContent('Test content for automated testing');
   }
 }
+

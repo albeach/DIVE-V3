@@ -143,7 +143,7 @@ async function defaultFetchFn<T>(params: {
   signal?: AbortSignal;
 }): Promise<IPaginatedSearchResponse<T>> {
   // The /api/resources/search endpoint automatically handles federated search
-  // based on the instances parameter - no need to call a separate endpoint
+  // when multiple instances are selected or a non-local instance is selected
   const response = await fetch('/api/resources/search', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -154,7 +154,7 @@ async function defaultFetchFn<T>(params: {
         classifications: params.filters.classifications,
         countries: params.filters.countries,
         cois: params.filters.cois,
-        instances: params.filters.instances,
+        instances: params.filters.instances, // This triggers federated search in Next.js proxy
         encrypted: params.filters.encrypted,
         dateRange: params.filters.dateRange,
       },
@@ -164,7 +164,6 @@ async function defaultFetchFn<T>(params: {
         limit: params.limit,
       },
       includeFacets: params.includeFacets,
-      // Enable federated search across all selected instances
       federated: params.federated,
     }),
     signal: params.signal,
@@ -176,6 +175,56 @@ async function defaultFetchFn<T>(params: {
   }
 
   return response.json();
+}
+
+/**
+ * Generate facets from federated search results
+ * Used when federated-search endpoint doesn't provide facets
+ * (Kept for potential future use but currently not needed)
+ */
+function generateFacetsFromResults(results: any[]): IFacets {
+  const classificationCounts: Record<string, number> = {};
+  const countryCounts: Record<string, number> = {};
+  const coiCounts: Record<string, number> = {};
+  const instanceCounts: Record<string, number> = {};
+  const encryptionCounts: Record<string, number> = { encrypted: 0, unencrypted: 0 };
+
+  for (const resource of results) {
+    // Classification
+    const classification = resource.classification || 'UNCLASSIFIED';
+    classificationCounts[classification] = (classificationCounts[classification] || 0) + 1;
+
+    // Countries (releasabilityTo)
+    const countries = resource.releasabilityTo || [];
+    for (const country of countries) {
+      countryCounts[country] = (countryCounts[country] || 0) + 1;
+    }
+
+    // COI
+    const cois = resource.COI || [];
+    for (const coi of cois) {
+      coiCounts[coi] = (coiCounts[coi] || 0) + 1;
+    }
+
+    // Instance
+    const instance = resource.originRealm || 'UNKNOWN';
+    instanceCounts[instance] = (instanceCounts[instance] || 0) + 1;
+
+    // Encryption
+    if (resource.encrypted) {
+      encryptionCounts.encrypted++;
+    } else {
+      encryptionCounts.unencrypted++;
+    }
+  }
+
+  return {
+    classifications: Object.entries(classificationCounts).map(([value, count]) => ({ value, count })),
+    countries: Object.entries(countryCounts).map(([value, count]) => ({ value, count })),
+    cois: Object.entries(coiCounts).map(([value, count]) => ({ value, count })),
+    instances: Object.entries(instanceCounts).map(([value, count]) => ({ value, count })),
+    encryptionStatus: Object.entries(encryptionCounts).map(([value, count]) => ({ value, count })),
+  };
 }
 
 // ============================================

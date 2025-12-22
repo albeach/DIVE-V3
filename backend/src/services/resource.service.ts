@@ -442,27 +442,59 @@ export async function getResourceByIdFederated(
     }
 
     // Step 3: Proxy request to origin instance
-    // First check static config, then check Hub-Spoke Registry for dynamic spokes
-    let originApiUrl = FEDERATION_API_URLS[originInstance];
+    // CRITICAL: Check Hub-Spoke Registry FIRST for approved spokes (they override static config)
+    // Then fall back to static FEDERATION_API_URLS
+    let originApiUrl: string | undefined;
 
+    // Check Hub-Spoke Registry first (for dynamically registered spokes)
+    try {
+        const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(originInstance);
+        if (spoke && spoke.status === 'approved') {
+            // Build internal API URL for Docker network communication
+            // In development: Use Docker container names (e.g., dive-spoke-fra-backend:4000)
+            // In production: Use external hostnames from apiUrl
+            const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+            
+            if (isDevelopment && (spoke as any).internalApiUrl) {
+                // Use stored internalApiUrl if available
+                originApiUrl = (spoke as any).internalApiUrl;
+            } else if (isDevelopment) {
+                // Build Docker internal URL: dive-spoke-{code}-backend:4000
+                const codeLower = spoke.instanceCode.toLowerCase();
+                originApiUrl = `https://dive-spoke-${codeLower}-backend:4000`;
+            } else {
+                // Production: Use external apiUrl
+                originApiUrl = spoke.apiUrl || '';
+            }
+            
+            logger.info('Found spoke in Hub-Spoke Registry', {
+                originInstance,
+                apiUrl: originApiUrl,
+                spokeId: spoke.spokeId,
+                environment: isDevelopment ? 'development' : 'production'
+            });
+        }
+    } catch (error) {
+        logger.warn('Error checking Hub-Spoke Registry', {
+            originInstance,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+
+    // Fall back to static config if no spoke found
     if (!originApiUrl) {
-        // Check Hub-Spoke Registry for dynamically registered spokes
-        try {
-            const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(originInstance);
-            if (spoke && spoke.status === 'approved') {
-                // Use internalApiUrl for Docker network access, fall back to apiUrl
-                originApiUrl = (spoke as any).internalApiUrl || spoke.apiUrl || '';
-                logger.info('Found spoke in Hub-Spoke Registry', {
-                    originInstance,
-                    apiUrl: originApiUrl,
-                    spokeId: spoke.spokeId
+        originApiUrl = FEDERATION_API_URLS[originInstance];
+        
+        // Override static config in development mode to use Docker internal URLs
+        if (originApiUrl && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
+            const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+            if (originInstance === 'FRA' && originApiUrl.includes('fra-api.dive25.com')) {
+                originApiUrl = 'https://dive-spoke-fra-backend:4000';
+                logger.info('Overriding static FRA API URL for development', {
+                    original: FEDERATION_API_URLS[originInstance],
+                    override: originApiUrl
                 });
             }
-        } catch (error) {
-            logger.warn('Error checking Hub-Spoke Registry', {
-                originInstance,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
         }
     }
 
@@ -484,8 +516,14 @@ export async function getResourceByIdFederated(
     });
 
     try {
-        // Import axios for federation requests
+        // Import axios and https for federation requests
         const axios = (await import('axios')).default;
+        const https = (await import('https')).default;
+
+        // Create HTTPS agent for self-signed certificates in development
+        const httpsAgent = new https.Agent({
+            rejectUnauthorized: process.env.NODE_ENV === 'production'
+        });
 
         const response = await axios.get(`${originApiUrl}/api/resources/${resourceId}`, {
             headers: {
@@ -493,6 +531,7 @@ export async function getResourceByIdFederated(
                 'Content-Type': 'application/json',
                 'X-Federated-From': CURRENT_INSTANCE, // Indicate this is a federated request
             },
+            httpsAgent, // Use custom HTTPS agent for self-signed certs
             timeout: 10000, // 10 second timeout for federation
             validateStatus: (status) => status < 500, // Don't throw on 4xx
         });

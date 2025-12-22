@@ -1,13 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-nld-98b19d07",
+    "spokeId": "spoke-nld-e824faf6",
     "instanceCode": "NLD",
     "name": "Kingdom of the Netherlands",
     "description": "DIVE V3 Spoke Instance for Kingdom of the Netherlands",
     "country": "NLD",
     "organizationType": "government",
-    "contactEmail": "admin@nld.dive25.com",
-    "registeredSpokeId": "spoke-nld-6712351e"
+    "contactEmail": "admin@nld.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,15 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:nld",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-20T12:40:31Z",
-    "spokeToken": "CnGltO2Ii2RDdgaE572uY1JRoJ2jzvdvg2_GD1JarVw"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-20T12:36:49Z",
-    "lastModified": "2025-12-20T12:36:49Z",
+    "createdAt": "2025-12-22T01:05:40Z",
+    "lastModified": "2025-12-22T01:05:40Z",
     "configHash": ""
   }
 }

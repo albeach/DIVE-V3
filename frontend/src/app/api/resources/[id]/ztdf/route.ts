@@ -1,15 +1,20 @@
 /**
  * ZTDF Details API Proxy Route
- * 
+ *
  * GET /api/resources/[id]/ztdf
- * 
- * Modern 2025 pattern: Server-side token handling only
+ *
+ * Fetches ZTDF details including Key Access Objects (KAOs) for decryption
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
 export const dynamic = 'force-dynamic';
+
+// Allow self-signed certs in local/dev (backend uses mkcert)
+if (process.env.NODE_ENV !== 'production') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 export async function GET(
     request: NextRequest,
@@ -31,10 +36,10 @@ export async function GET(
             );
         }
 
-        // Get tokens server-side
+        // Get tokens server-side (NEVER expose to client)
         const tokens = await getSessionTokens();
 
-        // Proxy request to backend
+        // Proxy request to backend ZTDF endpoint with access token
         const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
         const response = await fetch(`${backendUrl}/api/resources/${resourceId}/ztdf`, {
             method: 'GET',
@@ -46,19 +51,27 @@ export async function GET(
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ 
+            const error = await response.json().catch(() => ({
                 error: 'Unknown error',
-                message: `Backend returned ${response.status}` 
+                message: `Backend returned ${response.status}`
             }));
 
+            console.error('[ZTDF API] Backend error:', {
+                resourceId,
+                status: response.status,
+                error,
+            });
+
+            // Forward backend error status
             return NextResponse.json(error, { status: response.status });
         }
 
+        // Forward backend response to client
         const data = await response.json();
         return NextResponse.json(data);
 
     } catch (error) {
-        console.error('[ZTDFAPI] Error:', error);
+        console.error('[ZTDF API] Error:', error);
 
         return NextResponse.json(
             {

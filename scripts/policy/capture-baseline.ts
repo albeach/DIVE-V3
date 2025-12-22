@@ -677,3 +677,4 @@ switch (command) {
     console.log('Usage: npx ts-node scripts/policy/capture-baseline.ts <capture|compare|report>');
     process.exit(1);
 }
+

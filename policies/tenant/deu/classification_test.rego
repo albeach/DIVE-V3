@@ -313,3 +313,4 @@ test_invalid_classification_message_german if {
 	msg := classification.invalid_classification_msg("UNKNOWN")
 	contains(msg, "Unbekannte")
 }
+

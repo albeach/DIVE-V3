@@ -112,9 +112,8 @@ cmd_deploy() {
     log_step "Step 4: Stopping existing containers..."
     docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 
-    log_step "Step 5: Removing old volumes..."
-    docker volume rm dive-v3_postgres_data dive-v3_mongo_data dive-v3_redis_data 2>/dev/null || true
-    docker volume rm dive-pilot_postgres_data dive-pilot_mongo_data dive-pilot_redis_data 2>/dev/null || true
+    log_step "Step 5: Volumes removed via compose down -v"
+    # Volumes are automatically removed by 'docker compose down -v' above
 
     log_step "Step 6: Starting infrastructure services..."
     docker compose -f "$COMPOSE_FILE" up -d
@@ -201,17 +200,27 @@ checkpoint_create() {
     # Save compose state
     docker compose ps --format json > "${checkpoint_path}/compose-state.json" 2>/dev/null || echo "[]" > "${checkpoint_path}/compose-state.json"
 
-    # Backup volumes
-    local volumes=("dive-v3_postgres_data" "dive-v3_mongo_data" "dive-v3_redis_data")
-    for vol in "${volumes[@]}"; do
-        if docker volume inspect "$vol" >/dev/null 2>&1; then
-            log_verbose "Backing up volume: ${vol}"
-            docker run --rm \
-                -v "${vol}:/data:ro" \
-                -v "${checkpoint_path}:/backup" \
-                alpine tar czf "/backup/${vol}.tar.gz" -C /data . 2>/dev/null || true
-        fi
-    done
+    # Backup volumes - dynamically discover volumes from compose file
+    local compose_file="${COMPOSE_FILE:-docker-compose.yml}"
+    local project_name="${COMPOSE_PROJECT_NAME:-dive-v3}"
+    local volumes
+    volumes=$(docker compose -f "$compose_file" config --volumes 2>/dev/null || echo "")
+
+    if [ -z "$volumes" ]; then
+        log_warn "Could not discover volumes from compose file, skipping volume backup"
+    else
+        for vol in $volumes; do
+            # Construct full volume name with project prefix
+            local full_vol_name="${project_name}_${vol}"
+            if docker volume inspect "$full_vol_name" >/dev/null 2>&1; then
+                log_verbose "Backing up volume: ${full_vol_name}"
+                docker run --rm \
+                    -v "${full_vol_name}:/data:ro" \
+                    -v "${checkpoint_path}:/backup" \
+                    alpine tar czf "/backup/${full_vol_name}.tar.gz" -C /data . 2>/dev/null || true
+            fi
+        done
+    fi
 
     # Save latest pointer
     echo "$name" > "${CHECKPOINT_DIR}/latest"
@@ -288,23 +297,33 @@ cmd_rollback() {
     log_verbose "Stopping containers..."
     docker compose down 2>/dev/null || true
 
-    # Restore volumes
-    local volumes=("dive-v3_postgres_data" "dive-v3_mongo_data" "dive-v3_redis_data")
-    for vol in "${volumes[@]}"; do
-        local backup_file="${checkpoint_path}/${vol}.tar.gz"
-        if [ -f "$backup_file" ]; then
-            log_verbose "Restoring volume: ${vol}"
-            # Remove existing volume
-            docker volume rm "$vol" 2>/dev/null || true
-            # Create new volume
-            docker volume create "$vol" >/dev/null
-            # Restore data
-            docker run --rm \
-                -v "${vol}:/data" \
-                -v "${checkpoint_path}:/backup:ro" \
-                alpine tar xzf "/backup/${vol}.tar.gz" -C /data 2>/dev/null || true
-        fi
-    done
+    # Restore volumes - dynamically discover volumes from compose file
+    local compose_file="${COMPOSE_FILE:-docker-compose.yml}"
+    local project_name="${COMPOSE_PROJECT_NAME:-dive-v3}"
+    local volumes
+    volumes=$(docker compose -f "$compose_file" config --volumes 2>/dev/null || echo "")
+
+    if [ -z "$volumes" ]; then
+        log_warn "Could not discover volumes from compose file, skipping volume restore"
+    else
+        for vol in $volumes; do
+            # Construct full volume name with project prefix
+            local full_vol_name="${project_name}_${vol}"
+            local backup_file="${checkpoint_path}/${full_vol_name}.tar.gz"
+            if [ -f "$backup_file" ]; then
+                log_verbose "Restoring volume: ${full_vol_name}"
+                # Remove existing volume
+                docker volume rm "$full_vol_name" 2>/dev/null || true
+                # Create new volume
+                docker volume create "$full_vol_name" >/dev/null
+                # Restore data
+                docker run --rm \
+                    -v "${full_vol_name}:/data" \
+                    -v "${checkpoint_path}:/backup:ro" \
+                    alpine tar xzf "/backup/${full_vol_name}.tar.gz" -C /data 2>/dev/null || true
+            fi
+        done
+    fi
 
     # Restart services
     log_verbose "Starting containers..."
@@ -372,7 +391,7 @@ cmd_nuke() {
         log_dry "docker compose -f docker-compose.hub.yml down -v --remove-orphans"
         log_dry "docker compose -f docker-compose.pilot.yml down -v --remove-orphans"
         log_dry "docker volume rm (all dive-* volumes)"
-        log_dry "docker network rm dive-v3-shared-network shared-network"
+        log_dry "docker network rm dive-shared shared-services"
         [ "$keep_images" = false ] && log_dry "docker image rm (all dive images)"
         log_dry "docker system prune -f --volumes"
         log_dry "rm -rf .dive-checkpoint/"
@@ -410,10 +429,22 @@ cmd_nuke() {
         docker volume rm "$vol" 2>/dev/null || true
     done
 
-    # Remove dive-specific networks
-    docker network rm dive-v3-shared-network 2>/dev/null || true
-    docker network rm dive-v3-network 2>/dev/null || true
-    docker network rm shared-network 2>/dev/null || true
+    # Remove networks via compose (removes project-prefixed networks)
+    for compose_file in docker-compose.yml docker-compose.pilot.yml docker-compose.hub.yml; do
+        if [ -f "$compose_file" ]; then
+            docker compose -f "$compose_file" down --remove-orphans 2>/dev/null || true
+        fi
+    done
+
+    # Remove external shared networks (only if not in use)
+    for net in dive-shared shared-services; do
+        if docker network inspect "$net" >/dev/null 2>&1; then
+            local container_count=$(docker network inspect "$net" --format='{{len .Containers}}' 2>/dev/null || echo "0")
+            if [ "$container_count" -eq 0 ]; then
+                docker network rm "$net" 2>/dev/null || true
+            fi
+        fi
+    done
 
     # Remove dive images unless --keep-images
     if [ "$keep_images" = false ]; then

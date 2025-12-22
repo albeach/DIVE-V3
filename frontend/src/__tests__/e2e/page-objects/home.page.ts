@@ -102,3 +102,4 @@ export class HomePage extends BasePage {
     return await emergencyElements.count() > 0;
   }
 }
+

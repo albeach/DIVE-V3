@@ -1,12 +1,12 @@
 /**
  * KAS (Key Access Service) Server
- * 
+ *
  * Implements NATO ACP-240 Key Access Service
  * - Policy-bound encryption: Re-evaluates OPA policy before key release
  * - DEK/KEK management: Hybrid encryption (mock for pilot, HSM for production)
  * - Audit logging: All key requests logged per ACP-240 section 6
  * - Fail-closed: Deny on policy failure, integrity failure, or service unavailable
- * 
+ *
  * Reference: ACP240-llms.txt section 5.2 (Hybrid Encryption & Key Management)
  */
 
@@ -44,7 +44,7 @@ config({ path: '.env.local' });
 const app: Application = express();
 const PORT = process.env.KAS_PORT || 8080;
 const HTTPS_ENABLED = process.env.HTTPS_ENABLED === 'true';
-const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
+const OPA_URL = process.env.OPA_URL || 'https://localhost:8181';
 const BACKEND_URL = process.env.BACKEND_URL || 'https://localhost:4000';
 
 // ============================================
@@ -337,12 +337,18 @@ app.post('/request-key', async (req: Request, res: Response) => {
         let opaDecision: any;
         const opaStartTime = Date.now();
         try {
+            // Configure axios for HTTPS with self-signed certs (local dev)
+            const httpsAgent = new https.Agent({
+                rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0'
+            });
+
             const opaResponse = await axios.post(
-                `${OPA_URL}/v1/data/dive/authorization`,
+                `${OPA_URL}/v1/data/dive/authz/decision`,
                 opaInput,
                 {
                     headers: { 'Content-Type': 'application/json' },
-                    timeout: 5000
+                    timeout: 5000,
+                    httpsAgent: OPA_URL.startsWith('https') ? httpsAgent : undefined
                 }
             );
 

@@ -89,6 +89,9 @@ cmd_up() {
 
     log_step "Starting DIVE V3 Stack..."
 
+    # Ensure required networks exist before starting
+    ensure_shared_network || { log_error "Network setup failed"; exit 1; }
+
     # Choose compose file based on environment
     COMPOSE_FILE="docker-compose.yml"
     [ "$ENVIRONMENT" = "pilot" ] && COMPOSE_FILE="docker-compose.pilot.yml"
@@ -107,6 +110,7 @@ cmd_up() {
         ensure_client_https_redirects || { log_error "Failed to enforce HTTPS redirect URIs"; exit 1; }
         ensure_idps_present || { log_error "No IdPs found; aborting startup"; exit 1; }
         ensure_webauthn_policy
+        configure_amr || log_warn "AMR configuration skipped (non-blocking)"
         wait_for_backend || { log_error "Backend did not become ready"; exit 1; }
         wait_for_frontend || { log_error "Frontend did not become ready"; exit 1; }
         auto_seed_resources || log_warn "Resource seeding skipped/failed (non-blocking)"
@@ -548,6 +552,37 @@ ensure_webauthn_policy() {
     else
         log_warn "WebAuthn policy verify mismatch (got='${rp}', expected='${rp_id}')"
     fi
+}
+
+# =============================================================================
+# AMR Configuration
+# =============================================================================
+# Ensures AMR (Authentication Methods Reference) is properly configured.
+# Keycloak 26's native oidc-amr-mapper doesn't work with standard authenticators.
+# WORKAROUND: Use user attribute mapper instead, set AMR on users via seed scripts.
+configure_amr() {
+    case "$ENVIRONMENT" in
+        local|dev) ;;
+        *) return 0 ;;  # Skip for non-local environments
+    esac
+
+    local configure_script="${DIVE_ROOT}/scripts/hub-init/configure-amr.sh"
+    if [ ! -f "$configure_script" ]; then
+        log_warn "AMR configuration script not found: ${configure_script}"
+        return 0
+    fi
+
+    log_step "Configuring AMR (Authentication Methods Reference)..."
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "bash ${configure_script}"
+        return 0
+    fi
+
+    bash "$configure_script" 2>&1 | while read -r line; do
+        echo "  $line"
+    done
+
+    return 0
 }
 
 ensure_terraform() {

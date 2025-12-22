@@ -1,11 +1,11 @@
 /**
  * Resources API Proxy Route
- * 
+ *
  * Modern 2025 pattern: Client never touches tokens
  * - Client makes simple fetch('/api/resources')
  * - Server validates session and handles tokens
  * - Server proxies request to backend with proper auth
- * 
+ *
  * Security: Tokens accessed server-side only via session validation utilities
  */
 
@@ -13,6 +13,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
 export const dynamic = 'force-dynamic';
+
+// Allow self-signed certs in local/dev (backend uses mkcert)
+if (process.env.NODE_ENV !== 'production') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 export async function GET(request: NextRequest) {
     try {

@@ -526,3 +526,4 @@ done
 # Run main deployment
 SECONDS=0
 main "$@"
+

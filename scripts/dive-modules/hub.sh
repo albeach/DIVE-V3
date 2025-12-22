@@ -349,6 +349,38 @@ hub_up() {
 
     log_success "Hub services started"
     echo ""
+
+    # Initialize NextAuth database if needed
+    log_step "Checking NextAuth database..."
+    _hub_init_nextauth_db || log_warn "NextAuth database initialization had issues (non-blocking)"
+
+    # Apply Terraform (MFA flows, protocol mappers, etc.)
+    log_step "Applying Terraform configuration (MFA flows)..."
+    _hub_apply_terraform || log_warn "Terraform apply had issues (MFA may not be configured)"
+
+    # Check if hub has been initialized (users and resources seeded)
+    local init_marker="${HUB_DATA_DIR}/.initialized"
+    if [ ! -f "$init_marker" ]; then
+        echo ""
+        log_warn "Hub not fully initialized (users/resources not seeded)"
+        log_step "Running post-deployment initialization..."
+
+        # Wait for services to be healthy before seeding
+        log_info "Waiting for services to be ready..."
+        sleep 10
+
+        # Run seeding automatically
+        if hub_seed 5000; then
+            log_success "Hub fully initialized with users and resources!"
+        else
+            log_warn "Initialization had some issues. You can re-run with:"
+            echo "  ./dive hub seed"
+        fi
+    else
+        log_info "Hub already initialized (skipping seeding)"
+    fi
+
+    echo ""
     echo "  Keycloak: ${HUB_KEYCLOAK_URL}"
     echo "  Backend:  ${HUB_BACKEND_URL}"
     echo "  OPA:      ${HUB_OPA_URL}"
@@ -369,6 +401,51 @@ hub_down() {
 
     docker compose -f "$HUB_COMPOSE_FILE" down
     log_success "Hub services stopped"
+}
+
+##
+# Initialize NextAuth database for hub frontend
+##
+_hub_init_nextauth_db() {
+    local postgres_container="${COMPOSE_PROJECT_NAME:-dive-hub}-postgres"
+    local schema_file="${DIVE_ROOT}/scripts/spoke-init/nextauth-schema.sql"
+
+    # Wait for PostgreSQL to be ready
+    log_verbose "Waiting for PostgreSQL..."
+    local retries=10
+    while [ $retries -gt 0 ]; do
+        if docker exec "$postgres_container" pg_isready -U postgres >/dev/null 2>&1; then
+            break
+        fi
+        retries=$((retries - 1))
+        sleep 2
+    done
+
+    if [ $retries -eq 0 ]; then
+        log_error "PostgreSQL not ready"
+        return 1
+    fi
+
+    # Create database if it doesn't exist
+    log_verbose "Creating dive_v3_app database if needed..."
+    docker exec "$postgres_container" psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'dive_v3_app'" | grep -q 1 || {
+        docker exec "$postgres_container" psql -U postgres -c "CREATE DATABASE dive_v3_app;" >/dev/null 2>&1
+        log_success "Created dive_v3_app database"
+    }
+
+    # Apply NextAuth schema if file exists
+    if [ -f "$schema_file" ]; then
+        log_verbose "Applying NextAuth schema..."
+        if docker exec -i "$postgres_container" psql -U postgres -d dive_v3_app < "$schema_file" >/dev/null 2>&1; then
+            log_success "NextAuth schema applied"
+        else
+            log_warn "NextAuth schema may already exist (this is OK)"
+        fi
+    else
+        log_warn "NextAuth schema file not found: $schema_file"
+    fi
+
+    return 0
 }
 
 _hub_wait_all_healthy() {
@@ -1610,21 +1687,64 @@ hub_seed() {
         return 1
     fi
 
-    # Step 1: Seed users (includes User Profile configuration)
-    log_step "Step 1/2: Seeding test users..."
+    # Step 0: Configure client logout URIs (CRITICAL - must run before users)
+    log_step "Step 0/4: Configuring Keycloak client logout URIs..."
+    if [ -x "${SEED_SCRIPTS_DIR}/configure-hub-client.sh" ]; then
+        if [ "$DRY_RUN" = true ]; then
+            log_dry "Would run: ${SEED_SCRIPTS_DIR}/configure-hub-client.sh"
+        else
+            "${SEED_SCRIPTS_DIR}/configure-hub-client.sh" || log_warn "Client configuration had issues (non-blocking)"
+        fi
+    else
+        log_warn "configure-hub-client.sh not found - logout may not work"
+    fi
+    echo ""
+
+    # Step 1: Initialize COI Keys (CRITICAL - must run first)
+    log_step "Step 1/4: Initializing COI Keys database..."
+    local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker exec ${backend_container} npx tsx src/scripts/initialize-coi-keys.ts"
+    else
+        if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+            log_error "Backend container '${backend_container}' is not running"
+            return 1
+        fi
+
+        log_info "Initializing 35 COI definitions (NATO, FVEY, bilateral agreements, etc.)..."
+        docker exec "$backend_container" npx tsx src/scripts/initialize-coi-keys.ts 2>&1 | tail -10
+
+        if [ $? -eq 0 ]; then
+            log_success "COI Keys initialized (35 COIs covering 32 NATO + 5 partner nations)"
+        else
+            log_error "COI Keys initialization failed"
+            return 1
+        fi
+    fi
+    echo ""
+
+    # Step 2: Seed users (includes User Profile configuration)
+    log_step "Step 2/4: Seeding test users..."
     if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-users.sh" ]; then
         if [ "$DRY_RUN" = true ]; then
             log_dry "Would run: ${SEED_SCRIPTS_DIR}/seed-hub-users.sh"
         else
             "${SEED_SCRIPTS_DIR}/seed-hub-users.sh"
+            if [ $? -eq 0 ]; then
+                log_success "Test users created: testuser-usa-{1-4}, admin-usa"
+            else
+                log_error "User seeding failed"
+                return 1
+            fi
         fi
     else
         log_error "seed-hub-users.sh not found or not executable"
         return 1
     fi
 
-    # Step 2: Seed ZTDF encrypted resources using TypeScript seeder
-    log_step "Step 2/2: Seeding ${resource_count} ZTDF encrypted resources..."
+    # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
+    log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
     local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
 
     if [ "$DRY_RUN" = true ]; then
@@ -1652,6 +1772,11 @@ hub_seed() {
         }
     fi
 
+    # Mark hub as initialized
+    mkdir -p "$HUB_DATA_DIR"
+    touch "${HUB_DATA_DIR}/.initialized"
+    log_success "Hub initialization marker created"
+
     echo ""
     log_success "Hub seeding complete!"
     echo ""
@@ -1665,6 +1790,156 @@ hub_seed() {
     echo "    - All documents have full ZTDF policy structure"
     echo ""
     echo "  ABAC is now functional - users see resources based on clearance level"
+}
+
+# =============================================================================
+# AMR MANAGEMENT
+# =============================================================================
+
+hub_amr() {
+    local action="${1:-help}"
+    shift || true
+
+    case "$action" in
+        sync)
+            # Sync AMR attributes for all users based on configured credentials
+            log_step "Syncing AMR attributes..."
+            bash "${DIVE_ROOT}/scripts/sync-amr-attributes.sh" "$@"
+            ;;
+        set)
+            # Set AMR for a specific user
+            local username="$1"
+            local amr_value="$2"
+            if [ -z "$username" ] || [ -z "$amr_value" ]; then
+                log_error "Usage: ./dive hub amr set <username> '<amr_array>'"
+                log_error "Example: ./dive hub amr set testuser-usa-2 '[\"pwd\",\"otp\"]'"
+                return 1
+            fi
+            log_step "Setting AMR for user: ${username}"
+            _hub_set_user_amr "$username" "$amr_value"
+            ;;
+        show)
+            # Show AMR for a specific user
+            local username="$1"
+            if [ -z "$username" ]; then
+                log_error "Usage: ./dive hub amr show <username>"
+                return 1
+            fi
+            _hub_show_user_amr "$username"
+            ;;
+        help|*)
+            echo -e "${BOLD}DIVE Hub AMR Commands:${NC}"
+            echo ""
+            echo "  sync [--dry-run]              Sync AMR attributes based on credentials"
+            echo "  set <user> '<amr_array>'      Set AMR for a specific user"
+            echo "  show <user>                   Show AMR for a specific user"
+            echo ""
+            echo -e "${CYAN}Examples:${NC}"
+            echo "  ./dive hub amr sync                              # Sync all users"
+            echo "  ./dive hub amr sync --user testuser-usa-2        # Sync specific user"
+            echo "  ./dive hub amr set testuser-usa-2 '[\"pwd\",\"otp\"]'"
+            echo "  ./dive hub amr show testuser-usa-2"
+            echo ""
+            echo -e "${CYAN}Background:${NC}"
+            echo "  AMR (Authentication Methods Reference) tracks the auth factors used."
+            echo "  This script syncs the AMR attribute based on configured credentials."
+            echo "  OPA policies check AMR for AAL2/AAL3 enforcement."
+            ;;
+    esac
+}
+
+_hub_set_user_amr() {
+    local username="$1"
+    local amr_value="$2"
+
+    local keycloak_url="${HUB_KEYCLOAK_URL}"
+    local realm="dive-v3-broker"
+
+    # Get admin token
+    local admin_password
+    admin_password=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+
+    local token
+    token=$(curl -sk -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_password}" | jq -r '.access_token')
+
+    if [ -z "$token" ] || [ "$token" == "null" ]; then
+        log_error "Failed to authenticate with Keycloak"
+        return 1
+    fi
+
+    # Get user ID
+    local user_id
+    user_id=$(curl -sk "${keycloak_url}/admin/realms/${realm}/users?username=${username}&exact=true" \
+        -H "Authorization: Bearer $token" | jq -r '.[0].id')
+
+    if [ -z "$user_id" ] || [ "$user_id" == "null" ]; then
+        log_error "User not found: ${username}"
+        return 1
+    fi
+
+    # Get current user data
+    local user_data
+    user_data=$(curl -sk "${keycloak_url}/admin/realms/${realm}/users/${user_id}" \
+        -H "Authorization: Bearer $token")
+
+    # Update AMR attribute
+    local updated_data
+    updated_data=$(echo "$user_data" | jq --argjson amr "$amr_value" '.attributes.amr = $amr')
+
+    curl -sk -X PUT "${keycloak_url}/admin/realms/${realm}/users/${user_id}" \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -d "$updated_data" > /dev/null 2>&1
+
+    log_success "AMR set for ${username}: ${amr_value}"
+}
+
+_hub_show_user_amr() {
+    local username="$1"
+
+    local keycloak_url="${HUB_KEYCLOAK_URL}"
+    local realm="dive-v3-broker"
+
+    # Get admin token
+    local admin_password
+    admin_password=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+
+    local token
+    token=$(curl -sk -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_password}" | jq -r '.access_token')
+
+    if [ -z "$token" ] || [ "$token" == "null" ]; then
+        log_error "Failed to authenticate with Keycloak"
+        return 1
+    fi
+
+    # Get user
+    local user_data
+    user_data=$(curl -sk "${keycloak_url}/admin/realms/${realm}/users?username=${username}&exact=true" \
+        -H "Authorization: Bearer $token" | jq '.[0]')
+
+    if [ -z "$user_data" ] || [ "$user_data" == "null" ]; then
+        log_error "User not found: ${username}"
+        return 1
+    fi
+
+    local amr
+    amr=$(echo "$user_data" | jq -r '.attributes.amr // ["pwd"]')
+    local clearance
+    clearance=$(echo "$user_data" | jq -r '.attributes.clearance[0] // "UNCLASSIFIED"')
+
+    echo ""
+    echo -e "${BOLD}User: ${username}${NC}"
+    echo "  Clearance: ${clearance}"
+    echo "  AMR:       ${amr}"
+    echo ""
 }
 
 # =============================================================================
@@ -1687,6 +1962,7 @@ module_hub() {
         spokes)      hub_spokes "$@" ;;
         push-policy) hub_push_policy "$@" ;;
         seed)        hub_seed "$@" ;;
+        amr)         hub_amr "$@" ;;
 
         # Legacy compatibility
         bootstrap)   hub_deploy "$@" ;;
@@ -1724,6 +2000,11 @@ module_hub_help() {
     echo ""
     echo -e "${CYAN}Policy:${NC}"
     echo "  push-policy [layers] Push policy update to all spokes"
+    echo ""
+    echo -e "${CYAN}AMR Management (MFA/AAL):${NC}"
+    echo "  amr sync [--user X]     Sync AMR attributes based on credentials"
+    echo "  amr set <user> <amr>    Set AMR for a specific user"
+    echo "  amr show <user>         Show AMR for a specific user"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  ./dive hub deploy"

@@ -333,18 +333,18 @@
         "projectName": "fra"
       },
       "services": {
-        "_comment": "FRA uses -fra suffix on all service names",
+        "_comment": "FRA uses fra- prefix on all service names",
         "frontend": {
           "name": "frontend-fra",
-          "containerName": "dive-v3-frontend-fra",
+          "containerName": "dive-spoke-fra-frontend",
           "internalPort": 3000,
-          "externalPort": 3001,
+          "externalPort": 3457,
           "protocol": "https",
           "hostname": "fra-app.dive25.com"
         },
         "backend": {
           "name": "backend-fra",
-          "containerName": "dive-v3-backend-fra",
+          "containerName": "dive-spoke-fra-backend",
           "internalPort": 4000,
           "externalPort": 4001,
           "protocol": "https",
@@ -352,85 +352,19 @@
         },
         "keycloak": {
           "name": "keycloak-fra",
-          "containerName": "dive-v3-keycloak-fra",
+          "containerName": "dive-spoke-fra-keycloak",
           "internalPort": 8443,
           "externalPort": 8444,
           "protocol": "https",
           "hostname": "fra-idp.dive25.com"
         },
-        "kas": {
-          "name": "kas-fra",
-          "containerName": "dive-v3-kas-fra",
-          "internalPort": 8080,
-          "externalPort": 8091,
-          "protocol": "http",
-          "hostname": "fra-kas.dive25.com"
-        },
-        "postgres": {
-          "name": "postgres-fra",
-          "containerName": "dive-v3-postgres-fra",
-          "internalPort": 5432,
-          "externalPort": 5434
-        },
         "mongodb": {
           "name": "mongodb-fra",
-          "containerName": "dive-v3-mongodb-fra",
+          "containerName": "dive-spoke-fra-mongodb",
           "internalPort": 27017,
-          "externalPort": 27018
-        },
-        "redis": {
-          "name": "redis-fra",
-          "containerName": "dive-v3-redis-fra",
-          "internalPort": 6379,
-          "externalPort": 6380
-        },
-        "opa": {
-          "name": "opa-fra",
-          "containerName": "dive-v3-opa-fra",
-          "internalPort": 8181,
-          "externalPort": 8182
+          "externalPort": 27018,
+          "protocol": "mongodb"
         }
-      },
-      "cloudflare": {
-        "tunnelId": "e07574bd-6f32-478b-8f71-42fc3d4073f7",
-        "tunnelName": "dive-v3-fra",
-        "credentialsFile": "cloudflared/fra-tunnel-credentials.json",
-        "configFile": "cloudflared/config-fra.yml",
-        "metricsPort": 9127
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "keycloakAdmin": "dive-v3-keycloak-fra",
-        "keycloakClientSecret": "dive-v3-keycloak-client-secret-fra",
-        "postgres": "dive-v3-postgres-fra",
-        "mongodb": "dive-v3-mongodb-fra",
-        "redis": "dive-v3-redis-fra",
-        "authSecret": "dive-v3-auth-secret-fra",
-        "jwtSecret": "dive-v3-jwt-secret-fra",
-        "nextauthSecret": "dive-v3-nextauth-secret-fra"
-      },
-      "keycloak": {
-        "adminUsername": "admin",
-        "database": {
-          "name": "keycloak",
-          "user": "keycloak"
-        },
-        "theme": "dive-v3-fra"
-      },
-      "mongodb": {
-        "database": "dive-v3-fra",
-        "user": "admin"
-      },
-      "testUsers": {
-        "create": true,
-        "clearances": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "usernameTemplate": "testuser-{code}-{level}",
-        "emailDomain": "dive-demo.example"
       }
     },
     "gbr": {
@@ -860,6 +794,161 @@
           "externalPort": 27033,
           "protocol": "mongodb"
         }
+      },
+      "mongodb": {
+        "database": "dive_resources_lva",
+        "user": "admin"
+      }
+    },
+    "lux": {
+      "code": "LUX",
+      "name": "Luxembourg",
+      "locale": "lb-LU",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.lux.yml",
+        "projectName": "lux"
+      },
+      "services": {
+        "_comment": "LUX uses lux- prefix on all service names",
+        "frontend": {
+          "name": "frontend-lux",
+          "containerName": "dive-spoke-lux-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "lux-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-lux",
+          "containerName": "dive-spoke-lux-backend",
+          "internalPort": 4000,
+          "externalPort": 4018,
+          "protocol": "https",
+          "hostname": "lux-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-lux",
+          "containerName": "dive-spoke-lux-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8461,
+          "protocol": "https",
+          "hostname": "lux-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-lux",
+          "containerName": "dive-spoke-lux-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27035,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "mne": {
+      "code": "MNE",
+      "name": "Montenegro",
+      "locale": "sr-ME",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.mne.yml",
+        "projectName": "mne"
+      },
+      "services": {
+        "_comment": "MNE uses mne- prefix on all service names",
+        "frontend": {
+          "name": "frontend-mne",
+          "containerName": "dive-spoke-mne-frontend",
+          "internalPort": 3000,
+          "externalPort": 3459,
+          "protocol": "https",
+          "hostname": "mne-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-mne",
+          "containerName": "dive-spoke-mne-backend",
+          "internalPort": 4000,
+          "externalPort": 4018,
+          "protocol": "https",
+          "hostname": "mne-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-mne",
+          "containerName": "dive-spoke-mne-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8461,
+          "protocol": "https",
+          "hostname": "mne-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-mne",
+          "containerName": "dive-spoke-mne-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27035,
+          "protocol": "mongodb"
+        }
+      },
+      "mongodb": {
+        "database": "dive_resources_mne",
+        "user": "admin"
+      }
+    },
+    "nld": {
+      "code": "NLD",
+      "name": "Netherlands",
+      "locale": "nl-NL",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.nld.yml",
+        "projectName": "nld"
+      },
+      "services": {
+        "_comment": "NLD uses nld- prefix on all service names",
+        "frontend": {
+          "name": "frontend-nld",
+          "containerName": "dive-spoke-nld-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "nld-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-nld",
+          "containerName": "dive-spoke-nld-backend",
+          "internalPort": 4000,
+          "externalPort": 4020,
+          "protocol": "https",
+          "hostname": "nld-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-nld",
+          "containerName": "dive-spoke-nld-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8463,
+          "protocol": "https",
+          "hostname": "nld-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-nld",
+          "containerName": "dive-spoke-nld-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27037,
+          "protocol": "mongodb"
+        }
       }
     }
   },
@@ -874,12 +963,16 @@
         "gbr",
         "hun",
         "ita",
-        "lva"
+        "lux",
+        "lva",
+        "mne",
+        "nld"
       ],
       "fra": [
-        "usa",
+        "deu",
+        "fra",
         "gbr",
-        "deu"
+        "usa"
       ],
       "gbr": [
         "usa",
@@ -916,6 +1009,24 @@
         "usa"
       ],
       "lva": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "lux": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "mne": [
+        "usa",
+        "deu",
+        "fra",
+        "gbr"
+      ],
+      "nld": [
         "deu",
         "fra",
         "gbr",

@@ -169,3 +169,4 @@ test_aal3_sufficient_for_all if {
 	clearance.aal_sufficient(3, "SECRET")
 	clearance.aal_sufficient(3, "TOP_SECRET")
 }
+

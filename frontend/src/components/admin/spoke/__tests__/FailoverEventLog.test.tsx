@@ -232,3 +232,4 @@ describe('FailoverEventLog', () => {
     });
   });
 });
+

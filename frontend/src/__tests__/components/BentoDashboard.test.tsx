@@ -276,3 +276,4 @@ describe('BentoDashboardSkeleton', () => {
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
   });
 });
+

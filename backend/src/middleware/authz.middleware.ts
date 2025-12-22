@@ -68,7 +68,7 @@ export const clearAuthzCaches = (): void => {
 
 // OPA endpoint - Phase 5: Use unified dive.authz entrypoint
 // Supports backward compatibility via v1_shim.rego if using dive.authorization
-const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
+const OPA_URL = process.env.OPA_URL || 'https://localhost:8181';
 // In test mode, prefer the legacy endpoint unless explicitly overridden to keep unit tests aligned.
 const USE_UNIFIED_ENDPOINT =
     process.env.NODE_ENV === 'test'
@@ -1173,17 +1173,27 @@ export const authenticateJWT = async (
                     const countryOfAffiliation = (decoded as any).countryOfAffiliation || federatedFrom;
                     const acpCOI = (decoded as any).acpCOI || [];
 
+                    // Extract AMR and ACR for AAL/FAL enforcement (CRITICAL for classified document access)
+                    const amr = (decoded as any).amr;
+                    const acr = (decoded as any).acr;
+
                     // Attach federated user info to request
                     (req as any).user = {
                         uniqueID,
                         clearance,
                         countryOfAffiliation,
                         acpCOI,
+                        amr,  // Include AMR for authentication strength checks
+                        acr,  // Include ACR for assurance level checks
                         federated: true,
                         federatedFrom,
                     };
 
                     (req as any).accessToken = token;
+
+                    // CRITICAL: Also attach decodedToken for AAL2 validation
+                    // The authzMiddleware's validateAAL2() function expects req.decodedToken
+                    (req as any).decodedToken = decoded as IKeycloakToken;
 
                     logger.info('Federated request authenticated via partner trust', {
                         requestId,
@@ -1482,6 +1492,8 @@ export const authzMiddleware = async (
                 clearance: (req as any).user.clearance || 'UNCLASSIFIED',
                 countryOfAffiliation: (req as any).user.countryOfAffiliation || federatedFrom,
                 acpCOI: (req as any).user.acpCOI || [],
+                amr: (req as any).user.amr,  // CRITICAL: Include AMR for AAL2 validation
+                acr: (req as any).user.acr,  // CRITICAL: Include ACR for AAL2 validation
                 email: (req as any).user.email || `${(req as any).user.uniqueID}@federated.local`,
                 iss: `federated:${federatedFrom}`,
                 aud: 'dive-v3-client',
@@ -1898,15 +1910,34 @@ export const authzMiddleware = async (
                 logger.debug('Using cached authorization decision (test cache)', { cacheKey });
 
                 if (!cachedDecision.allow) {
+                    // Get user-friendly error message for test cached denials
+                    const userFriendlyTest = getUserFriendlyDenialMessage(
+                        cachedDecision.reason || 'Access denied',
+                        {
+                            classification,
+                            releasabilityTo,
+                            COI: ztdfCOI || coi,
+                            title: resource.title
+                        },
+                        {
+                            clearance,
+                            countryOfAffiliation,
+                            acpCOI
+                        }
+                    );
+
                     res.status(403).json({
                         error: 'Forbidden',
-                        message: cachedDecision.reason || 'Access denied',
+                        message: userFriendlyTest.message,
+                        reason: cachedDecision.reason || 'Access denied',
+                        guidance: userFriendlyTest.guidance,
+                        technical_reason: cachedDecision.reason,
                         details: {
                             subject: {
                                 uniqueID,
                                 clearance,
-                                countryOfAffiliation,
-                                acpCOI
+                                country: countryOfAffiliation,
+                                coi: acpCOI
                             },
                             resource: {
                                 resourceId,
@@ -1915,7 +1946,8 @@ export const authzMiddleware = async (
                                 releasabilityTo,
                                 coi: ztdfCOI || coi,
                                 encrypted: resource.encrypted || isZTDF,
-                            }
+                            },
+                            cached: true
                         }
                     });
                     return;
@@ -1945,15 +1977,34 @@ export const authzMiddleware = async (
                     const latencyMs = Date.now() - startTime;
                     logDecision(requestId, uniqueID, resourceId, false, cachedDecision.reason, latencyMs);
 
+                    // Get user-friendly error message for cached denials
+                    const userFriendlyCached = getUserFriendlyDenialMessage(
+                        cachedDecision.reason,
+                        {
+                            classification,
+                            releasabilityTo,
+                            COI: ztdfCOI || coi,
+                            title: resource.title
+                        },
+                        {
+                            clearance,
+                            countryOfAffiliation,
+                            acpCOI
+                        }
+                    );
+
                     res.status(403).json({
                         error: 'Forbidden',
-                        message: cachedDecision.reason,
+                        message: userFriendlyCached.message,
+                        reason: cachedDecision.reason,
+                        guidance: userFriendlyCached.guidance,
+                        technical_reason: cachedDecision.reason,
                         details: {
                             subject: {
                                 uniqueID,
                                 clearance,
-                                countryOfAffiliation,
-                                acpCOI
+                                country: countryOfAffiliation,
+                                coi: acpCOI
                             },
                             resource: {
                                 resourceId,
@@ -1963,7 +2014,8 @@ export const authzMiddleware = async (
                                 coi: ztdfCOI || coi,
                                 encrypted: resource.encrypted || isZTDF,
                             },
-                            checks: cachedDecision.evaluation_details || {}
+                            checks: cachedDecision.evaluation_details || {},
+                            cached: true
                         }
                     });
                     return;

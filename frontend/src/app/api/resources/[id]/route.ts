@@ -1,8 +1,8 @@
 /**
  * Individual Resource API Proxy Route
- * 
+ *
  * GET /api/resources/[id]
- * 
+ *
  * Modern 2025 pattern: Server-side token handling only
  * - Client requests resource by ID
  * - Server validates session and handles backend auth
@@ -13,6 +13,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
 export const dynamic = 'force-dynamic';
+
+// Allow self-signed certs in local/dev (backend uses mkcert)
+if (process.env.NODE_ENV !== 'production') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 export async function GET(
     request: NextRequest,
@@ -49,11 +54,11 @@ export async function GET(
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ 
+            const error = await response.json().catch(() => ({
                 error: 'Unknown error',
-                message: `Backend returned ${response.status}` 
+                message: `Backend returned ${response.status}`
             }));
-            
+
             console.error('[ResourceAPI] Backend error:', {
                 resourceId,
                 status: response.status,

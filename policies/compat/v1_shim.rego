@@ -209,3 +209,4 @@ get_equivalency_level(classification, country) := nato_classification.get_nato_l
 classification_equivalent(user_clearance, user_country, resource_classification, resource_country) if {
 	nato_classification.is_clearance_sufficient(user_clearance, user_country, resource_classification, resource_country)
 }
+

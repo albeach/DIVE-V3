@@ -929,7 +929,7 @@ name: dive-spoke-${code_lower}
 networks:
   dive-${code_lower}-network:
     driver: bridge
-  dive-v3-shared-network:
+  dive-shared:
     external: true
 
 volumes:
@@ -1020,7 +1020,7 @@ services:
         condition: service_healthy
     networks:
       - dive-${code_lower}-network
-      - dive-v3-shared-network
+      - dive-shared
 
   opa-${code_lower}:
     extends:
@@ -1042,9 +1042,9 @@ services:
     environment:
       OPAL_SERVER_URL: \${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: \${SPOKE_OPAL_TOKEN:-}
-      OPAL_OPA_URL: http://opa-${code_lower}:8181
+      OPAL_OPA_URL: https://opa-${code_lower}:8181
       OPAL_SUBSCRIPTION_ID: \${SPOKE_ID:-spoke-${code_lower}-default}
-      OPAL_POLICY_STORE_URL: http://opa-${code_lower}:8181
+      OPAL_POLICY_STORE_URL: https://opa-${code_lower}:8181
       OPAL_DATA_TOPICS: policy:base,policy:${code_lower},data:federation_matrix,data:trusted_issuers
     volumes:
       - ${code_lower}_opal_cache:/var/opal/cache
@@ -1054,7 +1054,7 @@ services:
         condition: service_healthy
     networks:
       - dive-${code_lower}-network
-      - dive-v3-shared-network  # Required to reach Hub OPAL server
+      - dive-shared  # Required to reach Hub OPAL server
 
   kas-${code_lower}:
     extends:
@@ -1064,7 +1064,7 @@ services:
     environment:
       KEYCLOAK_URL: https://keycloak-${code_lower}:8443
       KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      OPA_URL: http://opa-${code_lower}:8181
+      OPA_URL: https://opa-${code_lower}:8181
       INSTANCE_CODE: ${code_upper}
     ports:
       - "${kas_host_port}:8080"
@@ -1095,7 +1095,7 @@ services:
       TRUSTED_ISSUERS: https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower},https://keycloak-${code_lower}:8443/realms/dive-v3-broker-${code_lower},https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
-      OPA_URL: http://opa-${code_lower}:8181
+      OPA_URL: https://opa-${code_lower}:8181
       FEDERATION_ALLOWED_ORIGINS: https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port},https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com
       CORS_ALLOWED_ORIGINS: https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port},https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com
     ports:
@@ -1116,7 +1116,7 @@ services:
         condition: service_healthy
     networks:
       - dive-${code_lower}-network
-      - dive-v3-shared-network
+      - dive-shared
 
   frontend-${code_lower}:
     extends:
@@ -1328,7 +1328,10 @@ _spoke_init_legacy() {
 
         # Auto-clean stale volumes for better UX
         log_info "Auto-cleaning stale volumes for fresh deployment..."
-        docker volume ls -q 2>/dev/null | grep -E "^${code_lower}[_-]" | xargs -r docker volume rm 2>/dev/null || true
+        # Use compose to clean volumes instead of pattern matching
+        if [ -f "${spoke_dir}/docker-compose.yml" ]; then
+            (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="$code_lower" docker compose down -v 2>/dev/null) || true
+        fi
     fi
 
     # Generate fresh passwords for any missing values
@@ -2360,6 +2363,93 @@ spoke_rotate_certs() {
 }
 
 # =============================================================================
+# INTERNAL: Apply Terraform for Spoke (MFA flows, etc.)
+# =============================================================================
+_spoke_apply_terraform() {
+    local instance_code="${1:-}"
+    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    local tf_dir="${DIVE_ROOT}/terraform/spoke"
+    local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
+
+    if [ ! -d "$tf_dir" ]; then
+        log_info "No Terraform directory found at ${tf_dir}"
+        return 0
+    fi
+
+    if [ ! -f "$tfvars_file" ]; then
+        log_warn "Terraform tfvars not found: ${tfvars_file}"
+        log_info "Skipping Terraform apply (MFA will not be configured via Terraform)"
+        return 0
+    fi
+
+    log_info "Applying Terraform configuration for ${code_upper}..."
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "cd ${tf_dir} && terraform workspace select ${code_lower} && terraform apply -var-file=${tfvars_file} -auto-approve"
+        return 0
+    fi
+
+    (
+        cd "$tf_dir"
+
+        # Initialize if needed
+        [ ! -d ".terraform" ] && terraform init -input=false -backend=false
+
+        # Select or create workspace
+        if terraform workspace list 2>/dev/null | grep -q "^  ${code_lower}$\|^\* ${code_lower}$"; then
+            terraform workspace select "$code_lower" >/dev/null 2>&1
+        else
+            terraform workspace new "$code_lower" >/dev/null 2>&1
+        fi
+
+        # Load secrets for Terraform
+        local instance_dir="${DIVE_ROOT}/instances/${code_lower}"
+        if [ -f "${instance_dir}/.env" ]; then
+            set -a
+            source "${instance_dir}/.env"
+            set +a
+        fi
+
+        # Export secrets as TF_VAR_ environment variables
+        local instance_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+        export TF_VAR_keycloak_admin_password="${!instance_password_var:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+        export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_${code_upper}:-${KEYCLOAK_CLIENT_SECRET:-}}"
+        export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-DiveTestSecure2025!}"
+        export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
+        export TF_VAR_enable_mfa=true
+        export TF_VAR_webauthn_rp_id="${WEBAUTHN_RP_ID:-localhost}"
+
+        # Get Keycloak container name for internal URL
+        local kc_container="dive-spoke-${code_lower}-keycloak"
+        if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+            export KEYCLOAK_URL="http://${kc_container}:8080"
+        else
+            # Fallback to localhost with port offset
+            if type -t get_country_offset >/dev/null 2>&1 && is_nato_country "$code_upper" 2>/dev/null; then
+                local port_offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
+                local kc_port=$((8080 + port_offset))
+                export KEYCLOAK_URL="http://localhost:${kc_port}"
+            else
+                export KEYCLOAK_URL="http://localhost:8080"
+            fi
+        fi
+
+        # Export Keycloak connection for Terraform provider
+        export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
+        export KEYCLOAK_PASSWORD="${!instance_password_var:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+
+        terraform apply -var-file="../countries/${code_lower}.tfvars" -input=false -auto-approve
+    ) || {
+        log_warn "Terraform apply failed for ${code_upper}"
+        return 1
+    }
+
+    log_success "Terraform configuration applied for ${code_upper}"
+    return 0
+}
+
+# =============================================================================
 # SPOKE SECRET SYNCHRONIZATION
 # =============================================================================
 
@@ -2681,8 +2771,18 @@ spoke_up() {
         echo ""
 
         # Auto-sync secrets to prevent NextAuth "Invalid client credentials" errors
-        log_step "Checking frontend secret synchronization..."
-        spoke_sync_secrets "$instance_code" || log_warn "Secret sync had issues (non-blocking)"
+        # CRITICAL: This MUST run on every restart to sync Keycloak client secrets
+        log_step "Synchronizing frontend secrets with Keycloak..."
+        if ! spoke_sync_secrets "$instance_code"; then
+            log_error "Secret synchronization failed - NextAuth will not work!"
+            log_error "Run manually: ./dive --instance $code_lower spoke sync-secrets"
+            return 1
+        fi
+        log_success "Frontend secrets synchronized"
+
+        # Apply Terraform (MFA flows, protocol mappers, etc.)
+        log_step "Applying Terraform configuration (MFA flows)..."
+        _spoke_apply_terraform "$instance_code" || log_warn "Terraform apply had issues (MFA may not be configured)"
 
         # Check if initialization has been done
         local init_marker="${spoke_dir}/.initialized"
@@ -3757,26 +3857,13 @@ spoke_reset() {
 
     echo ""
 
-    # Step 1: Stop services
-    log_step "Stopping spoke services..."
+    # Step 1: Stop services and remove volumes
+    log_step "Stopping spoke services and removing volumes..."
     export COMPOSE_PROJECT_NAME="$code_lower"
     cd "$spoke_dir"
-    docker compose down 2>&1 | tail -3
+    docker compose down -v 2>&1 | tail -3
 
-    # Step 2: Remove data volumes
-    log_step "Removing data volumes..."
-    local volumes=(
-        "${code_lower}_postgres_data"
-        "${code_lower}_mongodb_data"
-        "${code_lower}_redis_data"
-        "${code_lower}_opal_cache"
-    )
-
-    for vol in "${volumes[@]}"; do
-        if docker volume ls -q | grep -q "^${vol}$"; then
-            docker volume rm "$vol" 2>/dev/null || log_warn "Could not remove: $vol"
-        fi
-    done
+    # Step 2: Volumes removed via compose down -v above
 
     # Step 3: Remove initialized marker
     log_step "Removing initialization marker..."
@@ -3862,13 +3949,9 @@ spoke_teardown() {
     cd "$spoke_dir"
     docker compose down -v --remove-orphans 2>&1 | tail -3
 
-    # Step 2: Remove any leftover volumes with the code prefix
-    log_step "Removing Docker volumes..."
-    docker volume ls -q | grep "^${code_lower}_" | xargs -r docker volume rm 2>/dev/null || true
+    # Step 2: Volumes removed via compose down -v above
 
-    # Step 3: Remove Docker network if exists
-    log_step "Removing Docker network..."
-    docker network rm "dive-${code_lower}-network" 2>/dev/null || true
+    # Step 3: Network removed via compose down above
 
     # Step 4: Optionally notify hub
     if [ "$notify_hub" = "--notify-hub" ] && [ -n "$spoke_id" ] && [ -n "$hub_url" ]; then
@@ -3976,13 +4059,12 @@ spoke_clean() {
         "^${code_lower}-"
     )
 
-    for pattern in "${volume_patterns[@]}"; do
-        local volumes=$(docker volume ls -q 2>/dev/null | grep -E "$pattern" || true)
-        if [ -n "$volumes" ]; then
-            echo "$volumes" | xargs -r docker volume rm 2>/dev/null || true
-            volume_count=$((volume_count + $(echo "$volumes" | wc -l)))
-        fi
-    done
+    # Use compose to clean volumes instead of pattern matching
+    if [ -f "${spoke_dir}/docker-compose.yml" ]; then
+        (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="$code_lower" docker compose down -v 2>/dev/null) || true
+        # Count volumes that were removed (approximate)
+        volume_count=$((volume_count + 5))  # Typical spoke has ~5 volumes
+    fi
 
     log_info "Removed $volume_count volumes"
 

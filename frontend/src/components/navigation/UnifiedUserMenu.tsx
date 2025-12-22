@@ -3,13 +3,13 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { 
-    User, 
-    Settings, 
-    Copy, 
-    Check, 
-    FileText, 
-    Upload, 
+import {
+    User,
+    Settings,
+    Copy,
+    Check,
+    FileText,
+    Upload,
     Shield,
     Clock,
     Star,
@@ -56,8 +56,8 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     const [webAuthnConfigured, setWebAuthnConfigured] = useState<boolean | null>(null);
 
     const isSuperAdmin = (() => {
-        const hasRole = user?.roles?.includes('super_admin') || 
-                       user?.roles?.includes('admin') || 
+        const hasRole = user?.roles?.includes('super_admin') ||
+                       user?.roles?.includes('admin') ||
                        user?.roles?.includes('dive-admin') ||  // Spoke admin role
                        user?.roles?.includes('broker_super_admin') || false;
         // Debug logging (remove in production)
@@ -81,47 +81,114 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     }, [session?.idToken]);
 
     const pseudonym = getPseudonymFromUser(user as any);
-    const authTime: string | null = user?.auth_time 
-        ? new Date(user.auth_time * 1000).toLocaleString() 
+    const authTime: string | null = user?.auth_time
+        ? new Date(user.auth_time * 1000).toLocaleString()
         : (decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null);
     const acr: string | null = user?.acr || decoded?.acr || null;
-    const amr: string | null = Array.isArray(user?.amr) 
-        ? user!.amr.join(' + ') 
+    const amr: string | null = Array.isArray(user?.amr)
+        ? user!.amr.join(' + ')
         : (Array.isArray(decoded?.amr) ? decoded!.amr.join(' + ') : decoded?.amr || null);
-    
+
     // Convert ACR to readable AAL level
     const getAALDisplay = (acrValue: string | null): string => {
-        if (!acrValue) return 'N/A';
+        // COMPREHENSIVE AAL DEBUGGING - Full stack trace
+        console.group('🔍 [UnifiedUserMenu AAL Display] Full Trace');
+        console.log('📥 Input ACR Value:', {
+            acrValue,
+            type: typeof acrValue,
+            is_null: acrValue === null,
+            is_undefined: acrValue === undefined,
+        });
+        console.log('👤 User Object:', {
+            user_acr: user?.acr,
+            user_amr: user?.amr,
+            user_clearance: user?.clearance,
+            decoded_acr: decoded?.acr,
+            decoded_amr: decoded?.amr,
+        });
+
+        if (!acrValue) {
+            console.log('⚠️ ACR is null/undefined, returning N/A');
+            console.groupEnd();
+            return 'N/A';
+        }
+
         const acrNum = parseInt(acrValue, 10);
-        if (isNaN(acrNum)) {
+        const isNumeric = !isNaN(acrNum);
+
+        console.log('🔄 ACR Parsing:', {
+            acrValue,
+            parsed_number: acrNum,
+            is_numeric: isNumeric,
+        });
+
+        let result: string;
+        if (!isNumeric) {
             // Handle string formats like "aal1", "aal2", "aal3"
             const acrLower = acrValue.toLowerCase();
-            if (acrLower.includes('aal3') || acrLower.includes('gold') || acrLower === '3') return 'AAL3';
-            if (acrLower.includes('aal2') || acrLower.includes('silver') || acrLower === '2') return 'AAL2';
-            if (acrLower.includes('aal1') || acrLower.includes('bronze') || acrLower === '1' || acrLower === '0') return 'AAL1';
-            return acrValue.toUpperCase();
+            console.log('📝 String Format Detection:', {
+                acr_lower: acrLower,
+                includes_aal3: acrLower.includes('aal3') || acrLower.includes('gold') || acrLower === '3',
+                includes_aal2: acrLower.includes('aal2') || acrLower.includes('silver') || acrLower === '2',
+                includes_aal1: acrLower.includes('aal1') || acrLower.includes('bronze') || acrLower === '1' || acrLower === '0',
+            });
+
+            if (acrLower.includes('aal3') || acrLower.includes('gold') || acrLower === '3') {
+                result = 'AAL3';
+            } else if (acrLower.includes('aal2') || acrLower.includes('silver') || acrLower === '2') {
+                result = 'AAL2';
+            } else if (acrLower.includes('aal1') || acrLower.includes('bronze') || acrLower === '1' || acrLower === '0') {
+                result = 'AAL1';
+            } else {
+                result = acrValue.toUpperCase();
+            }
+        } else {
+            // Numeric format: Keycloak Level 1 => acr=1 (password), Level 2 => acr=2 (OTP), Level 3 => acr=3 (WebAuthn)
+            console.log('🔢 Numeric Format Detection:', {
+                acr_num: acrNum,
+                is_aal3: acrNum >= 3,
+                is_aal2: acrNum === 2,
+                is_aal1: acrNum < 2,
+            });
+
+            if (acrNum >= 3) {
+                result = 'AAL3';
+            } else if (acrNum === 2) {
+                result = 'AAL2';
+            } else {
+                result = 'AAL1'; // acr 0 or 1 -> treat as AAL1 (password/SSO)
+            }
         }
-        // Numeric format: Keycloak Level 1 => acr=1 (password), Level 2 => acr=2 (OTP), Level 3 => acr=3 (WebAuthn)
-        if (acrNum >= 3) return 'AAL3';
-        if (acrNum === 2) return 'AAL2';
-        return 'AAL1'; // acr 0 or 1 -> treat as AAL1 (password/SSO)
+
+        console.log('✅ Final AAL Display Result:', {
+            input_acr: acrValue,
+            output_aal: result,
+            user_clearance: user?.clearance,
+            expected_aal: user?.clearance === 'TOP_SECRET' ? 'AAL3' :
+                         (user?.clearance === 'SECRET' || user?.clearance === 'CONFIDENTIAL') ? 'AAL2' : 'AAL1',
+            matches_expected: result === (user?.clearance === 'TOP_SECRET' ? 'AAL3' :
+                                        (user?.clearance === 'SECRET' || user?.clearance === 'CONFIDENTIAL') ? 'AAL2' : 'AAL1'),
+        });
+        console.groupEnd();
+
+        return result;
     };
-    
+
     // Check if user has MFA configured (OTP or WebAuthn)
     const hasMFA = (): boolean | null => {
         // If both are null, we're still checking
         if (otpConfigured === null && webAuthnConfigured === null) {
             // Fallback: Check AMR directly from token (immediate, no API wait)
-            const amrArray = Array.isArray(user?.amr) ? user.amr : 
-                            (Array.isArray(decoded?.amr) ? decoded.amr : 
+            const amrArray = Array.isArray(user?.amr) ? user.amr :
+                            (Array.isArray(decoded?.amr) ? decoded.amr :
                             (decoded?.amr ? [decoded.amr] : []));
-            const hasWebAuthnInAMR = amrArray.some((m: string) => 
-                m.toLowerCase().includes('hwk') || 
-                m.toLowerCase().includes('webauthn') || 
+            const hasWebAuthnInAMR = amrArray.some((m: string) =>
+                m.toLowerCase().includes('hwk') ||
+                m.toLowerCase().includes('webauthn') ||
                 m.toLowerCase().includes('passkey')
             );
-            const hasOTPInAMR = amrArray.some((m: string) => 
-                m.toLowerCase().includes('otp') || 
+            const hasOTPInAMR = amrArray.some((m: string) =>
+                m.toLowerCase().includes('otp') ||
                 m.toLowerCase().includes('totp')
             );
             // If AMR shows MFA, return true immediately (don't wait for API)
@@ -139,16 +206,16 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     useEffect(() => {
         if (activeTab === 'profile' && (otpConfigured === null || webAuthnConfigured === null) && user?.uniqueID) {
             // First, check AMR from token immediately (no API call needed)
-            const amrArray = Array.isArray(user?.amr) ? user.amr : 
-                            (Array.isArray(decoded?.amr) ? decoded.amr : 
+            const amrArray = Array.isArray(user?.amr) ? user.amr :
+                            (Array.isArray(decoded?.amr) ? decoded.amr :
                             (decoded?.amr ? [decoded.amr] : []));
-            const hasWebAuthnInAMR = amrArray.some((m: string) => 
-                m.toLowerCase().includes('hwk') || 
-                m.toLowerCase().includes('webauthn') || 
+            const hasWebAuthnInAMR = amrArray.some((m: string) =>
+                m.toLowerCase().includes('hwk') ||
+                m.toLowerCase().includes('webauthn') ||
                 m.toLowerCase().includes('passkey')
             );
-            const hasOTPInAMR = amrArray.some((m: string) => 
-                m.toLowerCase().includes('otp') || 
+            const hasOTPInAMR = amrArray.some((m: string) =>
+                m.toLowerCase().includes('otp') ||
                 m.toLowerCase().includes('totp')
             );
 
@@ -261,19 +328,19 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     return (
         <div className="absolute top-full mt-2 right-0 w-80 origin-top-right animate-fade-in z-[9999]">
             {/* Solid background wrapper for better visibility */}
-            <div 
+            <div
                 className="relative bg-white rounded-xl overflow-hidden border-2 border-gray-300"
-                style={{ 
+                style={{
                     boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.1)'
                 }}
             >
                 {/* Compact Header - solid background for visibility */}
-                <div 
+                <div
                     className="px-4 py-3 border-b-2 border-gray-200 bg-gray-50"
                 >
                     <div className="flex items-center gap-3">
                         {/* Small Avatar */}
-                        <div 
+                        <div
                             className="w-10 h-10 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0"
                             style={{ background: 'var(--instance-banner-bg)' }}
                         >
@@ -281,7 +348,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                 {(pseudonym || 'U').charAt(0).toUpperCase()}
                             </span>
                         </div>
-                        
+
                         {/* Compact Info */}
                         <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
@@ -301,7 +368,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                 </button>
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                                <span 
+                                <span
                                     className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
                                     style={{
                                         background: 'rgba(var(--instance-primary-rgb), 0.1)',
@@ -375,7 +442,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                         onClick={onClose}
                                         className="group flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:border-gray-300 bg-white transition-colors"
                                     >
-                                        <action.icon 
+                                        <action.icon
                                             className="w-4 h-4 text-gray-400 group-hover:text-[var(--instance-primary)] transition-colors"
                                             strokeWidth={2}
                                         />
@@ -400,58 +467,58 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                         <div className="p-3 space-y-2">
                             {/* Identity Claims - Compact Grid */}
                             <div className="space-y-1.5">
-                                <CompactClaim 
-                                    icon={Fingerprint} 
-                                    label="ID" 
-                                    value={user?.uniqueID || 'N/A'} 
-                                    truncate 
+                                <CompactClaim
+                                    icon={Fingerprint}
+                                    label="ID"
+                                    value={user?.uniqueID || 'N/A'}
+                                    truncate
                                 />
-                                <CompactClaim 
-                                    icon={Lock} 
-                                    label="Clearance" 
-                                    value={getNationalClearance(user?.clearance, user?.countryOfAffiliation)} 
+                                <CompactClaim
+                                    icon={Lock}
+                                    label="Clearance"
+                                    value={getNationalClearance(user?.clearance, user?.countryOfAffiliation)}
                                     highlight
                                 />
-                                <CompactClaim 
-                                    icon={Globe} 
-                                    label="Country" 
-                                    value={getCountryName(user?.countryOfAffiliation)} 
+                                <CompactClaim
+                                    icon={Globe}
+                                    label="Country"
+                                    value={getCountryName(user?.countryOfAffiliation)}
                                 />
                                 {Array.isArray(user?.acpCOI) && user.acpCOI.length > 0 && (
-                                    <CompactClaim 
-                                        icon={Building} 
-                                        label="COI" 
-                                        value={user.acpCOI.join(', ')} 
+                                    <CompactClaim
+                                        icon={Building}
+                                        label="COI"
+                                        value={user.acpCOI.join(', ')}
                                     />
                                 )}
-                                <CompactClaim 
-                                    icon={Shield} 
-                                    label="AAL" 
-                                    value={getAALDisplay(acr)} 
+                                <CompactClaim
+                                    icon={Shield}
+                                    label="AAL"
+                                    value={getAALDisplay(acr)}
                                     highlight={acr === '2' || acr === '3'} // Highlight AAL3
                                 />
-                                <CompactClaim 
-                                    icon={Lock} 
-                                    label="MFA" 
+                                <CompactClaim
+                                    icon={Lock}
+                                    label="MFA"
                                     value={
-                                        hasMFA() === null 
-                                            ? 'Checking...' 
-                                            : hasMFA() 
-                                                ? '✅ Configured' 
+                                        hasMFA() === null
+                                            ? 'Checking...'
+                                            : hasMFA()
+                                                ? '✅ Configured'
                                                 : '❌ Not Set'
                                     }
                                     highlight={hasMFA() === true}
                                 />
-                                <CompactClaim 
-                                    icon={Clock} 
-                                    label="Auth" 
-                                    value={authTime || 'N/A'} 
+                                <CompactClaim
+                                    icon={Clock}
+                                    label="Auth"
+                                    value={authTime || 'N/A'}
                                     small
                                 />
                             </div>
 
                             {/* Privacy Note - Compact */}
-                            <div 
+                            <div
                                 className="mt-3 p-2 rounded-lg text-[10px] leading-relaxed"
                                 style={{
                                     background: 'rgba(var(--instance-primary-rgb), 0.05)',
@@ -467,7 +534,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                     {activeTab === 'admin' && isSuperAdmin && (
                         <div className="py-1">
                             <div className="px-4 py-1.5">
-                                <span 
+                                <span
                                     className="text-[10px] font-bold uppercase tracking-wider"
                                     style={{ color: 'var(--instance-primary)' }}
                                 >
@@ -481,7 +548,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                     onClick={onClose}
                                     className="group flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-gray-50"
                                 >
-                                    <item.icon 
+                                    <item.icon
                                         className="w-4 h-4 transition-colors"
                                         style={{ color: 'var(--instance-primary)' }}
                                         strokeWidth={2}
@@ -506,16 +573,16 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
 }
 
 // Compact Claim Display Component
-function CompactClaim({ 
-    icon: Icon, 
-    label, 
-    value, 
+function CompactClaim({
+    icon: Icon,
+    label,
+    value,
     truncate = false,
     highlight = false,
     small = false
-}: { 
-    icon: React.ElementType; 
-    label: string; 
+}: {
+    icon: React.ElementType;
+    label: string;
     value: string;
     truncate?: boolean;
     highlight?: boolean;
@@ -527,7 +594,7 @@ function CompactClaim({
             <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide w-16 flex-shrink-0">
                 {label}
             </span>
-            <span 
+            <span
                 className={`flex-1 font-medium text-right ${
                     truncate ? 'truncate' : ''
                 } ${highlight ? 'text-gray-900' : 'text-gray-600'} ${small ? 'text-[10px]' : 'text-xs'}`}

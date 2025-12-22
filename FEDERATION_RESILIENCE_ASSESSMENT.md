@@ -343,3 +343,4 @@ curl -X POST https://localhost:4000/api/federation/spokes/{spoke-id}/approve \
 
 **Conclusion**: The federation infrastructure is **NOT 100% persistent and resilient with @dive**. It requires significant refactoring to integrate the hub registration workflow into the `spoke up` command and fix the Keycloak authentication issues.
 
+

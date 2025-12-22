@@ -338,3 +338,4 @@ export async function adaptiveLogout(page: Page): Promise<void> {
     throw error;
   }
 }
+

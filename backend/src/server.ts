@@ -35,6 +35,7 @@ import opalRoutes from './routes/opal.routes';  // Phase 2: OPAL policy distribu
 import spokeRoutes from './routes/spoke.routes';  // Phase 5: Spoke resilience operations
 import notificationRoutes from './routes/notifications.routes';
 import notificationCountRoutes from './routes/notifications-count.routes';
+import activityRoutes from './routes/activity.routes';  // User activity endpoints
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
@@ -141,6 +142,7 @@ app.use('/api/opal', opalRoutes);  // Phase 2: OPAL policy distribution and bund
 app.use('/api/spoke', spokeRoutes);  // Phase 5: Spoke resilience operations (failover, maintenance, audit)
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notifications-count', notificationCountRoutes);
+app.use('/api/activity', activityRoutes);  // User activity endpoints
 
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server

@@ -19,6 +19,11 @@ import { eq } from 'drizzle-orm';
 
 export const dynamic = 'force-dynamic';
 
+// Allow self-signed certs in local/dev (backend uses mkcert)
+if (process.env.NODE_ENV !== 'production') {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 /**
  * POST /api/resources/search
  * Server-side paginated search with facets

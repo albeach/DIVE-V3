@@ -108,7 +108,7 @@ function loadFederationInstances(): FederationInstance[] {
         },
         {
             code: 'FRA',
-            apiUrl: process.env.FRA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4001' : 'https://fra-api.dive25.com'),
+            apiUrl: process.env.FRA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4010' : 'https://fra-api.dive25.com'),
             type: 'local',
             enabled: true
         },
@@ -154,12 +154,32 @@ async function getAllFederationInstances(): Promise<FederationInstance[]> {
             const approvedSpokes = await hubSpokeRegistry.listActiveSpokes();
             cachedSpokeInstances = approvedSpokes
                 .filter(spoke => spoke.status === 'approved' && spoke.apiUrl)
-                .map(spoke => ({
-                    code: spoke.instanceCode,
-                    apiUrl: spoke.apiUrl!,
-                    type: 'remote' as const, // Treat spokes as remote (they're separate Docker stacks)
-                    enabled: true
-                }));
+                .map(spoke => {
+                    // Build internal API URL for Docker network communication
+                    // In development: Use Docker container names (e.g., dive-spoke-fra-backend:4000)
+                    // In production: Use external hostnames from apiUrl
+                    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+                    let apiUrl: string;
+
+                    if (isDevelopment && (spoke as any).internalApiUrl) {
+                        // Use stored internalApiUrl if available
+                        apiUrl = (spoke as any).internalApiUrl;
+                    } else if (isDevelopment) {
+                        // Build Docker internal URL: dive-spoke-{code}-backend:4000
+                        const codeLower = spoke.instanceCode.toLowerCase();
+                        apiUrl = `https://dive-spoke-${codeLower}-backend:4000`;
+                    } else {
+                        // Production: Use external apiUrl
+                        apiUrl = spoke.apiUrl!;
+                    }
+
+                    return {
+                        code: spoke.instanceCode,
+                        apiUrl,
+                        type: 'remote' as const, // Treat spokes as remote (they're separate Docker stacks)
+                        enabled: true
+                    };
+                });
             spokeInstancesCacheTime = now;
 
             logger.info('Refreshed spoke instances cache', {

@@ -214,7 +214,7 @@ SPOKE_TIMEZONE=${spoke_timezone:-UTC}"
 sudo tee /opt/dive-v3/.env > /dev/null
 cd /opt/dive-v3
 echo 'Creating shared network...'
-sudo docker network create dive-v3-shared-network 2>/dev/null || true
+sudo docker network create dive-shared 2>/dev/null || true
 
 # Ensure spoke instance directory exists with certs
 echo 'Preparing spoke instance directory...'
@@ -347,7 +347,7 @@ echo 'Pruning any orphaned volumes...'
 sudo docker volume prune -f 2>/dev/null || true
 
 echo 'Removing shared network...'
-sudo docker network rm dive-v3-shared-network 2>/dev/null || true
+sudo docker network rm dive-shared 2>/dev/null || true
 
 echo 'Reset complete'
 "
@@ -825,28 +825,40 @@ pilot_deploy() {
     # Step 5: Reset and start fresh
     pilot_reset
 
+    # Step 5.5: Start the services
+    log_step "Starting Hub + Spoke services..."
+    pilot_up
+
     # Step 6: Wait for services with exponential backoff
-    log_step "Waiting for Hub + Spoke services to be healthy..."
+    log_info "Waiting for Hub + Spoke services to be healthy (timeout: 300s)..."
     local elapsed=0
     local timeout=300  # Increased for Hub + Spoke
     local delay=10
+    local attempts=0
 
     while [ $elapsed -lt $timeout ]; do
+        attempts=$((attempts + 1))
+        log_info "Health check attempt ${attempts} (${elapsed}s elapsed)..."
+
         if pilot_health 2>/dev/null; then
-            log_success "All services are healthy!"
-            break
+            log_success "All Hub + Spoke services are healthy!"
+            log_info "Pilot deployment completed successfully"
+            return 0
         fi
+
+        log_info "Services not yet healthy, waiting ${delay}s before next check..."
         sleep $delay
         elapsed=$((elapsed + delay))
-        delay=$((delay * 2 > 30 ? 30 : delay * 2))
-        log_verbose "Waiting... (${elapsed}s/${timeout}s)"
+        delay=$((delay * 2 > 30 ? 30 : delay * 2))  # Exponential backoff, max 30s
     done
 
-    if [ $elapsed -ge $timeout ]; then
-        log_error "Services did not become healthy within ${timeout}s"
-        log_info "You can check status with: ./dive --env gcp pilot status"
-        return 1
-    fi
+    log_error "Services did not become healthy within ${timeout}s (${attempts} attempts)"
+    log_error "Recent logs from hub-backend:"
+    pilot_logs hub-backend --tail=50 2>/dev/null || log_warn "Hub logs not available"
+    log_error "Recent logs from spoke-backend:"
+    pilot_logs spoke-backend --tail=50 2>/dev/null || log_warn "Spoke logs not available"
+    log_error "Check pilot health manually: ./dive --env gcp pilot health"
+    return 1
 
     # Step 7: Apply Terraform for Keycloak config (if configured)
     log_step "Applying Terraform (Keycloak configuration)..."
@@ -900,40 +912,51 @@ pilot_deploy() {
 # =============================================================================
 
 pilot_provision_vm() {
-    log_step "Provisioning GCP Compute VM with Terraform..."
+    log_info "Provisioning GCP Compute VM with Terraform..."
+    log_info "VM Name: ${PILOT_VM}"
+    log_info "Zone: ${PILOT_ZONE}"
+    log_info "Project: ${GCP_PROJECT}"
 
-    local tf_dir="${DIVE_ROOT}/terraform/pilot"
+    local tf_dir="${DIVE_ROOT}/terraform/vm-only"
 
     if [ ! -f "${tf_dir}/main.tf" ]; then
-        log_error "Terraform configuration not found at ${tf_dir}"
+        log_error "Terraform VM-only configuration not found at ${tf_dir}"
         return 1
     fi
 
     cd "${tf_dir}"
-
-    # Check if we need to use the compute-vm module
-    if [ -f "${DIVE_ROOT}/terraform/modules/compute-vm/main.tf" ]; then
-        log_verbose "Using compute-vm module for VM provisioning"
-    fi
+    log_info "Working directory: ${tf_dir}"
 
     # Initialize Terraform with GCS backend
-    log_verbose "Initializing Terraform..."
+    log_info "Initializing Terraform with GCS backend..."
     if ! terraform init -input=false; then
         log_error "Terraform init failed"
+        log_info "Check terraform/vm-only/.terraform directory and GCS bucket permissions"
+        return 1
+    fi
+    log_success "Terraform initialized successfully"
+
+    # Check for plan changes
+    log_info "Planning VM provisioning..."
+    if ! terraform plan -out=tfplan -input=false; then
+        log_error "Terraform plan failed"
         return 1
     fi
 
-    # Check for plan changes
-    log_verbose "Planning Terraform changes..."
-    terraform plan -out=tfplan -input=false
+    # Show what will be created
+    log_info "Terraform plan summary:"
+    terraform show -no-color tfplan | grep -E "(^#|Plan:|No changes)" | head -20
 
     # Apply
-    log_verbose "Applying Terraform..."
+    log_info "Applying Terraform configuration..."
+    log_info "This may take 2-5 minutes to provision the VM..."
     if terraform apply -input=false tfplan; then
         log_success "VM provisioned successfully"
+        log_info "VM should be available at: https://console.cloud.google.com/compute/instances?project=${GCP_PROJECT}"
         rm -f tfplan
     else
         log_error "Terraform apply failed"
+        log_info "Check terraform logs above and GCP Console for errors"
         rm -f tfplan
         return 1
     fi
@@ -946,33 +969,49 @@ pilot_wait_for_vm() {
     local elapsed=0
     local delay=5
 
-    log_verbose "Waiting for VM to be ready (timeout: ${timeout}s)..."
+    log_info "Waiting for VM to be ready (timeout: ${timeout}s)..."
 
     while [ $elapsed -lt $timeout ]; do
         # Check if VM is running
+        log_info "Checking VM status..."
         local status=$(gcloud compute instances describe "$PILOT_VM" \
             --zone="$PILOT_ZONE" \
             --project="$GCP_PROJECT" \
             --format='get(status)' 2>/dev/null)
 
-        if [ "$status" = "RUNNING" ]; then
-            # Check if we can SSH
-            if gcloud compute ssh "$PILOT_VM" \
-                --zone="$PILOT_ZONE" \
-                --project="$GCP_PROJECT" \
-                --command="echo 'VM ready'" \
-                --tunnel-through-iap 2>/dev/null; then
-                log_success "VM is ready and accessible"
-                return 0
-            fi
-        fi
+        case "$status" in
+            "RUNNING")
+                log_info "VM is in RUNNING state, testing SSH access..."
+                if gcloud compute ssh "$PILOT_VM" \
+                    --zone="$PILOT_ZONE" \
+                    --project="$GCP_PROJECT" \
+                    --command="echo 'VM ready'" \
+                    --tunnel-through-iap 2>/dev/null; then
+                    log_success "VM is ready and accessible via SSH"
+                    return 0
+                else
+                    log_info "VM running but SSH not yet available, will retry..."
+                fi
+                ;;
+            "PROVISIONING"|"STAGING")
+                log_info "VM is ${status}, waiting for it to finish..."
+                ;;
+            "TERMINATED"|"STOPPED")
+                log_error "VM is in ${status} state - provisioning may have failed"
+                return 1
+                ;;
+            *)
+                log_info "VM status: ${status:-unknown}, waiting..."
+                ;;
+        esac
 
         sleep $delay
         elapsed=$((elapsed + delay))
-        log_verbose "Waiting for VM... (${elapsed}s/${timeout}s) - status: ${status:-unknown}"
+        log_info "Waiting... (${elapsed}s/${timeout}s elapsed)"
     done
 
     log_error "VM did not become ready within ${timeout}s"
+    log_error "Check GCP Console for VM: https://console.cloud.google.com/compute/instances?project=${GCP_PROJECT}"
     return 1
 }
 
