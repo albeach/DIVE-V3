@@ -2178,16 +2178,23 @@ spoke_health() {
         return 0
     fi
 
-    # Get spoke configuration for correct ports
+    # Get spoke configuration for correct ports using NATO country database
     local keycloak_port backend_port opa_port
 
-    # For EST specifically, use known working ports from federation registry
-    if [ "$code_upper" = "EST" ]; then
-        keycloak_port=8451
-        backend_port=4008
-        opa_port=8261
+    # Source NATO countries database for systematic port calculation
+    if [ -f "${DIVE_ROOT}/scripts/nato-countries.sh" ]; then
+        source "${DIVE_ROOT}/scripts/nato-countries.sh"
+    fi
+
+    # Calculate ports using NATO offset system (deterministic and conflict-free)
+    if is_nato_country "$code_upper" 2>/dev/null; then
+        # Use NATO country offset for precise port calculation
+        local offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
+        keycloak_port=$((8443 + offset))
+        backend_port=$((4000 + offset))
+        opa_port=$((8181 + offset * 10))
     else
-        # For other instances, use default ports (can be enhanced later)
+        # Fallback for non-NATO countries
         keycloak_port=8443
         backend_port=4000
         opa_port=8181
