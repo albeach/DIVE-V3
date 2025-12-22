@@ -32,9 +32,8 @@ ingress:
   # Hostname:       usa-app.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-app.dive25.com
-    service: https://frontend:3000
+    service: http://frontend:3000
     originRequest:
-      noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: usa-app.dive25.com
   

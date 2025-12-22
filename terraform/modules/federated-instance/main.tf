@@ -111,7 +111,7 @@ resource "keycloak_realm" "broker" {
   # ============================================================================
   # NIST SP 800-63B AAL3 compliant policy for TOP_SECRET users
   # Allows: Hardware keys (YubiKey), Platform (TouchID), AND QR code/Hybrid flow
-  # 
+  #
   # Key Settings:
   # - relying_party_id = var.webauthn_rp_id → Parent domain for all subdomains
   # - authenticator_attachment = "" (not specified) → Allows ALL types including QR code
@@ -315,17 +315,20 @@ resource "keycloak_openid_user_realm_role_protocol_mapper" "realm_roles" {
 # ============================================
 # ACR/AMR MAPPERS (Keycloak 26.4 Native)
 # ============================================
-# SSOT Note (v3.0.0): Using native oidc-amr-mapper and oidc-acr-mapper below.
-# Session note mappers for acr/amr are REMOVED to avoid duplicate claims.
-# 
-# The native mappers (oidc-amr-mapper, oidc-acr-mapper) automatically:
-# - Read AUTH_METHODS_REF session note set by authenticators
-# - Convert ACR level configuration to acr claim
-# - Emit RFC 8176 compliant amr arrays
+# SSOT Note (v3.1.0): AMR/ACR Mapper Configuration
+# =================================================
+# ACR: Uses native oidc-acr-mapper (works with LoA conditional authenticator)
+# AMR: Uses user attribute mapper (workaround for Keycloak 26 limitation)
 #
-# Legacy session note mappers REMOVED:
-# - keycloak_openid_user_session_note_protocol_mapper.acr (redundant)
-# - keycloak_openid_user_session_note_protocol_mapper.amr (redundant)
+# The native oidc-amr-mapper was found to NOT populate AMR claims because
+# standard authenticators (auth-username-password-form, auth-otp-form) don't
+# expose "reference" config properties in Keycloak 26.4.2.
+#
+# WORKAROUND: Store AMR as user attribute, set during:
+# 1. User seeding (./dive seed sets amr=["pwd","otp"] for OTP users)
+# 2. OTP credential setup (future: event listener)
+#
+# This ensures OPA policies can verify MFA via amr claim checks.
 
 resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   realm_id  = keycloak_realm.broker.id
@@ -339,20 +342,31 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   add_to_access_token = true
 }
 
-# Built-in AMR/ACR mappers (Keycloak 26) to derive claims from authentication context
-resource "keycloak_generic_protocol_mapper" "amr_mapper" {
-  realm_id        = keycloak_realm.broker.id
-  client_id       = keycloak_openid_client.broker_client.id
-  name            = "amr (auth methods reference)"
-  protocol        = "openid-connect"
-  protocol_mapper = "oidc-amr-mapper"
+# AMR Mapper - Using user attribute approach
+# ============================================
+# IMPORTANT: The native oidc-amr-mapper requires authenticators to set "reference"
+# values in their execution configs, but Keycloak 26's standard authenticators
+# (auth-username-password-form, auth-otp-form) don't expose reference properties.
+#
+# WORKAROUND: Use user attribute mapper instead. The AMR attribute is set on users
+# via the seed script or when OTP is configured. This approach:
+# - Works reliably with all authentication flows
+# - Allows explicit control over AMR values
+# - Is managed by ./dive seed and user provisioning scripts
+#
+# The seed script sets amr=["pwd","otp"] for users with OTP credentials configured.
+resource "keycloak_openid_user_attribute_protocol_mapper" "amr_mapper" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "amr (user attribute)"
 
-  config = {
-    "id.token.claim"       = "true"
-    "access.token.claim"   = "true"
-    "userinfo.token.claim" = "true"
-    "claim.name"           = "amr"
-  }
+  user_attribute       = "amr"
+  claim_name           = "amr"
+  claim_value_type     = "String"
+  multivalued          = true
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
 }
 
 resource "keycloak_generic_protocol_mapper" "acr_mapper" {

@@ -269,3 +269,4 @@ console.log('• Complex multi-COI scenarios');
 
 console.log('\n🏆 OPA REGRESSION POLICY VALIDATION COMPLETE');
 console.log('All COI variations tested with full decision structure details!');
+

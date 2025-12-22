@@ -2,7 +2,7 @@
 
 /**
  * Activity Page Content
- * 
+ *
  * Modern timeline view of user's recent activity with:
  * - Document interactions (view, download)
  * - Authorization decisions
@@ -13,15 +13,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
-import { 
-  Eye, 
-  Download, 
-  Upload, 
-  Shield, 
-  ShieldCheck, 
-  ShieldX, 
-  Clock, 
-  FileText, 
+import {
+  Eye,
+  Download,
+  Upload,
+  Shield,
+  ShieldCheck,
+  ShieldX,
+  Clock,
+  FileText,
   ChevronRight,
   RefreshCw,
   Calendar,
@@ -80,7 +80,7 @@ function generateMockActivities(userId: string): ActivityItem[] {
   for (let i = 0; i < 25; i++) {
     const type = types[Math.floor(Math.random() * types.length)];
     const hoursAgo = Math.floor(Math.random() * 168); // Up to 7 days ago
-    
+
     activities.push({
       id: `act-${i}-${Date.now()}`,
       type,
@@ -103,14 +103,87 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [timeRange, setTimeRange] = useState<TimeRange>('7d');
 
-  // Load mock activities
+  // Load real activities from backend
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setActivities(generateMockActivities(user.uniqueID || 'unknown'));
-      setIsLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [user.uniqueID]);
+    let cancelled = false;
+
+    async function fetchActivities() {
+      try {
+        setIsLoading(true);
+
+        // Build query params
+        const params = new URLSearchParams({
+          limit: '50',
+          offset: '0',
+          timeRange: timeRange,
+          type: filter === 'all' ? 'all' : filter
+        });
+
+        // Call server-side API route (secure - no client-side tokens!)
+        const response = await fetch(`/api/activity?${params.toString()}`, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          let errorData: any = {};
+          try {
+            const text = await response.text();
+            errorData = text ? JSON.parse(text) : { status: response.status, statusText: response.statusText };
+          } catch (e) {
+            errorData = { status: response.status, statusText: response.statusText, message: 'Failed to parse error response' };
+          }
+
+          console.error('Failed to fetch activity:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+            url: `/api/activity?${params.toString()}`
+          });
+
+          // Fallback to mock data if backend fails
+          if (!cancelled) {
+            setActivities(generateMockActivities(user.uniqueID || 'unknown'));
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const data = await response.json();
+
+        if (!cancelled && data.activities) {
+          // Transform backend activities to frontend format
+          const transformedActivities: ActivityItem[] = data.activities.map((activity: any) => ({
+            id: activity.id,
+            type: activity.type,
+            resourceId: activity.resourceId,
+            resourceTitle: activity.resourceTitle || activity.resourceId, // Use resourceId as fallback title
+            classification: activity.classification || 'UNCLASSIFIED',
+            timestamp: new Date(activity.timestamp),
+            details: activity.details,
+            decision: activity.decision
+          }));
+
+          setActivities(transformedActivities);
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Error fetching activity:', error);
+
+        // Fallback to mock data on error
+        if (!cancelled) {
+          setActivities(generateMockActivities(user.uniqueID || 'unknown'));
+          setIsLoading(false);
+        }
+      }
+    }
+
+    fetchActivities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user.uniqueID, timeRange, filter]);
 
   // Filter activities
   const filteredActivities = useMemo(() => {
@@ -131,7 +204,7 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
 
     return activities.filter(activity => {
       const matchesFilter = filter === 'all' || activity.type === filter;
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         activity.resourceTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
         activity.resourceId.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesRange = isWithinRange(activity.timestamp);
@@ -286,7 +359,7 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
         <div className="relative p-5 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <div 
+              <div
                 className="w-11 h-11 rounded-xl flex items-center justify-center shadow-sm"
                 style={{ background: 'var(--instance-banner-bg)' }}
               >
@@ -375,8 +448,8 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
                   key={option.value}
                   onClick={() => setFilter(option.value)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                    isActive 
-                      ? 'text-white shadow-sm' 
+                    isActive
+                      ? 'text-white shadow-sm'
                       : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
                   }`}
                   style={isActive ? { background: 'var(--instance-banner-bg)' } : undefined}
@@ -406,21 +479,21 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
 
               {/* Activity Cards */}
               <div className="relative pl-5">
-                <div 
+                <div
                   className="absolute left-1.5 top-0 bottom-0 w-px"
                   style={{ background: 'linear-gradient(to bottom, rgba(var(--instance-primary-rgb),0.2), rgba(226,232,240,0.9))' }}
                 />
                 {items.map((activity, index) => {
                   const config = getActivityConfig(activity.type);
                   const Icon = config.icon;
-                  
+
                   return (
                     <div
                       key={activity.id}
                       className="relative group bg-white border border-gray-100 rounded-xl p-4 mb-3 hover:border-gray-200 hover:shadow-sm transition-all animate-fade-in"
                       style={{ animationDelay: `${index * 30}ms` }}
                     >
-                      <span 
+                      <span
                         className={`absolute -left-[19px] top-5 w-3 h-3 rounded-full border border-white shadow ring-2 ring-white ${config.bg}`}
                       />
                       <div className="flex items-start gap-3">
@@ -439,12 +512,12 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
                                 </span>
                                 {getDecisionBadge(activity.decision)}
                               </div>
-                              
+
                               {/* Resource Title */}
                               <h3 className="text-sm font-semibold text-gray-900 mt-0.5">
                                 {activity.resourceTitle}
                               </h3>
-                              
+
                               {/* Meta Info */}
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${getClassificationColor(activity.classification)}`}>
@@ -494,7 +567,7 @@ export function ActivityPageContent({ user }: ActivityPageContentProps) {
       {/* Load More (placeholder) */}
       {filteredActivities.length >= 25 && (
         <div className="mt-6 text-center">
-          <button 
+          <button
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -522,7 +595,7 @@ function StatCard({ label, value, trend }: { label: string; value: string; trend
 function EmptyActivityState() {
   return (
     <div className="text-center py-12">
-      <div 
+      <div
         className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
         style={{ background: 'linear-gradient(to bottom right, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))' }}
       >

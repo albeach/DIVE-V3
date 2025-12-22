@@ -84,3 +84,4 @@ if (require.main === module) {
 }
 
 export { getCurrentOTPCode, getOTPCodes };
+

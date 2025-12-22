@@ -433,3 +433,4 @@ describe('ResourceComparisonView', () => {
     });
   });
 });
+

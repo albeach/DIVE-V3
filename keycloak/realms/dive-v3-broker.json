@@ -304,16 +304,20 @@
           }
         },
         {
-          "name": "amr (auth methods reference)",
+          "name": "amr (user attribute)",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-amr-mapper",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
           "consentRequired": false,
           "config": {
+            "user.attribute": "amr",
+            "claim.name": "amr",
             "id.token.claim": "true",
             "access.token.claim": "true",
             "userinfo.token.claim": "true",
             "introspection.token.claim": "true",
-            "claim.name": "amr"
+            "multivalued": "true",
+            "aggregate.attrs": "false",
+            "jsonType.label": "String"
           }
         }
       ]

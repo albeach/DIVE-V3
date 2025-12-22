@@ -7,16 +7,17 @@
     "country": "FRA",
     "organizationType": "government",
     "contactEmail": "fra-admin@dive-demo.example",
-    "registeredSpokeId": "spoke-fra-a4db3486"
+    "registeredSpokeId": "spoke-fra-df3ca95d"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
     "hubApiUrl": "https://localhost:4000/api",
     "hubOpalUrl": "https://localhost:7002",
-    "baseUrl": "https://localhost:3002",
-    "apiUrl": "https://localhost:4001",
-    "idpUrl": "https://localhost:8444",
-    "kasUrl": "https://localhost:8001"
+    "baseUrl": "https://localhost:3010",
+    "apiUrl": "https://localhost:4010",
+    "idpUrl": "https://dive-spoke-fra-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8453",
+    "kasUrl": "https://localhost:9010"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/certs/spoke.crt",
@@ -33,7 +34,8 @@
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-13T14:30:25Z"
+    "registeredAt": "2025-12-22T05:30:07Z",
+    "spokeToken": "RZn9p4iXOjBXy6K-T1krKocKaf04yPYGzgyx6F-6Nhc"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

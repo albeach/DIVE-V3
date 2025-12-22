@@ -6,7 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Albania",
     "country": "ALB",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "alb-admin@dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",

@@ -745,3 +745,4 @@ class SpokeHeartbeatService extends EventEmitter {
 export const spokeHeartbeat = new SpokeHeartbeatService();
 
 export default SpokeHeartbeatService;
+

@@ -3,7 +3,7 @@
 # =============================================================================
 # Spoke instance using extends pattern from base services.
 # Regenerate with: ./dive spoke init NLD "Kingdom of the Netherlands"
-# Spoke ID: spoke-nld-98b19d07
+# Spoke ID: spoke-nld-e824faf6
 # =============================================================================
 
 name: dive-spoke-nld
@@ -105,29 +105,16 @@ services:
       - dive-v3-shared-network
 
   opa-nld:
-    image: openpolicyagent/opa:latest
+    extends:
+      file: ../../docker/base/services.yml
+      service: opa-base
     container_name: dive-spoke-nld-opa
-    restart: unless-stopped
-    # OPAL-managed OPA: HTTPS only, policies from OPAL client
-    command:
-      - "run"
-      - "--server"
-      - "--addr=0.0.0.0:8181"
-      - "--tls-cert-file=/certs/certificate.pem"
-      - "--tls-private-key-file=/certs/key.pem"
-      - "--log-level=info"
     ports:
       - "8381:8181"
     volumes:
-      - ./certs:/certs:ro
+      - ../../policies:/policies:ro
     networks:
       - dive-nld-network
-    healthcheck:
-      test: ["CMD", "/opa", "version"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   opal-client-nld:
     extends:
@@ -137,15 +124,10 @@ services:
     environment:
       OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      # HTTPS for OPA policy store (cert now includes opa-nld hostname)
-      OPAL_OPA_URL: https://opa-nld:8181
+      OPAL_OPA_URL: http://opa-nld:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-nld-default}
-      OPAL_POLICY_STORE_URL: https://opa-nld:8181
-      # Policies AND data from Hub
+      OPAL_POLICY_STORE_URL: http://opa-nld:8181
       OPAL_DATA_TOPICS: policy:base,policy:nld,data:federation_matrix,data:trusted_issuers
-      # Trust mkcert CA for local OPA connection
-      SSL_CERT_FILE: /var/opal/certs/mkcert-rootCA.pem
-      REQUESTS_CA_BUNDLE: /var/opal/certs/mkcert-rootCA.pem
     volumes:
       - nld_opal_cache:/var/opal/cache
       - ./certs:/var/opal/certs:ro
@@ -164,7 +146,7 @@ services:
     environment:
       KEYCLOAK_URL: https://keycloak-nld:8443
       KEYCLOAK_REALM: dive-v3-broker-nld
-      OPA_URL: https://opa-nld:8181
+      OPA_URL: http://opa-nld:8181
       INSTANCE_CODE: NLD
     ports:
       - "9020:8080"
@@ -192,14 +174,12 @@ services:
       KEYCLOAK_URL: https://keycloak-nld:8443
       KEYCLOAK_REALM: dive-v3-broker-nld
       KEYCLOAK_ISSUER: https://localhost:8463/realms/dive-v3-broker-nld
-      TRUSTED_ISSUERS: https://localhost:8463/realms/dive-v3-broker-nld,https://keycloak-nld:8443/realms/dive-v3-broker-nld,https://nld-idp.dive25.com/realms/dive-v3-broker-nld
+      TRUSTED_ISSUERS: https://localhost:8463/realms/dive-v3-broker-nld,https://keycloak-nld:8443/realms/dive-v3-broker-nld,https://nld-idp.dive25.com/realms/dive-v3-broker-nld,https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_NLD:?set KEYCLOAK_ADMIN_PASSWORD_NLD}
-      OPA_URL: https://opa-nld:8181
+      OPA_URL: http://opa-nld:8181
       FEDERATION_ALLOWED_ORIGINS: https://localhost:3020,https://localhost:4020,https://localhost:8463,https://nld-app.dive25.com,https://nld-api.dive25.com,https://nld-idp.dive25.com
       CORS_ALLOWED_ORIGINS: https://localhost:3020,https://localhost:4020,https://localhost:8463,https://nld-app.dive25.com,https://nld-api.dive25.com,https://nld-idp.dive25.com
-      # Federation Trust: Trust USA Hub and other NATO partners for cross-instance requests
-      TRUSTED_FEDERATION_INSTANCES: USA,FRA,GBR,DEU,HUN
     ports:
       - "4020:4000"
     volumes:

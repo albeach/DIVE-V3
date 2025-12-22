@@ -120,3 +120,4 @@ is_usa_trusted_issuer(issuer) if {
 is_federated_partner(country) if {
 	country in federation_partners
 }
+

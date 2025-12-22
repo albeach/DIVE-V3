@@ -124,15 +124,13 @@ case "$COMMAND" in
         ;;
 
     # Deployment commands (deploy.sh)
-    deploy|reset|clean|nuke|rollback|checkpoint)
+    deploy|reset|clean|nuke)
         source "${MODULES_DIR}/deploy.sh"
         case "$COMMAND" in
-            deploy)     cmd_deploy "$@" ;;
-            reset)      cmd_reset "$@" ;;
-            clean)      cmd_reset "$@" ;;
-            nuke)       cmd_nuke "$@" ;;
-            rollback)   cmd_rollback "$@" ;;
-            checkpoint) module_deploy "checkpoint" "$@" ;;
+            deploy) cmd_deploy "$@" ;;
+            reset)  cmd_reset "$@" ;;
+            clean)  cmd_reset "$@" ;;
+            nuke)   cmd_nuke ;;
         esac
         ;;
 
@@ -314,3 +312,4 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
+

@@ -38,7 +38,7 @@ nato_levels := {
 # Valid NATO classification values
 valid_nato_classifications := {
 	"NATO_UNCLASSIFIED",
-	"NATO_RESTRICTED", 
+	"NATO_RESTRICTED",
 	"NATO_CONFIDENTIAL",
 	"NATO_SECRET",
 	"COSMIC_TOP_SECRET",
@@ -434,7 +434,11 @@ default_classification_equivalency := {
 # Use OPAL-provided data if available, otherwise use defaults
 classification_equivalency := data.classification_equivalency if {
 	data.classification_equivalency
-} else := default_classification_equivalency
+}
+
+classification_equivalency := default_classification_equivalency if {
+	not data.classification_equivalency
+}
 
 # ============================================
 # NATO to DIVE V3 Standard Mapping

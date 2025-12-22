@@ -434,23 +434,23 @@ get_industry_max_classification(tenant_code) := max_class if {
 is_industry_clearance_exceeded := msg if {
 	# Only applies to industry users
 	resolved_org_type == "INDUSTRY"
-	
+
 	# Get user's country
 	user_country := input.subject.countryOfAffiliation
-	
+
 	# Get industry max classification for this tenant
 	max_class := get_industry_max_classification(user_country)
-	
+
 	# Get resource classification
 	resource_class := input.resource.classification
-	
+
 	# Get numeric levels
 	resource_level := get_clearance_level(resource_class)
 	max_level := get_clearance_level(max_class)
-	
+
 	# Check if resource exceeds industry cap
 	resource_level > max_level
-	
+
 	msg := sprintf("Industry clearance cap exceeded: resource=%s (%d) > tenant %s max=%s (%d)", [
 		resource_class,
 		resource_level,
@@ -491,7 +491,7 @@ is_coi_coherence_violation contains msg if {
 }
 
 # RELAXED: Releasability ⊆ COI check (ACP-240 Section 4.7 - Explicit Release)
-# 
+#
 # The strict interpretation (releasabilityTo ⊆ COI_members) has been relaxed.
 # Rationale: releasabilityTo is the AUTHORITATIVE list of approved recipients.
 # COI indicates the originating community, but explicit release overrides.

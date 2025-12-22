@@ -209,3 +209,4 @@ coi_access_denied_msg(user_cois, resource_cois, operator) := msg if {
 unknown_coi_msg(coi) := msg if {
 	msg := sprintf("Unknown COI: %s", [coi])
 }
+

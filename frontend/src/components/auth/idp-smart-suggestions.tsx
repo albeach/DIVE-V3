@@ -315,3 +315,4 @@ function getAllianceSuggestion(
 
 export default IdpSmartSuggestions;
 
+

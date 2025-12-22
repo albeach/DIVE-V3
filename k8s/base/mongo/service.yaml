@@ -19,3 +19,4 @@ spec:
       name: mongodb
   selector:
     app: mongo
+

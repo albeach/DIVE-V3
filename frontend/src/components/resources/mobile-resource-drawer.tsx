@@ -422,3 +422,4 @@ export function useSwipeToOpen(onOpen: () => void, threshold = 100) {
     onTouchEnd: handleTouchEnd,
   };
 }
+

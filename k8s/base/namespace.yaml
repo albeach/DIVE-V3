@@ -12,3 +12,4 @@ metadata:
     app.kubernetes.io/name: dive-v3
     app.kubernetes.io/part-of: dive-v3
     app.kubernetes.io/managed-by: argocd
+

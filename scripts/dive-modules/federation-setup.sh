@@ -2243,9 +2243,7 @@ module_federation_setup() {
             module_federation_setup_help
             ;;
     esac
-}
-
-module_federation_setup_help() {
+}module_federation_setup_help() {
     echo -e "${BOLD}Federation Setup Commands:${NC}"
     echo ""
     echo -e "  ${YELLOW}═══ HUB REGISTRATION (Bidirectional Federation) ═══${NC}"
@@ -2299,3 +2297,5 @@ module_federation_setup_help() {
     echo "  4. ./dive federation-setup verify <code>        # Verify setup"
     echo ""
 }
+
+

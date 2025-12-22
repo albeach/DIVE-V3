@@ -355,6 +355,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     return Response.redirect(new URL("/login", nextUrl));
                 }
 
+                // MFA ENFORCEMENT: Check if user needs MFA setup
+                // CONFIDENTIAL and SECRET users require AAL2 (MFA)
+                const user = auth?.user as any;
+                const requiresMFA = user?.clearance === 'CONFIDENTIAL' || user?.clearance === 'SECRET';
+                const hasMFA = user?.amr && Array.isArray(user.amr) &&
+                    (user.amr.includes('otp') || user.amr.includes('hwk') || user.amr.includes('webauthn'));
+                const isOnMFASetup = nextUrl.pathname === '/mfa-setup';
+
+                if (requiresMFA && !hasMFA && !isOnMFASetup && !isOnLogin && !isOnCustomLogin) {
+                    console.log('[DIVE] MFA required but not configured - redirecting to setup', {
+                        clearance: user?.clearance,
+                        amr: user?.amr,
+                        path: nextUrl.pathname
+                    });
+                    return Response.redirect(new URL("/mfa-setup", nextUrl));
+                }
+
                 // Redirect from Login to Dashboard (but allow Home for logout landing)
                 if (isOnLogin) {
                     return Response.redirect(new URL("/dashboard", nextUrl));
@@ -518,7 +535,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                         // SECURITY: DO NOT expose tokens to client session
                         // Tokens should only be used server-side. Client should use
                         // server-side API routes that handle token validation.
-                        // 
+                        //
                         // For internal server-side use only (e.g., API routes):
                         // - Access token: Used to call Keycloak protected resources
                         // - ID token: Contains user claims
@@ -639,33 +656,82 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     }
                                     session.user.amr = amr;
 
-                                    // Derive AAL from ACR/AMR if ACR missing
+                                    // Derive AAL from ACR/AMR if ACR missing or incorrect
+                                    // CRITICAL FIX: Keycloak sometimes returns acr="1" even when WebAuthn is used
+                                    // We must override based on AMR to get correct AAL level
                                     const amrSet = new Set(amr.map((v) => String(v).toLowerCase()));
-                                    if (!acr || acr === '0' || acr === 'aal1') {
-                                        if (amrSet.has('hwk') || amrSet.has('webauthn')) {
+
+                                    // Check if AMR indicates higher AAL than ACR suggests
+                                    const hasWebAuthn = amrSet.has('hwk') || amrSet.has('webauthn') || amrSet.has('passkey');
+                                    const hasOTP = amrSet.has('otp') || amrSet.has('totp');
+                                    const hasMultipleFactors = amr.length >= 2;
+
+                                    // Override ACR if Keycloak returned incorrect value
+                                    // Keycloak may return acr="1" even with WebAuthn (hwk in AMR)
+                                    if (!acr || acr === '0' || acr === '1' || acr === 'aal1') {
+                                        if (hasWebAuthn) {
                                             acr = '3'; // AAL3 if hardware key present
-                                        } else if (amr.length >= 2 || amrSet.has('otp')) {
+                                        } else if (hasMultipleFactors || hasOTP) {
                                             acr = '2'; // AAL2 if multiple factors or OTP
                                         } else {
                                             acr = '0';
                                         }
+                                    } else if (acr === '2' && hasWebAuthn) {
+                                        // Keycloak returned AAL2 but we have WebAuthn - upgrade to AAL3
+                                        acr = '3';
                                     }
+
                                     session.user.acr = acr || '0';
 
                                     // auth_time: Unix timestamp of authentication event
                                     // Used for token freshness validation in OPA
                                     session.user.auth_time = payload.auth_time;
 
-                                    console.log('[DIVE] Custom claims extracted:', {
+                                    // COMPREHENSIVE AAL DEBUGGING - Full stack trace
+                                    console.group('🔍 [DIVE AAL DEBUG] Full Authentication Context Trace');
+                                    console.log('📋 Raw Token Payload:', {
+                                        raw_acr: payload.acr,
+                                        raw_acr_type: typeof payload.acr,
+                                        raw_amr: payload.amr,
+                                        raw_amr_type: typeof payload.amr,
+                                        raw_auth_time: payload.auth_time,
+                                        clearance: payload.clearance,
+                                        uniqueID: payload.uniqueID,
+                                    });
+                                    console.log('🔄 ACR Processing:', {
+                                        initial_acr: payload.acr,
+                                        normalized_acr: acr,
+                                        acr_after_derivation: session.user.acr,
+                                    });
+                                    console.log('🔄 AMR Processing:', {
+                                        initial_amr: payload.amr,
+                                        normalized_amr: amr,
+                                        amr_set: Array.from(amrSet),
+                                        has_hwk: amrSet.has('hwk'),
+                                        has_webauthn: amrSet.has('webauthn'),
+                                        has_otp: amrSet.has('otp'),
+                                        amr_length: amr.length,
+                                    });
+                                    console.log('📊 AAL Derivation Logic:', {
+                                        acr_before_derivation: acr,
+                                        acr_is_zero_or_missing: !acr || acr === '0' || acr === 'aal1',
+                                        has_hwk_or_webauthn: amrSet.has('hwk') || amrSet.has('webauthn'),
+                                        has_multiple_factors: amr.length >= 2,
+                                        has_otp: amrSet.has('otp'),
+                                        derived_acr: session.user.acr,
+                                    });
+                                    console.log('✅ Final Session Claims:', {
                                         uniqueID: session.user.uniqueID,
                                         clearance: session.user.clearance,
                                         country: session.user.countryOfAffiliation,
                                         roles: session.user.roles,
-                                        // AAL/MFA claims
                                         acr: session.user.acr,
                                         amr: session.user.amr,
                                         auth_time: session.user.auth_time,
+                                        expected_aal_for_clearance: payload.clearance === 'TOP_SECRET' ? 'AAL3' :
+                                                                     (payload.clearance === 'SECRET' || payload.clearance === 'CONFIDENTIAL') ? 'AAL2' : 'AAL1',
                                     });
+                                    console.groupEnd();
                                 }
                             } catch (error) {
                                 console.error('Failed to decode id_token for custom claims:', error);

@@ -94,3 +94,4 @@ export class BasePage {
     await this.page.reload();
   }
 }
+

@@ -463,3 +463,4 @@ else
     echo "Screenshots saved to /tmp/ on failures (if wkhtmltoimage available)"
     exit 1
 fi
+

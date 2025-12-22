@@ -53,3 +53,4 @@ router.get('/search/zero-results', authenticateJWT, getZeroResultQueriesHandler)
 router.delete('/search/cleanup', authenticateJWT, cleanupAnalyticsHandler);
 
 export default router;
+

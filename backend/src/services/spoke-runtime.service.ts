@@ -756,3 +756,4 @@ class SpokeRuntimeService extends EventEmitter {
 export const spokeRuntime = new SpokeRuntimeService();
 
 export default SpokeRuntimeService;
+

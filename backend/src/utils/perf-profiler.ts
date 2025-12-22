@@ -671,3 +671,4 @@ class PerfProfiler extends EventEmitter {
 export const perfProfiler = new PerfProfiler();
 
 export default PerfProfiler;
+

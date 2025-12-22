@@ -18,3 +18,4 @@ pg_isready -U "${POSTGRES_USER:-postgres}" -q
 PGPASSWORD="${POSTGRES_PASSWORD}" psql -U "${POSTGRES_USER:-postgres}" -d postgres -c "SELECT 1" > /dev/null 2>&1
 
 exit 0
+

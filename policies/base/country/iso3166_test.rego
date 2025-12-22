@@ -347,3 +347,4 @@ test_eu_countries_has_27_members if {
 test_dive_core_has_five_countries if {
 	count(country.dive_core_countries) == 5
 }
+

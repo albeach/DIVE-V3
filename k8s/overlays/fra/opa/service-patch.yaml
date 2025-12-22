@@ -10,3 +10,4 @@ metadata:
 spec:
   selector:
     app: opa-fra
+

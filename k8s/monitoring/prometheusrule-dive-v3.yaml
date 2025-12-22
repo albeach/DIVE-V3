@@ -149,3 +149,4 @@ spec:
           annotations:
             summary: "Redis is down"
             description: "Redis has been down for more than 1 minute"
+

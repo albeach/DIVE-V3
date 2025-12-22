@@ -16,3 +16,4 @@ services:
     labels:
       - "com.dive-v3.service=landing"
       - "com.dive-v3.description=DIVE25.COM Landing Page"
+

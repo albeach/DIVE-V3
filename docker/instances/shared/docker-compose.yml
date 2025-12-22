@@ -15,8 +15,8 @@ services:
   # ---------------------------------------------------------------------------
   # Hub Redis Exporter - Metrics for main hub Redis
   # ---------------------------------------------------------------------------
-  # NOTE: This service needs access to dive-v3-shared-network where dive-hub-redis lives.
-  # The hub redis is NOT on shared-network, it's on dive-v3-shared-network for federation.
+  # NOTE: This service needs access to dive-shared-network where dive-hub-redis lives.
+  # The hub redis is NOT on shared-services-network, it's on dive-shared-network for federation.
   # ---------------------------------------------------------------------------
   hub-redis-exporter:
     image: oliver006/redis_exporter:latest
@@ -29,7 +29,7 @@ services:
     ports:
       - "9121:9121"
     networks:
-      - shared
+      - shared-services
       - dive-shared  # Required to reach dive-hub-redis
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9121/metrics"]
@@ -61,7 +61,7 @@ services:
     volumes:
       - blacklist_redis_data:/data
     networks:
-      - shared
+      - shared-services
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
       interval: 10s
@@ -83,7 +83,7 @@ services:
     ports:
       - "9122:9121"
     networks:
-      - shared
+      - shared-services
     depends_on:
       blacklist-redis:
         condition: service_healthy
@@ -114,7 +114,7 @@ services:
       - ./config/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     networks:
-      - shared
+      - shared-services
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -142,7 +142,7 @@ services:
       - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
     networks:
-      - shared
+      - shared-services
     depends_on:
       - prometheus
     healthcheck:
@@ -168,7 +168,7 @@ services:
       - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
     networks:
-      - shared
+      - shared-services
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
       interval: 30s
@@ -179,13 +179,13 @@ services:
 # Networks
 # -----------------------------------------------------------------------------
 networks:
-  shared:
-    name: shared-network
+  shared-services:
+    name: shared-services-network
     driver: bridge
     external: true
   # External network where dive-hub-redis lives (for hub-redis-exporter)
   dive-shared:
-    name: dive-v3-shared-network
+    name: dive-shared-network
     external: true
 
 # -----------------------------------------------------------------------------

@@ -183,7 +183,7 @@ cmd_status() {
 
     # Network status
     echo -e "${CYAN}Networks:${NC}"
-    local networks=("dive-v3-shared-network" "shared-network")
+    local networks=("dive-shared" "shared-services")
     if [ "$instance_lower" != "usa" ] && [ "$instance_lower" != "hub" ]; then
         networks+=("dive-${instance_lower}-network" "${instance_lower}_dive-${instance_lower}-network")
     else
@@ -410,7 +410,7 @@ cmd_health() {
 
     # Check shared network
     total_checks=$((total_checks + 1))
-    if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qE "dive-v3-shared-network|shared-network"; then
+    if docker network ls --format '{{.Name}}' 2>/dev/null | grep -qE "dive-shared|shared-services"; then
         format_status "Shared network" "pass"
         passed_checks=$((passed_checks + 1))
     else
@@ -592,7 +592,7 @@ cmd_validate() {
     # =========================================================================
     echo -e "${CYAN}Docker Networks:${NC}"
 
-    local required_networks=("dive-v3-shared-network" "shared-network")
+    local required_networks=("dive-shared" "shared-services")
     for net in "${required_networks[@]}"; do
         if docker network ls --format '{{.Name}}' 2>/dev/null | grep -q "^${net}$"; then
             format_status "$net" "pass" "exists"
@@ -953,7 +953,7 @@ cmd_diagnostics() {
     echo ""
 
     # Check required networks exist
-    local required_networks=("dive-v3-shared-network" "shared-network")
+    local required_networks=("dive-shared" "shared-services")
     for net in "${required_networks[@]}"; do
         if docker network ls --format '{{.Name}}' 2>/dev/null | grep -q "^${net}$"; then
             local container_count

@@ -136,3 +136,4 @@ compare_nums(a, b) := 0 if {
 compare_nums(a, b) := 1 if {
 	a > b
 }
+

@@ -708,3 +708,4 @@ class SpokeAuditQueueService extends EventEmitter {
 export const spokeAuditQueue = new SpokeAuditQueueService();
 
 export default SpokeAuditQueueService;
+
