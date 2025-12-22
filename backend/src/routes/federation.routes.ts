@@ -239,6 +239,68 @@ router.get('/metadata', async (_req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /api/federation/status
+ * Get overall federation status (instances + health summary)
+ * Public endpoint (no auth) - used by CLI federation status command
+ */
+router.get('/status', async (_req: Request, res: Response): Promise<void> => {
+    try {
+        // Get federation instances
+        const registryPaths = [
+            path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
+            path.join(process.cwd(), 'config', 'federation-registry.json')
+        ];
+
+        let registry: any = null;
+        for (const registryPath of registryPaths) {
+            if (fs.existsSync(registryPath)) {
+                registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
+                break;
+            }
+        }
+
+        // Get spoke health data
+        const stats = await hubSpokeRegistry.getStatistics();
+        const unhealthy = await hubSpokeRegistry.getUnhealthySpokes();
+        const allSpokes = await hubSpokeRegistry.listAllSpokes();
+
+        // Build status for each instance
+        const instances = Object.entries(registry?.instances || {})
+            .filter(([_key, inst]: [string, any]) => inst.enabled)
+            .map(([key, inst]: [string, any]) => {
+                const spoke = allSpokes.find((s: any) => s.instanceCode === inst.code);
+                const isUnhealthy = unhealthy.some((u: any) => u.spokeId === spoke?.spokeId);
+
+                return {
+                    code: inst.code || key.toUpperCase(),
+                    name: inst.name || key,
+                    frontendUrl: `https://localhost:${inst.services?.frontend?.externalPort || 3000}`,
+                    apiUrl: `https://localhost:${inst.services?.backend?.externalPort || 4000}`,
+                    idpUrl: `https://localhost:${inst.services?.keycloak?.externalPort || 8443}`,
+                    status: spoke?.status || 'unknown',
+                    healthStatus: isUnhealthy ? 'unhealthy' : 'healthy',
+                    policySyncStatus: 'SYNCED', // Placeholder - would need real sync status
+                };
+            });
+
+        res.json({
+            instances,
+            statistics: stats,
+            unhealthyCount: unhealthy.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        logger.error('Failed to get federation status', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            error: 'InternalError',
+            message: 'Failed to get federation status'
+        });
+    }
+});
+
+/**
  * GET /api/federation/instances
  * Dynamically returns all federation instances from federation-registry.json
  * Public endpoint (no auth) - used by frontend for federated search UI
