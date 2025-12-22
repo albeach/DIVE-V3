@@ -733,6 +733,15 @@ function getInstanceConfig(registry: IFederationRegistry, instanceCode: string):
     if (!config) {
         throw new Error(`Unknown instance: ${instanceCode}. Valid instances: ${Object.keys(registry.instances).join(', ')}`);
     }
+
+    // Ensure mongodb configuration exists (provide defaults if missing)
+    if (!config.mongodb) {
+        config.mongodb = {
+            database: `dive-${key}`,
+            user: `dive-${key}-user`
+        };
+    }
+
     return config;
 }
 
