@@ -2,7 +2,7 @@
   "$schema": "./schemas/federation_matrix.schema.json",
   "_metadata": {
     "version": "1.0.0",
-    "lastUpdated": "2025-12-20T11:22:03.916Z",
+    "lastUpdated": "2025-12-22T16:47:20.901Z",
     "description": "OPAL-managed federation partner matrix for DIVE V3",
     "compliance": [
       "ACP-240",
@@ -17,7 +17,6 @@
       "GBR",
       "DEU",
       "CAN",
-      "AUS",
       "ZZ0",
       "ZZC",
       "ZZG",
@@ -36,7 +35,8 @@
       "ZZJ",
       "ZZB",
       "ZZZ",
-      "ZZ5"
+      "ZZ5",
+      "AUS"
     ],
     "FRA": [
       "USA",

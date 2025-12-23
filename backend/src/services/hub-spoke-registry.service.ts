@@ -1019,6 +1019,32 @@ class HubSpokeRegistryService extends EventEmitter {
   }
 
   /**
+   * Update spoke's Keycloak admin password
+   * Used for federation setup when password wasn't captured during registration
+   */
+  async updateSpokeKeycloakPassword(spokeId: string, keycloakAdminPassword: string): Promise<void> {
+    const spoke = await this.store.findById(spokeId);
+    if (!spoke) {
+      throw new Error(`Spoke ${spokeId} not found`);
+    }
+
+    // Update the spoke with the new password
+    const updatedSpoke = {
+      ...spoke,
+      keycloakAdminPassword,
+      updatedAt: new Date()
+    };
+
+    await this.store.save(updatedSpoke);
+
+    logger.info('Updated spoke Keycloak admin password', {
+      spokeId,
+      instanceCode: spoke.instanceCode,
+      hasPassword: !!keycloakAdminPassword
+    });
+  }
+
+  /**
    * Permanently revoke a spoke
    */
   async revokeSpoke(spokeId: string, reason: string): Promise<void> {

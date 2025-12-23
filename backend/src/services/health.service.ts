@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as https from 'https';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
@@ -325,9 +326,21 @@ class HealthService {
         const opaUrl = process.env.OPA_URL || 'http://localhost:8181';
 
         try {
-            const response = await axios.get(`${opaUrl}/health`, {
+            let config: any = {
                 timeout: 5000,
-            });
+            };
+
+            // Configure HTTPS agent for HTTPS URLs
+            if (opaUrl.startsWith('https://')) {
+                config.httpsAgent = new https.Agent({
+                    minVersion: 'TLSv1.2',
+                    rejectUnauthorized: false, // Allow self-signed certs in development
+                    // Also disable hostname checking
+                    checkServerIdentity: () => undefined,
+                });
+            }
+
+            const response = await axios.get(`${opaUrl}/health`, config);
 
             const responseTime = Date.now() - startTime;
 
@@ -344,7 +357,9 @@ class HealthService {
                 : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : 'Unknown error');
 
             logger.error('OPA health check failed', {
+                opaUrl,
                 error: errorMessage,
+                hasHttpsAgent: opaUrl.startsWith('https://'),
             });
 
             return {

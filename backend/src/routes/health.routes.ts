@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
+import * as https from 'https';
 import { healthService } from '../services/health.service';
 import { KeycloakConfigSyncService } from '../services/keycloak-config-sync.service';
 import { policyVersionMonitor } from '../services/policy-version-monitor.service';
@@ -122,9 +123,17 @@ router.get('/redis', async (_req: Request, res: Response) => {
  */
 router.get('/policy-version', async (_req: Request, res: Response) => {
     try {
+        const httpsAgent = new https.Agent({
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: false, // Allow self-signed certs in development
+        });
+
         const opaResponse = await axios.get(
             `${OPA_URL}/v1/data/dive/policy_version`,
-            { timeout: 5000 }
+            {
+                timeout: 5000,
+                httpsAgent,
+            }
         );
 
         res.json({

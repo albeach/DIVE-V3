@@ -1,11 +1,11 @@
 /**
  * HTTPS Server Wrapper for Backend
- * Uses self-signed certificates for local development
+ * Uses mkcert certificates for local development
  * Required for: HTTPS-only frontend to call backend without mixed content errors
  *
  * Single HTTPS Server (Best Practice):
  * - HTTPS (4000): All access (browser + Docker internal)
- * - Containers trust self-signed certs via NODE_TLS_REJECT_UNAUTHORIZED=0
+ * - Containers trust mkcert CA via NODE_EXTRA_CA_CERTS environment variable
  */
 
 import https from 'https';

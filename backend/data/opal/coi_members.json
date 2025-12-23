@@ -2,7 +2,7 @@
   "$schema": "./schemas/coi_members.schema.json",
   "_metadata": {
     "version": "1.0.0",
-    "lastUpdated": "2025-12-18T07:51:40.510Z",
+    "lastUpdated": "2025-12-22T16:47:20.901Z",
     "description": "OPAL-managed Community of Interest (COI) membership registry for DIVE V3",
     "compliance": [
       "ACP-240",

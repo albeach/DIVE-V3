@@ -1,12 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-est-e4844d69",
+    "spokeId": "spoke-est-828e33d8",
     "instanceCode": "EST",
     "name": "Estonia",
     "description": "DIVE V3 Spoke Instance for Estonia",
     "country": "EST",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@est.dive25.com",
+    "registeredSpokeId": "spoke-est-84684874"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,7 +15,8 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3008",
     "apiUrl": "https://localhost:4008",
-    "idpUrl": "https://localhost:8451",
+    "idpUrl": "https://dive-spoke-est-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8451",
     "kasUrl": "https://localhost:9008"
   },
   "certificates": {
@@ -25,13 +27,15 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "approved",
     "requestedScopes": [
       "policy:base",
       "policy:est",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2025-12-22T17:36:59Z",
+    "spokeToken": "lUOT72x_5jl65Rq5V-V19IsNUtHXTpGrtBAwC0Fm5C4"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -44,8 +48,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-19T01:55:59Z",
-    "lastModified": "2025-12-19T01:55:59Z",
+    "createdAt": "2025-12-22T17:22:19Z",
+    "lastModified": "2025-12-22T17:22:19Z",
     "configHash": ""
   }
 }

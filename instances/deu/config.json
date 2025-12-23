@@ -1,0 +1,54 @@
+{
+  "identity": {
+    "spokeId": "spoke-deu-cdb6f9fb",
+    "instanceCode": "DEU",
+    "name": "DEU Instance",
+    "description": "DIVE V3 Spoke Instance for DEU Instance",
+    "country": "DEU",
+    "organizationType": "government",
+    "contactEmail": "admin@deu.dive25.com",
+    "registeredSpokeId": "spoke-deu-06c4b630"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3011",
+    "apiUrl": "https://localhost:4011",
+    "idpUrl": "https://dive-spoke-deu-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8454",
+    "kasUrl": "https://localhost:9011"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/deu/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/deu/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/deu/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/deu/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "pending",
+    "requestedScopes": [
+      "policy:base",
+      "policy:deu",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-23T00:59:13Z"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/deu/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/deu/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-23T00:55:10Z",
+    "lastModified": "2025-12-23T00:55:10Z",
+    "configHash": ""
+  }
+}

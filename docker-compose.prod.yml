@@ -344,7 +344,8 @@ services:
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Security
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Production should use properly issued certificates
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       SSL_CERT_PATH: /app/certs
     ports:
       - "127.0.0.1:4000:4000"  # Bind to localhost only in production
@@ -416,7 +417,8 @@ services:
       AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
       # Security
       AUTH_TRUST_HOST: "true"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Production should use properly issued certificates
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       CERT_PATH: /certs
     ports:
       - "127.0.0.1:3000:3000"  # Bind to localhost only in production

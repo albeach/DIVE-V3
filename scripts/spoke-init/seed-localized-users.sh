@@ -109,13 +109,12 @@ echo "  ${CLEARANCE_SECRET} = SECRET"
 echo "  ${CLEARANCE_TS} = TOP_SECRET"
 echo ""
 
-# Define users to create
-declare -A USERS
-USERS["testuser-${COUNTRY_LOWER}-1"]="${CLEARANCE_UNCLASS}|Unclassified|User"
-USERS["testuser-${COUNTRY_LOWER}-2"]="${CLEARANCE_CONF}|Confidential|User"
-USERS["testuser-${COUNTRY_LOWER}-3"]="${CLEARANCE_SECRET}|Secret|User"
-USERS["testuser-${COUNTRY_LOWER}-4"]="${CLEARANCE_TS}|TopSecret|User"
-USERS["admin-${COUNTRY_LOWER}"]="${CLEARANCE_TS}|Admin|User"
+# Define users to create (using indexed array for bash compatibility)
+USERS=("testuser-${COUNTRY_LOWER}-1:${CLEARANCE_UNCLASS}:Unclassified:User"
+       "testuser-${COUNTRY_LOWER}-2:${CLEARANCE_CONF}:Confidential:User"
+       "testuser-${COUNTRY_LOWER}-3:${CLEARANCE_SECRET}:Secret:User"
+       "testuser-${COUNTRY_LOWER}-4:${CLEARANCE_TS}:TopSecret:User"
+       "admin-${COUNTRY_LOWER}:${CLEARANCE_TS}:Admin:User")
 
 PASSWORD="TestUser2025!Pilot"
 
@@ -123,7 +122,7 @@ create_or_update_user() {
     local username="$1"
     local clearance_val="$2"
     local firstname="$3"
-    local lastname="$4"
+    local lastname="${4:-Operator}"
 
     # Check if user exists
     local user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}" \
@@ -190,15 +189,16 @@ EOF
 echo -e "${BOLD}Creating/updating users with localized attributes...${NC}"
 echo ""
 
-for username in "${!USERS[@]}"; do
-    IFS='|' read -r clearance firstname lastname <<< "${USERS[$username]}"
+for user_data in "${USERS[@]}"; do
+    IFS=':' read -r username clearance firstname lastname <<< "$user_data"
     create_or_update_user "$username" "$clearance" "$firstname" "$lastname"
 done
 
 echo ""
 echo -e "${BOLD}Verifying users...${NC}"
 
-for username in "${!USERS[@]}"; do
+for user_data in "${USERS[@]}"; do
+    IFS=':' read -r username clearance firstname lastname <<< "$user_data"
     USER_DATA=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r ".[0].attributes.${LOCAL_CLEARANCE}[0] // \"NOT_SET\"")
     echo "  ${username}: ${LOCAL_CLEARANCE}=${USER_DATA}"

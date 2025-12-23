@@ -1,18 +1,19 @@
 /**
  * Health Controller
  * Phase 4, Task 3.1: Policy Version and System Health Endpoints
- * 
+ *
  * Provides health check endpoints for monitoring, including:
  * - System health status
  * - OPA policy version (for drift detection)
  * - KAS federation status
  * - Database connectivity
- * 
+ *
  * NATO Compliance: ACP-240 §6.1 (System Monitoring Requirements)
  */
 
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
+import * as https from 'https';
 import { logger } from '../utils/logger';
 import { policyVersionMonitor } from '../services/policy-version-monitor.service';
 import { kasRegistryService } from '../services/kas-registry.service';
@@ -193,8 +194,16 @@ export const getDetailedHealthHandler = async (
 
   // Check OPA
   try {
+    const httpsAgent = new https.Agent({
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: false, // Allow self-signed certs in development
+    });
+
     const opaStart = Date.now();
-    const opaResponse = await axios.get(`${OPA_URL}/health`, { timeout: 3000 });
+    const opaResponse = await axios.get(`${OPA_URL}/health`, {
+      timeout: 3000,
+      httpsAgent,
+    });
     checks.opa = {
       healthy: opaResponse.status === 200,
       latencyMs: Date.now() - opaStart
@@ -284,8 +293,16 @@ export const readinessHandler = async (
   _next: NextFunction
 ): Promise<void> => {
   try {
+    const httpsAgent = new https.Agent({
+      minVersion: 'TLSv1.2',
+      rejectUnauthorized: false, // Allow self-signed certs in development
+    });
+
     // Check OPA is reachable
-    await axios.get(`${OPA_URL}/health`, { timeout: 2000 });
+    await axios.get(`${OPA_URL}/health`, {
+      timeout: 2000,
+      httpsAgent,
+    });
 
     res.json({
       ready: true,

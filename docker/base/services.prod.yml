@@ -162,7 +162,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: "4000"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Production should use properly issued certificates
+      # NODE_EXTRA_CA_CERTS only needed if using internal CAs
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/health"]
       interval: 15s
@@ -185,7 +186,7 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Production should use properly issued certificates
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:

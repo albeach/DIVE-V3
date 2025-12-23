@@ -130,7 +130,7 @@ case "$COMMAND" in
             deploy) cmd_deploy "$@" ;;
             reset)  cmd_reset "$@" ;;
             clean)  cmd_reset "$@" ;;
-            nuke)   cmd_nuke ;;
+            nuke)   cmd_nuke "$@" ;;
         esac
         ;;
 
