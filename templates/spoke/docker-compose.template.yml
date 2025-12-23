@@ -4,9 +4,9 @@
 # Template Generated: {{TIMESTAMP}}
 # Spoke ID: {{SPOKE_ID}}
 # =============================================================================
-# 
+#
 # This is a STANDALONE spoke stack - completely separate from Hub.
-# 
+#
 # Placeholders (auto-replaced by ./dive spoke init):
 #   {{INSTANCE_CODE_UPPER}} - 3-letter uppercase code (e.g., NZL)
 #   {{INSTANCE_CODE_LOWER}} - 3-letter lowercase code (e.g., nzl)
@@ -230,7 +230,8 @@ services:
     command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       PORT: "4000"
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       INSTANCE_NAME: "{{INSTANCE_NAME}}"
@@ -267,6 +268,7 @@ services:
       - {{INSTANCE_CODE_LOWER}}_backend_node_modules:/app/node_modules
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
+      - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ./config.json:/app/config/config.json:ro
       - ../../config:/app/config/shared:ro
       - ./cache:/app/cache
@@ -301,7 +303,8 @@ services:
       KEY_FILE: key.pem
       CERT_FILE: certificate.pem
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /opt/app/certs/ca/rootCA.pem
       OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
@@ -320,6 +323,7 @@ services:
       - dive-{{INSTANCE_CODE_LOWER}}-network
     volumes:
       - ./certs:/opt/app/certs:ro
+      - ../../certs/mkcert:/opt/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ../../kas/src:/app/src
       - {{INSTANCE_CODE_LOWER}}_kas_logs:/app/logs
       - ../../config:/app/config:ro
@@ -343,7 +347,8 @@ services:
     command: ["/bin/sh","-c","rm -f /app/.env.local && npm install && npm run dev"]
     environment:
       NODE_ENV: development
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       NEXT_PUBLIC_INSTANCE: {{INSTANCE_CODE_UPPER}}
       NEXT_PUBLIC_INSTANCE_NAME: "{{INSTANCE_NAME}}"
       # Public URLs for client-side requests
@@ -375,6 +380,7 @@ services:
       - {{INSTANCE_CODE_LOWER}}_frontend_next:/app/.next
       - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
+      - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
     extra_hosts:
       - "localhost:host-gateway"
     depends_on:

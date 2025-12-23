@@ -21,7 +21,7 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 - [SP Client Registration](#sp-client-registration)
 - [Policy Management](#policy-management)
 - [Certificate Management](#certificate-management)
-- [Federation Setup](#federation-setup)
+- [Federation Setup](#federation-setup) *(v2.0.0 - Refactored)*
 - [Resilience & Failover](#resilience--failover)
 - [Fix Commands](#fix-commands)
 - [Testing Suite](#testing-suite)
@@ -32,6 +32,7 @@ The DIVE V3 CLI (`./dive`) is a comprehensive modular management script for the 
 - [Checkpoint & Rollback](#checkpoint--rollback)
 - [Troubleshooting](#troubleshooting)
 - [Architecture Reference](#architecture-reference)
+- [Module Refactoring Status](#module-refactoring-status)
 
 ## Quick Start
 
@@ -82,6 +83,12 @@ DIVE_PILOT_MODE=false ./dive spoke init POL "Poland"
 # Verify federation health
 ./dive spoke verify-federation
 ./dive federation-setup verify-all
+
+# Verify bidirectional SSO for a specific spoke
+./dive federation verify POL
+
+# Fix misconfigured federation (if verify shows issues)
+./dive federation fix POL
 ```
 
 ## Global Options
@@ -736,6 +743,76 @@ Remove IdP trust relationship.
 
 ```bash
 ./dive federation unlink GBR
+```
+
+### `federation verify <CODE>` - Verify Bidirectional Federation
+
+Check bidirectional SSO configuration between hub and spoke.
+
+```bash
+./dive federation verify EST         # Verify USA ↔ EST federation
+./dive federation verify DEU         # Verify USA ↔ DEU federation
+./dive --instance fra federation verify USA  # Verify from FRA perspective
+```
+
+**Verification checks:**
+1. Remote IdP exists and is enabled in local Keycloak
+2. Local IdP exists and is enabled in remote Keycloak
+3. Federation network connectivity (Docker shared network)
+4. Client secret synchronization status
+
+**Output:**
+```
+Federation Verification: USA ↔ EST
+
+1. EST-idp in USA Keycloak: ✓ PASS (exists and enabled)
+2. USA-idp in EST Keycloak: ✓ PASS (exists and enabled)
+3. Federation network connectivity: ⚠ WARN (using host.docker.internal)
+4. Client secret synchronization: ⚠ WARN (secret may not be synced)
+
+✅ Bidirectional SSO is configured
+```
+
+### `federation fix <CODE>` - Fix Misconfigured Federation
+
+Automatically repair misconfigured bidirectional federation.
+
+```bash
+./dive federation fix EST         # Fix USA ↔ EST federation
+./dive federation fix DEU         # Fix USA ↔ DEU federation
+./dive federation fix FRA         # Fix USA ↔ FRA federation
+```
+
+**4-step fix process:**
+1. **Remove misconfigured IdPs** - Deletes existing IdPs with wrong configuration
+2. **Ensure federation clients exist** - Creates missing `dive-v3-broker-{code}` clients in both realms
+3. **Recreate IdPs with correct configuration** - Sets proper client IDs and dual URLs (public for browser auth, internal for token exchange)
+4. **Verify configuration** - Runs `federation verify` to confirm fix
+
+**Common issues fixed:**
+- Swapped/inverted client IDs in IdP configuration
+- Missing federation clients in target realms
+- Incorrect token URL (localhost vs internal Docker hostname)
+- Client secret mismatch between IdP and client
+
+**Example output:**
+```
+Fixing Federation: USA ↔ DEU
+
+Step 1: Removing misconfigured IdPs
+  Deleting deu-idp from USA... done
+  Deleting usa-idp from DEU... done
+
+Step 2: Ensuring federation clients exist
+  Checking dive-v3-broker-deu in dive-v3-broker... exists
+  Checking dive-v3-broker-usa in dive-v3-broker-deu... creating... created
+
+Step 3: Recreating IdPs with correct configuration
+  Created deu-idp in USA (direct)
+  Created usa-idp in DEU (direct)
+
+Step 4: Verifying configuration
+  ✅ Bidirectional SSO is configured
 ```
 
 ### `federation list-idps` - List Configured Identity Providers
@@ -1434,125 +1511,132 @@ Generate SSL certificate for a spoke.
 
 ## Federation Setup
 
-Keycloak federation configuration and troubleshooting.
+Keycloak federation configuration and troubleshooting. **Refactored in v2.0.0** with simplified commands and unified helpers.
 
-### `federation-setup register-hub <spoke>` - Register Spoke in Hub
+### Primary Commands
+
+#### `federation-setup configure <spoke|all>` - Configure Spoke Federation
+
+Complete federation configuration for Spoke→Hub flow with bidirectional attribute passthrough.
+
+```bash
+./dive federation-setup configure fra        # Configure France
+./dive federation-setup configure pol        # Configure Poland
+./dive federation-setup configure all        # Configure all running spokes
+```
+
+**6-step process:**
+1. Authenticate to Hub and Spoke Keycloaks
+2. Ensure spoke's usa-idp is configured with correct client secret
+3. Create Hub's federation client in spoke (`dive-v3-broker-usa`)
+4. Setup DIVE attribute scopes and mappers for claim passthrough
+5. Sync frontend .env with client secrets
+6. Recreate frontend container to load new secrets
+
+#### `federation-setup register-hub <spoke|all>` - Register Spoke in Hub
 
 Register a spoke as an IdP in the Hub, enabling Hub→Spoke federation.
 
 ```bash
 ./dive federation-setup register-hub rou     # Register Romania in Hub
 ./dive federation-setup register-hub pol     # Register Poland in Hub
+./dive federation-setup register-hub all     # Register all running spokes
 ```
 
-**7-step process:**
-1. Authenticate to Hub Keycloak
-2. Create Hub client for spoke (`dive-v3-client-{spoke}`)
-3. Create IdP in Hub (`{spoke}-idp`) with PKCE
-4. Create IdP mappers for DIVE attributes
-5. Update spoke client redirect URIs (login flow)
-6. Update spoke client post-logout redirect URIs (logout flow)
-7. Sync OPA trusted issuers
+**6-step process:**
+1. Authenticate to Hub and Spoke Keycloaks
+2. Create spoke client in Hub (`dive-v3-broker-{spoke}`)
+3. Create IdP in Hub (`{spoke}-idp`) pointing to spoke's Keycloak
+4. Create IdP mappers for DIVE attribute passthrough
+5. Configure redirect URIs in spoke client
+6. Sync OPA trusted issuers
 
-### `federation-setup register-hub-all` - Register All Spokes in Hub
+#### `federation-setup verify <spoke|all>` - Verify Federation
 
-Register all running spokes in the Hub.
-
-```bash
-./dive federation-setup register-hub-all
-```
-
-### `federation-setup configure <spoke>` - Configure Spoke Federation
-
-Complete federation configuration for Spoke→Hub flow.
+Check federation configuration for a spoke or all spokes.
 
 ```bash
-./dive federation-setup configure pol        # Configure Poland
-./dive federation-setup configure rou        # Configure Romania
-```
-
-**5-step process:**
-1. Configure usa-idp with Hub client secret
-2. Update spoke client redirect URIs
-3. Update Hub client redirect URIs
-4. Sync frontend .env with local client secret
-5. Recreate frontend container
-
-### `federation-setup configure-all` - Batch Federation Configuration
-
-Configure federation for all running spokes.
-
-```bash
-./dive federation-setup configure-all
-```
-
-### `federation-setup verify <spoke>` - Verify Spoke Federation
-
-Check federation configuration for a spoke.
-
-```bash
-./dive federation-setup verify pol
-./dive federation-setup verify rou
+./dive federation-setup verify fra
+./dive federation-setup verify all
 ```
 
 **Checks:**
-- Hub Keycloak running
-- Spoke Keycloak running
-- Hub Keycloak authentication
-- Spoke Keycloak authentication
-- Hub client exists
+- Hub and Spoke Keycloak health
+- Hub and Spoke Keycloak authentication
+- Hub client exists for spoke
 - Spoke local client exists
+- IdP configurations valid
 
-### `federation-setup verify-all` - Batch Federation Verification
+### Setup Commands
 
-Verify federation for all spokes.
-
-```bash
-./dive federation-setup verify-all
-```
-
-### `federation-setup sync-opa <spoke>` - Sync OPA Trusted Issuers
+#### `federation-setup sync-opa <spoke|all>` - Sync OPA Trusted Issuers
 
 Add spoke's Keycloak issuer to OPA trusted_issuers.json.
 
 ```bash
 ./dive federation-setup sync-opa pol
-./dive federation-setup sync-opa rou
+./dive federation-setup sync-opa all
 ```
 
-### `federation-setup sync-opa-all` - Sync All OPA Trusted Issuers
+#### `federation-setup setup-claims <spoke>` - Setup DIVE Claim Passthrough
 
-Sync OPA trusted issuers for all running spokes.
+Configure DIVE attribute scope and protocol mappers for a spoke.
 
 ```bash
-./dive federation-setup sync-opa-all
+./dive federation-setup setup-claims fra
 ```
 
-### `federation-setup fix-issuer <spoke>` - Fix Realm Issuer
+**What it does:**
+1. Creates `dive-attributes` scope with DIVE claim mappers
+2. Assigns scope to relevant clients
+3. Creates IdP mappers for claim passthrough
 
-Correct Keycloak realm's frontendUrl to match exposed port.
+#### `federation-setup init-nextauth <spoke>` - Initialize NextAuth Schema
+
+Create the NextAuth database tables in the spoke's PostgreSQL database.
 
 ```bash
-./dive federation-setup fix-issuer pol
+./dive federation-setup init-nextauth fra
+./dive federation-setup init-nextauth pol
 ```
 
-### `federation-setup fix-issuer-all` - Fix All Realm Issuers
+### Troubleshooting Commands
 
-Fix realm issuers for all running spokes.
+#### `federation-setup fix-idp-urls <spoke|all>` - Fix IdP URLs
+
+Fix `host.docker.internal` URLs in Hub IdP configurations. This resolves browser accessibility issues where federation redirects to internal Docker hostnames.
 
 ```bash
-./dive federation-setup fix-issuer-all
+./dive federation-setup fix-idp-urls fra       # Fix FRA IdP
+./dive federation-setup fix-idp-urls all       # Fix all IdPs
 ```
 
-### `federation-setup recreate-frontend <spoke>` - Recreate Frontend Container
+**What it fixes:**
+- `authorizationUrl`: `host.docker.internal` → `localhost`
+- `issuer`: `host.docker.internal` → `localhost`
+- `logoutUrl`: `host.docker.internal` → `localhost`
 
-Force recreate frontend to reload .env secrets.
+#### `federation-setup state <spoke>` - Show Federation State
+
+Display the current state of federation setup for a spoke.
 
 ```bash
-./dive federation-setup recreate-frontend pol
+./dive federation-setup state fra
 ```
 
-### `federation-setup get-hub-secret <spoke>` - Get Hub Client Secret
+Shows step completion status and any pending actions.
+
+#### `federation-setup recover <spoke>` - Recover Failed Setup
+
+Resume a failed federation setup from the last successful step.
+
+```bash
+./dive federation-setup recover fra
+```
+
+### Utility Commands
+
+#### `federation-setup get-hub-secret <spoke>` - Get Hub Client Secret
 
 Retrieve client secret from Hub for a spoke.
 
@@ -1560,12 +1644,46 @@ Retrieve client secret from Hub for a spoke.
 ./dive federation-setup get-hub-secret pol
 ```
 
-### `federation-setup get-spoke-secret <spoke>` - Get Spoke Local Client Secret
+#### `federation-setup get-spoke-secret <spoke>` - Get Spoke Client Secret
 
 Retrieve local client secret from spoke's Keycloak.
 
 ```bash
 ./dive federation-setup get-spoke-secret pol
+```
+
+### Deprecated Commands (Backwards Compatible)
+
+The following commands are deprecated but still work for backwards compatibility:
+
+| Deprecated Command | Use Instead |
+|-------------------|-------------|
+| `configure-all` | `configure all` |
+| `register-hub-all` | `register-hub all` |
+| `verify-all` | `verify all` |
+| `sync-opa-all` | `sync-opa all` |
+| `configure-idp` | `configure <spoke>` |
+| `sync-env`, `sync-hub-secret` | `configure <spoke>` |
+| `create-hub-client` | `configure <spoke>` |
+| `create-spoke-client` | `register-hub <spoke>` |
+| `fix-issuer`, `fix-issuer-all` | Auto-configured |
+
+### Complete New Spoke Setup
+
+The recommended workflow for setting up a new spoke:
+
+```bash
+# 1. Deploy the spoke
+./dive spoke deploy <code>
+
+# 2. Register spoke in Hub (Hub→Spoke flow)
+./dive federation-setup register-hub <code>
+
+# 3. Configure spoke federation (Spoke→Hub flow)
+./dive federation-setup configure <code>
+
+# 4. Verify bidirectional federation
+./dive federation-setup verify <code>
 ```
 
 ## Testing Suite
@@ -2714,8 +2832,54 @@ lsof -i :8443
 # Verify IdP links
 ./dive federation list-idps
 
+# Check bidirectional SSO for a specific spoke
+./dive federation verify EST
+
+# Fix misconfigured federation (wrong client IDs, broken URLs)
+./dive federation fix EST
+
 # Check spoke registration
 ./dive hub spokes list
+```
+
+#### Federation Attribute Issues
+
+If federated users show wrong country or missing attributes:
+
+```bash
+# Create/update Hub's federation client in spoke with DIVE attributes scope
+./dive federation-setup create-hub-client FRA
+
+# Sync client secrets
+./dive federation-setup sync-hub-secret FRA
+
+# Delete the federated user from Hub to force attribute refresh
+./dive federation-setup delete-hub-user testuser-fra-1
+
+# Full reconfigure with --force
+./dive federation-setup configure FRA --force
+```
+
+**Common symptoms:**
+- Federated user shows wrong country (e.g., "USA" instead of "FRA")
+- Missing clearance or COI attributes
+- "Invalid client or Invalid client credentials" errors
+
+**Root cause:** The spoke's realm is missing the `dive-attributes` scope or the Hub's client (`dive-v3-broker-usa`) in the spoke realm.
+
+#### host.docker.internal Issues
+
+If federation redirects to `https://host.docker.internal:...` URLs:
+
+```bash
+# Fix IdP URLs in Hub
+./dive federation-setup fix-idp-urls FRA
+
+# Or fix all IdPs at once
+./dive federation-setup fix-idp-urls all
+
+# Fix spoke realm's frontendUrl
+./dive federation-setup fix-issuer FRA
 ```
 
 ### Logs and Debugging
@@ -2897,6 +3061,8 @@ Federation:
   federation register-spoke <CODE> Add spoke to federation registry
   federation link <CODE>  Link IdP for cross-border SSO (bidirectional)
   federation unlink <CODE> Remove IdP link
+  federation verify <CODE> Verify bidirectional federation status (4 checks)
+  federation fix <CODE>   Fix misconfigured federation (delete & recreate)
   federation list-idps    List configured IdPs with status
   federation mappers list List NATO nation templates (PII warning)
   federation mappers show <nation> Show nation mapper details
@@ -2996,20 +3162,18 @@ Certificate Management:
   certs verify [spoke]     Verify certificate configuration
   certs verify-all         Batch verification (tabular output)
 
-Federation Setup:
-  federation-setup register-hub <spoke>   Register spoke as IdP in Hub
-  federation-setup register-hub-all       Register all spokes in Hub
-  federation-setup configure <spoke>      Configure spoke→Hub federation
-  federation-setup configure-all          Configure all spokes
-  federation-setup verify <spoke>         Verify federation configuration
-  federation-setup verify-all             Verify all spokes
-  federation-setup sync-opa <spoke>       Sync OPA trusted issuers
-  federation-setup sync-opa-all           Sync all OPA issuers
-  federation-setup fix-issuer <spoke>     Fix realm issuer URL
-  federation-setup fix-issuer-all         Fix all realm issuers
-  federation-setup recreate-frontend      Force recreate frontend container
-  federation-setup get-hub-secret         Get Hub client secret
-  federation-setup get-spoke-secret       Get spoke local client secret
+Federation Setup (v2.0.0 - Refactored):
+  federation-setup configure <spoke|all>  Configure spoke→Hub federation (6 steps)
+  federation-setup register-hub <spoke|all> Register spoke in Hub (Hub→Spoke, 6 steps)
+  federation-setup verify <spoke|all>     Verify federation configuration
+  federation-setup sync-opa <spoke|all>   Sync OPA trusted issuers
+  federation-setup setup-claims <spoke>   Setup DIVE claim passthrough
+  federation-setup init-nextauth <spoke>  Initialize NextAuth schema in spoke DB
+  federation-setup fix-idp-urls [spoke|all] Fix host.docker.internal → localhost
+  federation-setup state <spoke>          Show federation setup state
+  federation-setup recover <spoke>        Recover from failed setup
+  federation-setup get-hub-secret <spoke> Get Hub client secret
+  federation-setup get-spoke-secret <spoke> Get spoke client secret
 
 SP Client:
   sp register              Register OAuth client
@@ -3060,16 +3224,152 @@ Other:
 
 ---
 
+## Module Refactoring Status
+
+### Completed Refactoring
+
+| Module | Before | After | Reduction | Status | Date |
+|--------|--------|-------|-----------|--------|------|
+| `federation-setup.sh` | 4,390 lines | 1,899 lines | **57%** | ✅ Complete | 2025-12-22 |
+| `spoke.sh` | 6,625 lines | 2,227 lines | **66%** | ✅ Complete | 2025-12-23 |
+| `federation.sh` | 2,336 lines | 404 lines | **83%** | ✅ Complete | 2025-12-23 |
+| `hub.sh` | 1,825 lines | 1,185 lines | **35%** | ✅ Complete | 2025-12-23 |
+
+#### `hub.sh` Refactoring Details (v2.0.0)
+
+The `hub.sh` module was refactored from 1,825 to 1,185 lines (35% reduction) by extracting spoke management into a lazy-loaded sub-module:
+
+| Module | Functions | Lines | Purpose |
+|--------|-----------|-------|---------|
+| `hub.sh` (core) | ~25 | 1,185 | Deploy, status, health, logs, seed, AMR |
+| `hub-spokes.sh` | 10 | 714 | Spoke list, approve, reject, rotate-token |
+| **Total** | **35** | **1,899** | |
+
+**Key improvements:**
+- **35% main file reduction**: Core module now 1,185 lines vs 1,825 original
+- **Lazy loading**: `hub spokes` commands load sub-module on demand
+- **Faster startup**: Spoke management only loaded when needed
+
+**Working commands after refactoring:**
+```bash
+./dive hub help              # Shows full help
+./dive hub status            # Core command (immediate)
+./dive hub deploy            # Core command (immediate)
+./dive hub spokes list       # Lazy loads hub-spokes.sh
+./dive hub spokes approve X  # Lazy loads hub-spokes.sh
+./dive hub spokes pending    # Lazy loads hub-spokes.sh
+```
+
+#### `federation.sh` Refactoring Details (v2.0.0)
+
+The `federation.sh` module was refactored from 2,336 to 404 lines (83% reduction in main file) by extracting functionality into lazy-loaded sub-modules:
+
+| Module | Functions | Lines | Purpose |
+|--------|-----------|-------|---------|
+| `federation.sh` (core) | ~12 | 404 | Status, register, sync, dispatch |
+| `federation-link.sh` | 9 | 899 | IdP link, unlink, verify, fix, list-idps |
+| `federation-mappers.sh` | 6 | 417 | Mapper list, show, apply, verify |
+| `federation-test.sh` | 5 | 421 | Test basic, connectivity, auth, health |
+| **Total** | **32** | **2,141** | |
+
+**Key improvements:**
+- **83% main file reduction**: Core module now 404 lines vs 2,336 original
+- **Lazy loading**: Sub-modules only loaded when needed (link/mappers/test)
+- **Hub stubs removed**: Hub commands now delegate to `hub.sh` module
+- **Unified port helpers**: Uses `nato-countries.sh` for port offsets
+- **Cleaner help output**: Shows lazy-loaded sections clearly
+
+**Working commands after refactoring:**
+```bash
+./dive federation help          # Shows categorized help
+./dive federation status        # Core command (immediate)
+./dive federation link GBR      # Lazy loads federation-link.sh
+./dive federation verify EST    # Lazy loads federation-link.sh
+./dive federation mappers list  # Lazy loads federation-mappers.sh
+./dive federation test full     # Lazy loads federation-test.sh
+```
+
+#### `spoke.sh` Refactoring Details (v3.1.0)
+
+The `spoke.sh` module was refactored from 6,625 to 2,227 lines (66% reduction) by extracting functionality into 8 lazy-loaded sub-modules:
+
+| Module | Functions | Lines | Purpose |
+|--------|-----------|-------|---------|
+| `spoke.sh` (core) | ~20 | 2,227 | Status, health, certs, sync, lifecycle |
+| `spoke-init.sh` | 4 | 1,081 | Setup wizard, init internal/legacy |
+| `spoke-deploy.sh` | 3 | 1,176 | Deploy, up, wait for services |
+| `spoke-register.sh` | 7 | 744 | Register, token refresh, poll |
+| `spoke-kas.sh` | 6 | 445 | KAS management (init, register, unregister) |
+| `spoke-policy.sh` | 5 | 342 | Policy sync (status, sync, verify, version) |
+| `spoke-failover.sh` | 8 | 398 | Circuit breaker, maintenance, audit |
+| `spoke-countries.sh` | 7 | 292 | NATO country management |
+| `spoke-cloudflare.sh` | 3 | 233 | Optional Cloudflare tunnel |
+| **Total** | **63** | **6,938** | |
+
+**Key improvements:**
+- **66% main file reduction**: Core module now 2,227 lines vs 6,625 original
+- **8 sub-modules**: Each focused on specific functionality
+- **Lazy loading**: Sub-modules only loaded when needed, reducing startup time
+- **Better separation of concerns**: Each sub-module handles one domain
+- **Fixed associative array export issue**: NATO_COUNTRIES now properly loads even when flag is set
+- **Maintainable**: Easier to modify specific functionality without touching core code
+
+### Modules Recommended for Future Refactoring
+
+| Module | Lines | Priority | Notes |
+|--------|-------|----------|-------|
+| `kas.sh` | 1,746 | 🟡 **Medium** | Well-organized; could extract registry/federation/audit sections |
+| `status.sh` | 1,363 | 🟢 **Low** | Mostly display/formatting code |
+| `pilot.sh` | 1,154 | 🟢 **Low** | VM deployment specifics |
+
+#### `kas.sh` - Medium Priority (Optional)
+
+The `kas.sh` module (1,746 lines, 26 functions) is already well-organized with functions grouped by domain:
+- Registry management (~200 lines)
+- Federation commands (~200 lines)
+- Cache/Metrics/Alerts (~250 lines)
+- Audit/Security (~400 lines)
+- Certificate management (~200 lines)
+
+**Assessment:** Low benefit from refactoring. Each section is small enough to remain in the main module.
+
+---
+
 **DIVE V3 CLI Version:** Modular Unified Management Script (NATO 32-Country Edition with Resilience)
-**Last Updated:** December 20, 2025
+**Last Updated:** December 23, 2025
 **Documentation:** Complete CLI functionality including:
 - NATO 32-country expansion with automated deployment
 - Certificate Management with mkcert integration
-- Federation Setup with bidirectional trust
+- **Federation Setup v2.0.0** - Refactored with unified helpers (57% smaller)
+- **Federation Module v2.0.0** - Refactored with lazy-loaded sub-modules (83% smaller main file)
+- **Spoke Module v3.0.0** - Refactored with lazy-loaded sub-modules (23% smaller)
+- **Federation Verify & Fix** - Automatic detection and repair of misconfigured SSO
+- **Federation Attribute Passthrough** - DIVE attributes scope for cross-border identity claims
 - Hub-Spoke resilience (failover, maintenance mode, audit queuing)
 - Policy management with signature verification
 - Comprehensive monitoring (Redis, KAS, federation health)
 - Testing suite with dynamic Playwright E2E tests
-- Fix commands for common federation issues
+- Fix commands for common federation issues (including `host.docker.internal` fixes)
 - Checkpoint/rollback system for deployment safety
 - Phase 0-6 implementation with 120+ tests total
+
+### Total CLI Refactoring Impact
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| **Total Lines (4 modules)** | 15,176 | 8,585 | **-43.4%** |
+| **Max Module Size** | 6,625 | 5,097 | **-23%** |
+| **Sub-Modules Created** | 0 | 9 | +9 |
+| **Lazy-Loaded Sub-Modules** | 0 | 9 | +9 |
+
+**Detailed Breakdown:**
+
+| Main Module | Before | After | Sub-Modules | Sub-Module Lines |
+|-------------|--------|-------|-------------|------------------|
+| `federation-setup.sh` | 4,390 | 1,899 | 0 | 0 |
+| `spoke.sh` | 6,625 | 5,097 | 5 | 1,710 |
+| `federation.sh` | 2,336 | 404 | 3 | 1,737 |
+| `hub.sh` | 1,825 | 1,185 | 1 | 714 |
+| **Total** | **15,176** | **8,585** | **9** | **4,161** |
+
+The CLI now follows a consistent modular pattern with lazy loading for improved maintainability and faster startup times.

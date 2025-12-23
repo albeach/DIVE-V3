@@ -240,7 +240,8 @@ services:
       TRUSTED_ISSUERS: https://localhost:8467/realms/dive-v3-broker-prt,https://keycloak-prt:8443/realms/dive-v3-broker-prt,https://prt-idp.dive25.com/realms/dive-v3-broker-prt
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_PRT:?set KEYCLOAK_ADMIN_PASSWORD_PRT}
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       # OPA
       OPA_URL: http://opa-prt:8181
       # CORS
@@ -312,7 +313,8 @@ services:
       AUTH_REDIRECT_URI: https://prt-app.dive25.com/api/auth/callback/keycloak
       NEXT_PUBLIC_EXTERNAL_DOMAINS: https://prt-app.dive25.com,https://prt-api.dive25.com,https://prt-idp.dive25.com,https://localhost:3024,https://localhost:4024,https://localhost:8467
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       # Theme customization - dynamic from NATO countries database
       NEXT_PUBLIC_THEME_PRIMARY: "#006600"
       NEXT_PUBLIC_THEME_SECONDARY: "#FF0000"

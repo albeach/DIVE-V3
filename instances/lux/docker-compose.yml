@@ -109,10 +109,22 @@ services:
       file: ../../docker/base/services.yml
       service: opa-base
     container_name: dive-spoke-lux-opa
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--tls-cert-file=/certs/certificate.pem"
+      - "--tls-private-key-file=/certs/key.pem"
+      - "--bundle"
+      - "/policies"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "--set=decision_logs.console=true"
     ports:
       - "8361:8181"
     volumes:
       - ../../policies:/policies:ro
+      - ./certs:/certs:ro
     networks:
       - dive-lux-network
 
@@ -124,9 +136,9 @@ services:
     environment:
       OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      OPAL_OPA_URL: http://opa-lux:8181
+      OPAL_OPA_URL: https://opa-lux:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-lux-default}
-      OPAL_POLICY_STORE_URL: http://opa-lux:8181
+      OPAL_POLICY_STORE_URL: https://opa-lux:8181
       OPAL_DATA_TOPICS: policy:base,policy:lux,data:federation_matrix,data:trusted_issuers
     volumes:
       - lux_opal_cache:/var/opal/cache
@@ -146,7 +158,7 @@ services:
     environment:
       KEYCLOAK_URL: https://keycloak-lux:8443
       KEYCLOAK_REALM: dive-v3-broker-lux
-      OPA_URL: http://opa-lux:8181
+      OPA_URL: https://opa-lux:8181
       INSTANCE_CODE: LUX
     ports:
       - "9018:8080"
@@ -177,7 +189,10 @@ services:
       TRUSTED_ISSUERS: https://localhost:8461/realms/dive-v3-broker-lux,https://keycloak-lux:8443/realms/dive-v3-broker-lux,https://lux-idp.dive25.com/realms/dive-v3-broker-lux,https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_LUX:?set KEYCLOAK_ADMIN_PASSWORD_LUX}
-      OPA_URL: http://opa-lux:8181
+      OPA_URL: https://opa-lux:8181
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      NODE_TLS_MIN_VERSION: "TLSv1.2"   # Force TLS 1.2+ for OPA compatibility
       FEDERATION_ALLOWED_ORIGINS: https://localhost:3018,https://localhost:4018,https://localhost:8461,https://lux-app.dive25.com,https://lux-api.dive25.com,https://lux-idp.dive25.com
       CORS_ALLOWED_ORIGINS: https://localhost:3018,https://localhost:4018,https://localhost:8461,https://lux-app.dive25.com,https://lux-api.dive25.com,https://lux-idp.dive25.com
     ports:

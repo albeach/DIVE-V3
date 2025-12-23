@@ -1,12 +1,13 @@
 /**
  * Admin OPA Policy Controller
- * 
+ *
  * Handles real-time OPA policy updates for demo purposes
  * Allows toggling policy rules on/off dynamically
  */
 
 import { Request, Response } from 'express';
 import axios from 'axios';
+import * as https from 'https';
 import { logger } from '../utils/logger';
 import { logAdminAction } from '../middleware/admin-auth.middleware';
 import { IAdminAPIResponse } from '../types/admin.types';
@@ -35,7 +36,7 @@ const getPolicyDir = (): string => {
             logger.warn('POLICY_DIR env var set but directory does not exist', { path: envDir });
         }
     }
-    
+
     // 2. Check common Docker container paths
     const dockerPaths = [
         '/app/policies',           // Docker container path (from docker-compose.yml)
@@ -44,18 +45,18 @@ const getPolicyDir = (): string => {
         path.join(__dirname, '../../policies'), // Relative to compiled code
         path.join(__dirname, '../../../policies'), // Alternative relative path
     ];
-    
+
     for (const dir of dockerPaths) {
         if (fs.existsSync(dir)) {
             logger.info('Found policies directory', { path: dir, cwd: process.cwd() });
             return dir;
         }
     }
-    
+
     // 3. Fallback to default
     const fallback = path.join(process.cwd(), 'policies');
-    logger.warn('Policy directory not found, using fallback', { 
-        fallback, 
+    logger.warn('Policy directory not found, using fallback', {
+        fallback,
         cwd: process.cwd(),
         checkedPaths: dockerPaths,
         envPolicyDir: process.env.POLICY_DIR
@@ -68,13 +69,13 @@ const POLICY_DIR = getPolicyDir();
 // Recursively collect all .rego files under POLICY_DIR so nested modular layouts work
 const listRegoFiles = (dir: string): string[] => {
     const files: string[] = [];
-    
+
     try {
         if (!fs.existsSync(dir)) {
             logger.warn('Policy directory does not exist', { dir, cwd: process.cwd() });
             return files;
         }
-        
+
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
             if (entry.isDirectory()) {
@@ -92,7 +93,7 @@ const listRegoFiles = (dir: string): string[] => {
             cwd: process.cwd()
         });
     }
-    
+
     return files;
 };
 
@@ -184,12 +185,23 @@ export const getOPAStatusHandler = async (
         let opaVersion = 'unknown';
 
         try {
-            const healthResponse = await axios.get(healthUrl, { timeout: 2000 });
+            const httpsAgent = new https.Agent({
+                minVersion: 'TLSv1.2',
+                rejectUnauthorized: false, // Allow self-signed certs in development
+            });
+
+            const healthResponse = await axios.get(healthUrl, {
+                timeout: 2000,
+                httpsAgent,
+            });
             opaHealthy = healthResponse.status === 200;
-            
+
             // Try to get version
             try {
-                const versionResponse = await axios.get(`${OPA_URL}/version`, { timeout: 2000 });
+                const versionResponse = await axios.get(`${OPA_URL}/version`, {
+                    timeout: 2000,
+                    httpsAgent,
+                });
                 opaVersion = versionResponse.data?.version || 'unknown';
             } catch {
                 // Version endpoint may not exist
@@ -200,7 +212,7 @@ export const getOPAStatusHandler = async (
 
         // List available policies (recursive to support modular directories)
         const policyFiles: string[] = [];
-        
+
         logger.info('Listing policy files', {
             requestId,
             policyDir: POLICY_DIR,
@@ -208,7 +220,7 @@ export const getOPAStatusHandler = async (
             cwd: process.cwd(),
             envPolicyDir: process.env.POLICY_DIR
         });
-        
+
         if (fs.existsSync(POLICY_DIR)) {
             policyFiles.push(...listRegoFiles(POLICY_DIR));
             logger.info('Found policy files', {
@@ -281,7 +293,7 @@ export const toggleRuleHandler = async (
         }
 
         const policyPath = path.join(POLICY_DIR, policyFile);
-        
+
         if (!fs.existsSync(policyPath)) {
             res.status(404).json({
                 success: false,
@@ -305,7 +317,7 @@ export const toggleRuleHandler = async (
                 new RegExp(`#\\s*not\\s+${escapedRuleName}`, 'g'),
                 `\tnot ${escapedRuleName}`
             );
-            
+
             // Check if rule exists in allow block, add if missing
             const allowBlockMatch = policyContent.match(/allow\s+if\s*\{([^}]+)\}/s) || policyContent.match(/allow\s*:=\s*true\s+if\s*\{([^}]+)\}/s);
             if (allowBlockMatch) {

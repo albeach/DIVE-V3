@@ -7,7 +7,7 @@
     "country": "LUX",
     "organizationType": "government",
     "contactEmail": "admin@lux.dive25.com",
-    "registeredSpokeId": "spoke-lux-f1e325b6"
+    "registeredSpokeId": "spoke-lux-2feb92bd"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,15 +27,16 @@
   },
   "authentication": {},
   "federation": {
-    "status": "active",
+    "status": "approved",
     "requestedScopes": [
       "policy:base",
       "policy:lux",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-22T01:08:18Z",
-    "activatedAt": "2025-12-22T13:00:00Z"
+    "registeredAt": "2025-12-23T01:41:56Z",
+    "activatedAt": "2025-12-22T13:00:00Z",
+    "spokeToken": "Tpf3smrn-ujZ9jfvjiZARSAz_t-7xR97YO9E0k6Aeas"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-fra-b78e9b79",
+    "spokeId": "spoke-fra-6db61ec8",
     "instanceCode": "FRA",
-    "name": "France",
-    "description": "DIVE V3 Spoke Instance for France",
+    "name": "French Armed Forces",
+    "description": "DIVE V3 Spoke Instance for French Armed Forces",
     "country": "FRA",
     "organizationType": "government",
-    "contactEmail": "fra-admin@dive-demo.example",
-    "registeredSpokeId": "spoke-fra-df3ca95d"
+    "contactEmail": "admin@fra.dive25.com",
+    "registeredSpokeId": "spoke-fra-7ed740b3"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,15 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:fra",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-22T05:30:07Z",
-    "spokeToken": "RZn9p4iXOjBXy6K-T1krKocKaf04yPYGzgyx6F-6Nhc"
+    "registeredAt": "2025-12-23T04:29:04Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-13T14:27:03Z",
-    "lastModified": "2025-12-13T14:27:03Z",
+    "createdAt": "2025-12-23T04:27:30Z",
+    "lastModified": "2025-12-23T04:27:30Z",
     "configHash": ""
   }
 }

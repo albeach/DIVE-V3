@@ -3,7 +3,7 @@
 # =============================================================================
 # Spoke instance using extends pattern from base services.
 # Regenerate with: ./dive spoke init EST "Estonia"
-# Spoke ID: spoke-est-e4844d69
+# Spoke ID: spoke-est-828e33d8
 # =============================================================================
 
 name: dive-spoke-est
@@ -109,10 +109,22 @@ services:
       file: ../../docker/base/services.yml
       service: opa-base
     container_name: dive-spoke-est-opa
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--tls-cert-file=/certs/certificate.pem"
+      - "--tls-private-key-file=/certs/key.pem"
+      - "--bundle"
+      - "/policies"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "--set=decision_logs.console=true"
     ports:
       - "8261:8181"
     volumes:
       - ../../policies:/policies:ro
+      - ./certs:/certs:ro
     networks:
       - dive-est-network
 
@@ -122,11 +134,11 @@ services:
       service: opal-client-base
     container_name: dive-spoke-est-opal-client
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      OPAL_OPA_URL: http://opa-est:8181
+      OPAL_OPA_URL: https://opa-est:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-est-default}
-      OPAL_POLICY_STORE_URL: http://opa-est:8181
+      OPAL_POLICY_STORE_URL: https://opa-est:8181
       OPAL_DATA_TOPICS: policy:base,policy:est,data:federation_matrix,data:trusted_issuers
     volumes:
       - est_opal_cache:/var/opal/cache
@@ -136,6 +148,7 @@ services:
         condition: service_healthy
     networks:
       - dive-est-network
+      - dive-v3-shared-network  # Required to reach Hub OPAL server
 
   kas-est:
     extends:
@@ -145,7 +158,7 @@ services:
     environment:
       KEYCLOAK_URL: https://keycloak-est:8443
       KEYCLOAK_REALM: dive-v3-broker-est
-      OPA_URL: http://opa-est:8181
+      OPA_URL: https://opa-est:8181
       INSTANCE_CODE: EST
     ports:
       - "9008:8080"
@@ -173,10 +186,11 @@ services:
       KEYCLOAK_URL: https://keycloak-est:8443
       KEYCLOAK_REALM: dive-v3-broker-est
       KEYCLOAK_ISSUER: https://localhost:8451/realms/dive-v3-broker-est
-      TRUSTED_ISSUERS: https://localhost:8451/realms/dive-v3-broker-est,https://keycloak-est:8443/realms/dive-v3-broker-est,https://est-idp.dive25.com/realms/dive-v3-broker-est
+      TRUSTED_ISSUERS: https://localhost:8451/realms/dive-v3-broker-est,https://keycloak-est:8443/realms/dive-v3-broker-est,https://est-idp.dive25.com/realms/dive-v3-broker-est,https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_EST:?set KEYCLOAK_ADMIN_PASSWORD_EST}
-      OPA_URL: http://opa-est:8181
+      OPA_URL: https://opa-est:8181
+      NODE_TLS_MIN_VERSION: "TLSv1.2"
       FEDERATION_ALLOWED_ORIGINS: https://localhost:3008,https://localhost:4008,https://localhost:8451,https://est-app.dive25.com,https://est-api.dive25.com,https://est-idp.dive25.com
       CORS_ALLOWED_ORIGINS: https://localhost:3008,https://localhost:4008,https://localhost:8451,https://est-app.dive25.com,https://est-api.dive25.com,https://est-idp.dive25.com
     ports:
@@ -214,7 +228,7 @@ services:
       NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-est
       BACKEND_URL: https://backend-est:4000
       AUTH_SECRET: ${NEXTAUTH_SECRET_EST:?set NEXTAUTH_SECRET_EST}
-      AUTH_KEYCLOAK_ID: dive-v3-client-est
+      AUTH_KEYCLOAK_ID: dive-v3-broker-est
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_EST:?set KEYCLOAK_CLIENT_SECRET_EST}
       AUTH_KEYCLOAK_ISSUER: https://localhost:8451/realms/dive-v3-broker-est
       AUTH_TRUST_HOST: "true"
@@ -223,7 +237,7 @@ services:
       DATABASE_URL: postgresql://keycloak:${POSTGRES_PASSWORD_EST:?set POSTGRES_PASSWORD_EST}@postgres-est:5432/keycloak
       KEYCLOAK_URL: https://keycloak-est:8443
       KEYCLOAK_REALM: dive-v3-broker-est
-      KEYCLOAK_CLIENT_ID: dive-v3-client-est
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-est
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_EST:?set KEYCLOAK_CLIENT_SECRET_EST}
       AUTH_POST_LOGOUT_REDIRECT: https://est-app.dive25.com
       AUTH_REDIRECT_URI: https://est-app.dive25.com/api/auth/callback/keycloak

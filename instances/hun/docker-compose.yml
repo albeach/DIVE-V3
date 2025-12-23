@@ -240,7 +240,8 @@ services:
       TRUSTED_ISSUERS: https://localhost:8456/realms/dive-v3-broker-hun,https://keycloak-hun:8443/realms/dive-v3-broker-hun,https://hun-idp.dive25.com/realms/dive-v3-broker-hun
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_HUN:?set KEYCLOAK_ADMIN_PASSWORD_HUN}
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       # OPA
       OPA_URL: http://opa-hun:8181
       # CORS
@@ -312,7 +313,8 @@ services:
       AUTH_REDIRECT_URI: https://hun-app.dive25.com/api/auth/callback/keycloak
       NEXT_PUBLIC_EXTERNAL_DOMAINS: https://hun-app.dive25.com,https://hun-api.dive25.com,https://hun-idp.dive25.com,https://localhost:3013,https://localhost:4013,https://localhost:8456
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       # Theme customization - dynamic from NATO countries database
       NEXT_PUBLIC_THEME_PRIMARY: "#CD2A3E"
       NEXT_PUBLIC_THEME_SECONDARY: "#436F4D"

@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheckIcon, SmartphoneIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { ShieldCheckIcon, DevicePhoneMobileIcon, KeyIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 
 export default function MFASetupPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const [setupMethod, setSetupMethod] = useState<'otp' | 'webauthn' | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -89,7 +89,7 @@ export default function MFASetupPage() {
 
       if (response.ok) {
         // Success - refresh session and redirect
-        await session?.update();
+        await update();
         router.push('/dashboard');
       } else {
         setError(data.error || 'Invalid OTP code');
@@ -164,7 +164,7 @@ export default function MFASetupPage() {
                     className="w-full flex items-center justify-between p-4 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     <div className="flex items-center">
-                      <SmartphoneIcon className="h-6 w-6 text-blue-600 mr-3" />
+                      <DevicePhoneMobileIcon className="h-6 w-6 text-blue-600 mr-3" />
                       <div className="text-left">
                         <p className="font-semibold text-gray-900 dark:text-white">TOTP (Time-based One-Time Password)</p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">Use an authenticator app like Google Authenticator</p>

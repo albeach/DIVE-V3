@@ -1,0 +1,42 @@
+{
+  "identity": {
+    "hubId": "hub-efef5a8b",
+    "name": "DIVE V3 Federation Hub",
+    "description": "Central policy management and federation hub",
+    "version": "1.0.0"
+  },
+  "endpoints": {
+    "baseUrl": "https://hub.dive25.com",
+    "apiUrl": "https://hub.dive25.com/api",
+    "opalUrl": "https://hub.dive25.com:7002",
+    "keycloakUrl": "https://hub.dive25.com:8443"
+  },
+  "federation": {
+    "enabled": true,
+    "allowAutoApproval": false,
+    "requireCertificate": false,
+    "defaultTrustLevel": "development",
+    "defaultScopes": ["policy:read", "heartbeat:write"],
+    "tokenValidityMs": 86400000
+  },
+  "policy": {
+    "gitRepo": "",
+    "branch": "main",
+    "syncIntervalMs": 60000,
+    "layers": ["base", "coalition", "tenant"]
+  },
+  "security": {
+    "requireMTLS": false,
+    "allowedCipherSuites": ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"],
+    "minTLSVersion": "1.2"
+  },
+  "monitoring": {
+    "metricsEnabled": true,
+    "healthCheckIntervalMs": 30000,
+    "alertWebhookUrl": ""
+  },
+  "metadata": {
+    "createdAt": "2025-12-23T08:33:04Z",
+    "lastModified": "2025-12-23T08:33:04Z"
+  }
+}

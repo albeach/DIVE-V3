@@ -274,7 +274,8 @@ services:
       KEYCLOAK_ADMIN_PASSWORD_FRA: ${KEYCLOAK_ADMIN_PASSWORD_FRA}
       KEYCLOAK_ADMIN_PASSWORD_DEU: ${KEYCLOAK_ADMIN_PASSWORD_DEU}
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPAL_SERVER_URL: https://opal-server:7002
       OPAL_DATA_TOPICS: policy_data
       # Docker exec configuration for running OPA tests
@@ -291,6 +292,7 @@ services:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./policies:/app/policies:ro
       - ./backend/certs:/app/certs:ro
+      - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ./backend/logs:/app/logs
       - ./config:/app/config:ro
       # Docker socket for running OPA tests via docker exec
@@ -370,7 +372,8 @@ services:
       KEY_FILE: key.pem
       CERT_FILE: certificate.pem
       BACKEND_URL: https://backend:4000
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPA_URL: https://opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin
       MONGODB_DATABASE: dive-v3
@@ -387,6 +390,7 @@ services:
       - hub-internal
     volumes:
       - ./kas/certs:/opt/app/certs:ro
+      - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ./kas/logs:/app/logs
       - ./config:/app/config:ro
     # Use built version instead of dev mode
@@ -428,7 +432,8 @@ services:
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
       AUTH_TRUST_HOST: "true"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/dive_v3_app
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
@@ -445,6 +450,7 @@ services:
       - ./frontend:/app
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./frontend/certs:/opt/app/certs:ro
+      - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - hub_frontend_node_modules:/app/node_modules
       - hub_frontend_next:/app/.next
 

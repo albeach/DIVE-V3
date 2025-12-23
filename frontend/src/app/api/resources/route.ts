@@ -11,13 +11,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getSecureHttpsAgent } from '@/lib/https-agent';
 
 export const dynamic = 'force-dynamic';
-
-// Allow self-signed certs in local/dev (backend uses mkcert)
-if (process.env.NODE_ENV !== 'production') {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
 
 export async function GET(request: NextRequest) {
     try {

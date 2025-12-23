@@ -267,7 +267,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // FIX (Nov 7): Profile callback to handle remote IdPs without email
             // and capture DIVE attributes from Keycloak tokens
             profile(profile) {
-                console.log('[NextAuth profile()] Raw profile from Keycloak:', {
+                console.log('[NextAuth profile()] Raw Keycloak profile:', {
                     sub: profile.sub,
                     email: profile.email,
                     preferred_username: profile.preferred_username,

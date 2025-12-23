@@ -152,28 +152,68 @@ cmd_backup() {
 
     log_step "Creating backup in $backup_dir..."
 
-    local postgres_container="${POSTGRES_CONTAINER:-$(container_name postgres)}"
-    local mongo_container="${MONGO_CONTAINER:-$(container_name mongo)}"
+    # Determine container names - handle hub vs spoke environments
+    local postgres_container
+    local mongo_container
+
+    if [ "$COMMAND" = "hub" ] || [ "${COMPOSE_PROJECT_NAME:-}" = "dive-hub" ]; then
+        # Hub environment uses dive-hub-* containers
+        postgres_container="${COMPOSE_PROJECT_NAME:-dive-hub}-postgres"
+        mongo_container="${COMPOSE_PROJECT_NAME:-dive-hub}-mongodb"
+    else
+        # Spoke environment uses dive-v3-* containers
+        postgres_container="${POSTGRES_CONTAINER:-$(container_name postgres)}"
+        mongo_container="${MONGO_CONTAINER:-$(container_name mongo)}"
+    fi
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "mkdir -p $backup_dir"
         log_dry "docker exec ${postgres_container} pg_dumpall -U postgres > $backup_dir/postgres.sql"
-        log_dry "docker exec ${mongo_container} mongodump --archive > $backup_dir/mongo.archive"
+        log_dry "docker exec ${mongo_container} mongodump --username admin --password '***' --authenticationDatabase admin --archive=$backup_dir/mongo.archive --db dive-v3"
         return 0
     fi
 
     mkdir -p "$backup_dir"
 
-    # PostgreSQL
+    # PostgreSQL backup
     log_info "Backing up PostgreSQL..."
-    docker exec "$postgres_container" pg_dumpall -U postgres > "$backup_dir/postgres.sql" 2>/dev/null || log_warn "PostgreSQL backup failed"
+    if docker exec "$postgres_container" pg_dumpall -U postgres > "$backup_dir/postgres.sql" 2>/dev/null; then
+        log_success "PostgreSQL backup completed ($(stat -f%z "$backup_dir/postgres.sql" 2>/dev/null || echo "size unknown") bytes)"
+    else
+        log_warn "PostgreSQL backup failed"
+    fi
 
-    # MongoDB
+    # MongoDB backup with authentication
     log_info "Backing up MongoDB..."
-    docker exec "$mongo_container" mongodump --archive="$backup_dir/mongo.archive" 2>/dev/null || log_warn "MongoDB backup failed"
+    local mongo_password
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        # Hub environment - get password from .env.hub
+        mongo_password=$(grep "MONGO_PASSWORD=" "${DIVE_ROOT}/.env.hub" | cut -d'=' -f2)
+    else
+        # Spoke environment - try to get from environment or secrets
+        mongo_password="${MONGO_PASSWORD:-$(get_secret_value mongodb-$INSTANCE 2>/dev/null || echo 'admin')}"
+    fi
+
+    if docker exec "$mongo_container" mongodump \
+        --username admin \
+        --password "$mongo_password" \
+        --authenticationDatabase admin \
+        --archive \
+        --db dive-v3 > "$backup_dir/mongo.archive" 2>/dev/null; then
+        log_success "MongoDB backup completed ($(stat -f%z "$backup_dir/mongo.archive" 2>/dev/null || echo "size unknown") bytes)"
+    else
+        log_warn "MongoDB backup failed"
+    fi
 
     log_success "Backup created: $backup_dir"
     ls -la "$backup_dir"
+
+    # Verify backup integrity
+    if [ -s "$backup_dir/postgres.sql" ] && [ -s "$backup_dir/mongo.archive" ]; then
+        log_success "Backup verification passed - both databases backed up successfully"
+    else
+        log_warn "Backup verification failed - some databases may not have been backed up properly"
+    fi
 }
 
 cmd_restore() {
@@ -201,25 +241,62 @@ cmd_restore() {
 
     log_step "Restoring from $backup_dir..."
 
-    local postgres_container="${POSTGRES_CONTAINER:-$(container_name postgres)}"
-    local mongo_container="${MONGO_CONTAINER:-$(container_name mongo)}"
+    # Determine container names - handle hub vs spoke environments
+    local postgres_container
+    local mongo_container
+
+    if [ "$COMMAND" = "hub" ] || [ "${COMPOSE_PROJECT_NAME:-}" = "dive-hub" ]; then
+        # Hub environment uses dive-hub-* containers
+        postgres_container="${COMPOSE_PROJECT_NAME:-dive-hub}-postgres"
+        mongo_container="${COMPOSE_PROJECT_NAME:-dive-hub}-mongodb"
+    else
+        # Spoke environment uses dive-v3-* containers
+        postgres_container="${POSTGRES_CONTAINER:-$(container_name postgres)}"
+        mongo_container="${MONGO_CONTAINER:-$(container_name mongo)}"
+    fi
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker exec -i ${postgres_container} psql -U postgres < $backup_dir/postgres.sql"
-        log_dry "docker exec ${mongo_container} mongorestore --archive=$backup_dir/mongo.archive"
+        log_dry "docker exec ${mongo_container} mongorestore --username admin --password '***' --authenticationDatabase admin --archive=$backup_dir/mongo.archive --drop"
         return 0
     fi
 
-    # PostgreSQL
+    # PostgreSQL restore
     if [ -f "$backup_dir/postgres.sql" ]; then
         log_info "Restoring PostgreSQL..."
-        docker exec -i "$postgres_container" psql -U postgres < "$backup_dir/postgres.sql" 2>/dev/null || log_warn "PostgreSQL restore failed"
+        if docker exec -i "$postgres_container" psql -U postgres < "$backup_dir/postgres.sql" 2>/dev/null; then
+            log_success "PostgreSQL restore completed"
+        else
+            log_warn "PostgreSQL restore failed"
+        fi
+    else
+        log_warn "PostgreSQL backup file not found: $backup_dir/postgres.sql"
     fi
 
-    # MongoDB
+    # MongoDB restore with authentication
     if [ -f "$backup_dir/mongo.archive" ]; then
         log_info "Restoring MongoDB..."
-        docker exec "$mongo_container" mongorestore --archive="$backup_dir/mongo.archive" --drop 2>/dev/null || log_warn "MongoDB restore failed"
+        local mongo_password
+        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+            # Hub environment - get password from .env.hub
+            mongo_password=$(grep "MONGO_PASSWORD=" "${DIVE_ROOT}/.env.hub" | cut -d'=' -f2)
+        else
+            # Spoke environment - try to get from environment or secrets
+            mongo_password="${MONGO_PASSWORD:-$(get_secret_value mongodb-$INSTANCE 2>/dev/null || echo 'admin')}"
+        fi
+
+        if docker exec -i "$mongo_container" mongorestore \
+            --username admin \
+            --password "$mongo_password" \
+            --authenticationDatabase admin \
+            --archive \
+            --drop < "$backup_dir/mongo.archive" 2>/dev/null; then
+            log_success "MongoDB restore completed"
+        else
+            log_warn "MongoDB restore failed"
+        fi
+    else
+        log_warn "MongoDB backup file not found: $backup_dir/mongo.archive"
     fi
 
     log_success "Restore complete"

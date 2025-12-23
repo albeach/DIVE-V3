@@ -32,11 +32,12 @@ ingress:
   # Hostname:       usa-app.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-app.dive25.com
-    service: http://frontend:3000
+    service: https://hub-frontend:3000
     originRequest:
+      noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: usa-app.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
   # Docker Service: backend
@@ -49,7 +50,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: usa-api.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
   # Docker Service: keycloak
@@ -62,7 +63,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: usa-idp.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
   # Docker Service: kas
@@ -74,7 +75,7 @@ ingress:
     originRequest:
       connectTimeout: 60s
       httpHostHeader: usa-kas.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)
   # ─────────────────────────────────────────────────────────────────────────
