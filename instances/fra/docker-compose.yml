@@ -1,8 +1,9 @@
 # =============================================================================
-# DIVE V3 - FRA Instance (France)
+# DIVE V3 - FRA Instance (French Armed Forces)
 # =============================================================================
 # Spoke instance using extends pattern from base services.
-# Regenerate with: ./dive spoke init FRA "France"
+# Regenerate with: ./dive spoke init FRA "French Armed Forces"
+# Spoke ID: spoke-fra-6db61ec8
 # =============================================================================
 
 name: dive-spoke-fra
@@ -25,10 +26,6 @@ volumes:
   fra_backend_logs:
 
 services:
-  # ============================================================================
-  # DATABASE SERVICES
-  # ============================================================================
-
   postgres-fra:
     extends:
       file: ../../docker/base/services.yml
@@ -76,13 +73,6 @@ services:
       - dive-fra-network
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_FRA}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ============================================================================
-  # IDENTITY & ACCESS MANAGEMENT
-  # ============================================================================
 
   keycloak-fra:
     extends:
@@ -99,11 +89,13 @@ services:
       KC_HOSTNAME_ADMIN_URL: https://localhost:8453
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
     ports:
       - "8453:8443"
       - "8090:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ./truststores:/opt/keycloak/conf/truststores:ro
       - ../../keycloak/themes:/opt/keycloak/themes:ro
     depends_on:
       postgres-fra:
@@ -112,19 +104,25 @@ services:
       - dive-fra-network
       - dive-shared
 
-  # ============================================================================
-  # AUTHORIZATION
-  # ============================================================================
-
   opa-fra:
     extends:
       file: ../../docker/base/services.yml
       service: opa-base
     container_name: dive-spoke-fra-opa
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--tls-cert-file=/certs/certificate.pem"
+      - "--tls-private-key-file=/certs/key.pem"
+      - "--bundle"
+      - "/policies"
+      - "--log-level=info"
     ports:
       - "8281:8181"
     volumes:
       - ../../policies:/policies:ro
+      - ./certs:/certs:ro
     networks:
       - dive-fra-network
 
@@ -134,7 +132,7 @@ services:
       service: opal-client-base
     container_name: dive-spoke-fra-opal-client
     environment:
-      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://hub.dive25.com:7002}
+      OPAL_SERVER_URL: ${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_OPA_URL: https://opa-fra:8181
       OPAL_SUBSCRIPTION_ID: ${SPOKE_ID:-spoke-fra-default}
@@ -148,10 +146,7 @@ services:
         condition: service_healthy
     networks:
       - dive-fra-network
-
-  # ============================================================================
-  # KEY ACCESS SERVICE
-  # ============================================================================
+      - dive-shared  # Required to reach Hub OPAL server
 
   kas-fra:
     extends:
@@ -175,10 +170,6 @@ services:
     networks:
       - dive-fra-network
 
-  # ============================================================================
-  # BACKEND API
-  # ============================================================================
-
   backend-fra:
     extends:
       file: ../../docker/base/services.yml
@@ -186,15 +177,14 @@ services:
     container_name: dive-spoke-fra-backend
     environment:
       INSTANCE_CODE: FRA
-      INSTANCE_NAME: "France"
+      INSTANCE_NAME: "French Armed Forces"
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_FRA:?set MONGO_PASSWORD_FRA}@mongodb-fra:27017/dive-v3-fra?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_FRA:?set MONGO_PASSWORD_FRA}@mongodb-fra:27017/dive-v3-fra?authSource=admin
-      MONGODB_DATABASE: dive-v3-fra
       REDIS_URL: redis://:${REDIS_PASSWORD_FRA:?set REDIS_PASSWORD_FRA}@redis-fra:6379
       KEYCLOAK_URL: https://keycloak-fra:8443
       KEYCLOAK_REALM: dive-v3-broker-fra
       KEYCLOAK_ISSUER: https://localhost:8453/realms/dive-v3-broker-fra
-      TRUSTED_ISSUERS: https://localhost:8453/realms/dive-v3-broker-fra,https://keycloak-fra:8443/realms/dive-v3-broker-fra,https://fra-idp.dive25.com/realms/dive-v3-broker-fra,https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
+      TRUSTED_ISSUERS: https://localhost:8453/realms/dive-v3-broker-fra,https://keycloak-fra:8443/realms/dive-v3-broker-fra,https://fra-idp.dive25.com/realms/dive-v3-broker-fra
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_FRA:?set KEYCLOAK_ADMIN_PASSWORD_FRA}
       OPA_URL: https://opa-fra:8181
@@ -219,10 +209,6 @@ services:
     networks:
       - dive-fra-network
       - dive-shared
-
-  # ============================================================================
-  # FRONTEND
-  # ============================================================================
 
   frontend-fra:
     extends:
@@ -257,6 +243,7 @@ services:
       NEXT_PUBLIC_THEME_PRIMARY: "#002395"
       NEXT_PUBLIC_THEME_SECONDARY: "#ED2939"
       NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
+      TZ: "Europe/Paris"
     ports:
       - "3010:3000"
     volumes:

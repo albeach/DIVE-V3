@@ -178,7 +178,8 @@ services:
     environment:
       NODE_ENV: development
       PORT: "4000"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      # NODE_EXTRA_CA_CERTS is set in child compose files with correct path
     healthcheck:
       test: ["CMD", "node", "-e", "require('https').get('https://localhost:4000/health', {rejectUnauthorized: false}, (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
@@ -202,7 +203,8 @@ services:
     command: ["/bin/sh", "-c", "rm -f /app/.env.local && npm run dev"]
     environment:
       NODE_ENV: development
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      # NODE_EXTRA_CA_CERTS is set in child compose files with correct path
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:

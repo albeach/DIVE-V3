@@ -6,7 +6,6 @@ export const runtime = 'nodejs';
 
 // Allow self-signed certs in local/dev (spoke stacks use mkcert)
 if (process.env.NODE_ENV !== 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
 
 export async function GET(_req: NextRequest): Promise<NextResponse> {

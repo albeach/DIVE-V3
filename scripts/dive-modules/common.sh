@@ -27,7 +27,7 @@ export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
 
 # Pilot Mode Configuration
-export PILOT_MODE="${DIVE_PILOT_MODE:-true}"
+export PILOT_MODE="${DIVE_PILOT_MODE:-false}"
 
 # Hub API URL - Environment aware
 # - LOCAL/DEV: Use localhost hub

@@ -213,7 +213,9 @@ services:
       # Admin credentials for Keycloak Admin API (IdP listing, user management)
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Run ./scripts/sync-env.sh first}
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      NODE_TLS_MIN_VERSION: "TLSv1.2"   # Force TLS 1.2+ for OPA compatibility
       MONGODB_URL: ${MONGODB_URL:-mongodb://admin:${MONGO_PASSWORD:?Run ./dive secrets load first}@mongo:27017?authSource=admin}
       MONGODB_DATABASE: dive-v3
       OPA_URL: https://opa:8181
@@ -253,6 +255,8 @@ services:
       - ./policies:/app/policies:ro
       # CRITICAL: Mount certs directory for X.509 PKI certificates
       - ./backend/certs:/app/certs:ro
+      # SECURITY: Mount mkcert root CA for TLS trust
+      - ./certs/mkcert:/app/certs/ca:ro
       # Logs directory
       - ./backend/logs:/app/logs
       # IdP Management Revamp: Theme uploads directory
@@ -311,7 +315,9 @@ services:
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
       # SSL and host configuration
       AUTH_TRUST_HOST: "true"
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs in development
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      NODE_TLS_MIN_VERSION: "TLSv1.2"   # Force TLS 1.2+ for OPA compatibility in development
       # Database for NextAuth sessions
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?Required}@postgres:5432/dive_v3_app
     ports:
@@ -329,6 +335,8 @@ services:
       # Mount SSL certificates for HTTPS server (both locations)
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./frontend/certs:/opt/app/certs:ro
+      # SECURITY: Mount mkcert root CA for TLS trust
+      - ./certs/mkcert:/app/certs/ca:ro
       # CRITICAL: Use named volumes for persistence across Docker restarts
       # This prevents node_modules from being wiped on restart
       - frontend_node_modules:/app/node_modules
@@ -354,7 +362,9 @@ services:
       KEY_FILE: key.pem
       CERT_FILE: certificate.pem
       BACKEND_URL: https://backend:4000  # Docker network service name (works on all platforms)
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"  # Allow self-signed certs for HTTPS backend
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      NODE_TLS_MIN_VERSION: "TLSv1.2"   # Force TLS 1.2+ for OPA compatibility for HTTPS backend
       OPA_URL: https://opa:8181
       MONGODB_URL: ${MONGODB_URL:-mongodb://admin:${MONGO_PASSWORD:?Run ./dive secrets load first}@mongo:27017?authSource=admin}
       MONGODB_DATABASE: dive-v3
@@ -376,6 +386,8 @@ services:
     volumes:
       # CRITICAL: Mount SSL certificates for HTTPS server
       - ./kas/certs:/opt/app/certs:ro
+      # SECURITY: Mount mkcert root CA for TLS trust
+      - ./certs/mkcert:/app/certs/ca:ro
       - ./kas/src:/app/src
       - ./kas/logs:/app/logs
       - ./config:/app/config:ro
@@ -419,6 +431,7 @@ services:
       - "7002:7002"
     networks:
       - dive-network
+      - dive-shared
     volumes:
       - ./policies:/policies:ro
       - ./policies/data:/policy-data:ro

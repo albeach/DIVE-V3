@@ -454,7 +454,7 @@ export async function getResourceByIdFederated(
             // In development: Use Docker container names (e.g., dive-spoke-fra-backend:4000)
             // In production: Use external hostnames from apiUrl
             const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-            
+
             if (isDevelopment && (spoke as any).internalApiUrl) {
                 // Use stored internalApiUrl if available
                 originApiUrl = (spoke as any).internalApiUrl;
@@ -466,7 +466,7 @@ export async function getResourceByIdFederated(
                 // Production: Use external apiUrl
                 originApiUrl = spoke.apiUrl || '';
             }
-            
+
             logger.info('Found spoke in Hub-Spoke Registry', {
                 originInstance,
                 apiUrl: originApiUrl,
@@ -484,7 +484,7 @@ export async function getResourceByIdFederated(
     // Fall back to static config if no spoke found
     if (!originApiUrl) {
         originApiUrl = FEDERATION_API_URLS[originInstance];
-        
+
         // Override static config in development mode to use Docker internal URLs
         if (originApiUrl && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
             const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;

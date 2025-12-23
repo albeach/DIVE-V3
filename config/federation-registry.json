@@ -486,118 +486,49 @@
       "code": "DEU",
       "name": "Germany",
       "locale": "de-DE",
-      "type": "remote",
+      "type": "local",
       "primary": false,
       "enabled": true,
       "deployment": {
         "provider": "docker",
-        "host": "192.168.42.120",
-        "domain": "prosecurity.biz",
+        "host": "localhost",
+        "domain": "dive25.com",
         "composeFile": "docker-compose.deu.yml",
-        "projectName": "deu",
-        "sshUser": "mike",
-        "sshKeyPath": "~/.ssh/id_rsa",
-        "remotePath": "/opt/dive-v3"
+        "projectName": "deu"
       },
       "services": {
-        "_comment": "DEU uses -deu suffix on all service names",
+        "_comment": "DEU uses deu- prefix on all service names",
         "frontend": {
           "name": "frontend-deu",
-          "containerName": "dive-v3-frontend-deu",
+          "containerName": "dive-spoke-deu-frontend",
           "internalPort": 3000,
-          "externalPort": 3000,
+          "externalPort": 3457,
           "protocol": "https",
-          "hostname": "deu-app.prosecurity.biz"
+          "hostname": "deu-app.dive25.com"
         },
         "backend": {
           "name": "backend-deu",
-          "containerName": "dive-v3-backend-deu",
+          "containerName": "dive-spoke-deu-backend",
           "internalPort": 4000,
-          "externalPort": 4000,
+          "externalPort": 4011,
           "protocol": "https",
-          "hostname": "deu-api.prosecurity.biz"
+          "hostname": "deu-api.dive25.com"
         },
         "keycloak": {
           "name": "keycloak-deu",
-          "containerName": "dive-v3-keycloak-deu",
+          "containerName": "dive-spoke-deu-keycloak",
           "internalPort": 8443,
-          "externalPort": 8443,
+          "externalPort": 8454,
           "protocol": "https",
-          "hostname": "deu-idp.prosecurity.biz"
-        },
-        "kas": {
-          "name": "kas-deu",
-          "containerName": "dive-v3-kas-deu",
-          "internalPort": 8080,
-          "externalPort": 8080,
-          "protocol": "http",
-          "hostname": "deu-kas.prosecurity.biz"
-        },
-        "postgres": {
-          "name": "postgres-deu",
-          "containerName": "dive-v3-postgres-deu",
-          "internalPort": 5432,
-          "externalPort": 5432
+          "hostname": "deu-idp.dive25.com"
         },
         "mongodb": {
           "name": "mongodb-deu",
-          "containerName": "dive-v3-mongodb-deu",
+          "containerName": "dive-spoke-deu-mongodb",
           "internalPort": 27017,
-          "externalPort": 27017
-        },
-        "redis": {
-          "name": "redis-deu",
-          "containerName": "dive-v3-redis-deu",
-          "internalPort": 6379,
-          "externalPort": 6379
-        },
-        "opa": {
-          "name": "opa-deu",
-          "containerName": "dive-v3-opa-deu",
-          "internalPort": 8181,
-          "externalPort": 8181
+          "externalPort": 27028,
+          "protocol": "mongodb"
         }
-      },
-      "cloudflare": {
-        "tunnelId": "2112e264-61e3-463f-9d13-b55273bde204",
-        "tunnelName": "dive-v3-deu-prosecurity",
-        "credentialsFile": "cloudflared/deu-tunnel-credentials.json",
-        "configFile": "cloudflared/config-deu.yml",
-        "metricsPort": 9129
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "keycloakAdmin": "dive-v3-keycloak-deu",
-        "keycloakClientSecret": "dive-v3-keycloak-client-secret-deu",
-        "postgres": "dive-v3-postgres-deu",
-        "mongodb": "dive-v3-mongodb-deu",
-        "redis": "dive-v3-redis-deu",
-        "authSecret": "dive-v3-auth-secret-deu",
-        "jwtSecret": "dive-v3-jwt-secret-deu",
-        "nextauthSecret": "dive-v3-nextauth-secret-deu"
-      },
-      "keycloak": {
-        "adminUsername": "admin",
-        "database": {
-          "name": "keycloak",
-          "user": "keycloak"
-        },
-        "theme": "dive-v3-deu"
-      },
-      "mongodb": {
-        "database": "dive-v3-deu",
-        "user": "admin"
-      },
-      "testUsers": {
-        "create": true,
-        "clearances": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "usernameTemplate": "testuser-{code}-{level}",
-        "emailDomain": "dive-demo.example"
       }
     },
     "est": {
@@ -618,7 +549,7 @@
         "_comment": "EST uses est- prefix on all service names",
         "frontend": {
           "name": "frontend-est",
-          "containerName": "est-frontend-est-1",
+          "containerName": "dive-spoke-est-frontend",
           "internalPort": 3000,
           "externalPort": 3457,
           "protocol": "https",
@@ -626,7 +557,7 @@
         },
         "backend": {
           "name": "backend-est",
-          "containerName": "est-backend-est-1",
+          "containerName": "dive-spoke-est-backend",
           "internalPort": 4000,
           "externalPort": 4008,
           "protocol": "https",
@@ -634,7 +565,7 @@
         },
         "keycloak": {
           "name": "keycloak-est",
-          "containerName": "est-keycloak-est-1",
+          "containerName": "dive-spoke-est-keycloak",
           "internalPort": 8443,
           "externalPort": 8451,
           "protocol": "https",
@@ -642,7 +573,7 @@
         },
         "mongodb": {
           "name": "mongodb-est",
-          "containerName": "est-mongodb-est-1",
+          "containerName": "dive-spoke-est-mongodb",
           "internalPort": 27017,
           "externalPort": 27025,
           "protocol": "mongodb"
@@ -667,7 +598,7 @@
         "_comment": "ESP uses esp- prefix on all service names",
         "frontend": {
           "name": "frontend-esp",
-          "containerName": "esp-frontend-esp-1",
+          "containerName": "dive-spoke-esp-frontend",
           "internalPort": 3000,
           "externalPort": 3457,
           "protocol": "https",
@@ -675,7 +606,7 @@
         },
         "backend": {
           "name": "backend-esp",
-          "containerName": "esp-backend-esp-1",
+          "containerName": "dive-spoke-esp-backend",
           "internalPort": 4000,
           "externalPort": 4008,
           "protocol": "https",
@@ -683,7 +614,7 @@
         },
         "keycloak": {
           "name": "keycloak-esp",
-          "containerName": "esp-keycloak-esp-1",
+          "containerName": "dive-spoke-esp-keycloak",
           "internalPort": 8443,
           "externalPort": 8451,
           "protocol": "https",
@@ -691,7 +622,7 @@
         },
         "mongodb": {
           "name": "mongodb-esp",
-          "containerName": "esp-mongodb-esp-1",
+          "containerName": "dive-spoke-esp-mongodb",
           "internalPort": 27017,
           "externalPort": 27025,
           "protocol": "mongodb"
@@ -980,9 +911,10 @@
         "deu"
       ],
       "deu": [
-        "usa",
+        "deu",
         "fra",
-        "gbr"
+        "gbr",
+        "usa"
       ],
       "hun": [
         "deu",

@@ -1,32 +1,5 @@
 {
   "trusted_issuers": {
-    "https://idp.behind.example.com": {
-      "tenant": "BHD",
-      "name": "Behind Spoke Keycloak",
-      "country": "BHD",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
-    },
-    "https://idp.delta.example.com": {
-      "tenant": "DLT",
-      "name": "Delta Test Spoke Keycloak",
-      "country": "DLT",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
-    },
-    "https://idp.limited.example.com": {
-      "tenant": "LTD",
-      "name": "Limited Scope Spoke Keycloak",
-      "country": "LTD",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
-    },
     "https://test-issuer.example.com": {
       "tenant": "USA",
       "name": "Test Issuer",
@@ -53,28 +26,10 @@
       "enabled": true,
       "protocol": "saml",
       "federation_class": "NATIONAL"
-    },
-    "https://idp.test.example.com": {
-      "tenant": "TST",
-      "name": "Test Spoke Keycloak",
-      "country": "TST",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
-    },
-    "https://nzl-idp.nzdf.mil.nz": {
-      "tenant": "NZL",
-      "name": "New Zealand Defence Force Keycloak",
-      "country": "NZL",
-      "trust_level": "DEVELOPMENT",
-      "enabled": true,
-      "protocol": "oidc",
-      "federation_class": "NATIONAL"
     }
   },
   "_metadata": {
-    "lastUpdated": "2025-12-20T11:22:03.931Z"
+    "lastUpdated": "2025-12-22T16:47:20.901Z"
   },
   "https://localhost:8451/realms/dive-v3-broker-est": {
     "tenant": "EST",
@@ -141,5 +96,37 @@
     "protocol": "oidc",
     "federation_class": "NATIONAL",
     "jwks_uri": "https://mne-idp.dive25.com/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
+  },
+  "https://localhost:8463/realms/dive-v3-broker-nld": {
+    "tenant": "NLD",
+    "name": "NLD Keycloak (Local Dev)",
+    "country": "NLD",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL"
+  },
+  "https://localhost:8461/realms/dive-v3-broker-lux": {
+    "tenant": "LUX",
+    "name": "LUX Keycloak",
+    "country": "LUX",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
+  },
+  "https://localhost:8453/realms/dive-v3-broker-fra": {
+    "tenant": "FRA",
+    "name": "FRA Keycloak (Local Dev)",
+    "country": "FRA",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true,
+    "protocol": "oidc",
+    "federation_class": "LOCAL"
+  },
+  "https://localhost:8451/realms/dive-v3-broker-esp": {
+    "tenant": "ESP",
+    "name": "ESP Keycloak",
+    "country": "ESP",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
   }
 }

@@ -9,6 +9,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 INSTANCE_CODE="${1:-}"
 PUBLIC_KEYCLOAK_URL="${2:-}"
 ADMIN_PASSWORD="${3:-}"
@@ -57,7 +58,10 @@ fi
 # Set defaults - dynamically check for instance-specific password variable
 # Look for KEYCLOAK_ADMIN_PASSWORD_<CODE> first, then fallback to generic KEYCLOAK_ADMIN_PASSWORD
 INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
+echo "DEBUG: INSTANCE_PASSWORD_VAR=$INSTANCE_PASSWORD_VAR"
+echo "DEBUG: Value of ${INSTANCE_PASSWORD_VAR}=${!INSTANCE_PASSWORD_VAR}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-${!INSTANCE_PASSWORD_VAR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
+echo "DEBUG: Final ADMIN_PASSWORD=$ADMIN_PASSWORD"
 
 # Use backend container for API calls (has curl, on same network)
 # New naming pattern: dive-spoke-lva-backend (not lva-backend-lva-1)

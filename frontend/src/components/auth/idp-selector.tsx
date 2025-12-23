@@ -148,11 +148,10 @@ export function IdpSelector() {
       console.error('[IdP Selector] Error fetching IdPs:', err);
       setError(err instanceof Error ? err.message : 'Unable to load identity providers');
 
-      // Fallback IdPs
+      // Fallback IdPs - local authentication + federation
       const fallbackIdps: IdPOption[] = [
-        { alias: 'fra-realm-broker', displayName: 'France', protocol: 'oidc', enabled: true },
-        { alias: 'gbr-realm-broker', displayName: 'United Kingdom', protocol: 'oidc', enabled: true },
-        { alias: 'deu-realm-broker', displayName: 'Germany', protocol: 'oidc', enabled: true },
+        { alias: '', displayName: 'Local Login (FRA Users)', protocol: 'oidc', enabled: true },
+        { alias: 'usa-idp', displayName: 'Federated Login (USA Hub)', protocol: 'oidc', enabled: true },
       ];
       setIdps(fallbackIdps);
       checkIdpHealth(fallbackIdps);
@@ -172,11 +171,10 @@ export function IdpSelector() {
 
     // Trigger NextAuth signIn
     const { signIn } = await import('next-auth/react');
-    await signIn(
-      'keycloak',
-      { callbackUrl: '/' },
-      { kc_idp_hint: idpHint }
-    );
+    const signInOptions = { callbackUrl: '/' };
+    const providerOptions = idpHint ? { kc_idp_hint: idpHint } : {};
+
+    await signIn('keycloak', signInOptions, providerOptions);
   };
 
   // 🥚 Easter egg setup

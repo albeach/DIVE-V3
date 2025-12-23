@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import * as jwt from 'jsonwebtoken';
 import axios from 'axios';
+import * as https from 'https';
 import NodeCache from 'node-cache';
 import jwkToPem from 'jwk-to-pem';
 import { logger } from '../utils/logger';
@@ -939,12 +940,18 @@ const callOPA = async (input: IOPAInput): Promise<IOPADecision> => {
         });
 
         // Circuit breaker wraps OPA call - fails fast if OPA is down
+        const httpsAgent = new https.Agent({
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: false, // Allow self-signed certs in development
+        });
+
         const response = await opaCircuitBreaker.execute(async () => {
             return await axios.post<IOPAResponse>(OPA_DECISION_ENDPOINT, input, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 timeout: 5000, // 5 second timeout
+                httpsAgent,
             });
         });
 
@@ -2285,7 +2292,14 @@ export const authzMiddleware = async (
         let opaDecision: IOPADecision;
         try {
             if (process.env.NODE_ENV === 'test' && process.env.AUTHZ_TEST_SIMPLE !== 'false') {
-                const response = await axios.post<IOPAResponse>(OPA_DECISION_ENDPOINT, opaInput, {});
+                const httpsAgent = new https.Agent({
+                    minVersion: 'TLSv1.2',
+                    rejectUnauthorized: false, // Allow self-signed certs in development
+                });
+
+                const response = await axios.post<IOPAResponse>(OPA_DECISION_ENDPOINT, opaInput, {
+                    httpsAgent,
+                });
                 opaDecision = response.data.result?.decision
                     ? { result: response.data.result.decision }
                     : (response.data as any);

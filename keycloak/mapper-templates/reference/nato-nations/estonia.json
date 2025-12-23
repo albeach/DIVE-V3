@@ -74,7 +74,7 @@
       "protocol": "openid-connect",
       "protocolMapper": "oidc-usermodel-attribute-mapper",
       "config": {
-        "user.attribute": "countryOfAffiliation",
+        "user.attribute": "riigi_kuuluvus",
         "claim.name": "countryOfAffiliation",
         "id.token.claim": "true",
         "access.token.claim": "true",
@@ -87,7 +87,7 @@
       "protocol": "openid-connect",
       "protocolMapper": "oidc-usermodel-attribute-mapper",
       "config": {
-        "user.attribute": "clearance",
+        "user.attribute": "julgeolekutase",
         "claim.name": "clearance",
         "id.token.claim": "true",
         "access.token.claim": "true",
@@ -100,7 +100,7 @@
       "protocol": "openid-connect",
       "protocolMapper": "oidc-usermodel-attribute-mapper",
       "config": {
-        "user.attribute": "uniqueID",
+        "user.attribute": "unikaalne_tunnus",
         "claim.name": "uniqueID",
         "id.token.claim": "true",
         "access.token.claim": "true",
@@ -113,7 +113,7 @@
       "protocol": "openid-connect",
       "protocolMapper": "oidc-usermodel-attribute-mapper",
       "config": {
-        "user.attribute": "acpCOI",
+        "user.attribute": "huvikogukond",
         "claim.name": "acpCOI",
         "id.token.claim": "true",
         "access.token.claim": "true",

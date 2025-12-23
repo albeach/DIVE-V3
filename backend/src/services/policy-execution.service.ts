@@ -1,13 +1,14 @@
 /**
  * Policy Execution Service
- * 
+ *
  * Orchestrates policy evaluation against OPA (Rego) and AuthzForce (XACML) engines.
  * Handles timeouts, error normalization, and decision logging.
- * 
+ *
  * Date: October 26, 2025
  */
 
 import axios from 'axios';
+import * as https from 'https';
 import { logger } from '../utils/logger';
 import {
     IUnifiedInput,
@@ -77,10 +78,16 @@ export async function evaluateRego(
         };
 
         // Upload policy to OPA (PUT to /v1/policies/{id})
+        const httpsAgent = new https.Agent({
+            minVersion: 'TLSv1.2',
+            rejectUnauthorized: false, // Allow self-signed certs in development
+        });
+
         const policyUploadUrl = `${OPA_URL}/v1/policies/${context.policyId}`;
         await axios.put(policyUploadUrl, policySource, {
             headers: { 'Content-Type': 'text/plain' },
-            timeout: EVALUATION_TIMEOUT_MS
+            timeout: EVALUATION_TIMEOUT_MS,
+            httpsAgent,
         });
 
         logger.debug('Policy uploaded to OPA', { policyId: context.policyId, packagePath });
@@ -89,7 +96,8 @@ export async function evaluateRego(
         const queryUrl = `${OPA_URL}/v1/data/${policyPath}`;
         const response = await axios.post(queryUrl, opaInput, {
             timeout: EVALUATION_TIMEOUT_MS,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            httpsAgent,
         });
 
         const latency_ms = Date.now() - startTime;

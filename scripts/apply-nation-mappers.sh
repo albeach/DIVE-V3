@@ -46,7 +46,7 @@ ADMIN_PASSWORD="${5:-}"
 
 # Resolve script directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TEMPLATE_DIR="$SCRIPT_DIR/../keycloak/mapper-templates/nato-nations"
+TEMPLATE_DIR="$SCRIPT_DIR/../keycloak/mapper-templates/reference/nato-nations"
 TEMPLATE_FILE="$TEMPLATE_DIR/${NATION}.json"
 
 # Check if template exists

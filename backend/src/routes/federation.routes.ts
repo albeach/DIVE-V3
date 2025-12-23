@@ -421,7 +421,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         // Check if IdP validation should be skipped (for testing or dev environments)
         const skipValidation = req.body.skipValidation === true ||
             process.env.SKIP_IDP_VALIDATION === 'true' ||
-            process.env.NODE_ENV === 'test';
+            process.env.NODE_ENV === 'test' ||
+            process.env.NODE_ENV === 'development' ||
+            request.idpUrl.includes('dive-spoke-') ||  // Internal container names
+            request.idpUrl.includes('localhost') ||
+            request.idpUrl.includes('host.docker.internal');
 
         if (!skipValidation) {
             // Validate IdP endpoint before registration
@@ -446,7 +450,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             logger.info('Skipping IdP validation for spoke registration', {
                 instanceCode: request.instanceCode,
                 idpUrl: request.idpUrl,
-                reason: req.body.skipValidation ? 'skipValidation flag' : 'environment setting'
+                reason: skipValidation === true ? 'skipValidation flag' :
+                       request.idpUrl.includes('dive-spoke-') ? 'internal container URL' :
+                       request.idpUrl.includes('localhost') ? 'localhost URL' :
+                       request.idpUrl.includes('host.docker.internal') ? 'docker internal URL' :
+                       'environment setting'
             });
         }
 
@@ -1255,6 +1263,54 @@ router.get('/spokes/:spokeId', requireAdmin, async (req: Request, res: Response)
 
     } catch (error) {
         res.status(500).json({ error: 'Failed to get spoke details' });
+    }
+});
+
+/**
+ * PATCH /api/federation/spokes/:spokeId/keycloak-password
+ * Update spoke's Keycloak admin password (for federation setup)
+ */
+router.patch('/spokes/:spokeId/keycloak-password', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { keycloakAdminPassword } = req.body;
+
+        if (!keycloakAdminPassword || typeof keycloakAdminPassword !== 'string' || keycloakAdminPassword.length < 10) {
+            res.status(400).json({
+                error: 'Invalid password',
+                message: 'Keycloak admin password must be at least 10 characters'
+            });
+            return;
+        }
+
+        const spoke = await hubSpokeRegistry.getSpoke(req.params.spokeId);
+
+        if (!spoke) {
+            res.status(404).json({ error: 'Spoke not found' });
+            return;
+        }
+
+        // Update the spoke's Keycloak admin password
+        await hubSpokeRegistry.updateSpokeKeycloakPassword(spoke.spokeId, keycloakAdminPassword);
+
+        logger.info('Updated spoke Keycloak admin password', {
+            spokeId: spoke.spokeId,
+            instanceCode: spoke.instanceCode
+        });
+
+        res.json({
+            success: true,
+            message: 'Keycloak admin password updated successfully'
+        });
+
+    } catch (error) {
+        logger.error('Failed to update spoke Keycloak password', {
+            spokeId: req.params.spokeId,
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            error: 'Failed to update Keycloak password',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
     }
 });
 
@@ -2674,29 +2730,71 @@ function getPublicIdpUrl(instanceCode: string): string {
 async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> {
     const code = instanceCode.toUpperCase();
 
-    // Try environment variable
+    // PRIMARY: Check spoke registry for stored password from registration
+    try {
+        const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(code);
+        if (spoke?.keycloakAdminPassword) {
+            logger.info('Using stored Keycloak password from spoke registry', {
+                instanceCode,
+                hasPassword: !!spoke.keycloakAdminPassword
+            });
+            return spoke.keycloakAdminPassword;
+        }
+    } catch (error) {
+        logger.debug('Could not get password from spoke registry', {
+            instanceCode,
+            error: error instanceof Error ? error.message : 'Unknown'
+        });
+    }
+
+    // SECONDARY: Try environment variable (for manual override)
     const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
     if (process.env[envVar]) {
+        logger.info('Using Keycloak password from environment variable', {
+            instanceCode,
+            envVar
+        });
         return process.env[envVar];
     }
 
-    // For local dev, all use same password
-    if (process.env.NODE_ENV === 'development') {
-        return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+    // TERTIARY: For local dev, try to get from container or use same password
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+        // Try to get from the spoke's container directly
+        try {
+            const containerName = `dive-spoke-${code.toLowerCase()}-keycloak`;
+            // This would require executing a command, but we can't do that from Node.js easily
+            // For now, fall back to environment variable
+            return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+        } catch {
+            return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+        }
     }
 
-    // Production: GCP Secret Manager
+    // QUATERNARY: Production: GCP Secret Manager
     try {
         const { getSecret } = await import('../utils/gcp-secrets');
         const secretName = `keycloak-${code.toLowerCase()}` as any;
         const secret = await getSecret(secretName);
-        return secret || 'admin';  // Fallback if null
+        if (secret) {
+            logger.info('Using Keycloak password from GCP Secret Manager', {
+                instanceCode,
+                secretName
+            });
+            return secret;
+        }
     } catch (error) {
-        logger.warn('Could not get remote Keycloak password, using fallback', {
+        logger.debug('Could not get password from GCP Secret Manager', {
             instanceCode,
+            error: error instanceof Error ? error.message : 'Unknown'
         });
-        return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
     }
+
+    // LAST RESORT: Use fallback
+    logger.warn('Using fallback Keycloak password - bidirectional federation may fail', {
+        instanceCode,
+        fallback: 'admin'
+    });
+    return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
 }
 
 /**

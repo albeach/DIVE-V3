@@ -6,7 +6,8 @@
     "description": "DIVE V3 Spoke Instance for Kingdom of the Netherlands",
     "country": "NLD",
     "organizationType": "government",
-    "contactEmail": "admin@nld.dive25.com"
+    "contactEmail": "admin@nld.dive25.com",
+    "registeredSpokeId": "spoke-nld-0767967c"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:nld",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2025-12-23T03:22:07Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
