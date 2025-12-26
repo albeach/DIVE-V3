@@ -2,7 +2,7 @@
 # =============================================================================
 # DIVE V3 Hub Client Configuration Script
 #
-# Purpose: Configure the dive-v3-client-broker with proper settings including:
+# Purpose: Configure the dive-v3-broker-usa client with proper settings including:
 #   - post.logout.redirect.uris for federated logout
 #   - Other required OIDC settings
 #
@@ -33,8 +33,8 @@ log_info()  { echo -e "${CYAN}ℹ${NC} $1"; }
 
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
-REALM_NAME="${REALM_NAME:-dive-v3-broker}"
-CLIENT_ID="${CLIENT_ID:-dive-v3-client-broker}"
+REALM_NAME="${REALM_NAME:-dive-v3-broker-usa}"
+CLIENT_ID="${CLIENT_ID:-dive-v3-broker-usa}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
@@ -115,6 +115,62 @@ VERIFY_CONFIG=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${C
     -H "Authorization: Bearer ${TOKEN}")
 VERIFIED_URIS=$(echo "$VERIFY_CONFIG" | jq -r '.attributes["post.logout.redirect.uris"]')
 log_success "Verified: ${VERIFIED_URIS}"
+
+# =============================================================================
+# Configure Protocol Mappers for Federated Identity Attributes
+# These mappers ensure claims from federated IdPs flow through to the frontend
+# =============================================================================
+echo ""
+log_step "Configuring protocol mappers for federated identity attributes..."
+
+# Define the required protocol mappers
+declare -A MAPPERS=(
+    ["countryOfAffiliation"]="countryOfAffiliation"
+    ["clearance"]="clearance"
+    ["uniqueID"]="uniqueID"
+    ["acpCOI"]="acpCOI"
+)
+
+# Get existing mappers
+EXISTING_MAPPERS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+    -H "Authorization: Bearer ${TOKEN}" 2>/dev/null)
+
+for name in "${!MAPPERS[@]}"; do
+    attr="${MAPPERS[$name]}"
+
+    # Check if mapper already exists
+    existing_id=$(echo "$EXISTING_MAPPERS" | jq -r ".[] | select(.name == \"$name\") | .id // empty")
+
+    if [ -n "$existing_id" ]; then
+        log_info "Mapper '$name' already exists, skipping"
+    else
+        log_step "Creating mapper: $name -> $attr"
+        HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
+            -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"name\": \"$name\",
+                \"protocol\": \"openid-connect\",
+                \"protocolMapper\": \"oidc-usermodel-attribute-mapper\",
+                \"config\": {
+                    \"claim.name\": \"$attr\",
+                    \"user.attribute\": \"$attr\",
+                    \"id.token.claim\": \"true\",
+                    \"access.token.claim\": \"true\",
+                    \"userinfo.token.claim\": \"true\"
+                }
+            }")
+
+        if [ "$HTTP_CODE" == "201" ]; then
+            log_success "Created mapper: $name"
+        else
+            log_warn "Failed to create mapper '$name' (HTTP $HTTP_CODE) - may already exist"
+        fi
+    fi
+done
+
+log_success "Protocol mappers configured"
 
 echo ""
 log_success "Hub client configuration complete!"

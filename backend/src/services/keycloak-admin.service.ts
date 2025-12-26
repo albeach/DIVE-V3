@@ -1,13 +1,17 @@
 /**
  * Keycloak Admin Service
- * 
+ *
  * Manages Identity Providers via Keycloak Admin REST API
  * Supports OIDC and SAML IdP creation, update, deletion
- * 
+ *
  * Reference: keycloak-admin-api-llm.md
+ *
+ * PRODUCTION FIX: Uses direct REST API instead of @keycloak/keycloak-admin-client
+ * to avoid library compatibility issues with fetch() and custom HTTPS agents.
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
+import https from 'https';
 import { logger } from '../utils/logger';
 import {
     IIdentityProviderRepresentation,
@@ -21,64 +25,107 @@ import {
     IdPProtocol,
     IdPStatus
 } from '../types/keycloak.types';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
 /**
- * Keycloak Admin Client Singleton
+ * Keycloak Admin Service - Direct REST API Implementation
+ * This replaces the @keycloak/keycloak-admin-client library which has
+ * known issues with fetch() API and custom HTTPS agents in v26.x
  */
 class KeycloakAdminService {
-    private client: KcAdminClient;
+    private client: KcAdminClient; // Legacy - kept for backward compatibility
+    private axios: AxiosInstance;
+    private accessToken: string | null = null;
+    private tokenExpiry: number = 0;
+    private readonly TOKEN_REFRESH_BUFFER_MS = 5000; // Refresh 5s before expiry
 
     constructor() {
+        // Create axios instance with proper HTTPS agent for self-signed certs
+        this.axios = axios.create({
+            baseURL: process.env.KEYCLOAK_URL || 'https://localhost:8443',
+            timeout: 10000,
+            httpsAgent: new https.Agent({
+                rejectUnauthorized: false, // Required for self-signed/mkcert certs
+            }),
+        });
+
+        // Legacy client (keep for methods not yet migrated to REST)
+        const httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+        });
+
         this.client = new KcAdminClient({
             baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8081',
-            realmName: 'master'
+            realmName: 'master',
+            requestOptions: {
+                httpsAgent,
+            },
         });
     }
 
     /**
-     * Initialize and authenticate Keycloak Admin Client
+     * Get admin access token (with automatic refresh)
+     * Uses direct REST API instead of library
      */
-    private async ensureAuthenticated(): Promise<void> {
+    private async getAdminToken(): Promise<string> {
+        // Return cached token if still valid
+        if (this.accessToken && Date.now() < this.tokenExpiry) {
+            return this.accessToken;
+        }
+
+        const username = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
+        const password = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+
+        logger.debug('Authenticating to Keycloak Admin API (direct REST)', {
+            username,
+            passwordSet: !!password,
+            baseUrl: this.axios.defaults.baseURL,
+            realm: 'master'
+        });
+
         try {
-            const username = process.env.KEYCLOAK_ADMIN_USER || 'admin';
-            const password = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+            const response = await this.axios.post(
+                '/realms/master/protocol/openid-connect/token',
+                new URLSearchParams({
+                    grant_type: 'password',
+                    client_id: 'admin-cli',
+                    username,
+                    password,
+                }),
+                {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                }
+            );
 
-            logger.debug('Attempting Keycloak Admin authentication', {
-                username,
-                passwordSet: !!password,
-                baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8081',
-                authRealm: 'master'
+            this.accessToken = response.data.access_token;
+            const expiresIn = response.data.expires_in || 60;
+            this.tokenExpiry = Date.now() + (expiresIn * 1000) - this.TOKEN_REFRESH_BUFFER_MS;
+
+            logger.debug('Keycloak Admin authentication successful (direct REST)', {
+                expiresIn,
+                tokenLength: this.accessToken.length
             });
 
-            // CRITICAL: Ensure we're authenticating against MASTER realm
-            // Admin users exist in master realm, not dive-v3-broker
-            this.client.setConfig({
-                realmName: 'master'
-            });
-
-            // Authenticate with admin credentials
-            await this.client.auth({
-                username,
-                password,
-                grantType: 'password',
-                clientId: 'admin-cli'
-            });
-
-            // NOW switch to working realm for IdP management
-            this.client.setConfig({
-                realmName: process.env.KEYCLOAK_REALM || 'dive-v3-broker'
-            });
-            logger.debug('Keycloak Admin Client authenticated', {
-                baseUrl: process.env.KEYCLOAK_URL,
-                realm: process.env.KEYCLOAK_REALM
-            });
+            return this.accessToken;
         } catch (error) {
-            logger.error('Failed to authenticate Keycloak Admin Client', {
-                error: error instanceof Error ? error.message : 'Unknown error'
+            logger.error('Failed to authenticate Keycloak Admin (direct REST)', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                response: axios.isAxiosError(error) ? error.response?.data : undefined,
+                status: axios.isAxiosError(error) ? error.response?.status : undefined
             });
             throw new Error('Keycloak Admin API authentication failed');
         }
+    }
+
+    /**
+     * Legacy method - kept for backward compatibility
+     * @deprecated Use getAdminToken() instead
+     */
+    private async ensureAuthenticated(): Promise<void> {
+        // This method is now a no-op - getAdminToken() handles auth
+        await this.getAdminToken();
     }
 
     // ============================================
@@ -87,20 +134,33 @@ class KeycloakAdminService {
 
     /**
      * List all Identity Providers in the realm
+     * Uses direct REST API instead of library for better reliability
      */
     async listIdentityProviders(): Promise<IIdPListResponse> {
-        await this.ensureAuthenticated();
+        const token = await this.getAdminToken();
+        const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
-        // Switch to the broker realm where IdPs are configured
-        const originalRealm = this.client.realmName;
-        this.client.setConfig({ realmName: process.env.KEYCLOAK_REALM || 'dive-v3-broker' });
+        logger.debug('Listing identity providers (direct REST)', {
+            realm,
+            keycloakUrl: this.axios.defaults.baseURL
+        });
 
         try {
-            const idps = await this.client.identityProviders.find();
+            const response = await this.axios.get(
+                `/admin/realms/${realm}/identity-provider/instances`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
 
-            logger.info('Retrieved identity providers', {
+            const idps = response.data;
+
+            logger.info('Retrieved identity providers (direct REST)', {
                 count: idps.length,
-                idps: idps.map(i => ({
+                idps: idps.map((i: any) => ({
                     alias: i.alias,
                     providerId: i.providerId,
                     enabled: i.enabled
@@ -108,7 +168,7 @@ class KeycloakAdminService {
             });
 
             return {
-                idps: idps.map(idp => ({
+                idps: idps.map((idp: any) => ({
                     alias: idp.alias!,
                     displayName: idp.displayName || idp.alias!,
                     protocol: (idp.providerId === 'oidc' || idp.providerId === 'saml'
@@ -123,44 +183,47 @@ class KeycloakAdminService {
                 total: idps.length
             };
         } catch (error) {
-            // Switch back to original realm
-            this.client.setConfig({ realmName: originalRealm });
-
-            logger.error('Failed to list identity providers', {
+            logger.error('Failed to list identity providers (direct REST)', {
                 error: error instanceof Error ? error.message : 'Unknown error',
                 stack: error instanceof Error ? error.stack : undefined,
-                keycloakUrl: process.env.KEYCLOAK_URL,
-                keycloakRealm: process.env.KEYCLOAK_REALM,
-                originalRealm
+                keycloakUrl: this.axios.defaults.baseURL,
+                keycloakRealm: realm,
+                status: axios.isAxiosError(error) ? error.response?.status : undefined,
+                response: axios.isAxiosError(error) ? error.response?.data : undefined
             });
             throw new Error(`Failed to retrieve identity providers: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-
-        // Switch back to original realm
-        this.client.setConfig({ realmName: originalRealm });
     }
 
     /**
      * Get specific Identity Provider by alias
+     * Using direct REST API to avoid keycloak-admin-client library issues
      */
     async getIdentityProvider(alias: string): Promise<IIdentityProviderRepresentation | null> {
-        await this.ensureAuthenticated();
-
         try {
-            const idp = await this.client.identityProviders.findOne({ alias });
+            const token = await this.getAdminToken();
+            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
-            if (!idp) {
+            const response = await this.axios.get(
+                `/admin/realms/${realm}/identity-provider/instances/${alias}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` }
+                }
+            );
+
+            logger.debug('Retrieved identity provider (direct REST)', { alias });
+
+            return response.data as IIdentityProviderRepresentation;
+        } catch (error) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) {
                 logger.warn('Identity provider not found', { alias });
                 return null;
             }
-
-            logger.debug('Retrieved identity provider', { alias });
-
-            return idp as IIdentityProviderRepresentation;
-        } catch (error) {
             logger.error('Failed to get identity provider', {
                 alias,
-                error: error instanceof Error ? error.message : 'Unknown error'
+                error: axios.isAxiosError(error)
+                    ? `HTTP ${error.response?.status} ${error.response?.statusText}`
+                    : (error instanceof Error ? error.message : 'Unknown error')
             });
             return null;
         }
@@ -354,7 +417,7 @@ class KeycloakAdminService {
             const mapperType = protocol === 'oidc' ? 'oidc-user-attribute-idp-mapper' : 'saml-user-attribute-idp-mapper';
             const claimKey = protocol === 'oidc' ? 'claim' : 'attribute.name';
 
-            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const mapperUrl = `${baseUrl}/admin/realms/${realm}/identity-provider/instances/${idpAlias}/mappers`;
 
@@ -903,7 +966,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -935,7 +998,7 @@ class KeycloakAdminService {
     /**
      * Update MFA Configuration for Realm
      * Modifies authentication flows to require/optional OTP
-     * 
+     *
      * Note: This is a simplified implementation. In production, you'd:
      * 1. Clone the browser flow
      * 2. Add OTP required action
@@ -945,7 +1008,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -989,7 +1052,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -1030,7 +1093,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
             // Get all users (then get their sessions)
             const users = await this.client.users.find({ max: 1000, realm });
@@ -1084,7 +1147,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -1111,7 +1174,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
             // Find user by username
             const users = await this.client.users.find({ username, exact: true, realm });
@@ -1149,7 +1212,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const sessions = await this.getActiveSessions(realm);
 
             const stats = {
@@ -1205,7 +1268,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 
@@ -1237,7 +1300,7 @@ class KeycloakAdminService {
         await this.ensureAuthenticated();
 
         try {
-            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
             const token = this.client.accessToken;
 

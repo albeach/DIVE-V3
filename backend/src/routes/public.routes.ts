@@ -1,17 +1,24 @@
 /**
  * Public Routes
- * 
+ *
  * Unauthenticated endpoints for public-facing features
- * 
+ *
  * Routes:
  * - GET /api/idps/public - List enabled IdPs for login page
  * - POST /api/public/sp-registration - Self-service SP registration (Phase 4)
  */
 
 import { Router, Request, Response } from 'express';
+import axios from 'axios';
+import https from 'https';
 import { keycloakAdminService } from '../services/keycloak-admin.service';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+
+// HTTPS agent for self-signed certificates (development)
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
 
 const router = Router();
 
@@ -19,7 +26,7 @@ const router = Router();
  * GET /api/idps/public
  * Public endpoint to list enabled Identity Providers for login page
  * No authentication required - this is for unauthenticated users selecting their IdP
- * 
+ *
  * UX Enhancement: Filters out self-referential IdP (don't show "USA" on USA Hub)
  */
 router.get('/idps/public', async (req: Request, res: Response): Promise<void> => {
@@ -37,7 +44,7 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
 
         // Filter to only enabled IdPs AND exclude self-referential IdP
         // Don't show "United States" on USA Hub - that's confusing!
-        const enabledIdps = result.idps.filter(idp => 
+        const enabledIdps = result.idps.filter(idp =>
             idp.enabled && idp.alias !== selfIdpAlias
         );
 
@@ -91,7 +98,7 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
 
         // Get full IdP configuration from Keycloak (including URLs)
         const idpDetails = await keycloakAdminService.getIdentityProvider(alias);
-        
+
         if (!idpDetails) {
             // IdP not found - could be disabled or doesn't exist
             res.status(404).json({
@@ -124,10 +131,10 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
         // while authorizationUrl uses localhost which isn't reachable from inside Docker
         const tokenUrl = idp.config?.tokenUrl;
         const discoveryEndpoint = idp.config?.discoveryEndpoint;
-        
+
         // Build the well-known URL from internal Docker URL or discovery endpoint
         let wellKnownUrl: string | null = null;
-        
+
         if (discoveryEndpoint) {
             wellKnownUrl = discoveryEndpoint;
         } else if (tokenUrl) {
@@ -137,28 +144,24 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
             const issuer = tokenUrl.replace(/\/protocol\/openid-connect.*$/, '');
             wellKnownUrl = `${issuer}/.well-known/openid-configuration`;
         }
-        
-        logger.debug('IdP health check - URLs', { 
-            requestId, 
-            alias, 
+
+        logger.debug('IdP health check - URLs', {
+            requestId,
+            alias,
             tokenUrl,
             discoveryEndpoint,
-            wellKnownUrl 
+            wellKnownUrl
         });
 
         if (wellKnownUrl) {
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
-                
-                const response = await fetch(wellKnownUrl, {
-                    method: 'GET',
-                    signal: controller.signal,
+                // Use axios with https agent for self-signed certificate support
+                const response = await axios.get(wellKnownUrl, {
+                    httpsAgent,
+                    timeout: 2000
                 });
-                
-                clearTimeout(timeoutId);
-                
-                if (response.ok) {
+
+                if (response.status === 200) {
                     res.status(200).json({
                         success: true,
                         healthy: true,
@@ -227,10 +230,10 @@ router.get('/idps/:alias/health', async (req: Request, res: Response): Promise<v
 /**
  * POST /api/public/sp-registration
  * Phase 4, Task 1.2: Self-Service SP Registration Portal
- * 
+ *
  * Allows external organizations to self-register as OAuth clients.
  * Registration requires approval by SuperAdmin.
- * 
+ *
  * NATO Compliance: ACP-240 §4.5 (External Entity Registration)
  */
 router.post('/public/sp-registration', async (req: Request, res: Response): Promise<void> => {
