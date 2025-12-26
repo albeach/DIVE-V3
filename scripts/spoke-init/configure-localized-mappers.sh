@@ -11,7 +11,16 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+export DIVE_ROOT="$PROJECT_ROOT"
 MAPPINGS_FILE="${PROJECT_ROOT}/keycloak/mapper-templates/nato-attribute-mappings.json"
+
+# Source naming conventions library
+if [ -f "${PROJECT_ROOT}/scripts/lib/naming-conventions.sh" ]; then
+    source "${PROJECT_ROOT}/scripts/lib/naming-conventions.sh"
+else
+    echo "ERROR: Naming conventions library not found"
+    exit 1
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -62,13 +71,15 @@ KEYCLOAK_CONTAINER="dive-spoke-${COUNTRY_LOWER}-keycloak"
 if [ "$COUNTRY_CODE" = "USA" ]; then
     KEYCLOAK_CONTAINER="dive-hub-keycloak"
     KEYCLOAK_PORT="8443"
-    REALM="dive-v3-broker"
-    CLIENT_ID="dive-v3-client-broker"
+    REALM=$(get_realm_name "USA")
+    CLIENT_ID=$(get_client_id "USA")
 else
     # Get port from docker inspect or use default pattern
     KEYCLOAK_PORT=$(docker port "$KEYCLOAK_CONTAINER" 8443 2>/dev/null | cut -d: -f2 || echo "8443")
-    REALM="dive-v3-broker-${COUNTRY_LOWER}"
-    CLIENT_ID="dive-v3-broker-${COUNTRY_LOWER}"
+
+    # Use centralized naming convention
+    REALM=$(get_realm_name "$COUNTRY_CODE")
+    CLIENT_ID=$(get_client_id "$COUNTRY_CODE")
 fi
 
 KEYCLOAK_URL="https://localhost:${KEYCLOAK_PORT}"
@@ -222,6 +233,78 @@ MAPPERS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}
     -H "Authorization: Bearer $TOKEN" | jq '[.[] | select(.name | contains("→")) | {name, local: .config["user.attribute"], dive: .config["claim.name"]}]')
 
 echo "$MAPPERS" | jq -r '.[] | "  \(.local) → \(.dive)"'
+
+# =============================================================================
+# Step 5: Configure the Federation Client (dive-v3-client-<code>)
+# This client is used when OTHER instances federate TO this spoke
+# =============================================================================
+echo ""
+echo -e "${BOLD}Step 5: Configuring federation client (dive-v3-client-${COUNTRY_LOWER})${NC}"
+
+FED_CLIENT_ID="dive-v3-client-${COUNTRY_LOWER}"
+FED_CLIENT_UUID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients?clientId=${FED_CLIENT_ID}" \
+    -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+
+if [ -n "$FED_CLIENT_UUID" ] && [ "$FED_CLIENT_UUID" != "null" ]; then
+    log_info "Found federation client: ${FED_CLIENT_ID} (${FED_CLIENT_UUID})"
+
+    # Remove existing mappers on federation client
+    for mapper_name in clearance countryOfAffiliation uniqueID acpCOI; do
+        MAPPER_ID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name==\"${mapper_name}\") | .id // empty")
+        if [ -n "$MAPPER_ID" ]; then
+            curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models/${MAPPER_ID}" \
+                -H "Authorization: Bearer $TOKEN"
+        fi
+    done
+
+    # Also remove arrow-named mappers
+    for mapper_suffix in clearance countryOfAffiliation uniqueID acpCOI; do
+        MAPPER_ID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name | contains(\"→ ${mapper_suffix}\")) | .id // empty")
+        if [ -n "$MAPPER_ID" ]; then
+            curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models/${MAPPER_ID}" \
+                -H "Authorization: Bearer $TOKEN"
+        fi
+    done
+
+    # Create localized mappers on federation client
+    create_fed_mapper() {
+        local local_attr="$1"
+        local dive_claim="$2"
+        local multivalued="${3:-false}"
+        local mapper_name="${local_attr} → ${dive_claim}"
+
+        curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"name\": \"${mapper_name}\",
+                \"protocol\": \"openid-connect\",
+                \"protocolMapper\": \"oidc-usermodel-attribute-mapper\",
+                \"config\": {
+                    \"user.attribute\": \"${local_attr}\",
+                    \"claim.name\": \"${dive_claim}\",
+                    \"id.token.claim\": \"true\",
+                    \"access.token.claim\": \"true\",
+                    \"userinfo.token.claim\": \"true\",
+                    \"multivalued\": \"${multivalued}\",
+                    \"jsonType.label\": \"String\"
+                }
+            }" > /dev/null
+
+        log_success "Created on federation client: ${mapper_name}"
+    }
+
+    create_fed_mapper "$LOCAL_CLEARANCE" "clearance" "false"
+    create_fed_mapper "$LOCAL_COUNTRY" "countryOfAffiliation" "false"
+    create_fed_mapper "$LOCAL_UNIQUEID" "uniqueID" "false"
+    create_fed_mapper "$LOCAL_COI" "acpCOI" "true"
+
+    log_success "Federation client ${FED_CLIENT_ID} configured with localized mappers"
+else
+    log_warn "Federation client ${FED_CLIENT_ID} not found - it may be created during federation setup"
+fi
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════╗${NC}"
