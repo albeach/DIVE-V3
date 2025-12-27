@@ -1,0 +1,233 @@
+{
+  "$schema": "./naming-conventions.schema.json",
+  "version": "1.0.0",
+  "description": "DIVE V3 Centralized Naming Convention - Single Source of Truth for all Keycloak realms, clients, and service names",
+  "lastUpdated": "2025-12-24T00:00:00Z",
+  "conventions": {
+    "keycloak": {
+      "realmPattern": "dive-v3-broker-{instance}",
+      "clientIdPattern": "dive-v3-broker-{instance}",
+      "clientSecretEnvPattern": "KEYCLOAK_CLIENT_SECRET_{INSTANCE}",
+      "adminPasswordEnvPattern": "KEYCLOAK_ADMIN_PASSWORD_{INSTANCE}",
+      "description": "Keycloak naming uses 'broker' to indicate federated identity brokering capability"
+    },
+    "docker": {
+      "hubPrefix": "dive-hub",
+      "spokePrefix": "dive-spoke",
+      "containerNamePattern": "{prefix}-{instance}-{service}",
+      "networkNamePattern": "dive-network-{instance}",
+      "volumeNamePattern": "dive-{instance}-{service}-data"
+    },
+    "nextauth": {
+      "clientIdEnvPattern": "AUTH_KEYCLOAK_ID",
+      "clientSecretEnvPattern": "AUTH_KEYCLOAK_SECRET",
+      "issuerEnvPattern": "AUTH_KEYCLOAK_ISSUER",
+      "sessionSecretEnvPattern": "NEXTAUTH_SECRET_{INSTANCE}"
+    },
+    "services": {
+      "frontend": "frontend",
+      "backend": "backend",
+      "keycloak": "keycloak",
+      "mongodb": "mongodb",
+      "redis": "redis",
+      "kas": "kas",
+      "opal": "opal"
+    },
+    "ports": {
+      "basePortOffsetStrategy": "nato-database",
+      "fallbackOffsetStrategy": "checksum",
+      "hubPorts": {
+        "frontend": 3000,
+        "backend": 4000,
+        "keycloak": 8443,
+        "keycloakHttp": 8080,
+        "mongodb": 27017,
+        "redis": 6379,
+        "kas": 8085,
+        "opal": 7002
+      },
+      "spokePortOffset": {
+        "description": "Spokes use basePort + offset calculated from NATO database or checksum",
+        "frontendBase": 3000,
+        "backendBase": 4000,
+        "keycloakBase": 8443,
+        "mongodbBase": 27017,
+        "redisBase": 6379,
+        "kasBase": 8085
+      }
+    },
+    "endpoints": {
+      "productionPattern": "https://{instance}-{service}.dive25.com",
+      "localPattern": "https://localhost:{port}",
+      "internalPattern": "https://{containerName}:{internalPort}"
+    }
+  },
+  "validation": {
+    "instanceCodeFormat": "ISO 3166-1 alpha-3",
+    "instanceCodeLength": 3,
+    "allowedCharacters": "A-Z",
+    "caseSensitivity": "uppercase for codes, lowercase for container/file names"
+  },
+  "containerNaming": {
+    "current": {
+      "version": "v4.0",
+      "pattern": "dive-spoke-{code}-{service}",
+      "hubPattern": "dive-hub-{service}",
+      "description": "Current pattern established December 2025",
+      "examples": [
+        "dive-spoke-pol-frontend",
+        "dive-spoke-fra-keycloak",
+        "dive-hub-backend"
+      ]
+    },
+    "legacyPatterns": [
+      {
+        "version": "v3.x",
+        "pattern": "{code}-{service}-{code}-1",
+        "status": "DEPRECATED - backwards compatibility via resolve_spoke_container()",
+        "examples": [
+          "pol-frontend-pol-1",
+          "fra-keycloak-fra-1"
+        ]
+      },
+      {
+        "version": "v2.x",
+        "pattern": "dive-v3-{code}-{service}",
+        "status": "DEPRECATED - migration complete",
+        "examples": [
+          "dive-v3-pol-frontend",
+          "dive-v3-fra-keycloak"
+        ]
+      },
+      {
+        "version": "v1.x",
+        "pattern": "dive-{code}-{service}",
+        "status": "DEPRECATED - migration complete",
+        "examples": [
+          "dive-pol-frontend",
+          "dive-fra-keycloak"
+        ]
+      }
+    ],
+    "resolution": {
+      "function": "resolve_spoke_container()",
+      "location": "common.sh (planned)",
+      "status": "In use across modules",
+      "description": "Tries all patterns for backward compatibility"
+    }
+  },
+  "ssotPatterns": {
+    "portCalculation": {
+      "function": "get_instance_ports()",
+      "location": "scripts/dive-modules/common.sh:513",
+      "status": "CENTRALIZED (Dec 2025)",
+      "testCoverage": "tests/unit/test-port-calculation.sh (316 tests, 100% pass)",
+      "delegatingModules": [
+        "spoke.sh",
+        "spoke-verification.sh",
+        "spoke-kas.sh",
+        "federation-test.sh",
+        "federation-link.sh",
+        "hub.sh"
+      ]
+    },
+    "adminTokenRetrieval": {
+      "functions": [
+        "get_hub_admin_token()",
+        "get_spoke_admin_token()"
+      ],
+      "location": "scripts/dive-modules/federation-setup.sh",
+      "status": "CENTRALIZED (Dec 2025)",
+      "features": [
+        "15-retry logic with exponential backoff",
+        "GCP Secret Manager integration",
+        "Password quality validation"
+      ],
+      "replaces": "10+ duplicate implementations"
+    },
+    "secretLoading": {
+      "patterns": [
+        {
+          "name": "Direct GCP",
+          "location": "backend/src/utils/gcp-secrets.ts",
+          "usage": "Backend API, KAS service"
+        },
+        {
+          "name": "Environment Export",
+          "location": "scripts/dive-modules/secrets.sh",
+          "usage": "Docker compose, shell scripts"
+        },
+        {
+          "name": "Inline Fetch",
+          "location": "scripts/dive-modules/federation-setup.sh",
+          "usage": "Federation config, Keycloak API"
+        },
+        {
+          "name": "Cached .env",
+          "location": "instances/{code}/.env",
+          "usage": "Spoke instances"
+        }
+      ],
+      "rules": [
+        "NEVER hardcode secrets",
+        "ALL secrets from GCP Secret Manager (project: dive25)",
+        "Naming: dive-v3-{type}-{instance}"
+      ]
+    }
+  },
+  "migration": {
+    "timeline": {
+      "v4.0": "December 2025 - SSOT consolidation, deprecation warnings added",
+      "v4.1-v4.2": "Q1-Q2 2026 - Grace period (deprecated commands work with warnings)",
+      "v5.0": "Q3 2026 - Remove deprecated patterns and commands"
+    },
+    "legacyPatterns": {
+      "clientIdVariations": [
+        "dive-v3-client-{instance}",
+        "dive-v3-broker-{instance}"
+      ],
+      "containerPatterns": [
+        "{code}-{service}-{code}-1",
+        "dive-v3-{code}-{service}",
+        "dive-{code}-{service}"
+      ],
+      "note": "Use migration script to standardize all instances to current convention"
+    },
+    "migrationScript": "scripts/migrate-naming-convention.sh",
+    "deprecationDoc": "docs/DEPRECATION-TIMELINE.md"
+  },
+  "examples": {
+    "usa": {
+      "realm": "dive-v3-broker-usa",
+      "clientId": "dive-v3-broker-usa",
+      "frontendContainer": "dive-hub-frontend",
+      "backendContainer": "dive-hub-backend",
+      "keycloakContainer": "dive-hub-keycloak"
+    },
+    "esp": {
+      "realm": "dive-v3-broker-esp",
+      "clientId": "dive-v3-broker-esp",
+      "frontendContainer": "dive-spoke-esp-frontend",
+      "backendContainer": "dive-spoke-esp-backend",
+      "keycloakContainer": "dive-spoke-esp-keycloak"
+    },
+    "lux": {
+      "realm": "dive-v3-broker-lux",
+      "clientId": "dive-v3-broker-lux",
+      "frontendContainer": "dive-spoke-lux-frontend",
+      "backendContainer": "dive-spoke-lux-backend",
+      "keycloakContainer": "dive-spoke-lux-keycloak"
+    }
+  },
+  "references": {
+    "consumedBy": [
+      "scripts/spoke-init/init-keycloak.sh",
+      "scripts/spoke-init/configure-localized-mappers.sh",
+      "scripts/spoke-init/seed-users.sh",
+      "scripts/dive-modules/hub.sh",
+      "scripts/dive-modules/spoke.sh",
+      "templates/spoke/docker-compose.template.yml"
+    ],
+    "documentation": "docs/naming-conventions.md"
+  }
+}

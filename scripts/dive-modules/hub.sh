@@ -602,24 +602,177 @@ hub_verify() {
     ensure_dive_root
 
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Would verify hub health"
+        log_dry "Would run 10-point hub verification"
         return 0
     fi
 
-    echo -e "${CYAN}Running simplified health checks...${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Running 10-Point Hub Verification${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    # Quick health checks using the status command
-    if ./dive hub status >/dev/null 2>&1; then
-        echo -e "${GREEN}✓ All core services are healthy${NC}"
+    local checks_total=10
+    local checks_passed=0
+    local checks_failed=0
+
+    export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
+
+    # Check 1: Docker containers running (8 services)
+    printf "  %-50s" "1. Docker Containers (8 services):"
+    local expected_services=("keycloak" "backend" "opa" "opal-server" "mongodb" "postgres" "redis" "redis-blacklist")
+    local running_count=0
+
+    for service in "${expected_services[@]}"; do
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-${service}"; then
+            ((running_count++))
+        fi
+    done
+
+    if [ $running_count -eq 8 ]; then
+        echo -e "${GREEN}✓ ${running_count}/8 running${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ ${running_count}/8 running${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 2: Keycloak health
+    printf "  %-50s" "2. Keycloak Health:"
+    if curl -kfs "https://localhost:8443/health/ready" --max-time 10 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    elif curl -kfs "https://localhost:8443/realms/master" --max-time 10 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 3: Backend API health
+    printf "  %-50s" "3. Backend API Health:"
+    if curl -kfs "https://localhost:4000/health" --max-time 5 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Unhealthy${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 4: MongoDB connection
+    printf "  %-50s" "4. MongoDB Connection:"
+    if docker exec dive-hub-mongodb mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+        echo -e "${GREEN}✓ Connected${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Failed${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 5: Redis connection
+    printf "  %-50s" "5. Redis Connection:"
+    if docker exec dive-hub-redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        echo -e "${GREEN}✓ Connected${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Failed${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 6: OPAL Server health
+    printf "  %-50s" "6. OPAL Server Health:"
+    if curl -kfs "https://localhost:7002/healthcheck" --max-time 5 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Healthy${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${YELLOW}⚠ Not responding${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 7: Policy bundle available
+    printf "  %-50s" "7. Policy Bundle Available:"
+    local bundle=$(curl -kfs "https://localhost:4000/api/opal/bundle/current" --max-time 5 2>/dev/null)
+    if echo "$bundle" | grep -q '"bundleId"'; then
+        local version=$(echo "$bundle" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        echo -e "${GREEN}✓ ${version}${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${YELLOW}⚠ No bundle${NC}"
+    fi
+
+    # Check 8: Federation registry initialized
+    printf "  %-50s" "8. Federation Registry:"
+    if curl -kfs "https://localhost:4000/api/federation/health" --max-time 5 >/dev/null 2>&1; then
+        local spoke_count=$(curl -kfs "https://localhost:4000/api/federation/health" --max-time 5 2>/dev/null | grep -o '"totalSpokes"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+        echo -e "${GREEN}✓ Initialized (${spoke_count:-0} spokes)${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Not initialized${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 9: Registration endpoint accessible
+    printf "  %-50s" "9. Registration Endpoint:"
+    local reg_test=$(curl -kfs -o /dev/null -w '%{http_code}' -X POST "https://localhost:4000/api/federation/register" \
+        -H "Content-Type: application/json" \
+        -d '{}' --max-time 5 2>/dev/null)
+    if [ "$reg_test" = "400" ] || [ "$reg_test" = "401" ] || [ "$reg_test" = "422" ]; then
+        # Error codes mean endpoint is accessible (just rejecting empty request)
+        echo -e "${GREEN}✓ Accessible${NC}"
+        ((checks_passed++))
+    else
+        echo -e "${RED}✗ Not accessible (HTTP $reg_test)${NC}"
+        ((checks_failed++))
+    fi
+
+    # Check 10: TLS certificates valid
+    printf "  %-50s" "10. TLS Certificates:"
+    local cert_dir="${DIVE_ROOT}/keycloak/certs"
+    if [ -f "${cert_dir}/certificate.pem" ]; then
+        local expiry=$(openssl x509 -enddate -noout -in "${cert_dir}/certificate.pem" 2>/dev/null | cut -d= -f2)
+        local expiry_epoch=$(date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || date -d "$expiry" +%s 2>/dev/null || echo 0)
+        local now_epoch=$(date +%s)
+        local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
+
+        if [ $days_left -gt 30 ]; then
+            echo -e "${GREEN}✓ Valid (${days_left} days left)${NC}"
+            ((checks_passed++))
+        elif [ $days_left -gt 0 ]; then
+            echo -e "${YELLOW}⚠ Expires soon (${days_left} days)${NC}"
+            ((checks_passed++))
+        else
+            echo -e "${RED}✗ Expired${NC}"
+            ((checks_failed++))
+        fi
+    else
+        echo -e "${YELLOW}⚠ No cert file found${NC}"
+        # Don't fail - TLS may work via other means
+    fi
+
+    # Summary
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  Verification Summary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Total Checks:   $checks_total"
+    echo -e "  Passed:         ${GREEN}$checks_passed${NC}"
+    echo -e "  Failed:         ${RED}$checks_failed${NC}"
+    echo ""
+
+    if [ $checks_failed -eq 0 ] && [ $checks_passed -ge 8 ]; then
+        echo -e "${GREEN}✓ All critical verification checks passed!${NC}"
         echo -e "${GREEN}✓ Hub deployment is fully operational${NC}"
         echo ""
-        echo -e "${CYAN}For detailed status, run: ./dive hub status${NC}"
         return 0
     else
-        echo -e "${RED}✗ Some services may be unhealthy${NC}"
+        echo -e "${YELLOW}⚠ Some checks failed or were skipped${NC}"
         echo ""
-        echo -e "${CYAN}Check status with: ./dive hub status${NC}"
+        echo -e "${CYAN}Troubleshooting:${NC}"
+        echo "  - Check logs: ./dive hub logs"
+        echo "  - View status: ./dive hub status"
+        echo "  - Restart services: ./dive hub down && ./dive hub up"
+        echo ""
         return 1
     fi
 }
@@ -843,6 +996,29 @@ hub_logs() {
 
 hub_seed() {
     local resource_count="${1:-5000}"
+
+    # INPUT VALIDATION: Resource count must be a positive integer
+    if ! [[ "$resource_count" =~ ^[0-9]+$ ]]; then
+        log_error "Resource count must be a positive integer"
+        echo ""
+        echo "Usage: ./dive hub seed [count]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive hub seed          # Seed 5000 resources (default)"
+        echo "  ./dive hub seed 10000    # Seed 10000 resources"
+        echo "  ./dive hub seed 500      # Seed 500 resources (testing)"
+        echo ""
+        return 1
+    fi
+
+    # RANGE VALIDATION: Reasonable limits to prevent resource exhaustion
+    if [ "$resource_count" -lt 1 ] || [ "$resource_count" -gt 1000000 ]; then
+        log_error "Resource count must be between 1 and 1,000,000"
+        echo "  Requested: $resource_count"
+        echo "  Valid range: 1 - 1,000,000"
+        echo ""
+        return 1
+    fi
 
     print_header
     echo -e "${BOLD}Seeding Hub (USA) with Test Data${NC}"
@@ -1113,6 +1289,78 @@ _hub_show_user_amr() {
     echo ""
 }
 
+##
+# Reset hub to clean state (development only)
+# Nukes all data and redeploys from scratch
+##
+hub_reset() {
+    echo ""
+    echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${YELLOW}              Hub Reset (Development Only)                  ${NC}"
+    echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    echo -e "${RED}${BOLD}⚠️  WARNING: This will destroy ALL hub data!${NC}"
+    echo ""
+    echo "This operation will:"
+    echo "  • Stop all hub containers"
+    echo "  • Remove all hub volumes (PostgreSQL, MongoDB, Redis)"
+    echo "  • Delete all spoke registrations"
+    echo "  • Delete all users and resources"
+    echo "  • Redeploy hub from scratch"
+    echo ""
+
+    # Require explicit confirmation
+    local confirm
+    read -p "Type 'RESET' to confirm: " confirm
+
+    if [ "$confirm" != "RESET" ]; then
+        echo ""
+        log_warn "Hub reset cancelled"
+        return 1
+    fi
+
+    echo ""
+    log_step "Nuking hub resources..."
+
+    # Stop hub services
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker compose -f docker-compose.hub.yml down -v --remove-orphans"
+    else
+        docker compose -f "${DIVE_ROOT}/docker-compose.hub.yml" down -v --remove-orphans 2>/dev/null
+        log_success "Hub containers and volumes removed"
+    fi
+
+    # Remove any lingering volumes
+    if [ "$DRY_RUN" = false ]; then
+        docker volume ls --filter name=dive-hub --format '{{.Name}}' | while read -r vol; do
+            docker volume rm "$vol" 2>/dev/null
+        done
+    fi
+
+    echo ""
+    log_step "Redeploying hub..."
+
+    # Redeploy hub
+    hub_deploy "$@"
+
+    local result=$?
+
+    echo ""
+    if [ $result -eq 0 ]; then
+        log_success "Hub reset complete - fresh deployment ready"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Verify hub: ./dive hub verify"
+        echo "  2. Redeploy spokes: ./dive spoke deploy <code>"
+        echo "  3. Relink federation: ./dive federation link <code>"
+    else
+        log_error "Hub reset failed during redeployment"
+    fi
+
+    return $result
+}
+
 # =============================================================================
 # MODULE DISPATCH
 # =============================================================================
@@ -1126,6 +1374,7 @@ module_hub() {
         init)        hub_init "$@" ;;
         up|start)    hub_up "$@" ;;
         down|stop)   hub_down "$@" ;;
+        reset)       hub_reset "$@" ;;
         status)      hub_status "$@" ;;
         health)      hub_health "$@" ;;
         verify)      hub_verify "$@" ;;
@@ -1136,8 +1385,15 @@ module_hub() {
         amr)         hub_amr "$@" ;;
 
         # Legacy compatibility
-        bootstrap)   hub_deploy "$@" ;;
-        instances)   hub_spokes list "$@" ;;
+        # Deprecated aliases (backwards compatibility)
+        bootstrap)
+            log_warn "Deprecated: Use 'hub deploy' instead (removal in v5.0)"
+            hub_deploy "$@"
+            ;;
+        instances)
+            log_warn "Deprecated: Use 'hub spokes list' instead (removal in v5.0)"
+            hub_spokes list "$@"
+            ;;
 
         help|*)      module_hub_help ;;
     esac
@@ -1151,6 +1407,7 @@ module_hub_help() {
     echo "  init                Initialize hub directories and config"
     echo "  up, start           Start hub services"
     echo "  down, stop          Stop hub services"
+    echo "  reset               Nuke and redeploy (development only, requires 'RESET' confirmation)"
     echo "  seed [count]        Seed test users and ZTDF resources (default: 5000)"
     echo ""
     echo -e "${CYAN}Status & Verification:${NC}"

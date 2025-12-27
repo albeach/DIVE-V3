@@ -71,6 +71,19 @@ _load_federation_test() {
     return 0
 }
 
+##
+# Lazy load federation-diagnose.sh module
+##
+_load_federation_diagnose() {
+    if [ -z "$DIVE_FEDERATION_DIAGNOSE_LOADED" ]; then
+        source "${_FEDERATION_MODULES_DIR}/federation-diagnose.sh" 2>/dev/null || {
+            log_error "Failed to load federation-diagnose.sh module"
+            return 1
+        }
+    fi
+    return 0
+}
+
 # =============================================================================
 # ADMIN TOKEN HELPERS
 # =============================================================================
@@ -195,40 +208,10 @@ federation_register() {
     fi
 }
 
-federation_sync_policies() {
-    log_step "Syncing policies from hub..."
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Would pull policy bundle from OPAL server"
-        log_dry "Would update local OPA with new policies"
-    else
-        curl -X POST http://localhost:7002/data/config -d '{"entries": ["/"]}' 2>/dev/null || {
-            log_warn "OPAL client not running locally"
-            echo "Manual sync: policies are in policies/ directory"
-        }
-    fi
-}
-
-federation_sync_idps() {
-    log_step "Syncing IdP metadata from hub..."
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Would fetch IdP metadata from hub registry"
-        log_dry "Would update local Keycloak IdP configurations"
-    else
-        echo "IdP sync would connect to hub metadata registry..."
-        echo "TODO: Implement IdP metadata sync"
-    fi
-}
-
-federation_push_audit() {
-    log_step "Pushing audit logs to hub..."
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Would export local audit logs"
-        log_dry "Would POST to hub audit aggregator"
-    else
-        echo "Audit push would export logs to hub..."
-        echo "TODO: Implement audit log aggregation"
-    fi
-}
+# NOTE: The following commands have been removed (superseded by spoke commands):
+# - federation_sync_policies -> Use: ./dive --instance <code> spoke policy sync
+# - federation_sync_idps -> Not needed (IdPs configured via federation-setup)
+# - federation_push_audit -> Use: spoke audit queue (automatic sync)
 
 # =============================================================================
 # FEDERATION REGISTRY - Add spoke to federation-registry.json
@@ -312,9 +295,23 @@ module_federation() {
         status)         federation_status ;;
         register)       federation_register "$@" ;;
         register-spoke) federation_register_spoke "$@" ;;
-        sync-policies)  federation_sync_policies ;;
-        sync-idps)      federation_sync_idps ;;
-        push-audit)     federation_push_audit ;;
+
+        # Removed stub commands (superseded):
+        sync-policies)
+            log_warn "Command 'federation sync-policies' has been removed"
+            echo "Use instead: ./dive --instance <code> spoke policy sync"
+            return 1
+            ;;
+        sync-idps)
+            log_warn "Command 'federation sync-idps' has been removed"
+            echo "IdPs are configured via: ./dive federation-setup configure <spoke>"
+            return 1
+            ;;
+        push-audit)
+            log_warn "Command 'federation push-audit' has been removed"
+            echo "Audit logs are automatically synced by spoke audit queue"
+            return 1
+            ;;
 
         # Lazy-loaded: federation-link.sh
         link)           _federation_link_stub "$@" ;;
@@ -330,6 +327,9 @@ module_federation() {
         test)           _federation_test_stub "$@" ;;
         health|check)   _federation_health_check_stub "$@" ;;
 
+        # Lazy-loaded: federation-diagnose.sh
+        diagnose)       _load_federation_diagnose && federation_diagnose "$@" ;;
+
         # Help
         *)              module_federation_help ;;
     esac
@@ -342,11 +342,9 @@ module_federation_help() {
     echo "  ${CYAN}status${NC}               Show federation status"
     echo "  ${CYAN}register${NC} <url>       Register instance with hub"
     echo "  ${CYAN}register-spoke${NC} <CODE> Add spoke to federation registry (federated search)"
-    echo "  ${CYAN}sync-policies${NC}        Pull latest policies from hub"
-    echo "  ${CYAN}sync-idps${NC}            Sync IdP metadata from hub"
-    echo "  ${CYAN}push-audit${NC}           Push audit logs to hub"
     echo ""
-    echo -e "${CYAN}Testing Commands:${NC} (lazy loaded)"
+    echo -e "${CYAN}Testing & Diagnostics:${NC} (lazy loaded)"
+    echo "  ${CYAN}diagnose${NC} <CODE>      Comprehensive federation diagnostic (8 checks)"
     echo "  ${CYAN}health|check${NC}         Run comprehensive federation health checks"
     echo "  ${CYAN}test${NC} <type>          Run federation integration tests"
     echo "    ${GRAY}basic${NC}              Test hub APIs and basic connectivity"
@@ -370,6 +368,7 @@ module_federation_help() {
     echo ""
     echo "Examples:"
     echo "  ./dive federation status                        # Show federation status"
+    echo "  ./dive federation diagnose EST                  # Run diagnostic for EST spoke"
     echo "  ./dive federation link GBR                      # Link GBR to USA Hub"
     echo "  ./dive federation link EST --retry              # Link with retry on failure"
     echo "  ./dive federation verify EST                    # Verify EST ↔ USA bidirectional"
