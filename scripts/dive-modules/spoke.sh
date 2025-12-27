@@ -124,54 +124,15 @@ SPOKE_CERT_BITS="${SPOKE_CERT_BITS:-4096}"
 SPOKE_CERT_DAYS="${SPOKE_CERT_DAYS:-365}"
 
 # =============================================================================
-# PORT CALCULATION - SINGLE SOURCE OF TRUTH
+# PORT CALCULATION - DELEGATED TO COMMON.SH (SSOT)
 # =============================================================================
-# This function calculates consistent ports for any NATO country code.
-# Uses centralized NATO countries database (scripts/nato-countries.sh)
-# MUST be used everywhere to ensure docker-compose and config.json match.
-#
-# Supports all 32 NATO member countries with deterministic, conflict-free ports.
-# For partner nations (AUS, NZL, etc.), uses hash-based fallback.
+# This function now delegates to common.sh:get_instance_ports()
+# See: scripts/dive-modules/common.sh for authoritative implementation
 # =============================================================================
 
 _get_spoke_ports() {
-    local code="$1"
-    local code_upper="${code^^}"
-    local port_offset=0
-
-    # Check if it's a NATO country (uses centralized database)
-    if is_nato_country "$code_upper"; then
-        # Use centralized NATO port offset
-        port_offset=$(get_country_offset "$code_upper")
-    elif is_partner_nation "$code_upper"; then
-        # Partner nations get offsets 32-39
-        case "$code_upper" in
-            AUS) port_offset=32 ;;
-            NZL) port_offset=33 ;;
-            JPN) port_offset=34 ;;
-            KOR) port_offset=35 ;;
-            ISR) port_offset=36 ;;
-            UKR) port_offset=37 ;;
-            *)   port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 10) + 38 )) ;;
-        esac
-    else
-        # Unknown countries: use hash-based offset (48+) to avoid conflicts
-        port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20) + 48 ))
-        log_warn "Country '$code_upper' not in NATO database, using hash-based port offset: $port_offset"
-    fi
-
-    # Export calculated ports (can be sourced or eval'd)
-    # Port scheme ensures no conflicts for 48+ simultaneous spokes
-    echo "SPOKE_PORT_OFFSET=$port_offset"
-    echo "SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
-    echo "SPOKE_BACKEND_PORT=$((4000 + port_offset))"
-    echo "SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + port_offset))"
-    echo "SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + port_offset))"
-    echo "SPOKE_POSTGRES_PORT=$((5432 + port_offset))"
-    echo "SPOKE_MONGODB_PORT=$((27017 + port_offset))"
-    echo "SPOKE_REDIS_PORT=$((6379 + port_offset))"
-    echo "SPOKE_OPA_PORT=$((8181 + port_offset * 10))"
-    echo "SPOKE_KAS_PORT=$((9000 + port_offset))"
+    # Delegate to common.sh (SSOT)
+    get_instance_ports "$@"
 }
 
 # =============================================================================
@@ -1022,6 +983,141 @@ spoke_sync_all_secrets() {
     log_success "Secret synchronization complete: $success succeeded, $failed failed"
 
     [ $failed -eq 0 ]
+}
+
+##
+# Seed spoke database with test resources
+# Wraps cmd_seed with spoke instance context and validation
+##
+spoke_seed() {
+    local count="${1:-5000}"
+    local code_lower=$(lower "${INSTANCE:-usa}")
+    local code_upper=$(upper "$code_lower")
+
+    # INPUT VALIDATION: Count must be a positive integer
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+        log_error "Count must be a positive integer"
+        echo ""
+        echo "Usage: ./dive --instance <code> spoke seed [count]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive --instance pol spoke seed          # Seed 5000 resources (default)"
+        echo "  ./dive --instance fra spoke seed 10000    # Seed 10000 resources"
+        echo "  ./dive --instance est spoke seed 500      # Seed 500 resources (testing)"
+        echo ""
+        return 1
+    fi
+
+    # RANGE VALIDATION: Reasonable limits (1 to 1M like hub seed)
+    if [ "$count" -lt 1 ] || [ "$count" -gt 1000000 ]; then
+        log_error "Count must be between 1 and 1,000,000"
+        echo "  Requested: $count"
+        echo "  Valid range: 1 - 1,000,000"
+        echo ""
+        return 1
+    fi
+
+    log_step "Seeding $count ZTDF resources for $code_upper spoke..."
+
+    # Ensure spoke backend is running
+    local backend_container="dive-spoke-${code_lower}-backend"
+    if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+        log_error "Backend container not running for $code_upper"
+        echo ""
+        echo "Start the spoke first:"
+        echo "  ./dive --instance $code_lower spoke up"
+        echo ""
+        return 1
+    fi
+
+    # Delegate to db module with spoke instance context
+    # The db module's cmd_seed handles the actual seeding
+    INSTANCE="$code_lower" cmd_seed "$count" "$code_lower"
+
+    local result=$?
+    if [ $result -eq 0 ]; then
+        log_success "$code_upper spoke seeded with $count resources"
+    else
+        log_error "Failed to seed $code_upper spoke"
+    fi
+
+    return $result
+}
+
+##
+# List all registered federation peers (spokes) from hub perspective
+# Read-only command - shows current federation topology
+##
+spoke_list_peers() {
+    local code_lower=$(lower "${INSTANCE:-usa}")
+    local code_upper=$(upper "$code_lower")
+    local hub_url="${HUB_API_URL:-https://localhost:4000}"
+
+    log_step "Querying hub for registered spokes..."
+
+    # Try to reach hub
+    local response
+    response=$(curl -kfs --max-time 10 "${hub_url}/api/federation/spokes" 2>/dev/null)
+
+    if [ -z "$response" ]; then
+        log_error "Could not reach hub at $hub_url"
+        echo ""
+        echo "Troubleshooting:"
+        echo "  1. Verify hub is running: docker ps | grep dive-hub"
+        echo "  2. Check HUB_API_URL environment variable"
+        echo "  3. Test connectivity: curl -k $hub_url/health"
+        echo ""
+        return 1
+    fi
+
+    echo ""
+    echo -e "${BOLD}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}          Federation Spokes (Hub Perspective)              ${NC}"
+    echo -e "${BOLD}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+
+    # Check if response contains spokes array
+    local spoke_count
+    spoke_count=$(echo "$response" | jq -r '.spokes | length' 2>/dev/null)
+
+    if [ -z "$spoke_count" ] || [ "$spoke_count" = "null" ]; then
+        log_warn "No spokes registered in hub"
+        return 0
+    fi
+
+    if [ "$spoke_count" -eq 0 ]; then
+        log_warn "No spokes currently registered"
+        return 0
+    fi
+
+    # Display spoke list with formatting
+    echo -e "${CYAN}CODE   NAME                    STATUS      TRUST LEVEL   REGISTERED${NC}"
+    echo "───────────────────────────────────────────────────────────────────"
+
+    echo "$response" | jq -r '.spokes[] |
+        "\(.instanceCode // "N/A")   \(.name // "Unknown")   \(.status // "unknown")   \(.trustLevel // "none")   \(.registeredAt // "N/A")"' |
+        while IFS= read -r line; do
+            # Colorize status
+            if echo "$line" | grep -q "active"; then
+                echo -e "$line" | sed "s/active/${GREEN}active${NC}/"
+            elif echo "$line" | grep -q "pending"; then
+                echo -e "$line" | sed "s/pending/${YELLOW}pending${NC}/"
+            elif echo "$line" | grep -q "suspended"; then
+                echo -e "$line" | sed "s/suspended/${RED}suspended${NC}/"
+            else
+                echo "$line"
+            fi
+        done
+
+    echo ""
+    log_success "Found $spoke_count registered spokes"
+
+    # Show current spoke's perspective
+    echo ""
+    echo -e "${DIM}Query from: ${code_upper} spoke${NC}"
+    echo -e "${DIM}Hub URL: ${hub_url}${NC}"
+
+    return 0
 }
 
 # =============================================================================
@@ -2017,7 +2113,10 @@ module_spoke() {
 
     case "$action" in
         init)           spoke_init "$@" ;;
-        setup|wizard)   spoke_setup_wizard "$@" ;;
+        setup|wizard)
+            log_warn "Deprecated: Use 'spoke init' instead (removal in v5.0)"
+            spoke_setup_wizard "$@"
+            ;;
         deploy)         spoke_deploy "$@" ;;
         generate-certs) spoke_generate_certs "$@" ;;
         gen-certs)      spoke_generate_certs "$@" ;;
@@ -2032,19 +2131,33 @@ module_spoke() {
         sync)           spoke_sync ;;
         heartbeat)      spoke_heartbeat ;;
         policy)         spoke_policy "$@" ;;
+        seed)           spoke_seed "$@" ;;
+        list-peers)     spoke_list_peers ;;
         up|start)       spoke_up ;;
         down|stop)      spoke_down ;;
-        clean|purge)    spoke_clean ;;
+        clean)          spoke_clean ;;
+        purge)
+            log_warn "Deprecated: Use 'spoke clean' instead (removal in v5.0)"
+            spoke_clean
+            ;;
         logs)           spoke_logs "$@" ;;
         reset)          spoke_reset ;;
-        teardown)       spoke_teardown "$@" ;;
+        teardown)
+            log_warn "Deprecated: Use 'spoke clean' for volume cleanup or 'spoke down' to stop services (removal in v5.0)"
+            spoke_teardown "$@"
+            ;;
+
         failover)       spoke_failover "$@" ;;
         maintenance)    spoke_maintenance "$@" ;;
         audit-status)   spoke_audit_status ;;
         sync-secrets)   spoke_sync_secrets "$@" ;;
         sync-all-secrets) spoke_sync_all_secrets ;;
         list-countries) spoke_list_countries "$@" ;;
-        countries)      spoke_list_countries "$@" ;;
+        countries)
+            log_warn "Deprecated: Use 'spoke list-countries' instead (removal in v5.0)"
+            spoke_list_countries "$@"
+            ;;
+
         ports)          spoke_show_ports "$@" ;;
         country-info)   spoke_country_info "$@" ;;
         validate-country) spoke_validate_country "$@" ;;
@@ -2110,6 +2223,7 @@ module_spoke_help() {
     echo "  clean                  Remove all containers, volumes, and optionally config"
     echo "                         (Use before redeploy to fix password mismatches)"
     echo "  logs [service]         View service logs"
+    echo "  seed [count]           Seed spoke database with test resources (default: 5000)"
     echo "  health                 Check service health"
     echo "  verify                 Run 8-point connectivity test"
     echo ""
@@ -2122,6 +2236,7 @@ module_spoke_help() {
     echo -e "${CYAN}Federation:${NC}"
     echo "  sync                   Force policy sync from Hub"
     echo "  heartbeat              Send manual heartbeat to Hub"
+    echo "  list-peers             Show all registered spokes from hub perspective"
     echo "  sync-secrets           Synchronize frontend secrets with Keycloak"
     echo "  sync-all-secrets       Synchronize secrets for all running spokes"
     echo ""

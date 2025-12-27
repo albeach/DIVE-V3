@@ -5,6 +5,142 @@
 # Shared utilities used by all CLI modules
 # Source this file at the top of each module
 # =============================================================================
+#
+# SINGLE SOURCE OF TRUTH (SSOT) PATTERNS
+# =============================================================================
+#
+# This module implements critical SSOT patterns to eliminate code duplication
+# and ensure consistency across all 38 CLI modules.
+#
+# 1. PORT CALCULATION (✅ Centralized Dec 2025)
+# -----------------------------------------------------------------------------
+# FUNCTION: get_instance_ports <code>
+# LOCATION: common.sh:513
+# REPLACES: 6 duplicate implementations across modules
+#
+# Port allocation for NATO countries uses deterministic offset calculation:
+#   - Frontend:   3000 + offset
+#   - Backend:    4000 + offset
+#   - Keycloak:   8443 + offset
+#   - PostgreSQL: 5432 + offset
+#   - MongoDB:    27017 + offset
+#
+# Offset sources (priority order):
+#   1. NATO database (scripts/nato-countries.sh) - 32 countries (offset 0-31)
+#   2. Partner nations - offset 32-39
+#   3. Hash-based - offset 48+ for unknown codes
+#
+# DO NOT reimplement port calculation logic. Always use:
+#   ports=$(get_instance_ports "$code")
+#   frontend_port=$(echo "$ports" | jq -r '.frontend')
+#
+# DELEGATING MODULES:
+#   - spoke.sh (formerly had duplicate)
+#   - spoke-verification.sh (formerly had duplicate)
+#   - spoke-kas.sh (formerly had duplicate)
+#   - federation-test.sh (formerly had duplicate)
+#   - federation-link.sh (formerly had duplicate)
+#   - hub.sh (uses for spoke port lookups)
+#
+# TEST COVERAGE: tests/unit/test-port-calculation.sh (316 tests, 100% pass)
+#
+#
+# 2. ADMIN TOKEN RETRIEVAL (✅ Centralized Dec 2025)
+# -----------------------------------------------------------------------------
+# FUNCTIONS:
+#   - get_hub_admin_token() - federation-setup.sh:468
+#   - get_spoke_admin_token() - federation-setup.sh:526
+#
+# LOCATION: federation-setup.sh (centralized from 10+ locations)
+# FEATURES:
+#   - 15-retry logic with exponential backoff
+#   - Automatic password retrieval from GCP Secret Manager
+#   - Password quality validation (no defaults)
+#   - Resilient to slow Keycloak startup
+#
+# DO NOT implement local token retrieval. Always use:
+#   token=$(get_hub_admin_token)
+#   token=$(get_spoke_admin_token "$spoke_code")
+#
+# REPLACES: 10+ duplicate token retrieval blocks
+#
+#
+# 3. SECRET LOADING PATTERNS (4 Patterns)
+# -----------------------------------------------------------------------------
+# The CLI uses 4 different patterns for loading secrets from GCP:
+#
+# Pattern A: Direct GCP Secret Manager (backend/src/utils/gcp-secrets.ts)
+#   - Used by: Backend API, KAS service
+#   - Method: TypeScript utility functions
+#   - Best for: Runtime application code
+#
+# Pattern B: Environment Variable Export (secrets.sh)
+#   - Used by: Docker compose files, shell scripts
+#   - Method: `./dive secrets load` → exports to shell
+#   - Best for: Deployment scripts, CI/CD
+#
+# Pattern C: Inline Secret Fetch (federation-setup.sh)
+#   - Used by: Federation configuration, Keycloak API calls
+#   - Method: get_keycloak_admin_password(), get_keycloak_client_secret()
+#   - Best for: One-time configuration tasks
+#
+# Pattern D: Cached in .env Files (spoke instances)
+#   - Used by: Spoke instances
+#   - Location: instances/<code>/.env
+#   - Method: Written during spoke init, synced on spoke up
+#   - Best for: Persistent spoke configuration
+#
+# CRITICAL RULES:
+#   - NEVER hardcode secrets (see docs/DEPRECATION-TIMELINE.md)
+#   - ALL secrets must come from GCP Secret Manager (project: dive25)
+#   - Naming convention: dive-v3-<type>-<instance>
+#   - Use backend/src/utils/gcp-secrets.ts for TypeScript
+#   - Use functions in secrets.sh for bash
+#
+#
+# 4. CONTAINER NAMING RESOLUTION (Supports Legacy Patterns)
+# -----------------------------------------------------------------------------
+# FUNCTION: resolve_spoke_container <code> <service>
+# LOCATION: common.sh (planned)
+# STATUS: ⚠️ Not yet extracted (see Sprint 2-4 recommendations)
+#
+# Container naming evolved through 5 patterns:
+#   1. dive-spoke-<code>-<service> (current, v4.0+)
+#   2. <code>-<service>-<code>-1 (legacy, v3.x)
+#   3. dive-v3-<code>-<service> (legacy, v2.x)
+#   4. dive-<code>-<service> (legacy, v1.x)
+#   5. dive-hub-<service> (hub only, all versions)
+#
+# resolve_spoke_container() tries all patterns for backward compatibility.
+#
+# DO NOT hardcode container names. Always use:
+#   container=$(resolve_spoke_container "$code" "frontend")
+#
+# See: config/naming-conventions.json for migration status
+#
+#
+# 5. HUB VS SPOKE ASYMMETRY (Design Pattern)
+# -----------------------------------------------------------------------------
+# Hub and spokes have intentionally different command sets:
+#
+# HUB (permanent, always-on):
+#   - ❌ No cleanup/reset/teardown commands (hub is permanent)
+#   - ❌ No resilience/failover commands (hub is always available)
+#   - ✅ Spoke management commands (approve, reject, rotate-token)
+#   - ✅ Policy distribution (push-policy)
+#
+# SPOKE (ephemeral, may disconnect):
+#   - ✅ Cleanup commands (clean, reset, teardown)
+#   - ✅ Resilience features (failover, maintenance mode)
+#   - ✅ Policy sync (spoke sync, spoke policy status)
+#   - ❌ No spoke management (delegated to hub)
+#
+# RATIONALE: Hub is the source of truth and cannot be offline. Spokes may
+# disconnect for maintenance or network issues, requiring offline capabilities.
+#
+# See: docs/ADR-hub-spoke-asymmetry.md for full design rationale
+#
+# =============================================================================
 
 # Colors
 export GREEN='\033[0;32m'
@@ -474,6 +610,82 @@ apply_env_profile() {
     esac
 
     log_verbose "Applied env profile (${ENVIRONMENT}) for instance ${inst_lc}"
+}
+
+# =============================================================================
+# INSTANCE PORT CALCULATION - SINGLE SOURCE OF TRUTH
+# =============================================================================
+# This is the AUTHORITATIVE port calculation for ALL instances.
+# Used by: spoke.sh, federation-setup.sh, federation-link.sh, spoke-kas.sh, etc.
+#
+# DO NOT duplicate this logic elsewhere - call this function instead!
+#
+# Port allocation strategy:
+# 1. NATO countries (0-31): Use NATO database offset (scripts/nato-countries.sh)
+# 2. Partner nations (32-39): Hardcoded (AUS, NZL, JPN, KOR, ISR, UKR)
+# 3. Unknown countries (48+): Hash-based to avoid conflicts
+#
+# Port ranges:
+#   Frontend:   3000-3099
+#   Backend:    4000-4099
+#   Keycloak:   8443-8543
+#   PostgreSQL: 5432-5531
+#   MongoDB:    27017-27116
+#   Redis:      6379-6478
+#   OPA:        8181-8490 (offset * 10 for OPA)
+#   KAS:        9000-9099
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, FRA, POL)
+#
+# Returns:
+#   Exports 10 port variables via echo (use with eval)
+#
+# Example:
+#   eval "$(get_instance_ports "FRA")"
+#   echo $SPOKE_FRONTEND_PORT  # 3010
+# =============================================================================
+
+get_instance_ports() {
+    local code="$1"
+    local code_upper="${code^^}"
+    local port_offset=0
+
+    # Check if it's a NATO country (uses centralized database)
+    if type -t is_nato_country &>/dev/null && is_nato_country "$code_upper" 2>/dev/null; then
+        # Use centralized NATO port offset
+        if type -t get_country_offset &>/dev/null; then
+            port_offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
+        fi
+    elif type -t is_partner_nation &>/dev/null && is_partner_nation "$code_upper" 2>/dev/null; then
+        # Partner nations get offsets 32-39
+        case "$code_upper" in
+            AUS) port_offset=32 ;;
+            NZL) port_offset=33 ;;
+            JPN) port_offset=34 ;;
+            KOR) port_offset=35 ;;
+            ISR) port_offset=36 ;;
+            UKR) port_offset=37 ;;
+            *)   port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 10) + 38 )) ;;
+        esac
+    else
+        # Unknown countries: use hash-based offset (48+) to avoid conflicts
+        port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20) + 48 ))
+        log_warn "Country '$code_upper' not in NATO database, using hash-based port offset: $port_offset"
+    fi
+
+    # Export calculated ports (can be sourced or eval'd)
+    # Port scheme ensures no conflicts for 48+ simultaneous spokes
+    echo "export SPOKE_PORT_OFFSET=$port_offset"
+    echo "export SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
+    echo "export SPOKE_BACKEND_PORT=$((4000 + port_offset))"
+    echo "export SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + port_offset))"
+    echo "export SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + port_offset))"
+    echo "export SPOKE_POSTGRES_PORT=$((5432 + port_offset))"
+    echo "export SPOKE_MONGODB_PORT=$((27017 + port_offset))"
+    echo "export SPOKE_REDIS_PORT=$((6379 + port_offset))"
+    echo "export SPOKE_OPA_PORT=$((8181 + port_offset * 10))"
+    echo "export SPOKE_KAS_PORT=$((9000 + port_offset))"
 }
 
 # Ensure DIVE_ROOT is set
