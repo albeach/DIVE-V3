@@ -148,4 +148,3 @@ variable "webauthn_rp_id" {
 }
 
 # NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
-

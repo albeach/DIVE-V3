@@ -805,4 +805,14 @@ else
     log_warn "seed-resources.sh not found or not executable"
 fi
 
+# Initialize NextAuth database schema (required for SSO)
+if [[ -x "${SCRIPT_DIR}/init-nextauth-db.sh" ]]; then
+    log_info "Running init-nextauth-db.sh..."
+    "${SCRIPT_DIR}/init-nextauth-db.sh" "${INSTANCE_CODE}" || {
+        log_warn "NextAuth DB init failed - you can run manually: ./scripts/spoke-init/init-nextauth-db.sh ${INSTANCE_CODE}"
+    }
+else
+    log_warn "init-nextauth-db.sh not found - NextAuth sessions may not work"
+fi
+
 log_info "Keycloak initialization complete for ${INSTANCE_CODE}"

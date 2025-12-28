@@ -23,7 +23,6 @@ networks:
   # Federation shared network for cross-instance communication (OPAL, Keycloak)
   dive-shared:
     external: true
-    name: dive-v3-shared-network
 
 volumes:
   hub_postgres_data:
@@ -256,10 +255,10 @@ services:
       MONGODB_DATABASE: dive-v3
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://dive-hub-keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-usa
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      KEYCLOAK_JWKS_URI: https://dive-hub-keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs
+      KEYCLOAK_JWKS_URI: https://dive-hub-keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Redis configuration
@@ -379,7 +378,7 @@ services:
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
       KEYCLOAK_URL: https://dive-hub-keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-usa
       KEYCLOAK_CLIENT_ID: dive-v3-client-broker
     ports:
       - "127.0.0.1:8085:8080"
@@ -419,10 +418,10 @@ services:
       BACKEND_URL: https://backend:4000
       KEYCLOAK_BASE_URL: https://dive-hub-keycloak:8443
       KEYCLOAK_URL: ${KEYCLOAK_URL:-https://localhost:8443}
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dive-v3-broker}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dive-v3-broker-usa}
       NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}
-      NEXT_PUBLIC_KEYCLOAK_REALM: ${NEXT_PUBLIC_KEYCLOAK_REALM:-dive-v3-broker}
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
+      NEXT_PUBLIC_KEYCLOAK_REALM: ${NEXT_PUBLIC_KEYCLOAK_REALM:-dive-v3-broker-usa}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
       AUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
@@ -430,7 +429,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
+      AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       AUTH_TRUST_HOST: "true"
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem

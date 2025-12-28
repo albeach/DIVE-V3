@@ -1079,18 +1079,27 @@ Generate development certificates for spoke services.
 3. **Start Docker services** - All spoke containers with health checks
 4. **Wait for services to be healthy** - Extended timeout for Keycloak
 5. **Run post-deployment initialization** - Keycloak realm, client, users
-6. **Configure federation** - usa-idp setup, secret synchronization
-7. **Register spoke as IdP in Hub** - Bidirectional federation setup
+6. **Configure federation** - usa-idp setup, secret synchronization (automatic, bidirectional)
+7. **Register spoke as IdP in Hub** - Bidirectional federation setup (automatic in dev mode)
 8. **Formal registration status check** - Optional production approval flow
 9. **Federation registry update** - Enable federated search capabilities
-10. **Finalize client configuration** - Sync secrets and restart frontend
+10. **Finalize client configuration** - Sync secrets and restart frontend (automatic)
 
 **Key benefits:**
 - **Zero manual intervention** for development deployments
-- **Automatic federation setup** (both directions: Hub↔Spoke)
+- **Automatic federation setup** (both directions: Hub↔Spoke, no manual steps required)
+- **Auto-approval in dev mode** (`DIVE_PILOT_MODE=false` - spokes auto-approved for testing)
 - **Certificate management** integrated
 - **GCP secret integration** with local fallback
-- **Auto-approval detection** for development environments
+- **Secret synchronization** runs automatically on every deployment and `spoke up`
+
+**Development vs Production modes:**
+| Mode | Auto-Approval | Federation Setup | Secret Sync |
+|------|---------------|------------------|-------------|
+| **Development** (`DIVE_PILOT_MODE=false`) | ✅ Automatic | ✅ Fully automatic | ✅ On every `up` |
+| **Production** (`DIVE_PILOT_MODE=true`) | ❌ Manual review | 🔶 Semi-automatic (requires approval) | ✅ On every `up` |
+
+**Note:** In development mode, federation is **fully automatic** - no manual `federation-setup configure` or `register-hub` commands needed. The 4-step manual process (shown in [Complete New Spoke Setup](#complete-new-spoke-setup)) is only required for production deployments or troubleshooting.
 
 ### `spoke register` - Register with Hub
 
@@ -1160,6 +1169,55 @@ View logs from spoke services.
 ```bash
 ./dive --instance pol spoke logs
 ./dive --instance pol spoke logs backend -f
+```
+
+### `spoke sync-secrets` - Synchronize Frontend Secrets
+
+Synchronize frontend client secrets with Keycloak (fixes secret mismatch issues).
+
+```bash
+./dive --instance pol spoke sync-secrets
+./dive --instance fra spoke sync-secrets
+```
+
+**What it does:**
+- Detects secret mismatches between frontend container and Keycloak
+- Retrieves authoritative secret from GCP Secret Manager
+- Updates `.env` file with correct secret
+- Restarts frontend container to apply changes
+- Verifies synchronization succeeded
+
+**When to use:**
+- After federation setup if authentication fails
+- When seeing "Invalid client or Invalid client credentials" errors
+- After manual Keycloak client configuration changes
+- As part of troubleshooting spoke deployment issues
+
+**Note:** This command automatically runs during `spoke up` to ensure secrets are always synchronized.
+
+### `spoke sync-all-secrets` - Batch Secret Synchronization
+
+Synchronize secrets for all running spokes in a single command.
+
+```bash
+./dive spoke sync-all-secrets
+```
+
+**What it does:**
+- Detects all running spoke frontend containers
+- Runs `spoke sync-secrets` for each spoke
+- Reports success/failure count
+- Provides troubleshooting guidance for failed spokes
+
+**Example output:**
+```
+Synchronizing secrets for all running spokes...
+
+  Processing EST... ✓ synchronized
+  Processing FRA... ⚠ mismatch detected - fixing... ✓ complete
+  Processing POL... ✓ synchronized
+
+✅ Synchronized 3/3 spokes successfully
 ```
 
 ## NATO Country Management
@@ -1670,7 +1728,12 @@ The following commands are deprecated but still work for backwards compatibility
 
 ### Complete New Spoke Setup
 
-The recommended workflow for setting up a new spoke:
+**For Production/Troubleshooting Only** - In development mode (`DIVE_PILOT_MODE=false`), federation setup is **automatic** during `spoke deploy`. Use this manual workflow only for:
+- Production deployments requiring manual approval
+- Troubleshooting federation issues
+- Re-configuring existing spokes
+
+**Manual 4-step workflow:**
 
 ```bash
 # 1. Deploy the spoke
@@ -1685,6 +1748,8 @@ The recommended workflow for setting up a new spoke:
 # 4. Verify bidirectional federation
 ./dive federation-setup verify <code>
 ```
+
+**Note:** For development, `./dive spoke deploy <code>` automatically performs steps 2-3 and verifies federation.
 
 ## Testing Suite
 
@@ -2866,6 +2931,44 @@ If federated users show wrong country or missing attributes:
 - "Invalid client or Invalid client credentials" errors
 
 **Root cause:** The spoke's realm is missing the `dive-attributes` scope or the Hub's client (`dive-v3-broker-usa`) in the spoke realm.
+
+#### Secret Synchronization Issues
+
+If spoke authentication fails with "Invalid client credentials" or secret mismatch errors:
+
+```bash
+# Sync secrets for a specific spoke
+./dive --instance pol spoke sync-secrets
+
+# Sync all running spokes at once
+./dive spoke sync-all-secrets
+
+# Verify secrets after sync
+./dive --instance pol spoke health
+```
+
+**Common symptoms:**
+- "Invalid client or Invalid client credentials" errors
+- NextAuth authentication failures
+- Frontend cannot connect to Keycloak
+- Secret mismatch warnings in logs
+
+**What it fixes:**
+- Frontend `.env` file out of sync with Keycloak client secret
+- Stale secrets after Keycloak client regeneration
+- Secret drift between GCP Secret Manager and containers
+
+**How it works:**
+1. Retrieves authoritative secret from GCP Secret Manager
+2. Compares with current frontend container secret
+3. Updates `.env` file if mismatch detected
+4. Restarts frontend container to apply changes
+5. Verifies synchronization succeeded
+
+**Note:** Secret sync runs automatically on `spoke up` and `spoke deploy`, but manual sync may be needed after:
+- Manual Keycloak client secret changes
+- GCP secret rotation
+- Container restarts without environment update
 
 #### host.docker.internal Issues
 

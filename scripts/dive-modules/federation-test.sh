@@ -19,35 +19,20 @@ fi
 export DIVE_FEDERATION_TEST_LOADED=1
 
 # =============================================================================
-# PORT OFFSET HELPER
+# PORT CALCULATION - DELEGATED TO COMMON.SH (SSOT)
+# =============================================================================
+# See: scripts/dive-modules/common.sh:get_instance_ports()
 # =============================================================================
 
 ##
-# Get port offset for a spoke instance (for local development)
+# Get port offset for a spoke instance - DELEGATED TO COMMON.SH (SSOT)
 ##
 _get_spoke_port_offset() {
     local spoke="${1:-}"
 
-    # Try NATO countries database first
-    if [ -f "${DIVE_ROOT}/scripts/nato-countries.sh" ]; then
-        if ! type get_country_offset &>/dev/null; then
-            source "${DIVE_ROOT}/scripts/nato-countries.sh"
-        fi
-        local offset=$(get_country_offset "${spoke^^}" 2>/dev/null)
-        if [[ -n "$offset" && "$offset" =~ ^[0-9]+$ ]]; then
-            echo "$offset"
-            return
-        fi
-    fi
-
-    # Fallback for known spokes
-    case "$spoke" in
-        fra) echo 10 ;;
-        est) echo 8 ;;
-        gbr) echo 2 ;;
-        deu) echo 3 ;;
-        *) echo 0 ;;
-    esac
+    # Use SSOT function from common.sh
+    eval "$(get_instance_ports "${spoke^^}")"
+    echo "$SPOKE_PORT_OFFSET"
 }
 
 # =============================================================================

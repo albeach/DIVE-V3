@@ -108,8 +108,6 @@
 /* Footer styling */
 .dive-footer a {
     color: #AE1C28;
-}
-
-.dive-footer a:hover {
+}.dive-footer a:hover {
     color: #21468B;
 }

@@ -780,6 +780,55 @@
         }
       }
     },
+    "cze": {
+      "code": "CZE",
+      "name": "Czechia",
+      "locale": "cs-CZ",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "instances/cze/docker-compose.yml",
+        "projectName": "cze"
+      },
+      "services": {
+        "_comment": "CZE uses cze- prefix on all service names",
+        "frontend": {
+          "name": "frontend-cze",
+          "containerName": "dive-spoke-cze-frontend",
+          "internalPort": 3000,
+          "externalPort": 3006,
+          "protocol": "https",
+          "hostname": "cze-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-cze",
+          "containerName": "dive-spoke-cze-backend",
+          "internalPort": 4000,
+          "externalPort": 4006,
+          "protocol": "https",
+          "hostname": "cze-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-cze",
+          "containerName": "dive-spoke-cze-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8449,
+          "protocol": "https",
+          "hostname": "cze-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-cze",
+          "containerName": "dive-spoke-cze-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27023,
+          "protocol": "mongodb"
+        }
+      }
+    },
     "mne": {
       "code": "MNE",
       "name": "Montenegro",
@@ -881,12 +930,65 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "hun": {
+      "code": "HUN",
+      "name": "Hungary",
+      "locale": "hu-HU",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.hun.yml",
+        "projectName": "hun"
+      },
+      "services": {
+        "frontend": {
+          "name": "frontend-hun",
+          "containerName": "dive-spoke-hun-frontend",
+          "internalPort": 3000,
+          "externalPort": 3013,
+          "protocol": "https",
+          "hostname": "hun-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-hun",
+          "containerName": "dive-spoke-hun-backend",
+          "internalPort": 4000,
+          "externalPort": 4013,
+          "protocol": "https",
+          "hostname": "hun-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-hun",
+          "containerName": "dive-spoke-hun-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8456,
+          "protocol": "https",
+          "hostname": "hun-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-hun",
+          "containerName": "dive-spoke-hun-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27030,
+          "protocol": "mongodb"
+        }
+      },
+      "mongodb": {
+        "database": "dive-v3-hun",
+        "user": "admin"
+      }
     }
   },
   "federation": {
     "model": "hub-spoke",
     "matrix": {
       "usa": [
+        "cze",
         "deu",
         "esp",
         "est",
@@ -898,6 +1000,9 @@
         "lva",
         "mne",
         "nld"
+      ],
+      "cze": [
+        "usa"
       ],
       "fra": [
         "deu",

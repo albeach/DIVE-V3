@@ -1,13 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-lux-1a89ba76",
+    "spokeId": "spoke-lux-62376b02",
     "instanceCode": "LUX",
     "name": "Luxembourg Armed Forces",
     "description": "DIVE V3 Spoke Instance for Luxembourg Armed Forces",
     "country": "LUX",
     "organizationType": "government",
-    "contactEmail": "admin@lux.dive25.com",
-    "registeredSpokeId": "spoke-lux-2feb92bd"
+    "contactEmail": "admin@lux.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -17,7 +16,7 @@
     "apiUrl": "https://localhost:4018",
     "idpUrl": "https://dive-spoke-lux-keycloak:8443",
     "idpPublicUrl": "https://localhost:8461",
-    "kasUrl": "https://localhost:9018"
+    "kasUrl": "https://localhost:10018"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/lux/certs/spoke.crt",
@@ -27,16 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:lux",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-23T01:41:56Z",
-    "activatedAt": "2025-12-22T13:00:00Z",
-    "spokeToken": "Tpf3smrn-ujZ9jfvjiZARSAz_t-7xR97YO9E0k6Aeas"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -49,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-22T01:06:58Z",
-    "lastModified": "2025-12-22T01:06:58Z",
+    "createdAt": "2025-12-27T22:12:52Z",
+    "lastModified": "2025-12-27T22:12:52Z",
     "configHash": ""
   }
 }

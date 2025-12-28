@@ -118,6 +118,8 @@ else
 fi
 
 # Check for instance-specific realm file
+# NOTE: For hub (USA), we always use "dive-v3-broker" as the realm name (not dive-v3-broker-usa)
+# This ensures consistency with backend/frontend configuration
 INSTANCE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 INSTANCE_REALM="${REALM_TEMPLATE_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json"
 if [ -f "${INSTANCE_REALM}" ]; then
@@ -131,8 +133,10 @@ if [ -f "${INSTANCE_REALM}" ]; then
         -e "s|\${API_URL}|${API_URL}|g" \
         -e "s|\${USA_IDP_URL}|${USA_IDP_URL}|g" \
         -e "s|\${USA_IDP_CLIENT_SECRET}|${USA_IDP_CLIENT_SECRET}|g" \
+        -e "s|\"realm\" *: *\"dive-v3-broker-${INSTANCE_LOWER}\"|\"realm\": \"dive-v3-broker\"|g" \
+        -e "s|\"id\" *: *\"dive-v3-broker-${INSTANCE_LOWER}\"|\"id\": \"dive-v3-broker\"|g" \
         "${INSTANCE_REALM}" > "${REALM_IMPORT_DIR}/dive-v3-broker.json"
-    echo "[DIVE] Using instance-specific realm configuration"
+    echo "[DIVE] Using instance-specific realm configuration (normalized to 'dive-v3-broker')"
 fi
 
 echo "[DIVE] Realm import preparation complete"

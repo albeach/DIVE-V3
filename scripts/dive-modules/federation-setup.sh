@@ -36,7 +36,7 @@ fi
 
 HUB_KEYCLOAK_CONTAINER="dive-hub-keycloak"
 HUB_BACKEND_CONTAINER="dive-hub-backend"
-HUB_REALM="dive-v3-broker"
+HUB_REALM="dive-v3-broker-usa"
 
 # =============================================================================
 # CORE HELPERS - Unified Keycloak API, Retry, and Parsing
@@ -362,7 +362,10 @@ resolve_spoke_container() {
 }
 
 ##
-# Get spoke ports from docker-compose or NATO offsets
+# Get spoke ports - DELEGATED TO COMMON.SH (SSOT)
+#
+# This function now delegates to common.sh:get_instance_ports()
+# See: scripts/dive-modules/common.sh for authoritative implementation
 #
 # Arguments:
 #   $1 - Spoke code (uppercase)
@@ -371,43 +374,8 @@ resolve_spoke_container() {
 #   Exports SPOKE_FRONTEND_PORT, SPOKE_KEYCLOAK_HTTPS_PORT, etc.
 ##
 _get_spoke_ports() {
-    local code="${1^^}"
-    local code_lower="${code,,}"
-
-    local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
-
-    if [ -f "$compose_file" ]; then
-        local frontend_port backend_port kc_https_port kc_http_port
-
-        frontend_port=$(grep -E "^\s+-\s+\"[0-9]+:3000\"" "$compose_file" | head -1 | sed 's/.*"\([0-9]*\):3000".*/\1/')
-        backend_port=$(grep -E "^\s+-\s+\"[0-9]+:4000\"" "$compose_file" | head -1 | sed 's/.*"\([0-9]*\):4000".*/\1/')
-        kc_https_port=$(grep -E "^\s+-\s+\"[0-9]+:8443\"" "$compose_file" | head -1 | sed 's/.*"\([0-9]*\):8443".*/\1/')
-        kc_http_port=$(grep -E "^\s+-\s+\"[0-9]+:8080\"" "$compose_file" | head -1 | sed 's/.*"\([0-9]*\):8080".*/\1/')
-
-        if [ -n "$frontend_port" ] && [ -n "$kc_https_port" ]; then
-            local port_offset=$((frontend_port - 3000))
-            echo "SPOKE_PORT_OFFSET=$port_offset"
-            echo "SPOKE_FRONTEND_PORT=${frontend_port}"
-            echo "SPOKE_BACKEND_PORT=${backend_port:-$((4000 + port_offset))}"
-            echo "SPOKE_KEYCLOAK_HTTPS_PORT=${kc_https_port}"
-            echo "SPOKE_KEYCLOAK_HTTP_PORT=${kc_http_port:-$((8080 + port_offset))}"
-    return 0
-        fi
-    fi
-
-    # Fallback to NATO offsets
-    local port_offset=0
-    if [[ -v NATO_PORT_OFFSETS[$code] ]]; then
-        port_offset="${NATO_PORT_OFFSETS[$code]}"
-    elif type -t get_country_offset &>/dev/null; then
-        port_offset=$(get_country_offset "$code" 2>/dev/null || echo "0")
-    fi
-
-    echo "SPOKE_PORT_OFFSET=$port_offset"
-    echo "SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
-    echo "SPOKE_BACKEND_PORT=$((4000 + port_offset))"
-    echo "SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + port_offset))"
-    echo "SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + port_offset))"
+    # Delegate to common.sh (SSOT)
+    get_instance_ports "$@"
 }
 
 # =============================================================================
@@ -495,28 +463,45 @@ _clear_federation_state() {
 # =============================================================================
 
 ##
-# Get Hub Keycloak admin token
+# Get Hub Keycloak admin token (with 15-retry logic for resilience)
 ##
 get_hub_admin_token() {
     ensure_dive_root
+    local max_attempts=15
+    local delay=3
     local admin_pass=""
 
-        local hub_files=(
-            "${DIVE_ROOT}/.env.hub"
-            "${DIVE_ROOT}/instances/usa/.env"
-            "${DIVE_ROOT}/instances/hub/.env"
-        )
+    local hub_files=(
+        "${DIVE_ROOT}/.env.hub"
+        "${DIVE_ROOT}/instances/usa/.env"
+        "${DIVE_ROOT}/instances/hub/.env"
+    )
 
-        for hub_env in "${hub_files[@]}"; do
-            if [ -f "$hub_env" ]; then
-                admin_pass=$(grep -E '^KEYCLOAK_ADMIN_PASSWORD=' "$hub_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    for hub_env in "${hub_files[@]}"; do
+        if [ -f "$hub_env" ]; then
+            admin_pass=$(grep -E '^KEYCLOAK_ADMIN_PASSWORD=' "$hub_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
             [ -z "$admin_pass" ] && admin_pass=$(grep -E '^KEYCLOAK_ADMIN_PASSWORD_USA=' "$hub_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
             [ -n "$admin_pass" ] && break
-            fi
-        done
+        fi
+    done
 
-    if [ -z "$admin_pass" ]; then
-        log_error "Could not find Hub Keycloak admin password"
+    # If not in files, try container with retry
+    if [ -z "$admin_pass" ] || [ ${#admin_pass} -lt 10 ]; then
+        log_verbose "Retrieving Hub password from container..."
+        for attempt in $(seq 1 $max_attempts); do
+            admin_pass=$(docker exec "$HUB_KEYCLOAK_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+
+            if [ -n "$admin_pass" ] && [ ${#admin_pass} -gt 10 ] && [[ ! "$admin_pass" =~ ^(admin|password|KeycloakAdmin|test|default)$ ]]; then
+                log_verbose "Retrieved Hub password from container (attempt $attempt)"
+                break
+            fi
+
+            [ $attempt -lt $max_attempts ] && sleep $delay
+        done
+    fi
+
+    if [ -z "$admin_pass" ] || [ ${#admin_pass} -lt 10 ]; then
+        log_error "Could not find valid Hub Keycloak admin password after $max_attempts attempts"
         return 1
     fi
 
@@ -536,24 +521,49 @@ get_hub_admin_token() {
 }
 
 ##
-# Get spoke Keycloak admin token
+# Get spoke Keycloak admin token (with 15-retry logic for resilience)
 ##
 get_spoke_admin_token() {
     local spoke_code="${1:?Spoke code required}"
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
+    local max_attempts=15
+    local delay=3
 
     ensure_dive_root
 
     local admin_pass=""
-        local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
-        if [ -f "$spoke_env" ]; then
-            admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+
+    # First try: spoke's .env file
+    if [ -f "$spoke_env" ]; then
+        admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
         [ -z "$admin_pass" ] && admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     fi
 
-    if [ -z "$admin_pass" ]; then
-        log_error "Could not find spoke Keycloak admin password for $code_upper"
+    # If not in .env or invalid, try container with retry
+    if [ -z "$admin_pass" ] || [ ${#admin_pass} -lt 10 ]; then
+        local keycloak_container="dive-spoke-${code_lower}-keycloak"
+
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${keycloak_container}$"; then
+            log_verbose "Retrieving ${code_upper} password from container..."
+
+            for attempt in $(seq 1 $max_attempts); do
+                admin_pass=$(docker exec "$keycloak_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+
+                # Validate password quality (length > 10, not a default)
+                if [ -n "$admin_pass" ] && [ ${#admin_pass} -gt 10 ] && [[ ! "$admin_pass" =~ ^(admin|password|KeycloakAdmin|test|default)$ ]]; then
+                    log_verbose "Retrieved ${code_upper} password from container (attempt $attempt)"
+                    break
+                fi
+
+                [ $attempt -lt $max_attempts ] && sleep $delay
+            done
+        fi
+    fi
+
+    if [ -z "$admin_pass" ] || [ ${#admin_pass} -lt 10 ]; then
+        log_error "Could not find valid spoke Keycloak admin password for $code_upper after $max_attempts attempts"
         return 1
     fi
 
@@ -769,7 +779,7 @@ ensure_hub_client_in_spoke() {
     fi
 
     # Create client
-    local redirect_uris='["https://localhost:8443/realms/dive-v3-broker/broker/'${code_lower}'-idp/endpoint","https://localhost:8443/realms/dive-v3-broker/broker/'${code_lower}'-idp/endpoint/*","https://hub.dive25.com/*"]'
+    local redirect_uris='["https://localhost:8443/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint","https://localhost:8443/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint/*","https://hub.dive25.com/*"]'
     local web_origins='["https://localhost:8443","https://localhost:3000","https://hub.dive25.com"]'
 
     if docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh create clients -r "$realm" \
@@ -852,7 +862,7 @@ ensure_hub_idp_client_in_spoke() {
 
     local hub_idp_secret=""
     if [ -n "$hub_token" ] && [ "$hub_token" != "null" ]; then
-        hub_idp_secret=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${code_lower}-idp" \
+        hub_idp_secret=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" \
             -H "Authorization: Bearer $hub_token" | jq -r '.config.clientSecret // empty')
     fi
 
@@ -863,7 +873,7 @@ ensure_hub_idp_client_in_spoke() {
     fi
 
     # Redirect URIs for Hub's broker endpoint
-    local redirect_uris='["https://localhost:8443/realms/dive-v3-broker/broker/'${code_lower}'-idp/endpoint","https://localhost:8443/realms/dive-v3-broker/broker/'${code_lower}'-idp/endpoint/*","https://usa-idp.dive25.com/realms/dive-v3-broker/broker/'${code_lower}'-idp/endpoint","https://usa-idp.dive25.com/realms/dive-v3-broker/broker/'${code_lower}'-idp/endpoint/*"]'
+    local redirect_uris='["https://localhost:8443/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint","https://localhost:8443/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint/*","https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint","https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint/*"]'
     local web_origins='["https://localhost:8443","https://localhost:3000","https://usa-idp.dive25.com","https://usa-app.dive25.com"]'
 
     if [ -n "$existing_client" ]; then
@@ -1394,26 +1404,49 @@ setup_claims() {
         log_success "Hub client scopes assigned"
     fi
 
-    # Spoke side: Create IdP mappers
+    # Spoke side: Create IdP mappers for usa-idp
     local spoke_token
     spoke_token=$(get_spoke_admin_token "$spoke") || return 1
 
-    local keycloak_container="${spoke_lower}-keycloak-${spoke_lower}-1"
+    local keycloak_container="dive-spoke-${spoke_lower}-keycloak"
     local realm="dive-v3-broker-${spoke_lower}"
 
     local mappers=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI")
+    local created=0
+
     for mapper in "${mappers[@]}"; do
-        local mapper_json="{\"name\": \"${mapper}-mapper\", \"identityProviderMapper\": \"oidc-user-attribute-idp-mapper\", \"identityProviderAlias\": \"usa-idp\", \"config\": {\"claim\": \"${mapper}\", \"user.attribute\": \"${mapper}\", \"syncMode\": \"FORCE\"}}"
+        # Check if mapper already exists
+        local existing
+        existing=$(docker exec "$keycloak_container" curl -sk \
+            "https://localhost:8443/admin/realms/${realm}/identity-provider/instances/usa-idp/mappers" \
+            -H "Authorization: Bearer ${spoke_token}" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty")
 
-        docker exec "$keycloak_container" curl -s -o /dev/null \
-            -X POST "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp/mappers" \
+        if [ -n "$existing" ]; then
+            log_verbose "IdP mapper '$mapper' already exists, skipping"
+            continue
+        fi
+
+        local mapper_json="{\"name\": \"${mapper}\", \"identityProviderMapper\": \"oidc-user-attribute-idp-mapper\", \"identityProviderAlias\": \"usa-idp\", \"config\": {\"claim\": \"${mapper}\", \"user.attribute\": \"${mapper}\", \"syncMode\": \"FORCE\"}}"
+
+        local result
+        result=$(docker exec "$keycloak_container" curl -sk -o /dev/null -w "%{http_code}" \
+            -X POST "https://localhost:8443/admin/realms/${realm}/identity-provider/instances/usa-idp/mappers" \
             -H "Authorization: Bearer ${spoke_token}" \
-        -H "Content-Type: application/json" \
-            -d "${mapper_json}" 2>/dev/null
-    done
-    log_success "Spoke IdP mappers created"
+            -H "Content-Type: application/json" \
+            -d "${mapper_json}" 2>/dev/null)
 
-        return 0
+        if [ "$result" = "201" ]; then
+            created=$((created + 1))
+        fi
+    done
+
+    if [ $created -gt 0 ]; then
+        log_success "Created $created IdP mappers for usa-idp"
+    else
+        log_success "Spoke IdP mappers already configured"
+    fi
+
+    return 0
 }
 
 # =============================================================================

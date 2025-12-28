@@ -50,23 +50,58 @@ spoke_up() {
     # Ensure shared network exists (local dev only)
     ensure_shared_network
 
-    # Pre-deployment cleanup: Remove stale containers
+    # Pre-deployment cleanup: Remove ALL stale/orphaned containers for this spoke
     cleanup_stale_containers() {
         local code_lower="$1"
-        log_verbose "Checking for stale containers before deployment..."
+        log_verbose "Cleaning up stale/orphaned containers before deployment..."
 
-        # Check for conflicting containers
-        for container in dive-spoke-${code_lower}-{frontend,backend,redis,keycloak,postgres,mongodb,opa}; do
+        # Get all containers matching this spoke (running or stopped)
+        local all_containers=$(docker ps -a --format '{{.Names}}' | grep "dive-spoke-${code_lower}-" 2>/dev/null || true)
+
+        if [ -n "$all_containers" ]; then
+            for container in $all_containers; do
+                # Check if container is orphaned (network removed) or stale
+                local container_network=$(docker inspect "$container" --format '{{range .NetworkSettings.Networks}}{{.NetworkID}}{{end}}' 2>/dev/null)
+                local container_status=$(docker inspect "$container" --format '{{.State.Status}}' 2>/dev/null)
+
+                # Remove if: exited, dead, or orphaned (no network connectivity)
+                local should_remove=false
+
+                if [[ "$container_status" == "exited" ]] || [[ "$container_status" == "dead" ]]; then
+                    should_remove=true
+                    log_verbose "Removing stopped container: $container"
+                elif [ -z "$container_network" ]; then
+                    should_remove=true
+                    log_verbose "Removing orphaned container (no network): $container"
+                else
+                    # Check if the container's expected network still exists
+                    local expected_network="${code_lower}_dive-${code_lower}-network"
+                    if ! docker network inspect "$expected_network" >/dev/null 2>&1; then
+                        # Network doesn't exist but container does - orphaned
+                        should_remove=true
+                        log_verbose "Removing orphaned container (network gone): $container"
+                    fi
+                fi
+
+                if [ "$should_remove" = true ]; then
+                    docker rm -f "$container" 2>/dev/null || true
+                fi
+            done
+        fi
+
+        # Also clean up any conflicting containers that docker-compose might create
+        for service in frontend backend redis keycloak postgres mongodb opa kas opal-client; do
+            local container="dive-spoke-${code_lower}-${service}"
             if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
-                local container_status=$(docker ps -a --filter "name=${container}" --format '{{.Status}}')
-                if echo "$container_status" | grep -q "Exited\|Dead"; then
-                    log_verbose "Removing stale container: $container ($container_status)"
+                local status=$(docker inspect "$container" --format '{{.State.Status}}' 2>/dev/null)
+                if [[ "$status" != "running" ]]; then
+                    log_verbose "Removing non-running container: $container ($status)"
                     docker rm -f "$container" 2>/dev/null || true
                 fi
             fi
         done
 
-        # Verify network connectivity
+        # Verify federation network exists
         if ! docker network inspect dive-shared >/dev/null 2>&1; then
             log_warn "Federation network 'dive-shared' not found, creating..."
             docker network create dive-shared 2>/dev/null || true
@@ -147,28 +182,14 @@ spoke_up() {
         log_success "Spoke services started"
         echo ""
 
-        # Auto-sync secrets to prevent NextAuth "Invalid client credentials" errors
-        # CRITICAL: This MUST run on every restart to sync Keycloak client secrets
-        log_step "Synchronizing frontend secrets with Keycloak..."
-        if ! spoke_sync_secrets "$instance_code"; then
-            log_error "Secret synchronization failed - NextAuth will not work!"
-            log_error "Run manually: ./dive --instance $code_lower spoke sync-secrets"
-            return 1
-        fi
-        log_success "Frontend secrets synchronized"
-
-        # Apply Terraform (MFA flows, protocol mappers, etc.)
-        log_step "Applying Terraform configuration (MFA flows)..."
-        _spoke_apply_terraform "$instance_code" || log_warn "Terraform apply had issues (MFA may not be configured)"
-
-        # Check if initialization has been done
+        # Check if initialization has been done FIRST (creates Keycloak realm/client)
         local init_marker="${spoke_dir}/.initialized"
         if [ ! -f "$init_marker" ]; then
             echo ""
             echo -e "${CYAN}Running post-deployment initialization...${NC}"
             echo ""
 
-            # Run initialization scripts
+            # Run initialization scripts (creates Keycloak realm, client, users, NextAuth tables)
             local init_script="${DIVE_ROOT}/scripts/spoke-init/init-all.sh"
             if [ -f "$init_script" ]; then
                 cd "${DIVE_ROOT}"
@@ -188,6 +209,21 @@ spoke_up() {
         else
             log_info "Spoke already initialized (skipping post-deployment setup)"
         fi
+
+        # Auto-sync secrets AFTER initialization (Keycloak client must exist first)
+        # CRITICAL: This MUST run on every restart to sync Keycloak client secrets
+        log_step "Synchronizing frontend secrets with Keycloak..."
+        cd "$spoke_dir"
+        if ! spoke_sync_secrets "$instance_code"; then
+            log_warn "Secret synchronization failed - may need manual intervention"
+            log_info "Run manually: ./dive --instance $code_lower spoke sync-secrets"
+        else
+            log_success "Frontend secrets synchronized"
+        fi
+
+        # Apply Terraform (MFA flows, protocol mappers, etc.)
+        log_step "Applying Terraform configuration (MFA flows)..."
+        _spoke_apply_terraform "$instance_code" || log_warn "Terraform apply had issues (MFA may not be configured)"
 
         echo ""
         echo "  View logs:    ./dive spoke logs"

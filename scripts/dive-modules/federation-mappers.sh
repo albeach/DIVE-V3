@@ -175,7 +175,7 @@ federation_mappers_apply() {
         return 1
     fi
 
-    local realm="dive-v3-broker"
+    local realm="dive-v3-broker-usa"
     [ "$instance_lower" != "usa" ] && realm="dive-v3-broker-${instance_lower}"
 
     local client_id="dive-v3-cross-border-client"
@@ -282,7 +282,7 @@ federation_mappers_verify() {
         return 1
     fi
 
-    local realm="dive-v3-broker"
+    local realm="dive-v3-broker-usa"
     [ "$instance_lower" != "usa" ] && realm="dive-v3-broker-${instance_lower}"
 
     # Get client ID

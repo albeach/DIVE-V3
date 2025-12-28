@@ -479,9 +479,7 @@ test_decision_structure_deny if {
 
 # =============================================================================
 # 10. CROSS-INSTANCE FEDERATED SEARCH TESTS
-# =============================================================================
-
-# Test: Allow federated search for authenticated user
+# =============================================================================# Test: Allow federated search for authenticated user
 test_allow_federated_search if {
     federation.allow_federated_search with input as {
         "subject": {
