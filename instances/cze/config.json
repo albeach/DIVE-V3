@@ -1,0 +1,54 @@
+{
+  "identity": {
+    "spokeId": "spoke-cze-ff14436d",
+    "instanceCode": "CZE",
+    "name": "Czech Armed Forces",
+    "description": "DIVE V3 Spoke Instance for Czech Armed Forces",
+    "country": "CZE",
+    "organizationType": "government",
+    "contactEmail": "admin@cze.dive25.com",
+    "registeredSpokeId": "spoke-cze-62a8ff89"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3006",
+    "apiUrl": "https://localhost:4006",
+    "idpUrl": "https://dive-spoke-cze-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8449",
+    "kasUrl": "https://localhost:10006"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/cze/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/cze/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/cze/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/cze/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "pending",
+    "requestedScopes": [
+      "policy:base",
+      "policy:cze",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ],
+    "registeredAt": "2025-12-28T00:30:47Z"
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/cze/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/cze/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2025-12-28T00:30:26Z",
+    "lastModified": "2025-12-28T00:30:26Z",
+    "configHash": ""
+  }
+}

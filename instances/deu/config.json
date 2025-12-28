@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-deu-cdb6f9fb",
+    "spokeId": "spoke-deu-8a7be2cc",
     "instanceCode": "DEU",
-    "name": "DEU Instance",
-    "description": "DIVE V3 Spoke Instance for DEU Instance",
+    "name": "--help",
+    "description": "DIVE V3 Spoke Instance for --help",
     "country": "DEU",
     "organizationType": "government",
     "contactEmail": "admin@deu.dive25.com",
-    "registeredSpokeId": "spoke-deu-06c4b630"
+    "registeredSpokeId": "spoke-deu-a26d80c5"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -34,7 +34,7 @@
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-23T00:59:13Z"
+    "registeredAt": "2025-12-27T04:16:17Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -47,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-23T00:55:10Z",
-    "lastModified": "2025-12-23T00:55:10Z",
+    "createdAt": "2025-12-27T04:14:54Z",
+    "lastModified": "2025-12-27T04:14:54Z",
     "configHash": ""
   }
 }

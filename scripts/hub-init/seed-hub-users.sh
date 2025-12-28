@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
 # DIVE V3 Hub User Seeding Script
-# 
+#
 # Purpose: Create test users with proper DIVE attributes on the Hub (USA)
-# 
+#
 # CRITICAL: Keycloak 26+ requires User Profile configuration BEFORE
 # custom attributes can be stored on users. This script:
 #   1. Configures User Profile with DIVE attributes (clearance, country, etc.)
@@ -39,8 +39,8 @@ log_info()  { echo -e "${CYAN}ℹ${NC} $1"; }
 
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
-REALM_NAME="${REALM_NAME:-dive-v3-broker}"
-CLIENT_ID="${CLIENT_ID:-dive-v3-client-broker}"
+REALM_NAME="${REALM_NAME:-dive-v3-broker-usa}"
+CLIENT_ID="${CLIENT_ID:-dive-v3-broker-usa}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
 TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-TestUser2025!Pilot}"
@@ -127,7 +127,7 @@ if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
     # Fix acpCOI mapper
     MAPPER_ID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name == "acpCOI") | .id')
-    
+
     if [ -n "$MAPPER_ID" ] && [ "$MAPPER_ID" != "null" ]; then
         curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${MAPPER_ID}" \
             -H "Authorization: Bearer $TOKEN" \
@@ -161,12 +161,12 @@ if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
         curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${mapper_id}" \
             -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1
     done
-    
+
     # Create AMR mapper (user attribute based - reads from user.attributes.amr)
     # This is set based on user's configured credentials (pwd, otp, hwk)
     AMR_MAPPER=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name | contains("amr")) | .name')
-    
+
     if [ -z "$AMR_MAPPER" ]; then
         curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
             -H "Authorization: Bearer $TOKEN" \
@@ -201,7 +201,7 @@ log_step "Creating DIVE roles..."
 for role in "dive-admin" "dive-user"; do
     ROLE_EXISTS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/${role}" \
         -H "Authorization: Bearer $TOKEN" -o /dev/null -w "%{http_code}")
-    
+
     if [ "$ROLE_EXISTS" != "200" ]; then
         curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles" \
             -H "Authorization: Bearer $TOKEN" \
@@ -225,17 +225,17 @@ create_user() {
     local coi="$6"
     local password="$7"
     local is_admin="$8"
-    
+
     # Build COI array
     local coi_json="[]"
     if [ -n "$coi" ]; then
         coi_json=$(echo "$coi" | tr ',' '\n' | jq -R . | jq -s .)
     fi
-    
+
     # Check if user exists
     local user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
-    
+
     if [ -n "$user_id" ]; then
         # Get user's credentials to determine AMR
         local creds=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/credentials" \
@@ -243,7 +243,7 @@ create_user() {
         local has_pwd=$(echo "$creds" | jq 'any(.[]; .type == "password")')
         local has_otp=$(echo "$creds" | jq 'any(.[]; .type == "otp")')
         local has_webauthn=$(echo "$creds" | jq 'any(.[]; .type == "webauthn" or .type == "webauthn-passwordless")')
-        
+
         # Build AMR array based on credentials AND clearance requirements
         # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
         local amr='["pwd"'
@@ -260,7 +260,7 @@ create_user() {
             [ "$has_webauthn" == "true" ] && amr="${amr},\"hwk\""
         fi
         amr="${amr}]"
-        
+
         # Update existing user with credential-based AMR
         curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
             -H "Authorization: Bearer $TOKEN" \
@@ -287,7 +287,7 @@ create_user() {
         if [ "$clearance" == "TOP_SECRET" ]; then
             initial_amr='["pwd","hwk"]'
         fi
-        
+
         # Create new user
         local http_code=$(curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
             -H "Authorization: Bearer $TOKEN" \
@@ -308,14 +308,14 @@ create_user() {
                     \"amr\": ${initial_amr}
                 }
             }" -o /dev/null -w "%{http_code}")
-        
+
         if [ "$http_code" == "201" ]; then
             log_success "Created: ${username} (${clearance}, amr=${initial_amr})"
-            
+
             # Get new user ID and assign roles
             user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${username}" \
                 -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
-            
+
             # Assign dive-user role
             local role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-user" \
                 -H "Authorization: Bearer $TOKEN" | jq -r '.id')
@@ -325,7 +325,7 @@ create_user() {
                     -H "Content-Type: application/json" \
                     -d "[{\"id\": \"${role_id}\", \"name\": \"dive-user\"}]" > /dev/null 2>&1
             fi
-            
+
             # Assign dive-admin role if admin
             if [ "$is_admin" == "true" ]; then
                 local admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" \

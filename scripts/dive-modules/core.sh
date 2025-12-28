@@ -285,7 +285,7 @@ broker_realm_exists() {
 
 # Bootstrap broker realm via kcadm (DEPRECATED - use realm JSON import instead)
 bootstrap_broker_realm() {
-    local realm="dive-v3-broker"
+    local realm="dive-v3-broker-usa"
     local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"
     local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"

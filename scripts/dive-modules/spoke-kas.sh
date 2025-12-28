@@ -25,19 +25,13 @@ fi
 # SPOKE KAS MANAGEMENT
 # =============================================================================
 
-# Get spoke ports (wrapper around shared function)
+# Get spoke ports - DELEGATED TO COMMON.SH (SSOT)
 _spoke_kas_get_ports() {
     local code="$1"
-    local code_upper="${code^^}"
-    local port_offset=0
 
-    if is_nato_country "$code_upper" 2>/dev/null; then
-        port_offset=$(get_country_offset "$code_upper")
-    else
-        port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20) + 48 ))
-    fi
-
-    echo "SPOKE_KAS_PORT=$((9000 + port_offset))"
+    # Use SSOT function from common.sh
+    eval "$(get_instance_ports "$code")"
+    echo "SPOKE_KAS_PORT=$SPOKE_KAS_PORT"
 }
 
 # Initialize KAS for a spoke instance

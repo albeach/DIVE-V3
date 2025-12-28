@@ -19,6 +19,114 @@ fi
 export DIVE_SPOKE_INIT_LOADED=1
 
 # =============================================================================
+# KAS AUTO-REGISTRATION HELPER
+# =============================================================================
+# Automatically registers a spoke's KAS server in config/kas-registry.json
+# This ensures ZTDF encryption works without manual configuration edits
+# =============================================================================
+
+_auto_register_kas() {
+    local code_upper="$1"
+    local code_lower="$2"
+    local kas_port="$3"
+
+    local kas_registry="${DIVE_ROOT}/config/kas-registry.json"
+
+    if [ ! -f "$kas_registry" ]; then
+        log_warn "KAS registry not found: $kas_registry"
+        return 0  # Non-fatal
+    fi
+
+    # Check if KAS entry already exists
+    if jq -e ".kasServers[] | select(.countryCode == \"$code_upper\")" "$kas_registry" >/dev/null 2>&1; then
+        log_info "KAS entry for $code_upper already exists (skipping registration)"
+        return 0
+    fi
+
+    log_info "Auto-registering $code_upper in KAS registry..."
+
+    # Get country name from NATO database
+    local country_name="$code_upper"
+    if declare -F get_country_name >/dev/null 2>&1; then
+        country_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
+    fi
+
+    # Create KAS entry JSON
+    local kas_entry=$(cat <<EOF
+{
+  "kasId": "${code_lower}-kas",
+  "organization": "$country_name",
+  "countryCode": "$code_upper",
+  "kasUrl": "https://localhost:${kas_port}/api/kas",
+  "internalKasUrl": "http://kas-${code_lower}:8080",
+  "authMethod": "jwt",
+  "authConfig": {
+    "jwtIssuer": "https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}",
+    "jwtAudience": "dive-v3-client-broker"
+  },
+  "trustLevel": "high",
+  "supportedCountries": ["$code_upper"],
+  "supportedCOIs": ["NATO", "NATO-COSMIC", "EU-RESTRICTED"],
+  "policyTranslation": {
+    "clearanceMapping": {
+      "UNCLASSIFIED": "UNCLASSIFIED",
+      "RESTRICTED": "RESTRICTED",
+      "CONFIDENTIAL": "CONFIDENTIAL",
+      "SECRET": "SECRET",
+      "TOP_SECRET": "TOP_SECRET"
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
+    "contact": "kas-admin@${code_lower}.dive25.com",
+    "lastVerified": "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)",
+    "healthEndpoint": "/health",
+    "requestKeyEndpoint": "/request-key"
+  }
+}
+EOF
+)
+
+    # Add KAS server to registry
+    local temp_file=$(mktemp)
+    if jq ".kasServers += [$kas_entry]" "$kas_registry" > "$temp_file" 2>/dev/null; then
+        mv "$temp_file" "$kas_registry"
+    else
+        log_error "Failed to add KAS entry (jq error)"
+        rm -f "$temp_file"
+        return 1
+    fi
+
+    # Update trust matrix - add bidirectional trust with USA and other major partners
+    local default_partners=("usa" "fra" "gbr" "deu")
+
+    # Add this spoke to all partners' trust lists
+    for partner in "${default_partners[@]}"; do
+        local temp_file2=$(mktemp)
+        if jq ".federationTrust.trustMatrix[\"${partner}-kas\"] += [\"${code_lower}-kas\"] | .federationTrust.trustMatrix[\"${partner}-kas\"] |= unique" "$kas_registry" > "$temp_file2" 2>/dev/null; then
+            mv "$temp_file2" "$kas_registry"
+        else
+            rm -f "$temp_file2"
+        fi
+    done
+
+    # Add partners to this spoke's trust list
+    local partners_json='["usa-kas","fra-kas","gbr-kas","deu-kas"]'
+
+    local temp_file3=$(mktemp)
+    if jq ".federationTrust.trustMatrix[\"${code_lower}-kas\"] = $partners_json" "$kas_registry" > "$temp_file3" 2>/dev/null; then
+        mv "$temp_file3" "$kas_registry"
+        log_success "KAS entry registered for $code_upper (trusted by: USA, FRA, GBR, DEU)"
+    else
+        log_warn "Failed to update trust matrix"
+        rm -f "$temp_file3"
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # SPOKE INITIALIZATION FUNCTIONS
 # =============================================================================
 
@@ -537,6 +645,12 @@ EOF
     chmod 644 "$spoke_dir/certs/spoke.csr"
 
     echo ""
+
+    # ==========================================================================
+    # AUTO-REGISTER KAS ENTRY (Best Practice: Configuration Automation)
+    # ==========================================================================
+    _auto_register_kas "$code_upper" "$code_lower" "$kas_port"
+
     log_success "Spoke instance initialized: $code_upper"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -721,9 +835,12 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: \${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}
       KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
-      KC_HOSTNAME: localhost
+      # Set KC_HOSTNAME_URL to ensure consistent token issuer regardless of access method
+      # This prevents "Invalid token issuer" errors during refresh token flows
       KC_HOSTNAME_URL: https://localhost:${keycloak_https_port}
-      KC_HOSTNAME_ADMIN_URL: https://localhost:${keycloak_https_port}
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
@@ -750,6 +867,7 @@ services:
       - "${opa_host_port}:8181"
     volumes:
       - ../../policies:/policies:ro
+      - ./certs:/certs:ro
     networks:
       - dive-${code_lower}-network
 
@@ -856,6 +974,8 @@ services:
       AUTH_KEYCLOAK_SECRET: \${KEYCLOAK_CLIENT_SECRET_${code_upper}:?set KEYCLOAK_CLIENT_SECRET_${code_upper}}
       AUTH_KEYCLOAK_ISSUER: https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower}
       AUTH_TRUST_HOST: "true"
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/rootCA.pem
       NEXTAUTH_URL: https://localhost:${frontend_host_port}
       NEXTAUTH_SECRET: \${NEXTAUTH_SECRET_${code_upper}:?set NEXTAUTH_SECRET_${code_upper}}
       DATABASE_URL: postgresql://keycloak:\${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}@postgres-${code_lower}:5432/keycloak
@@ -966,10 +1086,49 @@ _spoke_init_legacy() {
         return 1
     fi
 
-    # Validate code is 3 letters
+    # CODE FORMAT VALIDATION
+    # 1. Length must be exactly 3 characters (ISO 3166-1 alpha-3)
     if [ ${#instance_code} -ne 3 ]; then
         log_error "Instance code must be exactly 3 characters (ISO 3166-1 alpha-3)"
+        echo "  Examples: USA, FRA, POL, GBR, EST"
         return 1
+    fi
+
+    # 2. Must be alphabetic only (no numbers or special characters)
+    if ! [[ "$instance_code" =~ ^[A-Za-z]{3}$ ]]; then
+        log_error "Instance code must contain only letters (A-Z)"
+        echo "  Invalid: $instance_code"
+        echo "  Valid examples: USA, FRA, POL"
+        return 1
+    fi
+
+    # 3. Normalize to uppercase
+    instance_code="${instance_code^^}"
+
+    # 4. NATO country validation (warning, not blocking)
+    if type -t is_nato_country &>/dev/null && ! is_nato_country "$instance_code" 2>/dev/null; then
+        if type -t is_partner_nation &>/dev/null && ! is_partner_nation "$instance_code" 2>/dev/null; then
+            log_warn "Warning: '$instance_code' is not a recognized NATO country or partner nation"
+            log_warn "Port allocation will use hash-based fallback (offsets 48+)"
+            echo ""
+            echo "  Valid NATO countries (32):"
+            if type -t list_nato_countries &>/dev/null; then
+                list_nato_countries 2>/dev/null | head -5
+                echo "  ... (see './dive spoke list-countries' for full list)"
+            fi
+            echo ""
+            echo "  This may cause port conflicts if multiple non-NATO codes are used."
+            echo ""
+            read -p "  Continue anyway? (yes/no): " confirm
+            if [ "$confirm" != "yes" ]; then
+                log_info "Cancelled"
+                return 1
+            fi
+        else
+            log_info "Partner nation detected: $instance_code (will use offsets 32-39)"
+        fi
+    else
+        log_info "NATO country detected: $instance_code"
     fi
 
     # Use default values and call internal init

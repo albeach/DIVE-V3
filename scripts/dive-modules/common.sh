@@ -675,7 +675,8 @@ get_instance_ports() {
     fi
 
     # Export calculated ports (can be sourced or eval'd)
-    # Port scheme ensures no conflicts for 48+ simultaneous spokes
+    # Port scheme ensures no conflicts for 100+ simultaneous spokes
+    # FIXED: Changed OPA from 8181+(offset*10) to 9100+offset to avoid conflicts
     echo "export SPOKE_PORT_OFFSET=$port_offset"
     echo "export SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
     echo "export SPOKE_BACKEND_PORT=$((4000 + port_offset))"
@@ -684,8 +685,8 @@ get_instance_ports() {
     echo "export SPOKE_POSTGRES_PORT=$((5432 + port_offset))"
     echo "export SPOKE_MONGODB_PORT=$((27017 + port_offset))"
     echo "export SPOKE_REDIS_PORT=$((6379 + port_offset))"
-    echo "export SPOKE_OPA_PORT=$((8181 + port_offset * 10))"
-    echo "export SPOKE_KAS_PORT=$((9000 + port_offset))"
+    echo "export SPOKE_OPA_PORT=$((9100 + port_offset))"
+    echo "export SPOKE_KAS_PORT=$((10000 + port_offset))"
 }
 
 # Ensure DIVE_ROOT is set

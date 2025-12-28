@@ -25,87 +25,32 @@ fi
 export DIVE_FEDERATION_LINK_LOADED=1
 
 # =============================================================================
-# PORT OFFSET HELPER (uses nato-countries.sh if available)
+# PORT CALCULATION - DELEGATED TO COMMON.SH (SSOT)
+# =============================================================================
+# This module now uses common.sh:get_instance_ports() for ALL port calculations
+# See: scripts/dive-modules/common.sh for authoritative implementation
 # =============================================================================
 
 ##
-# Get port offset for an instance (hub=0, spokes use NATO offset)
-#
-# Arguments:
-#   $1 - Instance code (USA, FRA, GBR, etc.)
-#
-# Returns:
-#   Port offset number
+# Get backend port for an instance - DELEGATED TO COMMON.SH (SSOT)
 ##
 _get_instance_port() {
     local code="${1^^}"
 
-    # USA hub is always base port
-    if [ "$code" = "USA" ]; then
-        echo 4000
-        return
-    fi
-
-    # Try NATO countries database first
-    if [ -f "${DIVE_ROOT}/scripts/nato-countries.sh" ]; then
-        if ! type get_country_offset &>/dev/null; then
-            source "${DIVE_ROOT}/scripts/nato-countries.sh"
-        fi
-        local offset=$(get_country_offset "$code" 2>/dev/null)
-        if [[ -n "$offset" && "$offset" =~ ^[0-9]+$ ]]; then
-            echo $((4000 + offset))
-            return
-        fi
-    fi
-
-    # Fallback to known offsets
-    case "$code" in
-        FRA) echo 4010 ;;
-        DEU) echo 4002 ;;
-        GBR) echo 4003 ;;
-        CAN) echo 4004 ;;
-        NZL) echo 4005 ;;
-        EST) echo 4008 ;;
-        LVA) echo 4009 ;;
-        LTU) echo 4011 ;;
-        POL) echo 4012 ;;
-        ALB) echo 4013 ;;
-        BEL) echo 4014 ;;
-        *) echo 4000 ;;
-    esac
+    # Use SSOT function from common.sh
+    eval "$(get_instance_ports "$code")"
+    echo "$SPOKE_BACKEND_PORT"
 }
 
 ##
-# Get Keycloak port for an instance
+# Get Keycloak port for an instance - DELEGATED TO COMMON.SH (SSOT)
 ##
 _get_keycloak_port() {
     local code="${1^^}"
 
-    if [ "$code" = "USA" ]; then
-        echo 8443
-        return
-    fi
-
-    # Try NATO countries database first
-    if [ -f "${DIVE_ROOT}/scripts/nato-countries.sh" ]; then
-        if ! type get_country_offset &>/dev/null; then
-            source "${DIVE_ROOT}/scripts/nato-countries.sh"
-        fi
-        local offset=$(get_country_offset "$code" 2>/dev/null)
-        if [[ -n "$offset" && "$offset" =~ ^[0-9]+$ ]]; then
-            echo $((8443 + offset))
-            return
-        fi
-    fi
-
-    # Fallback
-    case "$code" in
-        FRA) echo 8453 ;;
-        DEU) echo 8446 ;;
-        GBR) echo 8445 ;;
-        EST) echo 8451 ;;
-        *) echo 8443 ;;
-    esac
+    # Use SSOT function from common.sh
+    eval "$(get_instance_ports "$code")"
+    echo "$SPOKE_KEYCLOAK_HTTPS_PORT"
 }
 
 # =============================================================================
@@ -185,7 +130,7 @@ _federation_link_direct() {
     local target_kc_container target_realm
     if [ "$target_upper" = "USA" ]; then
         target_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-        target_realm="dive-v3-broker"
+        target_realm="dive-v3-broker-usa"
     else
         target_kc_container="dive-spoke-${target_lower}-keycloak"
         target_realm="dive-v3-broker-${target_lower}"
@@ -193,7 +138,7 @@ _federation_link_direct() {
 
     local source_realm
     if [ "$source_upper" = "USA" ]; then
-        source_realm="dive-v3-broker"
+        source_realm="dive-v3-broker-usa"
     else
         source_realm="dive-v3-broker-${source_lower}"
     fi
@@ -293,6 +238,8 @@ _federation_link_direct() {
     fi
 
     # Create IdP configuration
+    # Note: firstBrokerLoginFlowAlias is empty to enable seamless SSO
+    # trustEmail=true + empty flow = automatic account creation/linking
     local idp_config="{
         \"alias\": \"${idp_alias}\",
         \"displayName\": \"${source_upper} Federation\",
@@ -301,7 +248,7 @@ _federation_link_direct() {
         \"trustEmail\": true,
         \"storeToken\": true,
         \"linkOnly\": false,
-        \"firstBrokerLoginFlowAlias\": \"first broker login\",
+        \"firstBrokerLoginFlowAlias\": \"\",
         \"config\": {
             \"clientId\": \"${federation_client_id}\",
             \"clientSecret\": \"${client_secret}\",
@@ -424,6 +371,20 @@ federation_link() {
     local local_instance="${INSTANCE:-USA}"
     local local_code="${local_instance^^}"
     local local_lower="${local_instance,,}"
+
+    # SELF-LINK VALIDATION: Prevent linking instance to itself
+    if [ "$remote_code" = "$local_code" ]; then
+        log_error "Cannot link instance to itself"
+        echo ""
+        echo "  Local instance:  $local_code"
+        echo "  Remote instance: $remote_code"
+        echo ""
+        echo "To set up federation, link from different instances:"
+        echo "  From USA: ./dive federation link GBR"
+        echo "  From GBR: ./dive --instance gbr federation link USA"
+        echo ""
+        return 1
+    fi
 
     log_step "Linking Identity Provider: ${remote_code} ↔ ${local_code}"
     if [ "$retry_mode" = true ]; then
@@ -576,7 +537,7 @@ federation_verify() {
     local remote_idp_alias="${remote_lower}-idp"
     local local_realm
     if [ "$local_code" = "USA" ]; then
-        local_realm="dive-v3-broker"
+        local_realm="dive-v3-broker-usa"
     else
         local_realm="dive-v3-broker-${local_lower}"
     fi
@@ -635,7 +596,7 @@ federation_verify() {
     local local_idp_alias="${local_lower}-idp"
     local remote_realm
     if [ "$remote_code" = "USA" ]; then
-        remote_realm="dive-v3-broker"
+        remote_realm="dive-v3-broker-usa"
     else
         remote_realm="dive-v3-broker-${remote_lower}"
     fi
@@ -785,7 +746,7 @@ federation_fix() {
     local local_kc_container local_realm
     if [ "$local_code" = "USA" ]; then
         local_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-        local_realm="dive-v3-broker"
+        local_realm="dive-v3-broker-usa"
     else
         local_kc_container="dive-spoke-${local_lower}-keycloak"
         local_realm="dive-v3-broker-${local_lower}"
@@ -808,7 +769,7 @@ federation_fix() {
     local remote_kc_container remote_realm
     if [ "$remote_code" = "USA" ]; then
         remote_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-        remote_realm="dive-v3-broker"
+        remote_realm="dive-v3-broker-usa"
     else
         remote_kc_container="dive-spoke-${remote_lower}-keycloak"
         remote_realm="dive-v3-broker-${remote_lower}"
@@ -851,9 +812,53 @@ federation_fix() {
     echo ""
 
     # ==========================================================================
-    # Step 4: Verify
+    # Step 4: Configure IdP Claim Mappers
     # ==========================================================================
-    echo -e "${CYAN}Step 4: Verifying configuration${NC}"
+    echo -e "${CYAN}Step 4: Configuring IdP claim mappers${NC}"
+
+    # Create IdP mappers for claim passthrough
+    local mappers=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI")
+
+    # Configure mappers for remote-idp in local realm
+    for mapper in "${mappers[@]}"; do
+        local existing
+        existing=$(docker exec "$local_kc_container" curl -sk \
+            "https://localhost:8443/admin/realms/${local_realm}/identity-provider/instances/${remote_lower}-idp/mappers" \
+            -H "Authorization: Bearer ${local_token}" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty" 2>/dev/null)
+
+        if [ -z "$existing" ]; then
+            docker exec "$local_kc_container" curl -sk -o /dev/null \
+                -X POST "https://localhost:8443/admin/realms/${local_realm}/identity-provider/instances/${remote_lower}-idp/mappers" \
+                -H "Authorization: Bearer ${local_token}" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\": \"${mapper}\", \"identityProviderMapper\": \"oidc-user-attribute-idp-mapper\", \"identityProviderAlias\": \"${remote_lower}-idp\", \"config\": {\"claim\": \"${mapper}\", \"user.attribute\": \"${mapper}\", \"syncMode\": \"FORCE\"}}" 2>/dev/null
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} IdP mappers configured for ${remote_lower}-idp in ${local_code}"
+
+    # Configure mappers for local-idp in remote realm
+    for mapper in "${mappers[@]}"; do
+        local existing
+        existing=$(docker exec "$remote_kc_container" curl -sk \
+            "https://localhost:8443/admin/realms/${remote_realm}/identity-provider/instances/${local_lower}-idp/mappers" \
+            -H "Authorization: Bearer ${remote_token}" 2>/dev/null | jq -r ".[] | select(.name==\"${mapper}\") | .name // empty" 2>/dev/null)
+
+        if [ -z "$existing" ]; then
+            docker exec "$remote_kc_container" curl -sk -o /dev/null \
+                -X POST "https://localhost:8443/admin/realms/${remote_realm}/identity-provider/instances/${local_lower}-idp/mappers" \
+                -H "Authorization: Bearer ${remote_token}" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\": \"${mapper}\", \"identityProviderMapper\": \"oidc-user-attribute-idp-mapper\", \"identityProviderAlias\": \"${local_lower}-idp\", \"config\": {\"claim\": \"${mapper}\", \"user.attribute\": \"${mapper}\", \"syncMode\": \"FORCE\"}}" 2>/dev/null
+        fi
+    done
+    echo -e "  ${GREEN}✓${NC} IdP mappers configured for ${local_lower}-idp in ${remote_code}"
+
+    echo ""
+
+    # ==========================================================================
+    # Step 5: Verify
+    # ==========================================================================
+    echo -e "${CYAN}Step 5: Verifying configuration${NC}"
     federation_verify "$remote_code"
 
     # Restore errexit

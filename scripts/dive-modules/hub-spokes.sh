@@ -257,6 +257,24 @@ hub_spokes_approve() {
             fi
         fi
 
+        # TRUST LEVEL VALIDATION
+        case "$trust_level" in
+            development|partner|bilateral|national)
+                # Valid trust level
+                ;;
+            *)
+                log_error "Invalid trust level: $trust_level"
+                echo ""
+                echo "Valid trust levels:"
+                echo "  - development  (most restrictive)"
+                echo "  - partner      (standard)"
+                echo "  - bilateral    (elevated)"
+                echo "  - national     (full access)"
+                echo ""
+                return 1
+                ;;
+        esac
+
         # Classification selection
         if [ -z "$max_class" ]; then
             echo ""

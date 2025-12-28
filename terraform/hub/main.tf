@@ -4,7 +4,7 @@
 
 # Data source: Import existing realm (created by Keycloak JSON import on startup)
 data "keycloak_realm" "hub" {
-  realm = "dive-v3-broker"
+  realm = "dive-v3-broker-usa"
 }
 
 # Data source: Get broker client for protocol mapper configuration
@@ -18,7 +18,7 @@ module "mfa" {
   source = "../modules/realm-mfa"
 
   realm_id           = data.keycloak_realm.hub.id
-  realm_name         = "dive-v3-broker"
+  realm_name         = "dive-v3-broker-usa"
   realm_display_name = "DIVE V3 - Hub"
 
   use_standard_browser_flow = false
@@ -32,7 +32,7 @@ resource "null_resource" "set_browser_flow" {
       docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
         --server http://localhost:8080 --realm master --user admin \
         --password "${var.keycloak_admin_password}" >/dev/null 2>&1 && \
-      docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker \
+      docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker-usa \
         -s browserFlow="${module.mfa.browser_flow_alias}" >/dev/null 2>&1
     EOT
   }

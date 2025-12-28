@@ -123,6 +123,8 @@ services:
       - "run"
       - "--server"
       - "--addr=0.0.0.0:8181"
+      - "--tls-cert-file=/certs/certificate.pem"
+      - "--tls-private-key-file=/certs/key.pem"
       - "--log-level=info"
       - "--log-format=json"
       - "/policies"

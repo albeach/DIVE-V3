@@ -200,9 +200,7 @@ scrape_configs:
     scrape_interval: 30s
     scheme: https
     tls_config:
-      insecure_skip_verify: true
-
-  - job_name: 'deu-cloudflared'
+      insecure_skip_verify: true  - job_name: 'deu-cloudflared'
     static_configs:
       - targets: ['192.168.42.120:9129']
         labels:

@@ -74,7 +74,7 @@ federation_diagnose() {
         local idp_check
         idp_check=$(curl -kfs --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
-            "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+            "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
 
         if [ -n "$idp_check" ]; then
             local enabled=$(echo "$idp_check" | jq -r '.enabled // false')
