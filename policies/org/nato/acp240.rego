@@ -43,61 +43,42 @@ check_authenticated if {
 # ACP-240 Section 4.2: Required Attributes
 # ============================================
 # Validates presence of mandatory attributes per ACP-240.
+# Uses else-chain to return first matching error (avoids OPA conflict).
 
 is_missing_required_attributes := msg if {
 	not input.subject.uniqueID
 	msg := "Missing required attribute: uniqueID"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	input.subject.uniqueID == ""
 	msg := "Empty uniqueID is not allowed"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	not input.subject.clearance
 	msg := "Missing required attribute: clearance"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	input.subject.clearance == ""
 	msg := "Empty clearance is not allowed"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	not input.subject.countryOfAffiliation
 	msg := "Missing required attribute: countryOfAffiliation"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	input.subject.countryOfAffiliation == ""
 	msg := "Empty countryOfAffiliation is not allowed"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	not input.resource.classification
 	msg := "Missing required attribute: resource.classification"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	not input.resource.releasabilityTo
 	msg := "Missing required attribute: resource.releasabilityTo"
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	input.resource.releasabilityTo == null
 	msg := "Null releasabilityTo is not allowed"
-}
-
-# Validate country codes
-is_missing_required_attributes := msg if {
+} else := msg if {
+	# Validate country codes
 	input.subject.countryOfAffiliation
 	input.subject.countryOfAffiliation != ""
 	not country.is_valid(input.subject.countryOfAffiliation)
 	msg := sprintf("Invalid country code: %s (must be ISO 3166-1 alpha-3)", [input.subject.countryOfAffiliation])
-}
-
-is_missing_required_attributes := msg if {
+} else := msg if {
 	country.is_valid(input.subject.countryOfAffiliation)
 	input.resource.releasabilityTo
 	count(input.resource.releasabilityTo) > 0
@@ -128,6 +109,7 @@ uses_classification_equivalency if {
 	input.resource.originalCountry != null
 }
 
+# Uses else-chain to return first matching error (avoids OPA conflict).
 # Clearance check with classification equivalency (cross-nation)
 is_insufficient_clearance := msg if {
 	uses_classification_equivalency
@@ -143,24 +125,18 @@ is_insufficient_clearance := msg if {
 		input.resource.originalClassification,
 		input.resource.originalCountry,
 	)
-}
-
-# Clearance check with DIVE V3 standard levels (backward compatibility)
-is_insufficient_clearance := msg if {
+} else := msg if {
+	# Clearance check with DIVE V3 standard levels (backward compatibility)
 	not uses_classification_equivalency
 	not clearance.sufficient(input.subject.clearance, input.resource.classification)
 	msg := clearance.insufficient_clearance_msg(input.subject.clearance, input.resource.classification)
-}
-
-# Validate clearance level
-is_insufficient_clearance := msg if {
+} else := msg if {
+	# Validate clearance level
 	not uses_classification_equivalency
 	not clearance.is_valid(input.subject.clearance)
 	msg := clearance.invalid_clearance_msg(input.subject.clearance)
-}
-
-# Validate classification level
-is_insufficient_clearance := msg if {
+} else := msg if {
+	# Validate classification level
 	not uses_classification_equivalency
 	not clearance.is_valid(input.resource.classification)
 	msg := clearance.invalid_clearance_msg(input.resource.classification)
@@ -175,12 +151,11 @@ check_clearance_sufficient if {
 # ============================================
 # Verifies subject's country is in resource releasabilityTo.
 
+# Uses else-chain to return first matching error (avoids OPA conflict).
 is_not_releasable_to_country := msg if {
 	count(input.resource.releasabilityTo) == 0
 	msg := "Resource releasabilityTo is empty (deny all)"
-}
-
-is_not_releasable_to_country := msg if {
+} else := msg if {
 	count(input.resource.releasabilityTo) > 0
 	user_country := input.subject.countryOfAffiliation
 	not user_country in input.resource.releasabilityTo
@@ -199,15 +174,14 @@ check_country_releasable if {
 # ============================================
 # Validates COI membership requirements.
 
+# Uses else-chain to return first matching error (avoids OPA conflict).
 is_coi_violation := msg if {
 	# US-ONLY requires exact match
 	"US-ONLY" in input.resource.COI
 	user_coi := object.get(input.subject, "acpCOI", [])
 	not user_coi == ["US-ONLY"]
 	msg := sprintf("Resource requires US-ONLY COI. User has COI: %v", [user_coi])
-}
-
-is_coi_violation := msg if {
+} else := msg if {
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
 	count(user_coi) > 0 # User has COI tags
@@ -218,9 +192,7 @@ is_coi_violation := msg if {
 		user_coi,
 		input.resource.COI,
 	])
-}
-
-is_coi_violation := msg if {
+} else := msg if {
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
 	count(user_coi) > 0
@@ -258,26 +230,21 @@ check_embargo_passed if {
 # ============================================
 # Validates Zero Trust Data Format integrity binding.
 
+# Uses else-chain to return first matching error (avoids OPA conflict).
 is_ztdf_integrity_violation := msg if {
 	input.resource.ztdf
 	input.resource.ztdf.integrityValidated == false
 	msg := "ZTDF integrity validation failed (cryptographic binding compromised)"
-}
-
-is_ztdf_integrity_violation := msg if {
+} else := msg if {
 	input.resource.ztdf
 	not input.resource.ztdf.policyHash
 	msg := "ZTDF policy hash missing (STANAG 4778 binding required)"
-}
-
-is_ztdf_integrity_violation := msg if {
+} else := msg if {
 	input.resource.ztdf
 	input.resource.ztdf.policyHash
 	not input.resource.ztdf.payloadHash
 	msg := "ZTDF payload hash missing (integrity protection required)"
-}
-
-is_ztdf_integrity_violation := msg if {
+} else := msg if {
 	input.resource.ztdf
 	input.resource.ztdf.policyHash
 	input.resource.ztdf.payloadHash
