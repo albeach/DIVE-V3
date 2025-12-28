@@ -167,6 +167,15 @@ export function IdpSelector() {
     console.log(`[IdP Selector] Using kc_idp_hint: ${idpHint}`);
 
     // Save to recent IdPs
+    // #region agent log
+    console.log('[DEBUG H4] User clicked IdP:', {
+        selectedIdP: idp.alias,
+        idpName: idp.name,
+        idpHint: idpHint ?? null,
+        callbackUrl: '/',
+        windowLocation: typeof window !== 'undefined' ? window.location.href : null
+    });
+    // #endregion
     saveRecentIdP(idp.alias);
 
     // Trigger NextAuth signIn
@@ -174,6 +183,13 @@ export function IdpSelector() {
     const signInOptions = { callbackUrl: '/' };
     const providerOptions = idpHint ? { kc_idp_hint: idpHint } : {};
 
+    // #region agent log
+    console.log('[DEBUG H4] Calling NextAuth signIn:', {
+        provider: 'keycloak',
+        signInOptions,
+        providerOptions
+    });
+    // #endregion
     await signIn('keycloak', signInOptions, providerOptions);
   };
 

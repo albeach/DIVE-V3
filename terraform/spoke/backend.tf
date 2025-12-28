@@ -19,15 +19,15 @@
 terraform {
   # GCS Backend for Production/Team Use
   # Each workspace stores state at: gs://dive25-tfstate/spoke/<workspace>/default.tfstate
-  backend "gcs" {
-    bucket = "dive25-tfstate"
-    prefix = "spoke"
-  }
-
-  # Local Backend for Isolated Development (uncomment if needed)
-  # backend "local" {
-  #   path = "terraform.tfstate"
+  # backend "gcs" {
+  #   bucket = "dive25-tfstate"
+  #   prefix = "spoke"
   # }
+
+  # Local Backend for Isolated Development (enabled for local docker deployments)
+  backend "local" {
+    path = "terraform.tfstate"
+  }
 
   required_version = ">= 1.5.0"
 }

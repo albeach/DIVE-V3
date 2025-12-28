@@ -858,7 +858,7 @@ spoke_sync_secrets() {
         return 1
     fi
 
-    # Get current frontend secret
+    # Get current frontend secret (authoritative - this is what's running)
     local frontend_secret
     frontend_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
 
@@ -867,82 +867,212 @@ spoke_sync_secrets() {
         return 1
     fi
 
-    # Get the correct client secret from GCP (authoritative source)
-    local correct_secret
-    correct_secret=$(get_keycloak_client_secret "$code_lower")
+    # Get Keycloak admin credentials
+    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+    local admin_pass
+    admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
 
-    if [ -z "$correct_secret" ]; then
-        log_error "Could not get correct client secret for $code_upper from GCP"
-        # Fallback: try to get from Keycloak if GCP fails
-        local admin_pass
-        admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KEYCLOAK_ADMIN_PASSWORD)
-
-        if [ -n "$admin_pass" ]; then
-            # Try kcadm approach as fallback
-            docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh config credentials \
-                --server https://localhost:8443 --realm master --user admin --password "$admin_pass" --insecure >/dev/null 2>&1
-
-            local secret_response
-            secret_response=$(docker exec "dive-spoke-${code_lower}-keycloak" /opt/keycloak/bin/kcadm.sh get clients \
-                -r "dive-v3-broker-${code_lower}" -q "clientId=dive-v3-broker-${code_lower}" \
-                --fields secret 2>/dev/null)
-
-            # Handle both array and single object responses
-            if echo "$secret_response" | jq -e '.[0]' >/dev/null 2>&1; then
-                # Response is an array
-                correct_secret=$(echo "$secret_response" | jq -r '.[0].secret // empty')
-            else
-                # Response is a single object
-                correct_secret=$(echo "$secret_response" | jq -r '.secret // empty')
-            fi
-        fi
-
-        if [ -z "$correct_secret" ] || [ "$correct_secret" = "null" ]; then
-            log_error "Could not get client secret for $code_upper from any source"
-            return 1
-        fi
+    if [ -z "$admin_pass" ]; then
+        admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
     fi
 
+    if [ -z "$admin_pass" ]; then
+        log_error "Could not get Keycloak admin password for $code_upper"
+        return 1
+    fi
+
+    # Get spoke port
+    eval "$(_get_spoke_ports "$code_upper" 2>/dev/null)" || true
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+
+    # Get admin token
+    local token
+    token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_pass}" | jq -r '.access_token')
+
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        log_error "Could not authenticate with $code_upper Keycloak"
+        return 1
+    fi
+
+    # Get current Keycloak client secret
+    local realm="dive-v3-broker-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
+
+    local client_uuid
+    client_uuid=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients?clientId=${client_id}" \
+        -H "Authorization: Bearer $token" | jq -r '.[0].id // empty')
+
+    if [ -z "$client_uuid" ]; then
+        log_error "Client ${client_id} not found in $code_upper Keycloak"
+        return 1
+    fi
+
+    local kc_secret
+    kc_secret=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/client-secret" \
+        -H "Authorization: Bearer $token" | jq -r '.value // empty')
+
     # Compare secrets
-    if [ "$frontend_secret" = "$correct_secret" ]; then
-        log_success "$code_upper secrets are synchronized"
+    if [ "$frontend_secret" = "$kc_secret" ]; then
+        log_success "$code_upper secrets are already synchronized"
         return 0
     fi
 
-    log_warn "$code_upper secret mismatch detected - fixing..."
-    log_verbose "Frontend: ${frontend_secret:0:8}..., Correct: ${correct_secret:0:8}..."
+    log_warn "$code_upper secret mismatch detected - syncing Keycloak to match frontend..."
+    log_verbose "Frontend: ${frontend_secret:0:8}..., Keycloak: ${kc_secret:0:8}..."
 
-    # Update .env file with correct secret
-    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local env_file="$spoke_dir/.env"
+    # Update Keycloak client to use the frontend's secret (no restart needed!)
+    local result
+    result=$(curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}" \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        -d "{\"secret\": \"${frontend_secret}\"}" -w "%{http_code}" -o /dev/null)
 
-    if [ -f "$env_file" ]; then
-        # Update .env file with correct secret
-        if grep -q "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file"; then
-            sed -i.bak "s/^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*/KEYCLOAK_CLIENT_SECRET_${code_upper}=${correct_secret}/" "$env_file"
-        else
-            echo "KEYCLOAK_CLIENT_SECRET_${code_upper}=${correct_secret}" >> "$env_file"
-        fi
-        log_success "Updated $env_file with correct secret"
-    fi
+    if [ "$result" = "204" ]; then
+        log_success "$code_upper Keycloak client secret updated to match frontend"
 
-    # Restart frontend container to pick up new secret
-    log_info "Restarting $code_upper frontend container..."
-    if docker restart "dive-spoke-${code_lower}-frontend" >/dev/null 2>&1; then
-        log_success "$code_upper frontend restarted successfully"
-        # Verify the secret was updated
-        sleep 2
+        # Verify the update
         local new_secret
-        new_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
-        if [ "$new_secret" = "$correct_secret" ]; then
+        new_secret=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/client-secret" \
+            -H "Authorization: Bearer $token" | jq -r '.value // empty')
+
+        if [ "$new_secret" = "$frontend_secret" ]; then
             log_success "$code_upper secret synchronization complete"
             return 0
         else
-            log_error "Frontend secret was not updated correctly"
+            log_error "Secret verification failed"
             return 1
         fi
     else
-        log_error "Failed to restart $code_upper frontend"
+        log_error "Failed to update Keycloak client secret (HTTP $result)"
+        return 1
+    fi
+}
+
+##
+# Sync federation IdP secrets (usa-idp in spoke must match Hub's client for spoke)
+# This ensures Spoke→Hub SSO works by syncing the usa-idp client secret
+##
+spoke_sync_federation_secrets() {
+    local code_lower="${1:-$(lower "${INSTANCE:-usa}")}"
+    local code_upper
+    code_upper=$(upper "$code_lower")
+
+    log_step "Synchronizing $code_upper federation IdP secrets with Hub..."
+
+    # Skip if this is the Hub (USA)
+    if [ "$code_lower" = "usa" ]; then
+        log_info "Skipping - USA is the Hub, no usa-idp to sync"
+        return 0
+    fi
+
+    # Check if Hub is running
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-keycloak"; then
+        log_error "Hub Keycloak is not running"
+        return 1
+    fi
+
+    # Check if spoke Keycloak is running
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-keycloak"; then
+        log_error "Spoke Keycloak for $code_upper is not running"
+        return 1
+    fi
+
+    # Get Hub admin credentials
+    source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
+    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+        log_error "Could not get Hub Keycloak admin password"
+        return 1
+    fi
+
+    # Get Hub token
+    local hub_token
+    hub_token=$(curl -sk -X POST "https://localhost:8443/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${KEYCLOAK_ADMIN_PASSWORD}" | jq -r '.access_token')
+
+    if [ -z "$hub_token" ] || [ "$hub_token" = "null" ]; then
+        log_error "Could not authenticate with Hub Keycloak"
+        return 1
+    fi
+
+    # Get Hub's client secret for this spoke
+    local client_id="dive-v3-broker-${code_lower}"
+    local client_uuid
+    client_uuid=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/clients?clientId=${client_id}" \
+        -H "Authorization: Bearer $hub_token" | jq -r '.[0].id // empty')
+
+    if [ -z "$client_uuid" ]; then
+        log_warn "Client ${client_id} not found in Hub - creating via federation fix"
+        return 1
+    fi
+
+    local hub_secret
+    hub_secret=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/clients/${client_uuid}/client-secret" \
+        -H "Authorization: Bearer $hub_token" | jq -r '.value // empty')
+
+    if [ -z "$hub_secret" ]; then
+        log_error "Could not get Hub client secret for ${client_id}"
+        return 1
+    fi
+
+    # Get spoke admin credentials
+    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+    local spoke_admin_pass
+    spoke_admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+
+    if [ -z "$spoke_admin_pass" ]; then
+        log_error "Could not get $code_upper Keycloak admin password"
+        return 1
+    fi
+
+    # Get spoke port
+    eval "$(_get_spoke_ports "$code_upper" 2>/dev/null)" || true
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+
+    # Get spoke token
+    local spoke_token
+    spoke_token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${spoke_admin_pass}" | jq -r '.access_token')
+
+    if [ -z "$spoke_token" ] || [ "$spoke_token" = "null" ]; then
+        log_error "Could not authenticate with $code_upper Keycloak"
+        return 1
+    fi
+
+    # Get spoke's usa-idp configuration
+    local usa_idp
+    usa_idp=$(curl -sk "https://localhost:${kc_port}/admin/realms/dive-v3-broker-${code_lower}/identity-provider/instances/usa-idp" \
+        -H "Authorization: Bearer $spoke_token")
+
+    if echo "$usa_idp" | jq -e '.error' >/dev/null 2>&1; then
+        log_warn "usa-idp not found in $code_upper - needs federation setup"
+        return 1
+    fi
+
+    # Update usa-idp with Hub's client secret
+    local updated_idp
+    updated_idp=$(echo "$usa_idp" | jq --arg secret "$hub_secret" '.config.clientSecret = $secret')
+
+    local result
+    result=$(curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/dive-v3-broker-${code_lower}/identity-provider/instances/usa-idp" \
+        -H "Authorization: Bearer $spoke_token" \
+        -H "Content-Type: application/json" \
+        -d "$updated_idp" -w "%{http_code}" -o /dev/null)
+
+    if [ "$result" = "204" ]; then
+        log_success "$code_upper usa-idp secret synchronized with Hub"
+        return 0
+    else
+        log_error "Failed to update $code_upper usa-idp (HTTP $result)"
         return 1
     fi
 }
@@ -1032,6 +1162,7 @@ spoke_seed() {
 
     # Delegate to db module with spoke instance context
     # The db module's cmd_seed handles the actual seeding
+    source "${DIVE_ROOT}/scripts/dive-modules/db.sh"
     INSTANCE="$code_lower" cmd_seed "$count" "$code_lower"
 
     local result=$?
@@ -1786,7 +1917,18 @@ spoke_down() {
 
     export COMPOSE_PROJECT_NAME="$code_lower"
     cd "$spoke_dir"
-    docker compose down
+
+    # Stop and remove containers (not volumes)
+    docker compose down --remove-orphans 2>/dev/null || docker compose down 2>/dev/null || true
+
+    # Clean up any orphaned containers that docker-compose didn't remove
+    for container in $(docker ps -a --format '{{.Names}}' | grep "dive-spoke-${code_lower}-" 2>/dev/null || true); do
+        local status=$(docker inspect "$container" --format '{{.State.Status}}' 2>/dev/null)
+        if [[ "$status" != "running" ]]; then
+            log_verbose "Removing orphaned container: $container"
+            docker rm -f "$container" 2>/dev/null || true
+        fi
+    done
 
     log_success "Spoke services stopped"
 }
@@ -2151,6 +2293,7 @@ module_spoke() {
         maintenance)    spoke_maintenance "$@" ;;
         audit-status)   spoke_audit_status ;;
         sync-secrets)   spoke_sync_secrets "$@" ;;
+        sync-federation-secrets) spoke_sync_federation_secrets "$@" ;;
         sync-all-secrets) spoke_sync_all_secrets ;;
         list-countries) spoke_list_countries "$@" ;;
         countries)
@@ -2238,6 +2381,7 @@ module_spoke_help() {
     echo "  heartbeat              Send manual heartbeat to Hub"
     echo "  list-peers             Show all registered spokes from hub perspective"
     echo "  sync-secrets           Synchronize frontend secrets with Keycloak"
+    echo "  sync-federation-secrets Synchronize usa-idp secrets with Hub"
     echo "  sync-all-secrets       Synchronize secrets for all running spokes"
     echo ""
 

@@ -1200,7 +1200,7 @@ _hub_set_user_amr() {
     local amr_value="$2"
 
     local keycloak_url="${HUB_KEYCLOAK_URL}"
-    local realm="dive-v3-broker"
+    local realm="dive-v3-broker-usa"
 
     # Get admin token
     local admin_password
@@ -1249,7 +1249,7 @@ _hub_show_user_amr() {
     local username="$1"
 
     local keycloak_url="${HUB_KEYCLOAK_URL}"
-    local realm="dive-v3-broker"
+    local realm="dive-v3-broker-usa"
 
     # Get admin token
     local admin_password

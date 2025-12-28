@@ -200,6 +200,49 @@
       }
     },
     {
+      "kasId": "esp-kas",
+      "organization": "Spain",
+      "countryCode": "ESP",
+      "kasUrl": "https://localhost:10028/api/kas",
+      "internalKasUrl": "http://kas-esp:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://esp-idp.dive25.com/realms/dive-v3-broker",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "ESP"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@esp.dive25.com",
+        "lastVerified": "2025-12-27T00:00:00Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
       "kasId": "lux-kas",
       "organization": "Luxembourg",
       "countryCode": "LUX",
@@ -326,6 +369,135 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "cze-kas",
+      "organization": "Czechia",
+      "countryCode": "CZE",
+      "kasUrl": "https://localhost:10006/api/kas",
+      "internalKasUrl": "http://kas-cze:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://cze-idp.dive25.com/realms/dive-v3-broker-cze",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "CZE"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@cze.dive25.com",
+        "lastVerified": "2025-12-28T00:30:27Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "pol-kas",
+      "organization": "Poland",
+      "countryCode": "POL",
+      "kasUrl": "https://localhost:10023/api/kas",
+      "internalKasUrl": "http://kas-pol:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://pol-idp.dive25.com/realms/dive-v3-broker-pol",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "POL"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@pol.dive25.com",
+        "lastVerified": "2025-12-28T03:38:14Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "hun-kas",
+      "organization": "Hungary",
+      "countryCode": "HUN",
+      "kasUrl": "https://localhost:10013/api/kas",
+      "internalKasUrl": "http://kas-hun:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://hun-idp.dive25.com/realms/dive-v3-broker-hun",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "HUN"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@hun.dive25.com",
+        "lastVerified": "2025-12-28T03:49:11Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {
@@ -333,50 +505,94 @@
     "defaultTrustLevel": "high",
     "trustMatrix": {
       "usa-kas": [
+        "cze-kas",
+        "deu-kas",
+        "esp-kas",
         "fra-kas",
         "gbr-kas",
-        "deu-kas",
+        "hun-kas",
         "lux-kas",
         "mne-kas",
-        "nld-kas"
+        "nld-kas",
+        "pol-kas"
       ],
       "fra-kas": [
-        "usa-kas",
-        "gbr-kas",
+        "cze-kas",
         "deu-kas",
+        "esp-kas",
+        "gbr-kas",
+        "hun-kas",
         "lux-kas",
         "mne-kas",
-        "nld-kas"
+        "nld-kas",
+        "pol-kas",
+        "usa-kas"
       ],
       "gbr-kas": [
-        "usa-kas",
-        "fra-kas",
+        "cze-kas",
         "deu-kas",
+        "esp-kas",
+        "fra-kas",
+        "hun-kas",
         "lux-kas",
         "mne-kas",
-        "nld-kas"
+        "nld-kas",
+        "pol-kas",
+        "usa-kas"
       ],
       "deu-kas": [
+        "cze-kas",
+        "esp-kas",
+        "fra-kas",
+        "gbr-kas",
+        "hun-kas",
+        "lux-kas",
+        "mne-kas",
+        "nld-kas",
+        "pol-kas",
+        "usa-kas"
+      ],
+      "esp-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",
-        "lux-kas",
-        "mne-kas",
-        "nld-kas"
+        "deu-kas",
+        "lux-kas"
       ],
       "lux-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",
-        "deu-kas"
+        "deu-kas",
+        "esp-kas"
       ],
       "mne-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",
-        "deu-kas"
+        "deu-kas",
+        "esp-kas"
       ],
       "nld-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas",
+        "esp-kas"
+      ],
+      "cze-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "pol-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "hun-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",

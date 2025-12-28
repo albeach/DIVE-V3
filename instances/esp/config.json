@@ -1,21 +1,22 @@
 {
   "identity": {
-    "spokeId": "spoke-esp-fee558db",
+    "spokeId": "spoke-esp-0a017fe0",
     "instanceCode": "ESP",
     "name": "Spain",
     "description": "DIVE V3 Spoke Instance for Spain",
     "country": "ESP",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@esp.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
     "hubApiUrl": "https://localhost:4000/api",
     "hubOpalUrl": "https://localhost:7002",
-    "baseUrl": "https://localhost:3008",
-    "apiUrl": "https://localhost:4008",
-    "idpUrl": "https://localhost:8451",
-    "kasUrl": "https://localhost:8098"
+    "baseUrl": "https://localhost:3028",
+    "apiUrl": "https://localhost:4028",
+    "idpUrl": "https://dive-spoke-esp-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8471",
+    "kasUrl": "https://localhost:10028"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/esp/certs/spoke.crt",
@@ -44,9 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-13T15:42:01Z",
-    "lastModified": "2025-12-13T15:42:01Z",
+    "createdAt": "2025-12-27T22:12:25Z",
+    "lastModified": "2025-12-27T22:12:25Z",
     "configHash": ""
-  },
-  "contactEmail": "esp-admin@dive-demo.example"
+  }
 }

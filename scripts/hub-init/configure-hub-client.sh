@@ -68,16 +68,57 @@ if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
 fi
 log_success "Authenticated as admin"
 
-# Get client UUID
+# Get or create client
 log_step "Finding client ${CLIENT_ID}..."
 CLIENT_UUID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
     -H "Authorization: Bearer ${TOKEN}" | jq -r ".[] | select(.clientId == \"${CLIENT_ID}\") | .id")
 
 if [ -z "$CLIENT_UUID" ] || [ "$CLIENT_UUID" == "null" ]; then
-    log_error "Client ${CLIENT_ID} not found"
-    exit 1
+    log_warn "Client ${CLIENT_ID} not found - creating it..."
+
+    # Get the client secret from environment
+    CLIENT_SECRET="${AUTH_KEYCLOAK_SECRET:-}"
+    if [ -z "$CLIENT_SECRET" ]; then
+        CLIENT_SECRET=$(docker exec dive-hub-frontend printenv AUTH_KEYCLOAK_SECRET 2>/dev/null || echo "")
+    fi
+    if [ -z "$CLIENT_SECRET" ]; then
+        CLIENT_SECRET=$(openssl rand -base64 24)
+        log_warn "Generated new client secret (update frontend AUTH_KEYCLOAK_SECRET)"
+    fi
+
+    # Create the client
+    HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
+        -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"clientId\": \"${CLIENT_ID}\",
+            \"name\": \"DIVE V3 Frontend Client\",
+            \"enabled\": true,
+            \"protocol\": \"openid-connect\",
+            \"publicClient\": false,
+            \"standardFlowEnabled\": true,
+            \"directAccessGrantsEnabled\": true,
+            \"secret\": \"${CLIENT_SECRET}\",
+            \"redirectUris\": [\"https://localhost:3000/*\", \"http://localhost:3000/*\"],
+            \"webOrigins\": [\"https://localhost:3000\", \"http://localhost:3000\"],
+            \"attributes\": {
+                \"post.logout.redirect.uris\": \"https://localhost:3000/*##http://localhost:3000/*\"
+            }
+        }")
+
+    if [ "$HTTP_CODE" == "201" ]; then
+        log_success "Created client ${CLIENT_ID}"
+        # Get the new client UUID
+        CLIENT_UUID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+            -H "Authorization: Bearer ${TOKEN}" | jq -r ".[] | select(.clientId == \"${CLIENT_ID}\") | .id")
+    else
+        log_error "Failed to create client (HTTP $HTTP_CODE)"
+        exit 1
+    fi
+else
+    log_success "Found existing client: ${CLIENT_UUID}"
 fi
-log_success "Found client: ${CLIENT_UUID}"
 
 # Get current client configuration
 log_step "Fetching current client configuration..."
@@ -123,29 +164,23 @@ log_success "Verified: ${VERIFIED_URIS}"
 echo ""
 log_step "Configuring protocol mappers for federated identity attributes..."
 
-# Define the required protocol mappers
-declare -A MAPPERS=(
-    ["countryOfAffiliation"]="countryOfAffiliation"
-    ["clearance"]="clearance"
-    ["uniqueID"]="uniqueID"
-    ["acpCOI"]="acpCOI"
-)
-
 # Get existing mappers
 EXISTING_MAPPERS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
     -H "Authorization: Bearer ${TOKEN}" 2>/dev/null)
 
-for name in "${!MAPPERS[@]}"; do
-    attr="${MAPPERS[$name]}"
+# Function to create a mapper if it doesn't exist
+create_mapper() {
+    local name="$1"
+    local multivalued="${2:-false}"
 
     # Check if mapper already exists
-    existing_id=$(echo "$EXISTING_MAPPERS" | jq -r ".[] | select(.name == \"$name\") | .id // empty")
+    local existing_id=$(echo "$EXISTING_MAPPERS" | jq -r ".[] | select(.name == \"$name\") | .id // empty")
 
     if [ -n "$existing_id" ]; then
         log_info "Mapper '$name' already exists, skipping"
     else
-        log_step "Creating mapper: $name -> $attr"
-        HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
+        log_step "Creating mapper: $name"
+        local HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
             -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Content-Type: application/json" \
@@ -154,11 +189,13 @@ for name in "${!MAPPERS[@]}"; do
                 \"protocol\": \"openid-connect\",
                 \"protocolMapper\": \"oidc-usermodel-attribute-mapper\",
                 \"config\": {
-                    \"claim.name\": \"$attr\",
-                    \"user.attribute\": \"$attr\",
+                    \"claim.name\": \"$name\",
+                    \"user.attribute\": \"$name\",
+                    \"jsonType.label\": \"String\",
                     \"id.token.claim\": \"true\",
                     \"access.token.claim\": \"true\",
-                    \"userinfo.token.claim\": \"true\"
+                    \"userinfo.token.claim\": \"true\",
+                    \"multivalued\": \"$multivalued\"
                 }
             }")
 
@@ -168,7 +205,13 @@ for name in "${!MAPPERS[@]}"; do
             log_warn "Failed to create mapper '$name' (HTTP $HTTP_CODE) - may already exist"
         fi
     fi
-done
+}
+
+# Create all required mappers
+create_mapper "clearance" "false"
+create_mapper "countryOfAffiliation" "false"
+create_mapper "uniqueID" "false"
+create_mapper "acpCOI" "true"
 
 log_success "Protocol mappers configured"
 

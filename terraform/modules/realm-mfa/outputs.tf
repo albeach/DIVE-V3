@@ -53,4 +53,3 @@ output "post_broker_mfa_flow_alias" {
 # Note: These outputs are defined in simple-post-broker-otp.tf
 # - simple_post_broker_otp_flow_alias
 # - simple_post_broker_otp_flow_id
-

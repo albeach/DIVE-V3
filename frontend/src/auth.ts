@@ -244,14 +244,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
         },
         warn(code, ...message) {
+            // #region agent log
+            console.warn('[DEBUG H1-H5] NextAuth warning:', { code, message: message.slice(0, 2) });
+            // #endregion
             console.warn('[NextAuth Warn]', code, message);
         },
         debug(code, ...message) {
+            // #region agent log
+            console.log('[DEBUG H1-H5] NextAuth debug:', { code, message: message.slice(0, 2) });
+            // #endregion
             console.log('[NextAuth Debug]', code, message);
         },
     },
     providers: [
         Keycloak({
+            // #region agent log
+            // Log provider configuration at startup (H1: issuer mismatch)
+            ...(() => {
+                console.log('[DEBUG H1] Keycloak provider config:', {
+                    AUTH_KEYCLOAK_ID: process.env.AUTH_KEYCLOAK_ID,
+                    AUTH_KEYCLOAK_SECRET_EXISTS: !!(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_SECRET,
+                    AUTH_KEYCLOAK_ISSUER: (process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_ISSUER,
+                    NEXTAUTH_URL: process.env.NEXTAUTH_URL
+                });
+                return {};
+            })(),
+            // #endregion
             // Auth.js standard configuration (per https://authjs.dev/getting-started/providers/keycloak)
             // Uses AUTH_KEYCLOAK_ID, AUTH_KEYCLOAK_SECRET, AUTH_KEYCLOAK_ISSUER from environment
             // Auth.js automatically discovers endpoints via OIDC discovery from issuer
@@ -267,6 +285,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // FIX (Nov 7): Profile callback to handle remote IdPs without email
             // and capture DIVE attributes from Keycloak tokens
             profile(profile) {
+                // #region agent log
+                console.log('[DEBUG H2] Keycloak profile callback:', {
+                    hasSub: !!profile.sub,
+                    hasEmail: !!profile.email,
+                    uniqueID: profile.uniqueID ?? null,
+                    countryOfAffiliation: profile.countryOfAffiliation ?? null
+                });
+                // #endregion
                 console.log('[NextAuth profile()] Raw Keycloak profile:', {
                     sub: profile.sub,
                     email: profile.email,

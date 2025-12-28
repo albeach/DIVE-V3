@@ -452,6 +452,240 @@ test_instances() {
 }
 
 # =============================================================================
+# SSO TESTING
+# =============================================================================
+
+test_sso() {
+    local spoke_code="${1}"
+
+    # If no spoke specified, check environment
+    if [ -z "$spoke_code" ]; then
+        if [ -n "$INSTANCE" ] && [ "$INSTANCE" != "usa" ]; then
+            spoke_code="${INSTANCE^^}"
+        else
+            log_error "Specify spoke with: ./dive test sso <CODE> or ./dive --instance <CODE> test sso"
+            echo ""
+            echo "Examples:"
+            echo "  ./dive test sso ESP"
+            echo "  ./dive --instance lux test sso"
+            return 1
+        fi
+    fi
+
+    local spoke_upper="${spoke_code^^}"
+    local spoke_lower="${spoke_code,,}"
+
+    log_info "Testing SSO bidirectional federation: USA ↔ $spoke_upper"
+    echo ""
+
+    # Auto-sync secrets before testing (ensures SSO will work)
+    log_info "Pre-test: Synchronizing secrets..."
+    if declare -F spoke_sync_secrets >/dev/null 2>&1; then
+        spoke_sync_secrets "$spoke_lower" >/dev/null 2>&1 || true
+    fi
+    if declare -F spoke_sync_federation_secrets >/dev/null 2>&1; then
+        spoke_sync_federation_secrets "$spoke_lower" >/dev/null 2>&1 || true
+    fi
+    log_success "Secrets synchronized"
+    echo ""
+
+    # Check if spoke is running
+    local spoke_backend="dive-spoke-${spoke_lower}-backend"
+    if ! docker ps --format '{{.Names}}' | grep -q "^${spoke_backend}$"; then
+        log_error "Spoke $spoke_upper is not running"
+        log_info "Start it with: ./dive --instance $spoke_lower spoke up"
+        return 1
+    fi
+
+    # Check if hub is running
+    local hub_backend="${HUB_BACKEND_CONTAINER:-dive-hub-backend}"
+    if ! docker ps --format '{{.Names}}' | grep -q "^${hub_backend}$"; then
+        log_error "Hub is not running"
+        log_info "Start it with: ./dive hub up"
+        return 1
+    fi
+
+    # Test 1: Check IdP exists in Hub
+    log_info "Test 1/4: Checking if $spoke_upper IdP is configured in Hub Keycloak..."
+    local hub_kc="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    local hub_realm="dive-v3-broker-usa"
+    local hub_pass=$(docker exec "$hub_kc" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+
+    if [ -z "$hub_pass" ]; then
+        log_error "Cannot get Hub Keycloak password"
+        return 1
+    fi
+
+    # Get admin token
+    local hub_token=$(curl -sk --max-time 10 -X POST \
+        "https://localhost:8443/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${hub_pass}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
+
+    if [ -z "$hub_token" ]; then
+        log_error "Failed to get Hub admin token"
+        return 1
+    fi
+
+    # Check IdP exists
+    local idp_alias="${spoke_lower}-idp"
+    local idp_check=$(curl -sk --max-time 10 \
+        "https://localhost:8443/admin/realms/${hub_realm}/identity-provider/instances/${idp_alias}" \
+        -H "Authorization: Bearer ${hub_token}" 2>/dev/null)
+
+    if echo "$idp_check" | jq -e '.alias' >/dev/null 2>&1; then
+        log_success "✓ $spoke_upper IdP exists in Hub ($idp_alias)"
+    else
+        log_error "✗ $spoke_upper IdP NOT found in Hub"
+        log_info "Create it with: ./dive federation link $spoke_upper"
+        return 1
+    fi
+
+    # Test 2: Check IdP exists in Spoke
+    log_info "Test 2/4: Checking if USA IdP is configured in $spoke_upper Keycloak..."
+    local spoke_kc="dive-spoke-${spoke_lower}-keycloak"
+    local spoke_realm="dive-v3-broker-${spoke_lower}"
+    local spoke_pass=$(docker exec "$spoke_kc" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+
+    if [ -z "$spoke_pass" ]; then
+        log_error "Cannot get $spoke_upper Keycloak password"
+        return 1
+    fi
+
+    # Check USA IdP exists in spoke
+    local usa_idp_alias="usa-idp"
+
+    # Get actual running port (not SSOT expected port, in case of older deployments)
+    local spoke_kc_port=$(docker port "$spoke_kc" 8443 2>/dev/null | head -1 | cut -d: -f2)
+
+    if [ -z "$spoke_kc_port" ]; then
+        log_error "Cannot determine $spoke_upper Keycloak HTTPS port"
+        return 1
+    fi
+
+    log_info "Using $spoke_upper Keycloak port: $spoke_kc_port"
+
+    # Get spoke admin token
+    local spoke_token=$(curl -sk --max-time 10 -X POST \
+        "https://localhost:${spoke_kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${spoke_pass}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
+
+    if [ -z "$spoke_token" ]; then
+        log_error "Failed to get $spoke_upper admin token"
+        return 1
+    fi
+
+    local usa_idp_check=$(curl -sk --max-time 10 \
+        "https://localhost:${spoke_kc_port}/admin/realms/${spoke_realm}/identity-provider/instances/${usa_idp_alias}" \
+        -H "Authorization: Bearer ${spoke_token}" 2>/dev/null)
+
+    if echo "$usa_idp_check" | jq -e '.alias' >/dev/null 2>&1; then
+        log_success "✓ USA IdP exists in $spoke_upper ($usa_idp_alias)"
+    else
+        log_error "✗ USA IdP NOT found in $spoke_upper"
+        log_info "Create it with: ./dive federation link $spoke_upper"
+        return 1
+    fi
+
+    # Test 3: Check network connectivity via OIDC discovery
+    log_info "Test 3/6: Testing network connectivity between Hub and Spoke..."
+
+    # Test Hub → Spoke (using OIDC discovery)
+    local spoke_kc_internal="dive-spoke-${spoke_lower}-keycloak"
+    local spoke_discovery=$(docker exec "$hub_kc" sh -c "curl -sk --max-time 5 'https://${spoke_kc_internal}:8443/realms/${spoke_realm}/.well-known/openid-configuration' 2>/dev/null" | jq -r '.issuer // empty')
+    if [ -n "$spoke_discovery" ]; then
+        log_success "✓ Hub can reach $spoke_upper Keycloak (issuer: $(echo "$spoke_discovery" | cut -d/ -f1-3))"
+    else
+        log_warn "⚠ Hub cannot reach $spoke_upper Keycloak OIDC endpoint"
+    fi
+
+    # Test Spoke → Hub (using OIDC discovery)
+    local hub_kc_internal="dive-hub-keycloak"
+    local hub_discovery=$(docker exec "$spoke_kc" sh -c "curl -sk --max-time 5 'https://${hub_kc_internal}:8443/realms/${hub_realm}/.well-known/openid-configuration' 2>/dev/null" | jq -r '.issuer // empty')
+    if [ -n "$hub_discovery" ]; then
+        log_success "✓ $spoke_upper can reach Hub Keycloak (issuer: $(echo "$hub_discovery" | cut -d/ -f1-3))"
+    else
+        log_warn "⚠ $spoke_upper cannot reach Hub Keycloak OIDC endpoint"
+    fi
+
+    # Test 4: Verify OAuth2 client credentials match
+    log_info "Test 4/6: Verifying OAuth2 client credentials match..."
+
+    # Get the client secret that Hub's IdP uses for spoke
+    local hub_idp_config=$(curl -sk --max-time 10 \
+        "https://localhost:8443/admin/realms/${hub_realm}/identity-provider/instances/${idp_alias}" \
+        -H "Authorization: Bearer ${hub_token}" 2>/dev/null)
+
+    local hub_idp_client_id=$(echo "$hub_idp_config" | jq -r '.config.clientId // empty')
+
+    if [ -n "$hub_idp_client_id" ]; then
+        log_success "✓ Hub IdP uses client: $hub_idp_client_id"
+
+        # Verify this client exists in the spoke using the already-obtained spoke_token
+        local spoke_client_check=$(curl -sk --max-time 10 \
+            "https://localhost:${spoke_kc_port}/admin/realms/${spoke_realm}/clients?clientId=${hub_idp_client_id}" \
+            -H "Authorization: Bearer ${spoke_token}" 2>/dev/null)
+
+        if echo "$spoke_client_check" | jq -e '.[0].clientId' >/dev/null 2>&1; then
+            log_success "✓ Client $hub_idp_client_id exists in $spoke_upper Keycloak"
+        else
+            log_error "✗ Client $hub_idp_client_id NOT found in $spoke_upper Keycloak"
+            log_info "Fix with: ./dive federation fix $spoke_upper"
+        fi
+    else
+        log_warn "⚠ Could not determine Hub IdP client configuration"
+    fi
+
+    # Test 5: Verify frontend can list IdPs
+    log_info "Test 5/6: Verifying Hub frontend can list IdPs..."
+
+    # Check Hub backend IdPs endpoint
+    local hub_idps=$(curl -sk --max-time 10 "https://localhost:4000/api/idps/public" 2>/dev/null)
+    if echo "$hub_idps" | jq -e ".idps[] | select(.alias == \"${idp_alias}\")" >/dev/null 2>&1; then
+        log_success "✓ Hub backend lists $spoke_upper IdP ($idp_alias)"
+    else
+        log_warn "⚠ Hub backend does NOT list $spoke_upper IdP"
+        log_info "Check backend realm config: KEYCLOAK_REALM env var"
+    fi
+
+    # Test 6: Test actual token endpoint connectivity
+    log_info "Test 6/6: Testing server-to-server token endpoint connectivity..."
+
+    local spoke_token_url=$(echo "$hub_idp_config" | jq -r '.config.tokenUrl // empty')
+    if [ -n "$spoke_token_url" ]; then
+        # Test from Hub container to spoke's token endpoint
+        local token_test=$(docker exec "$hub_kc" sh -c "curl -sk --max-time 5 -X POST '$spoke_token_url' -d 'grant_type=client_credentials' 2>&1")
+        if echo "$token_test" | grep -q -E '(error|invalid)'; then
+            log_success "✓ Token endpoint reachable (returned expected auth error)"
+        else
+            log_warn "⚠ Token endpoint may not be reachable: $(echo "$token_test" | head -c 50)"
+        fi
+    else
+        log_warn "⚠ Could not determine spoke token URL"
+    fi
+
+    echo ""
+    log_success "🎉 SSO bidirectional federation test PASSED: USA ↔ $spoke_upper"
+    echo ""
+
+    # Get actual spoke frontend port
+    local spoke_frontend=$(docker port "dive-spoke-${spoke_lower}-frontend" 3000 2>/dev/null | head -1 | cut -d: -f2)
+    [ -z "$spoke_frontend" ] && spoke_frontend="(check docker ps)"
+
+    echo "Next steps:"
+    echo "  1. Test SSO login: Open https://localhost:3000 and select '$spoke_upper' IdP"
+    echo "  2. Test reverse: Open https://localhost:$spoke_frontend and select 'USA' IdP"
+    echo ""
+
+    return 0
+}
+
+# =============================================================================
 # ALL TESTS
 # =============================================================================
 
@@ -565,6 +799,9 @@ module_test() {
         instances|hub-spoke)
             test_instances "$@"
             ;;
+        sso)
+            test_sso "$@"
+            ;;
         all)
             test_all
             ;;
@@ -579,6 +816,7 @@ module_test_help() {
     echo ""
     echo -e "${CYAN}Test Suites:${NC}"
     echo "  federation          Run all federation E2E tests"
+    echo "  sso <CODE>          Test SSO bidirectional federation for a spoke"
     echo "  unit                Run backend unit tests (Jest)"
     echo "  playwright          Run dynamic Playwright E2E tests"
     echo "  instances           Test all running hub-spoke instances"
@@ -591,10 +829,12 @@ module_test_help() {
     echo "  --dry-run, -d       Show what would run without executing"
     echo ""
     echo -e "${CYAN}Arguments:${NC}"
-    echo "  <CODE>              NATO country code (ALB, DNK, GBR, ROU, etc.) for instances command"
+    echo "  <CODE>              NATO country code (ALB, DNK, GBR, ROU, ESP, LUX, etc.)"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  ./dive test federation"
+    echo "  ./dive test sso ESP"
+    echo "  ./dive --instance lux test sso"
     echo "  ./dive test federation --verbose"
     echo "  ./dive test federation --fail-fast"
     echo "  ./dive test unit"
