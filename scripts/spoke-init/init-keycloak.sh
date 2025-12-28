@@ -673,21 +673,21 @@ else
         \"storeToken\": true,
         \"addReadTokenRoleOnCreate\": true,
         \"trustEmail\": true,
-        \"firstBrokerLoginFlowAlias\": \"first broker login\",
+        \"firstBrokerLoginFlowAlias\": \"\",
         \"config\": {
             \"clientId\": \"${USA_IDP_CLIENT_ID}\",
             \"clientSecret\": \"${USA_IDP_CLIENT_SECRET}\",
             \"defaultScope\": \"openid profile email\",
-            \"authorizationUrl\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker/protocol/openid-connect/auth\",
-            \"tokenUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker/protocol/openid-connect/token\",
-            \"logoutUrl\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker/protocol/openid-connect/logout\",
-            \"userInfoUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker/protocol/openid-connect/userinfo\",
-            \"issuer\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker\",
-            \"jwksUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker/protocol/openid-connect/certs\",
+            \"authorizationUrl\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker-usa/protocol/openid-connect/auth\",
+            \"tokenUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker-usa/protocol/openid-connect/token\",
+            \"logoutUrl\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker-usa/protocol/openid-connect/logout\",
+            \"userInfoUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker-usa/protocol/openid-connect/userinfo\",
+            \"issuer\": \"${HUB_IDP_PUBLIC_URL}/realms/dive-v3-broker-usa\",
+            \"jwksUrl\": \"${HUB_IDP_INTERNAL_URL}/realms/dive-v3-broker-usa/protocol/openid-connect/certs\",
             \"validateSignature\": \"true\",
             \"useJwksUrl\": \"true\",
             \"backchannelSupported\": \"true\",
-            \"syncMode\": \"INHERIT\",
+            \"syncMode\": \"FORCE\",
             \"pkceEnabled\": \"true\",
             \"pkceMethod\": \"S256\"
         }
@@ -709,6 +709,43 @@ else
             -d "${USA_IDP_PAYLOAD}" 2>/dev/null
         log_success "Created IdP: ${USA_IDP_ALIAS}"
     fi
+    
+    # =============================================================================
+    # Create IdP Mappers for usa-idp (CRITICAL for authorization flow)
+    # =============================================================================
+    log_step "Creating IdP claim mappers for ${USA_IDP_ALIAS}..."
+    
+    # Create mappers for clearance, countryOfAffiliation, uniqueID, acpCOI
+    for attr in clearance countryOfAffiliation uniqueID acpCOI; do
+        MAPPER_PAYLOAD="{
+            \"name\": \"${attr}-mapper\",
+            \"identityProviderMapper\": \"oidc-user-attribute-idp-mapper\",
+            \"identityProviderAlias\": \"${USA_IDP_ALIAS}\",
+            \"config\": {
+                \"syncMode\": \"FORCE\",
+                \"claim\": \"${attr}\",
+                \"user.attribute\": \"${attr}\"
+            }
+        }"
+        
+        # Check if mapper exists
+        EXISTING_MAPPER=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers" 2>/dev/null | \
+            jq -r --arg name "${attr}-mapper" '.[] | select(.name==$name) | .id // empty')
+        
+        if [[ -n "$EXISTING_MAPPER" ]]; then
+            kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers/${EXISTING_MAPPER}" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "${MAPPER_PAYLOAD}" 2>/dev/null || true
+        else
+            kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "${MAPPER_PAYLOAD}" 2>/dev/null || true
+        fi
+    done
+    log_success "Created IdP claim mappers for ${USA_IDP_ALIAS}"
 fi
 
 # =============================================================================

@@ -935,6 +935,8 @@ services:
       OPA_URL: https://opa-${code_lower}:8181
       FEDERATION_ALLOWED_ORIGINS: https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port},https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com
       CORS_ALLOWED_ORIGINS: https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port},https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com
+      # SECURITY: Trust mkcert CA instead of disabling TLS verification
+      NODE_EXTRA_CA_CERTS: /app/certs/rootCA.pem
     ports:
       - "${backend_host_port}:4000"
     volumes:
