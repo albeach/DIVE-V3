@@ -170,7 +170,7 @@ export function IdpSelector() {
     // #region agent log
     console.log('[DEBUG H4] User clicked IdP:', {
         selectedIdP: idp.alias,
-        idpName: idp.name,
+        idpName: idp.displayName,
         idpHint: idpHint ?? null,
         callbackUrl: '/',
         windowLocation: typeof window !== 'undefined' ? window.location.href : null

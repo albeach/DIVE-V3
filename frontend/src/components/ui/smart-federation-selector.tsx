@@ -139,10 +139,14 @@ function prioritizeInstances(
     if (aRecent !== bRecent) return aRecent ? -1 : 1;
 
     // 4. Usage frequency
-    if (a.frequency !== b.frequency) return b.frequency - a.frequency;
+    const aFreq = a.frequency ?? 0;
+    const bFreq = b.frequency ?? 0;
+    if (aFreq !== bFreq) return bFreq - aFreq;
 
     // 5. Document count (relevance)
-    if (a.count !== b.count) return b.count - a.count;
+    const aCount = a.count ?? 0;
+    const bCount = b.count ?? 0;
+    if (aCount !== bCount) return bCount - aCount;
 
     // 6. Alphabetical fallback
     return a.name.localeCompare(b.name);
@@ -190,13 +194,13 @@ function PrimaryChip({ instance, isSelected, onToggle, onRemove, disabled, showC
       <span>{instance.code}</span>
 
       {/* Count badge */}
-      {showCount && instance.count > 0 && (
+      {showCount && (instance.count ?? 0) > 0 && (
         <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
           isSelected
             ? 'bg-white/20 text-white'
             : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
         }`}>
-          {instance.count.toLocaleString()}
+          {(instance.count ?? 0).toLocaleString()}
         </span>
       )}
 
@@ -347,9 +351,9 @@ function OverflowDropdown({
                       <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
                         {instance.code}
                       </span>
-                      {instance.count > 0 && (
+                      {(instance.count ?? 0) > 0 && (
                         <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                          ({instance.count.toLocaleString()})
+                          ({(instance.count ?? 0).toLocaleString()})
                         </span>
                       )}
                     </div>

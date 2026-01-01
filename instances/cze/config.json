@@ -1,13 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-cze-ff14436d",
+    "spokeId": "spoke-cze-fec21aef",
     "instanceCode": "CZE",
-    "name": "Czech Armed Forces",
-    "description": "DIVE V3 Spoke Instance for Czech Armed Forces",
+    "name": "Czech Republic Defence",
+    "description": "DIVE V3 Spoke Instance for Czech Republic Defence",
     "country": "CZE",
     "organizationType": "government",
-    "contactEmail": "admin@cze.dive25.com",
-    "registeredSpokeId": "spoke-cze-62a8ff89"
+    "contactEmail": "admin@cze.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "pending",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:cze",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-28T00:30:47Z"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -47,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-28T00:30:26Z",
-    "lastModified": "2025-12-28T00:30:26Z",
+    "createdAt": "2025-12-31T00:19:56Z",
+    "lastModified": "2025-12-31T00:19:56Z",
     "configHash": ""
   }
 }

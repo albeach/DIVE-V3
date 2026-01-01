@@ -10,7 +10,7 @@ data "keycloak_realm" "hub" {
 # Data source: Get broker client for protocol mapper configuration
 data "keycloak_openid_client" "broker_client" {
   realm_id  = data.keycloak_realm.hub.id
-  client_id = "dive-v3-client-broker"
+  client_id = "dive-v3-client-broker-usa"
 }
 
 # MFA Module: Add clearance-based authentication flows

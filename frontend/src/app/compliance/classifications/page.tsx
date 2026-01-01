@@ -2,7 +2,7 @@
 
 /**
  * Classification Equivalency Mapping
- * 
+ *
  * Interactive visualization of 12-nation classification systems
  * Shows cross-nation classification mapping for coalition interoperability
  */
@@ -11,10 +11,10 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
-import { 
-  Globe, 
-  Shield, 
-  CheckCircle2, 
+import {
+  Globe,
+  Shield,
+  CheckCircle2,
   Flag,
   Search,
   Filter,
@@ -51,7 +51,7 @@ interface ClassificationData {
 export default function ClassificationsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [classificationsData, setClassificationsData] = useState<ClassificationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,14 +68,14 @@ export default function ClassificationsPage() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    
+
     if (!session) {
       return;
     }
 
     async function fetchClassificationsData() {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-      
+
       try {
         const response = await fetch(`${backendUrl}/api/compliance/classifications`, {
           cache: 'no-store',
@@ -123,20 +123,20 @@ export default function ClassificationsPage() {
   // Filter mappings based on search and country filter
   const getFilteredMappings = (mappings: ClassificationMapping[]) => {
     let filtered = mappings;
-    
+
     if (filterCountry !== 'ALL') {
       filtered = filtered.filter(m => m.country === filterCountry);
     }
-    
+
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.country.toLowerCase().includes(query) ||
         m.localLevel.toLowerCase().includes(query) ||
         m.localAbbrev.toLowerCase().includes(query)
       );
     }
-    
+
     return filtered;
   };
 
@@ -228,7 +228,7 @@ export default function ClassificationsPage() {
         </div>
       </div>
 
-      {/* Interactive Classification Equivalency Matrix (12x4) */}
+      {/* Interactive Classification Equivalency Matrix (35x5) */}
       <div className="mb-8 bg-white rounded-xl border-2 border-gray-200 shadow-lg overflow-hidden">
         <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-600">
           <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
@@ -236,7 +236,7 @@ export default function ClassificationsPage() {
             Interactive Equivalency Matrix (ACP-240 Section 4.3)
           </h2>
           <p className="text-blue-100 text-sm">
-            12 nations × 4 classification levels - Hover over cells to see national classification names
+            {classificationsData.supportedNations} nations × {classificationsData.levels.length} classification levels - Hover over cells to see national classification names
           </p>
         </div>
 
@@ -248,7 +248,7 @@ export default function ClassificationsPage() {
                   Nation
                 </th>
                 {classificationsData.levels.map((level) => (
-                  <th 
+                  <th
                     key={level.canonicalLevel}
                     className="p-3 text-center font-bold text-white border border-gray-300"
                     style={{ backgroundColor: level.color }}
@@ -263,7 +263,7 @@ export default function ClassificationsPage() {
               {allCountries.map((country) => {
                 const isUserCountry = country === (session?.user as any)?.countryOfAffiliation;
                 return (
-                  <tr 
+                  <tr
                     key={country}
                     className={`transition-all ${
                       isUserCountry
@@ -287,7 +287,7 @@ export default function ClassificationsPage() {
                     {classificationsData.levels.map((level) => {
                       const mapping = level.mappings.find(m => m.country === country);
                       return (
-                        <td 
+                        <td
                           key={`${country}-${level.canonicalLevel}`}
                           className="p-3 text-center border border-gray-300 hover:bg-blue-50 hover:shadow-inner transition-all cursor-help"
                           title={mapping ? `${mapping.localLevel} (${mapping.localAbbrev})` : 'No mapping'}
@@ -320,8 +320,8 @@ export default function ClassificationsPage() {
               📊 How to use this matrix:
             </p>
             <ul className="text-xs text-blue-800 space-y-1 ml-4 list-disc">
-              <li><strong>Rows:</strong> Represent nations (12 total)</li>
-              <li><strong>Columns:</strong> Represent NATO classification levels (4 total)</li>
+              <li><strong>Rows:</strong> Represent nations ({classificationsData.supportedNations} total: 32 NATO + FVEY partners)</li>
+              <li><strong>Columns:</strong> Represent NATO classification levels ({classificationsData.levels.length} total)</li>
               <li><strong>Cells:</strong> Show the national classification equivalent for each nation-level combination</li>
               <li><strong>Hover:</strong> See tooltip with full classification name and abbreviation</li>
               <li><strong>Your country</strong> is highlighted in green for easy reference</li>
@@ -340,13 +340,13 @@ export default function ClassificationsPage() {
           {classificationsData.levels.map((level) => {
             const filteredMappings = getFilteredMappings(level.mappings);
             const isOpen = selectedLevel === level.canonicalLevel;
-            
+
             if (filteredMappings.length === 0 && (searchQuery || filterCountry !== 'ALL')) {
               return null; // Hide level if no mappings match filter
             }
 
             return (
-              <div 
+              <div
                 key={level.canonicalLevel}
                 className={`bg-white rounded-xl border-2 shadow-md overflow-hidden transition-all ${
                   isOpen
@@ -364,7 +364,7 @@ export default function ClassificationsPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
-                      <div 
+                      <div
                         className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg"
                         style={{ backgroundColor: level.color }}
                       >
@@ -382,7 +382,7 @@ export default function ClassificationsPage() {
                         </p>
                         <p className="text-xs text-gray-600">Mappings</p>
                       </div>
-                      <ChevronDown 
+                      <ChevronDown
                         className={`w-6 h-6 text-gray-400 transition-transform duration-200 ${
                           isOpen ? 'transform rotate-180' : ''
                         }`}
@@ -393,13 +393,13 @@ export default function ClassificationsPage() {
 
                 {/* Accordion Content - Collapsible */}
                 {isOpen && (
-                  <div 
+                  <div
                     id={`classification-${level.canonicalLevel}`}
                     className="border-t-2 border-gray-200 p-6 animate-in slide-in-from-top-2 duration-200"
                   >
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                       {filteredMappings.map((mapping) => (
-                        <div 
+                        <div
                           key={`${level.canonicalLevel}-${mapping.country}`}
                           className="bg-gray-50 rounded-lg p-4 border-2 border-gray-200 hover:border-green-400 hover:shadow-md transition-all"
                         >

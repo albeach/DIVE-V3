@@ -23,6 +23,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { normalizeClearance } from '../services/clearance-normalization.service';
 
 // Import trusted federation instances - dynamic from environment
 const TRUSTED_FEDERATION_INSTANCES: string[] = (() => {
@@ -384,22 +385,49 @@ export async function enrichmentMiddleware(
             });
         }
 
-        // Validate clearance level
-        if (!VALID_CLEARANCE_LEVELS.includes(payload.clearance)) {
-            logger.error('enrichment', 'Invalid clearance level after enrichment', {
+        // Normalize and validate clearance level
+        // This handles localized clearance values (e.g., NON_CLASSIFICATO → UNCLASSIFIED)
+        const countryForNormalization = payload.countryOfAffiliation || 'USA';
+        const normalizedResult = normalizeClearance(payload.clearance, countryForNormalization);
+
+        if (!normalizedResult.normalized) {
+            // Normalization failed - check if it's already a valid standard level
+            if (!VALID_CLEARANCE_LEVELS.includes(payload.clearance)) {
+                logger.error('enrichment', 'Invalid clearance level after enrichment', {
+                    requestId,
+                    uniqueID: payload.uniqueID,
+                    clearance: payload.clearance,
+                    country: countryForNormalization,
+                    normalizationFailed: true
+                });
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Invalid clearance level',
+                    details: {
+                        clearance: payload.clearance,
+                        validLevels: VALID_CLEARANCE_LEVELS
+                    }
+                });
+                return;
+            }
+        } else {
+            // Store original clearance and use normalized for validation
+            const originalClearance = payload.clearance;
+            payload.clearance = normalizedResult.normalized;
+
+            logger.info('enrichment', 'Clearance normalized', {
                 requestId,
                 uniqueID: payload.uniqueID,
-                clearance: payload.clearance
+                originalClearance,
+                normalizedClearance: payload.clearance,
+                country: countryForNormalization
             });
-            res.status(403).json({
-                error: 'Forbidden',
-                message: 'Invalid clearance level',
-                details: {
-                    clearance: payload.clearance,
-                    validLevels: VALID_CLEARANCE_LEVELS
-                }
-            });
-            return;
+
+            // Mark as enriched if clearance was changed
+            if (originalClearance !== payload.clearance) {
+                enriched = true;
+                enrichments.push(`clearance=${payload.clearance} (normalized from ${originalClearance})`);
+            }
         }
 
         // Enrichment 3: acpCOI missing

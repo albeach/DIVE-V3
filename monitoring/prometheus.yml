@@ -189,9 +189,7 @@ scrape_configs:
         labels:
           instance: 'deu'
     metrics_path: '/metrics'
-    scrape_interval: 15s
-
-  - job_name: 'deu-keycloak'
+    scrape_interval: 15s  - job_name: 'deu-keycloak'
     static_configs:
       - targets: ['192.168.42.120:9003']
         labels:

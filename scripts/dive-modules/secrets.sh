@@ -94,7 +94,7 @@ secrets_export() {
 secrets_lint() {
     local verbose=""
     local fix=""
-    
+
     # Parse options
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -105,17 +105,17 @@ secrets_lint() {
         esac
         shift
     done
-    
+
     echo -e "${CYAN}Running secret lint scan...${NC}"
-    
+
     local script_path
     script_path="$(dirname "${BASH_SOURCE[0]}")/../lint-secrets.sh"
-    
+
     if [ ! -x "$script_path" ]; then
         log_error "Lint script not found: $script_path"
         return 1
     fi
-    
+
     # Run lint script
     "$script_path" $verbose $fix
     return $?
@@ -124,21 +124,21 @@ secrets_lint() {
 secrets_verify_all() {
     echo -e "${CYAN}Verifying secrets for all instances...${NC}"
     echo ""
-    
+
     local instances=("usa" "gbr" "fra" "deu" "dnk" "pol" "nor" "esp" "ita" "bel" "alb")
     local failed=0
     local passed=0
-    
+
     for inst in "${instances[@]}"; do
         local inst_uc
         inst_uc=$(echo "$inst" | tr '[:lower:]' '[:upper:]')
-        
+
         echo -e "${CYAN}Checking $inst_uc...${NC}"
-        
+
         # Try to fetch required secrets
         local missing=0
         local secrets=("postgres-$inst" "mongodb-$inst" "keycloak-$inst")
-        
+
         for secret in "${secrets[@]}"; do
             if ! gcloud secrets versions access latest --secret="dive-v3-$secret" --project="$GCP_PROJECT" >/dev/null 2>&1; then
                 echo -e "  ${RED}✗${NC} dive-v3-$secret"
@@ -147,18 +147,212 @@ secrets_verify_all() {
                 echo -e "  ${GREEN}✓${NC} dive-v3-$secret"
             fi
         done
-        
+
         if [ $missing -eq 0 ]; then
             ((passed++))
         else
             ((failed++))
         fi
     done
-    
+
     echo ""
     echo -e "${CYAN}Summary:${NC} ${GREEN}$passed passed${NC}, ${RED}$failed failed${NC}"
-    
+
     [ $failed -eq 0 ]
+}
+
+# =============================================================================
+# GCP SSOT COMMANDS (PUSH/PULL/SYNC)
+# =============================================================================
+
+# Helper: Create or update GCP secret
+_gcp_secret_upsert() {
+    local secret_name="$1"
+    local secret_value="$2"
+    local project="${3:-${GCP_PROJECT:-dive25}}"
+
+    if [ -z "$secret_value" ]; then
+        log_warn "  Skipping $secret_name (empty value)"
+        return 0
+    fi
+
+    # Check if secret exists
+    if gcloud secrets describe "$secret_name" --project="$project" &>/dev/null; then
+        # Update existing
+        echo -n "$secret_value" | gcloud secrets versions add "$secret_name" \
+            --data-file=- --project="$project" &>/dev/null
+        log_info "  ✓ Updated: $secret_name"
+    else
+        # Create new
+        echo -n "$secret_value" | gcloud secrets create "$secret_name" \
+            --data-file=- \
+            --project="$project" \
+            --replication-policy="automatic" &>/dev/null
+        log_success "  ✓ Created: $secret_name"
+    fi
+}
+
+secrets_push() {
+    local instance="${1:-$INSTANCE}"
+    local code_lower=$(lower "$instance")
+    local code_upper=$(upper "$instance")
+    local project="${GCP_PROJECT:-dive25}"
+
+    ensure_dive_root
+
+    # Determine env file path (hub vs spoke)
+    local env_file
+    if [ "$code_lower" = "usa" ]; then
+        env_file="${DIVE_ROOT}/.env.hub"
+    else
+        env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    fi
+
+    if [ ! -f "$env_file" ]; then
+        log_error "No .env file found for ${code_upper}: $env_file"
+        return 1
+    fi
+
+    check_gcloud || { log_error "gcloud not authenticated"; return 1; }
+
+    log_step "Pushing ${code_upper} secrets to GCP Secret Manager (SSOT)..."
+
+    # Read secrets from .env
+    local postgres_pass=$(grep "^POSTGRES_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local mongo_pass=$(grep "^MONGO_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local redis_pass=$(grep "^REDIS_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local keycloak_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local client_secret=$(grep "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local auth_secret=$(grep "^AUTH_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local jwt_secret=$(grep "^JWT_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+    local nextauth_secret=$(grep "^NEXTAUTH_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"' || echo "")
+
+    # Push to GCP (create if missing, update if exists)
+    _gcp_secret_upsert "dive-v3-postgres-${code_lower}" "$postgres_pass" "$project"
+    _gcp_secret_upsert "dive-v3-mongodb-${code_lower}" "$mongo_pass" "$project"
+    _gcp_secret_upsert "dive-v3-redis-${code_lower}" "$redis_pass" "$project"
+    _gcp_secret_upsert "dive-v3-keycloak-${code_lower}" "$keycloak_pass" "$project"
+    _gcp_secret_upsert "dive-v3-client-secret-${code_lower}" "$client_secret" "$project"
+    _gcp_secret_upsert "dive-v3-auth-secret-${code_lower}" "$auth_secret" "$project"
+    _gcp_secret_upsert "dive-v3-jwt-secret-${code_lower}" "$jwt_secret" "$project"
+    _gcp_secret_upsert "dive-v3-nextauth-secret-${code_lower}" "$nextauth_secret" "$project"
+
+    log_success "✓ ${code_upper} secrets pushed to GCP Secret Manager"
+}
+
+secrets_pull() {
+    local instance="${1:-$INSTANCE}"
+    local code_lower=$(lower "$instance")
+    local code_upper=$(upper "$instance")
+    local project="${GCP_PROJECT:-dive25}"
+
+    ensure_dive_root
+
+    # Determine env file path (hub vs spoke)
+    local env_file
+    if [ "$code_lower" = "usa" ]; then
+        env_file="${DIVE_ROOT}/.env.hub"
+    else
+        env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    fi
+
+    check_gcloud || { log_error "gcloud not authenticated"; return 1; }
+
+    log_step "Pulling ${code_upper} secrets from GCP Secret Manager (SSOT)..."
+
+    # Load from GCP
+    if ! load_gcp_secrets "$code_lower"; then
+        log_error "Failed to load secrets from GCP for ${code_upper}"
+        return 1
+    fi
+
+    # Backup existing .env if it exists
+    if [ -f "$env_file" ]; then
+        cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)"
+        log_info "Backed up existing .env"
+    fi
+
+    # Update .env file with GCP values
+    if [ -f "$env_file" ]; then
+        # Use sed to update in place
+        [ -n "$POSTGRES_PASSWORD" ] && sed -i '' "s|^POSTGRES_PASSWORD_${code_upper}=.*|POSTGRES_PASSWORD_${code_upper}=${POSTGRES_PASSWORD}|" "$env_file"
+        [ -n "$MONGO_PASSWORD" ] && sed -i '' "s|^MONGO_PASSWORD_${code_upper}=.*|MONGO_PASSWORD_${code_upper}=${MONGO_PASSWORD}|" "$env_file"
+        [ -n "$REDIS_PASSWORD" ] && sed -i '' "s|^REDIS_PASSWORD_${code_upper}=.*|REDIS_PASSWORD_${code_upper}=${REDIS_PASSWORD}|" "$env_file"
+        [ -n "$KEYCLOAK_ADMIN_PASSWORD" ] && sed -i '' "s|^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=.*|KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${KEYCLOAK_ADMIN_PASSWORD}|" "$env_file"
+        [ -n "$KEYCLOAK_CLIENT_SECRET" ] && sed -i '' "s|^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*|KEYCLOAK_CLIENT_SECRET_${code_upper}=${KEYCLOAK_CLIENT_SECRET}|" "$env_file"
+        [ -n "$AUTH_SECRET" ] && sed -i '' "s|^AUTH_SECRET_${code_upper}=.*|AUTH_SECRET_${code_upper}=${AUTH_SECRET}|" "$env_file"
+        [ -n "$JWT_SECRET" ] && sed -i '' "s|^JWT_SECRET_${code_upper}=.*|JWT_SECRET_${code_upper}=${JWT_SECRET}|" "$env_file"
+        [ -n "$NEXTAUTH_SECRET" ] && sed -i '' "s|^NEXTAUTH_SECRET_${code_upper}=.*|NEXTAUTH_SECRET_${code_upper}=${NEXTAUTH_SECRET}|" "$env_file"
+    else
+        log_warn "No .env file found to update: $env_file"
+    fi
+
+    log_success "✓ ${code_upper} secrets pulled from GCP and written to .env"
+}
+
+secrets_sync() {
+    local instance="${1:-$INSTANCE}"
+    local direction="${2:-bidirectional}"
+
+    case "$direction" in
+        push)
+            secrets_push "$instance"
+            ;;
+        pull)
+            secrets_pull "$instance"
+            ;;
+        bidirectional|auto)
+            # Check which is newer: GCP or .env
+            local code_lower=$(lower "$instance")
+            local env_file
+            if [ "$code_lower" = "usa" ]; then
+                env_file="${DIVE_ROOT}/.env.hub"
+            else
+                env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+            fi
+
+            if [ ! -f "$env_file" ]; then
+                log_info "No .env file - pulling from GCP"
+                secrets_pull "$instance"
+                return $?
+            fi
+
+            # Get file modification time
+            local env_modified
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                env_modified=$(stat -f %m "$env_file" 2>/dev/null || echo 0)
+            else
+                env_modified=$(stat -c %Y "$env_file" 2>/dev/null || echo 0)
+            fi
+
+            # Get GCP secret last modified time (use keycloak secret as reference)
+            local gcp_time
+            gcp_time=$(gcloud secrets describe "dive-v3-keycloak-${code_lower}" \
+                --format="value(createTime)" --project="${GCP_PROJECT:-dive25}" 2>/dev/null || echo "")
+
+            if [ -z "$gcp_time" ]; then
+                log_info "No GCP secrets found - pushing .env to GCP"
+                secrets_push "$instance"
+            elif [ "$env_modified" -gt 0 ]; then
+                # Simple heuristic: if .env is very recent (< 1 hour), push it
+                local now=$(date +%s)
+                local age=$((now - env_modified))
+                if [ $age -lt 3600 ]; then
+                    log_info ".env is recent - pushing to GCP"
+                    secrets_push "$instance"
+                else
+                    log_info "GCP is authoritative - pulling to .env"
+                    secrets_pull "$instance"
+                fi
+            else
+                secrets_pull "$instance"
+            fi
+            ;;
+        *)
+            log_error "Invalid sync direction: $direction (use push, pull, or bidirectional)"
+            return 1
+            ;;
+    esac
 }
 
 # =============================================================================
@@ -168,7 +362,7 @@ secrets_verify_all() {
 module_secrets() {
     local action="${1:-show}"
     shift || true
-    
+
     case "$action" in
         load)       secrets_load "$@" ;;
         show)       secrets_show "$@" ;;
@@ -177,19 +371,37 @@ module_secrets() {
         verify-all) secrets_verify_all ;;
         export)     secrets_export "$@" ;;
         lint)       secrets_lint "$@" ;;
+        push)       secrets_push "$@" ;;
+        pull)       secrets_pull "$@" ;;
+        sync)       secrets_sync "$@" ;;
         *)          module_secrets_help ;;
     esac
 }
 
 module_secrets_help() {
     echo -e "${BOLD}Secrets Commands:${NC}"
+    echo ""
+    echo -e "${CYAN}Read Operations:${NC}"
     echo "  load [instance]        Load secrets into environment"
     echo "  show [instance]        Show secrets for instance"
     echo "  list                   List all DIVE secrets in GCP"
     echo "  verify [instance]      Verify secrets can be accessed"
     echo "  verify-all             Verify secrets for all instances"
     echo "  export [--unsafe] [instance]  Export secrets as shell commands"
+    echo ""
+    echo -e "${CYAN}SSOT Sync Operations:${NC}"
+    echo "  push [instance]        Push .env secrets to GCP (Local → GCP)"
+    echo "  pull [instance]        Pull GCP secrets to .env (GCP → Local)"
+    echo "  sync [instance] [direction]  Sync secrets (bidirectional/push/pull)"
+    echo ""
+    echo -e "${CYAN}Other:${NC}"
     echo "  lint [--verbose|--fix] Lint codebase for hardcoded secrets"
     echo ""
-    echo "Usage: ./dive secrets [load|show|list|verify|verify-all|export|lint] [options]"
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ./dive --instance fra secrets push     # Upload FRA secrets to GCP"
+    echo "  ./dive --instance gbr secrets pull     # Download GBR secrets from GCP"
+    echo "  ./dive --instance pol secrets sync     # Auto-sync (newest wins)"
+    echo "  ./dive secrets verify-all              # Check all instances"
+    echo ""
+    echo "Usage: ./dive secrets [command] [options]"
 }

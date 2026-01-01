@@ -34,8 +34,11 @@ fi
 # CONSTANTS
 # =============================================================================
 
-HUB_KEYCLOAK_CONTAINER="dive-hub-keycloak"
-HUB_BACKEND_CONTAINER="dive-hub-backend"
+# Container naming - use COMPOSE_PROJECT_NAME for consistency with docker-compose.hub.yml
+# Default: dive-v3 (matches COMPOSE_PROJECT_NAME in .env)
+HUB_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
+HUB_KEYCLOAK_CONTAINER="${HUB_PROJECT_NAME}-keycloak"
+HUB_BACKEND_CONTAINER="${HUB_PROJECT_NAME}-backend"
 HUB_REALM="dive-v3-broker-usa"
 
 # =============================================================================
@@ -527,63 +530,62 @@ get_spoke_admin_token() {
     local spoke_code="${1:?Spoke code required}"
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
-    local max_attempts=15
-    local delay=3
+    local max_attempts=5
+    local delay=2
 
     ensure_dive_root
 
     local admin_pass=""
-    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+    local keycloak_container="dive-spoke-${code_lower}-keycloak"
+    local backend_container
+    backend_container=$(resolve_spoke_container "$code_lower" "backend") || return 1
 
-    # First try: spoke's .env file
-    if [ -f "$spoke_env" ]; then
-        admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-        [ -z "$admin_pass" ] && admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    # FIXED (Dec 2025): ALWAYS prefer container password - it's authoritative
+    # .env files can become stale after container restart/redeploy
+    # NOTE: All log output MUST go to stderr >&2 since stdout is captured for return value
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${keycloak_container}$"; then
+        admin_pass=$(docker exec "$keycloak_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        log_verbose "Retrieved ${code_upper} password from container (len: ${#admin_pass})" >&2
     fi
 
-    # If not in .env or invalid, try container with retry
+    # Fallback to .env file only if container password not available
     if [ -z "$admin_pass" ] || [ ${#admin_pass} -lt 10 ]; then
-        local keycloak_container="dive-spoke-${code_lower}-keycloak"
-
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${keycloak_container}$"; then
-            log_verbose "Retrieving ${code_upper} password from container..."
-
-            for attempt in $(seq 1 $max_attempts); do
-                admin_pass=$(docker exec "$keycloak_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-
-                # Validate password quality (length > 10, not a default)
-                if [ -n "$admin_pass" ] && [ ${#admin_pass} -gt 10 ] && [[ ! "$admin_pass" =~ ^(admin|password|KeycloakAdmin|test|default)$ ]]; then
-                    log_verbose "Retrieved ${code_upper} password from container (attempt $attempt)"
-                    break
-                fi
-
-                [ $attempt -lt $max_attempts ] && sleep $delay
-            done
+        local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+        if [ -f "$spoke_env" ]; then
+            admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+            [ -z "$admin_pass" ] && admin_pass=$(grep -E "^KEYCLOAK_ADMIN_PASSWORD=" "$spoke_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+            log_verbose "Using ${code_upper} password from .env file (len: ${#admin_pass})" >&2
         fi
     fi
 
     if [ -z "$admin_pass" ] || [ ${#admin_pass} -lt 10 ]; then
-        log_error "Could not find valid spoke Keycloak admin password for $code_upper after $max_attempts attempts"
+        log_error "Could not find valid spoke Keycloak admin password for $code_upper" >&2
         return 1
     fi
 
-    local backend_container
-    backend_container=$(resolve_spoke_container "$code_lower" "backend") || return 1
-    local keycloak_container="dive-spoke-${code_lower}-keycloak"
+    # Get admin token with retry
+    local token=""
+    for attempt in $(seq 1 $max_attempts); do
+        token=$(docker exec "$backend_container" curl -s -k -X POST \
+            "https://${keycloak_container}:8443/realms/master/protocol/openid-connect/token" \
+            -d "client_id=admin-cli" \
+            -d "username=admin" \
+            -d "password=${admin_pass}" \
+            -d "grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
 
-    local token
-    token=$(docker exec "$backend_container" curl -s -k -X POST \
-        "https://${keycloak_container}:8443/realms/master/protocol/openid-connect/token" \
-        -d "client_id=admin-cli" \
-        -d "username=admin" \
-        -d "password=${admin_pass}" \
-        -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+        if [ -n "$token" ] && [ "$token" != "null" ]; then
+            echo "$token"
+            return 0
+        fi
 
-    if [ -z "$token" ] || [ "$token" = "null" ]; then
-        return 1
-    fi
+        if [ $attempt -lt $max_attempts ]; then
+            log_verbose "Token fetch attempt $attempt failed, retrying..." >&2
+            sleep $delay
+        fi
+    done
 
-    echo "$token"
+    log_error "Failed to get admin token for $code_upper after $max_attempts attempts" >&2
+    return 1
 }
 
 # =============================================================================
@@ -643,7 +645,8 @@ get_spoke_local_client_secret() {
 
 ##
 # Sync all secrets for Hub→Spoke federation
-# Consolidates: sync_hub_idp_client_secret + sync_spoke_usa_idp_secret
+# FIXED (Dec 2025): Read secret directly from spoke Keycloak, not from .env file
+# The .env file can be stale if the client secret was regenerated in Keycloak
 ##
 sync_hub_to_spoke_secrets() {
     local spoke_code="${1:?Spoke code required}"
@@ -652,18 +655,48 @@ sync_hub_to_spoke_secrets() {
 
     log_verbose "Syncing Hub→Spoke secrets for ${code_upper}..."
 
-    local spoke_env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
-    local usa_idp_secret=""
-    if [ -f "$spoke_env_file" ]; then
-        usa_idp_secret=$(grep "^USA_IDP_CLIENT_SECRET=" "$spoke_env_file" | cut -d= -f2 | tr -d '\n\r"')
-    fi
+    local spoke_realm="dive-v3-broker-${code_lower}"
+    local federation_client_id="dive-v3-broker-usa"
+    local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
 
-    if [ -z "$usa_idp_secret" ]; then
-        log_error "USA_IDP_CLIENT_SECRET not found in ${spoke_env_file}"
+    # Get spoke admin password
+    local spoke_admin_pass
+    spoke_admin_pass=$(docker exec "$spoke_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -z "$spoke_admin_pass" ]; then
+        log_error "Could not get spoke Keycloak admin password"
         return 1
     fi
 
-    # Update Hub's IdP to use spoke's client secret
+    # Authenticate with spoke Keycloak
+    docker exec "$spoke_kc_container" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin --password "$spoke_admin_pass" 2>/dev/null || {
+        log_error "Could not authenticate with spoke Keycloak"
+        return 1
+    }
+
+    # Get the actual client secret from spoke Keycloak
+    local client_uuid
+    client_uuid=$(docker exec "$spoke_kc_container" /opt/keycloak/bin/kcadm.sh get clients \
+        -r "$spoke_realm" --fields id,clientId 2>/dev/null | \
+        jq -r ".[] | select(.clientId==\"${federation_client_id}\") | .id")
+
+    if [ -z "$client_uuid" ]; then
+        log_error "Federation client ${federation_client_id} not found in ${spoke_realm}"
+        return 1
+    fi
+
+    local spoke_client_secret
+    spoke_client_secret=$(docker exec "$spoke_kc_container" /opt/keycloak/bin/kcadm.sh get \
+        "clients/${client_uuid}/client-secret" -r "$spoke_realm" 2>/dev/null | jq -r '.value')
+
+    if [ -z "$spoke_client_secret" ] || [ "$spoke_client_secret" = "null" ]; then
+        log_error "Could not get client secret for ${federation_client_id}"
+        return 1
+    fi
+
+    log_verbose "Retrieved ${code_upper} client secret (len: ${#spoke_client_secret})"
+
+    # Update Hub's IdP to use spoke's actual client secret
     source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
     if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
         log_error "KEYCLOAK_ADMIN_PASSWORD not set"
@@ -677,7 +710,7 @@ sync_hub_to_spoke_secrets() {
 
     if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh update \
         "identity-provider/instances/${idp_alias}" -r "$HUB_REALM" \
-        -s "config.clientSecret=$usa_idp_secret" 2>/dev/null; then
+        -s "config.clientSecret=$spoke_client_secret" 2>/dev/null; then
         log_success "Hub ${idp_alias} secret synced"
         return 0
     else
@@ -736,30 +769,43 @@ ensure_hub_client_in_spoke() {
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
 
-    log_verbose "Creating Hub federation client in ${code_upper} realm..."
+    log_verbose "Creating Hub federation client in ${code_upper} realm..." >&2
 
     local keycloak_container="dive-spoke-${code_lower}-keycloak"
     local realm="dive-v3-broker-${code_lower}"
     local client_id="dive-v3-broker-usa"
 
-    local spoke_env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    # FIXED (Dec 2025): Get password from container (authoritative)
     local spoke_admin_password=""
-    if [ -f "$spoke_env_file" ]; then
-        spoke_admin_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env_file" | cut -d= -f2 | tr -d '\n\r"')
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${keycloak_container}$"; then
+        spoke_admin_password=$(docker exec "$keycloak_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    fi
+
+    # Fallback to .env file
+    if [ -z "$spoke_admin_password" ] || [ ${#spoke_admin_password} -lt 10 ]; then
+        local spoke_env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+        if [ -f "$spoke_env_file" ]; then
+            spoke_admin_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env_file" | cut -d= -f2 | tr -d '\n\r"')
+        fi
     fi
 
     if [ -z "$spoke_admin_password" ]; then
-        log_error "Cannot find Keycloak admin password for ${code_upper}"
+        log_error "Cannot find Keycloak admin password for ${code_upper}" >&2
         return 1
     fi
 
+    # Get Hub client secret for spoke
     local usa_idp_secret=""
-    if [ -f "$spoke_env_file" ]; then
-        usa_idp_secret=$(grep "^USA_IDP_CLIENT_SECRET=" "$spoke_env_file" | cut -d= -f2 | tr -d '\n\r"')
+    usa_idp_secret=$(get_hub_client_secret "$spoke_code" 2>/dev/null)
+    if [ -z "$usa_idp_secret" ]; then
+        local spoke_env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+        if [ -f "$spoke_env_file" ]; then
+            usa_idp_secret=$(grep "^USA_IDP_CLIENT_SECRET=" "$spoke_env_file" | cut -d= -f2 | tr -d '\n\r"')
+        fi
     fi
 
     if [ -z "$usa_idp_secret" ]; then
-        log_error "USA_IDP_CLIENT_SECRET not found"
+        log_error "USA_IDP_CLIENT_SECRET not found" >&2
         return 1
     fi
 
@@ -1057,7 +1103,9 @@ create_spoke_idp_in_hub() {
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
     local spoke_realm="dive-v3-broker-${code_lower}"
-    local spoke_client="dive-v3-client-${code_lower}"
+    # FIXED (Dec 2025): Use cross-border client for Hub→Spoke federation
+    # This client is created by init-keycloak.sh specifically for cross-border auth
+    local spoke_client="dive-v3-cross-border-client"
     local spoke_idp="${code_lower}-idp"
     local spoke_display_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
 
@@ -1095,9 +1143,10 @@ create_spoke_idp_in_hub() {
     fi
 
     # Create IdP
-    # IMPORTANT: Use dive-spoke-{code}-keycloak as the container name for server-to-server URLs
-    # The browser-facing URLs use localhost:{port}, container-to-container uses Docker network names
-    local spoke_keycloak_container="dive-spoke-${code_lower}-keycloak"
+    # FIXED (Dec 2025): Use host.docker.internal for server-to-server URLs
+    # The container name (dive-spoke-{code}-keycloak) is NOT in the SSL certificate SAN
+    # host.docker.internal IS in the certificate SAN and resolves to the host from containers
+    # Browser-facing URLs use localhost:{port}
 
     if docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create identity-provider/instances \
         -r "$HUB_REALM" \
@@ -1107,10 +1156,10 @@ create_spoke_idp_in_hub() {
         -s "displayName=${spoke_display_name}" \
         -s trustEmail=true \
         -s "config.authorizationUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/auth" \
-        -s "config.tokenUrl=https://${spoke_keycloak_container}:8443/realms/${spoke_realm}/protocol/openid-connect/token" \
-        -s "config.userInfoUrl=https://${spoke_keycloak_container}:8443/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
+        -s "config.tokenUrl=https://host.docker.internal:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/token" \
+        -s "config.userInfoUrl=https://host.docker.internal:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/userinfo" \
         -s "config.logoutUrl=https://localhost:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/logout" \
-        -s "config.jwksUrl=https://${spoke_keycloak_container}:8443/realms/${spoke_realm}/protocol/openid-connect/certs" \
+        -s "config.jwksUrl=https://host.docker.internal:${kc_port}/realms/${spoke_realm}/protocol/openid-connect/certs" \
         -s "config.issuer=https://localhost:${kc_port}/realms/${spoke_realm}" \
         -s "config.clientId=${spoke_client}" \
         -s "config.clientSecret=${client_secret}" \
@@ -1164,6 +1213,143 @@ create_hub_idp_mappers() {
 
     [ $created -gt 0 ] && log_success "Created $created IdP mappers"
         return 0
+}
+
+##
+# Ensure protocol mappers exist on the spoke's federation client (dive-v3-broker-usa)
+# These mappers expose user attributes in the tokens issued by the spoke
+# Without these, the Hub's IdP mappers have nothing to import!
+##
+ensure_protocol_mappers_on_spoke_client() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower=$(lower "$spoke_code")
+    local code_upper=$(upper "$spoke_code")
+
+    local spoke_realm="dive-v3-broker-${code_lower}"
+    local federation_client_id="dive-v3-broker-usa"
+    local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
+
+    log_verbose "Adding protocol mappers to ${federation_client_id} in ${spoke_realm}..."
+
+    # Get spoke admin password
+    local admin_pass
+    admin_pass=$(docker exec "$spoke_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -z "$admin_pass" ]; then
+        log_error "Could not get spoke Keycloak admin password"
+        return 1
+    fi
+
+    # Configure kcadm credentials
+    docker exec "$spoke_kc_container" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin --password "$admin_pass" 2>/dev/null || {
+        log_error "Could not authenticate with spoke Keycloak"
+        return 1
+    }
+
+    # Get client UUID
+    local client_uuid
+    client_uuid=$(docker exec "$spoke_kc_container" /opt/keycloak/bin/kcadm.sh get clients \
+        -r "$spoke_realm" --fields id,clientId 2>/dev/null | jq -r ".[] | select(.clientId==\"${federation_client_id}\") | .id")
+
+    if [ -z "$client_uuid" ]; then
+        log_error "Federation client ${federation_client_id} not found in ${spoke_realm}"
+        return 1
+    fi
+
+    # Define standard attribute mappings
+    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID")
+
+    # Define localized attribute mappings based on spoke country
+    # Format: "source_attribute:claim_name"
+    local localized_attrs=()
+    case "$code_upper" in
+        FRA)
+            localized_attrs=(
+                "pays_affiliation:countryOfAffiliation"
+                "niveau_habilitation:clearance"
+                "communaute_interet:acpCOI"
+                "identifiant_unique:uniqueID"
+            )
+            ;;
+        DEU)
+            localized_attrs=(
+                "land_zugehoerigkeit:countryOfAffiliation"
+                "sicherheitsstufe:clearance"
+                "interessengemeinschaft:acpCOI"
+                "eindeutige_id:uniqueID"
+            )
+            ;;
+        # Add more country mappings as needed
+    esac
+
+    local created=0
+
+    # Create mappers for standard attributes
+    for attr in "${standard_attrs[@]}"; do
+        _create_spoke_protocol_mapper_kcadm "$spoke_kc_container" "$spoke_realm" "$client_uuid" "$attr" "$attr" "federation-std-${attr}"
+        ((created++))
+    done
+
+    # Create mappers for localized attributes
+    for mapping in "${localized_attrs[@]}"; do
+        local source_attr="${mapping%%:*}"
+        local claim_name="${mapping##*:}"
+        _create_spoke_protocol_mapper_kcadm "$spoke_kc_container" "$spoke_realm" "$client_uuid" "$source_attr" "$claim_name" "federation-${source_attr}"
+        ((created++))
+    done
+
+    log_success "Created/verified $created protocol mappers on ${federation_client_id}"
+    return 0
+}
+
+##
+# Helper: Create a single protocol mapper on a spoke's federation client using kcadm.sh
+##
+_create_spoke_protocol_mapper_kcadm() {
+    local kc_container="$1"
+    local realm="$2"
+    local client_uuid="$3"
+    local user_attr="$4"
+    local claim_name="$5"
+    local mapper_name="$6"
+
+    # Check if mapper already exists
+    local existing
+    existing=$(docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh get \
+        "clients/${client_uuid}/protocol-mappers/models" -r "$realm" --fields id,name 2>/dev/null | \
+        jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
+
+    if [ -n "$existing" ]; then
+        # Update existing mapper
+        docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh update \
+            "clients/${client_uuid}/protocol-mappers/models/${existing}" -r "$realm" \
+            -s "name=${mapper_name}" \
+            -s "protocol=openid-connect" \
+            -s "protocolMapper=oidc-usermodel-attribute-mapper" \
+            -s "consentRequired=false" \
+            -s "config.\"userinfo.token.claim\"=true" \
+            -s "config.\"id.token.claim\"=true" \
+            -s "config.\"access.token.claim\"=true" \
+            -s "config.\"claim.name\"=${claim_name}" \
+            -s "config.\"user.attribute\"=${user_attr}" \
+            -s "config.\"jsonType.label\"=String" \
+            -s "config.multivalued=false" 2>/dev/null || true
+    else
+        # Create new mapper
+        docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh create \
+            "clients/${client_uuid}/protocol-mappers/models" -r "$realm" \
+            -s "name=${mapper_name}" \
+            -s "protocol=openid-connect" \
+            -s "protocolMapper=oidc-usermodel-attribute-mapper" \
+            -s "consentRequired=false" \
+            -s "config.\"userinfo.token.claim\"=true" \
+            -s "config.\"id.token.claim\"=true" \
+            -s "config.\"access.token.claim\"=true" \
+            -s "config.\"claim.name\"=${claim_name}" \
+            -s "config.\"user.attribute\"=${user_attr}" \
+            -s "config.\"jsonType.label\"=String" \
+            -s "config.multivalued=false" 2>/dev/null || true
+    fi
 }
 
 # =============================================================================
@@ -1230,10 +1416,12 @@ update_hub_redirect_uris() {
     eval "$(_get_spoke_ports "$code_upper")"
     local kc_https_port=$SPOKE_KEYCLOAK_HTTPS_PORT
 
-        local token
+    local token
     token=$(get_hub_admin_token) || return 1
 
-    local client_id="dive-v3-client-${code_lower}"
+    # FIXED (Dec 2025): Use correct client naming - dive-v3-broker-{code}
+    # This matches what's created during spoke registration in Hub
+    local client_id="dive-v3-broker-${code_lower}"
 
     local client_uuid
     client_uuid=$(_get_client_uuid "$HUB_BACKEND_CONTAINER" "dive-hub-keycloak" "8080" "$HUB_REALM" "$client_id" "$token") || return 1
@@ -1673,28 +1861,33 @@ register_spoke_in_hub() {
     eval "$(_get_spoke_ports "$spoke")"
 
     # Step 1: Create Hub client for spoke (Spoke→Hub flow)
-    log_step "[1/6] Creating Hub client for spoke..."
+    log_step "[1/7] Creating Hub client for spoke..."
     ensure_spoke_client_in_hub "$spoke" || log_warn "Client may already exist"
 
     # Step 2: Create IdP in Hub
-    log_step "[2/6] Creating IdP in Hub..."
+    log_step "[2/7] Creating IdP in Hub..."
     create_spoke_idp_in_hub "$spoke" || return 1
 
-    # Step 3: Create IdP mappers
-    log_step "[3/6] Creating IdP mappers..."
+    # Step 3: Create IdP mappers on Hub (to import claims from spoke tokens)
+    log_step "[3/7] Creating IdP mappers on Hub..."
     create_hub_idp_mappers "$spoke"
 
     # Step 4: Create Hub's IdP client in spoke (Hub→Spoke flow)
     # CRITICAL: This client must exist in spoke for Hub→Spoke federation to work
-    log_step "[4/6] Creating Hub IdP client in spoke..."
+    log_step "[4/7] Creating Hub IdP client in spoke..."
     ensure_hub_idp_client_in_spoke "$spoke" || log_warn "May need manual configuration"
 
-    # Step 5: Sync Hub IdP secret
-    log_step "[5/6] Syncing Hub IdP secret..."
+    # Step 5: Create protocol mappers on spoke's federation client
+    # CRITICAL: Without these, spoke tokens won't include user attributes!
+    log_step "[5/7] Creating protocol mappers on spoke's federation client..."
+    ensure_protocol_mappers_on_spoke_client "$spoke" || log_warn "Protocol mappers may need manual configuration"
+
+    # Step 6: Sync Hub IdP secret
+    log_step "[6/7] Syncing Hub IdP secret..."
     sync_hub_to_spoke_secrets "$spoke" || log_warn "Secret sync may need manual review"
 
-    # Step 6: Sync OPA
-    log_step "[6/6] Syncing OPA trusted issuers..."
+    # Step 7: Sync OPA
+    log_step "[7/7] Syncing OPA trusted issuers..."
     sync_opa_trusted_issuers "$spoke" || log_warn "OPA sync may need manual review"
 
     echo ""

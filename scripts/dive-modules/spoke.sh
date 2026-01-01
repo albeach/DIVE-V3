@@ -740,7 +740,8 @@ _spoke_apply_terraform() {
         # Export secrets as TF_VAR_ environment variables
         local instance_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
         export TF_VAR_keycloak_admin_password="${!instance_password_var:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
-        export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_${code_upper}:-${KEYCLOAK_CLIENT_SECRET:-}}"
+        local instance_client_secret_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+        export TF_VAR_client_secret="${!instance_client_secret_var:-${KEYCLOAK_CLIENT_SECRET:-}}"
         export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-DiveTestSecure2025!}"
         export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
         export TF_VAR_enable_mfa=true
@@ -840,30 +841,20 @@ get_keycloak_client_secret() {
 #   0 - Registration successful
 #   1 - Registration failed
 ##
-spoke_sync_secrets() {
-    local code_lower="${1:-$(lower "${INSTANCE:-usa}")}"
-    local code_upper
-    code_upper=$(upper "$code_lower")
-
-    log_step "Synchronizing $code_upper frontend secrets with Keycloak..."
-
-    # Check if containers are running
-    if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-frontend"; then
-        log_error "Frontend container not running for $code_upper"
-        return 1
-    fi
-
-    if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-keycloak"; then
-        log_error "Keycloak container not running for $code_upper"
-        return 1
-    fi
+##
+# Helper function: Perform single secret sync attempt
+# Returns 0 on success, 1 on failure
+##
+_do_secret_sync_attempt() {
+    local code_lower="$1"
+    local code_upper="$2"
 
     # Get current frontend secret (authoritative - this is what's running)
     local frontend_secret
     frontend_secret=$(docker exec "dive-spoke-${code_lower}-frontend" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null)
 
     if [ -z "$frontend_secret" ]; then
-        log_error "Could not get frontend secret for $code_upper"
+        log_verbose "Could not get frontend secret for $code_upper"
         return 1
     fi
 
@@ -877,7 +868,7 @@ spoke_sync_secrets() {
     fi
 
     if [ -z "$admin_pass" ]; then
-        log_error "Could not get Keycloak admin password for $code_upper"
+        log_verbose "Could not get Keycloak admin password for $code_upper"
         return 1
     fi
 
@@ -891,29 +882,29 @@ spoke_sync_secrets() {
         -d "grant_type=password" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
-        -d "password=${admin_pass}" | jq -r '.access_token')
+        -d "password=${admin_pass}" 2>/dev/null | jq -r '.access_token' 2>/dev/null)
 
     if [ -z "$token" ] || [ "$token" = "null" ]; then
-        log_error "Could not authenticate with $code_upper Keycloak"
+        log_verbose "Could not authenticate with $code_upper Keycloak (API not ready yet)"
         return 1
     fi
 
     # Get current Keycloak client secret
     local realm="dive-v3-broker-${code_lower}"
-    local client_id="dive-v3-broker-${code_lower}"
+    local client_id="dive-v3-client-broker-${code_lower}"
 
     local client_uuid
     client_uuid=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients?clientId=${client_id}" \
-        -H "Authorization: Bearer $token" | jq -r '.[0].id // empty')
+        -H "Authorization: Bearer $token" 2>/dev/null | jq -r '.[0].id // empty' 2>/dev/null)
 
     if [ -z "$client_uuid" ]; then
-        log_error "Client ${client_id} not found in $code_upper Keycloak"
+        log_verbose "Client ${client_id} not found in $code_upper Keycloak (not initialized yet)"
         return 1
     fi
 
     local kc_secret
     kc_secret=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/client-secret" \
-        -H "Authorization: Bearer $token" | jq -r '.value // empty')
+        -H "Authorization: Bearer $token" 2>/dev/null | jq -r '.value // empty' 2>/dev/null)
 
     # Compare secrets
     if [ "$frontend_secret" = "$kc_secret" ]; then
@@ -929,7 +920,7 @@ spoke_sync_secrets() {
     result=$(curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}" \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
-        -d "{\"secret\": \"${frontend_secret}\"}" -w "%{http_code}" -o /dev/null)
+        -d "{\"secret\": \"${frontend_secret}\"}" -w "%{http_code}" -o /dev/null 2>/dev/null)
 
     if [ "$result" = "204" ]; then
         log_success "$code_upper Keycloak client secret updated to match frontend"
@@ -937,19 +928,106 @@ spoke_sync_secrets() {
         # Verify the update
         local new_secret
         new_secret=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/client-secret" \
-            -H "Authorization: Bearer $token" | jq -r '.value // empty')
+            -H "Authorization: Bearer $token" 2>/dev/null | jq -r '.value // empty' 2>/dev/null)
 
         if [ "$new_secret" = "$frontend_secret" ]; then
             log_success "$code_upper secret synchronization complete"
             return 0
         else
-            log_error "Secret verification failed"
+            log_verbose "Secret verification failed"
             return 1
         fi
     else
-        log_error "Failed to update Keycloak client secret (HTTP $result)"
+        log_verbose "Failed to update Keycloak client secret (HTTP $result)"
         return 1
     fi
+}
+
+##
+# Sync frontend secrets with Keycloak (with retry logic)
+# Waits for containers to exist and Keycloak API to be ready
+##
+spoke_sync_secrets() {
+    local code_lower="${1:-$(lower "${INSTANCE:-usa}")}"
+    local code_upper
+    code_upper=$(upper "$code_lower")
+
+
+    local max_retries=5
+    local retry_delay=2
+    local attempt=1
+
+    log_step "Synchronizing $code_upper frontend secrets with Keycloak..."
+
+    # Wait for containers to exist and be healthy
+    while [ $attempt -le $max_retries ]; do
+        # Check if frontend container exists and is running
+        if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-frontend"; then
+            if [ $attempt -eq $max_retries ]; then
+                log_error "Frontend container not running for $code_upper after $max_retries attempts"
+                return 1
+            fi
+            log_info "Waiting for frontend container (attempt $attempt/$max_retries, retry in ${retry_delay}s)..."
+            sleep $retry_delay
+            retry_delay=$((retry_delay * 2))  # Exponential backoff
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        # Check if Keycloak container exists and is running
+        if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-keycloak"; then
+            if [ $attempt -eq $max_retries ]; then
+                log_error "Keycloak container not running for $code_upper after $max_retries attempts"
+                return 1
+            fi
+            log_info "Waiting for Keycloak container (attempt $attempt/$max_retries, retry in ${retry_delay}s)..."
+            sleep $retry_delay
+            retry_delay=$((retry_delay * 2))
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        # Get spoke port for API check
+        eval "$(_get_spoke_ports "$code_upper" 2>/dev/null)" || true
+        local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+
+        # Check if Keycloak API is actually ready (not just container healthy)
+        if ! curl -kfs --max-time 5 "https://localhost:${kc_port}/realms/master" >/dev/null 2>&1; then
+            if [ $attempt -eq $max_retries ]; then
+                log_error "Keycloak API not ready for $code_upper after $max_retries attempts"
+                return 1
+            fi
+            log_info "Waiting for Keycloak API to be ready (attempt $attempt/$max_retries, retry in ${retry_delay}s)..."
+
+
+            sleep $retry_delay
+            retry_delay=$((retry_delay * 2))
+            attempt=$((attempt + 1))
+            continue
+        fi
+
+        # Containers exist and API is ready - attempt sync
+        log_info "Attempting secret synchronization (attempt $attempt/$max_retries)..."
+
+
+        if _do_secret_sync_attempt "$code_lower" "$code_upper"; then
+            return 0
+        fi
+
+
+        if [ $attempt -eq $max_retries ]; then
+            log_error "Secret synchronization failed for $code_upper after $max_retries attempts"
+            return 1
+        fi
+
+        log_info "Sync attempt failed, retrying (attempt $attempt/$max_retries, retry in ${retry_delay}s)..."
+        sleep $retry_delay
+        retry_delay=$((retry_delay * 2))
+        attempt=$((attempt + 1))
+    done
+
+    log_error "Secret synchronization failed for $code_upper (max retries exceeded)"
+    return 1
 }
 
 ##
@@ -2226,6 +2304,54 @@ spoke_localize() {
 }
 
 # =============================================================================
+# PKI MANAGEMENT
+# =============================================================================
+
+##
+# Generate CSR for spoke policy signing certificate
+##
+spoke_pki_request() {
+    local code
+    code=$(get_instance_code)
+
+    log_header "Spoke PKI Certificate Request: ${code}"
+
+    local pki_script="${DIVE_ROOT}/scripts/pki/init-pki.sh"
+
+    if [[ ! -x "$pki_script" ]]; then
+        log_error "PKI script not found: $pki_script"
+        return 1
+    fi
+
+    "$pki_script" spoke "$code"
+
+    log_success "CSR generated for ${code}"
+    log_info "Next: Submit CSR to Hub: ./dive hub pki-sign --spoke ${code,,}"
+}
+
+##
+# Import Hub-signed certificate
+##
+spoke_pki_import() {
+    local code
+    code=$(get_instance_code)
+
+    log_header "Spoke PKI Certificate Import: ${code}"
+
+    local pki_script="${DIVE_ROOT}/scripts/pki/init-pki.sh"
+
+    if [[ ! -x "$pki_script" ]]; then
+        log_error "PKI script not found: $pki_script"
+        return 1
+    fi
+
+    "$pki_script" import "$code"
+
+    log_success "Certificate imported for ${code}"
+    log_info "Restart spoke to apply PKI: ./dive --instance ${code,,} spoke restart"
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -2314,6 +2440,11 @@ module_spoke() {
         localize)       spoke_localize "$@" ;;
         localize-mappers) spoke_localize_mappers "$@" ;;
         localize-users) spoke_localize_users "$@" ;;
+
+        # PKI Management
+        pki-request)    spoke_pki_request "$@" ;;
+        pki-import)     spoke_pki_import "$@" ;;
+
         *)              module_spoke_help ;;
     esac
 }
@@ -2350,6 +2481,10 @@ module_spoke_help() {
     echo -e "${CYAN}Certificates:${NC}"
     echo "  generate-certs         Generate X.509 certificates for mTLS"
     echo "  rotate-certs           Rotate existing certificates (with backup)"
+    echo ""
+    echo -e "${CYAN}PKI Management:${NC}"
+    echo "  pki-request            Generate CSR for policy signing certificate"
+    echo "  pki-import             Import Hub-signed certificate and trust chain"
     echo ""
 
     echo -e "${CYAN}Registration (Phase 3):${NC}"

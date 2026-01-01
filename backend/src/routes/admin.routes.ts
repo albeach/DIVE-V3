@@ -1,15 +1,12 @@
 /**
  * Admin Routes
- * 
+ *
  * All routes require super_admin role (enforced by adminAuthMiddleware)
- * 
- * Routes:
- * - GET /api/admin/idps - List all IdPs
- * - GET /api/admin/idps/:alias - Get specific IdP
- * - POST /api/admin/idps - Create new IdP
- * - PUT /api/admin/idps/:alias - Update IdP
- * - DELETE /api/admin/idps/:alias - Delete IdP
- * - POST /api/admin/idps/:alias/test - Test IdP connectivity
+ *
+ * @swagger
+ * tags:
+ *   - name: Admin
+ *     description: Administrative operations and system management
  */
 
 import { Router, Request, Response } from 'express';
@@ -85,38 +82,149 @@ router.use(adminAuthMiddleware);
 // ============================================
 
 /**
- * GET /api/admin/idps
- * List all Identity Providers
+ * @swagger
+ * /api/admin/idps:
+ *   get:
+ *     summary: List all Identity Providers
+ *     description: Returns all configured IdPs in Keycloak
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of IdPs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   alias:
+ *                     type: string
+ *                   displayName:
+ *                     type: string
+ *                   enabled:
+ *                     type: boolean
+ *                   providerId:
+ *                     type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Requires super_admin role
  */
 router.get('/idps', listIdPsHandler);
 
 /**
- * GET /api/admin/idps/:alias
- * Get specific Identity Provider
+ * @swagger
+ * /api/admin/idps/{alias}:
+ *   get:
+ *     summary: Get specific Identity Provider
+ *     description: Returns configuration for a specific IdP
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: IdP alias identifier
+ *     responses:
+ *       200:
+ *         description: IdP configuration
+ *       404:
+ *         description: IdP not found
  */
 router.get('/idps/:alias', getIdPHandler);
 
 /**
- * POST /api/admin/idps
- * Create new Identity Provider
+ * @swagger
+ * /api/admin/idps:
+ *   post:
+ *     summary: Create new Identity Provider
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               alias:
+ *                 type: string
+ *               displayName:
+ *                 type: string
+ *               providerId:
+ *                 type: string
+ *                 enum: [oidc, saml]
+ *     responses:
+ *       201:
+ *         description: IdP created
+ *       400:
+ *         description: Invalid configuration
  */
 router.post('/idps', createIdPHandler);
 
 /**
- * PUT /api/admin/idps/:alias
- * Update Identity Provider
+ * @swagger
+ * /api/admin/idps/{alias}:
+ *   put:
+ *     summary: Update Identity Provider
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: IdP updated
+ *       404:
+ *         description: IdP not found
+ *   delete:
+ *     summary: Delete Identity Provider
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: IdP deleted
+ *       404:
+ *         description: IdP not found
  */
 router.put('/idps/:alias', updateIdPHandler);
-
-/**
- * DELETE /api/admin/idps/:alias
- * Delete Identity Provider
- */
 router.delete('/idps/:alias', deleteIdPHandler);
 
 /**
- * POST /api/admin/idps/:alias/test
- * Test Identity Provider connectivity
+ * @swagger
+ * /api/admin/idps/{alias}/test:
+ *   post:
+ *     summary: Test Identity Provider connectivity
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Connectivity test result
  */
 router.post('/idps/:alias/test', testIdPHandler);
 
@@ -149,26 +257,80 @@ router.post('/idps/parse/saml-metadata', parseSAMLMetadataFileHandler);
 // ============================================
 
 /**
- * GET /api/admin/logs
- * Query audit logs
+ * @swagger
+ * /api/admin/logs:
+ *   get:
+ *     summary: Query audit logs
+ *     description: Search and filter audit logs with pagination
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: level
+ *         schema:
+ *           type: string
+ *           enum: [info, warn, error]
+ *     responses:
+ *       200:
+ *         description: Paginated audit logs
  */
 router.get('/logs', getLogsHandler);
 
 /**
- * GET /api/admin/logs/violations
- * Get security violations
+ * @swagger
+ * /api/admin/logs/violations:
+ *   get:
+ *     summary: Get security violations
+ *     description: Returns list of security policy violations
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Security violations list
  */
 router.get('/logs/violations', getViolationsHandler);
 
 /**
- * GET /api/admin/logs/stats
- * Get log statistics
+ * @swagger
+ * /api/admin/logs/stats:
+ *   get:
+ *     summary: Get log statistics
+ *     description: Returns aggregated log statistics
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Log statistics
  */
 router.get('/logs/stats', getStatsHandler);
 
 /**
- * GET /api/admin/logs/export
- * Export logs to JSON
+ * @swagger
+ * /api/admin/logs/export:
+ *   get:
+ *     summary: Export logs to JSON
+ *     description: Export audit logs for compliance reporting
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Exported logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
  */
 router.get('/logs/export', exportLogsHandler);
 

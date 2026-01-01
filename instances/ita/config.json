@@ -1,12 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-ita-01c60842",
+    "spokeId": "spoke-ita-18e78f7e",
     "instanceCode": "ITA",
-    "name": "Italy",
-    "description": "DIVE V3 Spoke Instance for Italy",
+    "name": "Italian Defence Forces",
+    "description": "DIVE V3 Spoke Instance for Italian Defence Forces",
     "country": "ITA",
     "organizationType": "government",
-    "contactEmail": "ita-admin@dive-demo.example"
+    "contactEmail": "admin@ita.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,8 +14,9 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3015",
     "apiUrl": "https://localhost:4015",
-    "idpUrl": "https://localhost:8458",
-    "kasUrl": "https://localhost:8015"
+    "idpUrl": "https://dive-spoke-ita-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8458",
+    "kasUrl": "https://localhost:10015"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/ita/certs/spoke.crt",
@@ -44,9 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-13T15:32:40Z",
-    "lastModified": "2025-12-13T15:32:40Z",
+    "createdAt": "2025-12-28T04:03:41Z",
+    "lastModified": "2025-12-28T04:03:41Z",
     "configHash": ""
-  },
-  "contactEmail": "ita-admin@dive-demo.example"
+  }
 }

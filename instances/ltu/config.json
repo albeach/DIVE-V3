@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Lithuanian Armed Forces",
     "country": "LTU",
     "organizationType": "government",
-    "contactEmail": "admin@ltu.dive25.com",
-    "registeredSpokeId": "spoke-ltu-196c96a7"
+    "contactEmail": "admin@ltu.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "pending",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:ltu",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-20T07:38:41Z"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

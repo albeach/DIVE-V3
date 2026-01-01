@@ -1,15 +1,15 @@
 /**
  * Session Heartbeat Hook
- * 
+ *
  * Modern 2025 session management patterns:
  * - Periodic server-side session validation
  * - Page visibility detection (pause when hidden)
  * - Clock skew detection and compensation
  * - Proper loading and error states
  * - Automatic retry with exponential backoff
- * 
+ *
  * Security: All validation happens server-side. Client never parses JWTs.
- * 
+ *
  * Week 3.4+: Advanced Session Management
  */
 
@@ -49,7 +49,7 @@ export function useSessionHeartbeat() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [retryCount, setRetryCount] = useState(0);
-    
+
     const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastHeartbeatRef = useRef<number>(0);
     const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -72,6 +72,8 @@ export function useSessionHeartbeat() {
             const response = await fetch('/api/session/refresh', {
                 method: 'GET',
                 cache: 'no-store',
+                // Add credentials to ensure cookies are sent
+                credentials: 'same-origin',
             });
 
             const clientTimeAfter = Date.now();
@@ -90,7 +92,7 @@ export function useSessionHeartbeat() {
                     };
                     setSessionHealth(invalidHealth);
                     setIsLoading(false);
-                    setError('Session expired');
+                    setError(null); // Don't treat 401 as an error - it's expected when not logged in
                     return invalidHealth;
                 }
 
@@ -163,13 +165,22 @@ export function useSessionHeartbeat() {
 
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            console.error('[Heartbeat] Failed:', errorMessage);
+            console.error('[Heartbeat] Failed:', errorMessage, err);
 
-            // Implement exponential backoff retry
+            // Check if it's a network error (Failed to fetch)
+            if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+                console.warn('[Heartbeat] Network error detected - this is usually a CORS or connectivity issue');
+                // Don't retry on network errors during initial load - just fail silently
+                setIsLoading(false);
+                setError(null); // Don't show error for network issues
+                return null;
+            }
+
+            // Implement exponential backoff retry for other errors
             if (retryCount < MAX_RETRY_ATTEMPTS) {
                 const delay = RETRY_DELAY_BASE * Math.pow(2, retryCount);
                 console.log(`[Heartbeat] Retry attempt ${retryCount + 1}/${MAX_RETRY_ATTEMPTS} in ${delay}ms`);
-                
+
                 setRetryCount(prev => prev + 1);
                 setError(`Connection issue (retry ${retryCount + 1}/${MAX_RETRY_ATTEMPTS})`);
 

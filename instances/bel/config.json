@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Belgian Ministry of Defence",
     "country": "BEL",
     "organizationType": "government",
-    "contactEmail": "admin@bel.dive25.com",
-    "registeredSpokeId": "spoke-bel-4db6030b"
+    "contactEmail": "admin@bel.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:bel",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-19T13:19:02Z",
     "spokeToken": "8bLg8NcdPeN-3-P0p_Vwaan9bWO9vETZfzgqLpbcPOA"
   },
   "operational": {

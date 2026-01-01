@@ -127,6 +127,125 @@ EOF
 }
 
 # =============================================================================
+# AUTO-REGISTER TRUSTED ISSUER
+# =============================================================================
+# Automatically registers a spoke's Keycloak issuer in trusted_issuers.json
+# This ensures JWT tokens from the spoke are trusted during authorization
+# =============================================================================
+
+_auto_register_trusted_issuer() {
+    local code_upper="$1"
+    local code_lower="$2"
+    local keycloak_https_port="$3"
+
+    local realm="dive-v3-broker-${code_lower}"
+    local issuer_url="https://localhost:${keycloak_https_port}/realms/${realm}"
+    local internal_url="https://keycloak-${code_lower}:8443/realms/${realm}"
+
+    log_info "Auto-registering ${code_upper} trusted issuer..."
+
+    # Update backend/data/opal/trusted_issuers.json
+    # IMPORTANT: Issuers must be added inside the .trusted_issuers object, not at root level
+    local trusted_issuers_file="${DIVE_ROOT}/backend/data/opal/trusted_issuers.json"
+    if [ -f "$trusted_issuers_file" ]; then
+        local tmp_file="${trusted_issuers_file}.tmp"
+        if jq --arg url "$issuer_url" \
+              --arg internal_url "$internal_url" \
+              --arg tenant "$code_upper" \
+              --arg name "${code_upper} Keycloak (Local Dev)" \
+              --arg country "$code_upper" \
+           '.trusted_issuers[$url] = {
+             "tenant": $tenant,
+             "name": $name,
+             "country": $country,
+             "trust_level": "DEVELOPMENT",
+             "enabled": true,
+             "protocol": "oidc",
+             "federation_class": "LOCAL"
+           } | .trusted_issuers[$internal_url] = {
+             "tenant": $tenant,
+             "name": ($tenant + " Keycloak (Internal Docker)"),
+             "country": $country,
+             "trust_level": "DEVELOPMENT",
+             "enabled": true,
+             "protocol": "oidc",
+             "federation_class": "LOCAL"
+           }' "$trusted_issuers_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$trusted_issuers_file"
+            log_verbose "Updated trusted_issuers.json with ${code_upper} issuer"
+        else
+            rm -f "$tmp_file"
+            log_warn "Failed to update trusted_issuers.json"
+        fi
+    fi
+
+    # Update opal-data-source/trusted_issuers.json
+    # IMPORTANT: Issuers must be added inside the .trusted_issuers object, not at root level
+    local opal_issuers_file="${DIVE_ROOT}/opal-data-source/trusted_issuers.json"
+    if [ -f "$opal_issuers_file" ]; then
+        local tmp_file="${opal_issuers_file}.tmp"
+        if jq --arg url "$issuer_url" \
+              --arg internal_url "$internal_url" \
+              --arg tenant "$code_upper" \
+              --arg name "${code_upper} Keycloak (Local Dev)" \
+              --arg country "$code_upper" \
+           '.trusted_issuers[$url] = {
+             "tenant": $tenant,
+             "name": $name,
+             "country": $country,
+             "trust_level": "DEVELOPMENT",
+             "enabled": true,
+             "protocol": "oidc",
+             "federation_class": "LOCAL"
+           } | .trusted_issuers[$internal_url] = {
+             "tenant": $tenant,
+             "name": ($tenant + " Keycloak (Internal Docker)"),
+             "country": $country,
+             "trust_level": "DEVELOPMENT",
+             "enabled": true,
+             "protocol": "oidc",
+             "federation_class": "LOCAL"
+           }' "$opal_issuers_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$opal_issuers_file"
+            log_verbose "Updated opal-data-source/trusted_issuers.json"
+        else
+            rm -f "$tmp_file"
+        fi
+    fi
+
+    # Update policies/policy_data.json
+    local policy_data_file="${DIVE_ROOT}/policies/policy_data.json"
+    if [ -f "$policy_data_file" ]; then
+        local tmp_file="${policy_data_file}.tmp"
+        if jq --arg url "$issuer_url" \
+              --arg internal_url "$internal_url" \
+              --arg tenant "$code_upper" \
+              --arg name "${code_upper} Keycloak" \
+              --arg country "$code_upper" \
+           '.trusted_issuers[$url] = {
+             "tenant": $tenant,
+             "name": $name,
+             "country": $country,
+             "trust_level": "DEVELOPMENT"
+           } | .trusted_issuers[$internal_url] = {
+             "tenant": $tenant,
+             "name": ($tenant + " Keycloak (Internal)"),
+             "country": $country,
+             "trust_level": "DEVELOPMENT"
+           } | .federation_matrix.USA += [$tenant] | .federation_matrix.USA |= unique' \
+           "$policy_data_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$policy_data_file"
+            log_verbose "Updated policy_data.json with ${code_upper} issuer"
+        else
+            rm -f "$tmp_file"
+        fi
+    fi
+
+    log_success "Trusted issuer registered for ${code_upper}"
+    return 0
+}
+
+# =============================================================================
 # SPOKE INITIALIZATION FUNCTIONS
 # =============================================================================
 
@@ -651,6 +770,39 @@ EOF
     # ==========================================================================
     _auto_register_kas "$code_upper" "$code_lower" "$kas_port"
 
+    # ==========================================================================
+    # AUTO-REGISTER TRUSTED ISSUER (Best Practice: JWT Trust Automation)
+    # ==========================================================================
+    _auto_register_trusted_issuer "$code_upper" "$code_lower" "$keycloak_https_port"
+
+    # ==========================================================================
+    # PUSH SECRETS TO GCP (SSOT: Single Source of Truth)
+    # ==========================================================================
+    log_step "Uploading secrets to GCP Secret Manager (SSOT)..."
+    if check_gcloud; then
+        # Source the secrets module for _gcp_secret_upsert function
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/secrets.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/secrets.sh"
+
+            # Push all secrets to GCP
+            _gcp_secret_upsert "dive-v3-postgres-${code_lower}" "$postgres_pass" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-mongodb-${code_lower}" "$mongo_pass" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-redis-${code_lower}" "$redis_pass" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-keycloak-${code_lower}" "$keycloak_pass" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-client-secret-${code_lower}" "$client_secret" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-auth-secret-${code_lower}" "$auth_secret" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-jwt-secret-${code_lower}" "$jwt_secret" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-nextauth-secret-${code_lower}" "$nextauth_secret" "${GCP_PROJECT:-dive25}"
+
+            log_success "✓ Secrets persisted to GCP Secret Manager (SSOT established)"
+        else
+            log_warn "secrets.sh module not found - secrets only stored locally in .env"
+        fi
+    else
+        log_warn "gcloud not authenticated - secrets only stored locally in .env"
+        log_warn "Run 'gcloud auth application-default login' to enable GCP SSOT"
+    fi
+
     log_success "Spoke instance initialized: $code_upper"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -834,12 +986,10 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres-${code_lower}:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: \${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}
-      KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
-      # Set KC_HOSTNAME_URL to ensure consistent token issuer regardless of access method
-      # This prevents "Invalid token issuer" errors during refresh token flows
-      KC_HOSTNAME_URL: https://localhost:${keycloak_https_port}
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: xforwarded
+      # Use new Keycloak 26+ bootstrap admin password variable
+      KC_BOOTSTRAP_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
+      # Proxy and certificate configuration (start-dev handles hostname automatically)
+      KC_PROXY: edge
       KC_HTTP_ENABLED: "true"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem

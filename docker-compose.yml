@@ -271,6 +271,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev  # Development mode with hot reload
     container_name: dive-hub-frontend
+    # IMPORTANT: Use hash-based detection to reinstall when package.json changes
+    # This ensures new dependencies are installed even when node_modules volume exists
+    command: ["/bin/sh", "-c", "if [ ! -f /app/node_modules/.package-hash ] || [ \"$$(md5sum /app/package.json | cut -d' ' -f1)\" != \"$$(cat /app/node_modules/.package-hash 2>/dev/null)\" ]; then echo 'Package.json changed - reinstalling dependencies...' && npm install && md5sum /app/package.json | cut -d' ' -f1 > /app/node_modules/.package-hash; else echo 'Dependencies up to date'; fi && npm run dev"]
     healthcheck:
       # Use curl (installed in Dockerfile.dev). Frontend serves HTTPS (self-signed) in dev; skip cert validation.
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]

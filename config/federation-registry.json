@@ -346,7 +346,7 @@
           "name": "backend-fra",
           "containerName": "dive-spoke-fra-backend",
           "internalPort": 4000,
-          "externalPort": 4001,
+          "externalPort": 4010,
           "protocol": "https",
           "hostname": "fra-api.dive25.com"
         },
@@ -354,7 +354,7 @@
           "name": "keycloak-fra",
           "containerName": "dive-spoke-fra-keycloak",
           "internalPort": 8443,
-          "externalPort": 8444,
+          "externalPort": 8453,
           "protocol": "https",
           "hostname": "fra-idp.dive25.com"
         },
@@ -362,7 +362,7 @@
           "name": "mongodb-fra",
           "containerName": "dive-spoke-fra-mongodb",
           "internalPort": 27017,
-          "externalPort": 27018,
+          "externalPort": 27027,
           "protocol": "mongodb"
         }
       }
@@ -791,7 +791,7 @@
         "provider": "docker",
         "host": "localhost",
         "domain": "dive25.com",
-        "composeFile": "instances/cze/docker-compose.yml",
+        "composeFile": "docker-compose.cze.yml",
         "projectName": "cze"
       },
       "services": {
@@ -800,7 +800,7 @@
           "name": "frontend-cze",
           "containerName": "dive-spoke-cze-frontend",
           "internalPort": 3000,
-          "externalPort": 3006,
+          "externalPort": 3457,
           "protocol": "https",
           "hostname": "cze-app.dive25.com"
         },
@@ -982,12 +982,209 @@
         "database": "dive-v3-hun",
         "user": "admin"
       }
+    },
+    "bgr": {
+      "code": "BGR",
+      "name": "Bulgaria",
+      "locale": "bg-BG",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.bgr.yml",
+        "projectName": "bgr"
+      },
+      "services": {
+        "_comment": "BGR uses bgr- prefix on all service names",
+        "frontend": {
+          "name": "frontend-bgr",
+          "containerName": "dive-spoke-bgr-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "bgr-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-bgr",
+          "containerName": "dive-spoke-bgr-backend",
+          "internalPort": 4000,
+          "externalPort": 4003,
+          "protocol": "https",
+          "hostname": "bgr-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-bgr",
+          "containerName": "dive-spoke-bgr-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8446,
+          "protocol": "https",
+          "hostname": "bgr-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-bgr",
+          "containerName": "dive-spoke-bgr-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27020,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "pol": {
+      "code": "POL",
+      "name": "Poland",
+      "locale": "pl-PL",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.pol.yml",
+        "projectName": "pol"
+      },
+      "services": {
+        "_comment": "POL uses pol- prefix on all service names",
+        "frontend": {
+          "name": "frontend-pol",
+          "containerName": "dive-spoke-pol-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "pol-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-pol",
+          "containerName": "dive-spoke-pol-backend",
+          "internalPort": 4000,
+          "externalPort": 4023,
+          "protocol": "https",
+          "hostname": "pol-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-pol",
+          "containerName": "dive-spoke-pol-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8466,
+          "protocol": "https",
+          "hostname": "pol-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-pol",
+          "containerName": "dive-spoke-pol-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27040,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "svk": {
+      "code": "SVK",
+      "name": "Slovakia",
+      "locale": "sk-SK",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.svk.yml",
+        "projectName": "svk"
+      },
+      "services": {
+        "_comment": "SVK uses svk- prefix on all service names",
+        "frontend": {
+          "name": "frontend-svk",
+          "containerName": "dive-spoke-svk-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "svk-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-svk",
+          "containerName": "dive-spoke-svk-backend",
+          "internalPort": 4000,
+          "externalPort": 4026,
+          "protocol": "https",
+          "hostname": "svk-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-svk",
+          "containerName": "dive-spoke-svk-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8469,
+          "protocol": "https",
+          "hostname": "svk-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-svk",
+          "containerName": "dive-spoke-svk-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27043,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "nor": {
+      "code": "NOR",
+      "name": "Norway",
+      "locale": "no-NO",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.nor.yml",
+        "projectName": "nor"
+      },
+      "services": {
+        "_comment": "NOR uses nor- prefix on all service names",
+        "frontend": {
+          "name": "frontend-nor",
+          "containerName": "dive-spoke-nor-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "nor-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-nor",
+          "containerName": "dive-spoke-nor-backend",
+          "internalPort": 4000,
+          "externalPort": 4022,
+          "protocol": "https",
+          "hostname": "nor-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-nor",
+          "containerName": "dive-spoke-nor-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8465,
+          "protocol": "https",
+          "hostname": "nor-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-nor",
+          "containerName": "dive-spoke-nor-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27039,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
     "model": "hub-spoke",
     "matrix": {
       "usa": [
+        "bgr",
         "cze",
         "deu",
         "esp",
@@ -999,9 +1196,15 @@
         "lux",
         "lva",
         "mne",
-        "nld"
+        "nld",
+        "nor",
+        "pol",
+        "svk"
       ],
       "cze": [
+        "deu",
+        "fra",
+        "gbr",
         "usa"
       ],
       "fra": [
@@ -1064,6 +1267,30 @@
         "gbr"
       ],
       "nld": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "bgr": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "pol": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "svk": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "nor": [
         "deu",
         "fra",
         "gbr",

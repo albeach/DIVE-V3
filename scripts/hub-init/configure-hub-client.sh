@@ -39,8 +39,14 @@ ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
 # Get admin password from container if not set
+# Try multiple container names for compatibility (dive-v3-backend, dive-hub-backend, keycloak)
 if [ -z "$ADMIN_PASSWORD" ]; then
-    ADMIN_PASSWORD=$(docker exec dive-hub-backend printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
+    for container in "dive-v3-backend" "dive-hub-backend" "dive-v3-keycloak"; do
+        if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+            ADMIN_PASSWORD=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
+            [ -n "$ADMIN_PASSWORD" ] && break
+        fi
+    done
 fi
 
 if [ -z "$ADMIN_PASSWORD" ]; then

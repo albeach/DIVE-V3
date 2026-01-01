@@ -2,15 +2,34 @@
  * Activity Routes
  *
  * User activity endpoints for tracking document interactions and authorization decisions
+ *
+ * IMPORTANT: This route queries the `audit_logs` collection (populated by ACP-240 audit logger)
+ * NOT the `decisions` collection. The authz middleware writes to audit_logs via auditService.
  */
 
 import { Router } from 'express';
+import { MongoClient, Db } from 'mongodb';
 import { authenticateJWT } from '../middleware/authz.middleware';
-import { decisionLogService } from '../services/decision-log.service';
 import { logger } from '../utils/logger';
+import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import type { Request, Response } from 'express';
 
 const router = Router();
+
+// MongoDB connection for audit_logs
+let mongoClient: MongoClient | null = null;
+let db: Db | null = null;
+
+async function getAuditLogsCollection() {
+    if (!mongoClient || !db) {
+        const url = getMongoDBUrl();
+        const dbName = getMongoDBName();
+        mongoClient = new MongoClient(url);
+        await mongoClient.connect();
+        db = mongoClient.db(dbName);
+    }
+    return db.collection(process.env.ACP240_LOGS_COLLECTION || 'audit_logs');
+}
 
 interface IAuthenticatedRequest extends Request {
     user?: {
@@ -24,7 +43,7 @@ interface IAuthenticatedRequest extends Request {
 
 /**
  * GET /api/activity
- * Get current user's activity logs
+ * Get current user's activity logs from audit_logs collection
  * Query params:
  * - limit: Maximum number of logs (default: 50)
  * - offset: Pagination offset (default: 0)
@@ -66,73 +85,74 @@ router.get('/', authenticateJWT, async (req: IAuthenticatedRequest, res: Respons
                 startTime = undefined;
         }
 
-        // Build query
-        const query: any = {
-            subject: uniqueID,
-            limit,
-            skip: offset
+        // Build MongoDB filter for audit_logs collection
+        const filter: any = {
+            subject: uniqueID
         };
 
         if (startTime) {
-            query.startTime = startTime;
+            filter.timestamp = { $gte: startTime.toISOString() };
         }
 
-        // Filter by decision type if specified
-        if (type === 'access_granted') {
-            query.decision = 'ALLOW';
+        // Filter by decision outcome if specified
+        if (type === 'access_granted' || type === 'view' || type === 'download') {
+            filter.outcome = 'ALLOW';
         } else if (type === 'access_denied') {
-            query.decision = 'DENY';
+            filter.outcome = 'DENY';
         }
 
-        // Query decision logs
-        const decisions = await decisionLogService.queryDecisions(query);
+        // Query audit_logs collection
+        const collection = await getAuditLogsCollection();
+        const auditLogs = await collection
+            .find(filter)
+            .sort({ timestamp: -1 })
+            .skip(offset)
+            .limit(limit)
+            .toArray();
 
-        // Transform to activity format
-        const activities = decisions.map((decision) => {
-            // Determine activity type from decision and action
+        // Transform audit_logs to activity format
+        const activities = auditLogs.map((log: any) => {
+            // Determine activity type from event type and outcome
             let activityType: 'view' | 'download' | 'upload' | 'access_granted' | 'access_denied' | 'request_submitted';
 
-            if (decision.decision === 'ALLOW') {
-                // Check action.operation to determine type
-                if (decision.action.operation === 'download' || decision.action.operation === 'GET' && decision.resource.resourceId.includes('download')) {
+            const eventType = log.acp240EventType || log.eventType;
+            const outcome = log.outcome || (log.policyEvaluation?.allow ? 'ALLOW' : 'DENY');
+            const action = log.action || 'access';
+
+            if (outcome === 'ALLOW') {
+                if (action === 'download' || eventType === 'DOWNLOAD') {
                     activityType = 'download';
-                } else if (decision.action.operation === 'upload' || decision.action.operation === 'POST') {
+                } else if (action === 'upload' || eventType === 'UPLOAD') {
                     activityType = 'upload';
+                } else if (eventType === 'DECRYPT' || action === 'access') {
+                    activityType = 'view';
                 } else {
-                    activityType = decision.decision === 'ALLOW' ? 'access_granted' : 'access_denied';
+                    activityType = 'access_granted';
                 }
             } else {
                 activityType = 'access_denied';
             }
 
-            // Default to 'view' if operation is GET and decision is ALLOW
-            if (decision.action.operation === 'GET' && decision.decision === 'ALLOW' && activityType === 'access_granted') {
-                activityType = 'view';
-            }
-
-            // Try to extract title from resource metadata if available
-            // Resource metadata may be in evaluation_details or resource attributes
-            let resourceTitle = decision.resource.resourceId;
-            const resourceMetadata = (decision.evaluation_details as any)?.resource || decision.resource;
-            if (resourceMetadata?.title) {
-                resourceTitle = resourceMetadata.title;
-            } else if (resourceMetadata?.name) {
-                resourceTitle = resourceMetadata.name;
+            // Extract resource title if available
+            const resourceId = log.resourceId || 'unknown';
+            let resourceTitle = resourceId;
+            if (log.resourceAttributes?.title) {
+                resourceTitle = log.resourceAttributes.title;
             }
 
             return {
-                id: decision.requestId,
+                id: log.requestId || log._id?.toString(),
                 type: activityType,
-                resourceId: decision.resource.resourceId,
+                resourceId: resourceId,
                 resourceTitle: resourceTitle,
-                classification: decision.resource.classification || 'UNCLASSIFIED',
-                timestamp: new Date(decision.timestamp),
-                details: decision.decision === 'DENY' ? decision.reason : undefined,
-                decision: decision.decision
+                classification: log.resourceAttributes?.classification || 'UNCLASSIFIED',
+                timestamp: new Date(log.timestamp),
+                details: outcome === 'DENY' ? log.reason : undefined,
+                decision: outcome
             };
         });
 
-        logger.info('User activity queried', {
+        logger.info('User activity queried from audit_logs', {
             uniqueID,
             count: activities.length,
             timeRange,

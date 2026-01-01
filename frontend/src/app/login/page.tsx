@@ -25,11 +25,11 @@ export default async function LoginPage({
             Please wait while we redirect you to your Identity Provider
           </p>
         </div>
-        
+
         <div className="mt-8 flex justify-center">
-          <AutoSignIn 
-            idpHint={params.idp} 
-            callbackUrl={params.callbackUrl || '/dashboard'} 
+          <AutoSignIn
+            idpHint={params.idp}
+            callbackUrl={params.callbackUrl || '/dashboard'}
           />
         </div>
       </div>

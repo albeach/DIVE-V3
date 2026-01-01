@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Latvia Ministry of Defence",
     "country": "LVA",
     "organizationType": "government",
-    "contactEmail": "admin@lva.dive25.com",
-    "registeredSpokeId": "spoke-lva-d1f13823"
+    "contactEmail": "admin@lva.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:lva",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-19T11:46:16Z",
     "spokeToken": "uyjhzVxTnt645QIb9IwAyyeYQ1i1bWN-zdWlXX3wKqY"
   },
   "operational": {

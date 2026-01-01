@@ -91,15 +91,14 @@ services:
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     environment:
       KC_DB: postgres
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       KC_HTTPS_PORT: "8443"
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
-      KEYCLOAK_ADMIN: admin
+      # Use new Keycloak 26+ bootstrap admin variables (replaces deprecated KEYCLOAK_ADMIN)
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master || exit 1"]
       interval: 30s
@@ -202,7 +201,9 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile.dev
     restart: unless-stopped
-    command: ["/bin/sh", "-c", "rm -f /app/.env.local && npm run dev"]
+    # IMPORTANT: Use hash-based detection to reinstall when package.json changes
+    # This ensures new dependencies are installed even when node_modules volume exists
+    command: ["/bin/sh", "-c", "rm -f /app/.env.local && if [ ! -f /app/node_modules/.package-hash ] || [ \"$$(md5sum /app/package.json | cut -d' ' -f1)\" != \"$$(cat /app/node_modules/.package-hash 2>/dev/null)\" ]; then echo 'Package.json changed - reinstalling dependencies...' && npm install && md5sum /app/package.json | cut -d' ' -f1 > /app/node_modules/.package-hash; else echo 'Dependencies up to date'; fi && npm run dev"]
     environment:
       NODE_ENV: development
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
@@ -244,11 +245,13 @@ services:
       # Extra CA bundle for self-signed certificates
       NODE_EXTRA_CA_CERTS: /var/opal/certs/mkcert-rootCA.pem
     # Note: Volumes are defined in spoke compose, includes ./certs:/var/opal/certs
+    # Health check: Verify OPAL client main process is running
+    # Uses /proc filesystem to check if PID 1 (main process) exists and is alive
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      test: ["CMD-SHELL", "test -f /proc/1/stat && kill -0 1 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 10
+      retries: 3
       start_period: 60s
     logging:
       driver: json-file

@@ -39,6 +39,7 @@ hub_spokes() {
         approve)      hub_spokes_approve "$@" ;;
         reject)       hub_spokes_reject "$@" ;;
         suspend)      hub_spokes_suspend "$@" ;;
+        unsuspend)    hub_spokes_unsuspend "$@" ;;  # ADDED (Dec 2025)
         revoke)       hub_spokes_revoke "$@" ;;
         token)        hub_spokes_token "$@" ;;
         rotate-token) hub_spokes_rotate_token "$@" ;;
@@ -637,6 +638,56 @@ hub_spokes_suspend() {
     fi
 }
 
+# ADDED (Dec 2025): Unsuspend/reactivate a suspended spoke
+hub_spokes_unsuspend() {
+    local spoke_id="$1"
+    local retry_federation="${2:-false}"
+
+    if [ -z "$spoke_id" ]; then
+        echo "Usage: ./dive hub spokes unsuspend <spoke-id> [--retry-federation]"
+        echo ""
+        echo "Options:"
+        echo "  --retry-federation    Also retry bidirectional federation setup"
+        return 1
+    fi
+
+    # Check for --retry-federation flag
+    if [ "$2" = "--retry-federation" ] || [ "$2" = "-r" ]; then
+        retry_federation="true"
+    fi
+
+    log_step "Unsuspending spoke: ${spoke_id}"
+    if [ "$retry_federation" = "true" ]; then
+        log_info "Will also retry bidirectional federation"
+    fi
+
+    local response=$(curl -kfs --max-time 30 \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+        -d "{\"retryFederation\": ${retry_federation}}" \
+        "${HUB_BACKEND_URL}/api/federation/spokes/${spoke_id}/unsuspend" 2>/dev/null)
+
+    if echo "$response" | jq -e '.success' >/dev/null 2>&1; then
+        log_success "Spoke unsuspended!"
+        local new_status=$(echo "$response" | jq -r '.spoke.status // "unknown"')
+        echo ""
+        echo "  Status:  ${new_status}"
+        if [ "$retry_federation" = "true" ]; then
+            local fed_alias=$(echo "$response" | jq -r '.spoke.federationIdPAlias // "not configured"')
+            echo "  IdP:     ${fed_alias}"
+        else
+            echo ""
+            echo "  To restore bidirectional SSO, run:"
+            echo "  ./dive federation-setup configure $(echo "$response" | jq -r '.spoke.instanceCode // "SPOKE"' | tr '[:upper:]' '[:lower:]')"
+        fi
+    else
+        local error_msg=$(echo "$response" | jq -r '.message // "Unknown error"')
+        log_error "Failed to unsuspend spoke: ${error_msg}"
+        return 1
+    fi
+}
+
 hub_spokes_revoke() {
     local spoke_id="$1"
     local reason="${2:-Revoked by administrator}"
@@ -716,6 +767,7 @@ hub_spokes_help() {
     echo -e "${CYAN}Spoke Operations:${NC}"
     echo "  list                 List all registered spokes"
     echo "  suspend <id>         Temporarily suspend a spoke"
+    echo "  unsuspend <id>       Reactivate a suspended spoke [--retry-federation]"
     echo "  revoke <id>          Permanently revoke a spoke"
     echo ""
     echo -e "${CYAN}Token Management:${NC}"
@@ -727,6 +779,7 @@ hub_spokes_help() {
     echo "  ./dive hub spokes approve spoke-nzl-abc123"
     echo "  ./dive hub spokes approve spoke-nzl-abc123 --scopes 'policy:base' --trust-level partner"
     echo "  ./dive hub spokes reject spoke-xyz-123 --reason 'Failed security review'"
+    echo "  ./dive hub spokes unsuspend spoke-fra-456 --retry-federation"
     echo "  ./dive hub spokes rotate-token spoke-fra-456"
 }
 

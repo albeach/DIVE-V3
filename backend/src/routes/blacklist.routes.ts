@@ -1,10 +1,11 @@
 /**
  * Token Blacklist Routes
  * Phase 2 GAP-007: Session Synchronization
- * 
- * Provides endpoints for:
- * - POST /api/auth/blacklist-token - Add token to shared blacklist
- * - GET /api/blacklist/stats - Get blacklist statistics (monitoring)
+ *
+ * @swagger
+ * tags:
+ *   - name: Authentication
+ *     description: Token management and session operations
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
@@ -15,9 +16,40 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 /**
- * POST /api/auth/blacklist-token
- * Add the current user's access token to the shared blacklist
- * Called by frontend during logout to ensure cross-instance revocation
+ * @swagger
+ * /api/auth/blacklist-token:
+ *   post:
+ *     summary: Add token to shared blacklist
+ *     description: Called during logout to ensure cross-instance token revocation
+ *     tags: [Authentication]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for blacklisting
+ *                 example: User logout
+ *     responses:
+ *       200:
+ *         description: Token successfully blacklisted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 jti:
+ *                   type: string
+ *                 ttl:
+ *                   type: number
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.post('/api/auth/blacklist-token', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -50,7 +82,7 @@ router.post('/api/auth/blacklist-token', async (req: Request, res: Response, nex
                     instance: process.env.INSTANCE_REALM
                 });
                 await revokeAllUserTokens(uniqueID, 900, reason);
-                res.json({ 
+                res.json({
                     message: 'All user tokens revoked',
                     uniqueID,
                     reason

@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-est-828e33d8",
+    "spokeId": "spoke-est-6b0d26fb",
     "instanceCode": "EST",
-    "name": "Estonia",
-    "description": "DIVE V3 Spoke Instance for Estonia",
+    "name": "Estonia Defence Forces",
+    "description": "DIVE V3 Spoke Instance for Estonia Defence Forces",
     "country": "EST",
     "organizationType": "government",
     "contactEmail": "admin@est.dive25.com",
-    "registeredSpokeId": "spoke-est-84684874"
+    "registeredSpokeId": "spoke-est-9dc55f0e"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -17,7 +17,7 @@
     "apiUrl": "https://localhost:4008",
     "idpUrl": "https://dive-spoke-est-keycloak:8443",
     "idpPublicUrl": "https://localhost:8451",
-    "kasUrl": "https://localhost:9008"
+    "kasUrl": "https://localhost:10008"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/certs/spoke.crt",
@@ -27,15 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:est",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-22T17:36:59Z",
-    "spokeToken": "lUOT72x_5jl65Rq5V-V19IsNUtHXTpGrtBAwC0Fm5C4"
+    "registeredAt": "2025-12-31T22:48:14Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-22T17:22:19Z",
-    "lastModified": "2025-12-22T17:22:19Z",
+    "createdAt": "2025-12-30T07:14:08Z",
+    "lastModified": "2025-12-30T07:14:08Z",
     "configHash": ""
   }
 }

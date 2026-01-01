@@ -69,6 +69,28 @@ json_array_unique() {
 # =============================================================================
 
 cmd_up() {
+    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
+    # If --instance is set to a spoke (not usa), delegate to spoke module
+    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        # This is a spoke instance - route to spoke module
+        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke up' instead"
+        log_warn "Support for './dive --instance $instance_lower up' will be removed in v5.0"
+        echo ""
+
+        # Load spoke module and delegate
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
+            spoke_up "$@"
+            return $?
+        else
+            log_error "Spoke module not found - cannot start spoke instance"
+            return 1
+        fi
+    fi
+
+    # HUB STARTUP: Continue with hub logic
     print_header
     check_docker || exit 1
     load_secrets || exit 1
@@ -87,7 +109,7 @@ cmd_up() {
         log_verbose "Skipping mkcert generation for env ${ENVIRONMENT}"
     fi
 
-    log_step "Starting DIVE V3 Stack..."
+    log_step "Starting DIVE V3 Hub..."
 
     # Ensure required networks exist before starting
     ensure_shared_network || { log_error "Network setup failed"; exit 1; }
@@ -816,7 +838,28 @@ bootstrap_default_idp() {
 }
 
 cmd_down() {
-    log_step "Stopping containers..."
+    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
+    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        # This is a spoke instance - route to spoke module
+        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke down' instead"
+        log_warn "Support for './dive --instance $instance_lower down' will be removed in v5.0"
+        echo ""
+
+        # Load spoke module and delegate
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
+            spoke_down "$@"
+            return $?
+        else
+            log_error "Spoke module not found - cannot stop spoke instance"
+            return 1
+        fi
+    fi
+
+    # HUB SHUTDOWN: Continue with hub logic
+    log_step "Stopping hub containers..."
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f docker-compose.yml down"
@@ -829,14 +872,37 @@ cmd_down() {
         docker compose -f docker-compose.pilot.yml down 2>/dev/null || true
     fi
 
-    log_success "Stack stopped"
+    log_success "Hub stopped"
 }
 
 cmd_restart() {
     local service="${1:-}"
 
+    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
+    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        # This is a spoke instance - route to spoke module
+        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke down && ./dive --instance $instance_lower spoke up' instead"
+        log_warn "Support for './dive --instance $instance_lower restart' will be removed in v5.0"
+        echo ""
+
+        # Load spoke module and delegate
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
+            spoke_down "$@"
+            sleep 2
+            spoke_up "$@"
+            return $?
+        else
+            log_error "Spoke module not found - cannot restart spoke instance"
+            return 1
+        fi
+    fi
+
+    # HUB RESTART: Continue with hub logic
     if [ -n "$service" ]; then
-        log_step "Restarting $service..."
+        log_step "Restarting hub service: $service..."
         run docker compose restart "$service"
     else
         cmd_down
@@ -849,6 +915,27 @@ cmd_logs() {
     local service="${1:-}"
     local lines="${2:-100}"
 
+    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
+    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        # This is a spoke instance - route to spoke module
+        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke logs [service]' instead"
+        log_warn "Support for './dive --instance $instance_lower logs' will be removed in v5.0"
+        echo ""
+
+        # Load spoke module and delegate
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
+            spoke_logs "$service"
+            return $?
+        else
+            log_error "Spoke module not found - cannot view spoke logs"
+            return 1
+        fi
+    fi
+
+    # HUB LOGS: Continue with hub logic
     if [ -n "$service" ]; then
         docker compose logs -f --tail="$lines" "$service"
     else
@@ -857,9 +944,29 @@ cmd_logs() {
 }
 
 cmd_ps() {
-    echo -e "${CYAN}Running DIVE Containers:${NC}"
-    # Show all containers with DIVE-related names (hub and spokes)
-    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null | grep -E "(^dive|^[a-z]{3}-)" || echo "No DIVE containers running"
+    # INSTANCE-AWARE: Show containers for specified instance
+    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        # Spoke instance - show only spoke containers
+        echo -e "${CYAN}Running DIVE Spoke Containers (${instance_lower^^}):${NC}"
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null | \
+            grep -E "dive-spoke-${instance_lower}|^${instance_lower}-" || \
+            echo "No containers running for spoke ${instance_lower^^}"
+    else
+        # Hub instance - show hub containers
+        echo -e "${CYAN}Running DIVE Hub Containers:${NC}"
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null | \
+            grep -E "dive-hub-" || \
+            echo "No hub containers running"
+
+        # Also show count of running spokes
+        local spoke_count=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c "dive-spoke-" || echo "0")
+        if [ "$spoke_count" -gt 0 ]; then
+            echo ""
+            echo -e "${DIM}Note: $spoke_count spoke containers running (use './dive ps' to see all)${NC}"
+        fi
+    fi
 }
 
 cmd_exec() {
@@ -872,17 +979,44 @@ cmd_exec() {
         return 1
     fi
 
-    # Map short names to container names (prefer V3 naming, fall back to pilot)
-    case "$container" in
-        fe|frontend) container="${FRONTEND_CONTAINER:-dive-v3-frontend}";;
-        be|backend)  container="${BACKEND_CONTAINER:-dive-v3-backend}";;
-        kc|keycloak) container="${KEYCLOAK_CONTAINER:-dive-v3-keycloak}";;
-        pg|postgres) container="${POSTGRES_CONTAINER:-dive-v3-postgres}";;
-        mongo|mongodb) container="${MONGO_CONTAINER:-dive-v3-mongo}";;
-        redis)       container="${REDIS_CONTAINER:-dive-v3-redis}";;
-        opa)         container="${OPA_CONTAINER:-dive-v3-opa}";;
-        opal|opal-server) container="${OPAL_CONTAINER:-dive-v3-opal-server}";;
-    esac
+    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
+    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        # Spoke instance - prepend spoke prefix to container name
+        log_verbose "Targeting spoke instance: ${instance_lower^^}"
+
+        # Map short names to spoke container names
+        case "$container" in
+            fe|frontend) container="dive-spoke-${instance_lower}-frontend";;
+            be|backend)  container="dive-spoke-${instance_lower}-backend";;
+            kc|keycloak) container="dive-spoke-${instance_lower}-keycloak";;
+            pg|postgres) container="dive-spoke-${instance_lower}-postgres";;
+            mongo|mongodb) container="dive-spoke-${instance_lower}-mongodb";;
+            redis)       container="dive-spoke-${instance_lower}-redis";;
+            opa)         container="dive-spoke-${instance_lower}-opa";;
+            opal|opal-client) container="dive-spoke-${instance_lower}-opal-client";;
+            kas)         container="dive-spoke-${instance_lower}-kas";;
+            # If already fully qualified, use as-is
+            dive-spoke-*) ;;
+            *)
+                # Assume it's a custom container name
+                log_verbose "Using custom container name: $container"
+                ;;
+        esac
+    else
+        # Hub instance - map to hub container names
+        case "$container" in
+            fe|frontend) container="${FRONTEND_CONTAINER:-dive-hub-frontend}";;
+            be|backend)  container="${BACKEND_CONTAINER:-dive-hub-backend}";;
+            kc|keycloak) container="${KEYCLOAK_CONTAINER:-dive-hub-keycloak}";;
+            pg|postgres) container="${POSTGRES_CONTAINER:-dive-hub-postgres}";;
+            mongo|mongodb) container="${MONGO_CONTAINER:-dive-hub-mongo}";;
+            redis)       container="${REDIS_CONTAINER:-dive-hub-redis}";;
+            opa)         container="${OPA_CONTAINER:-dive-hub-opa}";;
+            opal|opal-server) container="${OPAL_CONTAINER:-dive-hub-opal-server}";;
+        esac
+    fi
 
     # Allow non-TTY exec for non-interactive environments (e.g., CI)
     local exec_opts=("-it")

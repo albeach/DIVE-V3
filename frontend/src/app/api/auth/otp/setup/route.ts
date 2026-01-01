@@ -1,12 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../[...nextauth]/route';
+/**
+ * OTP Setup Route - Generate TOTP secret for 2FA
+ *
+ * NextAuth v5 pattern: Uses `auth()` from @/auth for session validation
+ */
+
+import { NextResponse } from 'next/server';
+import { auth } from '@/auth';
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const session = await getServerSession(authOptions);
+    // NextAuth v5: Use auth() to get session
+    const session = await auth();
 
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

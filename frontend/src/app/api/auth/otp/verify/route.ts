@@ -1,11 +1,17 @@
+/**
+ * OTP Verify Route - Verify TOTP code for 2FA
+ *
+ * NextAuth v5 pattern: Uses `auth()` from @/auth for session validation
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../../[...nextauth]/route';
+import { auth } from '@/auth';
 import speakeasy from 'speakeasy';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    // NextAuth v5: Use auth() to get session
+    const session = await auth();
 
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -1,15 +1,15 @@
 /**
  * X.509 Certificate Management
- * 
+ *
  * ACP-240 Section 5.4: Digital Signatures (X.509 PKI)
- * 
+ *
  * Provides production-ready certificate management:
  * - Certificate Authority (CA) initialization
  * - Certificate generation for policy signing
  * - Certificate chain validation
  * - Certificate revocation checking
  * - Certificate storage and retrieval
- * 
+ *
  * Production deployment:
  * - Integrate with enterprise PKI (DoD PKI, NATO PKI)
  * - Store certificates in HSM or secure vault
@@ -87,7 +87,7 @@ export interface ICertificateGenerationOptions {
 
 /**
  * Certificate Authority Manager
- * 
+ *
  * Manages a local Certificate Authority for policy signing certificates.
  * In production, integrate with enterprise PKI.
  */
@@ -239,17 +239,39 @@ export class CertificateManager {
 
     /**
      * Resolve certificate paths for three-tier hierarchy
+     * Supports instance-specific PKI directories for hub-spoke model
      */
     resolveCertificatePaths(): ICertificatePaths {
+        // Check for instance-specific PKI directory first (spoke model)
+        const instanceCode = process.env.INSTANCE_CODE || 'USA';
+        const isHub = instanceCode.toUpperCase() === 'USA';
+
+        // For spokes, check instance-specific PKI directory
+        const instancePkiDir = path.join(this.certDir, 'pki');
+        const hubPkiDir = path.join(this.certDir, '..', 'hub-pki');
+
+        // Determine base PKI directory
+        let pkiBaseDir = this.certDir;
+
+        if (fs.existsSync(instancePkiDir)) {
+            // Instance has its own PKI directory (imported from hub)
+            pkiBaseDir = instancePkiDir;
+            logger.debug('Using instance-specific PKI directory', { instanceCode, pkiBaseDir });
+        } else if (isHub && fs.existsSync(hubPkiDir)) {
+            // Hub uses hub-pki directory
+            pkiBaseDir = hubPkiDir;
+            logger.debug('Using hub PKI directory', { pkiBaseDir });
+        }
+
         return {
-            rootCertPath: process.env.PKI_ROOT_CA_PATH || path.join(this.certDir, 'ca', 'root.crt'),
-            rootKeyPath: process.env.PKI_ROOT_CA_KEY_PATH || path.join(this.certDir, 'ca', 'root.key'),
-            intermediateCertPath: process.env.PKI_INTERMEDIATE_CA_PATH || path.join(this.certDir, 'ca', 'intermediate.crt'),
-            intermediateKeyPath: process.env.PKI_INTERMEDIATE_CA_KEY_PATH || path.join(this.certDir, 'ca', 'intermediate.key'),
-            signingCertPath: process.env.PKI_SIGNING_CERT_PATH || path.join(this.certDir, 'signing', 'policy-signer.crt'),
-            signingKeyPath: process.env.PKI_SIGNING_KEY_PATH || path.join(this.certDir, 'signing', 'policy-signer.key'),
-            chainPath: path.join(this.certDir, 'ca', 'chain.pem'),
-            signingBundlePath: path.join(this.certDir, 'signing', 'policy-signer-bundle.pem')
+            rootCertPath: process.env.PKI_ROOT_CA_PATH || path.join(pkiBaseDir, 'ca', 'root.crt'),
+            rootKeyPath: process.env.PKI_ROOT_CA_KEY_PATH || path.join(pkiBaseDir, 'ca', 'root.key'),
+            intermediateCertPath: process.env.PKI_INTERMEDIATE_CA_PATH || path.join(pkiBaseDir, 'ca', 'intermediate.crt'),
+            intermediateKeyPath: process.env.PKI_INTERMEDIATE_CA_KEY_PATH || path.join(pkiBaseDir, 'ca', 'intermediate.key'),
+            signingCertPath: process.env.PKI_SIGNING_CERT_PATH || path.join(pkiBaseDir, 'signing', 'policy-signer.crt'),
+            signingKeyPath: process.env.PKI_SIGNING_KEY_PATH || path.join(pkiBaseDir, 'signing', 'policy-signer.key'),
+            chainPath: path.join(pkiBaseDir, 'ca', 'chain.pem'),
+            signingBundlePath: path.join(pkiBaseDir, 'signing', 'policy-signer-bundle.pem')
         };
     }
 
@@ -659,12 +681,12 @@ ${Buffer.from(JSON.stringify({ ...certData, signature })).toString('base64').mat
     verifyCertificateChain(certificatePEM: string): boolean {
         try {
             const cert = new X509Certificate(certificatePEM);
-            
+
             // Load three-tier hierarchy
             const paths = this.resolveCertificatePaths();
             const intermediatePEM = fs.readFileSync(paths.intermediateCertPath, 'utf8');
             const rootPEM = fs.readFileSync(paths.rootCertPath, 'utf8');
-            
+
             const intermediateCert = new X509Certificate(intermediatePEM);
             const rootCert = new X509Certificate(rootPEM);
 
