@@ -10,10 +10,8 @@
 import React, { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-// Global jest declaration for testing utilities
-declare global {
-  const jest: any;
-}
+// Declare jest globally for TypeScript when not in test environment
+declare const jest: typeof import('@jest/globals').jest;
 
 // ============================================
 // Test Query Client
@@ -55,7 +53,7 @@ interface TestWrapperProps {
  */
 export function createTestWrapper(queryClient?: QueryClient) {
   const client = queryClient || createTestQueryClient();
-  
+
   return function TestWrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
@@ -93,8 +91,9 @@ export function mockError(message: string, status = 500, delay = 0): Promise<nev
  * Create a mock fetch implementation
  */
 export function createMockFetch(responses: Record<string, unknown>) {
-  return jest.fn().mockImplementation((url: string) => {
-    const urlPath = new URL(url, 'http://localhost').pathname;
+  return jest.fn().mockImplementation((url: unknown) => {
+    const urlString = String(url);
+    const urlPath = new URL(urlString, 'http://localhost').pathname;
     const response = responses[urlPath];
 
     if (response === undefined) {

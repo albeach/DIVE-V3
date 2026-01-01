@@ -36,6 +36,7 @@ import spokeRoutes from './routes/spoke.routes';  // Phase 5: Spoke resilience o
 import notificationRoutes from './routes/notifications.routes';
 import notificationCountRoutes from './routes/notifications-count.routes';
 import activityRoutes from './routes/activity.routes';  // User activity endpoints
+import swaggerRoutes from './routes/swagger.routes';  // API Documentation (OpenAPI/Swagger)
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
@@ -72,10 +73,12 @@ app.use(helmet({
 }));
 
 // CORS - Allow HTTPS frontend and federation partners
-const corsOrigins = [
+const corsOrigins: (string | RegExp)[] = [
   process.env.NEXT_PUBLIC_BASE_URL || 'https://localhost:3000',
   'https://localhost:3000',
-  'http://localhost:3000'  // Fallback for development
+  'http://localhost:3000',  // Fallback for development
+  // Allow all localhost ports for spoke instances (development)
+  /^https?:\/\/localhost:\d+$/,
 ];
 
 // Add federation partner origins from environment
@@ -143,6 +146,7 @@ app.use('/api/spoke', spokeRoutes);  // Phase 5: Spoke resilience operations (fa
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notifications-count', notificationCountRoutes);
 app.use('/api/activity', activityRoutes);  // User activity endpoints
+app.use('/api-docs', swaggerRoutes);  // API Documentation (OpenAPI/Swagger UI)
 
 // Federation endpoints (Phase 1)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server

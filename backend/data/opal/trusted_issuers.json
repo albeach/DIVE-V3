@@ -9,123 +9,300 @@
       "protocol": "oidc",
       "federation_class": "NATIONAL"
     },
-    "https://new-issuer.example.com": {
+    "https://localhost:8451/realms/dive-v3-broker-usa": {
       "tenant": "USA",
-      "name": "Test Issuer",
+      "name": "USA Keycloak Hub (Local Dev)",
       "country": "USA",
-      "trust_level": "HIGH",
+      "trust_level": "DEVELOPMENT",
       "enabled": true,
       "protocol": "oidc",
-      "federation_class": "NATIONAL"
+      "federation_class": "LOCAL"
     },
-    "https://jpn-idp.example.com": {
-      "tenant": "JPN",
-      "name": "Japan Defense IdP",
-      "country": "JPN",
-      "trust_level": "HIGH",
+    "https://keycloak-usa:8443/realms/dive-v3-broker-usa": {
+      "tenant": "USA",
+      "name": "USA Keycloak Hub (Internal Docker)",
+      "country": "USA",
+      "trust_level": "DEVELOPMENT",
       "enabled": true,
-      "protocol": "saml",
-      "federation_class": "NATIONAL"
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8458/realms/dive-v3-broker-ita": {
+      "tenant": "ITA",
+      "name": "ITA Keycloak (Local Dev)",
+      "country": "ITA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-ita:8443/realms/dive-v3-broker-ita": {
+      "tenant": "ITA",
+      "name": "ITA Keycloak (Internal Docker)",
+      "country": "ITA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8453/realms/dive-v3-broker-fra": {
+      "tenant": "FRA",
+      "name": "FRA Keycloak (Local Dev)",
+      "country": "FRA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-fra:8443/realms/dive-v3-broker-fra": {
+      "tenant": "FRA",
+      "name": "FRA Keycloak (Internal Docker)",
+      "country": "FRA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8454/realms/dive-v3-broker-gbr": {
+      "tenant": "GBR",
+      "name": "GBR Keycloak (Local Dev)",
+      "country": "GBR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-gbr:8443/realms/dive-v3-broker-gbr": {
+      "tenant": "GBR",
+      "name": "GBR Keycloak (Internal Docker)",
+      "country": "GBR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8455/realms/dive-v3-broker-deu": {
+      "tenant": "DEU",
+      "name": "DEU Keycloak (Local Dev)",
+      "country": "DEU",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-deu:8443/realms/dive-v3-broker-deu": {
+      "tenant": "DEU",
+      "name": "DEU Keycloak (Internal Docker)",
+      "country": "DEU",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8456/realms/dive-v3-broker-can": {
+      "tenant": "CAN",
+      "name": "CAN Keycloak (Local Dev)",
+      "country": "CAN",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-can:8443/realms/dive-v3-broker-can": {
+      "tenant": "CAN",
+      "name": "CAN Keycloak (Internal Docker)",
+      "country": "CAN",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-bgr": {
+      "tenant": "BGR",
+      "name": "BGR Keycloak (Local Dev)",
+      "country": "BGR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-bgr:8443/realms/dive-v3-broker-bgr": {
+      "tenant": "BGR",
+      "name": "BGR Keycloak (Internal Docker)",
+      "country": "BGR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-deu": {
+      "tenant": "DEU",
+      "name": "DEU Keycloak (Local Dev)",
+      "country": "DEU",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-est": {
+      "tenant": "EST",
+      "name": "EST Keycloak (Local Dev)",
+      "country": "EST",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-est:8443/realms/dive-v3-broker-est": {
+      "tenant": "EST",
+      "name": "EST Keycloak (Internal Docker)",
+      "country": "EST",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak (Local Dev)",
+      "country": "POL",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-pol:8443/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak (Internal Docker)",
+      "country": "POL",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-svk": {
+      "tenant": "SVK",
+      "name": "SVK Keycloak (Local Dev)",
+      "country": "SVK",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-svk:8443/realms/dive-v3-broker-svk": {
+      "tenant": "SVK",
+      "name": "SVK Keycloak (Internal Docker)",
+      "country": "SVK",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-cze": {
+      "tenant": "CZE",
+      "name": "CZE Keycloak (Local Dev)",
+      "country": "CZE",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-cze:8443/realms/dive-v3-broker-cze": {
+      "tenant": "CZE",
+      "name": "CZE Keycloak (Internal Docker)",
+      "country": "CZE",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-nor": {
+      "tenant": "NOR",
+      "name": "NOR Keycloak (Local Dev)",
+      "country": "NOR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-nor:8443/realms/dive-v3-broker-nor": {
+      "tenant": "NOR",
+      "name": "NOR Keycloak (Internal Docker)",
+      "country": "NOR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-gbr": {
+      "tenant": "GBR",
+      "name": "GBR Keycloak (Local Dev)",
+      "country": "GBR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-fra": {
+      "tenant": "FRA",
+      "name": "FRA Keycloak (Local Dev)",
+      "country": "FRA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
   },
   "_metadata": {
-    "lastUpdated": "2025-12-22T16:47:20.901Z"
+    "lastUpdated": "2025-12-28T00:00:00.000Z",
+    "description": "Trusted Keycloak issuers for DIVE V3 federation. Each issuer maps to a tenant/country for authorization."
+  },
+  "https://localhost:8469/realms/dive-v3-broker-svk": {
+    "tenant": "SVK",
+    "name": "SVK Keycloak",
+    "country": "SVK",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
   },
   "https://localhost:8451/realms/dive-v3-broker-est": {
     "tenant": "EST",
-    "name": "EST Keycloak (Local Dev)",
+    "name": "EST Keycloak",
     "country": "EST",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL"
-  },
-  "https://localhost:8467/realms/dive-v3-broker-prt": {
-    "tenant": "PRT",
-    "name": "PRT Keycloak (Local Dev)",
-    "country": "PRT",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL"
-  },
-  "https://localhost:8456/realms/dive-v3-broker-hun": {
-    "tenant": "HUN",
-    "name": "HUN Keycloak (Local Dev)",
-    "country": "HUN",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL"
-  },
-  "https://localhost:8459/realms/dive-v3-broker-lva": {
-    "tenant": "LVA",
-    "name": "LVA Keycloak (Local Dev)",
-    "country": "LVA",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL"
-  },
-  "https://localhost:8462/realms/dive-v3-broker-mne": {
-    "tenant": "MNE",
-    "name": "Montenegro Keycloak (Local Dev)",
-    "country": "MNE",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL",
-    "jwks_uri": "https://localhost:8462/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
-  },
-  "https://keycloak-mne:8443/realms/dive-v3-broker-mne": {
-    "tenant": "MNE",
-    "name": "Montenegro Keycloak (Internal Docker)",
-    "country": "MNE",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL",
-    "jwks_uri": "https://keycloak-mne:8443/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
-  },
-  "https://mne-idp.dive25.com/realms/dive-v3-broker-mne": {
-    "tenant": "MNE",
-    "name": "Montenegro Keycloak (Production)",
-    "country": "MNE",
-    "trust_level": "HIGH",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "NATIONAL",
-    "jwks_uri": "https://mne-idp.dive25.com/realms/dive-v3-broker-mne/protocol/openid-connect/certs"
-  },
-  "https://localhost:8463/realms/dive-v3-broker-nld": {
-    "tenant": "NLD",
-    "name": "NLD Keycloak (Local Dev)",
-    "country": "NLD",
-    "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL"
-  },
-  "https://localhost:8461/realms/dive-v3-broker-lux": {
-    "tenant": "LUX",
-    "name": "LUX Keycloak",
-    "country": "LUX",
     "trust_level": "DEVELOPMENT",
     "enabled": true
   },
   "https://localhost:8453/realms/dive-v3-broker-fra": {
     "tenant": "FRA",
-    "name": "FRA Keycloak (Local Dev)",
+    "name": "FRA Keycloak",
     "country": "FRA",
     "trust_level": "DEVELOPMENT",
-    "enabled": true,
-    "protocol": "oidc",
-    "federation_class": "LOCAL"
+    "enabled": true
   },
-  "https://localhost:8451/realms/dive-v3-broker-esp": {
-    "tenant": "ESP",
-    "name": "ESP Keycloak",
-    "country": "ESP",
+  "https://localhost:8496/realms/dive-v3-broker-fra": {
+    "tenant": "FRA",
+    "name": "FRA Keycloak",
+    "country": "FRA",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
+  },
+  "https://localhost:8493/realms/dive-v3-broker-gbr": {
+    "tenant": "GBR",
+    "name": "GBR Keycloak",
+    "country": "GBR",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
+  },
+  "https://localhost:8474/realms/dive-v3-broker-gbr": {
+    "tenant": "GBR",
+    "name": "GBR Keycloak",
+    "country": "GBR",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
+  },
+  "https://localhost:8466/realms/dive-v3-broker-pol": {
+    "tenant": "POL",
+    "name": "POL Keycloak",
+    "country": "POL",
     "trust_level": "DEVELOPMENT",
     "enabled": true
   }

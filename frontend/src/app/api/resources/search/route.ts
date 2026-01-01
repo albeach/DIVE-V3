@@ -40,18 +40,102 @@ export async function POST(request: NextRequest) {
         }
 
         // Step 2: Get access token from database
-        const accountResults = await db
+        let accountResults = await db
             .select()
             .from(accounts)
             .where(eq(accounts.userId, session.user.id))
             .limit(1);
 
-        const account = accountResults[0];
+        let account = accountResults[0];
         if (!account?.access_token) {
             return NextResponse.json(
                 { error: 'Unauthorized', message: 'No access token' },
                 { status: 401 }
             );
+        }
+
+        // CRITICAL FIX: Check if token is expired and refresh if needed
+        // This handles the race condition where session callback hasn't run yet
+        const currentTime = Math.floor(Date.now() / 1000);
+        const timeUntilExpiry = (account.expires_at || 0) - currentTime;
+        const isExpired = timeUntilExpiry <= 0;
+        const needsRefresh = isExpired || timeUntilExpiry < 60; // Less than 1 minute
+
+        if (needsRefresh && account.refresh_token) {
+            console.log('[SearchAPI] Token expired or near expiry, refreshing', {
+                userId: session.user.id,
+                timeUntilExpiry,
+                expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
+            });
+
+            try {
+                // Refresh the token using the same logic as auth.ts
+                const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
+                const response = await fetch(refreshUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        client_id: process.env.KEYCLOAK_CLIENT_ID!,
+                        client_secret: process.env.KEYCLOAK_CLIENT_SECRET!,
+                        grant_type: 'refresh_token',
+                        refresh_token: account.refresh_token!,
+                    }),
+                });
+
+                const tokens = await response.json();
+
+                if (!response.ok) {
+                    console.error('[SearchAPI] Token refresh failed', {
+                        error: tokens.error,
+                        error_description: tokens.error_description,
+                    });
+
+                    // If refresh fails, the user needs to re-authenticate
+                    return NextResponse.json(
+                        { error: 'Unauthorized', message: 'Session expired, please login again' },
+                        { status: 401 }
+                    );
+                }
+
+                // Update account in database with new tokens
+                const newExpiresAt = currentTime + tokens.expires_in;
+                await db.update(accounts)
+                    .set({
+                        access_token: tokens.access_token,
+                        id_token: tokens.id_token,
+                        expires_at: newExpiresAt,
+                        refresh_token: tokens.refresh_token || account.refresh_token,
+                    })
+                    .where(eq(accounts.userId, session.user.id));
+
+                console.log('[SearchAPI] Token refreshed successfully', {
+                    userId: session.user.id,
+                    newExpiresAt: new Date(newExpiresAt * 1000).toISOString(),
+                });
+
+                // Re-fetch the updated account with fresh token
+                accountResults = await db
+                    .select()
+                    .from(accounts)
+                    .where(eq(accounts.userId, session.user.id))
+                    .limit(1);
+
+                account = accountResults[0];
+                if (!account?.access_token) {
+                    return NextResponse.json(
+                        { error: 'Unauthorized', message: 'No access token after refresh' },
+                        { status: 401 }
+                    );
+                }
+            } catch (refreshError) {
+                console.error('[SearchAPI] Token refresh exception:', refreshError);
+                return NextResponse.json(
+                    { error: 'Unauthorized', message: 'Failed to refresh session' },
+                    { status: 401 }
+                );
+            }
         }
 
         // Step 3: Get request body

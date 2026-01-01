@@ -794,7 +794,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
-                domain: AUTH_COOKIE_DOMAIN,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
         callbackUrl: {
@@ -804,7 +804,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
-                domain: AUTH_COOKIE_DOMAIN,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
         csrfToken: {
@@ -814,7 +814,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
-                domain: AUTH_COOKIE_DOMAIN,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
         pkceCodeVerifier: {
@@ -824,7 +824,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
-                domain: AUTH_COOKIE_DOMAIN,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
                 maxAge: 60 * 15, // 15 minutes
             },
         },
@@ -832,15 +832,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.state`,
             options: {
                 httpOnly: true,
-                // CRITICAL FIX: For localhost HTTPS, 'lax' should work for redirects
-                // But if cookies aren't being sent, try 'none' with secure: true
-                // 'lax' allows cookies on top-level navigations (GET redirects)
+                // CRITICAL FIX: For localhost HTTPS, 'lax' allows cookies on top-level navigations (GET redirects)
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
-                // CRITICAL FIX: Don't set domain for localhost - browser handles this automatically
-                // Setting domain explicitly can break cookie handling
-                domain: AUTH_COOKIE_DOMAIN,
+                // CRITICAL FIX: Don't set domain for localhost - omit it entirely when undefined
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
                 maxAge: 60 * 15, // 15 minutes
             },
         },
@@ -851,7 +848,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
-                domain: AUTH_COOKIE_DOMAIN,
+                ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),
             },
         },
     },

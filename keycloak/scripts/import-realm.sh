@@ -118,13 +118,18 @@ else
 fi
 
 # Check for instance-specific realm file
-# NOTE: For hub (USA), we always use "dive-v3-broker" as the realm name (not dive-v3-broker-usa)
-# This ensures consistency with backend/frontend configuration
+# FIXED (Dec 2025): Preserve instance-specific realm names for consistency
+# Hub uses dive-v3-broker-usa, spokes use dive-v3-broker-{code}
+# This matches docker-compose.hub.yml and backend configuration
 INSTANCE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
 INSTANCE_REALM="${REALM_TEMPLATE_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json"
+TARGET_REALM_NAME="dive-v3-broker-${INSTANCE_LOWER}"
+
 if [ -f "${INSTANCE_REALM}" ]; then
     echo "[DIVE] Found instance-specific realm: ${INSTANCE_REALM}"
+    echo "[DIVE] Using realm name: ${TARGET_REALM_NAME}"
     # Apply environment variable substitution to instance-specific realm
+    # PRESERVE the instance-specific realm name (no normalization)
     sed \
         -e "s|\${KEYCLOAK_CLIENT_SECRET}|${KEYCLOAK_CLIENT_SECRET}|g" \
         -e "s|\${ADMIN_PASSWORD}|${ADMIN_PASSWORD}|g" \
@@ -133,10 +138,19 @@ if [ -f "${INSTANCE_REALM}" ]; then
         -e "s|\${API_URL}|${API_URL}|g" \
         -e "s|\${USA_IDP_URL}|${USA_IDP_URL}|g" \
         -e "s|\${USA_IDP_CLIENT_SECRET}|${USA_IDP_CLIENT_SECRET}|g" \
-        -e "s|\"realm\" *: *\"dive-v3-broker-${INSTANCE_LOWER}\"|\"realm\": \"dive-v3-broker\"|g" \
-        -e "s|\"id\" *: *\"dive-v3-broker-${INSTANCE_LOWER}\"|\"id\": \"dive-v3-broker\"|g" \
-        "${INSTANCE_REALM}" > "${REALM_IMPORT_DIR}/dive-v3-broker.json"
-    echo "[DIVE] Using instance-specific realm configuration (normalized to 'dive-v3-broker')"
+        "${INSTANCE_REALM}" > "${REALM_IMPORT_DIR}/${TARGET_REALM_NAME}.json"
+    echo "[DIVE] Using instance-specific realm: ${TARGET_REALM_NAME}"
+else
+    # Fallback: Use base template but update realm name to be instance-specific
+    if [ -f "${REALM_IMPORT_DIR}/dive-v3-broker.json" ]; then
+        echo "[DIVE] Updating base realm to instance-specific: ${TARGET_REALM_NAME}"
+        sed \
+            -e "s|\"realm\" *: *\"dive-v3-broker\"|\"realm\": \"${TARGET_REALM_NAME}\"|g" \
+            -e "s|\"id\" *: *\"dive-v3-broker\"|\"id\": \"${TARGET_REALM_NAME}\"|g" \
+            "${REALM_IMPORT_DIR}/dive-v3-broker.json" > "${REALM_IMPORT_DIR}/${TARGET_REALM_NAME}.json"
+        rm -f "${REALM_IMPORT_DIR}/dive-v3-broker.json"
+        echo "[DIVE] Realm renamed to: ${TARGET_REALM_NAME}"
+    fi
 fi
 
 echo "[DIVE] Realm import preparation complete"

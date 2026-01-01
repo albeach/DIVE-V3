@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Swedish Armed Forces",
     "country": "SWE",
     "organizationType": "government",
-    "contactEmail": "admin@swe.dive25.com",
-    "registeredSpokeId": "spoke-swe-be80b2a8"
+    "contactEmail": "admin@swe.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:swe",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-20T03:33:34Z",
     "spokeToken": "xCsJeDWgzKT4e35WHlbJQcl01Pfm_GzysqVbLwSHUuI"
   },
   "operational": {

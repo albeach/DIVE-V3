@@ -174,15 +174,24 @@ fi
 echo ""
 echo -e "${BOLD}Step 2: Removing existing DIVE V3 protocol mappers${NC}"
 
-# Remove existing DIVE V3 mappers
-for mapper_name in clearance countryOfAffiliation uniqueID acpCOI; do
-    MAPPER_ID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
-        -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name==\"${mapper_name}\") | .id")
-    if [ -n "$MAPPER_ID" ] && [ "$MAPPER_ID" != "null" ]; then
-        curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models/${MAPPER_ID}" \
-            -H "Authorization: Bearer $TOKEN"
-        log_success "Removed mapper: ${mapper_name}"
-    fi
+# Get all existing mappers
+ALL_MAPPERS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+    -H "Authorization: Bearer $TOKEN")
+
+# Remove mappers by exact English name AND by arrow-named mappers
+for mapper_pattern in "clearance" "countryOfAffiliation" "uniqueID" "acpCOI" \
+    "→ clearance" "→ countryOfAffiliation" "→ uniqueID" "→ acpCOI" \
+    "clearanceCountry" "fallback:"; do
+
+    MAPPER_IDS=$(echo "$ALL_MAPPERS" | jq -r ".[] | select(.name | contains(\"${mapper_pattern}\")) | .id")
+    for MAPPER_ID in $MAPPER_IDS; do
+        if [ -n "$MAPPER_ID" ] && [ "$MAPPER_ID" != "null" ]; then
+            MAPPER_NAME=$(echo "$ALL_MAPPERS" | jq -r ".[] | select(.id==\"${MAPPER_ID}\") | .name")
+            curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models/${MAPPER_ID}" \
+                -H "Authorization: Bearer $TOKEN"
+            log_success "Removed: ${MAPPER_NAME}"
+        fi
+    done
 done
 
 echo ""
@@ -225,6 +234,48 @@ create_mapper "$LOCAL_CLEARANCE" "clearance" "false"
 create_mapper "$LOCAL_COUNTRY" "countryOfAffiliation" "false"
 create_mapper "$LOCAL_UNIQUEID" "uniqueID" "false"
 create_mapper "$LOCAL_COI" "acpCOI" "true"
+
+# =============================================================================
+# Step 3b: Add clearance_original claim for classification normalization
+# =============================================================================
+# The clearance claim contains the localized value (e.g., NON_CLASSIFICATO).
+# We also add a clearance_original claim so OPA can track the original value
+# while performing classification equivalency mapping.
+# =============================================================================
+echo ""
+echo -e "${BOLD}Step 3b: Adding classification normalization support${NC}"
+
+# Create a hardcoded claim for clearance country (used in OPA classification.rego)
+CLEARANCE_COUNTRY_MAPPER_NAME="clearanceCountry (hardcoded)"
+EXISTING=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+    -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name==\"${CLEARANCE_COUNTRY_MAPPER_NAME}\") | .id")
+
+if [ -z "$EXISTING" ] || [ "$EXISTING" = "null" ]; then
+    curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"name\": \"${CLEARANCE_COUNTRY_MAPPER_NAME}\",
+            \"protocol\": \"openid-connect\",
+            \"protocolMapper\": \"oidc-hardcoded-claim-mapper\",
+            \"config\": {
+                \"claim.name\": \"clearanceCountry\",
+                \"claim.value\": \"${COUNTRY_CODE}\",
+                \"id.token.claim\": \"true\",
+                \"access.token.claim\": \"true\",
+                \"userinfo.token.claim\": \"true\",
+                \"jsonType.label\": \"String\"
+            }
+        }" > /dev/null
+    log_success "Created: clearanceCountry = ${COUNTRY_CODE} (for classification normalization)"
+else
+    log_info "clearanceCountry mapper already exists"
+fi
+
+# Note: Classification normalization (e.g., NON_CLASSIFICATO → UNCLASSIFIED) is handled by:
+# 1. OPA policy: policies/org/nato/classification.rego
+# 2. Backend: backend/src/services/clearance-normalization.service.ts
+# The JWT contains the localized clearance value; OPA normalizes it at authorization time.
 
 echo ""
 echo -e "${BOLD}Step 4: Verifying mappers${NC}"
@@ -300,6 +351,31 @@ if [ -n "$FED_CLIENT_UUID" ] && [ "$FED_CLIENT_UUID" != "null" ]; then
     create_fed_mapper "$LOCAL_COUNTRY" "countryOfAffiliation" "false"
     create_fed_mapper "$LOCAL_UNIQUEID" "uniqueID" "false"
     create_fed_mapper "$LOCAL_COI" "acpCOI" "true"
+
+    # Add clearanceCountry hardcoded claim for federation client
+    FED_CLEARANCE_COUNTRY_NAME="clearanceCountry (hardcoded)"
+    FED_EXISTING=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name==\"${FED_CLEARANCE_COUNTRY_NAME}\") | .id")
+
+    if [ -z "$FED_EXISTING" ] || [ "$FED_EXISTING" = "null" ]; then
+        curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"name\": \"${FED_CLEARANCE_COUNTRY_NAME}\",
+                \"protocol\": \"openid-connect\",
+                \"protocolMapper\": \"oidc-hardcoded-claim-mapper\",
+                \"config\": {
+                    \"claim.name\": \"clearanceCountry\",
+                    \"claim.value\": \"${COUNTRY_CODE}\",
+                    \"id.token.claim\": \"true\",
+                    \"access.token.claim\": \"true\",
+                    \"userinfo.token.claim\": \"true\",
+                    \"jsonType.label\": \"String\"
+                }
+            }" > /dev/null
+        log_success "Created on federation client: clearanceCountry = ${COUNTRY_CODE}"
+    fi
 
     log_success "Federation client ${FED_CLIENT_ID} configured with localized mappers"
 else

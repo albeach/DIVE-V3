@@ -13,8 +13,22 @@ const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
 const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
 
 /**
- * GET /health
- * Basic health check for load balancers
+ * @openapi
+ * /health:
+ *   get:
+ *     summary: Basic health check
+ *     description: Simple health check for load balancers and monitoring systems
+ *     tags: [Health]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthStatus'
+ *       503:
+ *         description: Service is unhealthy
  */
 router.get('/', async (_req: Request, res: Response) => {
     try {
@@ -32,8 +46,44 @@ router.get('/', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/detailed
- * Comprehensive health status (admin only in production)
+ * @openapi
+ * /health/detailed:
+ *   get:
+ *     summary: Detailed health check
+ *     description: |
+ *       Comprehensive health status including all service dependencies.
+ *       Returns status of MongoDB, OPA, Keycloak, and Redis connections.
+ *     tags: [Health]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Detailed health status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [healthy, degraded, unhealthy]
+ *                 services:
+ *                   type: object
+ *                   properties:
+ *                     mongodb:
+ *                       type: object
+ *                       properties:
+ *                         status:
+ *                           type: string
+ *                         responseTime:
+ *                           type: integer
+ *                     opa:
+ *                       type: object
+ *                     keycloak:
+ *                       type: object
+ *                     redis:
+ *                       type: object
+ *       503:
+ *         description: Service is unhealthy
  */
 router.get('/detailed', async (_req: Request, res: Response) => {
     try {

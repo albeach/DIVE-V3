@@ -498,6 +498,221 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "ita-kas",
+      "organization": "Italy",
+      "countryCode": "ITA",
+      "kasUrl": "https://localhost:10015/api/kas",
+      "internalKasUrl": "http://kas-ita:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://ita-idp.dive25.com/realms/dive-v3-broker-ita",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "ITA"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@ita.dive25.com",
+        "lastVerified": "2025-12-28T04:03:43Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "bgr-kas",
+      "organization": "Bulgaria",
+      "countryCode": "BGR",
+      "kasUrl": "https://localhost:10003/api/kas",
+      "internalKasUrl": "http://kas-bgr:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://bgr-idp.dive25.com/realms/dive-v3-broker-bgr",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "BGR"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@bgr.dive25.com",
+        "lastVerified": "2025-12-30T03:02:06Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "est-kas",
+      "organization": "Estonia",
+      "countryCode": "EST",
+      "kasUrl": "https://localhost:10008/api/kas",
+      "internalKasUrl": "http://kas-est:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://est-idp.dive25.com/realms/dive-v3-broker-est",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "EST"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@est.dive25.com",
+        "lastVerified": "2025-12-30T07:14:10Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "svk-kas",
+      "organization": "Slovakia",
+      "countryCode": "SVK",
+      "kasUrl": "https://localhost:10026/api/kas",
+      "internalKasUrl": "http://kas-svk:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://svk-idp.dive25.com/realms/dive-v3-broker-svk",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "SVK"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@svk.dive25.com",
+        "lastVerified": "2025-12-30T07:53:32Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "nor-kas",
+      "organization": "Norway",
+      "countryCode": "NOR",
+      "kasUrl": "https://localhost:10022/api/kas",
+      "internalKasUrl": "http://kas-nor:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://nor-idp.dive25.com/realms/dive-v3-broker-nor",
+        "jwtAudience": "dive-v3-client-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "NOR"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@nor.dive25.com",
+        "lastVerified": "2025-12-31T00:23:02Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {
@@ -505,51 +720,71 @@
     "defaultTrustLevel": "high",
     "trustMatrix": {
       "usa-kas": [
+        "bgr-kas",
         "cze-kas",
         "deu-kas",
         "esp-kas",
+        "est-kas",
         "fra-kas",
         "gbr-kas",
         "hun-kas",
+        "ita-kas",
         "lux-kas",
         "mne-kas",
         "nld-kas",
-        "pol-kas"
+        "nor-kas",
+        "pol-kas",
+        "svk-kas"
       ],
       "fra-kas": [
+        "bgr-kas",
         "cze-kas",
         "deu-kas",
         "esp-kas",
+        "est-kas",
         "gbr-kas",
         "hun-kas",
+        "ita-kas",
         "lux-kas",
         "mne-kas",
         "nld-kas",
+        "nor-kas",
         "pol-kas",
+        "svk-kas",
         "usa-kas"
       ],
       "gbr-kas": [
+        "bgr-kas",
         "cze-kas",
         "deu-kas",
         "esp-kas",
+        "est-kas",
         "fra-kas",
         "hun-kas",
+        "ita-kas",
         "lux-kas",
         "mne-kas",
         "nld-kas",
+        "nor-kas",
         "pol-kas",
+        "svk-kas",
         "usa-kas"
       ],
       "deu-kas": [
+        "bgr-kas",
         "cze-kas",
         "esp-kas",
+        "est-kas",
         "fra-kas",
         "gbr-kas",
         "hun-kas",
+        "ita-kas",
         "lux-kas",
         "mne-kas",
         "nld-kas",
+        "nor-kas",
         "pol-kas",
+        "svk-kas",
         "usa-kas"
       ],
       "esp-kas": [
@@ -593,6 +828,36 @@
         "deu-kas"
       ],
       "hun-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "ita-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "bgr-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "est-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "svk-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "nor-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",

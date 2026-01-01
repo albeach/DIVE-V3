@@ -556,9 +556,7 @@ test_allow_federated_resource_gbr_to_usa if {
             "amr": ["pwd", "otp"]
         }
     }
-}
-
-# Test: Deny federated resource when user country not releasable
+}# Test: Deny federated resource when user country not releasable
 test_deny_federated_resource_not_releasable if {
     not federation.allow_federated_resource with input as {
         "subject": {

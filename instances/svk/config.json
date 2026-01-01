@@ -1,13 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-svk-549d023e",
+    "spokeId": "spoke-svk-e738feb2",
     "instanceCode": "SVK",
-    "name": "Slovak Armed Forces",
-    "description": "DIVE V3 Spoke Instance for Slovak Armed Forces",
+    "name": "Slovakia",
+    "description": "DIVE V3 Spoke Instance for Slovakia",
     "country": "SVK",
     "organizationType": "government",
-    "contactEmail": "admin@svk.dive25.com",
-    "registeredSpokeId": "spoke-svk-519e77b2"
+    "contactEmail": "admin@svk.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -17,7 +16,7 @@
     "apiUrl": "https://localhost:4026",
     "idpUrl": "https://dive-spoke-svk-keycloak:8443",
     "idpPublicUrl": "https://localhost:8469",
-    "kasUrl": "https://localhost:9026"
+    "kasUrl": "https://localhost:10026"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/svk/certs/spoke.crt",
@@ -27,15 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:svk",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-20T07:13:58Z",
-    "spokeToken": "SjTE0zJAK30NzeirCXT_johQyolGlSCcN5sP3B6142E"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-20T07:06:28Z",
-    "lastModified": "2025-12-20T07:06:28Z",
+    "createdAt": "2025-12-30T07:53:30Z",
+    "lastModified": "2025-12-30T07:53:30Z",
     "configHash": ""
   }
 }

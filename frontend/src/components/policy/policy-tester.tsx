@@ -874,10 +874,9 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
                   <User className="w-4 h-4 text-blue-400" />
                 </div>
                 <h4 className="text-sm font-semibold text-gray-200">Subject Attributes</h4>
-                <Lightbulb
-                  className="w-4 h-4 text-gray-500 ml-auto cursor-help"
-                  title="The person or system requesting access"
-                />
+                <span title="The person or system requesting access" className="ml-auto">
+                  <Lightbulb className="w-4 h-4 text-gray-500 cursor-help" />
+                </span>
               </div>
 
               <div className="space-y-4">
@@ -966,10 +965,9 @@ export default function PolicyTester({ policyId }: PolicyTesterProps) {
                   <FileText className="w-4 h-4 text-purple-400" />
                 </div>
                 <h4 className="text-sm font-semibold text-gray-200">Resource Attributes</h4>
-                <Lightbulb
-                  className="w-4 h-4 text-gray-500 ml-auto cursor-help"
-                  title="The document or asset being accessed"
-                />
+                <span title="The document or asset being accessed" className="ml-auto">
+                  <Lightbulb className="w-4 h-4 text-gray-500 cursor-help" />
+                </span>
               </div>
 
               <div className="space-y-4">

@@ -13,6 +13,7 @@ resource "keycloak_realm" "broker" {
   # Phase 3B FIX: Frontend URL ensures consistent issuer regardless of access method
   # This prevents token refresh failures when internal Docker access uses different port
   # than external Cloudflare tunnel access (e.g., keycloak:8443 vs usa-idp.dive25.com)
+  # CRITICAL: SameSite=None required for cross-origin federation (different Keycloak ports)
   attributes = {
     frontendUrl = var.idp_url
     acrToLoaMap = jsonencode({
@@ -20,6 +21,18 @@ resource "keycloak_realm" "broker" {
       "urn:mace:incommon:iap:gold"     = 2
       "urn:mace:incommon:iap:platinum" = 3
     })
+    # SameSite cookie fix for federation across different Keycloak instances
+    # Without this, cookies are blocked when Hub (localhost:8443) redirects to Spoke (localhost:8453)
+    "_browser-header-content-security-policy" = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
+    webAuthnPolicyRpEntityName               = "DIVE V3 - ${var.instance_name}"
+    # CRITICAL: Legacy SameSite attribute (Keycloak < 24)
+    # Allows cookies to be sent in cross-origin requests (federation)
+    oauth2DeviceCodeLifespan       = "600"
+    oauth2DevicePollingInterval    = "5"
+    clientSessionIdleTimeout       = "0"
+    clientSessionMaxLifespan       = "0"
+    clientOfflineSessionIdleTimeout = "0"
+    clientOfflineSessionMaxLifespan = "0"
   }
 
   # Login settings
@@ -157,29 +170,33 @@ resource "keycloak_openid_client" "broker_client" {
   # Without this, Keycloak generates a random secret that doesn't match GCP
   client_secret = var.client_secret
 
-  # URLs - include both localhost (dev) and Cloudflare (prod)
+  # URLs - HTTPS only for security
   root_url = var.app_url
   base_url = var.app_url
   valid_redirect_uris = [
     "${var.app_url}/*",
-    "http://localhost:3000/*",
     "https://localhost:3000/*",
+    "https://localhost:4000/*",  # Backend API callbacks
+    "https://localhost:8443/*",  # Keycloak callbacks
   ]
   web_origins = [
     var.app_url,
     var.api_url,
-    "http://localhost:3000",
     "https://localhost:3000",
+    "https://localhost:4000",
+    "https://localhost:8443",
   ]
 
   # Logout configuration - CRITICAL for proper Single Logout (SLO)
   # Without these, logout redirects fail with "Unable to Complete Request"
+  # SECURITY: HTTPS only - no HTTP allowed
   frontchannel_logout_enabled = true
   frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
   valid_post_logout_redirect_uris = [
     var.app_url,
-    "http://localhost:3000",
     "https://localhost:3000",
+    "https://localhost:4000",
+    "https://localhost:8443",
   ]
 
   # Token settings
@@ -252,6 +269,8 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "unique_id" {
 }
 
 # ACP COI (Communities of Interest) mapper
+# CRITICAL: multivalued MUST be true - users can have multiple COIs
+# Example: admin-fra has ["NATO-COSMIC", "FVEY", "FIVE_EYES"]
 resource "keycloak_openid_user_attribute_protocol_mapper" "acp_coi" {
   realm_id  = keycloak_realm.broker.id
   client_id = keycloak_openid_client.broker_client.id
@@ -260,7 +279,7 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acp_coi" {
   user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
   claim_value_type    = "JSON"
-  multivalued         = false
+  multivalued         = true   # MUST be true for array values
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true

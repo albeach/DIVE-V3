@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Slovenian Armed Forces",
     "country": "SVN",
     "organizationType": "government",
-    "contactEmail": "admin@svn.dive25.com",
-    "registeredSpokeId": "spoke-svn-9b137d68"
+    "contactEmail": "admin@svn.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:svn",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-20T07:32:00Z",
     "spokeToken": "RbxWyeROxa2nvlzKdOAfI2Bg9VUDXiRqy9Ex4lg2LGQ"
   },
   "operational": {

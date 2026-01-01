@@ -1316,6 +1316,9 @@ export const authenticateJWT = async (
 
         const clearance = decodedToken.clearance;
         const countryOfAffiliation = decodedToken.countryOfAffiliation;
+        // ACP-240 Section 4.3: Classification equivalency support
+        // clearanceCountry is the country that issued the clearance (used for normalization)
+        const clearanceCountry = decodedToken.clearanceCountry || countryOfAffiliation;
 
         // Normalize AMR and ACR for AAL/FAL enforcement
         const normalizedAMR = normalizeAMR(decodedToken.amr);
@@ -1362,6 +1365,10 @@ export const authenticateJWT = async (
             sub: decodedToken.sub,
             uniqueID,
             clearance,
+            // ACP-240: For classification equivalency, store both localized clearance
+            // (as clearanceOriginal) and the country that issued it (clearanceCountry)
+            clearanceOriginal: clearance,  // The localized value (e.g., NON_CLASSIFICATO)
+            clearanceCountry,              // Country that issued clearance (e.g., ITA)
             countryOfAffiliation,
             acpCOI,
             email: decodedToken.email,

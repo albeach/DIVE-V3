@@ -1,6 +1,6 @@
 /**
  * Faceted Filters Component (2025)
- * 
+ *
  * Modern faceted search filters with:
  * - Live document counts per facet value
  * - Collapsible sections with memory
@@ -144,7 +144,6 @@ const INSTANCE_FLAGS: Record<string, string> = {
   'CHE': '🇨🇭',
   'LUX': '🇱🇺',
   'SVN': '🇸🇮',
-  'HRV': '🇭🇷',
   'BIH': '🇧🇦',
   'SRB': '🇷🇸',
   'MNE': '🇲🇪',
@@ -178,11 +177,11 @@ function FacetSection({
 }: FacetSectionProps & { hasApproximateCounts?: boolean }) {
   const [isExpanded, setIsExpanded] = useState(group.defaultExpanded ?? true);
   const [showAll, setShowAll] = useState(false);
-  
-  const visibleItems = group.showMore && !showAll 
+
+  const visibleItems = group.showMore && !showAll
     ? group.items.slice(0, group.initialVisible || 5)
     : group.items;
-  
+
   const hasMore = group.showMore && group.items.length > (group.initialVisible || 5);
   const activeCount = selectedValues.length;
 
@@ -263,11 +262,11 @@ function FacetSection({
                 const isHighlighted = userHighlight.includes(item.value);
                 const itemColor = CLASSIFICATION_COLORS[item.value] || '';
                 const itemIcon = item.icon || CLASSIFICATION_ICONS[item.value] || INSTANCE_FLAGS[item.value];
-                
+
                 // Determine if this filter type should use color-coded design
                 const isClassification = group.id === 'classifications';
                 const hasColorCoding = isClassification && itemColor;
-                
+
                 // Modern 2025 Compact Pill/Chip Design - Applied to ALL filters
                 return (
                   <motion.button
@@ -278,7 +277,7 @@ function FacetSection({
                     whileTap={!item.disabled && !isLoading ? { scale: 0.99 } : {}}
                     className={`
                       w-full relative overflow-hidden rounded-xl transition-all duration-200 touch-manipulation
-                      ${isSelected 
+                      ${isSelected
                         ? hasColorCoding
                           ? `${itemColor} border-2 border-current shadow-md shadow-current/15`
                           : 'bg-gradient-to-r from-blue-50 to-blue-100/50 dark:from-blue-900/40 dark:to-blue-800/30 border-2 border-blue-400/60 dark:border-blue-500/60 shadow-md'
@@ -294,13 +293,13 @@ function FacetSection({
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className={`absolute inset-0 pointer-events-none ${
-                          hasColorCoding 
-                            ? 'bg-gradient-to-br from-white/15 to-transparent' 
+                          hasColorCoding
+                            ? 'bg-gradient-to-br from-white/15 to-transparent'
                             : 'bg-gradient-to-br from-blue-50/30 to-transparent'
                         }`}
                       />
                     )}
-                    
+
                     <div className="relative px-3 py-2 flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {/* Color indicator dot - compact */}
@@ -308,19 +307,19 @@ function FacetSection({
                           <motion.div
                             className={`
                               w-2 h-2 rounded-full flex-shrink-0
-                              ${isSelected 
-                                ? 'ring-1 ring-white/60' 
+                              ${isSelected
+                                ? 'ring-1 ring-white/60'
                                 : 'ring-1 ring-gray-300 dark:ring-gray-600'
                               }
                             `}
                             style={{
-                              backgroundColor: isSelected 
+                              backgroundColor: isSelected
                                 ? (item.value === 'UNCLASSIFIED' ? '#10b981' :
                                    item.value === 'CONFIDENTIAL' ? '#f59e0b' :
                                    item.value === 'SECRET' ? '#f97316' :
                                    item.value === 'TOP_SECRET' ? '#ef4444' : '#3b82f6')
                                 : 'transparent',
-                              borderColor: !isSelected 
+                              borderColor: !isSelected
                                 ? (item.value === 'UNCLASSIFIED' ? '#10b981' :
                                    item.value === 'CONFIDENTIAL' ? '#f59e0b' :
                                    item.value === 'SECRET' ? '#f97316' :
@@ -336,8 +335,8 @@ function FacetSection({
                           <motion.div
                             className={`
                               w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0 transition-all duration-200
-                              ${isSelected 
-                                ? 'bg-gradient-to-br from-blue-600 to-blue-500 shadow-sm' 
+                              ${isSelected
+                                ? 'bg-gradient-to-br from-blue-600 to-blue-500 shadow-sm'
                                 : 'border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
                               }
                             `}
@@ -347,21 +346,21 @@ function FacetSection({
                             {isSelected && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
                           </motion.div>
                         )}
-                        
+
                         {/* Icon - compact */}
                         {itemIcon && (
                           <span className="text-base flex-shrink-0 leading-none">{itemIcon}</span>
                         )}
-                        
+
                         {/* Label - compact typography */}
                         <span className={`text-xs font-bold tracking-tight ${
-                          isSelected 
+                          isSelected
                             ? hasColorCoding ? 'text-current' : 'text-gray-900 dark:text-gray-100'
                             : 'text-gray-700 dark:text-gray-300'
                         }`}>
                           {item.label}
                         </span>
-                        
+
                         {/* User badge - compact */}
                         {isHighlighted && (
                           <motion.span
@@ -373,7 +372,7 @@ function FacetSection({
                           </motion.span>
                         )}
                       </div>
-                      
+
                         {/* Count badge - compact */}
                       <motion.div
                         className={`
@@ -391,7 +390,7 @@ function FacetSection({
                         {item.count.toLocaleString()}
                       </motion.div>
                     </div>
-                    
+
                     {/* Selected indicator - compact checkmark overlay (only for non-color-coded) */}
                     {isSelected && !hasColorCoding && (
                       <motion.div
@@ -454,7 +453,7 @@ export default function FacetedFilters({
   onRefreshFacets,
   hasApproximateCounts = false,
 }: FacetedFiltersProps & { hasApproximateCounts?: boolean }) {
-  
+
   // Phase 2: Filter zero-count items if enabled
   const filterZeroCounts = useCallback((items: FacetItem[]): FacetItem[] => {
     if (!hideZeroCounts) {
@@ -510,12 +509,12 @@ export default function FacetedFilters({
   // Toggle handler for multi-select facets
   const handleToggle = useCallback((groupId: string, value: string) => {
     const currentValues = (selectedFilters as any)[groupId];
-    
+
     if (Array.isArray(currentValues)) {
       const newValues = currentValues.includes(value)
         ? currentValues.filter((v: string) => v !== value)
         : [...currentValues, value];
-      
+
       onFilterChange({
         ...selectedFilters,
         [groupId]: newValues,
@@ -555,7 +554,7 @@ export default function FacetedFilters({
   // Get all active filter chips
   const activeFilterChips = useMemo(() => {
     const chips: Array<{ label: string; group: string; value: string }> = [];
-    
+
     selectedFilters.classifications.forEach(v => {
       chips.push({ label: v.replace('_', ' '), group: 'classifications', value: v });
     });
@@ -566,13 +565,13 @@ export default function FacetedFilters({
       chips.push({ label: v, group: 'cois', value: v });
     });
     if (selectedFilters.encryptionStatus) {
-      chips.push({ 
-        label: selectedFilters.encryptionStatus === 'encrypted' ? '🔐 Encrypted' : '📄 Unencrypted', 
-        group: 'encryptionStatus', 
-        value: selectedFilters.encryptionStatus 
+      chips.push({
+        label: selectedFilters.encryptionStatus === 'encrypted' ? '🔐 Encrypted' : '📄 Unencrypted',
+        group: 'encryptionStatus',
+        value: selectedFilters.encryptionStatus
       });
     }
-    
+
     return chips;
   }, [selectedFilters]);
 
@@ -613,7 +612,7 @@ export default function FacetedFilters({
             </button>
           )}
         </div>
-        
+
         {/* Results summary - Enhanced typography */}
         <div className="text-xs text-gray-600 dark:text-gray-400">
           Showing <span className="font-bold text-gray-900 dark:text-gray-100">{safeFilteredCount.toLocaleString()}</span> of{' '}
@@ -766,7 +765,7 @@ export function MobileFilterDrawer({ isOpen, onClose, ...props }: MobileFilterDr
             className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={onClose}
           />
-          
+
           {/* Drawer */}
           <motion.div
             initial={{ x: '-100%' }}
@@ -786,7 +785,7 @@ export function MobileFilterDrawer({ isOpen, onClose, ...props }: MobileFilterDr
             >
               <X className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
-            
+
             <FacetedFilters {...props} className="h-full rounded-none border-0" />
           </motion.div>
         </>

@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Montenegro Armed Forces",
     "country": "MNE",
     "organizationType": "government",
-    "contactEmail": "admin@mne.dive25.com",
-    "registeredSpokeId": "spoke-mne-b780b388"
+    "contactEmail": "admin@mne.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:mne",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-20T08:12:13Z",
     "spokeToken": "zendoI6L32RuMu-fXGuzfkY6W7Mu57wLOvB9fIp6KMQ"
   },
   "operational": {

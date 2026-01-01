@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Hellenic Ministry of National Defence",
     "country": "GRC",
     "organizationType": "government",
-    "contactEmail": "admin@grc.dive25.com",
-    "registeredSpokeId": "spoke-grc-c45973b1"
+    "contactEmail": "admin@grc.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:grc",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-19T12:48:58Z",
     "spokeToken": "CTM5ma2JeFE-hIw_hhCL2z47HfF8DRfyEvzdb5rwdFU"
   },
   "operational": {

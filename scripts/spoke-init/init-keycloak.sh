@@ -55,19 +55,31 @@ if command -v jq >/dev/null 2>&1 && [[ -f "${INSTANCE_DIR}/instance.json" ]]; th
     KEYCLOAK_HTTPS_PORT_FROM_INSTANCE=$(jq -r '.ports.keycloak_https // empty' "${INSTANCE_DIR}/instance.json")
 fi
 
-# Set defaults - dynamically check for instance-specific password variable
-# Look for KEYCLOAK_ADMIN_PASSWORD_<CODE> first, then fallback to generic KEYCLOAK_ADMIN_PASSWORD
-INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
-echo "DEBUG: INSTANCE_PASSWORD_VAR=$INSTANCE_PASSWORD_VAR"
-echo "DEBUG: Value of ${INSTANCE_PASSWORD_VAR}=${!INSTANCE_PASSWORD_VAR}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-${!INSTANCE_PASSWORD_VAR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}"
-echo "DEBUG: Final ADMIN_PASSWORD=$ADMIN_PASSWORD"
-
 # Use backend container for API calls (has curl, on same network)
 # New naming pattern: dive-spoke-lva-backend (not lva-backend-lva-1)
 PROJECT_PREFIX="${COMPOSE_PROJECT_NAME:-dive-spoke-${CODE_LOWER}}"
 API_CONTAINER="dive-spoke-${CODE_LOWER}-backend"
 KC_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
+
+# FIXED (Dec 2025): ALWAYS prefer container password - it's authoritative
+# The .env file can become stale after container restart/redeploy
+# Priority: 1) Container env var, 2) Instance-specific env var, 3) Generic env var
+ADMIN_PASSWORD=""
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${KC_CONTAINER}$"; then
+    ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -n "$ADMIN_PASSWORD" ] && [ ${#ADMIN_PASSWORD} -gt 10 ]; then
+        log_info "Using Keycloak password from container (authoritative)"
+    else
+        ADMIN_PASSWORD=""
+    fi
+fi
+
+# Fallback to environment variables if container password not available
+if [ -z "$ADMIN_PASSWORD" ]; then
+    INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
+    ADMIN_PASSWORD="${!INSTANCE_PASSWORD_VAR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+    log_warn "Container password not available, using env var fallback"
+fi
 
 # Internal URL for API calls (via Docker network using Keycloak container name)
 KEYCLOAK_INTERNAL_URL="https://dive-spoke-${CODE_LOWER}-keycloak:8443"
@@ -210,6 +222,73 @@ if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
     exit 1
 fi
 log_success "Admin authentication successful"
+
+# =============================================================================
+# Ensure Realm Exists (with retry logic for resilience)
+# =============================================================================
+# ADDED (Dec 2025): Pre-verification with retry to ensure realm exists
+# before any client/user operations are attempted
+ensure_realm_exists() {
+    local realm_name="$1"
+    local max_attempts=5
+    local delay=3
+    local attempt=1
+
+    log_step "Ensuring realm exists: $realm_name (with retry)..."
+
+    while [ $attempt -le $max_attempts ]; do
+        # Check if realm exists
+        local realm_check=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${realm_name}" 2>/dev/null | jq -r '.realm // empty')
+
+        if [[ -n "$realm_check" ]]; then
+            log_success "Realm $realm_name verified (attempt $attempt)"
+            return 0
+        fi
+
+        log_warn "Realm $realm_name not found (attempt $attempt/$max_attempts), creating..."
+
+        # Create realm with minimal config
+        local create_result=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -w "%{http_code}" \
+            -o /dev/null \
+            -d "{
+                \"realm\": \"$realm_name\",
+                \"enabled\": true,
+                \"displayName\": \"DIVE V3 ${CODE_UPPER}\",
+                \"sslRequired\": \"none\",
+                \"registrationAllowed\": false,
+                \"loginWithEmailAllowed\": true,
+                \"duplicateEmailsAllowed\": false,
+                \"resetPasswordAllowed\": true,
+                \"editUsernameAllowed\": false,
+                \"bruteForceProtected\": true
+            }" 2>/dev/null)
+
+        if [[ "$create_result" == "201" || "$create_result" == "409" ]]; then
+            log_success "Realm $realm_name created successfully"
+            return 0
+        fi
+
+        if [ $attempt -lt $max_attempts ]; then
+            log_warn "Realm creation returned HTTP $create_result, retrying in ${delay}s..."
+            sleep $delay
+            delay=$((delay * 2))
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log_error "Failed to ensure realm $realm_name exists after $max_attempts attempts"
+    return 1
+}
+
+# Pre-verify realm exists before proceeding
+if ! ensure_realm_exists "$REALM_NAME"; then
+    log_error "Cannot proceed without realm. Exiting."
+    exit 1
+fi
 
 # =============================================================================
 # Determine Theme
@@ -709,12 +788,17 @@ else
             -d "${USA_IDP_PAYLOAD}" 2>/dev/null
         log_success "Created IdP: ${USA_IDP_ALIAS}"
     fi
-    
+
     # =============================================================================
     # Create IdP Mappers for usa-idp (CRITICAL for authorization flow)
     # =============================================================================
     log_step "Creating IdP claim mappers for ${USA_IDP_ALIAS}..."
-    
+
+    # Source resilient mapper utilities
+    if [ -f "${PROJECT_ROOT}/scripts/dive-modules/keycloak-mappers.sh" ]; then
+        source "${PROJECT_ROOT}/scripts/dive-modules/keycloak-mappers.sh"
+    fi
+
     # Create mappers for clearance, countryOfAffiliation, uniqueID, acpCOI
     for attr in clearance countryOfAffiliation uniqueID acpCOI; do
         MAPPER_PAYLOAD="{
@@ -727,22 +811,24 @@ else
                 \"user.attribute\": \"${attr}\"
             }
         }"
-        
-        # Check if mapper exists
-        EXISTING_MAPPER=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+
+        # Check if mapper exists by ID (not just name)
+        EXISTING_MAPPER_ID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
             "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers" 2>/dev/null | \
             jq -r --arg name "${attr}-mapper" '.[] | select(.name==$name) | .id // empty')
-        
-        if [[ -n "$EXISTING_MAPPER" ]]; then
-            kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers/${EXISTING_MAPPER}" \
+
+        if [[ -n "$EXISTING_MAPPER_ID" ]]; then
+            # Update existing mapper using its ID
+            kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers/${EXISTING_MAPPER_ID}" \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "${MAPPER_PAYLOAD}" 2>/dev/null || true
+                -d "${MAPPER_PAYLOAD}" >/dev/null 2>&1 || log_warn "Failed to update ${attr}-mapper (non-blocking)"
         else
+            # Create new mapper
             kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/identity-provider/instances/${USA_IDP_ALIAS}/mappers" \
                 -H "Authorization: Bearer $TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "${MAPPER_PAYLOAD}" 2>/dev/null || true
+                -d "${MAPPER_PAYLOAD}" >/dev/null 2>&1 || log_warn "Failed to create ${attr}-mapper (non-blocking)"
         fi
     done
     log_success "Created IdP claim mappers for ${USA_IDP_ALIAS}"
@@ -826,21 +912,21 @@ else
     log_warn "seed-users.sh not found or not executable"
 fi
 
-# Seed resources (needs MONGO_PASSWORD from container)
-if [[ -x "${SCRIPT_DIR}/seed-resources.sh" ]]; then
-    log_info "Running seed-resources.sh..."
-    MONGO_CONTAINER="dive-spoke-${CODE_LOWER}-mongodb"
-    MONGO_PWD=$(docker exec "$MONGO_CONTAINER" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
-    if [[ -n "$MONGO_PWD" ]]; then
-        MONGO_PASSWORD="$MONGO_PWD" "${SCRIPT_DIR}/seed-resources.sh" "${INSTANCE_CODE}" || {
-            log_warn "Resource seeding failed - you can run manually: ./scripts/spoke-init/seed-resources.sh ${INSTANCE_CODE}"
-        }
-    else
-        log_warn "Could not get MongoDB password from container - skipping resource seeding"
-    fi
-else
-    log_warn "seed-resources.sh not found or not executable"
-fi
+# =============================================================================
+# RESOURCE SEEDING REMOVED FROM init-keycloak.sh
+# =============================================================================
+# ⚠️  CRITICAL: Resource seeding is now handled EXCLUSIVELY by init-all.sh
+#     which uses the ZTDF-encrypted TypeScript seeder.
+#
+#     DO NOT call seed-resources.sh here - it creates PLAINTEXT resources
+#     which violate ACP-240 compliance requirements.
+#
+#     All resources MUST be ZTDF-encrypted via:
+#       npm run seed:instance -- --instance=<CODE> --count=5000 --replace
+#
+#     This is called automatically by init-all.sh Step 4.
+# =============================================================================
+log_info "Resource seeding skipped - will be handled by init-all.sh (ZTDF-only)"
 
 # Initialize NextAuth database schema (required for SSO)
 if [[ -x "${SCRIPT_DIR}/init-nextauth-db.sh" ]]; then

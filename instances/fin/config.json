@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Finnish Defence Forces",
     "country": "FIN",
     "organizationType": "government",
-    "contactEmail": "admin@fin.dive25.com",
-    "registeredSpokeId": "spoke-fin-7934a471"
+    "contactEmail": "admin@fin.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:fin",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-19T14:10:40Z",
     "spokeToken": "a2n41BDS9nvO9U1oXfTH9ubc9hTKuIjcEauziDJwR-c"
   },
   "operational": {

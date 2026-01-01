@@ -339,9 +339,13 @@ cmd_rollback() {
 # =============================================================================
 
 cmd_nuke() {
+    # #region agent log
+    echo "{\"location\":\"deploy.sh:341\",\"message\":\"cmd_nuke entry\",\"data\":{\"args\":\"$*\"},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
     local confirm_flag=false
     local force_flag=false
     local keep_images=false
+    local reset_spokes=false
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -359,6 +363,10 @@ cmd_nuke() {
                 keep_images=true
                 shift
                 ;;
+            --reset-spokes|--clear-spokes)
+                reset_spokes=true
+                shift
+                ;;
             *)
                 shift
                 ;;
@@ -372,6 +380,9 @@ cmd_nuke() {
     local container_count=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
     local volume_count=$(docker volume ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
     local network_count=$(docker network ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    # #region agent log
+    echo "{\"location\":\"deploy.sh:371\",\"message\":\"Pre-nuke resource count\",\"data\":{\"containers\":$container_count,\"volumes\":$volume_count,\"networks\":$network_count},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
 
     echo ""
     echo -e "${RED}⚠️  NUKE: This will destroy ALL DIVE resources${NC}"
@@ -383,6 +394,13 @@ cmd_nuke() {
     if [ "$keep_images" = false ]; then
         local image_count=$(docker images -q --filter 'reference=*dive*' 2>/dev/null | wc -l | tr -d ' ')
         echo "    - Images:     ${image_count}"
+    fi
+    if [ "$reset_spokes" = true ]; then
+        local spoke_count=0
+        for spoke_dir in "${DIVE_ROOT}/instances"/*; do
+            [ -d "$spoke_dir" ] && [ -f "$spoke_dir/config.json" ] && spoke_count=$((spoke_count + 1))
+        done
+        echo "    - Spoke Configs: ${spoke_count} (registration data will be cleared)"
     fi
     echo ""
 
@@ -413,7 +431,14 @@ cmd_nuke() {
     # Stop and remove containers from all compose files
     for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml; do
         if [ -f "$compose_file" ]; then
-            docker compose -f "$compose_file" down -v --remove-orphans 2>/dev/null || true
+            # Extract project name from compose file (first line with 'name:')
+            local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: //' | tr -d ' ')
+            if [ -n "$project_name" ]; then
+                docker compose -f "$compose_file" --project-name "$project_name" down -v --remove-orphans 2>/dev/null || true
+            else
+                # For compose files without explicit project names, try with default project name
+                docker compose -f "$compose_file" down -v --remove-orphans 2>/dev/null || true
+            fi
         fi
     done
 
@@ -424,16 +449,63 @@ cmd_nuke() {
         fi
     done
 
-    # Remove all dive-related volumes explicitly
+    # CRITICAL: Force remove ALL orphaned dive containers (even if compose file is missing)
+    log_verbose "Force removing all dive-related containers..."
+    local dive_containers=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    local spoke_containers=$(docker ps -aq --filter 'name=spoke' 2>/dev/null | wc -l | tr -d ' ')
+    # #region agent log
+    echo "{\"location\":\"deploy.sh:437\",\"message\":\"Force removing orphaned containers\",\"data\":{\"dive_containers\":$dive_containers,\"spoke_containers\":$spoke_containers},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run2\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+    for container in $(docker ps -aq --filter 'name=dive' 2>/dev/null); do
+        docker rm -f "$container" 2>/dev/null || true
+    done
+    for container in $(docker ps -aq --filter 'name=spoke' 2>/dev/null); do
+        docker rm -f "$container" 2>/dev/null || true
+    done
+
+    # Remove all dive-related volumes explicitly (including dive-hub_* pattern)
     for vol in $(docker volume ls -q --filter 'name=dive' 2>/dev/null); do
+        docker volume rm "$vol" 2>/dev/null || true
+    done
+    # Also remove volumes with project-specific prefixes (dive-hub_*, {code}_*)
+    for vol in $(docker volume ls --format '{{.Name}}' | grep -E '^(dive-hub_|[a-z]{3}_)' 2>/dev/null); do
         docker volume rm "$vol" 2>/dev/null || true
     done
 
     # Remove networks via compose (removes project-prefixed networks)
     for compose_file in docker-compose.yml docker-compose.pilot.yml docker-compose.hub.yml; do
         if [ -f "$compose_file" ]; then
-            docker compose -f "$compose_file" down --remove-orphans 2>/dev/null || true
+            # Extract project name from compose file (first line with 'name:')
+            local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: //' | tr -d ' ')
+            if [ -n "$project_name" ]; then
+                docker compose -f "$compose_file" --project-name "$project_name" down --remove-orphans 2>/dev/null || true
+            else
+                docker compose -f "$compose_file" down --remove-orphans 2>/dev/null || true
+            fi
         fi
+    done
+
+    # CRITICAL: Force remove ALL dive-related networks (even orphaned spoke networks)
+    log_verbose "Force removing all dive-related networks..."
+    local dive_networks=$(docker network ls --filter 'name=dive' -q 2>/dev/null | wc -l | tr -d ' ')
+    local spoke_networks=$(docker network ls --format '{{.Name}}' | grep -E '^[a-z]{3}_dive-[a-z]{3}-network$' 2>/dev/null | wc -l | tr -d ' ')
+    # #region agent log
+    echo "{\"location\":\"deploy.sh:454\",\"message\":\"Force removing orphaned networks\",\"data\":{\"dive_networks\":$dive_networks,\"spoke_networks\":$spoke_networks},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run2\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+    for net in $(docker network ls --filter 'name=dive' -q 2>/dev/null); do
+        # Disconnect all containers first
+        for container in $(docker network inspect "$net" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+            docker network disconnect -f "$net" "$container" 2>/dev/null || true
+        done
+        docker network rm "$net" 2>/dev/null || true
+    done
+
+    # Remove spoke networks (pattern: <code>_dive-<code>-network)
+    for net in $(docker network ls --format '{{.Name}}' | grep -E '^[a-z]{3}_dive-[a-z]{3}-network$' 2>/dev/null); do
+        for container in $(docker network inspect "$net" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+            docker network disconnect -f "$net" "$container" 2>/dev/null || true
+        done
+        docker network rm "$net" 2>/dev/null || true
     done
 
     # Remove external shared networks (only if not in use)
@@ -459,10 +531,36 @@ cmd_nuke() {
     # Remove checkpoint directory
     rm -rf "${CHECKPOINT_DIR}"
 
+    # Clear spoke registrations if requested
+    if [ "$reset_spokes" = true ]; then
+        log_step "Clearing spoke registrations..."
+        if [ -f "${DIVE_ROOT}/scripts/clear-stale-spoke-registration.sh" ]; then
+            bash "${DIVE_ROOT}/scripts/clear-stale-spoke-registration.sh" --all 2>/dev/null || log_warn "Could not clear spoke registrations"
+        else
+            # Fallback: manually clear registeredSpokeId from all config.json files
+            for spoke_dir in "${DIVE_ROOT}/instances"/*; do
+                if [ -f "$spoke_dir/config.json" ]; then
+                    local instance_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
+                    if command -v jq &> /dev/null; then
+                        jq 'del(.identity.registeredSpokeId) | .federation.status = "unregistered" | del(.federation.registeredAt)' \
+                            "$spoke_dir/config.json" > "$spoke_dir/config.json.tmp" && \
+                            mv "$spoke_dir/config.json.tmp" "$spoke_dir/config.json"
+                        log_info "Cleared registration for $instance_code"
+                    fi
+                    rm -f "$spoke_dir/.federation-registered"
+                fi
+            done
+        fi
+        log_success "Spoke registrations cleared"
+    fi
+
     # Verify clean state
     local remaining_containers=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
     local remaining_volumes=$(docker volume ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
     local remaining_networks=$(docker network ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
+    # #region agent log
+    echo "{\"location\":\"deploy.sh:480\",\"message\":\"Post-nuke resource count\",\"data\":{\"containers\":$remaining_containers,\"volumes\":$remaining_volumes,\"networks\":$remaining_networks},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
 
     if [ "$remaining_containers" -eq 0 ] && [ "$remaining_volumes" -eq 0 ] && [ "$remaining_networks" -eq 0 ]; then
         log_success "Clean slate achieved ✓"
@@ -513,10 +611,12 @@ module_deploy_help() {
     echo "  --confirm, --yes    Skip confirmation prompt"
     echo "  --force, -f         Force destruction (skip confirmation)"
     echo "  --keep-images       Don't remove Docker images"
+    echo "  --reset-spokes      Clear spoke registration data (fixes stale spokeIds)"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./dive nuke --confirm         # Destroy all DIVE resources"
-    echo "  ./dive checkpoint create      # Save current state"
-    echo "  ./dive rollback               # Restore from latest checkpoint"
-    echo "  ./dive rollback 20251218_120000  # Restore specific checkpoint"
+    echo "  ./dive nuke --confirm                # Destroy all DIVE resources"
+    echo "  ./dive nuke --confirm --reset-spokes # Also clear spoke registrations"
+    echo "  ./dive checkpoint create             # Save current state"
+    echo "  ./dive rollback                      # Restore from latest checkpoint"
+    echo "  ./dive rollback 20251218_120000      # Restore specific checkpoint"
 }

@@ -698,30 +698,30 @@ cmd_validate() {
     echo -e "${CYAN}Required Secrets:${NC}"
 
     local secrets_available=0
-    local secrets_missing=0
     local required_secrets=("KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_CLIENT_SECRET" "POSTGRES_PASSWORD" "MONGO_PASSWORD")
 
+    # Check environment variables
     for secret in "${required_secrets[@]}"; do
         if [ -n "${!secret:-}" ]; then
             secrets_available=$((secrets_available + 1))
-        else
-            secrets_missing=$((secrets_missing + 1))
         fi
     done
 
-    if [ "$secrets_available" -gt 0 ]; then
-        format_status "Shell secrets" "pass" "$secrets_available/${#required_secrets[@]} loaded"
-    else
-        format_status "Shell secrets" "warn" "Not loaded (run: ./dive secrets load)"
+    # Check .env.hub file for persistent secrets
+    if [ -f ".env.hub" ]; then
+        for secret in "${required_secrets[@]}"; do
+            if grep -qE "^${secret}=" .env.hub 2>/dev/null && [ "$secrets_available" -lt "${#required_secrets[@]}" ]; then
+                secrets_available=$((secrets_available + 1))
+            fi
+        done
     fi
 
-    # Check .env file
-    if [ -f ".env" ]; then
-        local env_secrets
-        env_secrets=$(grep -cE "^(KEYCLOAK|POSTGRES|MONGO|REDIS|AUTH)_" .env 2>/dev/null || echo "0")
-        format_status ".env file" "pass" "$env_secrets secrets defined"
+    if [ "$secrets_available" -ge "${#required_secrets[@]}" ]; then
+        format_status "Required secrets" "pass" "Available (shell + persistent)"
+    elif [ "$secrets_available" -gt 0 ]; then
+        format_status "Required secrets" "pass" "$secrets_available/${#required_secrets[@]} available"
     else
-        format_status ".env file" "warn" "Not found"
+        format_status "Required secrets" "warn" "Not available (run: ./dive secrets load)"
     fi
     echo ""
 
@@ -746,6 +746,9 @@ cmd_validate() {
             # Check if it's a DIVE container using the port (that's OK)
             local dive_using
             dive_using=$(docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null | grep -E ":$port->" | grep -cE "dive|shared" || echo "0")
+            dive_using=${dive_using:-0}
+            # Ensure dive_using is numeric
+            dive_using=$(echo "$dive_using" | tr -d -c '0-9' || echo "0")
             dive_using=${dive_using:-0}
             if [ "$dive_using" -gt 0 ]; then
                 # Port in use by DIVE - that's fine
@@ -1134,7 +1137,8 @@ cmd_diagnostics() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-keycloak"; then
         patterns_checked=$((patterns_checked + 1))
         local realms
-        realms=$(curl -ks https://localhost:8443/realms/ 2>/dev/null | jq -r '.[].realm' 2>/dev/null | grep -c "dive-v3" || echo "0")
+        realms=$(curl -ks https://localhost:8443/realms/ 2>/dev/null | jq -r '.[].realm' 2>/dev/null | grep -c "dive-v3" 2>/dev/null || echo "0")
+        realms=$(echo "$realms" | tr -d -c '0-9' || echo "0")
         if [ "$realms" -eq 0 ]; then
             warnings_found=$((warnings_found + 1))
             echo -e "  ${YELLOW}⚠${NC} Keycloak dive-v3-broker realm may not exist"
@@ -1148,7 +1152,8 @@ cmd_diagnostics() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-backend"; then
         patterns_checked=$((patterns_checked + 1))
         local backend_mongo_error
-        backend_mongo_error=$(docker logs dive-hub-backend 2>&1 | tail -50 | grep -c "MongoNetworkError\|ECONNREFUSED.*27017" || echo "0")
+        backend_mongo_error=$(docker logs dive-hub-backend 2>&1 | tail -50 | grep -c "MongoNetworkError\|ECONNREFUSED.*27017" 2>/dev/null || echo "0")
+        backend_mongo_error=$(echo "$backend_mongo_error" | tr -d -c '0-9' || echo "0")
         if [ "$backend_mongo_error" -gt 0 ]; then
             issues_found=$((issues_found + 1))
             echo -e "  ${RED}✗${NC} Backend has MongoDB connection errors"
@@ -1162,7 +1167,8 @@ cmd_diagnostics() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-frontend"; then
         patterns_checked=$((patterns_checked + 1))
         local fe_build_error
-        fe_build_error=$(docker logs dive-hub-frontend 2>&1 | tail -100 | grep -c "Build error\|FATAL ERROR\|Cannot find module" || echo "0")
+        fe_build_error=$(docker logs dive-hub-frontend 2>&1 | tail -100 | grep -c "Build error\|FATAL ERROR\|Cannot find module" 2>/dev/null || echo "0")
+        fe_build_error=$(echo "$fe_build_error" | tr -d -c '0-9' || echo "0")
         if [ "$fe_build_error" -gt 0 ]; then
             issues_found=$((issues_found + 1))
             echo -e "  ${RED}✗${NC} Frontend has build errors"
@@ -1176,7 +1182,8 @@ cmd_diagnostics() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opa"; then
         patterns_checked=$((patterns_checked + 1))
         local opa_errors
-        opa_errors=$(docker logs dive-hub-opa 2>&1 | tail -50 | grep -c "rego_parse_error\|rego_type_error" || echo "0")
+        opa_errors=$(docker logs dive-hub-opa 2>&1 | tail -50 | grep -c "rego_parse_error\|rego_type_error" 2>/dev/null || echo "0")
+        opa_errors=$(echo "$opa_errors" | tr -d -c '0-9' || echo "0")
         if [ "$opa_errors" -gt 0 ]; then
             issues_found=$((issues_found + 1))
             echo -e "  ${RED}✗${NC} OPA has policy syntax errors"

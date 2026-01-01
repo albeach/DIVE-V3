@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Portugal",
     "country": "PRT",
     "organizationType": "government",
-    "contactEmail": "admin@portugal.mil",
-    "registeredSpokeId": "spoke-prt-790d4f8e"
+    "contactEmail": "admin@portugal.mil"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,14 +25,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "pending",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:prt",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-18T08:49:17Z"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

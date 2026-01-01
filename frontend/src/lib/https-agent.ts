@@ -82,10 +82,9 @@ export function getSecureHttpsAgent(): https.Agent {
  * Use this for all internal API calls to backend services
  */
 export function getSecureFetchOptions(): RequestInit {
-    // @ts-expect-error - Node.js fetch supports agent option
     return {
         agent: getSecureHttpsAgent(),
-    };
+    } as RequestInit;
 }
 
 /**

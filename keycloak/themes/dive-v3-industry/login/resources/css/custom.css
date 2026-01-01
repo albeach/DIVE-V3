@@ -103,9 +103,7 @@
 /* Passkey/WebAuthn icon coloring */
 .passkey-icon {
     color: #3B82F6;
-}
-
-/* Footer styling */
+}/* Footer styling */
 .dive-footer a {
     color: #1E3A8A;
 }.dive-footer a:hover {

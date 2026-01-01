@@ -126,13 +126,33 @@ is_insufficient_clearance := msg if {
 		input.resource.originalCountry,
 	)
 } else := msg if {
+	# Fallback: User has localized clearance but resource uses NATO standard classification
+	# Normalize user's clearance to DIVE V3 standard and compare
+	not uses_classification_equivalency
+	input.subject.clearanceCountry
+	normalized_user_clearance := classification.get_dive_level(input.subject.clearance, input.subject.clearanceCountry)
+	normalized_user_clearance != null  # Normalization succeeded
+	not clearance.sufficient(normalized_user_clearance, input.resource.classification)
+	msg := sprintf("Insufficient clearance: user has %s (%s normalized), resource requires %s",
+		[input.subject.clearance, normalized_user_clearance, input.resource.classification])
+} else := msg if {
+	# User has clearanceCountry but clearance is not in known mapping - deny
+	not uses_classification_equivalency
+	input.subject.clearanceCountry
+	normalized_user_clearance := classification.get_dive_level(input.subject.clearance, input.subject.clearanceCountry)
+	normalized_user_clearance == null
+	msg := sprintf("Invalid clearance level: %s not recognized for country %s",
+		[input.subject.clearance, input.subject.clearanceCountry])
+} else := msg if {
 	# Clearance check with DIVE V3 standard levels (backward compatibility)
 	not uses_classification_equivalency
+	not input.subject.clearanceCountry  # No localization info, use direct comparison
 	not clearance.sufficient(input.subject.clearance, input.resource.classification)
 	msg := clearance.insufficient_clearance_msg(input.subject.clearance, input.resource.classification)
 } else := msg if {
-	# Validate clearance level
+	# Validate clearance level - only when no clearanceCountry for normalization
 	not uses_classification_equivalency
+	not input.subject.clearanceCountry
 	not clearance.is_valid(input.subject.clearance)
 	msg := clearance.invalid_clearance_msg(input.subject.clearance)
 } else := msg if {
@@ -622,6 +642,11 @@ ztdf_enabled if {
 
 equivalency_applied if {
 	uses_classification_equivalency
+} else if {
+	# Fallback normalization: user has clearanceCountry and clearance was normalized
+	not uses_classification_equivalency
+	input.subject.clearanceCountry
+	classification.get_dive_level(input.subject.clearance, input.subject.clearanceCountry) != null
 } else := false
 
 equivalency_details := details if {

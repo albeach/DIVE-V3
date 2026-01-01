@@ -435,138 +435,282 @@ export async function getCoiKeysInfo(
 /**
  * GET /api/compliance/classifications
  *
- * Returns classification equivalency mapping data
+ * Returns classification equivalency mapping data for all 32 NATO nations
+ * plus FVEY partners (AUS, NZL) and NATO as an entity.
+ *
+ * Reference: ACP-240, STANAG 4774/5636
  */
 export async function getClassificationEquivalency(
     _req: Request,
     res: Response,
 ): Promise<void> {
     try {
-        // Using hardcoded equivalency data for performance
+        // Complete NATO 32-nation classification equivalency matrix
+        // Matches policies/org/nato/classification.rego
         const equivalencyData = {
             title: "Classification Equivalency Mapping",
             description:
-                "DIVE V3 maps 12 national classification systems to enable cross-nation information sharing with appropriate security controls.",
-            supportedNations: 12,
+                "DIVE V3 maps all 32 NATO national classification systems plus FVEY partners to enable cross-nation information sharing with appropriate security controls per ACP-240 Section 4.3.",
+            supportedNations: 35, // 32 NATO + AUS + NZL + NATO entity
             levels: [
                 {
                     canonicalLevel: "UNCLASSIFIED",
-                    displayName: "Unclassified",
+                    displayName: "Unclassified / NATO UNCLASSIFIED",
                     numericValue: 0,
                     color: "#10B981",
                     mappings: [
+                        // Founding Members (1949)
                         { country: "USA", localLevel: "UNCLASSIFIED", localAbbrev: "U" },
                         { country: "GBR", localLevel: "OFFICIAL", localAbbrev: "OFFICIAL" },
-                        { country: "FRA", localLevel: "NON_PROTEGE", localAbbrev: "NP" },
+                        { country: "FRA", localLevel: "NON CLASSIFIÉ", localAbbrev: "NC" },
                         { country: "CAN", localLevel: "UNCLASSIFIED", localAbbrev: "U" },
+                        { country: "BEL", localLevel: "NON CLASSIFIÉ", localAbbrev: "NC" },
+                        { country: "NLD", localLevel: "NIET GERUBRICEERD", localAbbrev: "NG" },
+                        { country: "LUX", localLevel: "NON CLASSIFIÉ", localAbbrev: "NC" },
+                        { country: "ITA", localLevel: "NON CLASSIFICATO", localAbbrev: "NC" },
+                        { country: "PRT", localLevel: "NÃO CLASSIFICADO", localAbbrev: "NC" },
+                        { country: "DNK", localLevel: "UKLASSIFICERET", localAbbrev: "UKL" },
+                        { country: "ISL", localLevel: "ÓFLOKAÐ", localAbbrev: "ÓFL" },
+                        { country: "NOR", localLevel: "UGRADERT", localAbbrev: "UGR" },
+                        // Cold War Expansion (1952-1982)
+                        { country: "GRC", localLevel: "ΑΔΙΑΒΑΘΜΗΤΟ", localAbbrev: "ΑΔ" },
+                        { country: "TUR", localLevel: "TASNIF DIŞI", localAbbrev: "TD" },
                         { country: "DEU", localLevel: "OFFEN", localAbbrev: "OFFEN" },
-                        {
-                            country: "AUS",
-                            localLevel: "UNOFFICIAL",
-                            localAbbrev: "UNOFFICIAL",
-                        },
-                        { country: "NZL", localLevel: "UNCLASSIFIED", localAbbrev: "U" },
-                        {
-                            country: "NLD",
-                            localLevel: "NIET_GERUBRICEERD",
-                            localAbbrev: "NG",
-                        },
-                        {
-                            country: "ITA",
-                            localLevel: "NON_CLASSIFICATO",
-                            localAbbrev: "NC",
-                        },
-                        { country: "ESP", localLevel: "NO_CLASIFICADO", localAbbrev: "NC" },
+                        { country: "ESP", localLevel: "NO CLASIFICADO", localAbbrev: "NC" },
+                        // 1999 Expansion
                         { country: "POL", localLevel: "JAWNE", localAbbrev: "JW" },
-                        { country: "NATO", localLevel: "UNCLASSIFIED", localAbbrev: "NU" },
+                        { country: "CZE", localLevel: "NEUTAJOVANÉ", localAbbrev: "N" },
+                        { country: "HUN", localLevel: "NYILVÁNOS", localAbbrev: "NYI" },
+                        // 2004 Expansion
+                        { country: "BGR", localLevel: "НЕКЛАСИФИЦИРАНА", localAbbrev: "НК" },
+                        { country: "EST", localLevel: "AVALIK", localAbbrev: "AVA" },
+                        { country: "LVA", localLevel: "NEKLASIFICĒTA", localAbbrev: "NK" },
+                        { country: "LTU", localLevel: "NESLAPTA", localAbbrev: "NS" },
+                        { country: "ROU", localLevel: "NECLASIFICAT", localAbbrev: "NC" },
+                        { country: "SVK", localLevel: "NEUTAJOVANÉ", localAbbrev: "N" },
+                        { country: "SVN", localLevel: "NEKLASIFICIRANO", localAbbrev: "NK" },
+                        // 2009 Expansion
+                        { country: "ALB", localLevel: "I PAKLASIFIKUAR", localAbbrev: "IP" },
+                        { country: "HRV", localLevel: "NEKLASIFICIRANO", localAbbrev: "NK" },
+                        // 2017-2020 Expansion
+                        { country: "MNE", localLevel: "NEKLASIFIKOVANO", localAbbrev: "NK" },
+                        { country: "MKD", localLevel: "НЕКЛАСИФИЦИРАНО", localAbbrev: "НК" },
+                        // 2023-2024 Expansion
+                        { country: "FIN", localLevel: "JULKINEN", localAbbrev: "JUL" },
+                        { country: "SWE", localLevel: "ÖPPEN", localAbbrev: "ÖPP" },
+                        // FVEY Partners
+                        { country: "AUS", localLevel: "UNOFFICIAL", localAbbrev: "U" },
+                        { country: "NZL", localLevel: "UNCLASSIFIED", localAbbrev: "U" },
+                        // NATO Entity
+                        { country: "NATO", localLevel: "NATO UNCLASSIFIED", localAbbrev: "NU" },
+                    ],
+                },
+                {
+                    canonicalLevel: "RESTRICTED",
+                    displayName: "Restricted / NATO RESTRICTED",
+                    numericValue: 1,
+                    color: "#3B82F6",
+                    mappings: [
+                        // Founding Members (1949)
+                        { country: "USA", localLevel: "FOUO", localAbbrev: "FOUO" },
+                        { country: "GBR", localLevel: "OFFICIAL-SENSITIVE", localAbbrev: "O-S" },
+                        { country: "FRA", localLevel: "DIFFUSION RESTREINTE", localAbbrev: "DR" },
+                        { country: "CAN", localLevel: "PROTECTED A/B", localAbbrev: "PA/B" },
+                        { country: "BEL", localLevel: "DIFFUSION RESTREINTE", localAbbrev: "DR" },
+                        { country: "NLD", localLevel: "DEPARTEMENTAAL VERTROUWELIJK", localAbbrev: "DV" },
+                        { country: "LUX", localLevel: "DIFFUSION RESTREINTE", localAbbrev: "DR" },
+                        { country: "ITA", localLevel: "USO UFFICIALE", localAbbrev: "UU" },
+                        { country: "PRT", localLevel: "RESERVADO", localAbbrev: "RES" },
+                        { country: "DNK", localLevel: "TIL TJENESTEBRUG", localAbbrev: "TTB" },
+                        { country: "ISL", localLevel: "TRÚNAÐARMÁL", localAbbrev: "TR" },
+                        { country: "NOR", localLevel: "BEGRENSET", localAbbrev: "BEG" },
+                        // Cold War Expansion
+                        { country: "GRC", localLevel: "ΠΕΡΙΟΡΙΣΜΕΝΗΣ ΧΡΗΣΕΩΣ", localAbbrev: "ΠΧ" },
+                        { country: "TUR", localLevel: "HİZMETE ÖZEL", localAbbrev: "HÖ" },
+                        { country: "DEU", localLevel: "VS-NfD", localAbbrev: "VS-NfD" },
+                        { country: "ESP", localLevel: "DIFUSIÓN LIMITADA", localAbbrev: "DL" },
+                        // 1999 Expansion
+                        { country: "POL", localLevel: "ZASTRZEŻONE", localAbbrev: "Z" },
+                        { country: "CZE", localLevel: "VYHRAZENÉ", localAbbrev: "V" },
+                        { country: "HUN", localLevel: "KORLÁTOZOTT TERJESZTÉSŰ", localAbbrev: "KT" },
+                        // 2004 Expansion
+                        { country: "BGR", localLevel: "ЗА СЛУЖЕБНО ПОЛЗВАНЕ", localAbbrev: "ЗСП" },
+                        { country: "EST", localLevel: "ASUTUSESISESEKS KASUTAMISEKS", localAbbrev: "AK" },
+                        { country: "LVA", localLevel: "DIENESTA VAJADZĪBĀM", localAbbrev: "DV" },
+                        { country: "LTU", localLevel: "RIBOTO NAUDOJIMO", localAbbrev: "RN" },
+                        { country: "ROU", localLevel: "RESTRÂNS", localAbbrev: "R" },
+                        { country: "SVK", localLevel: "VYHRADENÉ", localAbbrev: "V" },
+                        { country: "SVN", localLevel: "INTERNO", localAbbrev: "INT" },
+                        // 2009 Expansion
+                        { country: "ALB", localLevel: "I KUFIZUAR", localAbbrev: "IK" },
+                        { country: "HRV", localLevel: "OGRANIČENO", localAbbrev: "OGR" },
+                        // 2017-2020 Expansion
+                        { country: "MNE", localLevel: "INTERNO", localAbbrev: "INT" },
+                        { country: "MKD", localLevel: "ИНТЕРНО", localAbbrev: "ИНТ" },
+                        // 2023-2024 Expansion
+                        { country: "FIN", localLevel: "KÄYTTÖ RAJOITETTU", localAbbrev: "KR" },
+                        { country: "SWE", localLevel: "BEGRÄNSAT HEMLIG", localAbbrev: "BH" },
+                        // FVEY Partners
+                        { country: "AUS", localLevel: "OFFICIAL: SENSITIVE", localAbbrev: "O:S" },
+                        { country: "NZL", localLevel: "IN-CONFIDENCE", localAbbrev: "I-C" },
+                        // NATO Entity
+                        { country: "NATO", localLevel: "NATO RESTRICTED", localAbbrev: "NR" },
                     ],
                 },
                 {
                     canonicalLevel: "CONFIDENTIAL",
-                    displayName: "Confidential",
-                    numericValue: 1,
+                    displayName: "Confidential / NATO CONFIDENTIAL",
+                    numericValue: 2,
                     color: "#F59E0B",
                     mappings: [
+                        // Founding Members (1949)
                         { country: "USA", localLevel: "CONFIDENTIAL", localAbbrev: "C" },
-                        { country: "GBR", localLevel: "SECRET", localAbbrev: "SECRET" },
-                        {
-                            country: "FRA",
-                            localLevel: "CONFIDENTIEL_DEFENSE",
-                            localAbbrev: "CD",
-                        },
+                        { country: "GBR", localLevel: "SECRET", localAbbrev: "S" },
+                        { country: "FRA", localLevel: "CONFIDENTIEL DÉFENSE", localAbbrev: "CD" },
                         { country: "CAN", localLevel: "CONFIDENTIAL", localAbbrev: "C" },
-                        {
-                            country: "DEU",
-                            localLevel: "VS_VERTRAULICH",
-                            localAbbrev: "VS-V",
-                        },
-                        { country: "AUS", localLevel: "CONFIDENTIAL", localAbbrev: "C" },
-                        { country: "NZL", localLevel: "CONFIDENTIAL", localAbbrev: "C" },
-                        {
-                            country: "NLD",
-                            localLevel: "CONFIDENTIEEL",
-                            localAbbrev: "CONF",
-                        },
+                        { country: "BEL", localLevel: "CONFIDENTIEL", localAbbrev: "C" },
+                        { country: "NLD", localLevel: "CONFIDENTIEEL", localAbbrev: "CONF" },
+                        { country: "LUX", localLevel: "CONFIDENTIEL", localAbbrev: "C" },
                         { country: "ITA", localLevel: "RISERVATO", localAbbrev: "R" },
+                        { country: "PRT", localLevel: "CONFIDENCIAL", localAbbrev: "C" },
+                        { country: "DNK", localLevel: "FORTROLIGT", localAbbrev: "F" },
+                        { country: "ISL", localLevel: "CONFIDENTIAL", localAbbrev: "C" },
+                        { country: "NOR", localLevel: "KONFIDENSIELT", localAbbrev: "K" },
+                        // Cold War Expansion
+                        { country: "GRC", localLevel: "ΕΜΠΙΣΤΕΥΤΙΚΟ", localAbbrev: "ΕΜΠ" },
+                        { country: "TUR", localLevel: "ÖZEL", localAbbrev: "ÖZL" },
+                        { country: "DEU", localLevel: "VS-VERTRAULICH", localAbbrev: "VS-V" },
                         { country: "ESP", localLevel: "CONFIDENCIAL", localAbbrev: "C" },
+                        // 1999 Expansion
                         { country: "POL", localLevel: "POUFNE", localAbbrev: "PF" },
-                        {
-                            country: "NATO",
-                            localLevel: "NATO_CONFIDENTIAL",
-                            localAbbrev: "NC",
-                        },
+                        { country: "CZE", localLevel: "DŮVĚRNÉ", localAbbrev: "D" },
+                        { country: "HUN", localLevel: "BIZALMAS", localAbbrev: "BIZ" },
+                        // 2004 Expansion
+                        { country: "BGR", localLevel: "ПОВЕРИТЕЛНО", localAbbrev: "ПОВ" },
+                        { country: "EST", localLevel: "KONFIDENTSIAALNE", localAbbrev: "K" },
+                        { country: "LVA", localLevel: "KONFIDENCIĀLA", localAbbrev: "K" },
+                        { country: "LTU", localLevel: "KONFIDENCIALI", localAbbrev: "K" },
+                        { country: "ROU", localLevel: "CONFIDENȚIAL", localAbbrev: "C" },
+                        { country: "SVK", localLevel: "DÔVERNÉ", localAbbrev: "D" },
+                        { country: "SVN", localLevel: "ZAUPNO", localAbbrev: "Z" },
+                        // 2009 Expansion
+                        { country: "ALB", localLevel: "KONFIDENCIAL", localAbbrev: "K" },
+                        { country: "HRV", localLevel: "POVJERLJIVO", localAbbrev: "POV" },
+                        // 2017-2020 Expansion
+                        { country: "MNE", localLevel: "POVJERLJIVO", localAbbrev: "POV" },
+                        { country: "MKD", localLevel: "ДОВЕРЛИВО", localAbbrev: "ДОВ" },
+                        // 2023-2024 Expansion
+                        { country: "FIN", localLevel: "LUOTTAMUKSELLINEN", localAbbrev: "LUO" },
+                        { country: "SWE", localLevel: "KONFIDENTIELL", localAbbrev: "K" },
+                        // FVEY Partners
+                        { country: "AUS", localLevel: "PROTECTED", localAbbrev: "P" },
+                        { country: "NZL", localLevel: "CONFIDENTIAL", localAbbrev: "C" },
+                        // NATO Entity
+                        { country: "NATO", localLevel: "NATO CONFIDENTIAL", localAbbrev: "NC" },
                     ],
                 },
                 {
                     canonicalLevel: "SECRET",
-                    displayName: "Secret",
-                    numericValue: 2,
+                    displayName: "Secret / NATO SECRET",
+                    numericValue: 3,
                     color: "#EF4444",
                     mappings: [
+                        // Founding Members (1949)
                         { country: "USA", localLevel: "SECRET", localAbbrev: "S" },
-                        {
-                            country: "GBR",
-                            localLevel: "TOP_SECRET",
-                            localAbbrev: "TOP SECRET",
-                        },
-                        { country: "FRA", localLevel: "SECRET_DEFENSE", localAbbrev: "SD" },
+                        { country: "GBR", localLevel: "TOP SECRET", localAbbrev: "TS" },
+                        { country: "FRA", localLevel: "SECRET DÉFENSE", localAbbrev: "SD" },
                         { country: "CAN", localLevel: "SECRET", localAbbrev: "S" },
-                        { country: "DEU", localLevel: "GEHEIM", localAbbrev: "GEHEIM" },
+                        { country: "BEL", localLevel: "SECRET", localAbbrev: "S" },
+                        { country: "NLD", localLevel: "GEHEIM", localAbbrev: "GEH" },
+                        { country: "LUX", localLevel: "SECRET", localAbbrev: "S" },
+                        { country: "ITA", localLevel: "SEGRETO", localAbbrev: "S" },
+                        { country: "PRT", localLevel: "SECRETO", localAbbrev: "S" },
+                        { country: "DNK", localLevel: "HEMMELIGT", localAbbrev: "H" },
+                        { country: "ISL", localLevel: "LEYNDARMÁL", localAbbrev: "L" },
+                        { country: "NOR", localLevel: "HEMMELIG", localAbbrev: "H" },
+                        // Cold War Expansion
+                        { country: "GRC", localLevel: "ΑΠΟΡΡΗΤΟ", localAbbrev: "ΑΠ" },
+                        { country: "TUR", localLevel: "GİZLİ", localAbbrev: "G" },
+                        { country: "DEU", localLevel: "GEHEIM", localAbbrev: "GEH" },
+                        { country: "ESP", localLevel: "SECRETO", localAbbrev: "S" },
+                        // 1999 Expansion
+                        { country: "POL", localLevel: "TAJNE", localAbbrev: "TJ" },
+                        { country: "CZE", localLevel: "TAJNÉ", localAbbrev: "T" },
+                        { country: "HUN", localLevel: "TITKOS", localAbbrev: "TIT" },
+                        // 2004 Expansion
+                        { country: "BGR", localLevel: "СЕКРЕТНО", localAbbrev: "СЕК" },
+                        { country: "EST", localLevel: "SALAJANE", localAbbrev: "SAL" },
+                        { country: "LVA", localLevel: "SLEPENA", localAbbrev: "SL" },
+                        { country: "LTU", localLevel: "SLAPTA", localAbbrev: "SL" },
+                        { country: "ROU", localLevel: "SECRET", localAbbrev: "S" },
+                        { country: "SVK", localLevel: "TAJNÉ", localAbbrev: "T" },
+                        { country: "SVN", localLevel: "TAJNO", localAbbrev: "T" },
+                        // 2009 Expansion
+                        { country: "ALB", localLevel: "SEKRET", localAbbrev: "S" },
+                        { country: "HRV", localLevel: "TAJNO", localAbbrev: "T" },
+                        // 2017-2020 Expansion
+                        { country: "MNE", localLevel: "TAJNO", localAbbrev: "T" },
+                        { country: "MKD", localLevel: "ТАЈНО", localAbbrev: "Т" },
+                        // 2023-2024 Expansion
+                        { country: "FIN", localLevel: "SALAINEN", localAbbrev: "SAL" },
+                        { country: "SWE", localLevel: "HEMLIG", localAbbrev: "H" },
+                        // FVEY Partners
                         { country: "AUS", localLevel: "SECRET", localAbbrev: "S" },
                         { country: "NZL", localLevel: "SECRET", localAbbrev: "S" },
-                        { country: "NLD", localLevel: "GEHEIM", localAbbrev: "GEH" },
-                        { country: "ITA", localLevel: "SEGRETO", localAbbrev: "S" },
-                        { country: "ESP", localLevel: "SECRETO", localAbbrev: "S" },
-                        { country: "POL", localLevel: "TAJNE", localAbbrev: "TJ" },
-                        { country: "NATO", localLevel: "NATO_SECRET", localAbbrev: "NS" },
+                        // NATO Entity
+                        { country: "NATO", localLevel: "NATO SECRET", localAbbrev: "NS" },
                     ],
                 },
                 {
                     canonicalLevel: "TOP_SECRET",
-                    displayName: "Top Secret",
-                    numericValue: 3,
+                    displayName: "Top Secret / COSMIC TOP SECRET",
+                    numericValue: 4,
                     color: "#7C3AED",
                     mappings: [
-                        { country: "USA", localLevel: "TOP_SECRET", localAbbrev: "TS" },
+                        // Founding Members (1949)
+                        { country: "USA", localLevel: "TOP SECRET", localAbbrev: "TS" },
                         { country: "GBR", localLevel: "STRAP", localAbbrev: "STRAP" },
-                        {
-                            country: "FRA",
-                            localLevel: "TRES_SECRET_DEFENSE",
-                            localAbbrev: "TSD",
-                        },
-                        { country: "CAN", localLevel: "TOP_SECRET", localAbbrev: "TS" },
-                        { country: "DEU", localLevel: "STRENG_GEHEIM", localAbbrev: "SG" },
-                        { country: "AUS", localLevel: "TOP_SECRET", localAbbrev: "TS" },
-                        { country: "NZL", localLevel: "TOP_SECRET", localAbbrev: "TS" },
-                        { country: "NLD", localLevel: "ZEER_GEHEIM", localAbbrev: "ZG" },
+                        { country: "FRA", localLevel: "TRÈS SECRET DÉFENSE", localAbbrev: "TSD" },
+                        { country: "CAN", localLevel: "TOP SECRET", localAbbrev: "TS" },
+                        { country: "BEL", localLevel: "TRÈS SECRET", localAbbrev: "TS" },
+                        { country: "NLD", localLevel: "ZEER GEHEIM", localAbbrev: "ZG" },
+                        { country: "LUX", localLevel: "TRÈS SECRET", localAbbrev: "TS" },
                         { country: "ITA", localLevel: "SEGRETISSIMO", localAbbrev: "SS" },
-                        { country: "ESP", localLevel: "ALTO_SECRETO", localAbbrev: "AS" },
-                        { country: "POL", localLevel: "SCISLE_TAJNE", localAbbrev: "ST" },
-                        {
-                            country: "NATO",
-                            localLevel: "COSMIC_TOP_SECRET",
-                            localAbbrev: "CTS",
-                        },
+                        { country: "PRT", localLevel: "MUITO SECRETO", localAbbrev: "MS" },
+                        { country: "DNK", localLevel: "STRENGT HEMMELIGT", localAbbrev: "SH" },
+                        { country: "ISL", localLevel: "MJÖG LEYNT", localAbbrev: "ML" },
+                        { country: "NOR", localLevel: "STRENGT HEMMELIG", localAbbrev: "SH" },
+                        // Cold War Expansion
+                        { country: "GRC", localLevel: "ΑΠΟΛΥΤΩΣ ΑΠΟΡΡΗΤΟ", localAbbrev: "ΑΑ" },
+                        { country: "TUR", localLevel: "ÇOK GİZLİ", localAbbrev: "ÇG" },
+                        { country: "DEU", localLevel: "STRENG GEHEIM", localAbbrev: "SG" },
+                        { country: "ESP", localLevel: "ALTO SECRETO", localAbbrev: "AS" },
+                        // 1999 Expansion
+                        { country: "POL", localLevel: "ŚCIŚLE TAJNE", localAbbrev: "ST" },
+                        { country: "CZE", localLevel: "PŘÍSNĚ TAJNÉ", localAbbrev: "PT" },
+                        { country: "HUN", localLevel: "SZIGORÚAN TITKOS", localAbbrev: "SZT" },
+                        // 2004 Expansion
+                        { country: "BGR", localLevel: "СТРОГО СЕКРЕТНО", localAbbrev: "СС" },
+                        { country: "EST", localLevel: "TÄIESTI SALAJANE", localAbbrev: "TS" },
+                        { country: "LVA", localLevel: "SEVIŠĶI SLEPENA", localAbbrev: "SS" },
+                        { country: "LTU", localLevel: "VISIŠKAI SLAPTA", localAbbrev: "VS" },
+                        { country: "ROU", localLevel: "STRICT SECRET", localAbbrev: "SS" },
+                        { country: "SVK", localLevel: "PRÍSNE TAJNÉ", localAbbrev: "PT" },
+                        { country: "SVN", localLevel: "STROGO TAJNO", localAbbrev: "ST" },
+                        // 2009 Expansion
+                        { country: "ALB", localLevel: "TEPËR SEKRET", localAbbrev: "TS" },
+                        { country: "HRV", localLevel: "VRLO TAJNO", localAbbrev: "VT" },
+                        // 2017-2020 Expansion
+                        { country: "MNE", localLevel: "STROGO TAJNO", localAbbrev: "ST" },
+                        { country: "MKD", localLevel: "СТРОГО ТАЈНО", localAbbrev: "СТ" },
+                        // 2023-2024 Expansion
+                        { country: "FIN", localLevel: "ERITTÄIN SALAINEN", localAbbrev: "ES" },
+                        { country: "SWE", localLevel: "KVALIFICERAT HEMLIG", localAbbrev: "KH" },
+                        // FVEY Partners
+                        { country: "AUS", localLevel: "TOP SECRET", localAbbrev: "TS" },
+                        { country: "NZL", localLevel: "TOP SECRET", localAbbrev: "TS" },
+                        // NATO Entity
+                        { country: "NATO", localLevel: "COSMIC TOP SECRET", localAbbrev: "CTS" },
                     ],
                 },
             ],
@@ -574,20 +718,26 @@ export async function getClassificationEquivalency(
                 {
                     title: "Cross-Nation Clearance Comparison",
                     description:
-                        'French user with "SECRET_DEFENSE" clearance can access US "SECRET" documents',
-                    example: "FRA: SECRET_DEFENSE → USA: SECRET ✅",
+                        'French user with "SECRET DÉFENSE" clearance can access US "SECRET" documents',
+                    example: "FRA: SECRET DÉFENSE → USA: SECRET ✅",
                 },
                 {
                     title: "Coalition Access Control",
                     description:
                         'Ensure German "GEHEIM" clearance is sufficient for NATO "SECRET" data',
-                    example: "DEU: GEHEIM → NATO: NATO_SECRET ✅",
+                    example: "DEU: GEHEIM → NATO: NATO SECRET ✅",
                 },
                 {
                     title: "Display Marking Translation",
                     description:
                         "Show appropriate classification marking in user's national format",
-                    example: 'USA user sees "SECRET", FRA user sees "SECRET DEFENSE"',
+                    example: 'USA user sees "SECRET", FRA user sees "SECRET DÉFENSE"',
+                },
+                {
+                    title: "New Member Integration",
+                    description:
+                        'Finland (2023) and Sweden (2024) classification systems fully integrated',
+                    example: "FIN: SALAINEN → NATO: NATO SECRET ✅",
                 },
             ],
             validationRules: [
@@ -595,6 +745,20 @@ export async function getClassificationEquivalency(
                 "COI membership required if resource has COI tags",
                 "Country of affiliation must be in releasabilityTo list",
                 "Classification equivalency applied before numeric comparison",
+                "All 32 NATO nations + FVEY partners supported",
+            ],
+            natoMembershipHistory: [
+                { year: 1949, countries: ["USA", "GBR", "FRA", "CAN", "BEL", "NLD", "LUX", "ITA", "PRT", "DNK", "ISL", "NOR"], event: "Founding Members" },
+                { year: 1952, countries: ["GRC", "TUR"], event: "First Expansion" },
+                { year: 1955, countries: ["DEU"], event: "West Germany Joins" },
+                { year: 1982, countries: ["ESP"], event: "Spain Joins" },
+                { year: 1999, countries: ["POL", "CZE", "HUN"], event: "Post-Cold War Expansion" },
+                { year: 2004, countries: ["BGR", "EST", "LVA", "LTU", "ROU", "SVK", "SVN"], event: "Big Bang Expansion" },
+                { year: 2009, countries: ["ALB", "HRV"], event: "Balkan Expansion" },
+                { year: 2017, countries: ["MNE"], event: "Montenegro Joins" },
+                { year: 2020, countries: ["MKD"], event: "North Macedonia Joins" },
+                { year: 2023, countries: ["FIN"], event: "Finland Joins" },
+                { year: 2024, countries: ["SWE"], event: "Sweden Joins" },
             ],
         };
 
@@ -611,77 +775,135 @@ export async function getClassificationEquivalency(
  * GET /api/compliance/certificates
  *
  * Returns X.509 certificate status and PKI health
+ * Gracefully handles missing PKI infrastructure with initialization guidance
  */
 export async function getCertificateStatus(
     _req: Request,
     res: Response,
 ): Promise<void> {
     try {
-        // Load real three-tier certificate hierarchy
+        // Try to load real three-tier certificate hierarchy
         const { certificateManager } = await import('../utils/certificate-manager');
-        const { certificateLifecycleService } = await import('../services/certificate-lifecycle.service');
-        
-        const hierarchy = await certificateManager.loadThreeTierHierarchy();
-        
-        // Get health status for each certificate
-        const rootHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.root, 'root');
-        const intermediateHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.intermediate, 'intermediate');
-        const signingHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.signing, 'signing');
-        
+
+        let pkiInitialized = false;
+        let hierarchy = null;
+        let rootHealth = { status: 'not_initialized' };
+        let intermediateHealth = { status: 'not_initialized' };
+        let signingHealth = { status: 'not_initialized' };
+
+        try {
+            const { certificateLifecycleService } = await import('../services/certificate-lifecycle.service');
+            hierarchy = await certificateManager.loadThreeTierHierarchy();
+            pkiInitialized = true;
+
+            // Get health status for each certificate
+            rootHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.root, 'root');
+            intermediateHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.intermediate, 'intermediate');
+            signingHealth = certificateLifecycleService.checkCertificateExpiry(hierarchy.signing, 'signing');
+        } catch (pkiError) {
+            // PKI not initialized - this is expected for new deployments
+            logger.info("PKI infrastructure not yet initialized", {
+                error: pkiError instanceof Error ? pkiError.message : 'Unknown error'
+            });
+        }
+
         // Calculate days until expiry
         const calcDaysUntilExpiry = (validTo: string) => {
             return Math.ceil((new Date(validTo).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
         };
-        
-        // Determine overall PKI health
-        const allHealthy = rootHealth.status === 'valid' && 
-                          intermediateHealth.status === 'valid' && 
-                          signingHealth.status === 'valid';
-        const componentsHealthy = [rootHealth, intermediateHealth, signingHealth]
-            .filter(h => h.status === 'valid').length;
 
+        // Get instance code from environment
+        const instanceCode = process.env.INSTANCE_CODE || 'USA';
+        const isHub = instanceCode.toUpperCase() === 'USA';
+
+        // Determine overall PKI health
+        const allHealthy = pkiInitialized &&
+                          rootHealth.status === 'valid' &&
+                          intermediateHealth.status === 'valid' &&
+                          signingHealth.status === 'valid';
+        const componentsHealthy = pkiInitialized ? [rootHealth, intermediateHealth, signingHealth]
+            .filter(h => h.status === 'valid').length : 0;
+
+        // Build response based on PKI initialization state
         const certificateStatus = {
             title: "X.509 PKI Infrastructure (Three-Tier)",
-            description:
-                "DIVE V3 uses enterprise X.509 three-tier PKI (Root CA → Intermediate CA → Signing Certificate) for policy signatures, trust chains, and cryptographic binding (ACP-240 Section 5.4).",
+            description: pkiInitialized
+                ? "DIVE V3 uses enterprise X.509 three-tier PKI (Root CA → Intermediate CA → Signing Certificate) for policy signatures, trust chains, and cryptographic binding (ACP-240 Section 5.4)."
+                : "PKI infrastructure not yet initialized. Run `./dive hub pki-init` (for Hub) or `./dive --instance <code> spoke pki-init` (for Spokes) to generate certificates.",
+            pkiInitialized,
+            instanceCode,
+            isHub,
             pkiHealth: {
-                status: allHealthy ? "healthy" : "warning",
+                status: pkiInitialized ? (allHealthy ? "healthy" : "warning") : "not_initialized",
                 lastCheck: new Date().toISOString(),
                 componentsHealthy,
                 componentsTotal: 3,
             },
-            rootCertificate: {
+            // Root Certificate (Hub-issued or placeholder)
+            rootCertificate: pkiInitialized && hierarchy ? {
                 subject: hierarchy.root.subject,
                 issuer: hierarchy.root.issuer,
                 serialNumber: hierarchy.root.serialNumber,
                 validFrom: hierarchy.root.validFrom,
                 validTo: hierarchy.root.validTo,
-                keySize: 4096, // RSA-4096 for root
+                keySize: 4096,
                 signatureAlgorithm: "sha256WithRSAEncryption",
                 status: rootHealth.status,
                 daysUntilExpiry: calcDaysUntilExpiry(hierarchy.root.validTo),
+            } : {
+                subject: `CN=DIVE V3 Root CA, O=NATO Coalition, C=${instanceCode}`,
+                issuer: `CN=DIVE V3 Root CA, O=NATO Coalition, C=${instanceCode}`,
+                serialNumber: "NOT_INITIALIZED",
+                validFrom: new Date().toISOString(),
+                validTo: new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toISOString(),
+                keySize: 4096,
+                signatureAlgorithm: "sha256WithRSAEncryption",
+                status: "not_initialized",
+                daysUntilExpiry: 0,
             },
-            intermediateCertificate: {
+            // Intermediate Certificate
+            intermediateCertificate: pkiInitialized && hierarchy ? {
                 subject: hierarchy.intermediate.subject,
                 issuer: hierarchy.intermediate.issuer,
                 serialNumber: hierarchy.intermediate.serialNumber,
                 validFrom: hierarchy.intermediate.validFrom,
                 validTo: hierarchy.intermediate.validTo,
-                keySize: 4096, // RSA-4096 for intermediate
+                keySize: 4096,
                 signatureAlgorithm: "sha256WithRSAEncryption",
                 status: intermediateHealth.status,
                 daysUntilExpiry: calcDaysUntilExpiry(hierarchy.intermediate.validTo),
+            } : {
+                subject: `CN=DIVE V3 Intermediate CA, O=NATO Coalition, C=${instanceCode}`,
+                issuer: `CN=DIVE V3 Root CA, O=NATO Coalition, C=${instanceCode}`,
+                serialNumber: "NOT_INITIALIZED",
+                validFrom: new Date().toISOString(),
+                validTo: new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000).toISOString(),
+                keySize: 4096,
+                signatureAlgorithm: "sha256WithRSAEncryption",
+                status: "not_initialized",
+                daysUntilExpiry: 0,
             },
-            signingCertificate: {
+            // Signing Certificate (instance-specific)
+            signingCertificate: pkiInitialized && hierarchy ? {
                 subject: hierarchy.signing.subject,
                 issuer: hierarchy.signing.issuer,
                 serialNumber: hierarchy.signing.serialNumber,
                 validFrom: hierarchy.signing.validFrom,
                 validTo: hierarchy.signing.validTo,
-                keySize: 4096, // RSA-4096 for signing
+                keySize: 4096,
                 signatureAlgorithm: "sha256WithRSAEncryption",
                 status: signingHealth.status,
                 daysUntilExpiry: calcDaysUntilExpiry(hierarchy.signing.validTo),
+            } : {
+                subject: `CN=DIVE V3 Policy Signer (${instanceCode}), O=NATO Coalition, C=${instanceCode}`,
+                issuer: `CN=DIVE V3 Intermediate CA, O=NATO Coalition, C=${instanceCode}`,
+                serialNumber: "NOT_INITIALIZED",
+                validFrom: new Date().toISOString(),
+                validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+                keySize: 4096,
+                signatureAlgorithm: "sha256WithRSAEncryption",
+                status: "not_initialized",
+                daysUntilExpiry: 0,
             },
             useCases: [
                 {
@@ -689,57 +911,100 @@ export async function getCertificateStatus(
                     description:
                         "Every encrypted resource includes X.509 digital signature for integrity",
                     icon: "✍️",
-                    status: "active",
+                    status: pkiInitialized ? "active" : "pending",
                 },
                 {
                     title: "Three-Tier Certificate Chain",
                     description:
                         "Root CA → Intermediate CA → Signing Certificate for robust trust management",
                     icon: "🔗",
-                    status: "active",
+                    status: pkiInitialized ? "active" : "pending",
                 },
                 {
                     title: "STANAG 4778 Cryptographic Binding",
                     description:
                         "Bind security labels to encrypted data with digital signatures",
                     icon: "🔐",
-                    status: "active",
+                    status: pkiInitialized ? "active" : "pending",
                 },
                 {
                     title: "Tamper Detection & SOC Alerts",
                     description:
                         "Fail-secure signature verification with automatic security alerts",
                     icon: "🚨",
-                    status: "active",
+                    status: pkiInitialized ? "active" : "pending",
                 },
             ],
-            signatureStatistics: {
+            signatureStatistics: pkiInitialized ? {
                 totalSigned: 1847,
                 totalVerified: 1847,
                 failedVerifications: 0,
                 averageSignTime: "12ms",
                 averageVerifyTime: "8ms",
+            } : {
+                totalSigned: 0,
+                totalVerified: 0,
+                failedVerifications: 0,
+                averageSignTime: "N/A",
+                averageVerifyTime: "N/A",
             },
             complianceRequirements: [
                 {
                     id: "5.6",
                     requirement: "Use X.509 certificates for policy signatures",
-                    status: "compliant",
+                    status: pkiInitialized ? "compliant" : "pending",
                     implementation: "certificate-manager.ts",
                 },
                 {
                     id: "5.7",
                     requirement: "Validate certificate chains before trusting signatures",
-                    status: "compliant",
+                    status: pkiInitialized ? "compliant" : "pending",
                     implementation: "policy-signature.ts",
                 },
                 {
                     id: "5.8",
                     requirement: "Alert on signature verification failures",
-                    status: "compliant",
+                    status: pkiInitialized ? "compliant" : "pending",
                     implementation: "ztdf.utils.ts + acp240-logger.ts",
                 },
             ],
+            // Hub-Spoke PKI Architecture
+            hubSpokeArchitecture: {
+                description: "DIVE V3 uses a hierarchical PKI model where the Hub (USA) acts as the Root CA, and Spokes receive intermediate certificates.",
+                phases: [
+                    {
+                        phase: 1,
+                        title: "Hub PKI Initialization",
+                        description: "Generate Root CA and Intermediate CA on the Hub (USA)",
+                        command: "./dive hub pki-init",
+                        status: isHub ? (pkiInitialized ? "complete" : "pending") : "hub_only",
+                    },
+                    {
+                        phase: 2,
+                        title: "Spoke Certificate Request",
+                        description: "Generate CSR on spoke and submit to Hub for signing",
+                        command: "./dive --instance <code> spoke pki-request",
+                        status: !isHub ? (pkiInitialized ? "complete" : "pending") : "spoke_only",
+                    },
+                    {
+                        phase: 3,
+                        title: "Hub Signs Spoke Certificate",
+                        description: "Hub signs the spoke's CSR with Intermediate CA",
+                        command: "./dive hub pki-sign --spoke <code>",
+                        status: isHub ? "pending" : "hub_only",
+                    },
+                    {
+                        phase: 4,
+                        title: "Spoke Imports Signed Certificate",
+                        description: "Spoke imports the Hub-signed certificate and trust chain",
+                        command: "./dive --instance <code> spoke pki-import",
+                        status: !isHub ? (pkiInitialized ? "complete" : "pending") : "spoke_only",
+                    },
+                ],
+                trustChain: isHub
+                    ? ["DIVE V3 Root CA (USA)", "DIVE V3 Intermediate CA (USA)", "Policy Signer (USA)"]
+                    : [`DIVE V3 Root CA (USA)`, `DIVE V3 Intermediate CA (USA)`, `Policy Signer (${instanceCode})`],
+            },
         };
 
         res.json(certificateStatus);

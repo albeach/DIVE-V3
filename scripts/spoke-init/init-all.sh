@@ -96,15 +96,75 @@ echo ""
 "${SCRIPT_DIR}/init-databases.sh" "${INSTANCE_CODE}"
 
 # =============================================================================
-# Step 3: Initialize Keycloak
+# Step 3: Initialize Keycloak (with pre-verification)
 # =============================================================================
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}  STEP 3/4: Configuring Keycloak${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# ADDED (Dec 2025): Pre-verify Keycloak is fully ready before realm operations
+KC_CONTAINER="$(container_name keycloak)"
+echo -e "  ${BLUE}ℹ${NC} Verifying Keycloak Admin API is responsive..."
+KC_READY=false
+for i in {1..30}; do
+    # Try to get admin token as readiness check
+    KC_ADMIN_PASS=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -n "$KC_ADMIN_PASS" ]; then
+        TOKEN_CHECK=$(docker exec "$KC_CONTAINER" curl -sf \
+            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" \
+            -d "username=admin" \
+            -d "password=${KC_ADMIN_PASS}" 2>/dev/null | grep -o '"access_token"' || true)
+        if [ -n "$TOKEN_CHECK" ]; then
+            echo -e "  ${GREEN}✓${NC} Keycloak Admin API ready (attempt $i)"
+            KC_READY=true
+            break
+        fi
+    fi
+    if [ $((i % 5)) -eq 0 ]; then
+        echo -e "  ${YELLOW}⏳${NC} Waiting for Keycloak Admin API... ($i/30)"
+    fi
+    sleep 2
+done
+
+if [ "$KC_READY" != "true" ]; then
+    echo -e "  ${RED}✗${NC} Keycloak Admin API not ready after 60s"
+    echo -e "  ${YELLOW}⚠${NC} Proceeding anyway - init-keycloak.sh has built-in retry logic"
+fi
+
 "${SCRIPT_DIR}/init-keycloak.sh" "${INSTANCE_CODE}"
-"${SCRIPT_DIR}/seed-users.sh" "${INSTANCE_CODE}"
+
+# =========================================================================
+# User Seeding: NATO countries use localized attributes, others use English
+# =========================================================================
+# NATO countries have their own attribute names and clearance terminology
+# (e.g., Italy: livello_sicurezza, NON_CLASSIFICATO)
+# These are mapped to DIVE V3 standard claims via protocol mappers
+# =========================================================================
+NATO_MAPPINGS_FILE="${SCRIPT_DIR}/../../keycloak/mapper-templates/nato-attribute-mappings.json"
+INSTANCE_DIR="${SCRIPT_DIR}/../../instances/${CODE_LOWER}"
+
+if [ -f "$NATO_MAPPINGS_FILE" ] && jq -e ".countries.${CODE_UPPER}" "$NATO_MAPPINGS_FILE" > /dev/null 2>&1; then
+    echo -e "  ${BLUE}ℹ${NC} ${CODE_UPPER} is a NATO country - using localized attributes"
+
+    # STEP 1: Configure protocol mappers FIRST
+    # This MUST run before seeding users because it registers localized attribute
+    # names in Keycloak's User Profile (required for attributes to be accepted)
+    "${SCRIPT_DIR}/configure-localized-mappers.sh" "${INSTANCE_CODE}"
+
+    # STEP 2: Now seed users with localized attributes
+    # The User Profile now has the localized attribute names registered
+    "${SCRIPT_DIR}/seed-localized-users.sh" "${INSTANCE_CODE}"
+
+    # Mark localization as complete (prevents duplicate run in spoke-deploy.sh)
+    touch "${INSTANCE_DIR}/.localized" 2>/dev/null || true
+    echo -e "  ${GREEN}✓${NC} NATO localization complete"
+else
+    echo -e "  ${BLUE}ℹ${NC} ${CODE_UPPER} uses standard DIVE V3 attributes"
+    "${SCRIPT_DIR}/seed-users.sh" "${INSTANCE_CODE}"
+fi
 
 # =============================================================================
 # Step 4: Seed Resources (ZTDF-encrypted)

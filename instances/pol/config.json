@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-pol-e117d8d8",
+    "spokeId": "spoke-pol-17139fb2",
     "instanceCode": "POL",
-    "name": "Polish Armed Forces",
-    "description": "DIVE V3 Spoke Instance for Polish Armed Forces",
+    "name": "Poland Ministry of Defence",
+    "description": "DIVE V3 Spoke Instance for Poland Ministry of Defence",
     "country": "POL",
     "organizationType": "government",
     "contactEmail": "admin@pol.dive25.com",
-    "registeredSpokeId": "spoke-pol-6603a9f1"
+    "registeredSpokeId": "spoke-pol-b4615ddb"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -34,7 +34,7 @@
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-28T03:38:30Z"
+    "registeredAt": "2025-12-31T23:25:26Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -47,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-28T03:38:12Z",
-    "lastModified": "2025-12-28T03:38:12Z",
+    "createdAt": "2025-12-30T07:15:27Z",
+    "lastModified": "2025-12-30T07:15:27Z",
     "configHash": ""
   }
 }

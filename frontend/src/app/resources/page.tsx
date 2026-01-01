@@ -165,6 +165,7 @@ export default function ResourcesPage() {
       countries: {} as Record<string, number>,
       cois: {} as Record<string, number>,
       encryptionStatus: {} as Record<string, number>,
+      instances: {} as Record<string, number>,
     };
 
     // Count facets from currently loaded resources (these are already filtered by API)
@@ -193,14 +194,21 @@ export default function ResourcesPage() {
       const encryptionStatus = resource.encrypted ? 'encrypted' : 'unencrypted';
       facetCounts.encryptionStatus[encryptionStatus] =
         (facetCounts.encryptionStatus[encryptionStatus] || 0) + 1;
+
+      // Instance facet (from originRealm or source instance)
+      const instance = resource.originRealm || (resource as any).sourceInstance;
+      if (instance) {
+        facetCounts.instances[instance] = (facetCounts.instances[instance] || 0) + 1;
+      }
     });
 
-    // Convert to the expected facet format
+    // Convert to the expected facet format (approximate: false since counts are exact from loaded data)
     return {
-      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count })),
-      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count })),
-      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count })),
-      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count })),
+      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count, approximate: false })),
+      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count, approximate: false })),
+      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count, approximate: false })),
+      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count, approximate: false })),
+      instances: Object.entries(facetCounts.instances).map(([value, count]) => ({ value, count, approximate: false })),
     };
   }, [resources]);
 

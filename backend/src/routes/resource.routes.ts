@@ -23,10 +23,46 @@ import { enforceFederationAgreement } from '../middleware/federation-agreement.m
 const router = Router();
 
 /**
- * GET /api/resources
- * List all resources with JWT authentication
- * NOTE: Returns all resources metadata - UI should hide resources user cannot access
- * Individual resource access is enforced by GET /api/resources/:id (with OPA)
+ * @openapi
+ * /api/resources:
+ *   get:
+ *     summary: List all resources
+ *     description: |
+ *       Returns metadata for all resources. Individual resource access
+ *       is enforced by GET /api/resources/:id with OPA policy evaluation.
+ *       UI should filter resources based on user's clearance level.
+ *     tags: [Resources]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classification
+ *         schema:
+ *           type: string
+ *           enum: [UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET]
+ *         description: Filter by classification level
+ *       - in: query
+ *         name: country
+ *         schema:
+ *           type: string
+ *         description: Filter by releasability country (ISO 3166-1 alpha-3)
+ *     responses:
+ *       200:
+ *         description: List of resources
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 resources:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Resource'
+ *                 total:
+ *                   type: integer
+ *                   example: 150
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/', authenticateJWT, listResourcesHandler);
 
@@ -36,9 +72,44 @@ router.get('/', authenticateJWT, listResourcesHandler);
  */
 
 /**
- * GET /api/resources/:id/ztdf
- * Get ZTDF details for a resource (Week 3.4.3 UI/UX transparency)
- * Returns full ZTDF structure with integrity validation results
+ * @openapi
+ * /api/resources/{id}/ztdf:
+ *   get:
+ *     summary: Get ZTDF details
+ *     description: |
+ *       Returns Zero Trust Data Format (ZTDF) structure with integrity validation.
+ *       Includes encryption metadata, policy bindings, and integrity status.
+ *     tags: [Resources, KAS]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Resource ID
+ *         example: doc-usa-001
+ *     responses:
+ *       200:
+ *         description: ZTDF details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 resourceId:
+ *                   type: string
+ *                 encrypted:
+ *                   type: boolean
+ *                 ztdfStructure:
+ *                   type: object
+ *                 integrityValid:
+ *                   type: boolean
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
  */
 router.get('/:id/ztdf', authenticateJWT, getZTDFDetailsHandler);
 
@@ -140,9 +211,57 @@ router.get('/search/facets', authenticateJWT, getFacetsHandler);
 router.get('/federated-search', authenticateJWT, federatedSearchGetHandler);
 
 /**
- * POST /api/resources/federated-search
- * Phase 4, Task 3.2: Search across all federated instances (POST variant)
- * Supports complex query parameters in request body
+ * @openapi
+ * /api/resources/federated-search:
+ *   post:
+ *     summary: Federated search across all instances
+ *     description: |
+ *       Search across all federated coalition instances (USA, FRA, GBR, DEU).
+ *       Returns aggregated results with source instance attribution.
+ *     tags: [Resources, Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               query:
+ *                 type: string
+ *                 description: Full-text search query
+ *                 example: fuel inventory
+ *               classification:
+ *                 type: string
+ *                 enum: [UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET]
+ *               countries:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: [USA, GBR]
+ *               limit:
+ *                 type: integer
+ *                 default: 20
+ *     responses:
+ *       200:
+ *         description: Federated search results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Resource'
+ *                 sources:
+ *                   type: object
+ *                   description: Results count per instance
+ *                 totalResults:
+ *                   type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.post('/federated-search', authenticateJWT, federatedSearchHandler);
 
@@ -154,21 +273,96 @@ router.post('/federated-search', authenticateJWT, federatedSearchHandler);
 router.get('/federated-status', authenticateJWT, federatedStatusHandler);
 
 /**
- * GET /api/resources/:id
- * Get a specific resource
- * Week 2: PEP middleware enforces ABAC authorization via OPA
- * Week 3: Enrichment middleware fills missing attributes BEFORE authz
- * Phase 4: Federation agreement enforcement for SP access
- *
- * IMPORTANT: This catch-all route MUST be LAST to avoid shadowing specific routes above
+ * @openapi
+ * /api/resources/{id}:
+ *   get:
+ *     summary: Get a specific resource
+ *     description: |
+ *       Retrieves a single resource with full ABAC authorization via OPA.
+ *       Evaluates clearance, releasability, and COI membership.
+ *       Returns decrypted content for ZTDF resources if authorized.
+ *     tags: [Resources]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Resource ID
+ *         example: doc-usa-001
+ *     responses:
+ *       200:
+ *         description: Resource with authorization decision
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Resource'
+ *                 - type: object
+ *                   properties:
+ *                     content:
+ *                       type: string
+ *                       description: Decrypted content (if authorized)
+ *                     authorizationDecision:
+ *                       $ref: '#/components/schemas/AuthorizationDecision'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
  */
 router.get('/:id', authenticateJWT, enrichmentMiddleware, authzMiddleware, enforceFederationAgreement, getResourceHandler);
 
 /**
- * POST /api/resources/request-key
- * Request decryption key from KAS (Week 3.4.3 KAS Request Modal)
- * Calls KAS service and decrypts content if approved
- * Phase 4: Federation agreement enforcement for SP access
+ * @openapi
+ * /api/resources/request-key:
+ *   post:
+ *     summary: Request decryption key from KAS
+ *     description: |
+ *       Requests a decryption key from the Key Access Service (KAS).
+ *       KAS re-evaluates authorization before releasing the key.
+ *       Returns decrypted content if authorized.
+ *     tags: [Resources, KAS]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - resourceId
+ *             properties:
+ *               resourceId:
+ *                 type: string
+ *                 description: Resource to decrypt
+ *                 example: doc-usa-001
+ *               reason:
+ *                 type: string
+ *                 description: Justification for access
+ *                 example: Mission planning requirement
+ *     responses:
+ *       200:
+ *         description: Key released and content decrypted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 decryptedContent:
+ *                   type: string
+ *                 kasDecision:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
  */
 router.post('/request-key', authenticateJWT, enforceFederationAgreement, requestKeyHandler);
 

@@ -25,30 +25,84 @@ import {
 const router = Router();
 
 /**
- * GET /api/policies
- * List all SYSTEM OPA policies (built-in authorization policies)
- * Returns: Array of policy metadata with statistics
- *
- * Authentication: None (system policies are public information)
- * Authorization: None (read-only access to system policies)
- *
- * NOTE: Now includes policies from all subdirectories (base/, org/, tenant/, entrypoints/)
+ * @openapi
+ * /api/policies:
+ *   get:
+ *     summary: List all OPA policies
+ *     description: |
+ *       Returns metadata for all system OPA Rego policies that power DIVE's ABAC engine.
+ *       Includes policies from base/, org/, tenant/, and entrypoints/ directories.
+ *     tags: [Policies]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: List of policies
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 policies:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: fuel_inventory_abac_policy
+ *                       name:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       layer:
+ *                         type: string
+ *                         enum: [base, org, tenant, entrypoints]
+ *                       ruleCount:
+ *                         type: integer
+ *                 total:
+ *                   type: integer
  */
 router.get('/', listPoliciesHandler);
 
 /**
- * GET /api/policies/hierarchy
- * Get complete policy hierarchy with dependency graph
- * Returns: Layered policy structure with imports, compliance, and visualization data
- *
- * Authentication: None (system policies are public information)
- * Authorization: None (read-only access)
- *
- * Response includes:
- * - version: Bundle version metadata
- * - layers: Policies grouped by layer (base, org, tenant, entrypoints, standalone)
- * - dependencyGraph: Import relationships for visualization
- * - stats: Aggregated statistics
+ * @openapi
+ * /api/policies/hierarchy:
+ *   get:
+ *     summary: Get policy hierarchy
+ *     description: |
+ *       Returns the complete policy hierarchy with dependency graph.
+ *       Includes layered structure, import relationships, and visualization data.
+ *     tags: [Policies]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Policy hierarchy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 version:
+ *                   type: object
+ *                   properties:
+ *                     bundleVersion:
+ *                       type: string
+ *                 layers:
+ *                   type: object
+ *                   properties:
+ *                     base:
+ *                       type: array
+ *                     org:
+ *                       type: array
+ *                     tenant:
+ *                       type: array
+ *                     entrypoints:
+ *                       type: array
+ *                 dependencyGraph:
+ *                   type: object
+ *                   description: Import relationships for visualization
+ *                 stats:
+ *                   type: object
  */
 router.get('/hierarchy', getHierarchyHandler);
 
@@ -66,16 +120,57 @@ router.get('/hierarchy', getHierarchyHandler);
 router.get('/:id', getPolicyHandler);
 
 /**
- * POST /api/policies/:id/test
- * Test SYSTEM policy decision with custom input
- * Body: IOPAInput (subject, action, resource, context)
- * Returns: Decision (allow/deny) with evaluation details
- *
- * Authentication: Required (JWT token for testing)
- * Authorization: None (any authenticated user can test policies)
- *
- * Example: POST /api/policies/fuel_inventory_abac_policy/test
- * Body: { input: { subject: {...}, action: {...}, resource: {...}, context: {...} } }
+ * @openapi
+ * /api/policies/{id}/test:
+ *   post:
+ *     summary: Test policy decision
+ *     description: |
+ *       Tests a policy with custom input data. Returns the authorization decision
+ *       with detailed evaluation results including which rules passed or failed.
+ *     tags: [Policies]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: fuel_inventory_abac_policy
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               input:
+ *                 type: object
+ *                 properties:
+ *                   subject:
+ *                     type: object
+ *                     properties:
+ *                       uniqueID:
+ *                         type: string
+ *                       clearance:
+ *                         type: string
+ *                       countryOfAffiliation:
+ *                         type: string
+ *                   action:
+ *                     type: object
+ *                   resource:
+ *                     type: object
+ *                   context:
+ *                     type: object
+ *     responses:
+ *       200:
+ *         description: Policy evaluation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthorizationDecision'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.post('/:id/test', authenticateJWT, testDecisionHandler);
 

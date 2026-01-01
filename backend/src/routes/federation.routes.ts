@@ -41,6 +41,137 @@ const spManagement = new SPManagementService();
 const router = Router();
 // Routes are mounted at /api/federation/* in server.ts for consistency with other DIVE APIs
 
+/**
+ * @openapi
+ * tags:
+ *   - name: Federation
+ *     description: |
+ *       Hub-Spoke federation management for cross-coalition resource sharing.
+ *       Enables secure identity federation and resource access across partner instances.
+ */
+
+/**
+ * @openapi
+ * /api/federation/spokes:
+ *   get:
+ *     summary: List all federation spokes
+ *     description: Returns all registered spokes with their status and health information
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of federation spokes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 spokes:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/FederationSpoke'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+
+/**
+ * @openapi
+ * /api/federation/register:
+ *   post:
+ *     summary: Register a new spoke instance
+ *     description: |
+ *       Registers a new spoke with the hub. The spoke will be in 'pending' status
+ *       until approved by a hub administrator.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - instanceCode
+ *               - name
+ *               - baseUrl
+ *               - apiUrl
+ *               - idpUrl
+ *               - requestedScopes
+ *               - contactEmail
+ *             properties:
+ *               instanceCode:
+ *                 type: string
+ *                 description: ISO 3166-1 alpha-3 country code
+ *                 example: FRA
+ *               name:
+ *                 type: string
+ *                 example: France Coalition Instance
+ *               baseUrl:
+ *                 type: string
+ *                 format: uri
+ *                 example: https://fra.dive-v3.mil
+ *               apiUrl:
+ *                 type: string
+ *                 format: uri
+ *               idpUrl:
+ *                 type: string
+ *                 format: uri
+ *               requestedScopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: [resources:read, policies:sync]
+ *               contactEmail:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       201:
+ *         description: Spoke registered successfully
+ *       400:
+ *         description: Invalid registration data
+ */
+
+/**
+ * @openapi
+ * /api/federation/heartbeat:
+ *   post:
+ *     summary: Send spoke heartbeat
+ *     description: |
+ *       Spokes send periodic heartbeats to report health status, policy version,
+ *       and operational metrics to the hub.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - spokeId
+ *             properties:
+ *               spokeId:
+ *                 type: string
+ *               policyVersion:
+ *                 type: string
+ *               services:
+ *                 type: object
+ *                 properties:
+ *                   opa:
+ *                     type: object
+ *                     properties:
+ *                       healthy:
+ *                         type: boolean
+ *                   mongodb:
+ *                     type: object
+ *               metrics:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Heartbeat acknowledged
+ *       404:
+ *         description: Spoke not found
+ */
+
 // ============================================
 // VALIDATION SCHEMAS
 // ============================================
@@ -511,9 +642,33 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                     spokeId: spoke.spokeId,
                     error: approvalError instanceof Error ? approvalError.message : 'Unknown error',
                 });
-                // Don't fail registration if auto-approval fails
-                // Spoke will remain in pending status for manual approval
+
+                // FIXED (Dec 2025): Get updated spoke from error if available (race condition fix)
+                // The approveSpoke function now attaches the re-fetched spoke to the error
+                if ((approvalError as any).spoke) {
+                    spoke = (approvalError as any).spoke;
+                    logger.warn('Spoke status after failed approval', {
+                        spokeId: spoke.spokeId,
+                        status: spoke.status,
+                    });
+                }
+                // Registration succeeds but spoke may be in suspended/pending status
             }
+        }
+
+        // FIXED (Dec 2025): Re-fetch spoke from DB to get authoritative status
+        // This ensures we return the true current state, not stale local variable
+        const freshSpoke = await hubSpokeRegistry.getSpokeByInstanceCode(spoke.instanceCode);
+        const finalStatus = freshSpoke?.status || spoke.status;
+
+        // Determine appropriate message based on actual status
+        let statusMessage: string;
+        if (finalStatus === 'approved') {
+            statusMessage = 'Registration approved with bidirectional federation.';
+        } else if (finalStatus === 'suspended') {
+            statusMessage = 'Registration failed - spoke suspended due to federation issues. Contact administrator.';
+        } else {
+            statusMessage = 'Registration pending approval. You will receive a token once approved.';
         }
 
         res.status(201).json({
@@ -522,11 +677,9 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 spokeId: spoke.spokeId,
                 instanceCode: spoke.instanceCode,
                 name: spoke.name,
-                status: spoke.status,
+                status: finalStatus,  // Use authoritative DB status
                 federationIdPAlias: spoke.federationIdPAlias,
-                message: spoke.status === 'approved'
-                    ? 'Registration approved with bidirectional federation.'
-                    : 'Registration pending approval. You will receive a token once approved.'
+                message: statusMessage,
             },
             token,  // Include token if auto-approved
         });
@@ -1428,6 +1581,49 @@ router.post('/spokes/:spokeId/suspend', requireAdmin, async (req: Request, res: 
         res.status(500).json({
             error: 'Suspension failed',
             message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+/**
+ * POST /api/federation/spokes/:spokeId/unsuspend
+ * Unsuspend a suspended spoke (reactivate)
+ * ADDED (Dec 2025): Provides API to reactivate suspended spokes
+ *
+ * Body:
+ *   - retryFederation: boolean (optional) - Whether to retry bidirectional federation setup
+ */
+router.post('/spokes/:spokeId/unsuspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { retryFederation } = req.body;
+        const unsuspendedBy = (req as any).user?.uniqueID || 'admin';
+
+        const spoke = await hubSpokeRegistry.unsuspendSpoke(
+            req.params.spokeId,
+            unsuspendedBy,
+            { retryFederation: retryFederation === true }
+        );
+
+        logger.info('Spoke unsuspended', {
+            spokeId: spoke.spokeId,
+            instanceCode: spoke.instanceCode,
+            unsuspendedBy,
+            retryFederation,
+        });
+
+        res.json({
+            success: true,
+            spoke,
+            message: retryFederation
+                ? 'Spoke unsuspended. Federation retry attempted.'
+                : 'Spoke unsuspended. Run federation-setup to restore bidirectional SSO.',
+        });
+
+    } catch (error) {
+        const statusCode = (error as Error).message?.includes('not suspended') ? 400 : 500;
+        res.status(statusCode).json({
+            error: 'Unsuspension failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
 });
