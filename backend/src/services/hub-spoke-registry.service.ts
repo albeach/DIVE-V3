@@ -709,10 +709,22 @@ class HubSpokeRegistryService extends EventEmitter {
         // Suspend the spoke since bidirectional federation failed
         await this.suspendSpoke(spokeId, `Bidirectional federation failed: ${errorMessage}`);
 
-        throw new Error(
+        // FIXED (Dec 2025): Re-fetch spoke to get updated status after suspension
+        // This fixes race condition where local variable still shows 'approved'
+        const suspendedSpoke = await this.store.findById(spokeId);
+        if (suspendedSpoke) {
+          // Update local variable to reflect true DB state
+          Object.assign(spoke, suspendedSpoke);
+        }
+
+        // Create error with accurate status information
+        const statusError = new Error(
           `Spoke approval failed: Bidirectional federation is REQUIRED. ` +
-          `Spoke has been suspended. Error: ${errorMessage}`
+          `Spoke status is now '${spoke.status}'. Error: ${errorMessage}`
         );
+        // Attach spoke to error for caller to access
+        (statusError as any).spoke = spoke;
+        throw statusError;
       }
     }
 
@@ -1013,6 +1025,92 @@ class HubSpokeRegistryService extends EventEmitter {
       suspendedBy: 'admin', // TODO: Pass actual admin from controller
       reason,
       correlationId
+    });
+
+    return spoke;
+  }
+
+  /**
+   * Unsuspend a spoke (reactivate after suspension)
+   * ADDED (Dec 2025): Provides programmatic way to reactivate suspended spokes
+   *
+   * @param spokeId - The spoke ID to unsuspend
+   * @param unsuspendedBy - Who is unsuspending (for audit)
+   * @param retryFederation - Whether to retry bidirectional federation setup
+   */
+  async unsuspendSpoke(
+    spokeId: string,
+    unsuspendedBy: string,
+    options: { retryFederation?: boolean } = {}
+  ): Promise<ISpokeRegistration> {
+    const spoke = await this.store.findById(spokeId);
+    if (!spoke) {
+      throw new Error(`Spoke ${spokeId} not found`);
+    }
+
+    if (spoke.status !== 'suspended') {
+      throw new Error(`Spoke ${spokeId} is not suspended (current status: ${spoke.status})`);
+    }
+
+    // Set status back to approved
+    spoke.status = 'approved';
+    spoke.suspendedReason = undefined;
+    await this.store.save(spoke);
+
+    logger.info('Spoke unsuspended', {
+      spokeId,
+      instanceCode: spoke.instanceCode,
+      unsuspendedBy,
+      retryFederation: options.retryFederation,
+    });
+
+    // Re-add to OPAL
+    await this.notifyOPALOfSpokeChange(spoke, 'approved');
+
+    // Re-add to OPA trust
+    try {
+      await this.updateOPATrustForSpoke(spoke, 'add');
+    } catch (error) {
+      logger.error('Failed to restore OPA trust data during spoke unsuspension', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
+    // Optionally retry bidirectional federation
+    if (options.retryFederation) {
+      logger.info('Retrying bidirectional federation for unsuspended spoke', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+      });
+
+      try {
+        await this.createFederationIdP(spoke);
+        spoke.federationIdPAlias = `${spoke.instanceCode.toLowerCase()}-idp`;
+        await this.store.save(spoke);
+
+        logger.info('Bidirectional federation restored successfully', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+        });
+      } catch (error) {
+        // Don't re-suspend - just log warning
+        logger.warn('Federation retry failed but spoke remains approved', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    // Emit event
+    const correlationId = `spoke-unsuspension-${uuidv4()}`;
+    this.emit('spoke:unsuspended', {
+      spoke,
+      timestamp: new Date(),
+      unsuspendedBy,
+      correlationId,
     });
 
     return spoke;

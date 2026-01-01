@@ -1,12 +1,5 @@
 {
   "$schema": "./schemas/trusted_issuers.schema.json",
-  "_metadata": {
-    "version": "1.0.0",
-    "lastUpdated": "2025-12-03T00:00:00Z",
-    "description": "OPAL-managed trusted issuer registry for DIVE V3",
-    "compliance": ["ACP-240", "ADatP-5663"],
-    "managedBy": "opal-data-publisher"
-  },
   "trusted_issuers": {
     "https://usa-idp.dive25.com/realms/dive-v3-broker": {
       "tenant": "USA",
@@ -151,6 +144,196 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://localhost:8458/realms/dive-v3-broker-ita": {
+      "tenant": "ITA",
+      "name": "ITA Keycloak (Local Dev)",
+      "country": "ITA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-ita:8443/realms/dive-v3-broker-ita": {
+      "tenant": "ITA",
+      "name": "ITA Keycloak (Internal Docker)",
+      "country": "ITA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-bgr": {
+      "tenant": "BGR",
+      "name": "BGR Keycloak (Local Dev)",
+      "country": "BGR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-bgr:8443/realms/dive-v3-broker-bgr": {
+      "tenant": "BGR",
+      "name": "BGR Keycloak (Internal Docker)",
+      "country": "BGR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-deu": {
+      "tenant": "DEU",
+      "name": "DEU Keycloak (Local Dev)",
+      "country": "DEU",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-deu:8443/realms/dive-v3-broker-deu": {
+      "tenant": "DEU",
+      "name": "DEU Keycloak (Internal Docker)",
+      "country": "DEU",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-est": {
+      "tenant": "EST",
+      "name": "EST Keycloak (Local Dev)",
+      "country": "EST",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-est:8443/realms/dive-v3-broker-est": {
+      "tenant": "EST",
+      "name": "EST Keycloak (Internal Docker)",
+      "country": "EST",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak (Local Dev)",
+      "country": "POL",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-pol:8443/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak (Internal Docker)",
+      "country": "POL",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-svk": {
+      "tenant": "SVK",
+      "name": "SVK Keycloak (Local Dev)",
+      "country": "SVK",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-svk:8443/realms/dive-v3-broker-svk": {
+      "tenant": "SVK",
+      "name": "SVK Keycloak (Internal Docker)",
+      "country": "SVK",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-cze": {
+      "tenant": "CZE",
+      "name": "CZE Keycloak (Local Dev)",
+      "country": "CZE",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-cze:8443/realms/dive-v3-broker-cze": {
+      "tenant": "CZE",
+      "name": "CZE Keycloak (Internal Docker)",
+      "country": "CZE",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-nor": {
+      "tenant": "NOR",
+      "name": "NOR Keycloak (Local Dev)",
+      "country": "NOR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-nor:8443/realms/dive-v3-broker-nor": {
+      "tenant": "NOR",
+      "name": "NOR Keycloak (Internal Docker)",
+      "country": "NOR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-gbr": {
+      "tenant": "GBR",
+      "name": "GBR Keycloak (Local Dev)",
+      "country": "GBR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-gbr:8443/realms/dive-v3-broker-gbr": {
+      "tenant": "GBR",
+      "name": "GBR Keycloak (Internal Docker)",
+      "country": "GBR",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-fra": {
+      "tenant": "FRA",
+      "name": "FRA Keycloak (Local Dev)",
+      "country": "FRA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-fra:8443/realms/dive-v3-broker-fra": {
+      "tenant": "FRA",
+      "name": "FRA Keycloak (Internal Docker)",
+      "country": "FRA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
+  },
+  "_metadata": {
+    "version": "1.0.0",
+    "lastUpdated": "2025-12-03T00:00:00Z",
+    "description": "OPAL-managed trusted issuer registry for DIVE V3",
+    "compliance": [
+      "ACP-240",
+      "ADatP-5663"
+    ],
+    "managedBy": "opal-data-publisher"
   }
 }

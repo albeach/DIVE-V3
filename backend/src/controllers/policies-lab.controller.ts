@@ -524,9 +524,7 @@ export async function loadSamplePolicies(req: Request, res: Response, next: Next
             count: loadedPolicies.length,
             policies: loadedPolicies,
             errors: errors.length > 0 ? errors : undefined
-        });
-
-    } catch (error: any) {
+        });    } catch (error: any) {
         logger.error('Load sample policies error', { error: error.message });
         next(error);
     }

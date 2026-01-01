@@ -57,9 +57,7 @@
 .dive-social-link:focus {
     border-color: #AA151B;
     box-shadow: 0 0 0 3px rgba(170, 21, 27, 0.15);
-}
-
-/* Links */
+}/* Links */
 .dive-link {
     color: #AA151B;
 }.dive-link:hover {

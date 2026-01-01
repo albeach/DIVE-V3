@@ -142,6 +142,29 @@
 #
 # =============================================================================
 
+# =============================================================================
+# LOAD NATO COUNTRIES DATABASE (SSOT for port offsets)
+# =============================================================================
+# FIXED (Dec 2025): Load NATO database early so get_instance_ports can use it
+# This must be loaded BEFORE get_instance_ports is called
+# FIX (Dec 2025): Associative arrays can't be exported, so check if array
+# is actually populated, not just if the flag is set.
+# Also handle case where BASH_SOURCE is empty by using DIVE_ROOT fallback.
+if [ -z "$NATO_COUNTRIES_LOADED" ] || [ "${#NATO_COUNTRIES[@]}" -eq 0 ] 2>/dev/null; then
+    if [ -n "${BASH_SOURCE[0]}" ]; then
+        _NATO_DB_PATH="$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh"
+    elif [ -n "$DIVE_ROOT" ]; then
+        _NATO_DB_PATH="${DIVE_ROOT}/scripts/nato-countries.sh"
+    else
+        _NATO_DB_PATH=""
+    fi
+
+    if [ -n "$_NATO_DB_PATH" ] && [ -f "$_NATO_DB_PATH" ]; then
+        source "$_NATO_DB_PATH"
+        NATO_COUNTRIES_LOADED=1  # Don't export - just use as local flag
+    fi
+fi
+
 # Colors
 export GREEN='\033[0;32m'
 export BLUE='\033[0;34m'
@@ -188,7 +211,9 @@ ensure_shared_network() {
         return 0
     fi
 
-    local network_name="dive-v3-shared-network"
+    # SSOT: Use "dive-shared" as the canonical network name
+    # This matches docker-compose.hub.yml and spoke docker-compose files
+    local network_name="dive-shared"
 
     if docker network ls --format '{{.Name}}' | grep -q "^${network_name}$"; then
         # Shared network already exists
@@ -671,7 +696,9 @@ get_instance_ports() {
     else
         # Unknown countries: use hash-based offset (48+) to avoid conflicts
         port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20) + 48 ))
-        log_warn "Country '$code_upper' not in NATO database, using hash-based port offset: $port_offset"
+        # FIXED (Dec 2025): Redirect warning to stderr to avoid polluting stdout
+        # This function's stdout is captured by eval, so logging must go to stderr
+        log_warn "Country '$code_upper' not in NATO database, using hash-based port offset: $port_offset" >&2
     fi
 
     # Export calculated ports (can be sourced or eval'd)

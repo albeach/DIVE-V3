@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Iceland Ministry of Foreign Affairs",
     "country": "ISL",
     "organizationType": "government",
-    "contactEmail": "admin@isl.dive25.com",
-    "registeredSpokeId": "spoke-isl-dbc20348"
+    "contactEmail": "admin@isl.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:isl",
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2025-12-19T12:31:06Z",
     "spokeToken": "RklWX0YsTI_63M582aSoPKYe_ePkDuBhvwvDoR_JEoc"
   },
   "operational": {

@@ -1,13 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-gbr-6a1ecfe7",
+    "spokeId": "spoke-gbr-2d606e80",
     "instanceCode": "GBR",
-    "name": "United Kingdom Ministry of Defence",
-    "description": "DIVE V3 Spoke Instance for United Kingdom Ministry of Defence",
+    "name": "United Kingdom",
+    "description": "DIVE V3 Spoke Instance for United Kingdom",
     "country": "GBR",
     "organizationType": "government",
-    "contactEmail": "admin@gbr.dive25.com",
-    "registeredSpokeId": "spoke-gbr-5940b83a"
+    "contactEmail": "admin@gbr.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -16,8 +15,8 @@
     "baseUrl": "https://localhost:3031",
     "apiUrl": "https://localhost:4031",
     "idpUrl": "https://dive-spoke-gbr-keycloak:8443",
-    "kasUrl": "https://localhost:9031",
-    "idpPublicUrl": "https://localhost:8474"
+    "idpPublicUrl": "https://localhost:8474",
+    "kasUrl": "https://localhost:10031"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/gbr/certs/spoke.crt",
@@ -27,15 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:gbr",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-19T10:30:29Z",
-    "spokeToken": "4SXoyuCaZC-smt2UnwfFZyKQWPV7NJlxY6zoFVUbyNk"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-19T04:13:58Z",
-    "lastModified": "2025-12-19T04:13:58Z",
+    "createdAt": "2025-12-31T03:48:16Z",
+    "lastModified": "2025-12-31T03:48:16Z",
     "configHash": ""
   }
 }

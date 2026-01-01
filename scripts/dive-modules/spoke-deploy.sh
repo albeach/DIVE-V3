@@ -128,38 +128,56 @@ spoke_up() {
         fi
     fi
 
-    # Try to load GCP secrets (will override local values if available)
-    if ! load_gcp_secrets "$instance_code"; then
-        log_warn "Falling back to local .env secrets for $instance_code"
-        # Secrets are already loaded from .env above, no need to call load_local_defaults
-    else
-        # GCP secrets loaded - update .env file for persistence
-        if [ -n "$POSTGRES_PASSWORD" ]; then
-            sed -i.bak "s|^POSTGRES_PASSWORD_${code_upper}=.*|POSTGRES_PASSWORD_${code_upper}=${POSTGRES_PASSWORD}|" "$spoke_dir/.env"
-            sed -i.bak "s|^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=.*|KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${KEYCLOAK_ADMIN_PASSWORD}|" "$spoke_dir/.env"
-            sed -i.bak "s|^MONGO_PASSWORD_${code_upper}=.*|MONGO_PASSWORD_${code_upper}=${MONGO_PASSWORD}|" "$spoke_dir/.env"
-            sed -i.bak "s|^AUTH_SECRET_${code_upper}=.*|AUTH_SECRET_${code_upper}=${AUTH_SECRET}|" "$spoke_dir/.env"
-            sed -i.bak "s|^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*|KEYCLOAK_CLIENT_SECRET_${code_upper}=${KEYCLOAK_CLIENT_SECRET}|" "$spoke_dir/.env"
-            rm -f "$spoke_dir/.env.bak"
-            log_info "Updated .env file with GCP secrets"
+    # ==========================================================================
+    # LOAD SECRETS (GCP Secret Manager = SSOT)
+    # ==========================================================================
+    # Priority: GCP Secret Manager > .env file
+    # GCP is the Single Source of Truth for secrets persistence after nuke
+
+    log_step "Loading secrets for ${code_upper}..."
+
+    # Try GCP Secret Manager first (SSOT)
+    if check_gcloud && load_gcp_secrets "$instance_code"; then
+        log_success "✓ Loaded secrets from GCP Secret Manager (SSOT)"
+
+        # Update .env file with GCP values for consistency
+        if [ -f "$env_file" ]; then
+            log_info "Syncing GCP secrets → .env for consistency"
+
+            # Source secrets module for sync function
+            if [ -f "${DIVE_ROOT}/scripts/dive-modules/secrets.sh" ]; then
+                source "${DIVE_ROOT}/scripts/dive-modules/secrets.sh"
+
+                # Update .env with GCP values (create backup first)
+                if [ -n "$POSTGRES_PASSWORD" ]; then
+                    cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)"
+                    sed -i.tmp "s|^POSTGRES_PASSWORD_${code_upper}=.*|POSTGRES_PASSWORD_${code_upper}=${POSTGRES_PASSWORD}|" "$env_file"
+                    sed -i.tmp "s|^MONGO_PASSWORD_${code_upper}=.*|MONGO_PASSWORD_${code_upper}=${MONGO_PASSWORD}|" "$env_file"
+                    sed -i.tmp "s|^REDIS_PASSWORD_${code_upper}=.*|REDIS_PASSWORD_${code_upper}=${REDIS_PASSWORD}|" "$env_file"
+                    sed -i.tmp "s|^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=.*|KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${KEYCLOAK_ADMIN_PASSWORD}|" "$env_file"
+                    sed -i.tmp "s|^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*|KEYCLOAK_CLIENT_SECRET_${code_upper}=${KEYCLOAK_CLIENT_SECRET}|" "$env_file"
+                    sed -i.tmp "s|^AUTH_SECRET_${code_upper}=.*|AUTH_SECRET_${code_upper}=${AUTH_SECRET}|" "$env_file"
+                    sed -i.tmp "s|^JWT_SECRET_${code_upper}=.*|JWT_SECRET_${code_upper}=${JWT_SECRET}|" "$env_file"
+                    sed -i.tmp "s|^NEXTAUTH_SECRET_${code_upper}=.*|NEXTAUTH_SECRET_${code_upper}=${NEXTAUTH_SECRET}|" "$env_file"
+                    rm -f "${env_file}.tmp"
+                    log_info "✓ .env file synced with GCP secrets"
+                fi
+            fi
         fi
+    elif [ -f "$env_file" ]; then
+        # Fallback to local .env if GCP unavailable
+        log_warn "GCP unavailable - using local .env (may be stale)"
+        log_warn "For SSOT persistence, authenticate: gcloud auth application-default login"
+        # Secrets already loaded from .env source above
+    else
+        log_error "No secrets found in GCP or .env for ${code_upper}"
+        log_error "Run: ./dive --instance ${code_lower} spoke init"
+        return 1
     fi
 
-    # CRITICAL: Synchronize frontend secrets before starting containers
-    # This ensures NextAuth works immediately after startup
-    log_info "Ensuring frontend secrets are synchronized..."
-    if ! spoke_sync_secrets "$instance_code" >/dev/null 2>&1; then
-        log_warn "Secret synchronization failed - NextAuth may not work initially"
-        echo "  Run manually after startup: ./dive --instance $code_lower spoke sync-secrets"
-    fi
-
-    # CRITICAL: Auto-register with federation hub for zero-touch deployment
-    # This ensures the spoke is immediately available for cross-domain federation
-    log_info "Ensuring spoke is registered with federation hub..."
-    if ! spoke_register_with_hub "$instance_code" >/dev/null 2>&1; then
-        log_warn "Automatic federation registration failed - spoke may not be federated"
-        echo "  Run manually after startup: ./dive --instance $code_lower spoke register"
-    fi
+    # NOTE: Secret synchronization and federation registration happen AFTER containers start
+    # Calling them here (before docker compose) would fail since containers don't exist yet
+    # See lines ~245 (secret sync) and ~285 (federation registration)
 
     print_header
     echo -e "${BOLD}Starting Spoke Services:${NC} ${code_upper}"
@@ -175,11 +193,30 @@ spoke_up() {
     export COMPOSE_PROJECT_NAME="$code_lower"
 
     cd "$spoke_dir"
-    docker compose up -d
 
-    if [ $? -eq 0 ]; then
-        echo ""
-        log_success "Spoke services started"
+    local compose_exit_code=0
+    docker compose up -d || compose_exit_code=$?
+
+    # Handle transient health check failures gracefully (same as hub)
+    if [ $compose_exit_code -ne 0 ]; then
+        # Check if base containers are actually running
+        if docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-postgres"; then
+            log_warn "Docker compose reported error, but containers are running (transient health check failure)"
+        else
+            log_error "Failed to start spoke services - postgres not running"
+            return 1
+        fi
+    fi
+
+    # Start any containers stuck in "Created" state
+    log_info "Starting any containers in Created state..."
+    for container in $(docker ps -a --filter "name=dive-spoke-${code_lower}-" --filter "status=created" --format '{{.Names}}'); do
+        log_info "Starting $container..."
+        docker start "$container" 2>/dev/null || true
+    done
+
+    echo ""
+    log_success "Spoke services started"
         echo ""
 
         # Check if initialization has been done FIRST (creates Keycloak realm/client)
@@ -275,10 +312,6 @@ spoke_up() {
             log_info "Hub not running locally - skipping auto-registration"
             echo "  To register later, run: ./dive --instance $code_lower spoke register"
         fi
-    else
-        log_error "Failed to start spoke services"
-        return 1
-    fi
 }
 
 # =============================================================================
@@ -619,8 +652,68 @@ spoke_deploy() {
 
             log_step "Configuring usa-idp and syncing secrets..."
 
+            # ADDED (Dec 2025): Retry wrapper for federation configuration
+            # This handles transient failures when Keycloak isn't fully ready
+            _with_federation_retry() {
+                local max_attempts=5
+                local delay=5
+                local attempt=1
 
-            if configure_spoke_federation "$code_lower"; then
+                while [ $attempt -le $max_attempts ]; do
+                    log_verbose "Federation attempt $attempt/$max_attempts..."
+                    if "$@"; then
+                        return 0
+                    fi
+
+                    if [ $attempt -lt $max_attempts ]; then
+                        log_warn "Federation attempt $attempt/$max_attempts failed, retrying in ${delay}s..."
+                        sleep $delay
+                        delay=$((delay * 2))  # Exponential backoff
+                    fi
+                    attempt=$((attempt + 1))
+                done
+
+                log_error "Federation failed after $max_attempts attempts"
+                return 1
+            }
+
+            # First verify realm exists before federation (pre-requisite)
+            log_step "Verifying spoke realm exists before federation..."
+            local realm_check_kc="dive-spoke-${code_lower}-keycloak"
+            local realm_name="dive-v3-broker-${code_lower}"
+            local kc_pass
+            kc_pass=$(docker exec "$realm_check_kc" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+            if [ -n "$kc_pass" ]; then
+                local realm_token
+                realm_token=$(docker exec "$realm_check_kc" curl -sf \
+                    -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+                    -d "grant_type=password" \
+                    -d "client_id=admin-cli" \
+                    -d "username=admin" \
+                    -d "password=${kc_pass}" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+                if [ -n "$realm_token" ]; then
+                    local realm_exists
+                    realm_exists=$(docker exec "$realm_check_kc" curl -sf \
+                        -H "Authorization: Bearer $realm_token" \
+                        "http://localhost:8080/admin/realms/${realm_name}" 2>/dev/null | grep -o '"realm"' || true)
+
+                    if [ -z "$realm_exists" ]; then
+                        log_warn "Realm $realm_name not found, creating..."
+                        docker exec "$realm_check_kc" curl -sf \
+                            -X POST "http://localhost:8080/admin/realms" \
+                            -H "Authorization: Bearer $realm_token" \
+                            -H "Content-Type: application/json" \
+                            -d "{\"realm\": \"$realm_name\", \"enabled\": true}" 2>/dev/null || true
+                        log_success "Realm $realm_name created"
+                    else
+                        log_verbose "Realm $realm_name verified"
+                    fi
+                fi
+            fi
+
+            # Apply retry wrapper to federation configuration
+            if _with_federation_retry configure_spoke_federation "$code_lower"; then
                 touch "$fed_marker"
                 log_success "Federation configured successfully!"
 
@@ -629,7 +722,7 @@ spoke_deploy() {
                 cd "$spoke_dir"
                 docker compose restart "frontend-${code_lower}" 2>/dev/null || true
             else
-                log_warn "Federation configuration had issues"
+                log_warn "Federation configuration had issues after retries"
                 echo ""
                 echo "  You may need to run manually:"
                 echo "  ./dive federation-setup configure $code_lower"

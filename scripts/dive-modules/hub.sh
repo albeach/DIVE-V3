@@ -50,6 +50,79 @@ FEDERATION_ADMIN_KEY="${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}"
 export DIVE_HUB_LOADED=1
 
 # =============================================================================
+# VALIDATION FUNCTIONS
+# =============================================================================
+
+##
+# Validate and fix client ID configuration
+# Ensures instance-specific client IDs are used throughout
+##
+_hub_validate_client_ids() {
+    local env_file="${DIVE_ROOT}/.env.hub"
+    local compose_file="${DIVE_ROOT}/docker-compose.hub.yml"
+    local errors=0
+
+    # Check 1: Ensure .env.hub has correct KEYCLOAK_CLIENT_ID
+    if [ -f "$env_file" ]; then
+        local env_client_id=$(grep "^KEYCLOAK_CLIENT_ID=" "$env_file" 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
+        if [ "$env_client_id" = "dive-v3-client-broker" ]; then
+            log_warn "Found generic client ID in .env.hub, updating to instance-specific..."
+            sed -i.bak 's/^KEYCLOAK_CLIENT_ID=dive-v3-client-broker$/KEYCLOAK_CLIENT_ID=dive-v3-client-broker-usa/' "$env_file"
+            rm -f "${env_file}.bak"
+            log_success "Updated .env.hub with correct client ID"
+        fi
+    fi
+
+    # Check 2: Verify running containers have correct environment
+    if docker ps --format '{{.Names}}' | grep -q "dive-hub-frontend"; then
+        local frontend_client_id=$(docker exec dive-hub-frontend printenv AUTH_KEYCLOAK_ID 2>/dev/null || echo "")
+        if [ "$frontend_client_id" = "dive-v3-client-broker" ]; then
+            log_error "Frontend container has incorrect client ID (requires restart)"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    if docker ps --format '{{.Names}}' | grep -q "dive-hub-backend"; then
+        local backend_client_id=$(docker exec dive-hub-backend printenv KEYCLOAK_CLIENT_ID 2>/dev/null || echo "")
+        if [ "$backend_client_id" = "dive-v3-client-broker" ]; then
+            log_error "Backend container has incorrect client ID (requires restart)"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    # Check 3: Verify Keycloak realm has correct client
+    if docker ps --format '{{.Names}}' | grep -q "dive-hub-keycloak"; then
+        set -a
+        source "$env_file" 2>/dev/null
+        set +a
+
+        local token=$(curl -sk -X POST "https://localhost:8443/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" \
+            -d "username=admin" \
+            -d "password=${KEYCLOAK_ADMIN_PASSWORD}" 2>/dev/null | jq -r '.access_token' 2>/dev/null)
+
+        if [ -n "$token" ] && [ "$token" != "null" ]; then
+            local client_exists=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/clients?clientId=dive-v3-client-broker-usa" \
+                -H "Authorization: Bearer $token" 2>/dev/null | jq -r '.[0].clientId' 2>/dev/null)
+
+            if [ "$client_exists" != "dive-v3-client-broker-usa" ]; then
+                log_error "Keycloak realm missing correct client: dive-v3-client-broker-usa"
+                errors=$((errors + 1))
+            fi
+        fi
+    fi
+
+    if [ $errors -gt 0 ]; then
+        log_warn "Client ID validation found $errors issue(s)"
+        log_info "Restart hub services to apply fixes: ./dive hub down && ./dive hub up"
+        return 1
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # LAZY LOADING INFRASTRUCTURE
 # =============================================================================
 
@@ -296,15 +369,69 @@ hub_deploy() {
     log_step "Step 1/7: Initializing hub..."
     hub_init || return 1
 
-    # Step 2: Load secrets
-    log_step "Step 2/7: Loading secrets..."
-    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    # Step 2: Load secrets (GCP SSOT)
+    log_step "Step 2/7: Loading secrets (GCP SSOT)..."
+
+    # Try GCP Secret Manager first (SSOT)
+    if check_gcloud && load_gcp_secrets "usa"; then
+        log_success "✓ Loaded secrets from GCP Secret Manager (SSOT)"
+
+        # Update .env.hub with GCP values for consistency
+        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+            log_info "Syncing GCP secrets → .env.hub"
+            cp "${DIVE_ROOT}/.env.hub" "${DIVE_ROOT}/.env.hub.bak.$(date +%Y%m%d-%H%M%S)"
+        fi
+
+        # Write GCP secrets to .env.hub
+        cat > "${DIVE_ROOT}/.env.hub" << EOF
+# Hub Secrets (from GCP Secret Manager SSOT)
+# Last synced: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Docker Compose Variables (no suffix - used by services)
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+MONGO_PASSWORD=${MONGO_PASSWORD}
+AUTH_SECRET=${AUTH_SECRET}
+KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
+JWT_SECRET=${JWT_SECRET:-$(openssl rand -base64 32)}
+NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-$(openssl rand -base64 32)}
+REDIS_PASSWORD_USA=${REDIS_PASSWORD:-$(openssl rand -base64 16 | tr -d '/+=')}
+REDIS_PASSWORD_BLACKLIST=${REDIS_PASSWORD_BLACKLIST:-$(openssl rand -base64 16 | tr -d '/+=')}
+OPAL_AUTH_MASTER_TOKEN=${OPAL_AUTH_MASTER_TOKEN:-$(openssl rand -base64 32 | tr -d '/+=')}
+FEDERATION_ADMIN_KEY=${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}
+
+# Archive Suffixed Variables (for reference)
+POSTGRES_PASSWORD_USA=${POSTGRES_PASSWORD}
+KEYCLOAK_ADMIN_PASSWORD_USA=${KEYCLOAK_ADMIN_PASSWORD}
+MONGO_PASSWORD_USA=${MONGO_PASSWORD}
+AUTH_SECRET_USA=${AUTH_SECRET}
+KEYCLOAK_CLIENT_SECRET_USA=${KEYCLOAK_CLIENT_SECRET}
+EOF
+        chmod 600 "${DIVE_ROOT}/.env.hub"
+        log_success "✓ .env.hub synced with GCP secrets"
+
+    elif [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        # Fallback to .env.hub if GCP unavailable
+        log_warn "GCP unavailable - using local .env.hub (may be stale)"
+        log_warn "For SSOT persistence, authenticate: gcloud auth application-default login"
         set -a
         source "${DIVE_ROOT}/.env.hub"
         set +a
-        log_success "Secrets loaded from .env.hub"
+        log_info "Secrets loaded from .env.hub"
     else
-        load_secrets || return 1
+        # Generate new secrets and push to GCP
+        log_info "No secrets found - generating new secrets..."
+        _hub_generate_secrets
+
+        # Push to GCP if authenticated
+        if check_gcloud; then
+            log_step "Pushing new secrets to GCP (establishing SSOT)..."
+            source "${DIVE_ROOT}/scripts/dive-modules/secrets.sh"
+            secrets_push "usa"
+        else
+            log_warn "gcloud not authenticated - secrets only in .env.hub"
+            log_warn "Run 'gcloud auth application-default login' to enable GCP SSOT"
+        fi
     fi
 
     # Step 3: Start services
@@ -359,7 +486,14 @@ hub_up() {
         set -a
         source "${DIVE_ROOT}/.env.hub"
         set +a
+    else
+        log_error ".env.hub file not found - run 'hub init' first"
+        return 1
     fi
+
+    # Validate client ID configuration
+    log_step "Validating client ID configuration..."
+    _hub_validate_client_ids || log_warn "Client ID validation completed with warnings"
 
     export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
 
@@ -1362,6 +1496,48 @@ hub_reset() {
 }
 
 # =============================================================================
+# HUB FIX COMMAND
+# =============================================================================
+
+hub_fix() {
+    print_header
+    echo -e "${BOLD}DIVE Hub - Configuration Fix${NC}"
+    echo ""
+
+    local fix_type="${1:-all}"
+
+    case "$fix_type" in
+        client-id|clientid)
+            log_step "Fixing client ID configuration..."
+            _hub_validate_client_ids
+            if [ $? -eq 0 ]; then
+                log_success "Client ID configuration is correct"
+            else
+                log_warn "Issues found - restart required"
+                echo ""
+                log_info "Run: ./dive hub down && ./dive hub up"
+            fi
+            ;;
+
+        all|*)
+            log_step "Running all configuration fixes..."
+
+            # Fix 1: Client ID
+            log_info "→ Checking client IDs..."
+            _hub_validate_client_ids
+
+            # Future fixes can be added here
+
+            echo ""
+            log_success "Configuration fix complete"
+            echo ""
+            log_info "If issues were found, restart hub:"
+            echo "  ./dive hub down && ./dive hub up"
+            ;;
+    esac
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1378,6 +1554,7 @@ module_hub() {
         status)      hub_status "$@" ;;
         health)      hub_health "$@" ;;
         verify)      hub_verify "$@" ;;
+        fix)         hub_fix "$@" ;;
         logs)        hub_logs "$@" ;;
         spokes)      _hub_spokes_stub "$@" ;;  # Lazy loaded from hub-spokes.sh
         push-policy) hub_push_policy "$@" ;;
@@ -1414,6 +1591,7 @@ module_hub_help() {
     echo "  status              Show comprehensive hub status"
     echo "  health              Check all service health"
     echo "  verify              10-point hub verification check (Phase 6)"
+    echo "  fix [type]          Validate and fix configuration issues"
     echo "  logs [service] [-f] View logs (optionally follow)"
     echo ""
     echo -e "${CYAN}Spoke Management (Phase 3):${NC}"

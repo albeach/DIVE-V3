@@ -145,6 +145,4 @@ variable "webauthn_rp_id" {
   description = "WebAuthn Relying Party ID. Empty for localhost, override in tfvars/ENV for CF host (e.g., usa-idp.dive25.com). Must match the origin effective domain."
   type        = string
   default     = ""
-}
-
-# NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
+}# NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf

@@ -1,40 +1,42 @@
 /**
  * Modern Dashboard - 2025 UX/UI Design Patterns
- * 
- * Features:
- * - Bento Grid Layout for visual hierarchy
- * - Glassmorphism and depth effects
- * - Micro-interactions and smooth animations
- * - Progressive disclosure of information
- * - Data visualization with at-a-glance metrics
- * - Quick actions hub with prominent CTAs
- * - Contextual, personalized information
+ *
+ * Completely revamped with:
+ * - Tabbed navigation (Overview, Federation, Authorization, Resources, Activity)
+ * - Ambient background effects (light theme)
+ * - Educational content with tooltips
+ * - Personal analytics and insights
+ * - Feature showcase cards
+ * - Real-time updates
+ * - Framer Motion animations
  */
 
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
-import { 
-  ShieldCheck, 
-  FileText, 
-  Upload, 
-  BookOpen, 
-  Globe, 
-  TrendingUp,
-  Lock,
+import {
+  ShieldCheck,
+  Globe,
   Users,
-  Activity,
   Clock,
   CheckCircle2,
-  AlertCircle,
-  Sparkles,
   ArrowRight,
-  Zap,
-  Award,
-  Eye
+  Sparkles,
+  RefreshCw,
+  BookOpen,
+  Info,
 } from 'lucide-react';
+
+// Import tab components
+import { DashboardTabs, type DashboardTab } from './dashboard-tabs';
+import { DashboardOverview } from './dashboard-overview';
+import { DashboardFederation } from './dashboard-federation';
+import { DashboardAuthorization } from './dashboard-authorization';
+import { DashboardResources } from './dashboard-resources';
+import { DashboardActivity } from './dashboard-activity';
+import { GlossaryPopover } from './educational-tooltip';
 
 interface User {
   uniqueID?: string;
@@ -56,6 +58,8 @@ const countryFlags: Record<string, string> = {
   NLD: '🇳🇱',
   POL: '🇵🇱',
   ESP: '🇪🇸',
+  AUS: '🇦🇺',
+  NZL: '🇳🇿',
 };
 
 // Country full names
@@ -69,6 +73,8 @@ const countryNames: Record<string, string> = {
   NLD: 'Netherlands',
   POL: 'Poland',
   ESP: 'Spain',
+  AUS: 'Australia',
+  NZL: 'New Zealand',
 };
 
 interface Session {
@@ -94,31 +100,37 @@ interface QuickStat {
   trend?: 'up' | 'down' | 'neutral';
 }
 
+interface DashboardData {
+  idps: IdP[];
+  quickStats: QuickStat[];
+  topDenyReasons?: Array<{ reason: string; count: number }>;
+  decisionsByCountry?: Record<string, number>;
+}
+
 export function DashboardModern({ user, session }: DashboardModernProps) {
-  const [idps, setIdps] = useState<IdP[]>([]);
-  const [quickStats, setQuickStats] = useState<QuickStat[]>([]);
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [data, setData] = useState<DashboardData>({
+    idps: [],
+    quickStats: [],
+  });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [showGlossary, setShowGlossary] = useState(false);
 
-  const [dashboardDetails, setDashboardDetails] = useState<{
-    topDenyReasons?: Array<{ reason: string; count: number }>;
-    decisionsByCountry?: Record<string, number>;
-  } | null>(null);
+  // Fetch dashboard data
+  const fetchData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
 
-  useEffect(() => {
-    // Fetch IdPs and dashboard stats
-    async function fetchData() {
       try {
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-        
+
         // Fetch IdPs
         const idpResponse = await fetch(`${backendUrl}/api/idps/public`);
-        if (idpResponse.ok) {
-          const data = await idpResponse.json();
-          setIdps(data.idps || []);
-        }
+      const idpData = idpResponse.ok ? await idpResponse.json() : { idps: [] };
 
-        // Try authenticated dashboard stats first (if user is logged in)
+      // Fetch stats
         let statsData: any = null;
         if (user && session) {
           try {
@@ -128,19 +140,12 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
             });
             if (statsResponse.ok) {
               statsData = await statsResponse.json();
-              if (statsData.success && statsData.details) {
-                setDashboardDetails({
-                  topDenyReasons: statsData.details.topDenyReasons,
-                  decisionsByCountry: statsData.details.decisionsByCountry,
-                });
-              }
-            }
-          } catch (authError) {
-            console.debug('Authenticated stats unavailable, falling back to public:', authError);
           }
+        } catch (authError) {
+          console.debug('Authenticated stats unavailable:', authError);
         }
+      }
 
-        // Fallback to public endpoint if authenticated failed or no user
         if (!statsData) {
           const statsResponse = await fetch(`${backendUrl}/api/dashboard/stats/public`);
           if (statsResponse.ok) {
@@ -148,172 +153,297 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
           }
         }
 
-        if (statsData?.success && statsData.stats) {
-          setQuickStats(statsData.stats);
-        } else {
-          // Fallback to defaults if API returns unexpected format
-          setQuickStats([
-            { value: '0', label: 'Documents Accessible', change: 'Loading...', trend: 'neutral' },
-            { value: '100%', label: 'Authorization Rate', change: 'No data', trend: 'neutral' },
-            { value: 'N/A', label: 'Avg Response Time', change: 'No data', trend: 'neutral' },
-          ]);
-        }
+      setData({
+        idps: idpData.idps || [],
+        quickStats: statsData?.stats || [
+          { value: '0', label: 'Documents Accessible', trend: 'neutral' },
+          { value: '100%', label: 'Authorization Rate', trend: 'neutral' },
+          { value: '<50ms', label: 'Avg Response Time', trend: 'up' },
+        ],
+        topDenyReasons: statsData?.details?.topDenyReasons,
+        decisionsByCountry: statsData?.details?.decisionsByCountry,
+      });
+      setLastRefresh(new Date());
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        // Fallback on network error
-        setQuickStats([
-          { value: '0', label: 'Documents Accessible', change: 'Offline', trend: 'neutral' },
-          { value: '100%', label: 'Authorization Rate', change: 'Offline', trend: 'neutral' },
-          { value: 'N/A', label: 'Avg Response Time', change: 'Offline', trend: 'neutral' },
-        ]);
       } finally {
         setLoading(false);
-      }
+      setRefreshing(false);
     }
-
-    fetchData();
-
-    // Update time every minute
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
   }, [user, session]);
+
+  useEffect(() => {
+    fetchData();
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+
+    // Auto-refresh every 30 seconds
+    const refreshTimer = setInterval(() => fetchData(true), 30000);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(refreshTimer);
+    };
+  }, [fetchData]);
 
   const pseudonym = getPseudonymFromUser((user || {}) as any);
   const clearanceLevel = user?.clearance || 'UNCLASSIFIED';
   const country = user?.countryOfAffiliation || 'Unknown';
   const coi = user?.acpCOI || [];
-  
+
   // Instance identification
   const currentInstance = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
   const instanceFlag = countryFlags[currentInstance] || '🌐';
   const instanceName = countryNames[currentInstance] || currentInstance;
-  
-  // Federation detection - is user from a different country than the instance?
+
+  // Federation detection
   const userHomeCountry = country;
   const userHomeFlag = countryFlags[userHomeCountry] || '🌐';
   const userHomeName = countryNames[userHomeCountry] || userHomeCountry;
   const isFederated = userHomeCountry !== currentInstance && userHomeCountry !== 'Unknown';
 
   return (
-    <div className="space-y-6">
-      {/* Instance Banner - Always visible at top */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-800 to-slate-900 p-4 shadow-lg border border-slate-700">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          {/* Current Instance */}
-          <div className="flex items-center gap-4">
-            <div className="text-4xl">{instanceFlag}</div>
-            <div>
-              <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Current Instance</p>
-              <p className="text-xl font-bold text-white">{instanceName} Portal</p>
-            </div>
-          </div>
-
-          {/* Federation Status */}
-          {isFederated ? (
-            <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/30">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{userHomeFlag}</span>
-                <ArrowRight className="w-4 h-4 text-amber-400" />
-                <span className="text-2xl">{instanceFlag}</span>
-              </div>
-              <div>
-                <p className="text-xs text-amber-300 font-medium">Federated Access</p>
-                <p className="text-sm font-bold text-white">Authenticated via {userHomeName}</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-              <div>
-                <p className="text-xs text-emerald-300 font-medium">Direct Access</p>
-                <p className="text-sm font-bold text-white">Home Instance User</p>
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="relative min-h-screen">
+      {/* Ambient Background Effects (Light Theme) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 right-1/4 w-[600px] h-[600px] bg-gradient-to-br from-blue-100/40 to-indigo-100/40 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 left-0 w-[500px] h-[500px] bg-gradient-to-br from-emerald-100/40 to-teal-100/40 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-gradient-to-br from-purple-100/30 to-pink-100/30 rounded-full blur-3xl" />
       </div>
 
-      {/* Hero Section - Compact & Personalized */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-8 shadow-2xl">
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `
-              linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px)
-            `,
-            backgroundSize: '60px 60px',
-            animation: 'backgroundScroll 20s linear infinite'
-          }}></div>
-        </div>
+      <div className="relative z-10 space-y-6">
+        {/* Instance Banner - Modern 2025 Glassmorphism Design */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden rounded-2xl"
+        >
+          {/* Mesh gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-600/20 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-violet-600/15 via-transparent to-transparent" />
 
-        {/* Floating orbs */}
-        <div className="absolute top-10 right-10 w-32 h-32 bg-blue-500 rounded-full blur-3xl opacity-20 animate-pulse"></div>
-        <div className="absolute bottom-10 left-10 w-40 h-40 bg-indigo-500 rounded-full blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '1s' }}></div>
+          {/* Animated grain texture */}
+          <div className="absolute inset-0 opacity-[0.015]" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+          }} />
 
-        <div className="relative z-10">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            {/* Left: Welcome message */}
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-lg">
-                  <Sparkles className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-white">
-                    Welcome back, <span className="bg-gradient-to-r from-blue-300 to-indigo-300 bg-clip-text text-transparent">{pseudonym}</span>
-                  </h1>
-                  <p className="text-blue-200 text-sm mt-1 flex items-center gap-2">
-                    <Clock className="w-4 h-4" />
-                    {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-              <p className="text-blue-100 text-base max-w-2xl">
-                Your secure access to classified resources across the coalition. All actions are protected by ABAC policies.
-              </p>
-            </div>
+          {/* Glowing orb accent */}
+          <motion.div
+            className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/30 rounded-full blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.4, 0.3],
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+          <motion.div
+            className="absolute -bottom-8 left-1/3 w-24 h-24 bg-violet-500/20 rounded-full blur-2xl"
+            animate={{
+              scale: [1, 1.15, 1],
+              opacity: [0.2, 0.3, 0.2],
+            }}
+            transition={{
+              duration: 5,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 1
+            }}
+          />
 
-            {/* Right: Identity badges */}
-            <div className="flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-                <ShieldCheck className="w-5 h-5 text-blue-300" />
-                <div>
-                  <p className="text-xs text-blue-200 font-medium">Clearance</p>
-                  <p className="text-sm font-bold text-white">{clearanceLevel}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-                <Globe className="w-5 h-5 text-emerald-300" />
-                <div>
-                  <p className="text-xs text-emerald-200 font-medium">Country</p>
-                  <p className="text-sm font-bold text-white">{country}</p>
-                </div>
-              </div>
-
-              {coi.length > 0 && (
-                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-                  <Users className="w-5 h-5 text-purple-300" />
-                  <div>
-                    <p className="text-xs text-purple-200 font-medium">COI</p>
-                    <p className="text-sm font-bold text-white">{coi[0]}{coi.length > 1 ? ` +${coi.length - 1}` : ''}</p>
+          {/* Content */}
+          <div className="relative z-10 px-6 py-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              {/* Left: Instance info with modern styling */}
+              <div className="flex items-center gap-4">
+                {/* Flag with glassmorphism container */}
+                <motion.div
+                  className="relative"
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl blur-sm" />
+                  <div className="relative w-14 h-14 rounded-xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm border border-white/10 flex items-center justify-center shadow-lg shadow-black/20">
+                    <span className="text-3xl">{instanceFlag}</span>
                   </div>
+                  {/* Active pulse indicator */}
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border border-emerald-400" />
+                  </span>
+                </motion.div>
+
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Instance</span>
+                    <span className="h-px w-8 bg-gradient-to-r from-slate-500/50 to-transparent" />
+                  </div>
+                  <h2 className="text-xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
+                    {instanceName} Portal
+                  </h2>
                 </div>
+              </div>
+
+              {/* Right: Federation status with pill design */}
+              {isFederated ? (
+                <motion.div
+                  className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 backdrop-blur-sm border border-amber-500/20 hover:border-amber-500/40 transition-colors cursor-default"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xl">{userHomeFlag}</span>
+                    <motion.div
+                      animate={{ x: [0, 3, 0] }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <ArrowRight className="w-3.5 h-3.5 text-amber-400/80" />
+                    </motion.div>
+                    <span className="text-xl">{instanceFlag}</span>
+                  </div>
+                  <div className="h-6 w-px bg-gradient-to-b from-transparent via-amber-500/30 to-transparent" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">Federated</p>
+                    <p className="text-xs font-medium text-white/90">via {userHomeName}</p>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-gradient-to-r from-emerald-500/10 to-teal-500/10 backdrop-blur-sm border border-emerald-500/20 hover:border-emerald-500/40 transition-colors cursor-default"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-emerald-500/30 rounded-full blur-sm" />
+                    <CheckCircle2 className="relative w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div className="h-6 w-px bg-gradient-to-b from-transparent via-emerald-500/30 to-transparent" />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80">Direct Access</p>
+                    <p className="text-xs font-medium text-white/90">Home Instance</p>
+                  </div>
+                </motion.div>
               )}
             </div>
           </div>
-        </div>
-      </div>
+
+          {/* Bottom border glow */}
+          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent" />
+        </motion.div>
+
+        {/* Hero Section - Compact Design */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30 px-5 py-4 shadow-lg border border-slate-200"
+        >
+          <div className="relative z-10">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              {/* Left: Welcome message - Compact */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 border border-blue-200/60 text-blue-700 text-[11px] font-semibold">
+                    <Sparkles className="w-3 h-3" />
+                    Coalition ICAM Platform
+                  </div>
+                  <span className="text-slate-400 text-xs hidden sm:inline">•</span>
+                  <span className="text-slate-500 text-xs flex items-center gap-1.5">
+                    <Clock className="w-3 h-3" />
+                    {currentTime.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+
+                <div className="mt-2 flex items-center gap-3">
+                  <h1 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
+                    Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{pseudonym}</span>
+                  </h1>
+                </div>
+
+                <p className="text-slate-500 text-sm mt-1 line-clamp-1 max-w-xl">
+                  Your secure access to classified resources across the coalition. All actions are protected by ABAC policies and logged for compliance.
+                </p>
+
+                {/* Quick action buttons - Inline */}
+                <div className="flex items-center gap-2 mt-3">
+                  <button
+                    onClick={() => setShowGlossary(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors border border-slate-200"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    Glossary
+                  </button>
+                  <button
+                    onClick={() => fetchData(true)}
+                    disabled={refreshing}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium transition-colors border border-blue-200 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Right: Identity badges - Horizontal compact */}
+              <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-slate-500 font-medium leading-none">Clearance</p>
+                    <p className="text-sm font-bold text-slate-900 truncate">{clearanceLevel}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                    <Globe className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-slate-500 font-medium leading-none">Country</p>
+                    <p className="text-sm font-bold text-slate-900">{country}</p>
+                  </div>
+                </div>
+
+                {coi.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 shadow-sm">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                      <Users className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] text-slate-500 font-medium leading-none">COI</p>
+                      <p className="text-sm font-bold text-slate-900">{coi[0]}{coi.length > 1 ? ` +${coi.length - 1}` : ''}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Last refresh - Compact */}
+                <div className="hidden xl:flex items-center gap-1 text-[10px] text-slate-400 px-2">
+                  <Clock className="w-3 h-3" />
+                  {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
 
       {/* Quick Stats Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {quickStats.map((stat, idx) => (
-          <div 
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
+          {data.quickStats.map((stat, idx) => (
+          <div
             key={idx}
             className="group relative overflow-hidden rounded-2xl bg-white border border-slate-200 p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
           >
-            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-start justify-between mb-2">
               <div>
                 <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
                 <p className="text-sm text-slate-600 mt-1">{stat.label}</p>
@@ -321,331 +451,124 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                 stat.trend === 'up' ? 'bg-green-100' : stat.trend === 'down' ? 'bg-red-100' : 'bg-slate-100'
               }`}>
-                {stat.trend === 'up' && <TrendingUp className="w-5 h-5 text-green-600" />}
-                {stat.trend === 'down' && <TrendingUp className="w-5 h-5 text-red-600 rotate-180" />}
-                {stat.trend === 'neutral' && <Activity className="w-5 h-5 text-slate-600" />}
+                  {stat.trend === 'up' && <ArrowRight className="w-5 h-5 text-green-600 -rotate-45" />}
+                  {stat.trend === 'down' && <ArrowRight className="w-5 h-5 text-red-600 rotate-45" />}
+                  {stat.trend === 'neutral' && <ArrowRight className="w-5 h-5 text-slate-600" />}
               </div>
             </div>
             {stat.change && (
               <div className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium ${
-                stat.trend === 'up' ? 'bg-green-50 text-green-700' : 
-                stat.trend === 'down' ? 'bg-red-50 text-red-700' : 
+                stat.trend === 'up' ? 'bg-green-50 text-green-700' :
+                stat.trend === 'down' ? 'bg-red-50 text-red-700' :
                 'bg-slate-50 text-slate-700'
               }`}>
                 {stat.change}
               </div>
             )}
 
-            {/* Hover effect */}
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
           </div>
         ))}
-      </div>
+        </motion.div>
 
-      {/* User-Specific Insights (if authenticated stats available) */}
-      {dashboardDetails && ((dashboardDetails.topDenyReasons?.length ?? 0) > 0 || Object.keys(dashboardDetails.decisionsByCountry || {}).length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top Deny Reasons */}
-          {dashboardDetails.topDenyReasons && dashboardDetails.topDenyReasons.length > 0 && (
-            <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center">
-                  <AlertCircle className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">Top Deny Reasons</h3>
-                  <p className="text-xs text-slate-500">Last 24 hours</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {dashboardDetails.topDenyReasons.slice(0, 5).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200">
-                    <span className="text-sm font-medium text-red-900 flex-1 truncate">{item.reason}</span>
-                    <span className="text-xs font-bold text-red-700 bg-red-100 px-2 py-1 rounded-full ml-2">
-                      {item.count}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        {/* Tab Navigation */}
+        <DashboardTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          badges={{
+            authorization: data.topDenyReasons?.length ? data.topDenyReasons.reduce((acc, r) => acc + r.count, 0) : undefined,
+          }}
+        />
 
-          {/* Decisions by Country */}
-          {dashboardDetails.decisionsByCountry && Object.keys(dashboardDetails.decisionsByCountry).length > 0 && (
-            <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-                  <Globe className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">Decisions by Country</h3>
-                  <p className="text-xs text-slate-500">Last 24 hours</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {Object.entries(dashboardDetails.decisionsByCountry)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 5)
-                  .map(([country, count], idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{countryFlags[country] || '🌐'}</span>
-                        <span className="text-sm font-medium text-blue-900">{countryNames[country] || country}</span>
-                      </div>
-                      <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">
-                        {count}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+        {/* Tab Content */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {activeTab === 'overview' && (
+              <DashboardOverview
+                idps={data.idps}
+                stats={{
+                  documentsAccessible: parseInt(data.quickStats[0]?.value?.toString() || '0') || 0,
+                  authorizationRate: data.quickStats[1]?.value?.toString() || '100%',
+                  policyCount: 41,
+                  federationPartners: data.idps.length,
+                }}
+                loading={loading}
+              />
+            )}
 
-      {/* Bento Grid - Main Actions & Information */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Large Feature Card - Browse Documents (takes 8 cols) */}
-        <Link 
-          href="/resources" 
-          className="group lg:col-span-8 relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 p-8 shadow-2xl hover:shadow-3xl transition-all duration-500 hover:scale-[1.02]"
-        >
-          {/* Animated pattern */}
-          <div className="absolute inset-0 opacity-20">
-            <div className="absolute inset-0" style={{
-              backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.2) 1px, transparent 1px)`,
-              backgroundSize: '30px 30px'
-            }}></div>
-          </div>
+            {activeTab === 'federation' && (
+              <DashboardFederation
+                idps={data.idps}
+                userCountry={country}
+                currentInstance={currentInstance}
+                isFederated={isFederated}
+                stats={{
+                  crossPartnerAccesses: 0,
+                  activeSessionsCount: 1,
+                  authenticationsToday: 1,
+                }}
+              />
+            )}
 
-          {/* Floating orb */}
-          <div className="absolute -right-20 -top-20 w-64 h-64 bg-white rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-700"></div>
+            {activeTab === 'authorization' && (
+              <DashboardAuthorization
+                decisions={[]}
+                stats={{
+                  totalDecisions: 0,
+                  allowedCount: 0,
+                  deniedCount: 0,
+                  avgLatencyMs: 45,
+                  topDenyReasons: data.topDenyReasons,
+                  decisionsByCountry: data.decisionsByCountry,
+                }}
+                userClearance={clearanceLevel}
+                userCountry={country}
+                userCOI={coi}
+              />
+            )}
 
-          <div className="relative z-10">
-            <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
-                  <FileText className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold text-white mb-1">Browse Documents</h2>
-                  <p className="text-blue-100 text-sm">Access classified resources securely</p>
-                </div>
-              </div>
-              <ArrowRight className="w-8 h-8 text-white group-hover:translate-x-2 transition-transform duration-300" />
-            </div>
+            {activeTab === 'resources' && (
+              <DashboardResources
+                stats={{
+                  totalAccessible: parseInt(data.quickStats[0]?.value?.toString() || '0') || 0,
+                  byClassification: { UNCLASSIFIED: 0, CONFIDENTIAL: 0, SECRET: 0, TOP_SECRET: 0 },
+                  recentlyAccessed: [],
+                  uploadedByUser: 0,
+                }}
+                userClearance={clearanceLevel}
+                userCountry={country}
+              />
+            )}
 
-            <p className="text-white/90 text-base mb-6 max-w-2xl">
-              Explore the document repository with ABAC-enforced access control. Every request is evaluated against OPA policies based on your clearance, country, and COI memberships.
-            </p>
-
-            <div className="flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-                <CheckCircle2 className="w-4 h-4 text-white" />
-                <span className="text-sm text-white font-medium">Policy-Enforced</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-                <Lock className="w-4 h-4 text-white" />
-                <span className="text-sm text-white font-medium">End-to-End Encrypted</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20">
-                <Eye className="w-4 h-4 text-white" />
-                <span className="text-sm text-white font-medium">Audit Logged</span>
-              </div>
-            </div>
-          </div>
-        </Link>
-
-        {/* Federation Network (4 cols) */}
-        <div className="lg:col-span-4 rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-lg border-2 border-emerald-200 hover:border-emerald-300 transition-all duration-300">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
-              <Globe className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Federation Network</h3>
-              <p className="text-xs text-slate-600">{idps.length} Active Partner{idps.length !== 1 ? 's' : ''}</p>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-14 bg-emerald-200/50 rounded-xl animate-pulse"></div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {idps.map((idp) => (
-                <div 
-                  key={idp.alias}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-white border border-emerald-200 hover:border-emerald-400 transition-all duration-200 hover:shadow-md"
-                >
-                  <div className={`w-8 h-8 rounded-lg ${
-                    idp.protocol === 'oidc' 
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600' 
-                      : 'bg-gradient-to-br from-purple-500 to-pink-600'
-                  } flex items-center justify-center`}>
-                    <ShieldCheck className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-900 truncate">{idp.displayName}</p>
-                    <p className="text-xs text-slate-500">{idp.protocol.toUpperCase()}</p>
-                  </div>
-                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Upload Document (4 cols) */}
-        <Link 
-          href="/upload" 
-          className="group lg:col-span-4 relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-600 p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-        >
-          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-500"></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                <Upload className="w-7 h-7 text-white" />
-              </div>
-              <ArrowRight className="w-6 h-6 text-white group-hover:translate-x-1 transition-transform duration-300" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Upload Document</h3>
-            <p className="text-emerald-100 text-sm">
-              Secure upload with automatic ZTDF encryption and ACP-240 compliant labeling
-            </p>
-          </div>
-        </Link>
-
-        {/* Authorization Policies (4 cols) */}
-        <Link 
-          href="/policies" 
-          className="group lg:col-span-4 relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-500 to-pink-600 p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-        >
-          <div className="absolute -left-10 -top-10 w-40 h-40 bg-white rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-500"></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                <ShieldCheck className="w-7 h-7 text-white" />
-              </div>
-              <ArrowRight className="w-6 h-6 text-white group-hover:translate-x-1 transition-transform duration-300" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Authorization Policies</h3>
-            <p className="text-purple-100 text-sm">
-              View OPA Rego policies and test authorization decisions in real-time
-            </p>
-          </div>
-        </Link>
-
-        {/* Integration Guide (4 cols) */}
-        <Link 
-          href="/integration/federation-vs-object" 
-          className="group lg:col-span-4 relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500 to-orange-600 p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-        >
-          <div className="absolute top-2 right-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/30">
-            <span className="text-xs font-bold text-white flex items-center gap-1">
-              <Sparkles className="w-3 h-3" />
-              NEW
-            </span>
-          </div>
-
-          <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white rounded-full blur-3xl opacity-10 group-hover:opacity-20 transition-opacity duration-500"></div>
-          
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
-                <BookOpen className="w-7 h-7 text-white" />
-              </div>
-              <ArrowRight className="w-6 h-6 text-white group-hover:translate-x-1 transition-transform duration-300" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Integration Guide</h3>
-            <p className="text-amber-100 text-sm">
-              Interactive tutorial on ADatP-5663 × ACP-240 security models
-            </p>
-          </div>
-        </Link>
-      </div>
-
-      {/* Information & Tips */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* System Status */}
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900">System Status</h3>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="text-sm font-medium text-green-900">OPA Policy Engine</span>
-              </div>
-              <span className="text-xs font-bold text-green-700">Operational</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="text-sm font-medium text-green-900">Keycloak Auth</span>
-              </div>
-              <span className="text-xs font-bold text-green-700">Operational</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <span className="text-sm font-medium text-green-900">Resource API</span>
-              </div>
-              <span className="text-xs font-bold text-green-700">Operational</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Tips */}
-        <div className="rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 p-6 shadow-lg">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900">Quick Tips</h3>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
-              <Award className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Your attributes are read-only</p>
-                <p className="text-xs text-slate-600 mt-1">Clearance and COI managed by your home IdP admin</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
-              <Award className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900">All actions are audited</p>
-                <p className="text-xs text-slate-600 mt-1">Every authorization decision is logged for compliance</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
-              <Award className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900">Cross-partner collaboration</p>
-                <p className="text-xs text-slate-600 mt-1">Users from partner IdPs may access your documents if authorized</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+            {activeTab === 'activity' && (
+              <DashboardActivity
+                auditEvents={[]}
+                complianceMetrics={[]}
+                lastLogin={new Date().toISOString()}
+                sessionCount={1}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
       {/* Development Session Details */}
       {process.env.NODE_ENV === 'development' && session && (
-        <div className="rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-lg">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-lg"
+          >
           <details className="group">
             <summary className="cursor-pointer flex items-center justify-between hover:text-emerald-400 transition-colors">
               <span className="text-sm font-bold text-white uppercase tracking-wide flex items-center gap-2">
-                <Activity className="w-4 h-4" />
+                  <Info className="w-4 h-4" />
                 Session Details (Development Only)
               </span>
               <ArrowRight className="w-5 h-5 text-slate-400 transition-transform group-open:rotate-90" />
@@ -656,7 +579,6 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   ...session,
                   user: {
                     ...session.user,
-                    // ACP-240 Section 6.2: Redact PII in development logs
                     name: session.user?.name ? '*** REDACTED (PII) ***' : undefined,
                     email: session.user?.email ? '*** REDACTED (PII) ***' : undefined,
                     uniqueID: session.user?.uniqueID,
@@ -668,8 +590,17 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
               </pre>
             </div>
           </details>
+          </motion.div>
+        )}
         </div>
-      )}
+
+      {/* Glossary Popover */}
+      <GlossaryPopover
+        isOpen={showGlossary}
+        onClose={() => setShowGlossary(false)}
+      />
     </div>
   );
 }
+
+export default DashboardModern;

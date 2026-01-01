@@ -337,7 +337,7 @@ export default function PolicyValidationPanel({
                     className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${config.bgColor} ${config.color}`}
                   >
                     <Icon className="w-3 h-3" />
-                    {count}
+                    {String(count)}
                   </span>
                 );
               })}

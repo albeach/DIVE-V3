@@ -183,7 +183,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET required}
       APP_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
-      USA_IDP_URL: ${USA_IDP_URL:-https://dive-hub-keycloak:8443}
+      USA_IDP_URL: ${USA_IDP_URL:-https://keycloak:8443}
       USA_IDP_CLIENT_SECRET: ${USA_IDP_CLIENT_SECRET:-default-usa-idp-secret}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
       TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
@@ -195,6 +195,8 @@ services:
     volumes:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
+      # ADDED (Dec 2025): Mount scripts to pick up local fixes without rebuilding image
+      - ./keycloak/scripts:/opt/keycloak/scripts:ro
     networks:
       - hub-internal
       - dive-shared  # Required for federation (Keycloak needs to reach spoke Keycloaks)
@@ -254,11 +256,11 @@ services:
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
       MONGODB_DATABASE: dive-v3
       OPA_URL: https://opa:8181
-      KEYCLOAK_URL: https://dive-hub-keycloak:8443
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      KEYCLOAK_JWKS_URI: https://dive-hub-keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
+      KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Redis configuration
@@ -377,9 +379,9 @@ services:
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin
       MONGODB_DATABASE: dive-v3
       LOG_LEVEL: info
-      KEYCLOAK_URL: https://dive-hub-keycloak:8443
+      KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
     ports:
       - "127.0.0.1:8085:8080"
     depends_on:
@@ -416,7 +418,7 @@ services:
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}
       NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       BACKEND_URL: https://backend:4000
-      KEYCLOAK_BASE_URL: https://dive-hub-keycloak:8443
+      KEYCLOAK_BASE_URL: https://keycloak:8443
       KEYCLOAK_URL: ${KEYCLOAK_URL:-https://localhost:8443}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dive-v3-broker-usa}
       NEXT_PUBLIC_KEYCLOAK_URL: ${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}
@@ -425,9 +427,9 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
       AUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       AUTH_TRUST_HOST: "true"
@@ -495,7 +497,8 @@ services:
       - hub-internal
       - dive-shared  # Allow spoke OPAL clients to connect via federation network
     volumes:
-      - ./policies:/policies:ro
+      # NOTE: ./policies volume mount removed to prevent duplication with Git-based distribution
+      # OPAL fetches policies from GitHub repo: https://github.com/albeach/dive-v3-policies.git
       - ./opal-data-source:/opal-data-source:ro
       - ./keycloak/certs:/certs:ro
       - ./certs/opal:/opal-keys:ro

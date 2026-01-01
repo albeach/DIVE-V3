@@ -6,8 +6,7 @@
     "description": "DIVE V3 Spoke Instance for Hungarian Defence Forces",
     "country": "HUN",
     "organizationType": "government",
-    "contactEmail": "admin@hun.dive25.com",
-    "registeredSpokeId": "spoke-hun-bf6df21c"
+    "contactEmail": "admin@hun.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,14 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "pending",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:hun",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2025-12-28T03:49:24Z"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

@@ -1524,19 +1524,21 @@ async function createZTDFDocument(
         title,
         // Top-level fields for search/filter compatibility
         classification,
-        releasabilityTo,
+        releasableTo: releasabilityTo, // FIXED: Use correct field name (releasableTo not releasabilityTo)
         COI,
         coiOperator,
         encrypted: true,
         encryptedContent: chunk.encryptedData,
         releasableToIndustry: industryAllowed,
         originRealm: instanceCode,
+        // Country for localized classification normalization (ACP-240)
+        country: instanceCode,
         // ZTDF structure
         ztdf: ztdfObject,
         // Legacy structure (kept for backwards compatibility)
         legacy: {
             classification,
-            releasabilityTo,
+            releasableTo: releasabilityTo, // FIXED: Use correct field name
             COI,
             coiOperator,
             encrypted: true,
@@ -1657,15 +1659,28 @@ async function seedInstance(
         await collection.createIndex({ seedBatchId: 1 });
         await collection.createIndex({ instanceCode: 1 });
 
-        // Clear existing if replace mode
+        // Clear existing if replace mode - DELETE ALL RESOURCES FOR THIS INSTANCE
+        // This ensures no legacy plaintext resources remain (ACP-240 compliance)
         if (options.replace) {
-            const deleteResult = await collection.deleteMany({
+            // First, delete all legacy patterns (ita-intel-*, ita-doc-*, etc.)
+            const legacyPattern = new RegExp(`^${instanceCode.toLowerCase()}-`);
+            const legacyResult = await collection.deleteMany({
+                resourceId: { $regex: legacyPattern }
+            });
+
+            // Then delete ZTDF pattern resources
+            const ztdfResult = await collection.deleteMany({
                 $or: [
                     { resourceId: { $regex: /^doc-/ } },
-                    { seedBatchId: { $exists: true } }
+                    { seedBatchId: { $exists: true } },
+                    { instanceCode: instanceCode },
+                    { instance: instanceCode }
                 ]
             });
-            console.log(`🗑️  Deleted ${deleteResult.deletedCount} existing documents\n`);
+
+            const totalDeleted = legacyResult.deletedCount + ztdfResult.deletedCount;
+            console.log(`🗑️  Deleted ${totalDeleted} existing documents (${legacyResult.deletedCount} legacy + ${ztdfResult.deletedCount} ZTDF)\n`);
+            console.log(`   ✅ All plaintext resources removed - ACP-240 compliance ensured\n`);
         }
 
         // Initialize checkpoint for resilience
