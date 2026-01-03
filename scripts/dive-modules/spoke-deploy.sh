@@ -47,6 +47,18 @@ spoke_up() {
     source "$spoke_dir/.env"
     set +a
 
+    # CRITICAL: Auto-fix Keycloak hostname configuration if needed
+    # This ensures KC_HOSTNAME_URL is set correctly for the issuer
+    if type -t spoke_auto_fix_hostname &>/dev/null; then
+        spoke_auto_fix_hostname "$instance_code" || log_warn "Hostname auto-fix had issues (non-blocking)"
+    else
+        # Load the fix module if not already loaded
+        if [ -f "${_SPOKE_MODULES_DIR}/spoke-fix-hostname.sh" ]; then
+            source "${_SPOKE_MODULES_DIR}/spoke-fix-hostname.sh"
+            spoke_auto_fix_hostname "$instance_code" || log_warn "Hostname auto-fix had issues (non-blocking)"
+        fi
+    fi
+
     # Ensure shared network exists (local dev only)
     ensure_shared_network
 
