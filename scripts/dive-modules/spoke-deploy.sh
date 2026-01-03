@@ -1188,6 +1188,26 @@ spoke_deploy() {
     echo ""
 
     # ==========================================================================
+    # Sync AMR Attributes (CRITICAL for MFA)
+    # ==========================================================================
+    # Sets user.attribute.amr based on each user's configured credentials (OTP, WebAuthn)
+    # This ensures AMR claims are populated correctly for MFA users
+    # The dive-amr-enrichment event listener also sets this on each login
+    log_step "Syncing AMR attributes for MFA users..."
+    local sync_amr_script="${DIVE_ROOT}/scripts/sync-amr-attributes.sh"
+    if [ -f "$sync_amr_script" ]; then
+        local realm_name="dive-v3-broker-${code_lower}"
+        if bash "$sync_amr_script" --realm "$realm_name" 2>/dev/null; then
+            log_success "AMR attributes synchronized"
+        else
+            log_warn "AMR sync completed with warnings (non-blocking)"
+        fi
+    else
+        log_warn "sync-amr-attributes.sh not found - skipping AMR sync"
+    fi
+    echo ""
+
+    # ==========================================================================
     # Deployment Complete
     # ==========================================================================
     local end_time=$(date +%s)
