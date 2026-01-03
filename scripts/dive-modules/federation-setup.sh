@@ -763,6 +763,95 @@ sync_spoke_local_secrets() {
     return 0
 }
 
+##
+# Sync Keycloak client secret to match running frontend container
+# This fixes "unauthorized_client" errors when the container was built with
+# a different secret than what's currently in Keycloak
+##
+sync_keycloak_to_frontend_container() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower=$(lower "$spoke_code")
+    local code_upper=$(upper "$spoke_code")
+
+    log_step "Syncing Keycloak client secret to frontend container for ${code_upper}..."
+
+    local frontend_container="dive-spoke-${code_lower}-frontend"
+    local keycloak_container="dive-spoke-${code_lower}-keycloak"
+
+    # Get secret from running frontend container (authoritative)
+    local container_secret=""
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${frontend_container}$"; then
+        container_secret=$(docker exec "$frontend_container" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null | tr -d '\n\r')
+        if [ -z "$container_secret" ]; then
+            container_secret=$(docker exec "$frontend_container" printenv KEYCLOAK_CLIENT_SECRET 2>/dev/null | tr -d '\n\r')
+        fi
+    fi
+
+    if [ -z "$container_secret" ]; then
+        log_warn "Cannot get secret from frontend container - not running or missing env var"
+        return 1
+    fi
+
+    log_verbose "Frontend container secret: ${container_secret:0:10}..."
+
+    # Get Keycloak admin credentials
+    eval "$(_get_spoke_ports "$spoke_code")"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+
+    local kc_password=""
+    kc_password=$(get_keycloak_password "${keycloak_container}" 2>/dev/null || true)
+    if [ -z "$kc_password" ]; then
+        local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+        if [ -f "$spoke_env" ]; then
+            kc_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" | cut -d= -f2 | tr -d '\n\r"')
+        fi
+    fi
+
+    if [ -z "$kc_password" ]; then
+        log_error "Cannot get Keycloak admin password"
+        return 1
+    fi
+
+    # Get admin token
+    local admin_token
+    admin_token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" -d "username=admin" -d "password=${kc_password}" -d "client_id=admin-cli" 2>/dev/null | \
+        jq -r '.access_token // empty')
+
+    if [ -z "$admin_token" ]; then
+        log_error "Failed to get Keycloak admin token"
+        return 1
+    fi
+
+    # Get client UUID
+    local realm_name="dive-v3-broker-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
+    local client_uuid
+    client_uuid=$(curl -sk -H "Authorization: Bearer ${admin_token}" \
+        "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" 2>/dev/null | \
+        jq -r '.[0].id // empty')
+
+    if [ -z "$client_uuid" ]; then
+        log_error "Client not found: ${client_id}"
+        return 1
+    fi
+
+    # Update client secret to match frontend container
+    local result
+    result=$(curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/${realm_name}/clients/${client_uuid}" \
+        -H "Authorization: Bearer ${admin_token}" \
+        -H "Content-Type: application/json" \
+        -d "{\"secret\": \"${container_secret}\"}" -w "%{http_code}" -o /dev/null)
+
+    if [ "$result" = "204" ]; then
+        log_success "Keycloak client secret synced to frontend container"
+        return 0
+    else
+        log_error "Failed to update client secret (HTTP ${result})"
+        return 1
+    fi
+}
+
 # =============================================================================
 # CLIENT MANAGEMENT
 # =============================================================================
