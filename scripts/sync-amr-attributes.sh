@@ -198,6 +198,15 @@ fi
 
 echo ""
 
+# Function to check if user is federated (has external IdP link)
+is_federated_user() {
+    local user_id="$1"
+    local fed_identities=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/federated-identity" \
+        -H "Authorization: Bearer $TOKEN")
+    local count=$(echo "$fed_identities" | jq 'length')
+    [ "$count" -gt 0 ]
+}
+
 # Process each user
 UPDATED=0
 SKIPPED=0
@@ -209,6 +218,17 @@ echo "$USERS" | jq -c '.[]' | while read -r user; do
 
     # Skip service accounts
     if [[ "$username" == service-account-* ]]; then
+        continue
+    fi
+
+    # CRITICAL FIX (Jan 2, 2026): Skip federated users
+    # Federated users get their AMR from their home IdP via the IdP mapper
+    # We should NOT overwrite their AMR based on local credentials (which don't exist)
+    if is_federated_user "$user_id"; then
+        # Get current AMR (set by IdP mapper)
+        current_amr=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.attributes.amr // ["pwd"] | tojson')
+        log_info "Skipping federated user: ${username} (amr=${current_amr} from IdP)"
         continue
     fi
 

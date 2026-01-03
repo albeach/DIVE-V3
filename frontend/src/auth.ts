@@ -638,7 +638,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     // The user_acr claim contains the ACR value from the federated Spoke's actual authentication.
                                     // The direct acr claim comes from the Hub's session (SSO cookie reuse, always 1).
                                     let acr: string | undefined;
-                                    
+
                                     // For federated users: use user_acr (from Spoke's authentication)
                                     // For direct users: use acr (from Hub's authentication)
                                     if (payload.user_acr !== undefined && payload.user_acr !== null) {
@@ -651,11 +651,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     // The user_amr claim contains the AMR array from the federated Spoke's actual authentication.
                                     // The direct amr claim comes from the Hub's session (empty for SSO cookie reuse).
                                     let amr: string[] = ['pwd']; // default fallback
-                                    
+
                                     // For federated users: use user_amr (from Spoke's authentication)
                                     // For direct users: use amr (from Hub's authentication)
                                     const amrSource = payload.user_amr || payload.amr;
-                                    
+
                                     if (amrSource) {
                                         if (Array.isArray(amrSource)) {
                                             amr = amrSource;

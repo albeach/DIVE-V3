@@ -42,12 +42,12 @@
             </svg>
             ${msg("webauthnRegisterLabelPrompt")}
         </label>
-        <input 
-            type="text" 
-            id="authenticatorLabel-input" 
-            class="dive-input dive-input-modern" 
-            placeholder="e.g., My iPhone, YubiKey 5" 
-            value="${msg("webauthnDefaultAuthenticatorLabel")}" 
+        <input
+            type="text"
+            id="authenticatorLabel-input"
+            class="dive-input dive-input-modern"
+            placeholder="e.g., My iPhone, YubiKey 5"
+            value="${msg("webauthnDefaultAuthenticatorLabel")}"
             autofocus
         />
         <p class="dive-input-hint">Give your security key a memorable name</p>
@@ -55,9 +55,9 @@
 
     <!-- Register Button -->
     <div class="dive-form-buttons">
-        <button 
+        <button
             id="registerWebAuthnButton"
-            class="dive-button-primary dive-button-hero" 
+            class="dive-button-primary dive-button-hero"
             type="button"
             onclick="webAuthnRegister()"
         >
@@ -137,7 +137,7 @@
         };
         fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webauthn-register.ftl:119',message:'WebAuthn form loaded',data:debugData,timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'A,B,C,D'})}).catch(()=>{});
         // #endregion
-        
+
         // WebAuthn registration with modern error handling
         const challenge = "${challenge}";
         const userid = "${userid}";
@@ -253,8 +253,8 @@
             console.log('[WebAuthn] requireResidentKey (evaluated):', publicKey.authenticatorSelection.requireResidentKey);
 
             // Only add authenticatorAttachment if specified
-            if (authenticatorAttachment && 
-                authenticatorAttachment !== '' && 
+            if (authenticatorAttachment &&
+                authenticatorAttachment !== '' &&
                 authenticatorAttachment !== 'not specified' &&
                 authenticatorAttachment !== 'Not specified') {
                 publicKey.authenticatorSelection.authenticatorAttachment = authenticatorAttachment;
