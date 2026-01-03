@@ -481,7 +481,7 @@ spoke_health() {
         local offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
         keycloak_port=$((8443 + offset))
         backend_port=$((4000 + offset))
-        opa_port=$((8181 + offset * 10))
+        opa_port=$((9100 + offset))
     else
         # Fallback for non-NATO countries
         keycloak_port=8443
