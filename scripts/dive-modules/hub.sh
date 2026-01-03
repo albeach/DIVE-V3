@@ -1332,23 +1332,28 @@ hub_seed() {
         # Check if backend container is running
         if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
             log_error "Backend container '${backend_container}' is not running"
-            log_info "Falling back to shell script seeder..."
-            if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" ]; then
-                "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" "$resource_count"
-            fi
-            return 0
+            log_error "Cannot seed ZTDF resources without backend container"
+            echo ""
+            echo "  Start the hub first:"
+            echo "  ./dive hub up"
+            echo ""
+            return 1
         fi
 
-        # Use ZTDF seeder via TypeScript
-        docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
+        # Use ZTDF seeder via TypeScript (SSOT - no plaintext fallback)
+        # All resources MUST be ZTDF-encrypted per ACP-240 compliance
+        if ! docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
             --instance=USA \
             --count="${resource_count}" \
-            --replace 2>&1 || {
-            log_warn "ZTDF seeding failed, trying fallback..."
-            if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" ]; then
-                "${SEED_SCRIPTS_DIR}/seed-hub-resources.sh" "$resource_count"
-            fi
-        }
+            --replace 2>&1; then
+            log_error "ZTDF seeding failed"
+            log_error "All resources MUST be ZTDF-encrypted per ACP-240 compliance"
+            echo ""
+            echo "  Retry seeding:"
+            echo "  ./dive hub seed ${resource_count}"
+            echo ""
+            return 1
+        fi
     fi
 
     # Mark hub as initialized
