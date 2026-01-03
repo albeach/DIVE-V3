@@ -1210,6 +1210,55 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "hrv": {
+      "code": "HRV",
+      "name": "Croatia",
+      "locale": "hr-HR",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.hrv.yml",
+        "projectName": "hrv"
+      },
+      "services": {
+        "_comment": "HRV uses hrv- prefix on all service names",
+        "frontend": {
+          "name": "frontend-hrv",
+          "containerName": "dive-spoke-hrv-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "hrv-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-hrv",
+          "containerName": "dive-spoke-hrv-backend",
+          "internalPort": 4000,
+          "externalPort": 4005,
+          "protocol": "https",
+          "hostname": "hrv-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-hrv",
+          "containerName": "dive-spoke-hrv-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8448,
+          "protocol": "https",
+          "hostname": "hrv-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-hrv",
+          "containerName": "dive-spoke-hrv-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27022,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
@@ -1224,6 +1273,7 @@
         "est",
         "fra",
         "gbr",
+        "hrv",
         "hun",
         "ita",
         "lux",
@@ -1338,6 +1388,12 @@
         "usa"
       ],
       "nzl": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "hrv": [
         "deu",
         "fra",
         "gbr",

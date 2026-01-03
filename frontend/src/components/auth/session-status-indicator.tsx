@@ -1,16 +1,16 @@
 /**
  * Session Status Indicator Component
- * 
+ *
  * Displays real-time session status to user:
  * - Time remaining until token expiry
  * - Visual color coding (green/yellow/red)
  * - Session health status
- * 
+ *
  * SECURITY: Uses server-side database sessions (DrizzleAdapter)
  * - No client-side JWT parsing
  * - Session validation happens via heartbeat API
  * - Database session expiry used as fallback
- * 
+ *
  * Week 3.4: Enhanced Session Management
  */
 

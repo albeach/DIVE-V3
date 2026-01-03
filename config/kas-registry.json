@@ -799,6 +799,49 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "hrv-kas",
+      "organization": "Croatia",
+      "countryCode": "HRV",
+      "kasUrl": "https://localhost:10005/api/kas",
+      "internalKasUrl": "http://kas-hrv:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://hrv-idp.dive25.com/realms/dive-v3-broker-hrv",
+        "jwtAudience": "dive-v3-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "HRV"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@hrv.dive25.com",
+        "lastVerified": "2026-01-03T10:55:34Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {
@@ -814,6 +857,7 @@
         "est-kas",
         "fra-kas",
         "gbr-kas",
+        "hrv-kas",
         "hun-kas",
         "ita-kas",
         "lux-kas",
@@ -832,6 +876,7 @@
         "esp-kas",
         "est-kas",
         "gbr-kas",
+        "hrv-kas",
         "hun-kas",
         "ita-kas",
         "lux-kas",
@@ -851,6 +896,7 @@
         "esp-kas",
         "est-kas",
         "fra-kas",
+        "hrv-kas",
         "hun-kas",
         "ita-kas",
         "lux-kas",
@@ -870,6 +916,7 @@
         "est-kas",
         "fra-kas",
         "gbr-kas",
+        "hrv-kas",
         "hun-kas",
         "ita-kas",
         "lux-kas",
@@ -964,6 +1011,12 @@
         "deu-kas"
       ],
       "nzl-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "hrv-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",

@@ -42,7 +42,7 @@ spoke_fix_keycloak_hostname() {
 
     # Get the spoke ports from SSOT
     eval "$(get_instance_ports "$code_upper")"
-    
+
     # Backup the compose file
     cp "$compose_file" "${compose_file}.bak.$(date +%Y%m%d_%H%M%S)"
 
@@ -123,7 +123,7 @@ spoke_fix_keycloak_hostname() {
 
     log_success "Fixed Keycloak hostname configuration for $code_upper"
     log_info "Backup saved to: ${compose_file}.bak.*"
-    
+
     return 0
 }
 
@@ -132,18 +132,18 @@ spoke_fix_keycloak_hostname() {
 ##
 spoke_fix_all_hostnames() {
     log_step "Fixing Keycloak hostname configuration for all spokes..."
-    
+
     local fixed=0
     local failed=0
-    
+
     for spoke_dir in "${DIVE_ROOT}"/instances/*/; do
         if [ ! -d "$spoke_dir" ]; then
             continue
         fi
-        
+
         local code_lower=$(basename "$spoke_dir")
         local code_upper=$(upper "$code_lower")
-        
+
         if [ -f "$spoke_dir/docker-compose.yml" ]; then
             if spoke_fix_keycloak_hostname "$code_upper"; then
                 ((fixed++))
@@ -152,7 +152,7 @@ spoke_fix_all_hostnames() {
             fi
         fi
     done
-    
+
     echo ""
     log_success "Fixed $fixed spoke(s)"
     if [ $failed -gt 0 ]; then
@@ -167,26 +167,26 @@ spoke_needs_hostname_fix() {
     local instance_code="${1:-${INSTANCE}}"
     local code_lower=$(lower "$instance_code")
     local compose_file="${DIVE_ROOT}/instances/${code_lower}/docker-compose.yml"
-    
+
     if [ ! -f "$compose_file" ]; then
         return 1  # Not initialized
     fi
-    
+
     # Check if KC_HOSTNAME_URL is present
     if grep -q "KC_HOSTNAME_URL:" "$compose_file"; then
         return 1  # Already fixed
     fi
-    
+
     # Check if using old KC_PROXY: edge syntax
     if grep -q "KC_PROXY: edge" "$compose_file"; then
         return 0  # Needs fix
     fi
-    
+
     # Check if KC_HOSTNAME_PORT is present (deprecated)
     if grep -q "KC_HOSTNAME_PORT:" "$compose_file"; then
         return 0  # Needs fix
     fi
-    
+
     return 1  # Probably okay
 }
 
@@ -195,7 +195,7 @@ spoke_needs_hostname_fix() {
 ##
 spoke_auto_fix_hostname() {
     local instance_code="${1:-${INSTANCE}}"
-    
+
     if spoke_needs_hostname_fix "$instance_code"; then
         log_warn "Detected outdated Keycloak hostname configuration"
         log_info "Auto-fixing before startup..."
@@ -205,6 +205,6 @@ spoke_auto_fix_hostname() {
         }
         log_success "Auto-fix completed - proceeding with startup"
     fi
-    
+
     return 0
 }

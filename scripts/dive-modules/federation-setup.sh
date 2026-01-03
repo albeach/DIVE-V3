@@ -1096,10 +1096,10 @@ ensure_spoke_client_in_hub() {
         if ! grep -q "^${spoke_secret_var}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null; then
             echo "${spoke_secret_var}=${spoke_client_secret}" >> "${DIVE_ROOT}/.env.hub"
         fi
-        
+
         # Add protocol mappers to the new client (CRITICAL for federation)
         ensure_protocol_mappers_on_hub_federation_client "$spoke_code"
-        
+
         return 0
     else
         log_error "Failed to create $client_id in Hub"
@@ -1118,7 +1118,7 @@ ensure_protocol_mappers_on_hub_federation_client() {
     local code_upper=$(upper "$spoke_code")
 
     local client_id="dive-v3-broker-${code_lower}"
-    
+
     log_verbose "Adding protocol mappers to ${client_id} in Hub realm..."
 
     # Get Hub admin token
@@ -1147,7 +1147,7 @@ ensure_protocol_mappers_on_hub_federation_client() {
 
     for attr in "${standard_attrs[@]}"; do
         local mapper_name="federation-std-${attr}"
-        
+
         # Check if mapper exists
         local existing
         existing=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
