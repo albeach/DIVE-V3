@@ -606,4 +606,4 @@ EOF
     log_info "Credentials saved to: ${CREDS_FILE}"
 fi
 
-log_info "Next: Run ./scripts/spoke-init/seed-resources.sh ${INSTANCE_CODE}"
+log_info "Next: Seed ZTDF resources via: ./dive --instance ${INSTANCE_CODE} spoke seed"
