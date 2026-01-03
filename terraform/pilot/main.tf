@@ -13,9 +13,9 @@ module "instance" {
   api_url = "https://localhost:4000"
   idp_url = "https://localhost:8443"
 
-  # Realm configuration
-  realm_name    = "dive-v3-broker"
-  client_id     = "dive-v3-broker"
+  # Realm configuration - must use instance-specific suffix
+  realm_name    = "dive-v3-broker-usa"
+  client_id     = "dive-v3-broker-usa"
   client_secret = var.client_secret
 
   # Test users
@@ -66,7 +66,7 @@ module "mfa" {
   source = "../modules/realm-mfa"
 
   realm_id           = module.instance.realm_id
-  realm_name         = "dive-v3-broker"
+  realm_name         = "dive-v3-broker-usa"
   realm_display_name = "DIVE V3 - USA Pilot"
 
   use_standard_browser_flow = false

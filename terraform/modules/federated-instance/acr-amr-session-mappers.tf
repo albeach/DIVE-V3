@@ -20,7 +20,7 @@
 # CLIENT ARCHITECTURE:
 # - dive-v3-broker-usa on Spoke: Client that Hub uses to federate TO the Spoke
 # - dive-v3-broker-{spoke} on Hub: Client that Spoke uses to federate TO the Hub
-# - dive-v3-cross-border-client: DEPRECATED (not used for actual federation)
+# Note: dive-v3-cross-border-client was removed (never used for actual federation)
 #
 # ============================================================================
 
