@@ -30,19 +30,22 @@
 # When other instances (like Hub) federate TO this instance (spoke), these
 # clients must include ACR/AMR in the tokens they issue.
 #
-# We use TWO mappers:
-# 1. Session-based (oidc-acr-mapper) for local users
-# 2. User-attribute-based (oidc-usermodel-attribute-mapper) for federated users
+# BEST PRACTICE ARCHITECTURE:
+# 1. Native oidc-amr-mapper (PRIMARY) - reads from AUTH_METHODS_REF session note
+#    The dive-amr-enrichment event listener sets this on every login.
+# 2. Native oidc-acr-mapper (PRIMARY) - reads from authentication context
+# 3. User-attribute mapper (FALLBACK) - for user_amr claim from stored attributes
 #
-# The AMR user-attribute mapper is CRITICAL for federation because federated
-# users have AMR stored in user.attribute.amr, not in the session.
+# The native oidc-amr-mapper properly parses the AUTH_METHODS_REF JSON array
+# and outputs it as a proper JWT array claim.
 
+# ACR from native session mapper (PRIMARY)
 resource "keycloak_generic_protocol_mapper" "incoming_federation_acr" {
   for_each = var.federation_partners
 
   realm_id        = keycloak_realm.broker.id
   client_id       = keycloak_openid_client.incoming_federation[each.key].id
-  name            = "acr (authentication session)"
+  name            = "acr (native session)"
   protocol        = "openid-connect"
   protocol_mapper = "oidc-acr-mapper"
 
@@ -55,16 +58,38 @@ resource "keycloak_generic_protocol_mapper" "incoming_federation_acr" {
   }
 }
 
-# AMR from user attribute (for federated users - fallback)
-# CRITICAL: jsonType.label MUST be "String" for multivalued arrays, NOT "JSON"
-resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_amr" {
+# AMR from native session mapper (PRIMARY)
+# Reads from AUTH_METHODS_REF session note set by dive-amr-enrichment event listener
+# This is the BEST PRACTICE approach - native mapper properly handles the JSON array
+resource "keycloak_generic_protocol_mapper" "incoming_federation_amr" {
+  for_each = var.federation_partners
+
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.incoming_federation[each.key].id
+  name            = "amr (native session)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-amr-mapper"
+
+  config = {
+    "id.token.claim"            = "true"
+    "access.token.claim"        = "true"
+    "userinfo.token.claim"      = "true"
+    "introspection.token.claim" = "true"
+    "claim.name"                = "amr"
+  }
+}
+
+# AMR from user attribute (FALLBACK for federation)
+# Outputs to user_amr claim - frontend prioritizes this for federated users
+# CRITICAL: claim_value_type MUST be "String" for multivalued arrays, NOT "JSON"
+resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_amr_fallback" {
   for_each = var.federation_partners
 
   realm_id            = keycloak_realm.broker.id
   client_id           = keycloak_openid_client.incoming_federation[each.key].id
-  name                = "amr (user attribute)"
+  name                = "amr (user attribute fallback)"
   user_attribute      = "amr"
-  claim_name          = "amr"
+  claim_name          = "user_amr"
   claim_value_type    = "String" # CRITICAL: NOT "JSON"!
   multivalued         = true
   add_to_id_token     = true
@@ -72,28 +97,20 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_a
   add_to_userinfo     = true
 }
 
-# AMR from session note (for MFA-enriched logins)
-# The dive-amr-enrichment event listener sets the "amr" session note on login
-# This mapper reads from that session note to get the ACTUAL authentication methods used
-# CRITICAL FIX (Jan 2, 2026): Without this, MFA methods won't appear in AMR!
-resource "keycloak_generic_protocol_mapper" "incoming_federation_amr_session" {
+# ACR from user attribute (FALLBACK for federation)
+resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_acr_fallback" {
   for_each = var.federation_partners
 
-  realm_id        = keycloak_realm.broker.id
-  client_id       = keycloak_openid_client.incoming_federation[each.key].id
-  name            = "amr (session note - MFA enriched)"
-  protocol        = "openid-connect"
-  protocol_mapper = "oidc-usersessionmodel-note-mapper"
-
-  config = {
-    "user.session.note"         = "amr"
-    "claim.name"                = "amr"
-    "id.token.claim"            = "true"
-    "access.token.claim"        = "true"
-    "userinfo.token.claim"      = "true"
-    "introspection.token.claim" = "true"
-    "jsonType.label"            = "String"
-  }
+  realm_id            = keycloak_realm.broker.id
+  client_id           = keycloak_openid_client.incoming_federation[each.key].id
+  name                = "acr (user attribute fallback)"
+  user_attribute      = "acr"
+  claim_name          = "user_acr"
+  claim_value_type    = "String"
+  multivalued         = false
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 }
 
 # ============================================================================
