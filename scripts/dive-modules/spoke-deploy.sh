@@ -452,7 +452,7 @@ spoke_deploy() {
     # Step 1: Initialize spoke if not already done
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 1/10: Checking Spoke Initialization${NC}"
+    echo -e "${CYAN}  STEP 1/12: Checking Spoke Initialization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -478,7 +478,7 @@ spoke_deploy() {
     # Step 2: Prepare Federation Certificates
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 2/11: Preparing Federation Certificates${NC}"
+    echo -e "${CYAN}  STEP 2/12: Preparing Federation Certificates${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -501,7 +501,7 @@ spoke_deploy() {
     # ==========================================================================
     set_deployment_state "$instance_code" "DEPLOYING" 2>/dev/null || true
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 3/11: Starting Spoke Services${NC}"
+    echo -e "${CYAN}  STEP 3/12: Starting Spoke Services${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -537,7 +537,7 @@ spoke_deploy() {
     # Step 4: Wait for services to be healthy
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 4/11: Waiting for Services to be Healthy${NC}"
+    echo -e "${CYAN}  STEP 4/12: Waiting for Services to be Healthy${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -583,7 +583,7 @@ spoke_deploy() {
     # Step 5: Run initialization scripts (if not already done)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 5/11: Running Post-Deployment Initialization${NC}"
+    echo -e "${CYAN}  STEP 5/12: Running Post-Deployment Initialization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -609,10 +609,48 @@ spoke_deploy() {
     fi
 
     # ==========================================================================
-    # Step 6: Configure Localization (NATO Attributes)
+    # Step 6: Seed ZTDF Encrypted Resources (5000 default, like Hub)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 6/11: Configuring NATO Localization${NC}"
+    echo -e "${CYAN}  STEP 6/12: Seeding ZTDF Encrypted Resources${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    local seed_marker="$spoke_dir/.seeded"
+    local seed_count="${SPOKE_SEED_COUNT:-5000}"
+
+    if [ -f "$seed_marker" ]; then
+        log_info "Spoke already seeded with ZTDF resources"
+        echo ""
+    else
+        local backend_container="dive-spoke-${code_lower}-backend"
+        if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+            log_step "Seeding ${seed_count} ZTDF encrypted resources..."
+
+            # Use the db.sh cmd_seed (SSOT for seeding)
+            if [ -f "${DIVE_ROOT}/scripts/dive-modules/db.sh" ]; then
+                source "${DIVE_ROOT}/scripts/dive-modules/db.sh"
+                if BACKEND_CONTAINER="$backend_container" INSTANCE="$code_lower" cmd_seed "$seed_count" "$code_lower"; then
+                    touch "$seed_marker"
+                    log_success "${seed_count} ZTDF resources seeded!"
+                else
+                    log_warn "ZTDF seeding had issues - run './dive --instance ${code_lower} spoke seed' later"
+                fi
+            else
+                log_warn "db.sh module not found - skipping seeding"
+            fi
+        else
+            log_warn "Backend not running yet - seeding deferred"
+            echo "  Run: ./dive --instance ${code_lower} spoke seed"
+        fi
+        echo ""
+    fi
+
+    # ==========================================================================
+    # Step 7: Configure Localization (NATO Attributes)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 7/12: Configuring NATO Localization${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -647,7 +685,7 @@ spoke_deploy() {
     # ==========================================================================
     set_deployment_state "$instance_code" "CONFIGURING" 2>/dev/null || true
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 7/11: Configuring Federation${NC}"
+    echo -e "${CYAN}  STEP 8/12: Configuring Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -754,7 +792,7 @@ spoke_deploy() {
     # Step 8: Register with Hub (BIDIRECTIONAL - spoke in Hub AND Hub in spoke)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 8/11: Hub Registration (Bidirectional Federation)${NC}"
+    echo -e "${CYAN}  STEP 9/12: Hub Registration (Bidirectional Federation)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -804,7 +842,7 @@ spoke_deploy() {
     # Step 9: Formal Registration (optional - for production approval workflow)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 9/11: Formal Registration Status${NC}"
+    echo -e "${CYAN}  STEP 10/12: Formal Registration Status${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -835,7 +873,7 @@ spoke_deploy() {
     # Step 10: Register in Federation Registry (Dynamic Federated Search)
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 10/11: Federation Registry (Federated Search)${NC}"
+    echo -e "${CYAN}  STEP 11/12: Federation Registry (Federated Search)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
@@ -1006,7 +1044,7 @@ spoke_deploy() {
     # ==========================================================================
     set_deployment_state "$instance_code" "VERIFYING" 2>/dev/null || true
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 11/11: Verifying Bidirectional Federation${NC}"
+    echo -e "${CYAN}  STEP 12/12: Verifying Bidirectional Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
