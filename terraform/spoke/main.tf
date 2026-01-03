@@ -34,8 +34,11 @@ module "instance" {
   idp_url = var.idp_url
 
   # Realm configuration
+  # CRITICAL: realm_name AND client_id must use instance suffix for spoke instances
+  # Docker-compose sets AUTH_KEYCLOAK_ID=dive-v3-broker-{instance}
+  # Terraform must create the client with matching name
   realm_name    = "dive-v3-broker-${lower(var.instance_code)}"
-  client_id     = var.client_id
+  client_id     = "dive-v3-broker-${lower(var.instance_code)}"
   client_secret = var.client_secret
 
   # Theme
