@@ -100,26 +100,56 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                     isFederatedUser = true;
                 }
             }
-            
+
             System.out.println("[DIVE AMR DEBUG] isFederatedUser: " + isFederatedUser);
 
             if (isFederatedUser) {
-                // For federated users, use their existing AMR attribute (from IdP)
+                // For federated users, use their existing AMR attribute (from IdP mapper)
+                // BEST PRACTICE: Handle BOTH formats from IdP:
+                // 1. Multi-valued attribute: ["pwd", "otp"] - proper array storage
+                // 2. JSON string: "[\"pwd\",\"otp\"]" - if IdP mapper stored native amr claim as string
                 List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
                 System.out.println("[DIVE AMR DEBUG] existingAmrAttr from user: " + existingAmrAttr);
+                
                 if (existingAmrAttr != null && !existingAmrAttr.isEmpty()) {
-                    String federatedAmr = "[\"" + String.join("\",\"", existingAmrAttr) + "\"]";
+                    List<String> amrMethods = new ArrayList<>();
+                    String federatedAmr;
+                    
+                    // Check if first element looks like a JSON array (IdP stored native amr as string)
+                    String firstVal = existingAmrAttr.get(0);
+                    if (firstVal.startsWith("[") && firstVal.contains("\"")) {
+                        // Parse JSON array string: "[\"pwd\",\"otp\"]"
+                        System.out.println("[DIVE AMR] Parsing JSON array from IdP: " + firstVal);
+                        federatedAmr = firstVal; // Already in correct format
+                        // Extract values for logging
+                        String cleaned = firstVal.replaceAll("[\\[\\]\"]", "");
+                        for (String m : cleaned.split(",")) {
+                            amrMethods.add(m.trim());
+                        }
+                    } else {
+                        // Multi-valued attribute: ["pwd", "otp"]
+                        amrMethods.addAll(existingAmrAttr);
+                        federatedAmr = "[\"" + String.join("\",\"", amrMethods) + "\"]";
+                    }
+                    
+                    // Get ACR - also handle both formats
                     String federatedAcr = user.getFirstAttribute("acr");
                     if (federatedAcr == null) federatedAcr = "0";
+                    // Strip quotes if stored as JSON string
+                    federatedAcr = federatedAcr.replaceAll("\"", "");
 
-                    System.out.println("[DIVE AMR] Federated user detected - preserving IdP AMR: " + federatedAmr);
+                    System.out.println("[DIVE AMR] Federated user detected - preserving IdP AMR: " + federatedAmr + ", ACR: " + federatedAcr);
+                    
+                    // Set session notes so native oidc-amr-mapper works correctly
+                    // This ensures BOTH federated and non-federated users get amr from session
                     userSession.setNote("AUTH_METHODS_REF", federatedAmr);
                     userSession.setNote("AUTH_CONTEXT_CLASS_REF", federatedAcr);
                     userSession.setNote("ACR", federatedAcr);
                     userSession.setNote("acr", federatedAcr);
                     userSession.setNote("amr", federatedAmr);
                     userSession.setNote("auth_time", String.valueOf(System.currentTimeMillis() / 1000));
-                    System.out.println("[DIVE AMR] Federated AMR/ACR preserved for user: " + user.getUsername());
+                    
+                    System.out.println("[DIVE AMR] Federated AMR/ACR set in session notes for user: " + user.getUsername());
                     return;
                 }
             }
