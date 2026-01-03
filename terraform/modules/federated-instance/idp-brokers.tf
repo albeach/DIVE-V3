@@ -170,7 +170,10 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
 #
 # Without these IdP mappers, federated user's AMR is never updated on the Hub!
 
-# AMR IdP Mapper - extracts user_amr from Spoke token → stores to user.amr
+# AMR IdP Mapper - extracts amr from Spoke token → stores to user.amr
+# BEST PRACTICE: Read the native 'amr' claim (JSON array from oidc-amr-mapper)
+# Keycloak's IdP mapper handles JSON arrays and stores as multi-valued attribute
+# The event listener then handles both formats (multi-valued or JSON string)
 resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   for_each = var.federation_partners
 
@@ -180,13 +183,14 @@ resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"          = "user_amr"  # Read from Spoke's user_amr claim (user attribute fallback)
-    "user.attribute" = "amr"       # Store to local user's amr attribute
-    "syncMode"       = "FORCE"     # Update on every login
+    "claim"          = "amr"   # Read native amr claim (JSON array from oidc-amr-mapper)
+    "user.attribute" = "amr"   # Store to local user's amr attribute
+    "syncMode"       = "FORCE" # Update on every login
   }
 }
 
-# ACR IdP Mapper - extracts user_acr from Spoke token → stores to user.acr
+# ACR IdP Mapper - extracts acr from Spoke token → stores to user.acr
+# BEST PRACTICE: Read the native 'acr' claim (from oidc-acr-mapper)
 resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   for_each = var.federation_partners
 
@@ -196,9 +200,9 @@ resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"          = "user_acr"  # Read from Spoke's user_acr claim (user attribute fallback)
-    "user.attribute" = "acr"       # Store to local user's acr attribute
-    "syncMode"       = "FORCE"     # Update on every login
+    "claim"          = "acr"   # Read native acr claim (from oidc-acr-mapper)
+    "user.attribute" = "acr"   # Store to local user's acr attribute
+    "syncMode"       = "FORCE" # Update on every login
   }
 }
 
