@@ -52,72 +52,29 @@ router.post('/federated-query', authenticateJWT, async (req: Request, res: Respo
     const user = (req as any).user;
 
     try {
-        // Enrich user attributes if missing (fallback for tokens without proper mappers)
-        // This matches the enrichment done in auth middleware
+        // SSOT: User attributes come from Keycloak token via protocol mappers
+        // If missing, Keycloak protocol mappers are not configured - see fix-mappers command
+        // The frontend enrichment (auth.ts) handles session-level fallbacks
         if (!user?.clearance) {
-            // Try to get clearance from preferred_username pattern (e.g., testuser-usa-2 → CONFIDENTIAL)
-            const username = user?.preferred_username || user?.uniqueID || '';
-            const clearanceByUser: Record<string, string> = {
-                'testuser-usa-1': 'UNCLASSIFIED',
-                'testuser-usa-2': 'CONFIDENTIAL',
-                'testuser-usa-3': 'SECRET',
-                'testuser-usa-4': 'TOP_SECRET',
-                'admin-usa': 'TOP_SECRET',
-            };
-            // Check for pattern matches (any country)
-            const match = username.match(/testuser-\w+-(\d)/);
-            if (match) {
-                const level = parseInt(match[1]);
-                const levels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-                user.clearance = levels[Math.min(level - 1, 3)] || 'UNCLASSIFIED';
-            } else if (username.startsWith('admin-')) {
-                user.clearance = 'TOP_SECRET';
-            } else if (clearanceByUser[username]) {
-                user.clearance = clearanceByUser[username];
-            } else {
-                // Ultimate fallback for authenticated users
-                user.clearance = 'UNCLASSIFIED';
-            }
-            logger.info('Enriched user clearance for federated query', {
+            logger.warn('User clearance missing from token - check Keycloak protocol mappers', {
                 requestId,
-                username,
-                enrichedClearance: user.clearance
+                uniqueID: user?.uniqueID,
+                hint: 'Run: ./dive --instance <CODE> spoke fix-mappers'
             });
-        }
-
-        if (!user?.countryOfAffiliation) {
-            // Infer country from email or username
-            const email = user?.email || '';
-            const username = user?.preferred_username || user?.uniqueID || '';
-            if (email.endsWith('.mil') || username.includes('-usa-')) {
-                user.countryOfAffiliation = 'USA';
-            } else if (email.endsWith('.gouv.fr') || username.includes('-fra-')) {
-                user.countryOfAffiliation = 'FRA';
-            } else if (email.endsWith('.mod.uk') || username.includes('-gbr-')) {
-                user.countryOfAffiliation = 'GBR';
-            } else if (username.includes('-nzl-')) {
-                user.countryOfAffiliation = 'NZL';
-            } else {
-                user.countryOfAffiliation = 'USA'; // Default
-            }
-            logger.info('Enriched user country for federated query', {
-                requestId,
-                username,
-                enrichedCountry: user.countryOfAffiliation
-            });
-        }
-
-        // Final validation after enrichment
-        if (!user?.clearance) {
             res.status(403).json({
                 error: 'Forbidden',
-                message: 'User clearance not available',
+                message: 'User clearance not available - Keycloak protocol mappers may be missing',
+                hint: 'Run: ./dive --instance <CODE> spoke fix-mappers',
                 requestId
             });
             return;
         }
 
         if (!user?.countryOfAffiliation) {
+            logger.warn('User countryOfAffiliation missing from token', {
+                requestId,
+                uniqueID: user?.uniqueID
+            });
             res.status(403).json({
                 error: 'Forbidden',
                 message: 'User countryOfAffiliation not available',
