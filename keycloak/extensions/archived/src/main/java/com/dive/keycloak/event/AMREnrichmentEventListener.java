@@ -134,6 +134,15 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             userSession.setNote("amr", amrJson);
             userSession.setNote("auth_time", String.valueOf(System.currentTimeMillis() / 1000));
             
+            // CRITICAL FIX (Jan 2, 2026): Also set user attributes for federation
+            // When this user federates to another realm (e.g., Hub), the session notes
+            // are NOT available. The oidc-usermodel-attribute-mapper reads from user
+            // attributes, so we must update them here for cross-realm federation to work.
+            // Use setAttribute with List for multivalued attributes (not setSingleAttribute!)
+            user.setAttribute("amr", amrMethods);  // List<String> for multivalued
+            user.setSingleAttribute("acr", acr);   // Single value for ACR
+            System.out.println("[DIVE AMR] Updated user attributes: amr=" + amrMethods + ", acr=" + acr);
+            
             System.out.println("[DIVE AMR] AMR/ACR enrichment complete for user: " + user.getUsername() + 
                              " (session: " + userSession.getId() + ")");
             
