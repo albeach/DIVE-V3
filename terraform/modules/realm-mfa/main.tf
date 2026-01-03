@@ -103,8 +103,19 @@ resource "keycloak_authentication_execution" "browser_forms" {
   priority          = 10 # Password form FIRST
 }
 
-# NOTE: Password authentication automatically sets acr=1 and amr=["pwd"]
-# No explicit config needed - Keycloak's oidc-acr-mapper handles this automatically
+# CRITICAL FIX (Jan 2, 2026): Add reference="pwd" for AMR claim population!
+# Keycloak's oidc-amr-mapper reads the "reference" config from each authenticator.
+# Without this, AMR will be empty because auth-username-password-form doesn't
+# automatically set a reference value (contrary to prior documentation assumptions).
+resource "keycloak_authentication_execution_config" "browser_password_acr" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_forms.id
+  alias        = "Password ACR AMR - ${var.realm_display_name}"
+  config = {
+    acr_level = "1"   # AAL1 for password-only authentication
+    reference = "pwd" # AMR reference for password (RFC-8176 compliant)
+  }
+}
 
 # ============================================
 # Step 2: Conditional AAL3 (TOP_SECRET → WebAuthn)

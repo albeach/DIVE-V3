@@ -171,6 +171,31 @@ else
 fi
 
 # =============================================================================
+# Step 3b: Sync AMR Attributes (CRITICAL for MFA)
+# =============================================================================
+# Sets user.attribute.amr based on each user's configured credentials (OTP, WebAuthn)
+# This ensures AMR claims are populated correctly for MFA users
+# The dive-amr-enrichment event listener also sets this on each login
+# =============================================================================
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}  STEP 3b: Syncing AMR Attributes for MFA Users${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+SYNC_AMR_SCRIPT="${SCRIPT_DIR}/../sync-amr-attributes.sh"
+if [ -f "$SYNC_AMR_SCRIPT" ]; then
+    # Use spoke-specific realm
+    REALM_NAME="dive-v3-broker-${CODE_LOWER}"
+    export KEYCLOAK_URL="https://localhost:${KEYCLOAK_PORT:-8443}"
+    bash "$SYNC_AMR_SCRIPT" --realm "$REALM_NAME" 2>/dev/null || {
+        echo -e "  ${YELLOW}⚠${NC} AMR sync completed with warnings (non-blocking)"
+    }
+else
+    echo -e "  ${YELLOW}⚠${NC} sync-amr-attributes.sh not found - skipping AMR sync"
+fi
+
+# =============================================================================
 # Step 4: Seed Resources (ZTDF-encrypted)
 # =============================================================================
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
