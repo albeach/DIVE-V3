@@ -2536,6 +2536,130 @@ spoke_pki_import() {
     log_info "Restart spoke to apply PKI: ./dive --instance ${code,,} spoke restart"
 }
 
+##
+# Fix missing protocol mappers on spoke's main client
+# This is the SSOT fix for spokes deployed without Terraform
+# Creates: clearance, countryOfAffiliation, acpCOI, uniqueID, realm roles mappers
+##
+spoke_fix_mappers() {
+    local code="${1:-$INSTANCE}"
+    if [ -z "$code" ]; then
+        log_error "Usage: ./dive --instance <CODE> spoke fix-mappers"
+        return 1
+    fi
+    local code_lower=$(lower "$code")
+    local code_upper=$(upper "$code")
+    
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  Fixing Protocol Mappers for ${code_upper}${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    local instance_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local realm="dive-v3-broker-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
+    
+    # Get instance ports - try multiple methods
+    local kc_port
+    
+    # Method 1: Use get_instance_ports from common.sh (SSOT)
+    if type get_instance_ports &>/dev/null; then
+        local ports_output
+        ports_output=$(get_instance_ports "$code_upper" 2>/dev/null)
+        if [ -n "$ports_output" ]; then
+            read -r _ _ _ kc_port _ <<< "$ports_output"
+        fi
+    fi
+    
+    # Method 2: Get from running Docker container
+    if [ -z "$kc_port" ] || [ "$kc_port" = "8443" ]; then
+        local container_port
+        container_port=$(docker port "dive-spoke-${code_lower}-keycloak" 8443 2>/dev/null | grep -oE '[0-9]+$' | head -1)
+        if [ -n "$container_port" ]; then
+            kc_port="$container_port"
+        fi
+    fi
+    
+    kc_port="${kc_port:-8443}"
+    
+    # Get admin password
+    local password
+    if [ -f "${instance_dir}/.env" ]; then
+        password=$(grep "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "${instance_dir}/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    password="${password:-admin}"
+    
+    log_info "Keycloak: https://localhost:${kc_port}"
+    log_info "Realm: ${realm}"
+    log_info "Client: ${client_id}"
+    
+    # Get admin token
+    local token
+    token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${password}" | jq -r '.access_token')
+    
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        log_error "Failed to get Keycloak admin token"
+        return 1
+    fi
+    
+    # Get client UUID
+    local client_uuid
+    client_uuid=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients" \
+        -H "Authorization: Bearer $token" | jq -r ".[] | select(.clientId==\"${client_id}\") | .id")
+    
+    if [ -z "$client_uuid" ]; then
+        log_error "Client ${client_id} not found in realm ${realm}"
+        return 1
+    fi
+    
+    log_info "Client UUID: ${client_uuid}"
+    
+    # Define required mappers
+    local mappers=(
+        '{"name":"clearance","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"clearance","user.attribute":"clearance","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
+        '{"name":"countryOfAffiliation","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"countryOfAffiliation","user.attribute":"countryOfAffiliation","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
+        '{"name":"acpCOI","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"acpCOI","user.attribute":"acpCOI","jsonType.label":"JSON","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true","multivalued":"true"}}'
+        '{"name":"uniqueID","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"uniqueID","user.attribute":"uniqueID","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
+        '{"name":"realm roles","protocol":"openid-connect","protocolMapper":"oidc-usermodel-realm-role-mapper","config":{"claim.name":"realm_access.roles","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","multivalued":"true"}}'
+    )
+    
+    local created=0
+    local skipped=0
+    
+    for mapper_json in "${mappers[@]}"; do
+        local mapper_name=$(echo "$mapper_json" | jq -r '.name')
+        
+        # Check if mapper exists
+        local existing
+        existing=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            -H "Authorization: Bearer $token" | jq -r ".[] | select(.name==\"${mapper_name}\") | .id")
+        
+        if [ -n "$existing" ]; then
+            log_verbose "Mapper '${mapper_name}' already exists"
+            skipped=$((skipped + 1))
+        else
+            # Create mapper
+            curl -sk -X POST "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                -d "$mapper_json"
+            log_info "Created mapper: ${mapper_name}"
+            created=$((created + 1))
+        fi
+    done
+    
+    echo ""
+    log_success "Protocol mappers fixed for ${code_upper}"
+    log_info "Created: ${created}, Skipped (existing): ${skipped}"
+    echo ""
+    log_warn "Users must log out and back in to get tokens with new claims"
+}
+
 # =============================================================================
 # MODULE DISPATCH
 # =============================================================================
@@ -2577,6 +2701,7 @@ module_spoke() {
         init-keycloak)  spoke_init_keycloak ;;
         reinit-client)  spoke_reinit_client ;;
         fix-client)     spoke_reinit_client ;;  # Alias for reinit-client
+        fix-mappers)    spoke_fix_mappers ;;    # Fix missing protocol mappers
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
         opal-token)     spoke_opal_token "$@" ;;
