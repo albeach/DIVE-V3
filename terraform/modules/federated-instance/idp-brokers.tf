@@ -170,10 +170,12 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
 #
 # Without these IdP mappers, federated user's AMR is never updated on the Hub!
 
-# AMR IdP Mapper - extracts amr from Spoke token → stores to user.amr
-# BEST PRACTICE: Read the native 'amr' claim (JSON array from oidc-amr-mapper)
-# Keycloak's IdP mapper handles JSON arrays and stores as multi-valued attribute
-# The event listener then handles both formats (multi-valued or JSON string)
+# AMR IdP Mapper - extracts user_amr from Spoke token → stores to user.amr
+# CRITICAL (Jan 2026): Must use 'user_amr' NOT 'amr' claim!
+# The native oidc-amr-mapper reads AUTH_METHODS_REF from session notes,
+# but during federation token generation the session notes may be empty.
+# The user_amr claim (from oidc-usermodel-attribute-mapper) reads from
+# user.amr attribute which IS always correct (set by spoke's event listener).
 resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   for_each = var.federation_partners
 
@@ -183,14 +185,15 @@ resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"          = "amr"   # Read native amr claim (JSON array from oidc-amr-mapper)
-    "user.attribute" = "amr"   # Store to local user's amr attribute
-    "syncMode"       = "FORCE" # Update on every login
+    "claim"          = "user_amr" # Read from user attribute mapper claim (guaranteed correct)
+    "user.attribute" = "amr"      # Store to local user's amr attribute
+    "syncMode"       = "FORCE"    # Update on every login (dynamic!)
   }
 }
 
-# ACR IdP Mapper - extracts acr from Spoke token → stores to user.acr
-# BEST PRACTICE: Read the native 'acr' claim (from oidc-acr-mapper)
+# ACR IdP Mapper - extracts user_acr from Spoke token → stores to user.acr
+# Same rationale as AMR - the native oidc-acr-mapper may not have session data
+# during federation, but user_acr from user attribute mapper is always correct.
 resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   for_each = var.federation_partners
 
@@ -200,9 +203,9 @@ resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"          = "acr"   # Read native acr claim (from oidc-acr-mapper)
-    "user.attribute" = "acr"   # Store to local user's acr attribute
-    "syncMode"       = "FORCE" # Update on every login
+    "claim"          = "user_acr" # Read from user attribute mapper claim (guaranteed correct)
+    "user.attribute" = "acr"      # Store to local user's acr attribute
+    "syncMode"       = "FORCE"    # Update on every login (dynamic!)
   }
 }
 
