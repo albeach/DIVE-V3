@@ -86,7 +86,7 @@ NATO_COUNTRIES=(
 #   Postgres:  5432 + offset (5432-5463)
 #   MongoDB:   27017 + offset (27017-27048)
 #   Redis:     6379 + offset (6379-6410)
-#   OPA:       8181 + (offset * 10) (8181-8491) - larger gaps to avoid conflicts
+#   OPA:       9100 + offset (9100-9131) - avoids port conflicts
 #   KAS:       9000 + offset (9000-9031)
 # =============================================================================
 
@@ -256,7 +256,7 @@ get_country_ports() {
     echo "SPOKE_POSTGRES_PORT=$((5432 + offset))"
     echo "SPOKE_MONGODB_PORT=$((27017 + offset))"
     echo "SPOKE_REDIS_PORT=$((6379 + offset))"
-    echo "SPOKE_OPA_PORT=$((8181 + offset * 10))"
+    echo "SPOKE_OPA_PORT=$((9100 + offset))"
     echo "SPOKE_KAS_PORT=$((9000 + offset))"
 }
 
@@ -352,7 +352,7 @@ get_country_json() {
     "postgres": $((5432 + offset)),
     "mongodb": $((27017 + offset)),
     "redis": $((6379 + offset)),
-    "opa": $((8181 + offset * 10)),
+    "opa": $((9100 + offset)),
     "kas": $((9000 + offset))
   }
 }
@@ -532,7 +532,7 @@ SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + offset))
 SPOKE_POSTGRES_PORT=$((5432 + offset))
 SPOKE_MONGODB_PORT=$((27017 + offset))
 SPOKE_REDIS_PORT=$((6379 + offset))
-SPOKE_OPA_PORT=$((8181 + (offset * 10)))
+SPOKE_OPA_PORT=$((9100 + offset))
 SPOKE_KAS_PORT=$((9000 + offset))
 EOF
 }
