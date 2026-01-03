@@ -924,38 +924,99 @@ ensure_hub_idp_client_in_spoke() {
         log_warn "Generated new client secret (Hub IdP may need update)"
     fi
 
-    # Redirect URIs for Hub's broker endpoint
-    local redirect_uris='["https://localhost:8443/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint","https://localhost:8443/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint/*","https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint","https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/'${code_lower}'-idp/endpoint/*"]'
-    local web_origins='["https://localhost:8443","https://localhost:3000","https://usa-idp.dive25.com","https://usa-app.dive25.com"]'
+    # Calculate spoke's frontend port using SSOT
+    eval "$(_get_spoke_ports "$spoke_code")"
+    local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
+    local backend_port="${SPOKE_BACKEND_PORT:-4000}"
+
+    # Federation-specific redirect URIs (Hub→Spoke broker callbacks)
+    local fed_redirect_uris=(
+        "https://localhost:8443/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint"
+        "https://localhost:8443/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*"
+        "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint"
+        "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*"
+    )
+
+    # Frontend-specific redirect URIs (CRITICAL: Required for login to work!)
+    local frontend_redirect_uris=(
+        "https://localhost:${frontend_port}"
+        "https://localhost:${frontend_port}/*"
+        "https://localhost:${frontend_port}/api/auth/callback/keycloak"
+        "https://${code_lower}-app.dive25.com"
+        "https://${code_lower}-app.dive25.com/*"
+        "https://${code_lower}-app.dive25.com/api/auth/callback/keycloak"
+        "https://localhost:3000"
+        "https://localhost:3000/*"
+        "*"
+    )
+
+    # Web origins (frontend + Hub)
+    local web_origins=(
+        "https://localhost:${frontend_port}"
+        "https://localhost:${backend_port}"
+        "https://${code_lower}-app.dive25.com"
+        "https://localhost:8443"
+        "https://localhost:3000"
+        "https://localhost:4000"
+        "https://usa-idp.dive25.com"
+        "https://usa-app.dive25.com"
+        "*"
+    )
 
     if [ -n "$existing_client" ]; then
-        # Update existing client with correct secret
+        # CRITICAL FIX: When client exists, MERGE redirect URIs instead of replacing
+        # This preserves frontend login URIs while adding federation URIs
+        log_info "Client exists - merging redirect URIs to preserve frontend login"
+
+        # Get existing redirect URIs
+        local existing_uris
+        existing_uris=$(curl -sk "https://localhost:${kc_port}/admin/realms/${spoke_realm}/clients/${existing_client}" \
+            -H "Authorization: Bearer $spoke_token" | jq -r '.redirectUris // []')
+
+        # Combine all URIs (frontend + federation), remove duplicates
+        local all_redirect_uris=$(printf '%s\n' "${frontend_redirect_uris[@]}" "${fed_redirect_uris[@]}" | sort -u | jq -R . | jq -s .)
+        local all_web_origins=$(printf '%s\n' "${web_origins[@]}" | sort -u | jq -R . | jq -s .)
+
+        # Update client with merged URIs AND secret
         curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/${spoke_realm}/clients/${existing_client}" \
             -H "Authorization: Bearer $spoke_token" \
             -H "Content-Type: application/json" \
-            -d "{\"secret\": \"${hub_idp_secret}\"}" >/dev/null
-        log_success "Updated ${client_id} secret in ${spoke_realm}"
+            -d "{
+                \"secret\": \"${hub_idp_secret}\",
+                \"redirectUris\": ${all_redirect_uris},
+                \"webOrigins\": ${all_web_origins}
+            }" >/dev/null
+
+        log_success "Updated ${client_id} with merged redirect URIs in ${spoke_realm}"
         return 0
     fi
 
-    # Create new client
+    # Create new client with BOTH frontend AND federation redirect URIs
+    # CRITICAL: The main broker client is used by BOTH:
+    #   1. The spoke's frontend for login (localhost:${frontend_port})
+    #   2. The Hub for federation callbacks
+    local all_redirect_uris=$(printf '%s\n' "${frontend_redirect_uris[@]}" "${fed_redirect_uris[@]}" | sort -u | jq -R . | jq -s .)
+    local all_web_origins=$(printf '%s\n' "${web_origins[@]}" | sort -u | jq -R . | jq -s .)
+
     local client_payload=$(cat <<EOF
 {
     "clientId": "${client_id}",
-    "name": "DIVE V3 Hub Federation Client",
-    "description": "Client for Hub-to-${code_upper} federation flow",
+    "name": "DIVE V3 Application - ${code_upper}",
+    "description": "Main application client for ${code_upper} instance (frontend + federation)",
     "enabled": true,
     "protocol": "openid-connect",
     "publicClient": false,
     "clientAuthenticatorType": "client-secret",
     "secret": "${hub_idp_secret}",
     "standardFlowEnabled": true,
-    "directAccessGrantsEnabled": false,
+    "directAccessGrantsEnabled": true,
     "serviceAccountsEnabled": false,
-    "redirectUris": ${redirect_uris},
-    "webOrigins": ${web_origins},
+    "redirectUris": ${all_redirect_uris},
+    "webOrigins": ${all_web_origins},
     "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://localhost:${frontend_port}##https://localhost:${frontend_port}/*##https://${code_lower}-app.dive25.com##https://${code_lower}-app.dive25.com/*",
+        "backchannel.logout.session.required": "true"
     }
 }
 EOF
