@@ -235,6 +235,42 @@ spoke_verify_deployment() {
         failures+=("Keycloak not accessible")
     fi
 
+    # 7. Verify client redirect URIs include frontend (CRITICAL for login to work)
+    local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
+    local client_id="dive-v3-broker-${code_lower}"
+    local realm_name="dive-v3-broker-${code_lower}"
+    local redirect_uri_check=""
+
+    # Get admin token
+    local kc_pass=""
+    kc_pass=$(get_keycloak_password "dive-spoke-${code_lower}-keycloak" 2>/dev/null || true)
+    if [ -n "$kc_pass" ]; then
+        local admin_token
+        admin_token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" -d "username=admin" -d "password=${kc_pass}" -d "client_id=admin-cli" 2>/dev/null | \
+            grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+        if [ -n "$admin_token" ]; then
+            # Check if frontend redirect URI is in the client config
+            redirect_uri_check=$(curl -sk -H "Authorization: Bearer ${admin_token}" \
+                "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" 2>/dev/null | \
+                grep -o "localhost:${frontend_port}" || true)
+
+            if [ -n "$redirect_uri_check" ]; then
+                echo "  ✅ Client ${client_id} has frontend redirect URIs (port ${frontend_port})"
+            else
+                echo "  ❌ Client ${client_id} MISSING frontend redirect URIs!"
+                echo "     This will cause 'Invalid redirect_uri' errors during login."
+                echo "     Fix: ./dive --instance ${code_lower} spoke reinit-client"
+                failures+=("Client missing frontend redirect URIs")
+            fi
+        else
+            echo "  ⚠️  Could not verify client redirect URIs (no admin token)"
+        fi
+    else
+        echo "  ⚠️  Could not verify client redirect URIs (no password)"
+    fi
+
     echo ""
     if [ ${#failures[@]} -eq 0 ]; then
         log_success "All deployment verifications passed!"

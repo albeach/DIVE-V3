@@ -2169,6 +2169,141 @@ spoke_init_keycloak() {
     (cd "${DIVE_ROOT}" && bash "${DIVE_ROOT}/scripts/spoke-init/init-keycloak.sh" "${code_upper}")
 }
 
+# =============================================================================
+# SPOKE REINIT CLIENT - Fix client redirect URIs
+# =============================================================================
+# Fixes the main broker client's redirect URIs to include both:
+#   1. Frontend login URLs (localhost:PORT, instance-app.dive25.com)
+#   2. Federation callback URLs (for Hub→Spoke flow)
+#
+# This command fixes the "Invalid redirect_uri" error that occurs when
+# federation scripts overwrote the frontend redirect URIs.
+#
+# Usage: ./dive --instance nzl spoke reinit-client
+# =============================================================================
+spoke_reinit_client() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+
+    print_header
+    echo -e "${BOLD}Reinitializing Client Redirect URIs:${NC} ${code_upper}"
+    echo ""
+
+    # Get port configuration
+    eval "$(get_instance_ports "$code_upper")"
+    local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
+    local backend_port="${SPOKE_BACKEND_PORT:-4000}"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local realm_name="dive-v3-broker-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
+
+    # Get admin password
+    local kc_pass=""
+    kc_pass=$(get_keycloak_password "dive-spoke-${code_lower}-keycloak" 2>/dev/null || true)
+
+    if [ -z "$kc_pass" ]; then
+        # Try from .env
+        if [ -f "$spoke_dir/.env" ]; then
+            kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+        fi
+    fi
+
+    if [ -z "$kc_pass" ]; then
+        log_error "Cannot find Keycloak admin password"
+        return 1
+    fi
+
+    # Get admin token
+    log_step "Getting admin token..."
+    local admin_token
+    admin_token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" -d "username=admin" -d "password=${kc_pass}" -d "client_id=admin-cli" 2>/dev/null | \
+        jq -r '.access_token // empty')
+
+    if [ -z "$admin_token" ]; then
+        log_error "Failed to get admin token"
+        return 1
+    fi
+
+    # Get client UUID
+    log_step "Finding client ${client_id}..."
+    local client_uuid
+    client_uuid=$(curl -sk -H "Authorization: Bearer ${admin_token}" \
+        "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" 2>/dev/null | \
+        jq -r '.[0].id // empty')
+
+    if [ -z "$client_uuid" ]; then
+        log_error "Client not found: ${client_id}"
+        return 1
+    fi
+
+    log_info "Client UUID: ${client_uuid}"
+
+    # Build comprehensive redirect URIs
+    log_step "Updating redirect URIs..."
+
+    local redirect_uris=$(cat <<EOF
+[
+    "https://localhost:${frontend_port}",
+    "https://localhost:${frontend_port}/*",
+    "https://localhost:${frontend_port}/api/auth/callback/keycloak",
+    "https://${code_lower}-app.dive25.com",
+    "https://${code_lower}-app.dive25.com/*",
+    "https://${code_lower}-app.dive25.com/api/auth/callback/keycloak",
+    "https://localhost:3000",
+    "https://localhost:3000/*",
+    "https://localhost:3000/api/auth/callback/keycloak",
+    "https://localhost:8443/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint",
+    "https://localhost:8443/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*",
+    "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint",
+    "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/broker/${code_lower}-idp/endpoint/*",
+    "*"
+]
+EOF
+)
+
+    local web_origins=$(cat <<EOF
+[
+    "https://localhost:${frontend_port}",
+    "https://localhost:${backend_port}",
+    "https://${code_lower}-app.dive25.com",
+    "https://localhost:3000",
+    "https://localhost:4000",
+    "https://localhost:8443",
+    "https://usa-idp.dive25.com",
+    "https://usa-app.dive25.com",
+    "*"
+]
+EOF
+)
+
+    # Update client
+    local result
+    result=$(curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/${realm_name}/clients/${client_uuid}" \
+        -H "Authorization: Bearer ${admin_token}" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"redirectUris\": ${redirect_uris},
+            \"webOrigins\": ${web_origins}
+        }" -w "%{http_code}" -o /dev/null)
+
+    if [ "$result" = "204" ]; then
+        log_success "Client redirect URIs updated successfully!"
+        echo ""
+        echo "  Frontend URIs: https://localhost:${frontend_port}/*"
+        echo "  Federation URIs: Hub broker callbacks"
+        echo ""
+        echo "  Test login: Open https://localhost:${frontend_port} in browser"
+    else
+        log_error "Failed to update client (HTTP ${result})"
+        return 1
+    fi
+}
+
 spoke_logs() {
     local service="${1:-}"
 
@@ -2439,6 +2574,8 @@ module_spoke() {
         gen-certs)      spoke_generate_certs "$@" ;;
         rotate-certs)   spoke_rotate_certs "$@" ;;
         init-keycloak)  spoke_init_keycloak ;;
+        reinit-client)  spoke_reinit_client ;;
+        fix-client)     spoke_reinit_client ;;  # Alias for reinit-client
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
         opal-token)     spoke_opal_token "$@" ;;
