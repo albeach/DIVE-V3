@@ -115,19 +115,45 @@ if [[ -f "$NATO_DB_PATH" ]]; then
     source "$NATO_DB_PATH"
 fi
 
-# Get port offset from NATO database or fall back to legacy offsets
-if type -t get_country_offset >/dev/null 2>&1 && is_nato_country "$CODE_UPPER" 2>/dev/null; then
+# Get port offset - use common.sh's SSOT if available, otherwise inline fallback
+# Priority: common.sh get_instance_ports > nato-countries.sh > inline fallback
+COMMON_SH="${SCRIPT_DIR}/../dive-modules/common.sh"
+if [[ -f "$COMMON_SH" ]]; then
+    source "$COMMON_SH"
+fi
+
+if type -t get_instance_ports >/dev/null 2>&1; then
+    # Use SSOT from common.sh
+    eval "$(get_instance_ports "$CODE_UPPER" 2>/dev/null)"
+    local_port_offset=$SPOKE_PORT_OFFSET
+    local_kc_port=$SPOKE_KEYCLOAK_HTTPS_PORT
+    log_info "Using SSOT port calculation: offset=$local_port_offset, keycloak=$local_kc_port"
+elif type -t get_country_offset >/dev/null 2>&1 && is_nato_country "$CODE_UPPER" 2>/dev/null; then
     local_port_offset=$(get_country_offset "$CODE_UPPER")
+    local_kc_port=$((8443 + local_port_offset))
     log_info "Using NATO database port offset: $local_port_offset for $CODE_UPPER"
 else
-    # Legacy fallback for non-NATO or when database not loaded
+    # Inline fallback matching common.sh exactly - partner nations + NATO core
     case "$CODE_UPPER" in
+        # NATO core countries (offset 0-31, from nato-countries.sh)
         USA) local_port_offset=0 ;;
-        *)   local_port_offset=$(( ($(echo "$CODE_UPPER" | cksum | cut -d' ' -f1) % 20) + 15 )) ;;
+        GBR) local_port_offset=1 ;;
+        FRA) local_port_offset=2 ;;
+        DEU) local_port_offset=3 ;;
+        CAN) local_port_offset=4 ;;
+        # Partner nations (offset 32-39, from common.sh)
+        AUS) local_port_offset=32 ;;
+        NZL) local_port_offset=33 ;;
+        JPN) local_port_offset=34 ;;
+        KOR) local_port_offset=35 ;;
+        ISR) local_port_offset=36 ;;
+        UKR) local_port_offset=37 ;;
+        # Unknown: hash-based offset 48+ to avoid conflicts
+        *)   local_port_offset=$(( ($(echo "$CODE_UPPER" | cksum | cut -d' ' -f1) % 20) + 48 )) ;;
     esac
-    log_warn "NATO database not loaded, using fallback offset: $local_port_offset"
+    local_kc_port=$((8443 + local_port_offset))
+    log_warn "Using inline fallback port offset: $local_port_offset for $CODE_UPPER"
 fi
-local_kc_port=$((8443 + local_port_offset))
 
 # Detect local development mode
 IS_LOCAL_DEV=false
