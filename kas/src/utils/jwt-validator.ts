@@ -1,12 +1,12 @@
 /**
  * JWT Validator for KAS (Key Access Service)
- * 
+ *
  * Implements secure JWT signature verification using JWKS
  * Adapted from backend/src/middleware/authz.middleware.ts
- * 
+ *
  * CRITICAL SECURITY FIX: Gap #3 - KAS JWT Verification
  * Date: October 20, 2025
- * 
+ *
  * This module replaces the insecure jwt.decode() with proper signature verification
  * to prevent forged token attacks on the Key Access Service.
  */
@@ -80,11 +80,11 @@ const getRealmFromToken = (token: string): string => {
 /**
  * Get signing key from JWKS with FEDERATION support
  * Uses direct JWKS fetch with caching
- * 
+ *
  * CRITICAL FIX (Dec 2, 2025):
  * For cross-instance federation, the JWKS must be fetched from the TOKEN'S ISSUER,
  * not the local Keycloak. A GBR-issued JWT needs GBR Keycloak's public key!
- * 
+ *
  * Flow:
  * 1. Extract issuer URL from JWT's `iss` claim
  * 2. Fetch JWKS from issuer's /protocol/openid-connect/certs endpoint
@@ -105,7 +105,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
         }
         return uri;
     };
-    
+
     if (token) {
         try {
             const decoded = jwt.decode(token, { complete: true }) as jwt.Jwt | null;
@@ -222,15 +222,15 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
 
 /**
  * Verify JWT token with signature verification and dual-issuer support
- * 
+ *
  * SECURITY FIX: This replaces jwt.decode() with proper signature verification
- * 
+ *
  * Multi-Realm Migration (Oct 21, 2025):
  * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
  * - Backward compatible: Existing tokens from dive-v3-broker still work
  * - Forward compatible: New tokens from dive-v3-broker federation accepted
  * - Dual audience support: dive-v3-client AND dive-v3-broker
- * 
+ *
  * @param token - JWT bearer token from request
  * @returns Decoded and verified token payload
  * @throws Error if token is invalid, expired, or signature verification fails
@@ -258,7 +258,7 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
         // Multi-realm: Accept tokens from all federated partner Keycloak instances
         // Each KAS must accept JWTs from ALL coalition partners for cross-instance access
-        // 
+        //
         // CRITICAL: Federation requires accepting JWTs from ANY partner IdP
         // A GBR user accessing FRA resources presents a GBR-issued JWT to FRA KAS
         //
@@ -270,7 +270,7 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         const validIssuers: [string, ...string[]] = [
             // Local instance (dynamic based on deployment)
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,
-            
+
             // === COALITION PARTNER IdPs (Cloudflare Tunnels) ===
             // USA
             'https://usa-idp.dive25.com/realms/dive-v3-broker',
@@ -284,7 +284,7 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             // DEU (uses prosecurity.biz domain)
             'https://deu-idp.prosecurity.biz/realms/dive-v3-broker',
             'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker',
-            
+
             // === LEGACY/DEV ISSUERS ===
             'http://localhost:8081/realms/dive-v3-broker',
             'https://localhost:8443/realms/dive-v3-broker',

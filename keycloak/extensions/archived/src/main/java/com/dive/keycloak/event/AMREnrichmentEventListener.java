@@ -82,29 +82,36 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
             // their AMR based on local credentials (they don't have local credentials).
             // Instead, preserve the AMR from their user attribute (set by IdP mapper).
             boolean isFederatedUser = user.getFederationLink() != null;
-            
+            System.out.println("[DIVE AMR DEBUG] federationLink: " + user.getFederationLink());
+
             // Check if user has federated identity providers linked
             if (!isFederatedUser) {
-                isFederatedUser = session.users().getFederatedIdentitiesStream(realm, user).findAny().isPresent();
+                long fedIdCount = session.users().getFederatedIdentitiesStream(realm, user).count();
+                System.out.println("[DIVE AMR DEBUG] federated identity count: " + fedIdCount);
+                isFederatedUser = fedIdCount > 0;
             }
-            
+
             // Also check if user has NO local credentials but HAS amr attribute (federated)
             if (!isFederatedUser) {
                 long credentialCount = user.credentialManager().getStoredCredentialsStream().count();
-                boolean hasAmrAttribute = user.getFirstAttribute("amr") != null;
-                if (credentialCount == 0 && hasAmrAttribute) {
+                String amrAttr = user.getFirstAttribute("amr");
+                System.out.println("[DIVE AMR DEBUG] credential count: " + credentialCount + ", amr attr: " + amrAttr);
+                if (credentialCount == 0 && amrAttr != null) {
                     isFederatedUser = true;
                 }
             }
             
+            System.out.println("[DIVE AMR DEBUG] isFederatedUser: " + isFederatedUser);
+
             if (isFederatedUser) {
                 // For federated users, use their existing AMR attribute (from IdP)
                 List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
+                System.out.println("[DIVE AMR DEBUG] existingAmrAttr from user: " + existingAmrAttr);
                 if (existingAmrAttr != null && !existingAmrAttr.isEmpty()) {
                     String federatedAmr = "[\"" + String.join("\",\"", existingAmrAttr) + "\"]";
                     String federatedAcr = user.getFirstAttribute("acr");
                     if (federatedAcr == null) federatedAcr = "0";
-                    
+
                     System.out.println("[DIVE AMR] Federated user detected - preserving IdP AMR: " + federatedAmr);
                     userSession.setNote("AUTH_METHODS_REF", federatedAmr);
                     userSession.setNote("AUTH_CONTEXT_CLASS_REF", federatedAcr);

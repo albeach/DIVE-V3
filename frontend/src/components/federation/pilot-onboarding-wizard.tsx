@@ -2,11 +2,11 @@
 
 /**
  * Pilot Onboarding Wizard
- * 
+ *
  * Streamlined 3-step wizard for partner onboarding during pilot demos.
  * Demonstrates the frictionless approach to federation while
  * acknowledging STANAGs and ACP-240 compliance requirements.
- * 
+ *
  * P0 Fix (Jan 2025): Now actually creates IdP in Keycloak via backend API
  */
 
@@ -21,20 +21,20 @@ interface OnboardingStep {
 }
 
 const STEPS: OnboardingStep[] = [
-  { 
-    id: 1, 
-    title: 'Partner Details', 
-    description: 'Basic information about the partner organization' 
+  {
+    id: 1,
+    title: 'Partner Details',
+    description: 'Basic information about the partner organization'
   },
-  { 
-    id: 2, 
-    title: 'Technical Setup', 
-    description: 'OIDC/SAML configuration and attribute mapping' 
+  {
+    id: 2,
+    title: 'Technical Setup',
+    description: 'OIDC/SAML configuration and attribute mapping'
   },
-  { 
-    id: 3, 
-    title: 'Review & Activate', 
-    description: 'Verify settings and enable federation' 
+  {
+    id: 3,
+    title: 'Review & Activate',
+    description: 'Verify settings and enable federation'
   },
 ];
 
@@ -75,7 +75,7 @@ export default function PilotOnboardingWizard({
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const handleQuickAdd = (partnerCode: string) => {
     setSelectedPartner(partnerCode);
     const partner = QUICK_ADD_PARTNERS.find(p => p.code === partnerCode);
@@ -91,34 +91,34 @@ export default function PilotOnboardingWizard({
       setCurrentStep(2); // Skip to technical setup
     }
   };
-  
+
   const handleComplete = async () => {
     setIsProcessing(true);
     setError(null);
-    
+
     try {
       // Validate session and token
       if (!session) {
         throw new Error('Authentication required. Please log in.');
       }
-      
+
       const token = (session as any)?.accessToken;
       if (!token) {
         throw new Error('No access token available. Please log out and log in again.');
       }
-      
+
       // Validate required fields
       if (!formData.countryCode || !formData.discoveryUrl) {
         throw new Error('Please complete all required fields.');
       }
-      
+
       // Parse discovery URL to extract issuer
       let issuer: string;
       let authorizationUrl: string;
       let tokenUrl: string;
       let userInfoUrl: string;
       let jwksUrl: string;
-      
+
       if (formData.federationType === 'oidc') {
         // Extract issuer from discovery URL
         issuer = formData.discoveryUrl.replace('/.well-known/openid-configuration', '').replace('/.well-known/openid-configuration/', '');
@@ -130,7 +130,7 @@ export default function PilotOnboardingWizard({
         // SAML - would need metadata URL parsing (simplified for now)
         throw new Error('SAML federation not yet supported in pilot wizard. Use full onboarding wizard.');
       }
-      
+
       // Build OIDC configuration
       const oidcConfig = {
         issuer,
@@ -143,7 +143,7 @@ export default function PilotOnboardingWizard({
         validateSignature: true,
         defaultScopes: 'openid profile email'
       };
-      
+
       // Create attribute mappings if auto-map is enabled
       const attributeMappings = formData.autoMapAttributes ? {
         uniqueID: { claim: 'uniqueID', userAttribute: 'uniqueID' },
@@ -156,7 +156,7 @@ export default function PilotOnboardingWizard({
         countryOfAffiliation: { claim: 'countryOfAffiliation', userAttribute: 'countryOfAffiliation' },
         acpCOI: { claim: 'acpCOI', userAttribute: 'acpCOI' }
       };
-      
+
       // Build request body matching backend API format
       const requestBody = {
         alias: `${formData.countryCode.toLowerCase()}-federation`,
@@ -166,13 +166,13 @@ export default function PilotOnboardingWizard({
         config: oidcConfig,
         attributeMappings
       };
-      
+
       console.log('[Pilot] Creating federation partner:', {
         alias: requestBody.alias,
         displayName: requestBody.displayName,
         protocol: requestBody.protocol
       });
-      
+
       // Call backend API
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
       const response = await fetch(`${backendUrl}/api/admin/idps`, {
@@ -183,18 +183,18 @@ export default function PilotOnboardingWizard({
         },
         body: JSON.stringify(requestBody)
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
         throw new Error(errorData.message || `Failed to create federation partner: ${response.status} ${response.statusText}`);
       }
-      
+
       const result = await response.json();
       console.log('[Pilot] Federation partner created successfully:', result);
-      
+
       setIsProcessing(false);
       onComplete?.(selectedPartner || formData.countryCode);
-      
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to onboard federation partner';
       console.error('[Pilot] Onboarding failed:', err);
@@ -202,17 +202,17 @@ export default function PilotOnboardingWizard({
       setIsProcessing(false);
     }
   };
-  
+
   const renderStepIndicator = () => (
     <div className="flex items-center justify-between mb-8">
       {STEPS.map((step, index) => (
         <React.Fragment key={step.id}>
           <div className="flex items-center">
-            <div 
+            <div
               className={`
                 w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
-                ${currentStep >= step.id 
-                  ? 'bg-blue-600 text-white' 
+                ${currentStep >= step.id
+                  ? 'bg-blue-600 text-white'
                   : 'bg-gray-200 text-gray-600'
                 }
                 ${currentStep === step.id ? 'ring-2 ring-blue-300 ring-offset-2' : ''}
@@ -234,7 +234,7 @@ export default function PilotOnboardingWizard({
       ))}
     </div>
   );
-  
+
   const renderStep1 = () => (
     <div className="space-y-6">
       {/* Quick Add Section */}
@@ -250,8 +250,8 @@ export default function PilotOnboardingWizard({
                 onClick={() => handleQuickAdd(partner.code)}
                 className={`
                   flex flex-col items-center p-3 rounded-lg border-2 transition-all
-                  ${isSelected 
-                    ? 'border-blue-500 bg-blue-50' 
+                  ${isSelected
+                    ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
                   }
                 `}
@@ -266,7 +266,7 @@ export default function PilotOnboardingWizard({
           Pre-configured partners for instant demo setup
         </p>
       </div>
-      
+
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-gray-200" />
@@ -275,7 +275,7 @@ export default function PilotOnboardingWizard({
           <span className="px-2 bg-white text-gray-500">or configure manually</span>
         </div>
       </div>
-      
+
       {/* Manual Configuration */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -318,7 +318,7 @@ export default function PilotOnboardingWizard({
       </div>
     </div>
   );
-  
+
   const renderStep2 = () => (
     <div className="space-y-6">
       <div>
@@ -332,8 +332,8 @@ export default function PilotOnboardingWizard({
               onClick={() => setFormData(prev => ({ ...prev, federationType: type }))}
               className={`
                 flex-1 py-3 px-4 rounded-lg border-2 text-center transition-all
-                ${formData.federationType === type 
-                  ? 'border-blue-500 bg-blue-50' 
+                ${formData.federationType === type
+                  ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-blue-300'
                 }
               `}
@@ -346,7 +346,7 @@ export default function PilotOnboardingWizard({
           ))}
         </div>
       </div>
-      
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           {formData.federationType === 'oidc' ? 'Discovery URL' : 'Metadata URL'}
@@ -355,14 +355,14 @@ export default function PilotOnboardingWizard({
           type="url"
           value={formData.discoveryUrl}
           onChange={e => setFormData(prev => ({ ...prev, discoveryUrl: e.target.value }))}
-          placeholder={formData.federationType === 'oidc' 
+          placeholder={formData.federationType === 'oidc'
             ? 'https://idp.example.com/.well-known/openid-configuration'
             : 'https://idp.example.com/metadata.xml'
           }
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
         />
       </div>
-      
+
       {formData.federationType === 'oidc' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -377,7 +377,7 @@ export default function PilotOnboardingWizard({
           />
         </div>
       )}
-      
+
       <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
         <input
           type="checkbox"
@@ -393,7 +393,7 @@ export default function PilotOnboardingWizard({
           </span>
         </label>
       </div>
-      
+
       {/* Pilot Mode Notice */}
       <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm">
         <div className="flex items-center gap-2 font-medium text-purple-800">
@@ -407,15 +407,15 @@ export default function PilotOnboardingWizard({
       </div>
     </div>
   );
-  
+
   const renderStep3 = () => {
     const FlagIcon = getFlagComponent(selectedPartner || formData.countryCode || 'USA');
-    
+
     return (
       <div className="space-y-6">
         <div className="p-4 bg-gray-50 rounded-lg">
           <h4 className="text-sm font-medium text-gray-700 mb-4">Configuration Summary</h4>
-          
+
           <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-200">
             <FlagIcon size={48} />
             <div>
@@ -427,7 +427,7 @@ export default function PilotOnboardingWizard({
               </div>
             </div>
           </div>
-          
+
           <dl className="grid grid-cols-1 gap-3 text-sm">
             <div className="flex justify-between">
               <dt className="text-gray-500">Admin Contact</dt>
@@ -449,7 +449,7 @@ export default function PilotOnboardingWizard({
             </div>
           </dl>
         </div>
-        
+
         {/* Compliance Acknowledgment */}
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h4 className="text-sm font-medium text-blue-800 mb-2">Standards Compliance</h4>
@@ -471,7 +471,7 @@ export default function PilotOnboardingWizard({
             Note: Full compliance validation deferred for pilot demonstration
           </p>
         </div>
-        
+
         {error && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
             <div className="flex items-center gap-2 text-red-800">
@@ -483,7 +483,7 @@ export default function PilotOnboardingWizard({
             <p className="text-sm text-red-700 mt-2">{error}</p>
           </div>
         )}
-        
+
         {isProcessing && (
           <div className="flex items-center justify-center gap-3 py-4">
             <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -493,7 +493,7 @@ export default function PilotOnboardingWizard({
       </div>
     );
   };
-  
+
   const canProceed = () => {
     switch (currentStep) {
       case 1:
@@ -506,7 +506,7 @@ export default function PilotOnboardingWizard({
         return false;
     }
   };
-  
+
   return (
     <div className={`bg-white rounded-xl shadow-lg p-6 max-w-2xl mx-auto ${className}`}>
       {/* Header */}
@@ -515,7 +515,7 @@ export default function PilotOnboardingWizard({
           <h2 className="text-xl font-bold text-gray-900">Add Federation Partner</h2>
           <p className="text-sm text-gray-500">Pilot Mode - Streamlined Onboarding</p>
         </div>
-        <button 
+        <button
           onClick={onCancel}
           className="text-gray-400 hover:text-gray-600"
         >
@@ -524,17 +524,17 @@ export default function PilotOnboardingWizard({
           </svg>
         </button>
       </div>
-      
+
       {/* Step Indicator */}
       {renderStepIndicator()}
-      
+
       {/* Step Content */}
       <div className="mb-8">
         {currentStep === 1 && renderStep1()}
         {currentStep === 2 && renderStep2()}
         {currentStep === 3 && renderStep3()}
       </div>
-      
+
       {/* Navigation */}
       <div className="flex items-center justify-between pt-4 border-t border-gray-200">
         <button
@@ -542,15 +542,15 @@ export default function PilotOnboardingWizard({
           disabled={currentStep === 1}
           className={`
             px-4 py-2 text-sm font-medium rounded-lg
-            ${currentStep === 1 
-              ? 'text-gray-300 cursor-not-allowed' 
+            ${currentStep === 1
+              ? 'text-gray-300 cursor-not-allowed'
               : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
             }
           `}
         >
           ← Back
         </button>
-        
+
         {currentStep < 3 ? (
           <button
             onClick={() => setCurrentStep(prev => prev + 1)}

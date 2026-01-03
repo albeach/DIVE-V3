@@ -51,34 +51,34 @@ is_running() {
 
 verify_hub() {
     log_header "HUB (USA) Verification"
-    
+
     local container="dive-hub-keycloak"
     if ! is_running "$container"; then
         log_fail "Hub Keycloak not running"
         return 1
     fi
-    
+
     local token=$(get_token $container)
     if [ -z "$token" ]; then
         log_fail "Cannot authenticate to Hub Keycloak"
         return 1
     fi
-    
+
     # Get broker client UUID
     local client_uuid=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/clients?clientId=dive-v3-broker-usa" \
         -H "Authorization: Bearer $token" | jq -r '.[0].id // empty')
-    
+
     if [ -z "$client_uuid" ]; then
         log_fail "dive-v3-broker-usa client not found on Hub"
         return 1
     fi
-    
+
     log_pass "dive-v3-broker-usa client exists"
-    
+
     # Check mappers
     local mappers=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $token")
-    
+
     # Check for AMR fallback mapper with correct type
     local amr_fallback=$(echo "$mappers" | jq -r '.[] | select(.name == "amr-user-attribute-fallback")')
     if [ -n "$amr_fallback" ]; then
@@ -91,7 +91,7 @@ verify_hub() {
     else
         log_fail "amr-user-attribute-fallback mapper NOT FOUND"
     fi
-    
+
     # Check for ACR fallback mapper with correct type
     local acr_fallback=$(echo "$mappers" | jq -r '.[] | select(.name == "acr-user-attribute-fallback")')
     if [ -n "$acr_fallback" ]; then
@@ -104,7 +104,7 @@ verify_hub() {
     else
         log_fail "acr-user-attribute-fallback mapper NOT FOUND"
     fi
-    
+
     # Check for native session mappers
     local native_amr=$(echo "$mappers" | jq -r '.[] | select(.protocolMapper == "oidc-amr-mapper") | .name')
     if [ -n "$native_amr" ]; then
@@ -122,36 +122,36 @@ verify_spoke() {
     local code=$1
     local code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
     local code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
-    
+
     log_header "SPOKE ($code_upper) Verification"
-    
+
     local container="dive-spoke-${code_lower}-keycloak"
     if ! is_running "$container"; then
         log_warn "Spoke $code_upper Keycloak not running (skipping)"
         return 0
     fi
-    
+
     local token=$(get_token $container)
     if [ -z "$token" ]; then
         log_fail "Cannot authenticate to $code_upper Keycloak"
         return 1
     fi
-    
+
     # Get dive-v3-broker-usa client UUID (the client Hub uses to federate TO this spoke)
     local usa_client=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}/clients?clientId=dive-v3-broker-usa" \
         -H "Authorization: Bearer $token" | jq -r '.[0].id // empty')
-    
+
     if [ -z "$usa_client" ]; then
         log_fail "dive-v3-broker-usa client not found on $code_upper"
         return 1
     fi
-    
+
     log_pass "dive-v3-broker-usa client exists"
-    
+
     # Check mappers
     local mappers=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}/clients/${usa_client}/protocol-mappers/models" \
         -H "Authorization: Bearer $token")
-    
+
     # Check for AMR user-attribute mapper with correct type
     local amr_mapper=$(echo "$mappers" | jq -r '.[] | select(.protocolMapper == "oidc-usermodel-attribute-mapper" and (.name | test("amr"; "i")))')
     if [ -n "$amr_mapper" ]; then
@@ -165,12 +165,12 @@ verify_spoke() {
     else
         log_fail "AMR user-attribute mapper NOT FOUND"
     fi
-    
+
     # Check frontendUrl matches exposed port
     local frontend_url=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}" \
         -H "Authorization: Bearer $token" | jq -r '.attributes.frontendUrl // "not set"')
     local exposed_port=$(docker port "$container" 8443 2>/dev/null | cut -d: -f2 || echo "unknown")
-    
+
     if [[ "$frontend_url" == *":$exposed_port"* ]]; then
         log_pass "frontendUrl ($frontend_url) matches exposed port ($exposed_port)"
     else

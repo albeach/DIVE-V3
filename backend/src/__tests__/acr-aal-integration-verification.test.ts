@@ -1,23 +1,23 @@
 /**
  * ACR/AAL Integration Verification Test Suite
- * 
+ *
  * Purpose: Verify that real users across different instances receive correct ACR/AAL
  * based on their clearance level by actually authenticating with Keycloak.
- * 
+ *
  * Test Users (format: testuser-[COUNTRYCODE]-[1-4]):
  * - testuser-usa-3 (SECRET) → Should get AAL2 (ACR="1", AMR=["pwd","otp"])
  * - testuser-fra-2 (CONFIDENTIAL) → Should get AAL2 (ACR="1", AMR=["pwd","otp"])
  * - testuser-deu-4 (TOP_SECRET) → Should get AAL3 (ACR="2", AMR=["pwd","hwk"])
- * 
+ *
  * Password: TestUser2025!Pilot (from terraform/modules/federated-instance/test-users.tf)
- * 
+ *
  * This test requires:
  * - Keycloak instances running (USA, FRA, DEU)
  * - Test users created via Terraform
  * - MFA configured for users requiring AAL2/AAL3
- * 
+ *
  * Run with: npm test -- acr-aal-integration-verification.test.ts
- * 
+ *
  * Environment Variables:
  *   KEYCLOAK_URL_USA - USA Keycloak URL (default: https://usa-idp.dive25.com)
  *   KEYCLOAK_URL_FRA - FRA Keycloak URL (default: https://fra-idp.dive25.com)
