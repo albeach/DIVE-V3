@@ -99,6 +99,53 @@ echo ""
 "$SCRIPT_DIR/seed-hub-resources.sh" 200
 
 # =============================================================================
+# Disable VERIFY_PROFILE and UPDATE_PROFILE (ACP-240 PII Minimization)
+# =============================================================================
+echo ""
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}  Configuring ACP-240 PII Minimization                          ${NC}"
+echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+
+# Get admin token
+ADMIN_PASSWORD=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "admin")
+TOKEN=$(curl -sk -X POST "https://localhost:8443/realms/master/protocol/openid-connect/token" \
+    -d "grant_type=password" \
+    -d "username=admin" \
+    -d "password=${ADMIN_PASSWORD}" \
+    -d "client_id=admin-cli" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+if [ -n "$TOKEN" ]; then
+    # Disable VERIFY_PROFILE
+    curl -sk -X PUT "https://localhost:8443/admin/realms/dive-v3-broker-usa/authentication/required-actions/VERIFY_PROFILE" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "alias": "VERIFY_PROFILE",
+            "name": "Verify Profile",
+            "providerId": "VERIFY_PROFILE",
+            "enabled": false,
+            "defaultAction": false,
+            "priority": 90
+        }' 2>/dev/null && echo -e "${GREEN}✓${NC} VERIFY_PROFILE disabled"
+
+    # Disable UPDATE_PROFILE
+    curl -sk -X PUT "https://localhost:8443/admin/realms/dive-v3-broker-usa/authentication/required-actions/UPDATE_PROFILE" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "alias": "UPDATE_PROFILE",
+            "name": "Update Profile",
+            "providerId": "UPDATE_PROFILE",
+            "enabled": false,
+            "defaultAction": false,
+            "priority": 40
+        }' 2>/dev/null && echo -e "${GREEN}✓${NC} UPDATE_PROFILE disabled"
+else
+    echo -e "${YELLOW}⚠${NC} Could not get admin token - profile actions not disabled"
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

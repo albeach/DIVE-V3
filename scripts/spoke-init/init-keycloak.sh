@@ -778,7 +778,7 @@ log_success "DIVE attribute mappers created"
 # ⚠️ REMOVED: Cross-Border Federation Client (v5.0)
 # =============================================================================
 # REMOVED as of Jan 2, 2026
-# 
+#
 # This dive-v3-cross-border-client was never used for actual federation.
 # Federation uses dive-v3-broker-{code} pattern exclusively:
 #   - Hub→Spoke: Hub uses dive-v3-broker-usa client ON the spoke
@@ -923,6 +923,41 @@ else
     log_warn "apply-user-profile.sh not found or not executable"
     log_info "Run manually: ./scripts/spoke-init/apply-user-profile.sh ${CODE_UPPER}"
 fi
+
+# =============================================================================
+# DISABLE PROFILE REQUIRED ACTIONS (ACP-240 PII MINIMIZATION)
+# =============================================================================
+# ACP-240 requires PII minimization. DIVE V3 uses pseudonymous identities.
+# VERIFY_PROFILE and UPDATE_PROFILE required actions should be DISABLED to
+# prevent Keycloak from asking users for firstName, lastName, email.
+# =============================================================================
+log_step "Disabling VERIFY_PROFILE and UPDATE_PROFILE required actions (ACP-240)..."
+
+# Disable VERIFY_PROFILE
+kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/authentication/required-actions/VERIFY_PROFILE" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "alias": "VERIFY_PROFILE",
+        "name": "Verify Profile",
+        "providerId": "VERIFY_PROFILE",
+        "enabled": false,
+        "defaultAction": false,
+        "priority": 90
+    }' 2>/dev/null && log_success "VERIFY_PROFILE disabled" || log_warn "VERIFY_PROFILE already disabled"
+
+# Disable UPDATE_PROFILE
+kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/authentication/required-actions/UPDATE_PROFILE" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "alias": "UPDATE_PROFILE",
+        "name": "Update Profile",
+        "providerId": "UPDATE_PROFILE",
+        "enabled": false,
+        "defaultAction": false,
+        "priority": 40
+    }' 2>/dev/null && log_success "UPDATE_PROFILE disabled" || log_warn "UPDATE_PROFILE already disabled"
 
 # =============================================================================
 # AUTO-CONFIGURE LOCALIZED MAPPERS (Phase 2 - GAP-001)
