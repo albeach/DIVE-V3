@@ -47,19 +47,23 @@ interface User {
   email?: string;
 }
 
-// Country flag emoji map
+// Country flag emoji map - All 32 NATO countries + partners
 const countryFlags: Record<string, string> = {
-  USA: '🇺🇸',
-  DEU: '🇩🇪',
-  FRA: '🇫🇷',
-  GBR: '🇬🇧',
-  CAN: '🇨🇦',
-  ITA: '🇮🇹',
-  NLD: '🇳🇱',
-  POL: '🇵🇱',
-  ESP: '🇪🇸',
-  AUS: '🇦🇺',
-  NZL: '🇳🇿',
+  // Founding NATO (1949)
+  USA: '🇺🇸', BEL: '🇧🇪', CAN: '🇨🇦', DNK: '🇩🇰', FRA: '🇫🇷',
+  ISL: '🇮🇸', ITA: '🇮🇹', LUX: '🇱🇺', NLD: '🇳🇱', NOR: '🇳🇴',
+  PRT: '🇵🇹', GBR: '🇬🇧',
+  // Cold War expansion
+  GRC: '🇬🇷', TUR: '🇹🇷', DEU: '🇩🇪', ESP: '🇪🇸',
+  // Post-Cold War
+  CZE: '🇨🇿', HUN: '🇭🇺', POL: '🇵🇱',
+  // 2004 expansion
+  BGR: '🇧🇬', EST: '🇪🇪', LVA: '🇱🇻', LTU: '🇱🇹',
+  ROU: '🇷🇴', SVK: '🇸🇰', SVN: '🇸🇮',
+  // 2009-2023 expansion
+  ALB: '🇦🇱', HRV: '🇭🇷', MNE: '🇲🇪', MKD: '🇲🇰', FIN: '🇫🇮', SWE: '🇸🇪',
+  // Partners
+  AUS: '🇦🇺', NZL: '🇳🇿', JPN: '🇯🇵', KOR: '🇰🇷',
 };
 
 // Country full names
