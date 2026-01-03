@@ -110,11 +110,11 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                 // 2. JSON string: "[\"pwd\",\"otp\"]" - if IdP mapper stored native amr claim as string
                 List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
                 System.out.println("[DIVE AMR DEBUG] existingAmrAttr from user: " + existingAmrAttr);
-                
+
                 if (existingAmrAttr != null && !existingAmrAttr.isEmpty()) {
                     List<String> amrMethods = new ArrayList<>();
                     String federatedAmr;
-                    
+
                     // Check if first element looks like a JSON array (IdP stored native amr as string)
                     String firstVal = existingAmrAttr.get(0);
                     if (firstVal.startsWith("[") && firstVal.contains("\"")) {
@@ -131,7 +131,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                         amrMethods.addAll(existingAmrAttr);
                         federatedAmr = "[\"" + String.join("\",\"", amrMethods) + "\"]";
                     }
-                    
+
                     // Get ACR - also handle both formats
                     String federatedAcr = user.getFirstAttribute("acr");
                     if (federatedAcr == null) federatedAcr = "0";
@@ -139,7 +139,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                     federatedAcr = federatedAcr.replaceAll("\"", "");
 
                     System.out.println("[DIVE AMR] Federated user detected - preserving IdP AMR: " + federatedAmr + ", ACR: " + federatedAcr);
-                    
+
                     // Set session notes so native oidc-amr-mapper works correctly
                     // This ensures BOTH federated and non-federated users get amr from session
                     userSession.setNote("AUTH_METHODS_REF", federatedAmr);
@@ -148,7 +148,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                     userSession.setNote("acr", federatedAcr);
                     userSession.setNote("amr", federatedAmr);
                     userSession.setNote("auth_time", String.valueOf(System.currentTimeMillis() / 1000));
-                    
+
                     System.out.println("[DIVE AMR] Federated AMR/ACR set in session notes for user: " + user.getUsername());
                     return;
                 }
