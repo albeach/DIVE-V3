@@ -142,7 +142,7 @@ export function getClientCredentialsForIdP(idpAlias: string): { clientId: string
 
     // Default to broker client
     return {
-        clientId: process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-client-broker',
+        clientId: process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker',
         clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
     };
 }

@@ -86,7 +86,7 @@ export default function PilotOnboardingWizard({
         countryCode: partner.code,
         adminEmail: `admin@${partner.code.toLowerCase()}.dive-pilot.example`,
         discoveryUrl: `https://${partner.code.toLowerCase()}-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration`,
-        clientId: `dive-v3-client-${partner.code.toLowerCase()}`,
+        clientId: `dive-v3-broker-${partner.code.toLowerCase()}`,
       }));
       setCurrentStep(2); // Skip to technical setup
     }
@@ -138,7 +138,7 @@ export default function PilotOnboardingWizard({
         tokenUrl,
         userInfoUrl,
         jwksUrl,
-        clientId: formData.clientId || `dive-v3-client-${formData.countryCode.toLowerCase()}`,
+        clientId: formData.clientId || `dive-v3-broker-${formData.countryCode.toLowerCase()}`,
         clientSecret: '', // Will be set via federation secret sync
         validateSignature: true,
         defaultScopes: 'openid profile email'

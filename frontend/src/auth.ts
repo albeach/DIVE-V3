@@ -244,32 +244,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
         },
         warn(code, ...message) {
-            // #region agent log
-            console.warn('[DEBUG H1-H5] NextAuth warning:', { code, message: message.slice(0, 2) });
-            // #endregion
             console.warn('[NextAuth Warn]', code, message);
         },
         debug(code, ...message) {
-            // #region agent log
-            console.log('[DEBUG H1-H5] NextAuth debug:', { code, message: message.slice(0, 2) });
-            // #endregion
-            console.log('[NextAuth Debug]', code, message);
+            // Only log debug in development
+            if (process.env.NODE_ENV === 'development') {
+                console.log('[NextAuth Debug]', code, message);
+            }
         },
     },
     providers: [
         Keycloak({
-            // #region agent log
-            // Log provider configuration at startup (H1: issuer mismatch)
-            ...(() => {
-                console.log('[DEBUG H1] Keycloak provider config:', {
-                    AUTH_KEYCLOAK_ID: process.env.AUTH_KEYCLOAK_ID,
-                    AUTH_KEYCLOAK_SECRET_EXISTS: !!(process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_SECRET,
-                    AUTH_KEYCLOAK_ISSUER: (process.env as Record<string, string | undefined>).AUTH_KEYCLOAK_ISSUER,
-                    NEXTAUTH_URL: process.env.NEXTAUTH_URL
-                });
-                return {};
-            })(),
-            // #endregion
             // Auth.js standard configuration (per https://authjs.dev/getting-started/providers/keycloak)
             // Uses AUTH_KEYCLOAK_ID, AUTH_KEYCLOAK_SECRET, AUTH_KEYCLOAK_ISSUER from environment
             // Auth.js automatically discovers endpoints via OIDC discovery from issuer
@@ -285,24 +270,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // FIX (Nov 7): Profile callback to handle remote IdPs without email
             // and capture DIVE attributes from Keycloak tokens
             profile(profile) {
-                // #region agent log
-                console.log('[DEBUG H2] Keycloak profile callback:', {
-                    hasSub: !!profile.sub,
-                    hasEmail: !!profile.email,
-                    uniqueID: profile.uniqueID ?? null,
-                    countryOfAffiliation: profile.countryOfAffiliation ?? null
-                });
-                // #endregion
-                console.log('[NextAuth profile()] Raw Keycloak profile:', {
-                    sub: profile.sub,
-                    email: profile.email,
-                    preferred_username: profile.preferred_username,
-                    name: profile.name,
-                    uniqueID: profile.uniqueID,
-                    clearance: profile.clearance,
-                    countryOfAffiliation: profile.countryOfAffiliation,
-                    acpCOI: profile.acpCOI,
-                });
+                // Log profile in development only
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[NextAuth profile()] Keycloak profile:', {
+                        sub: profile.sub,
+                        email: profile.email,
+                        preferred_username: profile.preferred_username,
+                        name: profile.name,
+                        uniqueID: profile.uniqueID,
+                        clearance: profile.clearance,
+                        countryOfAffiliation: profile.countryOfAffiliation,
+                        acpCOI: profile.acpCOI,
+                    });
+                }
 
                 // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
                 let email = profile.email;
@@ -654,31 +634,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     // These are critical for AAL2/AAL3 enforcement in OPA policies
                                     // Reference: AAL-MFA-ROOT-CAUSE-ANALYSIS.md (Issue #1)
 
-                                    // ACR: Normalize to string format; fallback to derive from AMR
-                                    // Keycloak may return numeric (0,1,2) or string ("aal1","aal2","aal3")
+                                    // ACR: For federated users, prioritize user_acr (from IdP)
+                                    // The user_acr claim contains the ACR value from the federated Spoke's actual authentication.
+                                    // The direct acr claim comes from the Hub's session (SSO cookie reuse, always 1).
                                     let acr: string | undefined;
-                                    if (payload.acr !== undefined && payload.acr !== null) {
+                                    
+                                    // For federated users: use user_acr (from Spoke's authentication)
+                                    // For direct users: use acr (from Hub's authentication)
+                                    if (payload.user_acr !== undefined && payload.user_acr !== null) {
+                                        acr = String(payload.user_acr);
+                                    } else if (payload.acr !== undefined && payload.acr !== null) {
                                         acr = String(payload.acr);
                                     }
 
-                                    // AMR: Normalize to array format
-                                    // Keycloak may return array ["pwd","otp"] or JSON string "[\"pwd\",\"otp\"]"
-                                    let amr: string[] = ['pwd']; // default
-                                    if (payload.amr) {
-                                        if (Array.isArray(payload.amr)) {
-                                            amr = payload.amr;
-                                        } else if (typeof payload.amr === 'string') {
+                                    // AMR: For federated users, prioritize user_amr (from IdP)
+                                    // The user_amr claim contains the AMR array from the federated Spoke's actual authentication.
+                                    // The direct amr claim comes from the Hub's session (empty for SSO cookie reuse).
+                                    let amr: string[] = ['pwd']; // default fallback
+                                    
+                                    // For federated users: use user_amr (from Spoke's authentication)
+                                    // For direct users: use amr (from Hub's authentication)
+                                    const amrSource = payload.user_amr || payload.amr;
+                                    
+                                    if (amrSource) {
+                                        if (Array.isArray(amrSource)) {
+                                            amr = amrSource;
+                                        } else if (typeof amrSource === 'string') {
+                                            // Sometimes stored as JSON string
                                             try {
-                                                const parsed = JSON.parse(payload.amr);
+                                                const parsed = JSON.parse(amrSource);
                                                 amr = Array.isArray(parsed) ? parsed : [parsed];
                                             } catch {
-                                                amr = [payload.amr];
+                                                // Not JSON, treat as single value
+                                                amr = [amrSource];
                                             }
-                                        } else {
-                                            amr = ['pwd'];
                                         }
-                                    } else {
-                                        console.log('[DIVE] AMR not present in JWT, defaulting to ["pwd"]');
                                     }
                                     session.user.amr = amr;
 
@@ -712,52 +702,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                     // auth_time: Unix timestamp of authentication event
                                     // Used for token freshness validation in OPA
                                     session.user.auth_time = payload.auth_time;
-
-                                    // COMPREHENSIVE AAL DEBUGGING - Full stack trace
-                                    console.group('🔍 [DIVE AAL DEBUG] Full Authentication Context Trace');
-                                    console.log('📋 Raw Token Payload:', {
-                                        raw_acr: payload.acr,
-                                        raw_acr_type: typeof payload.acr,
-                                        raw_amr: payload.amr,
-                                        raw_amr_type: typeof payload.amr,
-                                        raw_auth_time: payload.auth_time,
-                                        clearance: payload.clearance,
-                                        uniqueID: payload.uniqueID,
-                                    });
-                                    console.log('🔄 ACR Processing:', {
-                                        initial_acr: payload.acr,
-                                        normalized_acr: acr,
-                                        acr_after_derivation: session.user.acr,
-                                    });
-                                    console.log('🔄 AMR Processing:', {
-                                        initial_amr: payload.amr,
-                                        normalized_amr: amr,
-                                        amr_set: Array.from(amrSet),
-                                        has_hwk: amrSet.has('hwk'),
-                                        has_webauthn: amrSet.has('webauthn'),
-                                        has_otp: amrSet.has('otp'),
-                                        amr_length: amr.length,
-                                    });
-                                    console.log('📊 AAL Derivation Logic:', {
-                                        acr_before_derivation: acr,
-                                        acr_is_zero_or_missing: !acr || acr === '0' || acr === 'aal1',
-                                        has_hwk_or_webauthn: amrSet.has('hwk') || amrSet.has('webauthn'),
-                                        has_multiple_factors: amr.length >= 2,
-                                        has_otp: amrSet.has('otp'),
-                                        derived_acr: session.user.acr,
-                                    });
-                                    console.log('✅ Final Session Claims:', {
-                                        uniqueID: session.user.uniqueID,
-                                        clearance: session.user.clearance,
-                                        country: session.user.countryOfAffiliation,
-                                        roles: session.user.roles,
-                                        acr: session.user.acr,
-                                        amr: session.user.amr,
-                                        auth_time: session.user.auth_time,
-                                        expected_aal_for_clearance: payload.clearance === 'TOP_SECRET' ? 'AAL3' :
-                                                                     (payload.clearance === 'SECRET' || payload.clearance === 'CONFIDENTIAL') ? 'AAL2' : 'AAL1',
-                                    });
-                                    console.groupEnd();
                                 }
                             } catch (error) {
                                 console.error('Failed to decode id_token for custom claims:', error);

@@ -334,12 +334,12 @@ else
 fi
 
 # Test 6.4: Realm has DIVE V3 client with protocol mappers
-if jq -e '.clients[] | select(.clientId=="dive-v3-client-broker")' "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
-    pass "dive-v3-client-broker client defined"
+if jq -e '.clients[] | select(.clientId=="dive-v3-broker")' "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
+    pass "dive-v3-broker client defined"
 
     # Check for DIVE mappers on client
     for attr in clearance countryOfAffiliation uniqueID acpCOI; do
-        if jq -e ".clients[] | select(.clientId==\"dive-v3-client-broker\") | .protocolMappers[] | select(.name==\"${attr}\")" \
+        if jq -e ".clients[] | select(.clientId==\"dive-v3-broker\") | .protocolMappers[] | select(.name==\"${attr}\")" \
             "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
             pass "  Client has ${attr} mapper"
         else
@@ -347,7 +347,7 @@ if jq -e '.clients[] | select(.clientId=="dive-v3-client-broker")' "keycloak/rea
         fi
     done
 else
-    fail "dive-v3-client-broker client not defined"
+    fail "dive-v3-broker client not defined"
 fi
 
 # =============================================================================

@@ -109,7 +109,11 @@ echo -e "  ${BLUE}ℹ${NC} Verifying Keycloak Admin API is responsive..."
 KC_READY=false
 for i in {1..30}; do
     # Try to get admin token as readiness check
-    KC_ADMIN_PASS=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    # CRITICAL: Try KC_BOOTSTRAP_ADMIN_PASSWORD first (Keycloak 26+), then legacy KEYCLOAK_ADMIN_PASSWORD
+    KC_ADMIN_PASS=$(docker exec "$KC_CONTAINER" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -z "$KC_ADMIN_PASS" ]; then
+        KC_ADMIN_PASS=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    fi
     if [ -n "$KC_ADMIN_PASS" ]; then
         TOKEN_CHECK=$(docker exec "$KC_CONTAINER" curl -sf \
             -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \

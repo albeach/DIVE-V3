@@ -184,7 +184,7 @@
   },
   "defaults": {
     "realm": "dive-v3-broker",
-    "clientId": "dive-v3-client-broker",
+    "clientId": "dive-v3-broker",
     "tokenLifetime": "15m",
     "sessionLifetime": "10h",
     "clearanceLevels": [

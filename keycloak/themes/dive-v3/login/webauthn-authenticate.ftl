@@ -35,9 +35,9 @@
 
     <!-- Authenticate Button (Hero Style) -->
     <div class="dive-form-buttons">
-        <button 
+        <button
             id="authenticateWebAuthnButton"
-            class="dive-button-primary dive-button-hero" 
+            class="dive-button-primary dive-button-hero"
             type="button"
             onclick="webAuthnAuthenticate()"
         >
@@ -233,12 +233,18 @@
         window.webAuthnAuthenticate = webAuthnAuthenticate;
         window.retryAuthentication = retryAuthentication;
 
-        // Auto-trigger authentication on page load for seamless UX
+        // BEST PRACTICE: Do NOT auto-trigger WebAuthn on page load
+        // In federated SSO flows with redirects, the document may not be focused,
+        // causing "NotAllowedError: The document is not focused" errors.
+        // User must click the "Sign in with Passkey" button to initiate authentication.
+        // This ensures proper user interaction before calling navigator.credentials.get()
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('[WebAuthn] Page loaded, auto-triggering authentication in 500ms');
-            setTimeout(() => {
-                webAuthnAuthenticate();
-            }, 500);
+            console.log('[WebAuthn] Page loaded - awaiting user interaction (click button to authenticate)');
+            // Focus the button so user knows to click it
+            const authButton = document.getElementById('authenticateWebAuthnButton');
+            if (authButton) {
+                authButton.focus();
+            }
         });
     </script>
 

@@ -1,12 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-ita-18e78f7e",
+    "spokeId": "spoke-ita-4219f454",
     "instanceCode": "ITA",
-    "name": "Italian Defence Forces",
-    "description": "DIVE V3 Spoke Instance for Italian Defence Forces",
+    "name": "Italy",
+    "description": "DIVE V3 Spoke Instance for Italy",
     "country": "ITA",
     "organizationType": "government",
-    "contactEmail": "admin@ita.dive25.com"
+    "contactEmail": "admin@ita.dive25.com",
+    "registeredSpokeId": "spoke-ita-0776c697"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:ita",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2026-01-02T05:05:14Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -45,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-28T04:03:41Z",
-    "lastModified": "2025-12-28T04:03:41Z",
+    "createdAt": "2026-01-02T05:01:03Z",
+    "lastModified": "2026-01-02T05:01:03Z",
     "configHash": ""
   }
 }

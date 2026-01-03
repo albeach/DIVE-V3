@@ -290,9 +290,9 @@ echo "$MAPPERS" | jq -r '.[] | "  \(.local) → \(.dive)"'
 # This client is used when OTHER instances federate TO this spoke
 # =============================================================================
 echo ""
-echo -e "${BOLD}Step 5: Configuring federation client (dive-v3-client-${COUNTRY_LOWER})${NC}"
+echo -e "${BOLD}Step 5: Configuring federation client (dive-v3-broker-${COUNTRY_LOWER})${NC}"
 
-FED_CLIENT_ID="dive-v3-client-${COUNTRY_LOWER}"
+FED_CLIENT_ID="dive-v3-broker-${COUNTRY_LOWER}"
 FED_CLIENT_UUID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/clients?clientId=${FED_CLIENT_ID}" \
     -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
 

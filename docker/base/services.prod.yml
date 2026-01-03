@@ -75,7 +75,7 @@ services:
   # Keycloak - Identity Provider/Broker (Production Mode)
   # ---------------------------------------------------------------------------
   keycloak-base:
-    image: quay.io/keycloak/keycloak:26.2.4
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.4.7}
     restart: unless-stopped
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: ["start", "--optimized", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true"]

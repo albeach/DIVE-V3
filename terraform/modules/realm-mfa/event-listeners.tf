@@ -26,7 +26,8 @@ resource "keycloak_realm_events" "mfa_events" {
 
   # Enable event listeners
   # jboss-logging: Standard Keycloak event logging for security monitoring
-  # NOTE: dive-amr-enrichment custom SPI removed - using native Keycloak ACR/AMR mappers instead
+  # NOTE: Using native Keycloak oidc-acr-mapper and oidc-amr-mapper for ACR/AMR claims.
+  # These read from the authentication session, populated by authenticators during login.
   events_listeners = [
     "jboss-logging"
   ]

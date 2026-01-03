@@ -62,7 +62,7 @@ _auto_register_kas() {
   "authMethod": "jwt",
   "authConfig": {
     "jwtIssuer": "https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}",
-    "jwtAudience": "dive-v3-client-broker"
+    "jwtAudience": "dive-v3-broker"
   },
   "trustLevel": "high",
   "supportedCountries": ["$code_upper"],
@@ -789,7 +789,7 @@ EOF
             _gcp_secret_upsert "dive-v3-mongodb-${code_lower}" "$mongo_pass" "${GCP_PROJECT:-dive25}"
             _gcp_secret_upsert "dive-v3-redis-${code_lower}" "$redis_pass" "${GCP_PROJECT:-dive25}"
             _gcp_secret_upsert "dive-v3-keycloak-${code_lower}" "$keycloak_pass" "${GCP_PROJECT:-dive25}"
-            _gcp_secret_upsert "dive-v3-client-secret-${code_lower}" "$client_secret" "${GCP_PROJECT:-dive25}"
+            _gcp_secret_upsert "dive-v3-keycloak-secret-${code_lower}" "$client_secret" "${GCP_PROJECT:-dive25}"
             _gcp_secret_upsert "dive-v3-auth-secret-${code_lower}" "$auth_secret" "${GCP_PROJECT:-dive25}"
             _gcp_secret_upsert "dive-v3-jwt-secret-${code_lower}" "$jwt_secret" "${GCP_PROJECT:-dive25}"
             _gcp_secret_upsert "dive-v3-nextauth-secret-${code_lower}" "$nextauth_secret" "${GCP_PROJECT:-dive25}"

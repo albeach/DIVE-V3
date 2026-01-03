@@ -65,9 +65,9 @@ _hub_validate_client_ids() {
     # Check 1: Ensure .env.hub has correct KEYCLOAK_CLIENT_ID
     if [ -f "$env_file" ]; then
         local env_client_id=$(grep "^KEYCLOAK_CLIENT_ID=" "$env_file" 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "")
-        if [ "$env_client_id" = "dive-v3-client-broker" ]; then
+        if [ "$env_client_id" = "dive-v3-broker" ]; then
             log_warn "Found generic client ID in .env.hub, updating to instance-specific..."
-            sed -i.bak 's/^KEYCLOAK_CLIENT_ID=dive-v3-client-broker$/KEYCLOAK_CLIENT_ID=dive-v3-client-broker-usa/' "$env_file"
+            sed -i.bak 's/^KEYCLOAK_CLIENT_ID=dive-v3-client-broker$/KEYCLOAK_CLIENT_ID=dive-v3-broker-usa/' "$env_file"
             rm -f "${env_file}.bak"
             log_success "Updated .env.hub with correct client ID"
         fi
@@ -76,7 +76,7 @@ _hub_validate_client_ids() {
     # Check 2: Verify running containers have correct environment
     if docker ps --format '{{.Names}}' | grep -q "dive-hub-frontend"; then
         local frontend_client_id=$(docker exec dive-hub-frontend printenv AUTH_KEYCLOAK_ID 2>/dev/null || echo "")
-        if [ "$frontend_client_id" = "dive-v3-client-broker" ]; then
+        if [ "$frontend_client_id" = "dive-v3-broker" ]; then
             log_error "Frontend container has incorrect client ID (requires restart)"
             errors=$((errors + 1))
         fi
@@ -84,7 +84,7 @@ _hub_validate_client_ids() {
 
     if docker ps --format '{{.Names}}' | grep -q "dive-hub-backend"; then
         local backend_client_id=$(docker exec dive-hub-backend printenv KEYCLOAK_CLIENT_ID 2>/dev/null || echo "")
-        if [ "$backend_client_id" = "dive-v3-client-broker" ]; then
+        if [ "$backend_client_id" = "dive-v3-broker" ]; then
             log_error "Backend container has incorrect client ID (requires restart)"
             errors=$((errors + 1))
         fi
@@ -103,11 +103,11 @@ _hub_validate_client_ids() {
             -d "password=${KEYCLOAK_ADMIN_PASSWORD}" 2>/dev/null | jq -r '.access_token' 2>/dev/null)
 
         if [ -n "$token" ] && [ "$token" != "null" ]; then
-            local client_exists=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/clients?clientId=dive-v3-client-broker-usa" \
+            local client_exists=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/clients?clientId=dive-v3-broker-usa" \
                 -H "Authorization: Bearer $token" 2>/dev/null | jq -r '.[0].clientId' 2>/dev/null)
 
-            if [ "$client_exists" != "dive-v3-client-broker-usa" ]; then
-                log_error "Keycloak realm missing correct client: dive-v3-client-broker-usa"
+            if [ "$client_exists" != "dive-v3-broker-usa" ]; then
+                log_error "Keycloak realm missing correct client: dive-v3-broker-usa"
                 errors=$((errors + 1))
             fi
         fi
@@ -520,6 +520,13 @@ hub_up() {
     log_step "Applying Terraform configuration (MFA flows)..."
     _hub_apply_terraform || log_warn "Terraform apply had issues (MFA may not be configured)"
 
+    # Configure AMR mappers (critical for federated authentication)
+    # This ensures the correct user-attribute mappers are in place
+    log_step "Configuring AMR mappers..."
+    if [ -f "${DIVE_ROOT}/scripts/hub-init/configure-amr.sh" ]; then
+        bash "${DIVE_ROOT}/scripts/hub-init/configure-amr.sh" 2>/dev/null || log_warn "AMR configuration had issues (non-blocking)"
+    fi
+
     # Check if hub has been initialized (users and resources seeded)
     local init_marker="${HUB_DATA_DIR}/.initialized"
     if [ ! -f "$init_marker" ]; then
@@ -678,6 +685,83 @@ _hub_apply_terraform() {
     }
 
     log_success "Terraform configuration applied"
+
+    # Disable Review Profile in First Broker Login flow (best practice for federation)
+    _hub_disable_review_profile || log_warn "Could not disable Review Profile"
+}
+
+# =============================================================================
+# Disable Review Profile in First Broker Login Flow (Best Practice)
+# =============================================================================
+# For trusted federation, "Review Profile" should be DISABLED because:
+# 1. Federated IdPs (Spokes) are trusted
+# 2. User attributes are imported from federated tokens
+# 3. Profile verification adds friction and breaks seamless SSO
+# =============================================================================
+_hub_disable_review_profile() {
+    local keycloak_url="${HUB_KEYCLOAK_URL}"
+    local realm="dive-v3-broker-usa"
+
+    # Get admin token
+    local admin_password
+    admin_password=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
+
+    if [ -z "$admin_password" ]; then
+        log_warn "Cannot get Keycloak admin password"
+        return 1
+    fi
+
+    local token
+    token=$(curl -sk -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_password}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        log_warn "Cannot authenticate to Keycloak"
+        return 1
+    fi
+
+    log_info "Disabling Review Profile in First Broker Login flow..."
+
+    # Get the Review Profile execution details
+    local exec_json
+    exec_json=$(curl -sk -H "Authorization: Bearer $token" \
+        "${keycloak_url}/admin/realms/${realm}/authentication/flows/first%20broker%20login/executions" 2>/dev/null | \
+        jq '.[] | select(.providerId == "idp-review-profile")')
+
+    if [ -z "$exec_json" ]; then
+        log_warn "Review Profile execution not found"
+        return 1
+    fi
+
+    local current_req
+    current_req=$(echo "$exec_json" | jq -r '.requirement')
+
+    if [ "$current_req" = "DISABLED" ]; then
+        log_info "Review Profile already DISABLED"
+        return 0
+    fi
+
+    # Update to DISABLED
+    local update_payload
+    update_payload=$(echo "$exec_json" | jq '.requirement = "DISABLED"')
+
+    local http_status
+    http_status=$(curl -sk -X PUT \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        "${keycloak_url}/admin/realms/${realm}/authentication/flows/first%20broker%20login/executions" \
+        -d "$update_payload" -w "%{http_code}" -o /dev/null 2>/dev/null)
+
+    if [ "$http_status" = "204" ]; then
+        log_success "Review Profile disabled in Hub First Broker Login flow"
+        return 0
+    else
+        log_warn "Failed to disable Review Profile (HTTP $http_status)"
+        return 1
+    fi
 }
 
 _hub_verify_deployment() {
@@ -1282,6 +1366,11 @@ hub_amr() {
     shift || true
 
     case "$action" in
+        configure)
+            # Configure AMR mappers (replaces oidc-amr-mapper with user-attribute mapper)
+            log_step "Configuring AMR mappers..."
+            bash "${DIVE_ROOT}/scripts/hub-init/configure-amr.sh" "$@"
+            ;;
         sync)
             # Sync AMR attributes for all users based on configured credentials
             log_step "Syncing AMR attributes..."

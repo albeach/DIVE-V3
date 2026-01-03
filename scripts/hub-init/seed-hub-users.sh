@@ -159,43 +159,46 @@ if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
         log_success "acpCOI mapper set to multivalued"
     fi
 
-    # Configure native oidc-amr-mapper (reads from authentication session)
-    # This ensures AMR claim reflects ACTUAL authentication methods used
-    # First, remove any existing AMR mappers (broken user-attribute ones)
+    # Configure DIVE AMR mapper (derives AMR from ACR)
+    # CRITICAL FIX (Jan 2026): Native oidc-amr-mapper does NOT work because:
+    # - auth-username-password-form is NOT configurable (cannot set "reference" property)
+    # - Therefore "pwd" is never added to AMR, resulting in amr: []
+    #
+    # Solution: Use dive-amr-protocol-mapper which DERIVES AMR from ACR:
+    # - ACR "1" → AMR ["pwd"]           (AAL1: password only)
+    # - ACR "2" → AMR ["pwd", "otp"]    (AAL2: password + OTP)
+    # - ACR "3" → AMR ["pwd", "hwk"]    (AAL3: password + WebAuthn)
+    #
+    # First, remove any existing AMR mappers
     for mapper_id in $(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
-        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name | contains("amr")) | .id'); do
+        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name | test("amr|AMR"; "i")) | .id'); do
         curl -sk -X DELETE "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${mapper_id}" \
             -H "Authorization: Bearer $TOKEN" > /dev/null 2>&1
     done
 
-    # Create AMR mapper (user attribute based - reads from user.attributes.amr)
-    # This is set based on user's configured credentials (pwd, otp, hwk)
+    # Create DIVE AMR mapper (derives AMR from ACR - actually works!)
     AMR_MAPPER=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
-        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name | contains("amr")) | .name')
+        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.protocolMapper == "dive-amr-protocol-mapper") | .name')
 
     if [ -z "$AMR_MAPPER" ]; then
         curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d '{
-                "name": "amr (credential-based)",
+                "name": "amr (ACR-derived)",
                 "protocol": "openid-connect",
-                "protocolMapper": "oidc-usermodel-attribute-mapper",
+                "protocolMapper": "dive-amr-protocol-mapper",
                 "consentRequired": false,
                 "config": {
                     "introspection.token.claim": "true",
                     "userinfo.token.claim": "true",
-                    "user.attribute": "amr",
                     "id.token.claim": "true",
-                    "access.token.claim": "true",
-                    "claim.name": "amr",
-                    "jsonType.label": "String",
-                    "multivalued": "true"
+                    "access.token.claim": "true"
                 }
             }' > /dev/null 2>&1
-        log_success "AMR mapper configured (credential-based)"
+        log_success "AMR mapper configured (dive-amr-protocol-mapper: ACR-derived)"
     else
-        log_info "AMR mapper already exists: $AMR_MAPPER"
+        log_info "DIVE AMR mapper already exists: $AMR_MAPPER"
     fi
 fi
 

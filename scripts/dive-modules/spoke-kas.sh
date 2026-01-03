@@ -267,7 +267,7 @@ spoke_kas_register() {
   "authMethod": "jwt",
   "authConfig": {
     "jwtIssuer": "${idp_url}",
-    "jwtAudience": "dive-v3-client-broker"
+    "jwtAudience": "dive-v3-broker"
   },
   "trustLevel": "high",
   "supportedCountries": ["${code_upper}"],

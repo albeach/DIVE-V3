@@ -38,7 +38,7 @@ if [ "$INSTANCE_LOWER" = "usa" ]; then
     KC_PORT=8443
     APP_PORT=3000
     REALM="dive-v3-broker-usa"
-    CLIENT_ID="dive-v3-client-broker-usa"
+    CLIENT_ID="dive-v3-broker-usa"
     CONTAINER_PREFIX="dive-hub"
     ENV_FILE=".env.hub"
 else
@@ -57,7 +57,7 @@ else
     fi
 
     REALM="dive-v3-broker-${INSTANCE_LOWER}"
-    CLIENT_ID="dive-v3-client-broker-${INSTANCE_LOWER}"
+    CLIENT_ID="dive-v3-broker-${INSTANCE_LOWER}"
     CONTAINER_PREFIX="dive-spoke-${INSTANCE_LOWER}"
     ENV_FILE="instances/${INSTANCE_LOWER}/.env"
 

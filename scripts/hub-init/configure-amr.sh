@@ -56,7 +56,7 @@ done
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
 REALM_NAME="${REALM_NAME:-dive-v3-broker}"
-CLIENT_ID="${CLIENT_ID:-dive-v3-client-broker}"
+CLIENT_ID="${CLIENT_ID:-dive-v3-broker}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
 ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
 

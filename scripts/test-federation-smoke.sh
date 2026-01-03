@@ -25,9 +25,9 @@ test_step() {
     local step_name="$1"
     local expected="$2"
     local actual="$3"
-    
+
     TOTAL=$((TOTAL + 1))
-    
+
     if [ "$expected" = "$actual" ]; then
         echo -e "${GREEN}✅ PASS${NC} - $step_name"
         PASSED=$((PASSED + 1))
@@ -176,12 +176,12 @@ GBR_USER_CHECK=$(docker exec gbr-keycloak-gbr-1 /opt/keycloak/bin/kcadm.sh \
 test_step "GBR Test User Exists (testuser-gbr-4)" "testuser-gbr-4" "$GBR_USER_CHECK"
 
 # Test 12: USA test user exists
-echo -e "${BLUE}Checking if test-usa-ts exists...${NC}"
+echo -e "${BLUE}Checking if testuser-usa-4 exists...${NC}"
 USA_USER_CHECK=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh \
   get users -r dive-v3-broker \
-  -q username=test-usa-ts 2>&1 | jq -r '.[0].username' 2>/dev/null || echo "not_found")
+  -q username=testuser-usa-4 2>&1 | jq -r '.[0].username' 2>/dev/null || echo "not_found")
 
-test_step "USA Test User Exists (test-usa-ts)" "test-usa-ts" "$USA_USER_CHECK"
+test_step "USA Test User Exists (testuser-usa-4)" "testuser-usa-4" "$USA_USER_CHECK"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

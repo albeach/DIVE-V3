@@ -314,7 +314,7 @@ bootstrap_broker_realm() {
     local public_url="${NEXT_PUBLIC_KEYCLOAK_URL:-https://localhost:8443}"
     local frontend_url="${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}"
     local api_url="${NEXT_PUBLIC_API_URL:-https://localhost:4000}"
-    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}"
+    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-broker}"
     local client_secret="${KEYCLOAK_CLIENT_SECRET:-}"
     local extra_web_origins="${WEB_ORIGINS_EXTRA:-}"
     local max_retries=3
@@ -456,7 +456,7 @@ ensure_broker_realm() {
 }
 
 ensure_client_https_redirects() {
-    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}"
+    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-broker}"
     local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
     local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"

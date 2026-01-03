@@ -40,18 +40,18 @@ NATO_COUNTRIES=(
     ["PRT"]="Portugal|🇵🇹|#006600|#FF0000|Europe/Lisbon|1949"
     ["GBR"]="United Kingdom|🇬🇧|#012169|#C8102E|Europe/London|1949"
     ["USA"]="United States|🇺🇸|#002868|#BF0A30|America/New_York|1949"
-    
+
     # Cold War Expansion (1952-1982) - 4 countries
     ["GRC"]="Greece|🇬🇷|#0D5EAF|#FFFFFF|Europe/Athens|1952"
     ["TUR"]="Turkey|🇹🇷|#E30A17|#FFFFFF|Europe/Istanbul|1952"
     ["DEU"]="Germany|🇩🇪|#000000|#DD0000|Europe/Berlin|1955"
     ["ESP"]="Spain|🇪🇸|#AA151B|#F1BF00|Europe/Madrid|1982"
-    
+
     # Post-Cold War Expansion (1999) - 3 countries
     ["CZE"]="Czechia|🇨🇿|#11457E|#D7141A|Europe/Prague|1999"
     ["HUN"]="Hungary|🇭🇺|#CD2A3E|#436F4D|Europe/Budapest|1999"
     ["POL"]="Poland|🇵🇱|#DC143C|#FFFFFF|Europe/Warsaw|1999"
-    
+
     # 2004 Expansion (Big Bang) - 7 countries
     ["BGR"]="Bulgaria|🇧🇬|#00966E|#D62612|Europe/Sofia|2004"
     ["EST"]="Estonia|🇪🇪|#0072CE|#000000|Europe/Tallinn|2004"
@@ -60,13 +60,13 @@ NATO_COUNTRIES=(
     ["ROU"]="Romania|🇷🇴|#002B7F|#FCD116|Europe/Bucharest|2004"
     ["SVK"]="Slovakia|🇸🇰|#0B4EA2|#EE1C25|Europe/Bratislava|2004"
     ["SVN"]="Slovenia|🇸🇮|#005DA4|#ED1C24|Europe/Ljubljana|2004"
-    
+
     # 2009-2020 Expansion - 4 countries
     ["ALB"]="Albania|🇦🇱|#E41E20|#000000|Europe/Tirane|2009"
     ["HRV"]="Croatia|🇭🇷|#FF0000|#171796|Europe/Zagreb|2009"
     ["MNE"]="Montenegro|🇲🇪|#C40308|#D4AF37|Europe/Podgorica|2017"
     ["MKD"]="North Macedonia|🇲🇰|#D20000|#FFE600|Europe/Skopje|2020"
-    
+
     # Nordic Expansion (2023-2024) - 2 countries
     ["FIN"]="Finland|🇫🇮|#002F6C|#FFFFFF|Europe/Helsinki|2023"
     ["SWE"]="Sweden|🇸🇪|#006AA7|#FECC00|Europe/Stockholm|2024"
@@ -93,7 +93,7 @@ declare -A NATO_PORT_OFFSETS
 NATO_PORT_OFFSETS=(
     # USA as hub gets offset 0
     ["USA"]=0
-    
+
     # Remaining 31 countries in alphabetical order (offsets 1-31)
     ["ALB"]=1
     ["BEL"]=2
@@ -226,14 +226,14 @@ is_nato_country() {
 get_country_ports() {
     local code="${1^^}"
     local offset
-    
+
     if ! is_nato_country "$code"; then
         echo "# ERROR: $code is not a valid NATO country code"
         return 1
     fi
-    
+
     offset="${NATO_PORT_OFFSETS[$code]}"
-    
+
     # Export calculated ports
     echo "SPOKE_PORT_OFFSET=$offset"
     echo "SPOKE_FRONTEND_PORT=$((3000 + offset))"
@@ -304,12 +304,12 @@ list_nato_ports() {
 # Usage: get_country_json "GBR"
 get_country_json() {
     local code="${1^^}"
-    
+
     if ! is_nato_country "$code"; then
         echo "{\"error\": \"Invalid NATO country code: $code\"}"
         return 1
     fi
-    
+
     local name=$(get_country_name "$code")
     local flag=$(get_country_flag "$code")
     local primary=$(get_country_primary_color "$code")
@@ -317,7 +317,7 @@ get_country_json() {
     local timezone=$(get_country_timezone "$code")
     local year=$(get_country_join_year "$code")
     local offset=$(get_country_offset "$code")
-    
+
     cat <<EOF
 {
   "code": "$code",
@@ -352,17 +352,17 @@ EOF
 # Usage: validate_nato_country "XYZ" → error message or empty if valid
 validate_nato_country() {
     local code="${1^^}"
-    
+
     if [ -z "$code" ]; then
         echo "ERROR: Country code is required"
         return 1
     fi
-    
+
     if [ ${#code} -ne 3 ]; then
         echo "ERROR: Country code must be exactly 3 characters (ISO 3166-1 alpha-3)"
         return 1
     fi
-    
+
     if ! is_nato_country "$code"; then
         echo "ERROR: '$code' is not a valid NATO member country code"
         echo ""
@@ -371,7 +371,7 @@ validate_nato_country() {
         echo "... (use 'list_nato_countries' for full list)"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -380,13 +380,13 @@ validate_nato_country() {
 check_port_conflicts() {
     local -A seen_ports
     local conflicts=0
-    
+
     for code in "${!NATO_COUNTRIES[@]}"; do
         local offset=${NATO_PORT_OFFSETS[$code]}
         local frontend=$((3000 + offset))
         local backend=$((4000 + offset))
         local keycloak=$((8443 + offset))
-        
+
         for port in $frontend $backend $keycloak; do
             if [[ -v seen_ports[$port] ]]; then
                 echo "CONFLICT: Port $port used by both ${seen_ports[$port]} and $code"
@@ -396,7 +396,7 @@ check_port_conflicts() {
             fi
         done
     done
-    
+
     if [ $conflicts -eq 0 ]; then
         echo "✓ No port conflicts detected across all 32 NATO countries"
         return 0
@@ -410,6 +410,7 @@ check_port_conflicts() {
 # PARTNER NATIONS (Non-NATO, for future expansion)
 # =============================================================================
 # These are not NATO members but may participate in exercises/pilots
+# Port offsets 32-39 reserved for partner nations
 
 declare -A PARTNER_NATIONS=(
     ["AUS"]="Australia|🇦🇺|#002868|#FFFFFF|Australia/Sydney|PARTNER"
@@ -420,10 +421,163 @@ declare -A PARTNER_NATIONS=(
     ["UKR"]="Ukraine|🇺🇦|#0057B7|#FFDD00|Europe/Kyiv|PARTNER"
 )
 
+# Partner nation port offsets (32-39)
+declare -A PARTNER_PORT_OFFSETS=(
+    ["AUS"]=32
+    ["NZL"]=33
+    ["JPN"]=34
+    ["KOR"]=35
+    ["ISR"]=36
+    ["UKR"]=37
+)
+
 # Check if code is a partner nation
 is_partner_nation() {
     local code="${1^^}"
     [[ -v PARTNER_NATIONS[$code] ]]
+}
+
+# Get partner nation name
+get_partner_name() {
+    local code="${1^^}"
+    if [[ -v PARTNER_NATIONS[$code] ]]; then
+        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f1
+    fi
+}
+
+# Get partner nation flag
+get_partner_flag() {
+    local code="${1^^}"
+    if [[ -v PARTNER_NATIONS[$code] ]]; then
+        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f2
+    fi
+}
+
+# Get partner nation primary color
+get_partner_primary_color() {
+    local code="${1^^}"
+    if [[ -v PARTNER_NATIONS[$code] ]]; then
+        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f3
+    fi
+}
+
+# Get partner nation secondary color
+get_partner_secondary_color() {
+    local code="${1^^}"
+    if [[ -v PARTNER_NATIONS[$code] ]]; then
+        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f4
+    fi
+}
+
+# Get partner nation timezone
+get_partner_timezone() {
+    local code="${1^^}"
+    if [[ -v PARTNER_NATIONS[$code] ]]; then
+        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f5
+    fi
+}
+
+# Get partner nation port offset
+get_partner_offset() {
+    local code="${1^^}"
+    if [[ -v PARTNER_PORT_OFFSETS[$code] ]]; then
+        echo "${PARTNER_PORT_OFFSETS[$code]}"
+    else
+        echo "32"  # Default fallback
+    fi
+}
+
+# Get partner nation ports (same formula as NATO countries)
+get_partner_ports() {
+    local code="${1^^}"
+    if ! is_partner_nation "$code"; then
+        echo "# Unknown partner nation: $code" >&2
+        return 1
+    fi
+
+    local offset=$(get_partner_offset "$code")
+
+    # Same port calculation as NATO countries
+    cat << EOF
+SPOKE_FRONTEND_PORT=$((3000 + offset))
+SPOKE_BACKEND_PORT=$((4000 + offset))
+SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + offset))
+SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + offset))
+SPOKE_POSTGRES_PORT=$((5432 + offset))
+SPOKE_MONGODB_PORT=$((27017 + offset))
+SPOKE_REDIS_PORT=$((6379 + offset))
+SPOKE_OPA_PORT=$((8181 + (offset * 10)))
+SPOKE_KAS_PORT=$((9000 + offset))
+EOF
+}
+
+# List all partner nations
+list_partner_nations() {
+    for code in $(echo "${!PARTNER_NATIONS[@]}" | tr ' ' '\n' | sort); do
+        local name=$(get_partner_name "$code")
+        local flag=$(get_partner_flag "$code")
+        echo "$code: $name $flag"
+    done
+}
+
+# =============================================================================
+# UNIFIED COUNTRY FUNCTIONS (Works with both NATO and Partner Nations)
+# =============================================================================
+
+# Check if code is any valid country (NATO or Partner)
+is_valid_country() {
+    local code="${1^^}"
+    is_nato_country "$code" || is_partner_nation "$code"
+}
+
+# Get country name (unified)
+get_any_country_name() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        get_country_name "$code"
+    elif is_partner_nation "$code"; then
+        get_partner_name "$code"
+    fi
+}
+
+# Get country flag (unified)
+get_any_country_flag() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        get_country_flag "$code"
+    elif is_partner_nation "$code"; then
+        get_partner_flag "$code"
+    fi
+}
+
+# Get country timezone (unified)
+get_any_country_timezone() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        get_country_timezone "$code"
+    elif is_partner_nation "$code"; then
+        get_partner_timezone "$code"
+    fi
+}
+
+# Get country ports (unified)
+get_any_country_ports() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        get_country_ports "$code"
+    elif is_partner_nation "$code"; then
+        get_partner_ports "$code"
+    fi
+}
+
+# Get country offset (unified)
+get_any_country_offset() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        get_country_offset "$code"
+    elif is_partner_nation "$code"; then
+        get_partner_offset "$code"
+    fi
 }
 
 # =============================================================================
@@ -437,7 +591,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo ""
     echo "Total NATO Members: ${#NATO_COUNTRIES[@]}"
     echo ""
-    
+
     # Show usage if no arguments
     if [ $# -eq 0 ]; then
         echo "Usage: $0 <command> [country_code]"
@@ -456,7 +610,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         echo "  $0 json USA"
         exit 0
     fi
-    
+
     case "$1" in
         list)
             list_nato_countries

@@ -146,7 +146,7 @@ The clearance-based MFA enforcement relies on the user's `clearance` attribute. 
 
 ## Dependencies
 
-- Keycloak provider >= 5.0
+- Keycloak provider >= 5.6.0
 - Terraform >= 1.5.0
 - A realm created by the `federated-instance` module
 

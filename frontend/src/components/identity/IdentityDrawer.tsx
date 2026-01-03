@@ -29,17 +29,44 @@ export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose
     }
   }, [session?.idToken]);
 
+  // #region agent log
+  // DEBUG: Log raw token claims for ACR/AMR analysis (Hypothesis A, B, C, D, E)
+  useMemo(() => {
+    if (decoded || user) {
+      fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IdentityDrawer.tsx:35',message:'ACR_AMR_RAW_TOKEN_CLAIMS',data:{user_acr:user?.acr,user_amr:user?.amr,decoded_acr:decoded?.acr,decoded_amr:decoded?.amr,decoded_auth_time:decoded?.auth_time,user_clearance:user?.clearance,decoded_clearance:decoded?.clearance,decoded_iss:decoded?.iss,decoded_azp:decoded?.azp,has_id_token:!!session?.idToken,token_claims_preview:decoded ? Object.keys(decoded) : []},timestamp:Date.now(),sessionId:'acr-amr-debug',hypothesisId:'ALL'})}).catch(()=>{});
+    }
+  }, [decoded, user, session?.idToken]);
+  // #endregion
+
   if (!open) return null;
 
   const pseudonym = getPseudonymFromUser((user || {}) as any);
   // Prefer user object (from session.user) over decoded JWT, as it's more reliable
   const authTime: string | null = user?.auth_time ? new Date(user.auth_time * 1000).toLocaleString() : (decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null);
   const acr: string | null = user?.acr || decoded?.acr || null;
-  const amr: string | null = Array.isArray(user?.amr) ? user!.amr.join(" + ") : (Array.isArray(decoded?.amr) ? decoded!.amr.join(" + ") : decoded?.amr || null);
+
+  // Derive AMR from ACR since native Keycloak authenticators don't set AUTH_METHODS_REF session note
+  // Our authentication flow has a 1:1 mapping: ACR=1→pwd, ACR=2→pwd+otp, ACR=3→pwd+hwk
+  const deriveAmrFromAcr = (acrValue: string | null): string[] => {
+    if (!acrValue) return [];
+    const acrNum = parseInt(acrValue, 10);
+    if (acrNum >= 3) return ["pwd", "hwk"]; // TOP_SECRET: password + hardware key (WebAuthn)
+    if (acrNum >= 2) return ["pwd", "otp"]; // SECRET/CONFIDENTIAL: password + OTP
+    if (acrNum >= 1) return ["pwd"];         // UNCLASSIFIED: password only
+    return [];
+  };
+
+  // Get raw AMR from token, or derive from ACR if empty
+  const rawAmr = Array.isArray(user?.amr) && user!.amr.length > 0
+    ? user!.amr
+    : (Array.isArray(decoded?.amr) && decoded!.amr.length > 0 ? decoded!.amr : null);
+  const derivedAmr = rawAmr || deriveAmrFromAcr(acr);
+  const amr: string | null = derivedAmr.length > 0 ? derivedAmr.join(" + ") : null;
   const missingClaims: string[] = [];
   if (!authTime) missingClaims.push('auth_time');
   if (!acr) missingClaims.push('acr');
-  if (!amr || amr === 'N/A') missingClaims.push('amr');
+  // AMR is derived from ACR if not present in token, so only mark as missing if derivation failed
+  if (!amr || amr === 'N/A') missingClaims.push('amr (derived)');
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
@@ -88,7 +115,7 @@ export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose
             )}
             <Claim label="auth_time" value={authTime || "N/A"} />
             <Claim label="acr (AAL)" value={acr?.toUpperCase() || "N/A"} />
-            <Claim label="amr" value={amr || "N/A"} />
+            <Claim label={rawAmr ? "amr" : "amr (derived)"} value={amr || "N/A"} />
           </div>
 
           {/* Privacy note */}
