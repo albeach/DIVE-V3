@@ -1,23 +1,23 @@
 /**
  * ACR/AMR Extraction Unit Tests
- * 
+ *
  * These tests verify the correct extraction and prioritization of ACR (Authentication
  * Context Class Reference) and AMR (Authentication Methods Reference) claims from
  * JWT tokens, including federated authentication scenarios.
- * 
+ *
  * Key behaviors tested:
  * 1. user_acr is prioritized over acr for federated users
  * 2. user_amr is prioritized over amr for federated users
  * 3. AMR can be parsed from arrays, JSON strings, or single values
  * 4. AAL is correctly derived from AMR when ACR is missing or incorrect
  * 5. jsonType: "String" multivalued arrays are correctly parsed
- * 
+ *
  * Reference: HANDOFF_ACR_AMR_COMPLETE_FIX.md
  */
 
 describe('ACR/AMR Extraction Logic', () => {
     // Helper functions that mirror the logic in auth.ts
-    
+
     /**
      * Extract ACR from JWT payload, prioritizing user_acr for federated users
      */
@@ -36,11 +36,11 @@ describe('ACR/AMR Extraction Logic', () => {
      */
     function extractAMR(payload: Record<string, unknown>): string[] {
         const amrSource = payload.user_amr || payload.amr;
-        
+
         if (!amrSource) {
             return ['pwd']; // Default fallback
         }
-        
+
         if (Array.isArray(amrSource)) {
             return amrSource;
         } else if (typeof amrSource === 'string') {
@@ -53,7 +53,7 @@ describe('ACR/AMR Extraction Logic', () => {
                 return [amrSource];
             }
         }
-        
+
         return ['pwd'];
     }
 
@@ -63,11 +63,11 @@ describe('ACR/AMR Extraction Logic', () => {
      */
     function deriveAAL(acr: string | undefined, amr: string[]): string {
         const amrSet = new Set(amr.map((v) => String(v).toLowerCase()));
-        
+
         const hasWebAuthn = amrSet.has('hwk') || amrSet.has('webauthn') || amrSet.has('passkey');
         const hasOTP = amrSet.has('otp') || amrSet.has('totp');
         const hasMultipleFactors = amr.length >= 2;
-        
+
         // Override ACR if Keycloak returned incorrect value
         if (!acr || acr === '0' || acr === '1' || acr === 'aal1') {
             if (hasWebAuthn) {
@@ -81,7 +81,7 @@ describe('ACR/AMR Extraction Logic', () => {
             // Keycloak returned AAL2 but we have WebAuthn - upgrade to AAL3
             return '3';
         }
-        
+
         return acr || '0';
     }
 

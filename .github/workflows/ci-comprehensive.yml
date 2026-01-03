@@ -17,7 +17,7 @@ jobs:
   # - Better resource utilization
   # - Individual timeouts prevent one slow test from blocking all
   # - Easier debugging (isolate failures)
-  
+
   backend-unit-tests:
     name: Backend - Unit Tests
     runs-on: ubuntu-latest
@@ -78,7 +78,7 @@ jobs:
           fi
 
           echo "✅ Test certificates generated and verified"
-      
+
       - name: Generate Test RSA Keys
         run: |
           cd backend
@@ -98,7 +98,7 @@ jobs:
           fi
 
           echo "✅ Test RSA keys generated and verified"
-      
+
       - name: Generate Test Certificates for CI
         run: |
           mkdir -p ${{ github.workspace }}/certs
@@ -121,7 +121,7 @@ jobs:
           nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
           sleep 5
           curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
-      
+
       - name: Run Unit Tests
         run: |
           cd backend
@@ -150,27 +150,27 @@ jobs:
     timeout-minutes: 10  # Increased for integration test suite
 
     # Use MongoDB Memory Server for isolated testing
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install Dependencies
         run: cd backend && npm ci
-      
+
       - name: Cache MongoDB Binary
         uses: actions/cache@v4
         with:
           path: ~/.cache/mongodb-binaries
           key: ${{ runner.os }}-mongodb-binary-7.0.0
-      
+
       - name: Generate Test Certificates
         run: |
           cd backend
@@ -190,7 +190,7 @@ jobs:
           fi
 
           echo "✅ Test certificates generated and verified"
-      
+
       - name: Generate Test Certificates for CI
         run: |
           mkdir -p ${{ github.workspace }}/certs
@@ -213,7 +213,7 @@ jobs:
           nohup ./opa run --server --addr=:8181 --log-level=error --tls-cert-file=${{ github.workspace }}/certs/certificate.pem --tls-private-key-file=${{ github.workspace }}/certs/key.pem > opa.log 2>&1 &
           sleep 5
           curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
-      
+
       - name: Run Integration Tests
         run: cd backend && npm run test:integration
         env:
@@ -223,7 +223,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
           JWT_AUDIENCE: dive-v3-api-test
-      
+
       - name: Run Audit Log Tests
         run: cd backend && npm run test:audit-logs
         env:
@@ -240,23 +240,23 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
-      
+
       - name: Install Dependencies
         run: cd backend && npm ci
-      
+
       - name: Cache MongoDB Binary
         uses: actions/cache@v4
         with:
           path: ~/.cache/mongodb-binaries
           key: ${{ runner.os }}-mongodb-binary-7.0.0
-      
+
       - name: Generate Test Certificates
         run: |
           cd backend
@@ -276,7 +276,7 @@ jobs:
           fi
 
           echo "✅ Test certificates generated and verified"
-      
+
       - name: Generate Test RSA Keys
         run: |
           cd backend
@@ -322,7 +322,7 @@ jobs:
           JWT_SECRET: test-jwt-secret-for-ci
           JWT_ISSUER: dive-v3-test
           JWT_AUDIENCE: dive-v3-api-test
-      
+
       - name: Upload Backend Coverage
         uses: actions/upload-artifact@v4
         with:
@@ -334,11 +334,11 @@ jobs:
     name: Frontend - Unit & Component Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
@@ -346,7 +346,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
         id: setup-node-frontend
-      
+
       - name: Report Frontend npm Cache Status
         run: |
           echo "## 📦 Frontend npm Cache" >> $GITHUB_STEP_SUMMARY
@@ -355,10 +355,10 @@ jobs:
           else
             echo "⚠️ **Cache MISS** - Dependencies downloaded fresh" >> $GITHUB_STEP_SUMMARY
           fi
-      
+
       - name: Install Dependencies
         run: cd frontend && npm ci --legacy-peer-deps
-      
+
       - name: Run Tests
         run: |
           cd frontend
@@ -373,14 +373,14 @@ jobs:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-ci
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
-      
+
       - name: Generate Coverage Report
         run: cd frontend && npm run test:coverage
         env:
           NEXTAUTH_URL: http://localhost:3000
           NEXTAUTH_SECRET: test-secret-for-ci
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
-      
+
       - name: Upload Frontend Coverage
         uses: actions/upload-artifact@v4
         with:
@@ -392,21 +392,21 @@ jobs:
     name: OPA - Comprehensive Policy Tests
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
         with:
           version: latest
-      
+
       - name: Run All Policy Tests
         run: |
           cd policies
           opa test . -v
-      
+
       - name: OPA Benchmark (GAP FIX)
         run: |
           cd policies
@@ -414,7 +414,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           opa bench fuel_inventory_abac_policy.rego 2>&1 | tee benchmark.txt
           cat benchmark.txt >> $GITHUB_STEP_SUMMARY
-      
+
       - name: AAL/FAL Comprehensive Tests
         run: |
           cd policies
@@ -539,26 +539,26 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
+
       - name: Backend NPM Audit
         run: |
           cd backend
           npm audit --production --audit-level=high || true
-      
+
       - name: Frontend NPM Audit
         run: |
           cd frontend
           npm audit --production --audit-level=high || true
-      
+
       - name: Check Hardcoded Secrets
         run: |
           echo "Scanning for hardcoded secrets..."
@@ -583,7 +583,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-coverage, frontend-tests]
     if: always()
-    
+
     steps:
       - name: Download Backend Coverage
         uses: actions/download-artifact@v4
@@ -591,14 +591,14 @@ jobs:
           name: backend-coverage
           path: backend-coverage/
         continue-on-error: true
-      
+
       - name: Download Frontend Coverage
         uses: actions/download-artifact@v4
         with:
           name: frontend-coverage
           path: frontend-coverage/
         continue-on-error: true
-      
+
       - name: Generate Summary
         run: |
           echo "## 📊 Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
@@ -621,7 +621,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [frontend-tests, backend-unit-tests, backend-integration-tests, backend-coverage, opa-tests, performance-tests, security-audit, docker-build]
     if: always()
-    
+
     steps:
       - name: Generate Performance Dashboard
         run: |
@@ -630,7 +630,7 @@ jobs:
           echo "**Run Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "## ✅ Critical Path Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Component | Status | Tests | Performance |" >> $GITHUB_STEP_SUMMARY
@@ -644,7 +644,7 @@ jobs:
           echo "| Performance Tests | ${{ needs.performance-tests.result == 'success' && '✅' || '❌' }} | 8/8 (100%) | ~52s (baseline) |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker Builds | ${{ needs.docker-build.result == 'success' && '✅' || '❌' }} | 3 images | ~3m20s (baseline) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "## 🎯 Performance Baselines (Week 4 Day 3)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Current | Target | Status |" >> $GITHUB_STEP_SUMMARY
@@ -656,7 +656,7 @@ jobs:
           echo "| Total CI time (critical) | ~5min | <8min | ✅ 37% under target |" >> $GITHUB_STEP_SUMMARY
           echo "| Cache hit rate | 100% | >80% | ✅ **20% above target** |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "## 📊 Performance Trends" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Recent Improvements (Day 2 → Day 3):**" >> $GITHUB_STEP_SUMMARY
@@ -665,7 +665,7 @@ jobs:
           echo "- Docker: 3m54s → 3m20s (**⬇️ 15% improvement**)" >> $GITHUB_STEP_SUMMARY
           echo "- Cache: 100% hit rate (**maintained**)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "## ⚠️ Known Deferred Items" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Backend Test Failures (41 tests - infrastructure dependencies):**" >> $GITHUB_STEP_SUMMARY
@@ -675,7 +675,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Note:** All failures documented and categorized. Critical path at 100%." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "## 🔧 Quick Actions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [[ "${{ needs.frontend-tests.result }}" != "success" ]]; then

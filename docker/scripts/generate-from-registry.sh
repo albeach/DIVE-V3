@@ -35,9 +35,9 @@ generate_env() {
     local instance=$1
     local instance_upper=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
     local instance_dir="$INSTANCES_DIR/$instance"
-    
+
     log_info "Generating .env for $instance_upper..."
-    
+
     # Read instance config from registry
     local config=$(python3 -c "
 import json
@@ -60,12 +60,12 @@ print(f\"APP_HOSTNAME={instance['urls']['app'].replace('https://', '')}\")
 print(f\"REALM={instance['code']}\")
 print(f\"COUNTRY_CODE={instance['code']}\")
 ")
-    
+
     if [[ $? -ne 0 ]]; then
         log_warn "Failed to read instance config from registry"
         return 1
     fi
-    
+
     # Generate .env file
     cat > "$instance_dir/.env" << EOF
 # =============================================================================
@@ -109,7 +109,7 @@ EOF
 # -----------------------------------------------------------------------------
 get_ports() {
     local instance=$1
-    
+
     case "$instance" in
         usa)
             echo "KEYCLOAK_HTTP_PORT=8081"
@@ -162,7 +162,7 @@ get_ports() {
 # -----------------------------------------------------------------------------
 get_client_secret() {
     local instance=$1
-    
+
     case "$instance" in
         usa) echo "8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L" ;;
         fra) echo "y9YPayqbnOLRqemXhrLNMzDi9G9VMYrB" ;;
@@ -197,12 +197,12 @@ generate_cloudflared_config() {
     local instance=$1
     local instance_upper=$(echo "$instance" | tr '[:lower:]' '[:upper:]')
     local instance_dir="$INSTANCES_DIR/$instance"
-    
+
     log_info "Generating Cloudflare tunnel config for $instance_upper..."
-    
+
     # Read tunnel config from registry or use placeholder
     mkdir -p "$instance_dir/config"
-    
+
     cat > "$instance_dir/config/cloudflared.yml" << EOF
 # Cloudflare Tunnel Configuration for ${instance_upper}
 # Update tunnel UUID and credentials in production
@@ -243,22 +243,22 @@ EOF
 # -----------------------------------------------------------------------------
 main() {
     local target=${1:-"all"}
-    
+
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
     echo "  DIVE V3 - Configuration Generator"
     echo "═══════════════════════════════════════════════════════════════"
     echo ""
-    
+
     # Check registry file exists
     if [[ ! -f "$REGISTRY_FILE" ]]; then
         echo "Error: Federation registry not found at $REGISTRY_FILE"
         exit 1
     fi
-    
+
     log_info "Reading from: $REGISTRY_FILE"
     echo ""
-    
+
     if [[ "$target" == "all" ]]; then
         # Get all instances from registry
         local instances=$(python3 -c "
@@ -268,7 +268,7 @@ with open('$REGISTRY_FILE') as f:
 for inst in registry['instances']:
     print(inst['code'].lower())
 ")
-        
+
         for instance in $instances; do
             generate_env "$instance"
             generate_cloudflared_config "$instance"
@@ -278,7 +278,7 @@ for inst in registry['instances']:
         generate_env "$target"
         generate_cloudflared_config "$target"
     fi
-    
+
     echo ""
     log_success "Configuration generation complete!"
     echo ""

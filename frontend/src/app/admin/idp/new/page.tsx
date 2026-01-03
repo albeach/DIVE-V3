@@ -1,6 +1,6 @@
 /**
  * IdP Wizard Page
- * 
+ *
  * Multi-step wizard for creating new Identity Providers
  * Steps:
  * 1. Protocol Selection (OIDC or SAML)
@@ -159,7 +159,7 @@ export default function NewIdPWizard() {
         // Phase 2: Operational data - BACKEND will determine from discovery document
         // User cannot game these - auto-detected from endpoint testing
         operationalData: undefined,
-        
+
         // Phase 2: Compliance documents - optional uploads
         complianceDocuments: {
             mfaPolicy: '',
@@ -401,7 +401,7 @@ export default function NewIdPWizard() {
             setSubmissionResult({
                 ...result.data
             });
-            
+
             // Move to results step instead of redirecting immediately
             setCurrentStep(8);
         } catch (error) {
@@ -414,7 +414,7 @@ export default function NewIdPWizard() {
     };
 
     return (
-        <PageLayout 
+        <PageLayout
             user={session?.user || {}}
             breadcrumbs={[
                 { label: 'Admin', href: '/admin/dashboard' },
@@ -453,20 +453,20 @@ export default function NewIdPWizard() {
                 </div>
 
                     {/* Animated progress */}
-                    <div 
+                    <div
                         className="absolute top-5 left-0 h-2 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-full shadow-lg shadow-blue-500/40 transition-all duration-700 ease-out"
                         style={{ width: `${(currentStep / WIZARD_STEPS.length) * 100}%` }}
                     >
                         <div className="absolute inset-0 bg-white/30 animate-pulse" />
                     </div>
-                    
+
                     {/* Step indicators */}
                     <div className="relative flex justify-between">
                         {WIZARD_STEPS.map((step, idx) => (
                             <div key={step.number} className="flex flex-col items-center" style={{ animationDelay: `${idx * 50}ms` }}>
                                 <div className={`relative w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm transition-all duration-500 ${
-                                    step.number < currentStep 
-                                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50 scale-105' 
+                                    step.number < currentStep
+                                        ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50 scale-105'
                                         : step.number === currentStep
                                         ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-2xl shadow-blue-600/70 scale-125 ring-4 ring-blue-200'
                                         : 'bg-white border-2 border-gray-300 text-gray-400 scale-90'
@@ -520,11 +520,11 @@ export default function NewIdPWizard() {
                                         className="group relative transform transition-all duration-300 hover:scale-105 focus:outline-none"
                                     >
                                         <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
-                                            formData.providerId === 'oidc' 
-                                                ? 'bg-gradient-to-r from-blue-600 to-cyan-500 opacity-75 blur-sm' 
+                                            formData.providerId === 'oidc'
+                                                ? 'bg-gradient-to-r from-blue-600 to-cyan-500 opacity-75 blur-sm'
                                                 : 'bg-gradient-to-r from-blue-400 to-cyan-400 opacity-0 group-hover:opacity-50 blur-sm'
                                         }`} />
-                                        
+
                                         <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
                                             formData.providerId === 'oidc'
                                                 ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-2xl'
@@ -558,11 +558,11 @@ export default function NewIdPWizard() {
                                         className="group relative transform transition-all duration-300 hover:scale-105 focus:outline-none"
                                     >
                                         <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
-                                            formData.providerId === 'saml' 
-                                                ? 'bg-gradient-to-r from-orange-600 to-pink-500 opacity-75 blur-sm' 
+                                            formData.providerId === 'saml'
+                                                ? 'bg-gradient-to-r from-orange-600 to-pink-500 opacity-75 blur-sm'
                                                 : 'bg-gradient-to-r from-orange-400 to-pink-400 opacity-0 group-hover:opacity-50 blur-sm'
                                         }`} />
-                                        
+
                                         <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
                                             formData.providerId === 'saml'
                                                 ? 'bg-gradient-to-br from-orange-600 to-pink-600 text-white shadow-2xl'
@@ -605,11 +605,11 @@ export default function NewIdPWizard() {
                                         className="group relative w-full transform transition-all duration-300 hover:scale-[1.02] focus:outline-none"
                                     >
                                         <div className={`absolute -inset-0.5 rounded-2xl transition-opacity duration-300 ${
-                                            isFederationMode 
-                                                ? 'bg-gradient-to-r from-emerald-600 to-teal-500 opacity-75 blur-sm' 
+                                            isFederationMode
+                                                ? 'bg-gradient-to-r from-emerald-600 to-teal-500 opacity-75 blur-sm'
                                                 : 'bg-gradient-to-r from-emerald-400 to-teal-400 opacity-0 group-hover:opacity-50 blur-sm'
                                         }`} />
-                                        
+
                                         <div className={`relative flex items-center gap-6 rounded-2xl p-6 transition-all duration-300 ${
                                             isFederationMode
                                                 ? 'bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-2xl'
@@ -896,7 +896,7 @@ export default function NewIdPWizard() {
                                             Provide references to compliance documents. Admins will verify these during review.
                                         </p>
                                     </div>
-                                    
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700">
                                             MFA Policy Document
@@ -1164,7 +1164,7 @@ export default function NewIdPWizard() {
                                         {submissionResult.status === 'validation-failed' ? '⚠️ Validation Results' : '✅ Submission Complete!'}
                                     </h3>
                                     <p className="mt-2 text-sm text-gray-600">
-                                        {submissionResult.status === 'validation-failed' 
+                                        {submissionResult.status === 'validation-failed'
                                             ? 'Your configuration has validation issues. Review the details below and fix before resubmitting.'
                                             : 'Your Identity Provider has been validated and assessed. Review the results below.'
                                         }
@@ -1229,7 +1229,7 @@ export default function NewIdPWizard() {
                                         <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                                             🏆 Risk Assessment
                                         </h4>
-                                        <RiskScoreBadge 
+                                        <RiskScoreBadge
                                             score={submissionResult.comprehensiveRiskScore.total}
                                             maxScore={100}
                                             tier={submissionResult.comprehensiveRiskScore.tier}
@@ -1259,14 +1259,14 @@ export default function NewIdPWizard() {
                                 {submissionResult.approvalDecision?.slaDeadline && submissionResult.status === 'pending' && (
                                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                                         <h4 className="text-lg font-semibold mb-4">⏱️ Review Deadline</h4>
-                                        <SLACountdown 
+                                        <SLACountdown
                                             slaDeadline={submissionResult.approvalDecision.slaDeadline}
                                             slaStatus={submissionResult.slaStatus || 'within'}
                                             action={submissionResult.approvalDecision.action}
                                         />
                                         <p className="mt-2 text-xs text-gray-600">
-                                            {submissionResult.approvalDecision.action === 'fast-track' ? 
-                                                'Fast-track review (2-hour SLA)' : 
+                                            {submissionResult.approvalDecision.action === 'fast-track' ?
+                                                'Fast-track review (2-hour SLA)' :
                                                 'Standard review (24-hour SLA)'}
                                         </p>
                                     </div>
@@ -1322,8 +1322,8 @@ export default function NewIdPWizard() {
                                         : 'bg-blue-600 hover:bg-blue-700'
                                 } ${isFederationMode && currentStep === 1 && !selectedPartner ? 'opacity-50 cursor-not-allowed' : ''} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
                             >
-                                {isFederationMode && selectedPartner && currentStep === 1 
-                                    ? '⚡ Skip to Review' 
+                                {isFederationMode && selectedPartner && currentStep === 1
+                                    ? '⚡ Skip to Review'
                                     : 'Next →'}
                             </button>
                             ) : currentStep === 7 ? (

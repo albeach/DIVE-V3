@@ -18,27 +18,27 @@ fi
 terraform_run() {
     local action="${1:-plan}"
     local tf_dir="${2:-pilot}"
-    
+
     log_step "Running Terraform $action ($tf_dir)..."
-    
+
     load_secrets
-    
+
     ensure_dive_root
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "cd ${DIVE_ROOT}/terraform/$tf_dir"
         log_dry "terraform init (if needed)"
         log_dry "terraform $action -var-file=$INSTANCE.tfvars"
         return 0
     fi
-    
+
     cd "${DIVE_ROOT}/terraform/${tf_dir}"
-    
+
     if [ ! -d ".terraform" ]; then
         log_info "Initializing Terraform..."
         terraform init
     fi
-    
+
     case "$action" in
         plan)
             terraform plan -var-file="${INSTANCE}.tfvars"
@@ -66,21 +66,21 @@ terraform_run() {
 terraform_generate() {
     local code="${1:-}"
     local force="${2:-}"
-    
+
     ensure_dive_root
-    
+
     local script="${DIVE_ROOT}/scripts/generate-country-tfvars.sh"
-    
+
     if [ ! -f "$script" ]; then
         log_error "Tfvars generator script not found: $script"
         return 1
     fi
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would generate tfvars for: $code $force"
         return 0
     fi
-    
+
     # Build arguments
     local args=""
     if [ "$code" = "--all" ] || [ "$code" = "-a" ]; then
@@ -91,31 +91,31 @@ terraform_generate() {
         # Default to current instance
         args="${INSTANCE:-USA}"
     fi
-    
+
     if [ "$force" = "--force" ] || [ "$force" = "-f" ]; then
         args="$args --force"
     fi
-    
+
     # Run the tfvars generator
     "$script" $args
 }
 
 terraform_list_countries() {
     ensure_dive_root
-    
+
     local tfvars_dir="${DIVE_ROOT}/terraform/countries"
-    
+
     print_header
     echo -e "${BOLD}Generated Terraform Variable Files${NC}"
     echo ""
-    
+
     if [ ! -d "$tfvars_dir" ] || [ -z "$(ls -A "$tfvars_dir" 2>/dev/null)" ]; then
         echo "No tfvars files found."
         echo ""
         echo "Generate with: ./dive tf generate --all"
         return 0
     fi
-    
+
     local count=0
     for f in "$tfvars_dir"/*.tfvars; do
         if [ -f "$f" ]; then
@@ -125,7 +125,7 @@ terraform_list_countries() {
             count=$((count + 1))
         fi
     done
-    
+
     echo ""
     echo "Total: $count tfvars files"
     echo ""
@@ -139,17 +139,17 @@ terraform_list_countries() {
 terraform_workspace() {
     local subcommand="${1:-list}"
     local code="${2:-}"
-    
+
     ensure_dive_root
     cd "${DIVE_ROOT}/terraform/spoke"
-    
+
     # Ensure terraform is initialized (force reinit if .terraform exists but is stale)
     if [ ! -d ".terraform" ] || [ ! -f ".terraform/terraform.tfstate" ]; then
         log_info "Initializing Terraform..."
         rm -rf .terraform 2>/dev/null
         terraform init >/dev/null 2>&1
     fi
-    
+
     case "$subcommand" in
         list)
             log_step "Listing Terraform workspaces..."
@@ -200,7 +200,7 @@ terraform_workspace() {
 terraform_spoke() {
     local action="${1:-}"
     local code="${2:-}"
-    
+
     if [ -z "$action" ] || [ -z "$code" ]; then
         echo "Usage: ./dive tf spoke <init|plan|apply|destroy> <CODE>"
         echo ""
@@ -211,39 +211,39 @@ terraform_spoke() {
         echo "  ./dive tf spoke destroy POL   Destroy Poland resources"
         return 1
     fi
-    
+
     local code_upper="${code^^}"
     local code_lower="${code,,}"
     local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
-    
+
     ensure_dive_root
-    
+
     # Check if tfvars exists
     if [ ! -f "$tfvars_file" ]; then
         log_warning "tfvars not found: $tfvars_file"
         log_info "Generating tfvars for $code_upper..."
         terraform_generate "$code_upper"
-        
+
         if [ ! -f "$tfvars_file" ]; then
             log_error "Failed to generate tfvars for $code_upper"
             return 1
         fi
     fi
-    
+
     cd "${DIVE_ROOT}/terraform/spoke"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "cd ${DIVE_ROOT}/terraform/spoke"
         log_dry "terraform workspace select $code_lower (or create)"
         log_dry "terraform $action -var-file=../countries/${code_lower}.tfvars"
         return 0
     fi
-    
+
     case "$action" in
         init)
             log_step "Initializing spoke for $code_upper..."
             terraform init -backend=false
-            
+
             # Create or select workspace
             if terraform workspace list | grep -q "^  ${code_lower}$\|^\* ${code_lower}$"; then
                 log_info "Selecting existing workspace: $code_lower"
@@ -293,7 +293,7 @@ terraform_fix_acr_amr() {
     if [ -z "$DIVE_TERRAFORM_APPLY_LOADED" ]; then
         source "${MODULES_DIR}/terraform-apply.sh"
     fi
-    
+
     # Call the function from terraform-apply.sh
     terraform_apply_acr_amr_ssot
 }
@@ -304,21 +304,21 @@ terraform_fix_acr_amr() {
 
 terraform_validate() {
     ensure_dive_root
-    
+
     log_step "Validating Terraform configurations..."
-    
+
     local errors=0
-    
+
     for dir in pilot spoke; do
         local full_path="${DIVE_ROOT}/terraform/${dir}"
         if [ -d "$full_path" ]; then
             cd "$full_path"
-            
+
             # Initialize if needed
             if [ ! -d ".terraform" ]; then
                 terraform init -backend=false >/dev/null 2>&1
             fi
-            
+
             if terraform validate >/dev/null 2>&1; then
                 echo "  ✓ $dir: valid"
             else
@@ -328,7 +328,7 @@ terraform_validate() {
             fi
         fi
     done
-    
+
     if [ "$errors" -eq 0 ]; then
         log_success "All configurations valid"
     else
@@ -339,16 +339,16 @@ terraform_validate() {
 
 terraform_fmt() {
     ensure_dive_root
-    
+
     log_step "Formatting Terraform files..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "terraform fmt -recursive -check ${DIVE_ROOT}/terraform"
         return 0
     fi
-    
+
     local check_only="${1:-}"
-    
+
     if [ "$check_only" = "--check" ]; then
         terraform fmt -recursive -check "${DIVE_ROOT}/terraform"
     else
@@ -364,7 +364,7 @@ terraform_fmt() {
 module_terraform() {
     local action="${1:-plan}"
     shift || true
-    
+
     case "$action" in
         plan|apply|destroy|output)
             terraform_run "$action" "$@"

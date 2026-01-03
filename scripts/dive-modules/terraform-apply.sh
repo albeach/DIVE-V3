@@ -337,11 +337,11 @@ terraform_apply_acr_amr_ssot() {
 
     echo ""
     log_step "Step 2: Applying to Spokes..."
-    
+
     # Get list of spokes from instances directory
     local spoke_instances
     spoke_instances=$(find "${DIVE_ROOT}/instances" -maxdepth 1 -type d ! -name "." ! -name "hub" -exec basename {} \; 2>/dev/null | sort)
-    
+
     local failed_spokes=()
     for spoke_code in $spoke_instances; do
         if [[ -f "${DIVE_ROOT}/instances/$spoke_code/config.json" ]]; then

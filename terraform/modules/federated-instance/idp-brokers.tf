@@ -154,19 +154,53 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
 }
 
 # =============================================================================
-# ACR/AMR MAPPERS FOR FEDERATION - DEPRECATED (Jan 2026)
+# ACR/AMR MAPPERS FOR FEDERATION (CRITICAL - Re-enabled Jan 2026)
 # =============================================================================
-# REMOVED: User-attribute-based ACR/AMR storage is deprecated.
-# Reason: User attributes are persistent but stale; session notes are fresh and correct.
-# Replacement: Native oidc-acr-mapper and oidc-amr-mapper read from authentication session.
-# See: acr-amr-session-mappers.tf for the new SSOT implementation.
+# CRITICAL FIX: These mappers MUST exist for federated users.
 #
-# The following resources have been removed:
-# - keycloak_custom_identity_provider_mapper.acr_mapper (stored to federatedAcr attribute)
-# - keycloak_custom_identity_provider_mapper.amr_mapper (stored to federatedAmr attribute)
+# Architecture:
+# 1. NZL Spoke authenticates user with password + OTP
+# 2. NZL's event listener sets: AUTH_METHODS_REF = ["pwd","otp"], user.amr = ["pwd","otp"]
+# 3. NZL's client mappers output: amr (native session), user_amr (user attribute)
+# 4. Hub receives NZL token with amr and user_amr claims
+# 5. Hub's IdP mapper (BELOW) extracts user_amr → stores to user.amr attribute
+# 6. Hub's event listener detects federated user → preserves user.amr in session
+# 7. Hub's client mapper reads user.amr → outputs user_amr to frontend
+# 8. Frontend reads user_amr (prioritized over amr for federated users)
 #
-# Migration: When this Terraform is applied, the old mappers will be destroyed.
-# ACR/AMR will be read directly from authentication session via native mappers.
+# Without these IdP mappers, federated user's AMR is never updated on the Hub!
+
+# AMR IdP Mapper - extracts user_amr from Spoke token → stores to user.amr
+resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
+  for_each = var.federation_partners
+
+  realm                    = keycloak_realm.broker.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.federation_partner[each.key].alias
+  name                     = "amr-mapper"
+  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
+
+  extra_config = {
+    "claim"          = "user_amr"  # Read from Spoke's user_amr claim (user attribute fallback)
+    "user.attribute" = "amr"       # Store to local user's amr attribute
+    "syncMode"       = "FORCE"     # Update on every login
+  }
+}
+
+# ACR IdP Mapper - extracts user_acr from Spoke token → stores to user.acr
+resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
+  for_each = var.federation_partners
+
+  realm                    = keycloak_realm.broker.id
+  identity_provider_alias  = keycloak_oidc_identity_provider.federation_partner[each.key].alias
+  name                     = "acr-mapper"
+  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
+
+  extra_config = {
+    "claim"          = "user_acr"  # Read from Spoke's user_acr claim (user attribute fallback)
+    "user.attribute" = "acr"       # Store to local user's acr attribute
+    "syncMode"       = "FORCE"     # Update on every login
+  }
+}
 
 # Flexible claim mappers (multiple variants per attribute)
 resource "keycloak_custom_identity_provider_mapper" "flex_clearance" {

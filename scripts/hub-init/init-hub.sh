@@ -1,9 +1,9 @@
 #!/bin/bash
 # =============================================================================
 # DIVE V3 Hub Initialization Script
-# 
+#
 # Purpose: Complete initialization of the DIVE V3 Hub instance
-# 
+#
 # This script:
 #   1. Configures Keycloak User Profile for DIVE attributes
 #   2. Seeds test users with proper clearances
