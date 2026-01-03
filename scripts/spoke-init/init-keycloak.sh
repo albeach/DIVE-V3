@@ -39,10 +39,19 @@ CODE_UPPER=$(echo "$INSTANCE_CODE" | tr '[:lower:]' '[:upper:]')
 REALM_NAME="dive-v3-broker-${CODE_LOWER}"
 CLIENT_ID="dive-v3-broker-${CODE_LOWER}"
 
-# Load configuration from .env
+# Load configuration from .env (safely - ignore lines with errors)
 INSTANCE_DIR="instances/${CODE_LOWER}"
 if [[ -f "${INSTANCE_DIR}/.env" ]]; then
-    source "${INSTANCE_DIR}/.env"
+    # CRITICAL: Source .env safely - filter out any corrupted lines
+    # This prevents ANSI codes or error messages in .env from crashing the script
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        # Skip lines that don't look like valid KEY=value
+        [[ ! "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue
+        # Export the variable
+        export "$line" 2>/dev/null || true
+    done < "${INSTANCE_DIR}/.env"
 fi
 
 # Detect local dev hostname from instance.json (if present)
@@ -66,7 +75,11 @@ KC_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
 # Priority: 1) Container env var, 2) Instance-specific env var, 3) Generic env var
 ADMIN_PASSWORD=""
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${KC_CONTAINER}$"; then
-    ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (modern Keycloak), then KEYCLOAK_ADMIN_PASSWORD (legacy)
+    ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    fi
     if [ -n "$ADMIN_PASSWORD" ] && [ ${#ADMIN_PASSWORD} -gt 10 ]; then
         log_info "Using Keycloak password from container (authoritative)"
     else
@@ -224,10 +237,26 @@ fi
 log_success "Admin authentication successful"
 
 # =============================================================================
+# Determine Theme FIRST (needed for realm creation)
+# =============================================================================
+# Check if country-specific theme exists
+THEME_NAME="dive-v3-${CODE_LOWER}"
+THEME_DIR="keycloak/themes/${THEME_NAME}"
+
+if [[ -d "${THEME_DIR}" ]]; then
+    log_info "Found custom theme: ${THEME_NAME}"
+else
+    # Fall back to default dive-v3 theme
+    THEME_NAME="dive-v3"
+    log_info "Using default theme: ${THEME_NAME}"
+fi
+
+# =============================================================================
 # Ensure Realm Exists (with retry logic for resilience)
 # =============================================================================
 # ADDED (Dec 2025): Pre-verification with retry to ensure realm exists
 # before any client/user operations are attempted
+# FIXED (Jan 2026): Now includes theme settings when creating realm
 ensure_realm_exists() {
     local realm_name="$1"
     local max_attempts=5
@@ -243,12 +272,30 @@ ensure_realm_exists() {
 
         if [[ -n "$realm_check" ]]; then
             log_success "Realm $realm_name verified (attempt $attempt)"
+            # CRITICAL: Ensure theme is applied even if realm already exists
+            log_info "Applying theme and frontendUrl to existing realm..."
+            kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${realm_name}" \
+                -H "Authorization: Bearer $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{
+                    \"displayName\": \"${REALM_DISPLAY_NAME}\",
+                    \"loginTheme\": \"${THEME_NAME}\",
+                    \"accountTheme\": \"${THEME_NAME}\",
+                    \"adminTheme\": \"keycloak.v2\",
+                    \"emailTheme\": \"keycloak\",
+                    \"internationalizationEnabled\": true,
+                    \"supportedLocales\": [\"en\"],
+                    \"defaultLocale\": \"en\",
+                    \"attributes\": {
+                        \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\"
+                    }
+                }" 2>/dev/null && log_success "Theme applied: ${THEME_NAME}"
             return 0
         fi
 
         log_warn "Realm $realm_name not found (attempt $attempt/$max_attempts), creating..."
 
-        # Create realm with minimal config
+        # Create realm with FULL config including theme
         local create_result=$(kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
@@ -257,18 +304,28 @@ ensure_realm_exists() {
             -d "{
                 \"realm\": \"$realm_name\",
                 \"enabled\": true,
-                \"displayName\": \"DIVE V3 ${CODE_UPPER}\",
+                \"displayName\": \"${REALM_DISPLAY_NAME}\",
+                \"loginTheme\": \"${THEME_NAME}\",
+                \"accountTheme\": \"${THEME_NAME}\",
+                \"adminTheme\": \"keycloak.v2\",
+                \"emailTheme\": \"keycloak\",
+                \"internationalizationEnabled\": true,
+                \"supportedLocales\": [\"en\"],
+                \"defaultLocale\": \"en\",
                 \"sslRequired\": \"none\",
                 \"registrationAllowed\": false,
                 \"loginWithEmailAllowed\": true,
                 \"duplicateEmailsAllowed\": false,
                 \"resetPasswordAllowed\": true,
                 \"editUsernameAllowed\": false,
-                \"bruteForceProtected\": true
+                \"bruteForceProtected\": true,
+                \"attributes\": {
+                    \"frontendUrl\": \"${PUBLIC_KEYCLOAK_URL}\"
+                }
             }" 2>/dev/null)
 
         if [[ "$create_result" == "201" || "$create_result" == "409" ]]; then
-            log_success "Realm $realm_name created successfully"
+            log_success "Realm $realm_name created with theme: ${THEME_NAME}"
             return 0
         fi
 
@@ -284,31 +341,93 @@ ensure_realm_exists() {
     return 1
 }
 
-# Pre-verify realm exists before proceeding
-if ! ensure_realm_exists "$REALM_NAME"; then
-    log_error "Cannot proceed without realm. Exiting."
-    exit 1
+# =============================================================================
+# TERRAFORM SSOT - Apply Keycloak Configuration
+# =============================================================================
+# Terraform is now the Single Source of Truth (SSOT) for Keycloak configuration.
+#
+# IMPORTANT: When USE_TERRAFORM_SSOT=true, Terraform creates the realm, clients,
+# and protocol mappers. The ensure_realm_exists function only runs AFTER Terraform
+# to apply theme settings and verify the realm was created successfully.
+# It creates: realm, client, protocol mappers, WebAuthn policy, ACR-LoA mapping.
+#
+# The shell script handles ONLY dynamic operations:
+#   - USA Hub IdP creation (cross-instance references)
+#   - User profile initialization (backend script)
+#   - User seeding (needs runtime credentials)
+#   - NextAuth DB initialization
+#
+# =============================================================================
+# TERRAFORM SSOT MODE (Best Practice)
+# =============================================================================
+# Set USE_TERRAFORM_SSOT=false to use legacy API calls (NOT RECOMMENDED)
+# Set STRICT_TERRAFORM_SSOT=true to fail if Terraform fails (default for best practice)
+# =============================================================================
+USE_TERRAFORM_SSOT="${USE_TERRAFORM_SSOT:-true}"
+STRICT_TERRAFORM_SSOT="${STRICT_TERRAFORM_SSOT:-true}"
+TERRAFORM_APPLIED=false
+
+if [[ "$USE_TERRAFORM_SSOT" == "true" ]]; then
+    log_step "Applying Keycloak configuration via Terraform (SSOT)..."
+
+    # Source the terraform wrapper module
+    if [[ -f "${PROJECT_ROOT}/scripts/dive-modules/terraform-apply.sh" ]]; then
+        source "${PROJECT_ROOT}/scripts/dive-modules/terraform-apply.sh"
+
+        # Export required environment variables for Terraform
+        export KEYCLOAK_ADMIN_PASSWORD="$ADMIN_PASSWORD"
+        export KEYCLOAK_CLIENT_SECRET="$CLIENT_SECRET"
+        export TF_VAR_test_user_password="$ADMIN_PASSWORD"
+        export TF_VAR_client_secret="$CLIENT_SECRET"
+        export TF_VAR_webauthn_rp_id="localhost"
+        export TF_VAR_local_keycloak_port="$local_kc_port"
+        export TF_VAR_local_frontend_port="$LOCAL_FRONTEND_PORT"
+
+        # Apply Terraform (creates realm, client, mappers, WebAuthn, ACR-LoA)
+        if spoke_terraform_apply "$CODE_UPPER"; then
+            log_success "Terraform applied - realm, client, mappers configured"
+            TERRAFORM_APPLIED=true
+
+            # After Terraform creates realm, apply theme settings (Terraform doesn't manage themes well)
+            log_info "Applying theme settings to Terraform-created realm..."
+            ensure_realm_exists "$REALM_NAME"
+        else
+            if [[ "$STRICT_TERRAFORM_SSOT" == "true" ]]; then
+                log_error "Terraform apply failed and STRICT_TERRAFORM_SSOT is enabled"
+                log_error "Fix the Terraform configuration or set STRICT_TERRAFORM_SSOT=false"
+                exit 1
+            else
+                log_warn "Terraform apply failed, falling back to legacy API calls (NOT RECOMMENDED)"
+            fi
+        fi
+    else
+        if [[ "$STRICT_TERRAFORM_SSOT" == "true" ]]; then
+            log_error "Terraform wrapper not found at ${PROJECT_ROOT}/scripts/dive-modules/terraform-apply.sh"
+            log_error "STRICT_TERRAFORM_SSOT is enabled - cannot continue without Terraform"
+            exit 1
+        else
+            log_warn "Terraform wrapper not found, using legacy API calls (NOT RECOMMENDED)"
+        fi
+    fi
+fi
+
+# Verify realm exists (either from Terraform or legacy)
+if [[ "$TERRAFORM_APPLIED" != "true" ]]; then
+    # Legacy mode needs to create the realm first
+    if ! ensure_realm_exists "$REALM_NAME"; then
+        log_error "Cannot proceed without realm. Exiting."
+        exit 1
+    fi
 fi
 
 # =============================================================================
-# Determine Theme
+# LEGACY: Create Realm (if Terraform not used or failed)
 # =============================================================================
-# Check if country-specific theme exists
-THEME_NAME="dive-v3-${CODE_LOWER}"
-THEME_DIR="keycloak/themes/${THEME_NAME}"
-
-if [[ -d "${THEME_DIR}" ]]; then
-    log_info "Found custom theme: ${THEME_NAME}"
-else
-    # Fall back to default dive-v3 theme
-    THEME_NAME="dive-v3"
-    log_info "Using default theme: ${THEME_NAME}"
-fi
-
+# This section is DEPRECATED and will be removed in a future version.
+# It only runs if Terraform is disabled or failed.
 # =============================================================================
-# Create Realm (if not exists)
-# =============================================================================
-log_step "Creating realm: ${REALM_NAME}..."
+if [[ "$TERRAFORM_APPLIED" != "true" ]]; then
+    log_step "Creating realm: ${REALM_NAME} (legacy mode)..."
 
 REALM_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
     "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" 2>/dev/null | jq -r '.realm // empty')
@@ -361,6 +480,49 @@ else
             }
         }" 2>/dev/null
     log_success "Realm created: ${REALM_NAME} (${COUNTRY_FULL_NAME}) with theme: ${THEME_NAME}, frontendUrl: ${PUBLIC_KEYCLOAK_URL}"
+fi
+
+# =============================================================================
+# Disable Review Profile in First Broker Login Flow (Best Practice for Federation)
+# =============================================================================
+# CRITICAL: For trusted federation, the "Review Profile" step should be DISABLED
+# because:
+# 1. The federated IdP (Hub or other Spoke) is trusted
+# 2. User attributes are imported from the federated token
+# 3. Profile verification adds unnecessary friction and breaks seamless SSO
+#
+# Best Practice: Disable Review Profile for all trusted federation scenarios
+# =============================================================================
+log_step "Disabling Review Profile in First Broker Login flow..."
+
+# Get the Review Profile execution details
+REVIEW_PROFILE_EXEC=$(kc_curl -s -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/authentication/flows/first%20broker%20login/executions" 2>/dev/null | \
+    jq '.[] | select(.providerId == "idp-review-profile")')
+
+if [[ -n "$REVIEW_PROFILE_EXEC" ]]; then
+    CURRENT_REQ=$(echo "$REVIEW_PROFILE_EXEC" | jq -r '.requirement')
+
+    if [[ "$CURRENT_REQ" != "DISABLED" ]]; then
+        # Update the execution to DISABLED
+        UPDATE_PAYLOAD=$(echo "$REVIEW_PROFILE_EXEC" | jq '.requirement = "DISABLED"')
+
+        HTTP_STATUS=$(kc_curl -s -X PUT \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/authentication/flows/first%20broker%20login/executions" \
+            -d "$UPDATE_PAYLOAD" -w "%{http_code}" -o /dev/null 2>/dev/null)
+
+        if [[ "$HTTP_STATUS" == "204" ]]; then
+            log_success "Review Profile disabled in First Broker Login flow"
+        else
+            log_warn "Failed to disable Review Profile (HTTP $HTTP_STATUS)"
+        fi
+    else
+        log_info "Review Profile already DISABLED"
+    fi
+else
+    log_warn "Could not find Review Profile execution (may already be configured)"
 fi
 
 # =============================================================================
@@ -613,118 +775,27 @@ kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${C
 log_success "DIVE attribute mappers created"
 
 # =============================================================================
-# Ensure Cross-Border Federation Client (for other instances to federate TO us)
+# ⚠️ REMOVED: Cross-Border Federation Client (v5.0)
 # =============================================================================
-log_step "Ensuring cross-border federation client (dive-v3-cross-border-client)..."
+# REMOVED as of Jan 2, 2026
+# 
+# This dive-v3-cross-border-client was never used for actual federation.
+# Federation uses dive-v3-broker-{code} pattern exclusively:
+#   - Hub→Spoke: Hub uses dive-v3-broker-usa client ON the spoke
+#   - Spoke→Hub: Spoke uses dive-v3-broker-{spoke_code} client ON the hub
+#
+# The old cross-border-client code has been removed to avoid confusion.
+# See: HANDOFF_ACR_AMR_COMPLETE_FIX.md for details.
+# =============================================================================
+log_info "Skipping deprecated cross-border-client (removed in v5.0)"
 
-HUB_IDP_URL="${HUB_IDP_URL:-https://localhost:8443}"
-CROSS_BORDER_CLIENT_ID="dive-v3-cross-border-client"
-# Use well-known dev secret for local development (MUST be overridden in production via GCP)
-CROSS_BORDER_SECRET="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-cross-border-secret-2025}}"
-
-# Redirect URIs for cross-border: Keycloak only supports wildcards at the END of URIs
-# Include explicit hub broker endpoint + broad wildcard patterns
-# CRITICAL: Include both default ports AND port-offset ports for all scenarios
-# Use calculated port for this instance
-CROSS_BORDER_REDIRECT_URIS="[\"https://localhost:8443/*\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint\",\"https://localhost:8443/realms/dive-v3-broker/broker/${CODE_LOWER}-idp/endpoint/*\",\"https://localhost:3000/*\",\"https://localhost:${local_kc_port}/*\",\"https://localhost:${local_kc_port}/realms/dive-v3-broker-${CODE_LOWER}/broker/usa-idp/endpoint\",\"https://localhost:${local_kc_port}/realms/dive-v3-broker-${CODE_LOWER}/broker/usa-idp/endpoint/*\",\"https://${CODE_LOWER}-idp.dive25.com/*\"]"
-
-EXISTING_CB_CLIENT=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CROSS_BORDER_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
-CB_CLIENT_UUID="$EXISTING_CB_CLIENT"
-
-if [[ -n "$EXISTING_CB_CLIENT" ]]; then
-    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${EXISTING_CB_CLIENT}" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"redirectUris\": ${CROSS_BORDER_REDIRECT_URIS},
-            \"webOrigins\": [\"*\"],
-            \"publicClient\": false,
-            \"clientAuthenticatorType\": \"client-secret\",
-            \"attributes\": {
-                \"pkce.code.challenge.method\": \"S256\"
-            }
-        }" 2>/dev/null
-    log_info "Cross-border client exists: ${CROSS_BORDER_CLIENT_ID} (updated)"
-else
-    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"clientId\": \"${CROSS_BORDER_CLIENT_ID}\",
-            \"name\": \"DIVE V3 Cross-Border Federation\",
-            \"enabled\": true,
-            \"publicClient\": false,
-            \"clientAuthenticatorType\": \"client-secret\",
-            \"secret\": \"${CROSS_BORDER_SECRET}\",
-            \"redirectUris\": ${CROSS_BORDER_REDIRECT_URIS},
-            \"webOrigins\": [\"*\"],
-            \"protocol\": \"openid-connect\",
-            \"standardFlowEnabled\": true,
-            \"directAccessGrantsEnabled\": false,
-            \"serviceAccountsEnabled\": false,
-            \"attributes\": {
-                \"pkce.code.challenge.method\": \"S256\"
-            }
-        }" 2>/dev/null
-    log_success "Cross-border client created: ${CROSS_BORDER_CLIENT_ID}"
-    CB_CLIENT_UUID=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients?clientId=${CROSS_BORDER_CLIENT_ID}" 2>/dev/null | jq -r '.[0].id // empty')
-fi
-
-# For backwards compatibility, also keep the FED_CLIENT_UUID reference
-FED_CLIENT_UUID="$CB_CLIENT_UUID"
-
-# Ensure the federation client exposes GBR attributes to the hub
-if [[ -n "$FED_CLIENT_UUID" ]]; then
-    ensure_mapper() {
-        local mapper_name="$1"
-        local user_attr="$2"
-        local claim_name="$3"
-        local multivalued="${4:-false}"
-        local json_type="${5:-String}"
-        local existing
-        existing=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-            "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" 2>/dev/null | \
-            jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty')
-        local payload
-        payload=$(cat <<EOF
-{
-  "name": "${mapper_name}",
-  "protocol": "openid-connect",
-  "protocolMapper": "oidc-usermodel-attribute-mapper",
-  "config": {
-    "user.attribute": "${user_attr}",
-    "claim.name": "${claim_name}",
-    "id.token.claim": "true",
-    "access.token.claim": "true",
-    "userinfo.token.claim": "true",
-    "jsonType.label": "${json_type}",
-    "multivalued": "${multivalued}"
-  }
-}
-EOF
-)
-        if [[ -n "$existing" ]]; then
-            kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${FED_CLIENT_UUID}/protocol-mappers/models/${existing}" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "${payload}" >/dev/null 2>&1
-        else
-            kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${FED_CLIENT_UUID}/protocol-mappers/models" \
-                -H "Authorization: Bearer $TOKEN" \
-                -H "Content-Type: application/json" \
-                -d "${payload}" >/dev/null 2>&1
-        fi
-    }
-    ensure_mapper "clearance" "clearance" "clearance" "false" "String"
-    ensure_mapper "countryOfAffiliation" "countryOfAffiliation" "countryOfAffiliation" "false" "String"
-    ensure_mapper "uniqueID" "uniqueID" "uniqueID" "false" "String"
-    ensure_mapper "acpCOI" "acpCOI" "acpCOI" "true" "String"
-fi
+fi  # End of TERRAFORM_APPLIED != true block (realm, client, mappers, cross-border)
 
 # =============================================================================
 # Ensure USA Hub Identity Provider (so spoke can federate to hub)
+# =============================================================================
+# NOTE: This section ALWAYS runs (not managed by Terraform)
+# It creates a dynamic IdP reference from this spoke to the USA Hub.
 # =============================================================================
 log_step "Ensuring USA hub IdP (usa-idp) is configured..."
 
@@ -870,6 +941,203 @@ if [[ "${CODE_UPPER}" != "USA" ]]; then
         log_info "Run manually: ./scripts/spoke-init/configure-localized-mappers.sh ${CODE_UPPER}"
     fi
 fi
+
+# =============================================================================
+# LEGACY: WebAuthn, ACR-LoA, AMR/ACR Configuration
+# =============================================================================
+# These are now managed by Terraform (SSOT). This section only runs if
+# Terraform was not applied (fallback mode).
+# =============================================================================
+if [[ "$TERRAFORM_APPLIED" != "true" ]]; then
+
+# =============================================================================
+# Configure WebAuthn Policy (Best Practice: Spoke Handles MFA)
+# =============================================================================
+# CRITICAL: This sets the WebAuthn Relying Party ID to match the browser origin
+# Without this, passkey registration fails with "Type error" because the RP ID
+# doesn't match the domain in navigator.credentials.create()
+#
+# Best Practice: Spoke handles MFA, Hub trusts spoke's authentication
+# - Spoke enforces WebAuthn for TOP_SECRET, OTP for SECRET/CONFIDENTIAL
+# - Hub does NOT enforce post-broker MFA (trusts spoke's AMR/ACR claims)
+# =============================================================================
+log_step "Configuring WebAuthn policy for localhost..."
+
+WEBAUTHN_POLICY_UPDATE=$(cat <<EOF
+{
+    "webAuthnPolicyRpEntityName": "DIVE V3 - ${CODE_UPPER}",
+    "webAuthnPolicyRpId": "localhost",
+    "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
+    "webAuthnPolicyAttestationConveyancePreference": "none",
+    "webAuthnPolicyAuthenticatorAttachment": "not specified",
+    "webAuthnPolicyRequireResidentKey": "not specified",
+    "webAuthnPolicyUserVerificationRequirement": "preferred",
+    "webAuthnPolicyCreateTimeout": 60,
+    "webAuthnPolicyAvoidSameAuthenticatorRegister": false,
+    "webAuthnPolicyPasswordlessRpEntityName": "DIVE V3 - ${CODE_UPPER}",
+    "webAuthnPolicyPasswordlessRpId": "localhost",
+    "webAuthnPolicyPasswordlessSignatureAlgorithms": ["ES256", "RS256"],
+    "webAuthnPolicyPasswordlessAttestationConveyancePreference": "none",
+    "webAuthnPolicyPasswordlessAuthenticatorAttachment": "not specified",
+    "webAuthnPolicyPasswordlessRequireResidentKey": "Yes",
+    "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
+    "webAuthnPolicyPasswordlessCreateTimeout": 120
+}
+EOF
+)
+
+kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$WEBAUTHN_POLICY_UPDATE" 2>/dev/null
+
+if [ $? -eq 0 ]; then
+    log_success "WebAuthn policy configured: rpId=localhost"
+else
+    log_warn "WebAuthn policy configuration failed (non-blocking)"
+fi
+
+# =============================================================================
+# Configure ACR-LoA Mapping (Required for AAL enforcement)
+# =============================================================================
+# Maps ACR values to numeric Levels of Assurance for conditional MFA
+# AAL1 = Password only, AAL2 = OTP, AAL3 = WebAuthn
+# =============================================================================
+log_step "Configuring ACR-LoA mapping..."
+
+ACR_LOA_UPDATE=$(cat <<EOF
+{
+    "attributes": {
+        "frontendUrl": "${PUBLIC_KEYCLOAK_URL}",
+        "acr.loa.map": "{\"1\":1,\"2\":2,\"3\":3}"
+    }
+}
+EOF
+)
+
+kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$ACR_LOA_UPDATE" 2>/dev/null
+
+if [ $? -eq 0 ]; then
+    log_success "ACR-LoA mapping configured"
+else
+    log_warn "ACR-LoA mapping configuration failed (non-blocking)"
+fi
+
+# =============================================================================
+# Add AMR/ACR Protocol Mappers to Client
+# =============================================================================
+# These mappers ensure AMR/ACR claims are included in tokens issued by this spoke
+# Required for Hub to receive authentication method information from spoke
+#
+# CRITICAL (Jan 2, 2026): Must use oidc-usermodel-attribute-mapper for AMR!
+# Session-based oidc-amr-mapper does NOT work for federated users.
+# AMR is stored in user.attribute.amr, so we read from there.
+# jsonType.label MUST be "String" (not "JSON") for multivalued arrays.
+# See: HANDOFF_ACR_AMR_COMPLETE_FIX.md and docs/ACR_AMR_MAINTENANCE.md
+# =============================================================================
+log_step "Adding AMR/ACR protocol mappers to client..."
+
+# AMR mapper - MUST use user-attribute mapper (not session-based)
+# For federated users, AMR is stored in user.attribute.amr
+AMR_MAPPER_PAYLOAD=$(cat <<EOF
+{
+    "name": "amr (user attribute)",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-usermodel-attribute-mapper",
+    "consentRequired": false,
+    "config": {
+        "user.attribute": "amr",
+        "claim.name": "amr",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "jsonType.label": "String",
+        "multivalued": "true"
+    }
+}
+EOF
+)
+
+# Check if ANY AMR mapper exists (old or new style)
+EXISTING_AMR_MAPPER=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" 2>/dev/null | \
+    jq -r '.[] | select(.name | contains("amr")) | .id // empty' | head -1)
+
+if [[ -n "$EXISTING_AMR_MAPPER" ]]; then
+    # Delete old mapper first (might be wrong type)
+    kc_curl -X DELETE "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${EXISTING_AMR_MAPPER}" \
+        -H "Authorization: Bearer $TOKEN" 2>/dev/null || true
+    log_info "Removed old AMR mapper"
+fi
+
+# Create new correct mapper
+kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$AMR_MAPPER_PAYLOAD" 2>/dev/null
+log_success "Created AMR mapper (user-attribute, jsonType=String)"
+
+# ACR mapper
+ACR_MAPPER_PAYLOAD=$(cat <<EOF
+{
+    "name": "acr (authn context)",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-acr-mapper",
+    "consentRequired": false,
+    "config": {
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true",
+        "claim.name": "acr"
+    }
+}
+EOF
+)
+
+# Check if ACR mapper exists
+EXISTING_ACR_MAPPER=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" 2>/dev/null | \
+    jq -r '.[] | select(.name | contains("acr")) | .id // empty' | head -1)
+
+if [[ -n "$EXISTING_ACR_MAPPER" ]]; then
+    # Update existing
+    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models/${EXISTING_ACR_MAPPER}" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$ACR_MAPPER_PAYLOAD" 2>/dev/null
+    log_info "Updated ACR mapper"
+else
+    # Create new
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$ACR_MAPPER_PAYLOAD" 2>/dev/null
+    log_success "Created ACR mapper (authn context)"
+fi
+
+# Also add AMR/ACR mappers to the cross-border client (for federation)
+if [[ -n "$CB_CLIENT_UUID" ]]; then
+    log_step "Adding AMR/ACR mappers to cross-border federation client..."
+
+    # AMR mapper for federation client
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CB_CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$AMR_MAPPER_PAYLOAD" 2>/dev/null || true
+
+    # ACR mapper for federation client
+    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CB_CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "$ACR_MAPPER_PAYLOAD" 2>/dev/null || true
+
+    log_success "AMR/ACR mappers added to cross-border client"
+fi
+
+fi  # End of TERRAFORM_APPLIED != true block (WebAuthn, ACR-LoA, AMR/ACR)
 
 # =============================================================================
 # Summary

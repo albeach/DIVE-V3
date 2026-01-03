@@ -258,7 +258,7 @@ services:
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
@@ -381,7 +381,7 @@ services:
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
     ports:
       - "127.0.0.1:8085:8080"
     depends_on:
@@ -427,9 +427,9 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
       AUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker-usa}
+      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       AUTH_TRUST_HOST: "true"

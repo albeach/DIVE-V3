@@ -226,7 +226,7 @@ router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Prom
         // Check if user has admin role
         const isAdmin = user?.roles?.includes('dive-admin') ||
                         user?.realm_access?.roles?.includes('dive-admin') ||
-                        user?.resource_access?.['dive-v3-client-broker']?.roles?.includes('dive-admin');
+                        user?.resource_access?.['dive-v3-broker']?.roles?.includes('dive-admin');
 
         if (!isAdmin) {
             res.status(403).json({

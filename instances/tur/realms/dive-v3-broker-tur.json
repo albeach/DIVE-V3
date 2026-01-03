@@ -158,7 +158,7 @@
   ],
   "clients": [
     {
-      "clientId": "dive-v3-client-broker",
+      "clientId": "dive-v3-broker",
       "name": "DIVE V3 Application",
       "description": "Main application client for DIVE V3",
       "enabled": true,

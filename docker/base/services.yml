@@ -82,11 +82,14 @@ services:
 
   # ---------------------------------------------------------------------------
   # Keycloak - Identity Provider/Broker
+  # Version SSOT: KEYCLOAK_VERSION defined in scripts/dive-modules/common.sh
   # ---------------------------------------------------------------------------
   keycloak-base:
     build:
       context: ../../keycloak
       dockerfile: Dockerfile
+      args:
+        KEYCLOAK_VERSION: ${KEYCLOAK_VERSION:-26.4.7}
     restart: unless-stopped
     command: start-dev --spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true --features=scripts
     environment:

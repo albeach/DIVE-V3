@@ -221,7 +221,7 @@ jobs:
           NODE_ENV: test
           KEYCLOAK_URL: https://${{ env.KEYCLOAK_IP }}:8443
           KEYCLOAK_REALM: dive-v3-broker
-          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-broker
           KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
 
   policies-lab-tests:

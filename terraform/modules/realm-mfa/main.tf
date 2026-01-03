@@ -2,7 +2,7 @@
 # MFA Browser Authentication Flow (NATIVE KEYCLOAK 26.4.2) - BEST PRACTICE PATTERN
 # ============================================
 # Multi-Level AAL Enforcement: AAL1/AAL2/AAL3 Using ONLY Native Keycloak Features
-# 
+#
 # CRITICAL FIX #2 (Dec 1, 2025):
 # - Changed `negate = "true"` to `check_result = "not-executed"` for conditional-sub-flow-executed!
 # - The "negate" parameter doesn't exist for this authenticator - it was being silently ignored!
@@ -47,10 +47,10 @@
 # - Returning users with OTP: Validates existing OTP
 # - Users from external IdPs: Clearance attribute determines MFA requirement
 #
-# ACR/AMR Mapping:
-# - AAL1 (password only): acr="0", amr=["pwd"]
-# - AAL2 (password+OTP): acr="1", amr=["pwd","otp"]
-# - AAL3 (password+WebAuthn): acr="2", amr=["pwd","hwk"]
+# ACR/AMR Mapping (CORRECTED Jan 2026):
+# - AAL1 (password only): acr="1", amr=["pwd"]
+# - AAL2 (password+OTP): acr="2", amr=["pwd","otp"]
+# - AAL3 (password+WebAuthn): acr="3", amr=["pwd","hwk"]
 
 resource "keycloak_authentication_flow" "classified_browser" {
   realm_id    = var.realm_id
@@ -103,16 +103,8 @@ resource "keycloak_authentication_execution" "browser_forms" {
   priority          = 10 # Password form FIRST
 }
 
-# Configure ACR and AMR for password authentication (AAL1 baseline)
-resource "keycloak_authentication_execution_config" "browser_password_acr" {
-  realm_id     = var.realm_id
-  execution_id = keycloak_authentication_execution.browser_forms.id
-  alias        = "Password ACR AMR - ${var.realm_display_name}"
-  config = {
-    acr_level = "0"   # AAL1 for password-only
-    reference = "pwd" # AMR reference (RFC-8176 compliant)
-  }
-}
+# NOTE: Password authentication automatically sets acr=1 and amr=["pwd"]
+# No explicit config needed - Keycloak's oidc-acr-mapper handles this automatically
 
 # ============================================
 # Step 2: Conditional AAL3 (TOP_SECRET → WebAuthn)
@@ -149,13 +141,14 @@ resource "keycloak_authentication_execution_config" "browser_condition_top_secre
   }
 }
 
-# WebAuthn Authenticator (hardware-backed, AAL3)
-resource "keycloak_authentication_execution" "browser_webauthn_form" {
+# LoA Level Condition (AAL3) - Sets acr=3 when this subflow completes
+# CRITICAL: This authenticator SETS the LoA level in the session
+resource "keycloak_authentication_execution" "browser_loa_level_3" {
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
-  authenticator     = "webauthn-authenticator"
+  authenticator     = "conditional-level-of-authentication"
   requirement       = "REQUIRED"
-  priority          = 20 # Execute AFTER condition check
+  priority          = 15 # Execute AFTER user-attribute check, BEFORE webauthn
 
   depends_on = [
     keycloak_authentication_execution.browser_condition_top_secret,
@@ -163,14 +156,39 @@ resource "keycloak_authentication_execution" "browser_webauthn_form" {
   ]
 }
 
-# Configure ACR and AMR for WebAuthn (AAL3)
+resource "keycloak_authentication_execution_config" "browser_loa_level_3_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_loa_level_3.id
+  alias        = "LoA Level 3 AAL3 - ${var.realm_display_name}"
+  config = {
+    loa-condition-level = "3"   # AAL3 for TOP_SECRET + WebAuthn (correct property name!)
+    loa-max-age         = "0"   # 0 = require re-auth every time (most secure for TOP_SECRET)
+  }
+}
+
+# WebAuthn Authenticator (hardware-backed, AAL3)
+resource "keycloak_authentication_execution" "browser_webauthn_form" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_webauthn.alias
+  authenticator     = "webauthn-authenticator"
+  requirement       = "REQUIRED"
+  priority          = 20 # Execute AFTER LoA condition
+
+  depends_on = [
+    keycloak_authentication_execution.browser_loa_level_3,
+    keycloak_authentication_execution_config.browser_loa_level_3_config
+  ]
+}
+
+# Configure ACR and AMR for WebAuthn (AAL3) - CRITICAL FIX Jan 2026
+# This was missing! Without this config, WebAuthn wouldn't set ACR level properly
 resource "keycloak_authentication_execution_config" "browser_webauthn_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.browser_webauthn_form.id
   alias        = "WebAuthn ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "3"   # AAL3 for hardware key (AAL3)
-    reference = "hwk" # AMR reference: hardware key per RFC 8176
+    acr_level = "3"   # AAL3 for TOP_SECRET + WebAuthn
+    reference = "hwk" # AMR reference for hardware key (RFC-8176 compliant)
   }
 }
 
@@ -208,6 +226,31 @@ resource "keycloak_authentication_execution_config" "browser_condition_config" {
     attribute_expected_value = "^(CONFIDENTIAL|SECRET)$" # Regex pattern for both levels
     regex                    = "true"                    # CRITICAL: Enable regex matching!
     not                      = "false"                   # Do not negate the result
+  }
+}
+
+# LoA Level Condition (AAL2) - Sets acr=2 when this subflow completes
+# CRITICAL: This authenticator SETS the LoA level in the session
+resource "keycloak_authentication_execution" "browser_loa_level_2" {
+  realm_id          = var.realm_id
+  parent_flow_alias = keycloak_authentication_subflow.browser_conditional_otp.alias
+  authenticator     = "conditional-level-of-authentication"
+  requirement       = "REQUIRED"
+  priority          = 15 # Execute AFTER user-attribute check, BEFORE 2FA
+
+  depends_on = [
+    keycloak_authentication_execution.browser_condition_user_attribute,
+    keycloak_authentication_execution_config.browser_condition_config
+  ]
+}
+
+resource "keycloak_authentication_execution_config" "browser_loa_level_2_config" {
+  realm_id     = var.realm_id
+  execution_id = keycloak_authentication_execution.browser_loa_level_2.id
+  alias        = "LoA Level 2 AAL2 - ${var.realm_display_name}"
+  config = {
+    loa-condition-level = "2"   # AAL2 for CONFIDENTIAL/SECRET + OTP (correct property name!)
+    loa-max-age         = "300" # 5 minutes validity for SECRET/CONFIDENTIAL
   }
 }
 
@@ -257,7 +300,7 @@ resource "keycloak_authentication_execution_config" "browser_otp_existing_acr" {
   execution_id = keycloak_authentication_execution.browser_otp_form_existing.id
   alias        = "OTP Existing ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "1"   # AAL2 when OTP succeeds
+    acr_level = "2"   # FIXED: AAL2 = acr level 2 (was incorrectly set to 1)
     reference = "otp" # AMR reference (RFC-8176 compliant)
   }
 }
@@ -321,13 +364,13 @@ resource "keycloak_authentication_execution_config" "browser_otp_enrollment_acr"
   execution_id = keycloak_authentication_execution.browser_otp_form_enrollment.id
   alias        = "OTP Enrollment ACR AMR - ${var.realm_display_name}"
   config = {
-    acr_level = "1"   # AAL2 when OTP succeeds
+    acr_level = "2"   # FIXED: AAL2 = acr level 2 (was incorrectly set to 1)
     reference = "otp" # AMR reference (RFC-8176 compliant)
   }
 }
 
 # ============================================
-# Authentication Flow Bindings  
+# Authentication Flow Bindings
 # ============================================
 resource "keycloak_authentication_bindings" "classified_bindings" {
   realm_id     = var.realm_id

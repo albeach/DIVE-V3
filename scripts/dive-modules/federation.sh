@@ -282,6 +282,10 @@ _federation_health_check_stub() {
     _load_federation_test && federation_health_check "$@"
 }
 
+_federation_sync_secrets_stub() {
+    _load_federation_link && federation_sync_secrets "$@"
+}
+
 # =============================================================================
 # MODULE DISPATCH
 # =============================================================================
@@ -318,6 +322,7 @@ module_federation() {
         unlink)         _federation_unlink_stub "$@" ;;
         verify)         _federation_verify_stub "$@" ;;
         fix)            _federation_fix_stub "$@" ;;
+        sync-secrets)   _federation_sync_secrets_stub "$@" ;;
         list-idps)      _federation_list_idps_stub "$@" ;;
 
         # Lazy-loaded: federation-mappers.sh
@@ -357,6 +362,7 @@ module_federation_help() {
     echo "  ${GREEN}${BOLD}unlink${NC} <CODE>       Remove IdP link"
     echo "  ${GREEN}${BOLD}verify${NC} <CODE>       Verify bidirectional federation status"
     echo "  ${GREEN}${BOLD}fix${NC} <CODE>          Fix misconfigured federation (delete & recreate)"
+    echo "  ${GREEN}${BOLD}sync-secrets${NC} <CODE> Sync client secrets bidirectionally (after redeploy)"
     echo "  ${GREEN}${BOLD}list-idps${NC}           List configured IdPs"
     echo ""
     echo -e "${CYAN}Mapper Commands:${NC} (lazy loaded)"

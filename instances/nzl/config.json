@@ -1,21 +1,22 @@
 {
   "identity": {
-    "spokeId": "spoke-nzl-2a76bd42",
+    "spokeId": "spoke-nzl-1f9d47ea",
     "instanceCode": "NZL",
-    "name": "New Zealand Defence Force",
-    "description": "DIVE V3 Spoke Instance for New Zealand Defence Force",
+    "name": "New Zealand",
+    "description": "DIVE V3 Spoke Instance for New Zealand",
     "country": "NZL",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@nzl.dive25.com"
   },
   "endpoints": {
-    "hubUrl": "https://hub.dive25.com",
-    "hubApiUrl": "https://hub.dive25.com/api",
-    "hubOpalUrl": "https://hub.dive25.com",
-    "baseUrl": "https://nzl-app.dive25.com",
-    "apiUrl": "https://nzl-api.dive25.com",
-    "idpUrl": "https://nzl-idp.dive25.com",
-    "kasUrl": "https://nzl-kas.dive25.com"
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3033",
+    "apiUrl": "https://localhost:4033",
+    "idpUrl": "https://dive-spoke-nzl-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8476",
+    "kasUrl": "https://localhost:10033"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/certs/spoke.crt",
@@ -44,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-12T07:32:45Z",
-    "lastModified": "2025-12-12T07:32:45Z",
+    "createdAt": "2026-01-02T18:15:52Z",
+    "lastModified": "2026-01-02T18:15:52Z",
     "configHash": ""
   }
 }

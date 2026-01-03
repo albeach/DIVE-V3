@@ -142,7 +142,7 @@ jobs:
           JWT_AUDIENCE: dive-v3-api-test
           KEYCLOAK_URL: http://localhost:8081
           KEYCLOAK_REALM: dive-v3-broker
-          KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+          KEYCLOAK_CLIENT_ID: dive-v3-broker
 
   backend-integration-tests:
     name: Backend - Integration Tests

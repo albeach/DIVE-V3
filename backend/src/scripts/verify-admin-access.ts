@@ -12,7 +12,7 @@ const INSTANCES = [
 
 const PASSWORD = 'Admin2025!SecurePassword123';
 const REALM = 'dive-v3-broker';
-const CLIENT_ID = 'dive-v3-client-broker'; // Broker realm client ID
+const CLIENT_ID = 'dive-v3-broker'; // Broker realm client ID
 
 async function testAdminAccess(instance: typeof INSTANCES[0]) {
     console.log(`\n${'='.repeat(60)}`);

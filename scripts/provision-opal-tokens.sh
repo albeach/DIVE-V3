@@ -95,6 +95,13 @@ provision_spoke() {
         return 1
     fi
 
+    # CRITICAL: Validate the token looks like a JWT (starts with eyJ)
+    # This prevents error messages from being written to .env file
+    if [[ ! "$jwt" =~ ^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$ ]]; then
+        log_error "Invalid JWT format received from OPAL server"
+        return 1
+    fi
+
     # Update spoke's .env file
     if [ -f "$env_file" ]; then
         # Remove existing OPAL token entries

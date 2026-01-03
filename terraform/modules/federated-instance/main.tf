@@ -16,21 +16,29 @@ resource "keycloak_realm" "broker" {
   # CRITICAL: SameSite=None required for cross-origin federation (different Keycloak ports)
   attributes = {
     frontendUrl = var.idp_url
-    acrToLoaMap = jsonencode({
-      "urn:mace:incommon:iap:silver"   = 1
-      "urn:mace:incommon:iap:gold"     = 2
-      "urn:mace:incommon:iap:platinum" = 3
+    # ACR-LoA mapping for NIST AAL levels
+    # Maps numeric ACR values from WebAuthn/OTP authenticators to LoA levels
+    # WebAuthn authenticator sets acr_level: "3" (AAL3)
+    # OTP authenticator sets acr_level: "2" (AAL2)
+    # Password-only authentication defaults to LoA 1 (AAL1)
+    "acr.loa.map" = jsonencode({
+      "1"                = 1 # AAL1: Password only
+      "2"                = 2 # AAL2: Password + OTP/SMS
+      "3"                = 3 # AAL3: Password + WebAuthn/hardware key
+      "urn:dive25:aal:1" = 1
+      "urn:dive25:aal:2" = 2
+      "urn:dive25:aal:3" = 3
     })
     # SameSite cookie fix for federation across different Keycloak instances
     # Without this, cookies are blocked when Hub (localhost:8443) redirects to Spoke (localhost:8453)
     "_browser-header-content-security-policy" = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
-    webAuthnPolicyRpEntityName               = "DIVE V3 - ${var.instance_name}"
+    webAuthnPolicyRpEntityName                = "DIVE V3 - ${var.instance_name}"
     # CRITICAL: Legacy SameSite attribute (Keycloak < 24)
     # Allows cookies to be sent in cross-origin requests (federation)
-    oauth2DeviceCodeLifespan       = "600"
-    oauth2DevicePollingInterval    = "5"
-    clientSessionIdleTimeout       = "0"
-    clientSessionMaxLifespan       = "0"
+    oauth2DeviceCodeLifespan        = "600"
+    oauth2DevicePollingInterval     = "5"
+    clientSessionIdleTimeout        = "0"
+    clientSessionMaxLifespan        = "0"
     clientOfflineSessionIdleTimeout = "0"
     clientOfflineSessionMaxLifespan = "0"
   }
@@ -111,7 +119,7 @@ resource "keycloak_realm" "broker" {
     relying_party_entity_name         = "DIVE V3 Coalition Platform"
     relying_party_id                  = var.webauthn_rp_id
     signature_algorithms              = ["ES256", "RS256"]
-    attestation_conveyance_preference = "direct"        # Full attestation for audit
+    attestation_conveyance_preference = "none"          # Allow passkeys without attestation (most compatible)
     authenticator_attachment          = "not specified" # Allows all types (platform, cross-platform, hybrid/QR)
     require_resident_key              = "No"            # Server-side credential storage OK
     user_verification_requirement     = "required"
@@ -140,7 +148,7 @@ resource "keycloak_realm" "broker" {
     relying_party_entity_name         = "DIVE V3 Coalition Platform"
     relying_party_id                  = var.webauthn_rp_id
     signature_algorithms              = ["ES256", "RS256"]
-    attestation_conveyance_preference = "direct"        # Full attestation for audit
+    attestation_conveyance_preference = "none"          # Allow passkeys without attestation (most compatible)
     authenticator_attachment          = "not specified" # Allows ALL types (platform, cross-platform, hybrid/QR)
     require_resident_key              = "Yes"           # Discoverable credential (AAL3)
     user_verification_requirement     = "required"      # Biometric/PIN required (AAL3)
@@ -173,31 +181,49 @@ resource "keycloak_openid_client" "broker_client" {
   # URLs - HTTPS only for security
   root_url = var.app_url
   base_url = var.app_url
-  valid_redirect_uris = [
-    "${var.app_url}/*",
-    "https://localhost:3000/*",
-    "https://localhost:4000/*",  # Backend API callbacks
-    "https://localhost:8443/*",  # Keycloak callbacks
-  ]
-  web_origins = [
-    var.app_url,
-    var.api_url,
-    "https://localhost:3000",
-    "https://localhost:4000",
-    "https://localhost:8443",
-  ]
+  valid_redirect_uris = concat(
+    [
+      "${var.app_url}/*",
+      "https://localhost:3000/*",
+      "https://localhost:4000/*", # Backend API callbacks
+      "https://localhost:8443/*", # Keycloak callbacks
+    ],
+    # Port-offset URLs for local development (if specified)
+    var.local_frontend_port != null ? [
+      "https://localhost:${var.local_frontend_port}/*",
+      "https://localhost:${var.local_frontend_port}/api/auth/callback/keycloak",
+    ] : [],
+    var.local_keycloak_port != null ? [
+      "https://localhost:${var.local_keycloak_port}/*",
+    ] : []
+  )
+  web_origins = concat(
+    [
+      var.app_url,
+      var.api_url,
+      "https://localhost:3000",
+      "https://localhost:4000",
+      "https://localhost:8443",
+    ],
+    var.local_frontend_port != null ? ["https://localhost:${var.local_frontend_port}"] : [],
+    var.local_keycloak_port != null ? ["https://localhost:${var.local_keycloak_port}"] : []
+  )
 
   # Logout configuration - CRITICAL for proper Single Logout (SLO)
   # Without these, logout redirects fail with "Unable to Complete Request"
   # SECURITY: HTTPS only - no HTTP allowed
   frontchannel_logout_enabled = true
   frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
-  valid_post_logout_redirect_uris = [
-    var.app_url,
-    "https://localhost:3000",
-    "https://localhost:4000",
-    "https://localhost:8443",
-  ]
+  valid_post_logout_redirect_uris = concat(
+    [
+      var.app_url,
+      "https://localhost:3000",
+      "https://localhost:4000",
+      "https://localhost:8443",
+    ],
+    var.local_frontend_port != null ? ["https://localhost:${var.local_frontend_port}"] : [],
+    var.local_keycloak_port != null ? ["https://localhost:${var.local_keycloak_port}"] : []
+  )
 
   # Token settings
   access_token_lifespan = "900" # 15 minutes
@@ -278,8 +304,8 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acp_coi" {
 
   user_attribute      = "acpCOI"
   claim_name          = "acpCOI"
-  claim_value_type    = "JSON"
-  multivalued         = true   # MUST be true for array values
+  claim_value_type    = "String" # FIX: Use String (not JSON) - multivalued=true handles array
+  multivalued         = true     # MUST be true for array values
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true
@@ -361,31 +387,35 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   add_to_access_token = true
 }
 
-# AMR Mapper - Using user attribute approach
+# AMR Mapper - Using DIVE custom mapper (ACR-derived)
 # ============================================
-# IMPORTANT: The native oidc-amr-mapper requires authenticators to set "reference"
-# values in their execution configs, but Keycloak 26's standard authenticators
-# (auth-username-password-form, auth-otp-form) don't expose reference properties.
+# CRITICAL FIX (January 2026):
+# The native oidc-amr-mapper does NOT work in Keycloak 26 because:
+# 1. It reads "reference" config from authenticator execution configs
+# 2. auth-username-password-form has configurable=false (cannot set reference)
+# 3. Therefore "pwd" is never added to AMR, resulting in amr: []
 #
-# WORKAROUND: Use user attribute mapper instead. The AMR attribute is set on users
-# via the seed script or when OTP is configured. This approach:
-# - Works reliably with all authentication flows
-# - Allows explicit control over AMR values
-# - Is managed by ./dive seed and user provisioning scripts
+# Solution: Use DIVE's custom dive-amr-protocol-mapper which DERIVES AMR from ACR:
+# - ACR "1" → AMR ["pwd"]           (AAL1: password only)
+# - ACR "2" → AMR ["pwd", "otp"]    (AAL2: password + OTP)
+# - ACR "3" → AMR ["pwd", "hwk"]    (AAL3: password + WebAuthn)
 #
-# The seed script sets amr=["pwd","otp"] for users with OTP credentials configured.
-resource "keycloak_openid_user_attribute_protocol_mapper" "amr_mapper" {
-  realm_id  = keycloak_realm.broker.id
-  client_id = keycloak_openid_client.broker_client.id
-  name      = "amr (user attribute)"
+# The ACR is correctly set by the oidc-acr-mapper reading from acr.loa.map
+# and LoA conditional authenticators in the authentication flow.
+#
+# Requires: dive-keycloak-extensions.jar in /opt/keycloak/providers/
+resource "keycloak_generic_protocol_mapper" "amr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.broker_client.id
+  name            = "amr (ACR-derived)"
+  protocol        = "openid-connect"
+  protocol_mapper = "dive-amr-protocol-mapper"
 
-  user_attribute       = "amr"
-  claim_name           = "amr"
-  claim_value_type     = "String"
-  multivalued          = true
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  config = {
+    "id.token.claim"     = "true"
+    "access.token.claim" = "true"
+    "userinfo.token.claim" = "true"
+  }
 }
 
 resource "keycloak_generic_protocol_mapper" "acr_mapper" {
@@ -403,6 +433,17 @@ resource "keycloak_generic_protocol_mapper" "acr_mapper" {
   }
 }
 
+# =============================================================================
+# FEDERATED ACR/AMR ATTRIBUTE MAPPERS - DEPRECATED (Jan 2026)
+# =============================================================================
+# REMOVED: User-attribute-based fallback mappers are no longer needed.
+# Reason: Native oidc-acr-mapper and oidc-amr-mapper handle all cases correctly.
+# See: acr-amr-session-mappers.tf for the new SSOT implementation.
+#
+# The following resources have been removed:
+# - keycloak_openid_user_attribute_protocol_mapper.federated_acr_mapper
+# - keycloak_openid_user_attribute_protocol_mapper.federated_amr_mapper
+
 resource "keycloak_openid_client_default_scopes" "broker_client_defaults" {
   realm_id  = keycloak_realm.broker.id
   client_id = keycloak_openid_client.broker_client.id
@@ -419,19 +460,22 @@ resource "keycloak_openid_client_default_scopes" "broker_client_defaults" {
 # INCOMING FEDERATION CLIENTS
 # ============================================================================
 # Create clients for partner instances to federate TO this instance
-# When USA wants to federate to FRA, FRA needs a client called "dive-v3-usa-federation"
+# When USA wants to federate to FRA, FRA needs a client called "dive-v3-broker-usa"
 #
 # CLIENT SECRET MANAGEMENT:
 # The client_secret is sourced from GCP Secret Manager via incoming_federation_secrets variable.
 # GCP naming: dive-v3-federation-{this_instance}-{partner}
-# Example: FRA creates "dive-v3-usa-federation" client, uses dive-v3-federation-fra-usa
+# Example: FRA creates "dive-v3-broker-usa" client, uses dive-v3-federation-fra-usa
 
 resource "keycloak_openid_client" "incoming_federation" {
   for_each = var.federation_partners
 
-  realm_id  = keycloak_realm.broker.id
-  client_id = "dive-v3-${lower(each.value.instance_code)}-federation"
-  name      = "Federation Client - ${each.value.instance_name}"
+  realm_id = keycloak_realm.broker.id
+  # CRITICAL: Match the naming pattern used by federation-link.sh (_federation_link_direct)
+  # Pattern: dive-v3-broker-{partner} (NOT dive-v3-{partner}-federation)
+  # Example: When USA federates to FRA, FRA has client "dive-v3-broker-usa"
+  client_id = "dive-v3-broker-${lower(each.value.instance_code)}"
+  name      = "${each.value.instance_name} Federation Client"
   enabled   = each.value.enabled
 
   # Client settings for federation
@@ -447,9 +491,10 @@ resource "keycloak_openid_client" "incoming_federation" {
   client_secret = lookup(var.incoming_federation_secrets, each.key, null)
 
   # URLs - redirect back to the partner's Keycloak
+  # CRITICAL: Use partner's realm name (dive-v3-broker-{partner_code}), not generic dive-v3-broker
   valid_redirect_uris = [
-    "${each.value.idp_url}/realms/dive-v3-broker/broker/${lower(var.instance_code)}-federation/endpoint",
-    "${each.value.idp_url}/realms/dive-v3-broker/broker/${lower(var.instance_code)}-federation/endpoint/*",
+    "${each.value.idp_url}/realms/dive-v3-broker-${lower(each.value.instance_code)}/broker/${lower(var.instance_code)}-idp/endpoint",
+    "${each.value.idp_url}/realms/dive-v3-broker-${lower(each.value.instance_code)}/broker/${lower(var.instance_code)}-idp/endpoint/*",
   ]
   web_origins = [
     each.value.idp_url,
@@ -557,7 +602,10 @@ locals {
   admin_password = coalesce(var.admin_user_password, var.test_user_password)
 }
 
+# Admin user - only created if create_test_users is true (to avoid conflict with seed-users.sh)
 resource "keycloak_user" "admin_user" {
+  count = var.create_test_users ? 1 : 0
+
   realm_id   = keycloak_realm.broker.id
   username   = "admin-${lower(var.instance_code)}"
   enabled    = true
@@ -590,19 +638,23 @@ resource "keycloak_user" "admin_user" {
 }
 
 resource "keycloak_user_roles" "admin_user_super_admin" {
+  count = var.create_test_users ? 1 : 0
+
   realm_id = keycloak_realm.broker.id
-  user_id  = keycloak_user.admin_user.id
+  user_id  = keycloak_user.admin_user[0].id
   role_ids = [
     keycloak_role.super_admin.id,
   ]
 }
 
 resource "keycloak_group_memberships" "admin_user_super_admin_group" {
+  count = var.create_test_users ? 1 : 0
+
   realm_id = keycloak_realm.broker.id
   group_id = keycloak_group.super_admins.id
 
   members = [
-    keycloak_user.admin_user.username,
+    keycloak_user.admin_user[0].username,
   ]
 }
 

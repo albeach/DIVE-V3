@@ -313,7 +313,7 @@ services:
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
-      KEYCLOAK_CLIENT_ID: dive-v3-client-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
     ports:
       - "{{KAS_HOST_PORT}}:8080"
     depends_on:
@@ -369,10 +369,10 @@ services:
       # Keycloak OAuth config
       KEYCLOAK_URL: {{IDP_BASE_URL}}
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
-      KEYCLOAK_CLIENT_ID: dive-v3-client-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       # NextAuth v5 Keycloak provider
-      AUTH_KEYCLOAK_ID: dive-v3-client-{{INSTANCE_CODE_LOWER}}
+      AUTH_KEYCLOAK_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}

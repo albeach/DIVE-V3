@@ -85,9 +85,24 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
         ? new Date(user.auth_time * 1000).toLocaleString()
         : (decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null);
     const acr: string | null = user?.acr || decoded?.acr || null;
-    const amr: string | null = Array.isArray(user?.amr)
-        ? user!.amr.join(' + ')
-        : (Array.isArray(decoded?.amr) ? decoded!.amr.join(' + ') : decoded?.amr || null);
+
+    // Derive AMR from ACR since native Keycloak authenticators don't set AUTH_METHODS_REF session note
+    // Our authentication flow has a 1:1 mapping: ACR=1→pwd, ACR=2→pwd+otp, ACR=3→pwd+hwk
+    const deriveAmrFromAcr = (acrValue: string | null): string[] => {
+        if (!acrValue) return [];
+        const acrNum = parseInt(acrValue, 10);
+        if (acrNum >= 3) return ['pwd', 'hwk']; // TOP_SECRET: password + hardware key (WebAuthn)
+        if (acrNum >= 2) return ['pwd', 'otp']; // SECRET/CONFIDENTIAL: password + OTP
+        if (acrNum >= 1) return ['pwd'];         // UNCLASSIFIED: password only
+        return [];
+    };
+
+    // Get raw AMR from token, or derive from ACR if empty
+    const rawAmr = Array.isArray(user?.amr) && user!.amr.length > 0
+        ? user!.amr
+        : (Array.isArray(decoded?.amr) && decoded!.amr.length > 0 ? decoded!.amr : null);
+    const derivedAmrArray = rawAmr || deriveAmrFromAcr(acr);
+    const amr: string | null = derivedAmrArray.length > 0 ? derivedAmrArray.join(' + ') : null;
 
     // Convert ACR to readable AAL level
     const getAALDisplay = (acrValue: string | null): string => {
@@ -176,50 +191,43 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
 
     // Check if user has MFA configured (OTP or WebAuthn)
     const hasMFA = (): boolean | null => {
-        // If both are null, we're still checking
-        if (otpConfigured === null && webAuthnConfigured === null) {
-            // Fallback: Check AMR directly from token (immediate, no API wait)
-            const amrArray = Array.isArray(user?.amr) ? user.amr :
-                            (Array.isArray(decoded?.amr) ? decoded.amr :
-                            (decoded?.amr ? [decoded.amr] : []));
-            const hasWebAuthnInAMR = amrArray.some((m: string) =>
-                m.toLowerCase().includes('hwk') ||
-                m.toLowerCase().includes('webauthn') ||
-                m.toLowerCase().includes('passkey')
-            );
-            const hasOTPInAMR = amrArray.some((m: string) =>
-                m.toLowerCase().includes('otp') ||
-                m.toLowerCase().includes('totp')
-            );
-            // If AMR shows MFA, return true immediately (don't wait for API)
-            if (hasWebAuthnInAMR || hasOTPInAMR) {
-                return true;
-            }
-            // No MFA factors in AMR; treat as not set rather than "Checking"
-            return false;
+        // Use derivedAmrArray which is either from token or derived from ACR
+        const hasWebAuthnInAMR = derivedAmrArray.some((m: string) =>
+            m.toLowerCase().includes('hwk') ||
+            m.toLowerCase().includes('webauthn') ||
+            m.toLowerCase().includes('passkey')
+        );
+        const hasOTPInAMR = derivedAmrArray.some((m: string) =>
+            m.toLowerCase().includes('otp') ||
+            m.toLowerCase().includes('totp')
+        );
+        // If derived AMR shows MFA factors, return true
+        if (hasWebAuthnInAMR || hasOTPInAMR) {
+            return true;
         }
-        // Use configured status (from API or AMR)
-        return (otpConfigured === true) || (webAuthnConfigured === true);
+        // Fall back to API-configured status if available
+        if (otpConfigured !== null || webAuthnConfigured !== null) {
+            return (otpConfigured === true) || (webAuthnConfigured === true);
+        }
+        // No MFA factors detected
+        return false;
     };
 
     // Check MFA status (OTP and WebAuthn) when profile tab is active
     useEffect(() => {
         if (activeTab === 'profile' && (otpConfigured === null || webAuthnConfigured === null) && user?.uniqueID) {
-            // First, check AMR from token immediately (no API call needed)
-            const amrArray = Array.isArray(user?.amr) ? user.amr :
-                            (Array.isArray(decoded?.amr) ? decoded.amr :
-                            (decoded?.amr ? [decoded.amr] : []));
-            const hasWebAuthnInAMR = amrArray.some((m: string) =>
+            // Use derived AMR (either from token or derived from ACR)
+            const hasWebAuthnInAMR = derivedAmrArray.some((m: string) =>
                 m.toLowerCase().includes('hwk') ||
                 m.toLowerCase().includes('webauthn') ||
                 m.toLowerCase().includes('passkey')
             );
-            const hasOTPInAMR = amrArray.some((m: string) =>
+            const hasOTPInAMR = derivedAmrArray.some((m: string) =>
                 m.toLowerCase().includes('otp') ||
                 m.toLowerCase().includes('totp')
             );
 
-            // Set initial state from AMR (immediate, no waiting)
+            // Set initial state from derived AMR (immediate, no waiting)
             if (hasWebAuthnInAMR && webAuthnConfigured === null) {
                 setWebAuthnConfigured(true);
             }
@@ -228,7 +236,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
             }
 
             // Then fetch detailed status from API (for users who haven't logged in with MFA yet)
-            // Only fetch if we don't have definitive answer from AMR
+            // Only fetch if we don't have definitive answer from derived AMR
             if ((!hasWebAuthnInAMR && !hasOTPInAMR) || (otpConfigured === null || webAuthnConfigured === null)) {
                 const idpAlias = decoded?.idpAlias || decoded?.iss?.split('/').pop() || 'us-idp';
                 const username = user.uniqueID.split('@')[0] || user.uniqueID;
@@ -263,7 +271,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                     });
             }
         }
-    }, [activeTab, otpConfigured, webAuthnConfigured, user?.uniqueID, decoded]);
+    }, [activeTab, otpConfigured, webAuthnConfigured, user?.uniqueID, decoded, derivedAmrArray, acr]);
 
     const [unreadCount, setUnreadCount] = useState<number>(0);
 

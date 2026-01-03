@@ -164,7 +164,7 @@ get_client_id() {
     local code="$1"
     local code_lower="${code,,}"
     
-    echo "dive-v3-client-broker"
+    echo "dive-v3-broker"
 }
 
 # =============================================================================

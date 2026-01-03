@@ -23,7 +23,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   for_each = var.federation_partners
 
   realm        = keycloak_realm.broker.id
-  alias        = "${lower(each.value.instance_code)}-federation"
+  alias        = "${lower(each.value.instance_code)}-idp"
   display_name = "DIVE V3 - ${each.value.instance_name}"
   enabled      = each.value.enabled
 
@@ -43,7 +43,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   # Client credentials (these would be created in the partner's Keycloak)
   # NOTE: client_secret is a placeholder until sync-federation-secrets.sh runs post-Terraform
   # The chicken-and-egg problem: Partner creates the client, we need their secret
-  client_id     = "dive-v3-${lower(var.instance_code)}-federation"
+  client_id     = "dive-v3-${lower(var.instance_code)}-client"
   client_secret = each.value.client_secret
 
   # OIDC settings
@@ -60,6 +60,10 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   # UI settings
   gui_order          = lookup(local.federation_order, each.value.instance_code, 99)
   hide_on_login_page = false
+
+  # MFA Flow Binding
+  # Use simple_post_broker_otp_flow_alias for MFA after federated login
+  post_broker_login_flow_alias = var.simple_post_broker_otp_flow_alias
 
   # Extra config for attribute mapping
   extra_config = {
@@ -148,6 +152,21 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
     "syncMode"       = "FORCE"
   }
 }
+
+# =============================================================================
+# ACR/AMR MAPPERS FOR FEDERATION - DEPRECATED (Jan 2026)
+# =============================================================================
+# REMOVED: User-attribute-based ACR/AMR storage is deprecated.
+# Reason: User attributes are persistent but stale; session notes are fresh and correct.
+# Replacement: Native oidc-acr-mapper and oidc-amr-mapper read from authentication session.
+# See: acr-amr-session-mappers.tf for the new SSOT implementation.
+#
+# The following resources have been removed:
+# - keycloak_custom_identity_provider_mapper.acr_mapper (stored to federatedAcr attribute)
+# - keycloak_custom_identity_provider_mapper.amr_mapper (stored to federatedAmr attribute)
+#
+# Migration: When this Terraform is applied, the old mappers will be destroyed.
+# ACR/AMR will be read directly from authentication session via native mappers.
 
 # Flexible claim mappers (multiple variants per attribute)
 resource "keycloak_custom_identity_provider_mapper" "flex_clearance" {
@@ -353,6 +372,8 @@ locals {
   }
 
   # Back-channel URL for each partner (defaults to idp_url when idp_internal_url not provided)
+  # Container names (e.g., dive-spoke-bel-keycloak) ARE in SSL certificate SANs
+  # Certificates are generated with all container names included via mkcert
   partner_internal_url = {
     for k, v in var.federation_partners :
     k => coalesce(try(v.idp_internal_url, null), v.idp_url)

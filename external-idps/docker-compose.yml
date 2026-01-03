@@ -39,7 +39,7 @@ services:
       # Technical contact
       SIMPLESAMLPHP_TECHNICALCONTACT_NAME: Spanish Defense Ministry IT
       SIMPLESAMLPHP_TECHNICALCONTACT_EMAIL: tic@mde.es
-      # SSL Configuration  
+      # SSL Configuration
       SIMPLESAMLPHP_BASEURLPATH: http://localhost:9443/simplesaml/
       # Disable error email reporting (no mail server configured)
       SIMPLESAMLPHP_CONFIG_ERRORREPORTING: 'false'
@@ -82,7 +82,7 @@ services:
       retries: 5
 
   usa-oidc:
-    image: quay.io/keycloak/keycloak:26.0.0
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.4.7}
     container_name: dive-usa-oidc-idp
     hostname: usa-oidc
     environment:

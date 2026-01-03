@@ -1,0 +1,167 @@
+# ============================================================================
+# ⚠️  DEPRECATED - CROSS-BORDER FEDERATION CLIENT
+# ============================================================================
+# STATUS: DEPRECATED as of Jan 2, 2026
+# REASON: This client is NOT used for actual cross-border federation.
+#
+# ACTUAL ARCHITECTURE:
+# When Hub (USA) federates to Spoke (NZL), it uses:
+#   - Hub creates IdP: nzl-idp
+#   - IdP uses client: dive-v3-broker-usa (created on NZL's Keycloak)
+#   - NOT this dive-v3-cross-border-client
+#
+# The actual federation clients follow this pattern:
+#   - dive-v3-broker-{source_code} on the target Keycloak
+#   - e.g., Hub→NZL uses "dive-v3-broker-usa" on NZL's Keycloak
+#   - e.g., NZL→Hub uses "dive-v3-broker-nzl" on Hub's Keycloak
+#
+# This client was created by init-keycloak.sh but never actually used.
+# It is maintained for backwards compatibility but should be removed in v5.0.
+#
+# MIGRATION:
+# 1. Verify no active IdPs reference "dive-v3-cross-border-client"
+# 2. Remove this file and variable from variables.tf
+# 3. Run terraform apply to clean up
+#
+# Previously created by: scripts/spoke-init/init-keycloak.sh (lines 617-724)
+# Now managed by: Terraform (SSOT) - PENDING REMOVAL
+# ============================================================================
+
+resource "keycloak_openid_client" "cross_border_client" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = "dive-v3-cross-border-client"
+  name      = "DIVE V3 Cross-Border Federation"
+  enabled   = true
+
+  # Client settings
+  access_type                  = "CONFIDENTIAL"
+  standard_flow_enabled        = true
+  implicit_flow_enabled        = false
+  direct_access_grants_enabled = false
+  service_accounts_enabled     = false
+
+  # Client secret from GCP Secret Manager (or variable)
+  client_secret = var.cross_border_client_secret
+
+  # Redirect URIs for cross-border federation
+  # Include Hub broker endpoint + production URLs + local development ports
+  valid_redirect_uris = concat(
+    [
+      # Hub broker endpoints (USA Hub at default port)
+      "https://localhost:8443/*",
+      "https://localhost:8443/realms/dive-v3-broker-usa/broker/${lower(var.instance_code)}-idp/endpoint",
+      "https://localhost:8443/realms/dive-v3-broker-usa/broker/${lower(var.instance_code)}-idp/endpoint/*",
+      # Production URLs
+      "https://${lower(var.instance_code)}-idp.dive25.com/*",
+      "https://usa-idp.dive25.com/*",
+      # Generic localhost for development
+      "https://localhost:3000/*",
+    ],
+    # Port-offset URLs for local development (if specified)
+    var.local_keycloak_port != null ? [
+      "https://localhost:${var.local_keycloak_port}/*",
+      "https://localhost:${var.local_keycloak_port}/realms/dive-v3-broker-${lower(var.instance_code)}/broker/usa-idp/endpoint",
+      "https://localhost:${var.local_keycloak_port}/realms/dive-v3-broker-${lower(var.instance_code)}/broker/usa-idp/endpoint/*",
+    ] : []
+  )
+
+  # Allow all origins for federation
+  web_origins = ["*"]
+
+  # PKCE enabled for security
+  pkce_code_challenge_method = "S256"
+
+  # Token settings
+  access_token_lifespan = "300" # 5 minutes for federation tokens
+}
+
+# ============================================================================
+# PROTOCOL MAPPERS FOR CROSS-BORDER CLIENT
+# ============================================================================
+# These mappers ensure user attributes are included in tokens issued to
+# other instances during federation.
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "cross_border_clearance" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.cross_border_client.id
+  name      = "clearance"
+
+  user_attribute      = "clearance"
+  claim_name          = "clearance"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "cross_border_country" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.cross_border_client.id
+  name      = "countryOfAffiliation"
+
+  user_attribute      = "countryOfAffiliation"
+  claim_name          = "countryOfAffiliation"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "cross_border_unique_id" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.cross_border_client.id
+  name      = "uniqueID"
+
+  user_attribute      = "uniqueID"
+  claim_name          = "uniqueID"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "cross_border_coi" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.cross_border_client.id
+  name      = "acpCOI"
+
+  user_attribute      = "acpCOI"
+  claim_name          = "acpCOI"
+  claim_value_type    = "String"
+  multivalued         = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# AMR mapper for cross-border (authentication methods)
+resource "keycloak_generic_protocol_mapper" "cross_border_amr" {
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.cross_border_client.id
+  name            = "amr (authentication session)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-amr-mapper"
+
+  config = {
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+    "claim.name"           = "amr"
+  }
+}
+
+# ACR mapper for cross-border (authentication context)
+resource "keycloak_generic_protocol_mapper" "cross_border_acr" {
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.cross_border_client.id
+  name            = "acr (authn context)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-acr-mapper"
+
+  config = {
+    "id.token.claim"       = "true"
+    "access.token.claim"   = "true"
+    "userinfo.token.claim" = "true"
+    "claim.name"           = "acr"
+  }
+}

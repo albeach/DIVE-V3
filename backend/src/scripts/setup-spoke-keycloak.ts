@@ -351,7 +351,7 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
 
   // 3. Create broker client
   const brokerClient: ClientConfig = {
-    clientId: 'dive-v3-client-broker',
+    clientId: 'dive-v3-broker',
     name: 'DIVE V3 Client',
     description: `DIVE V3 application client for ${code} instance`,
     enabled: true,
@@ -458,7 +458,7 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
   console.log(`\n✅ Keycloak setup complete for ${code}!`);
   console.log(`\n📋 Configuration summary:`);
   console.log(`   Realm:     dive-v3-broker`);
-  console.log(`   Client ID: dive-v3-client-broker`);
+  console.log(`   Client ID: dive-v3-broker`);
   console.log(`   URL:       ${config.keycloakUrl}/realms/dive-v3-broker`);
   console.log(`\n   Next steps:`);
   console.log('   1. Create test users with clearance, countryOfAffiliation attributes');

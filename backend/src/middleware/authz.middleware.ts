@@ -511,7 +511,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
  * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
  * - Backward compatible: Existing tokens from dive-v3-broker still work
  * - Forward compatible: New tokens from dive-v3-broker federation accepted
- * - Dual audience support: dive-v3-client AND dive-v3-client-broker
+ * - Dual audience support: dive-v3-client AND dive-v3-broker
  */
 const verifyToken = async (token: string): Promise<IKeycloakToken> => {
     try {
@@ -708,7 +708,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
         const validAudiences: [string, ...string[]] = [
             'dive-v3-client',         // Legacy client (broker realm)
-            'dive-v3-client-broker',  // Multi-realm broker client (old name - deprecated)
+            'dive-v3-broker',  // Multi-realm broker client (old name - deprecated)
             'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
         ];
@@ -813,36 +813,58 @@ export function normalizeACR(acr: string | number | undefined): number {
  * - Array format (new): ["pwd", "otp"] (set by custom SPI session notes)
  * - JSON string format (legacy): "[\"pwd\",\"otp\"]" (from hardcoded user attributes)
  *
+ * CRITICAL FIX (Jan 2026): When AMR is empty/undefined but ACR is set,
+ * derive AMR from ACR since native Keycloak authenticators don't populate AMR.
+ * - ACR 1 → AMR ["pwd"]
+ * - ACR 2 → AMR ["pwd", "otp"]
+ * - ACR 3 → AMR ["pwd", "hwk"]
+ *
  * @param amr - AMR claim from JWT (array or JSON string)
+ * @param acr - Optional ACR claim for deriving AMR when AMR is empty
  * @returns Array of authentication methods
  */
-export function normalizeAMR(amr: string | string[] | undefined): string[] {
-    if (amr === undefined || amr === null) {
-        logger.debug('AMR not provided, defaulting to password-only');
-        return ['pwd'];  // Default: password only
-    }
-
-    // Handle array format (new)
-    if (Array.isArray(amr)) {
+export function normalizeAMR(amr: string | string[] | undefined, acr?: string | number): string[] {
+    // Handle array format (new) - if non-empty array, use it
+    if (Array.isArray(amr) && amr.length > 0) {
         logger.debug('AMR is array (new format)', { amr });
         return amr;
     }
 
     // Handle JSON string format (legacy - from hardcoded user attributes)
-    try {
-        const parsed = JSON.parse(amr as string);
-        if (Array.isArray(parsed)) {
-            logger.debug('AMR is JSON string (legacy), parsed to array', { amr, parsed });
-            return parsed;
+    if (typeof amr === 'string') {
+        try {
+            const parsed = JSON.parse(amr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                logger.debug('AMR is JSON string (legacy), parsed to array', { amr, parsed });
+                return parsed;
+            }
+        } catch (e) {
+            // Not JSON, treat as single method if non-empty
+            if (amr.trim()) {
+                logger.debug('AMR is single string value', { amr });
+                return [amr];
+            }
         }
-    } catch (e) {
-        // Not JSON, treat as single method
-        logger.debug('AMR is not JSON, treating as single method', { amr });
     }
 
-    // Single string value (edge case)
-    logger.debug('AMR is single string value', { amr });
-    return [amr as string];
+    // AMR is empty/undefined - derive from ACR if available (CRITICAL FIX Jan 2026)
+    // Native Keycloak authenticators don't populate AMR session notes, so we derive it
+    if (acr !== undefined && acr !== null) {
+        const acrNum = typeof acr === 'number' ? acr : parseInt(String(acr), 10);
+        if (!isNaN(acrNum)) {
+            if (acrNum >= 3) {
+                logger.debug('AMR derived from ACR=3 (AAL3: WebAuthn)', { acr, derivedAmr: ['pwd', 'hwk'] });
+                return ['pwd', 'hwk'];
+            } else if (acrNum >= 2) {
+                logger.debug('AMR derived from ACR=2 (AAL2: OTP)', { acr, derivedAmr: ['pwd', 'otp'] });
+                return ['pwd', 'otp'];
+            }
+        }
+    }
+
+    // Default: password only
+    logger.debug('AMR not provided and ACR not available, defaulting to password-only');
+    return ['pwd'];
 }
 
 /**
@@ -877,7 +899,7 @@ const validateAAL2 = (token: IKeycloakToken, classification: string): void => {
 
     // Phase 1: Use normalization functions for backward compatibility
     const aal = normalizeACR(token.acr);
-    const amrArray = normalizeAMR(token.amr);
+    const amrArray = normalizeAMR(token.amr, token.acr);  // Pass ACR to derive AMR when empty
 
     // Check if ACR indicates AAL2+ (numeric: 1 or higher)
     const isAAL2 = aal >= 1;
@@ -1184,6 +1206,13 @@ export const authenticateJWT = async (
                     const amr = (decoded as any).amr;
                     const acr = (decoded as any).acr;
 
+                    // #region agent log
+                    // DEBUG: Log federated token ACR/AMR claims (Hypothesis E: IdP mapper import)
+                    const fs = await import('fs');
+                    const debugPayload = JSON.stringify({location:'authz.middleware.ts:1189',message:'FEDERATED_TOKEN_ACR_AMR',data:{amr,acr,clearance,federatedFrom,uniqueID,issuer:(decoded as any).iss,all_claims:Object.keys(decoded)},timestamp:Date.now(),sessionId:'acr-amr-debug',hypothesisId:'E'});
+                    fs.appendFileSync('/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log', debugPayload + '\n');
+                    // #endregion
+
                     // Attach federated user info to request
                     (req as any).user = {
                         uniqueID,
@@ -1321,8 +1350,17 @@ export const authenticateJWT = async (
         const clearanceCountry = decodedToken.clearanceCountry || countryOfAffiliation;
 
         // Normalize AMR and ACR for AAL/FAL enforcement
-        const normalizedAMR = normalizeAMR(decodedToken.amr);
+        const normalizedAMR = normalizeAMR(decodedToken.amr, decodedToken.acr);  // Pass ACR to derive AMR when empty
         const normalizedACR = normalizeACR(decodedToken.acr);
+
+        // #region agent log
+        // DEBUG: Log direct (non-federated) token ACR/AMR claims (Hypothesis A, B, C, D)
+        try {
+            const fs = await import('fs');
+            const debugPayload = JSON.stringify({location:'authz.middleware.ts:1335',message:'DIRECT_TOKEN_ACR_AMR',data:{raw_amr:decodedToken.amr,raw_acr:decodedToken.acr,normalized_amr:normalizedAMR,normalized_acr:normalizedACR,clearance,uniqueID,issuer:decodedToken.iss,all_claims:Object.keys(decodedToken)},timestamp:Date.now(),sessionId:'acr-amr-debug',hypothesisId:'ABCD'});
+            fs.appendFileSync('/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log', debugPayload + '\n');
+        } catch (e) { /* ignore logging errors */ }
+        // #endregion
 
         // Handle acpCOI - Keycloak often double-encodes this as JSON string
         let acpCOI: string[] = [];
@@ -2231,7 +2269,7 @@ export const authzMiddleware = async (
 
         // Phase 1: Normalize ACR/AMR for OPA input (ensure consistent format)
         const normalizedAAL = decodedToken ? normalizeACR(decodedToken.acr) : 0;
-        const normalizedAMR = decodedToken ? normalizeAMR(decodedToken.amr) : ['sp_auth'];
+        const normalizedAMR = decodedToken ? normalizeAMR(decodedToken.amr, decodedToken.acr) : ['sp_auth'];  // Pass ACR to derive AMR when empty
         const acrForOPA = String(normalizedAAL); // OPA expects string format
 
         // Phase 5: Extract issuer for federation trust validation

@@ -55,7 +55,7 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         name: 'United States',
         idpUrl: 'https://usa-idp.dive25.com',
         realm: 'dive-v3-broker',
-        clientId: 'dive-v3-client-broker',
+        clientId: 'dive-v3-broker',
         protocol: 'oidc',
         enabled: true
     },
@@ -64,7 +64,7 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         name: 'France',
         idpUrl: 'https://fra-idp.dive25.com',
         realm: 'dive-v3-broker',
-        clientId: 'dive-v3-client-broker',
+        clientId: 'dive-v3-broker',
         protocol: 'oidc',
         enabled: true
     },
@@ -73,7 +73,7 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         name: 'United Kingdom',
         idpUrl: 'https://gbr-idp.dive25.com',
         realm: 'dive-v3-broker',
-        clientId: 'dive-v3-client-broker',
+        clientId: 'dive-v3-broker',
         protocol: 'oidc',
         enabled: true
     },
@@ -82,7 +82,7 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         name: 'Germany',
         idpUrl: 'https://deu-idp.prosecurity.biz',
         realm: 'dive-v3-broker',
-        clientId: 'dive-v3-client-broker',
+        clientId: 'dive-v3-broker',
         protocol: 'oidc',
         enabled: true
     },
@@ -91,7 +91,7 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         name: 'Canada',
         idpUrl: 'https://can-idp.dive25.com',
         realm: 'dive-v3-broker',
-        clientId: 'dive-v3-client-broker',
+        clientId: 'dive-v3-broker',
         protocol: 'oidc',
         enabled: false // Not yet deployed
     },
@@ -100,7 +100,7 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         name: 'Spain',
         idpUrl: 'https://esp-idp.dive25.com',
         realm: 'dive-v3-broker',
-        clientId: 'dive-v3-client-broker',
+        clientId: 'dive-v3-broker',
         protocol: 'oidc',
         enabled: false // Not yet deployed
     }

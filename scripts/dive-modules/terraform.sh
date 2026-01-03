@@ -284,6 +284,21 @@ terraform_spoke() {
 }
 
 # =============================================================================
+# TERRAFORM ACR/AMR SSOT FIX (Jan 2026)
+# =============================================================================
+# Wrapper for terraform_apply_acr_amr_ssot from terraform-apply.sh
+
+terraform_fix_acr_amr() {
+    # Load the terraform-apply module
+    if [ -z "$DIVE_TERRAFORM_APPLY_LOADED" ]; then
+        source "${MODULES_DIR}/terraform-apply.sh"
+    fi
+    
+    # Call the function from terraform-apply.sh
+    terraform_apply_acr_amr_ssot
+}
+
+# =============================================================================
 # TERRAFORM VALIDATE & FORMAT
 # =============================================================================
 
@@ -378,6 +393,9 @@ module_terraform() {
         fmt|format)
             terraform_fmt "$@"
             ;;
+        fix-acr-amr|acr-amr-fix)
+            terraform_fix_acr_amr
+            ;;
         *)
             module_terraform_help
             ;;
@@ -396,6 +414,9 @@ module_terraform_help() {
     echo "  init [dir]              Initialize Terraform"
     echo "  validate                Validate all configurations"
     echo "  fmt                     Format all Terraform files"
+    echo ""
+    echo -e "${CYAN}Fixes:${NC}"
+    echo "  fix-acr-amr             Apply ACR/AMR SSOT fix (session-based mappers)"
     echo ""
     echo -e "${CYAN}NATO Country tfvars Generation:${NC}"
     echo "  generate <CODE>         Generate tfvars for a NATO country"
@@ -421,6 +442,7 @@ module_terraform_help() {
     echo "  countries/              Per-country tfvars files"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
+    echo "  ./dive tf fix-acr-amr               Fix ACR/AMR mappers (SSOT)"
     echo "  ./dive tf generate POL              Generate Poland tfvars"
     echo "  ./dive tf generate --all            Generate all 32 tfvars"
     echo "  ./dive tf plan pilot                Plan pilot deployment"

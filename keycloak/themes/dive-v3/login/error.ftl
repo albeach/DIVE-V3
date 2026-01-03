@@ -2,6 +2,23 @@
 <@layout.registrationLayout displayMessage=false; section>
     <#if section = "header">
     <#elseif section = "form">
+        <#-- #region agent log -->
+        <#-- Hypothesis C,E: Log error page context to see what state was lost -->
+        <script>
+        (function() {
+            const errorData = {
+                message: '${message.summary?js_string}',
+                url: window.location.href,
+                hasState: window.location.href.includes('state='),
+                hasCode: window.location.href.includes('code='),
+                hasSessionState: window.location.href.includes('session_state='),
+                realm: '${realm.name?js_string}',
+                client: '${client.clientId?js_string}'
+            };
+            fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'error.ftl:10',message:'OAuth error page loaded',data:errorData,timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C,E'})}).catch(()=>{});
+        })();
+        </script>
+        <#-- #endregion -->
         <div class="dive-error-page">
             <!-- Status Indicator -->
             <div class="dive-error-status">
@@ -182,9 +199,15 @@
             
             <!-- Actions -->
             <div class="dive-error-actions">
-                <a href="${url.loginUrl}" class="dive-button-primary">
-                    ${msg("errorTryAgain")}
-                </a>
+                <#if url.loginRestartFlowUrl?has_content>
+                    <a href="${url.loginRestartFlowUrl}" class="dive-button-primary">
+                        ${msg("errorTryAgain")}
+                    </a>
+                <#elseif url.loginUrl?has_content>
+                    <a href="${url.loginUrl}" class="dive-button-primary">
+                        ${msg("errorTryAgain")}
+                    </a>
+                </#if>
                 <#if client?? && client.baseUrl?has_content>
                     <a href="${client.baseUrl}" class="dive-button-secondary">
                         ${msg("errorBackToApp")}

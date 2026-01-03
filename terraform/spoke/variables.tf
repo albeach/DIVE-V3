@@ -36,7 +36,7 @@ variable "idp_url" {
 variable "client_id" {
   description = "OIDC client ID"
   type        = string
-  default     = "dive-v3-client-broker"
+  default     = "dive-v3-broker"
 }
 
 variable "client_secret" {
