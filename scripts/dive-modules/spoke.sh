@@ -95,6 +95,16 @@ _load_spoke_init() {
     fi
 }
 
+# Lazy load Fix Hostname module
+_load_spoke_fix_hostname() {
+    if [ -z "$DIVE_SPOKE_FIX_HOSTNAME_LOADED" ]; then
+        source "${_SPOKE_MODULES_DIR}/spoke-fix-hostname.sh" 2>/dev/null || {
+            log_error "Failed to load spoke-fix-hostname.sh module"
+            return 1
+        }
+    fi
+}
+
 # Lazy load Deploy module (deploy, up)
 _load_spoke_deploy() {
     if [ -z "$DIVE_SPOKE_DEPLOY_LOADED" ]; then
@@ -2484,6 +2494,16 @@ module_spoke() {
         pki-request)    spoke_pki_request "$@" ;;
         pki-import)     spoke_pki_import "$@" ;;
 
+        # Fix/Migration Commands
+        fix-hostname)
+            _load_spoke_fix_hostname || return 1
+            if [ "$1" = "--all" ]; then
+                spoke_fix_all_hostnames
+            else
+                spoke_fix_keycloak_hostname "$@"
+            fi
+            ;;
+
         *)              module_spoke_help ;;
     esac
 }
@@ -2524,6 +2544,11 @@ module_spoke_help() {
     echo -e "${CYAN}PKI Management:${NC}"
     echo "  pki-request            Generate CSR for policy signing certificate"
     echo "  pki-import             Import Hub-signed certificate and trust chain"
+    echo ""
+
+    echo -e "${CYAN}Fix/Migration:${NC}"
+    echo "  fix-hostname           Fix Keycloak issuer URL configuration (Keycloak v26+)"
+    echo "  fix-hostname --all     Fix all initialized spokes"
     echo ""
 
     echo -e "${CYAN}Registration (Phase 3):${NC}"

@@ -988,11 +988,17 @@ services:
       KC_DB_PASSWORD: \${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}
       # Use new Keycloak 26+ bootstrap admin password variable
       KC_BOOTSTRAP_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
-      # Proxy and certificate configuration (start-dev handles hostname automatically)
-      KC_PROXY: edge
+      # Hostname configuration (Keycloak v26+ syntax)
+      # CRITICAL: Keycloak will use KC_HOSTNAME + mapped port to construct issuer URL
+      # For local dev: localhost will resolve to the mapped host port (e.g., 8476)
+      # For production: set to the actual domain (e.g., nzl-idp.dive25.com)
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
+      KC_HTTPS_PORT: "8443"
       KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
     ports:
       - "${keycloak_https_port}:8443"
