@@ -40,11 +40,19 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     }
   }
 
+  # ============================================
+  # PII FIELDS - NOT REQUIRED (ACP-240 Compliance)
+  # ============================================
+  # ACP-240 requires PII minimization. DIVE V3 uses pseudonymous identities
+  # with uniqueID as the primary identifier. Email, firstName, lastName are
+  # OPTIONAL and should NOT trigger VERIFY_PROFILE required actions.
+  
   attribute {
     name         = "email"
     display_name = "$${email}"
 
-    required_for_roles = ["user"]
+    # NOT required - ACP-240 PII minimization
+    # required_for_roles = ["user"]  # REMOVED
 
     permissions {
       view = ["admin", "user"]
@@ -67,7 +75,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     name         = "firstName"
     display_name = "$${firstName}"
 
-    required_for_roles = ["user"]
+    # NOT required - ACP-240 PII minimization
+    # required_for_roles = ["user"]  # REMOVED
 
     permissions {
       view = ["admin", "user"]
@@ -90,7 +99,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     name         = "lastName"
     display_name = "$${lastName}"
 
-    required_for_roles = ["user"]
+    # NOT required - ACP-240 PII minimization
+    # required_for_roles = ["user"]  # REMOVED
 
     permissions {
       view = ["admin", "user"]
