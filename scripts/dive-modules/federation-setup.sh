@@ -1160,6 +1160,7 @@ _sync_federation_client_secret_from_gcp() {
         -d "{\"id\": \"${client_uuid}\", \"clientId\": \"${client_id}\", \"secret\": \"${gcp_secret}\"}" >/dev/null
 
     log_verbose "Synced GCP secret to Hub client: ${client_id}"
+}
 
 ##
 # Ensure protocol mappers exist on Hub's federation client for a spoke
