@@ -387,35 +387,51 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   add_to_access_token = true
 }
 
-# AMR Mapper - Using DIVE custom mapper (ACR-derived)
+# AMR Mapper - Using native oidc-amr-mapper (BEST PRACTICE)
 # ============================================
 # CRITICAL FIX (January 2026):
-# The native oidc-amr-mapper does NOT work in Keycloak 26 because:
-# 1. It reads "reference" config from authenticator execution configs
-# 2. auth-username-password-form has configurable=false (cannot set reference)
-# 3. Therefore "pwd" is never added to AMR, resulting in amr: []
+# The custom dive-amr-protocol-mapper has been DEPRECATED.
+# It derived AMR from ACR, but this caused issues with federated users
+# because the event listener's transaction timing meant ACR was stale.
 #
-# Solution: Use DIVE's custom dive-amr-protocol-mapper which DERIVES AMR from ACR:
-# - ACR "1" → AMR ["pwd"]           (AAL1: password only)
-# - ACR "2" → AMR ["pwd", "otp"]    (AAL2: password + OTP)
-# - ACR "3" → AMR ["pwd", "hwk"]    (AAL3: password + WebAuthn)
+# BEST PRACTICE: Use native oidc-amr-mapper which reads AUTH_METHODS_REF
+# from the session notes. The event listener sets this correctly.
 #
-# The ACR is correctly set by the oidc-acr-mapper reading from acr.loa.map
-# and LoA conditional authenticators in the authentication flow.
-#
-# Requires: dive-keycloak-extensions.jar in /opt/keycloak/providers/
+# For federated users, the user attribute fallback (user_amr) is used,
+# which reads from user.amr attribute populated by the IdP mapper.
 resource "keycloak_generic_protocol_mapper" "amr_mapper" {
   realm_id        = keycloak_realm.broker.id
   client_id       = keycloak_openid_client.broker_client.id
-  name            = "amr (ACR-derived)"
+  name            = "amr (native session)"
   protocol        = "openid-connect"
-  protocol_mapper = "dive-amr-protocol-mapper"
+  protocol_mapper = "oidc-amr-mapper"
 
   config = {
-    "id.token.claim"     = "true"
-    "access.token.claim" = "true"
-    "userinfo.token.claim" = "true"
+    "id.token.claim"           = "true"
+    "access.token.claim"       = "true"
+    "introspection.token.claim" = "true"
+    "userinfo.token.claim"     = "true"
+    "claim.name"               = "amr"
   }
+}
+
+# AMR User Attribute Fallback Mapper (for federated users)
+# ============================================
+# Federated users may not have session-based AMR available at token time
+# because the IdP mapper runs after the event listener.
+# This mapper reads from user.amr attribute which IS correct by token time.
+resource "keycloak_openid_user_attribute_protocol_mapper" "amr_user_attribute_fallback" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "amr (user attribute fallback)"
+
+  user_attribute      = "amr"
+  claim_name          = "user_amr"
+  claim_value_type    = "String"
+  multivalued         = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 }
 
 resource "keycloak_generic_protocol_mapper" "acr_mapper" {
