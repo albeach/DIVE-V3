@@ -2619,13 +2619,22 @@ spoke_fix_mappers() {
 
     log_info "Client UUID: ${client_uuid}"
 
-    # Define required mappers (core DIVE V3 attributes + AMR for MFA)
+    # Define required mappers (core DIVE V3 attributes + ACR/AMR for MFA/federation)
     local mappers=(
+        # Core DIVE V3 attributes
         '{"name":"clearance","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"clearance","user.attribute":"clearance","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
         '{"name":"countryOfAffiliation","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"countryOfAffiliation","user.attribute":"countryOfAffiliation","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
         '{"name":"acpCOI","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"acpCOI","user.attribute":"acpCOI","jsonType.label":"JSON","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true","multivalued":"true"}}'
         '{"name":"uniqueID","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"uniqueID","user.attribute":"uniqueID","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
+        # AMR for local auth (reads from user.attribute.amr)
         '{"name":"amr (user attribute)","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"amr","user.attribute":"amr","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true","multivalued":"true"}}'
+        # AMR fallback for federated users (outputs to user_amr for frontend prioritization)
+        '{"name":"amr-user-attribute-fallback","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"user_amr","user.attribute":"amr","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true","multivalued":"true"}}'
+        # ACR for local auth (native session-based mapper)
+        '{"name":"acr (authn context)","protocol":"openid-connect","protocolMapper":"oidc-acr-mapper","config":{"claim.name":"acr","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
+        # ACR fallback for federated users (outputs to user_acr for frontend prioritization)
+        '{"name":"acr-user-attribute-fallback","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"user_acr","user.attribute":"acr","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
+        # Realm roles
         '{"name":"realm roles","protocol":"openid-connect","protocolMapper":"oidc-usermodel-realm-role-mapper","config":{"claim.name":"realm_access.roles","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","multivalued":"true"}}'
     )
 
@@ -2659,6 +2668,47 @@ spoke_fix_mappers() {
     log_info "Created: ${created}, Skipped (existing): ${skipped}"
     echo ""
     log_warn "Users must log out and back in to get tokens with new claims"
+}
+
+##
+# Regenerate Keycloak theme for a spoke with proper locale support
+# This is the CLI wrapper for generate-spoke-theme.sh
+##
+spoke_regenerate_theme() {
+    local code="${1:-$INSTANCE}"
+    if [ -z "$code" ]; then
+        log_error "Usage: ./dive --instance <CODE> spoke regenerate-theme"
+        return 1
+    fi
+    local code_upper=$(upper "$code")
+    
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}  Regenerating Keycloak Theme for ${code_upper}${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    local script="${DIVE_ROOT}/scripts/generate-spoke-theme.sh"
+    if [ ! -f "$script" ]; then
+        log_error "Theme generator script not found: $script"
+        return 1
+    fi
+    
+    # Run the theme generator with --force to regenerate
+    bash "$script" "$code_upper" --force
+    local result=$?
+    
+    if [ $result -eq 0 ]; then
+        echo ""
+        log_success "Theme regenerated for ${code_upper}"
+        echo ""
+        log_info "To apply the theme, restart the spoke's Keycloak:"
+        echo "  ./dive --instance ${code_upper} spoke restart keycloak"
+    else
+        log_error "Failed to regenerate theme for ${code_upper}"
+    fi
+    
+    return $result
 }
 
 # =============================================================================
@@ -2703,6 +2753,7 @@ module_spoke() {
         reinit-client)  spoke_reinit_client ;;
         fix-client)     spoke_reinit_client ;;  # Alias for reinit-client
         fix-mappers)    spoke_fix_mappers ;;    # Fix missing protocol mappers
+        regenerate-theme) spoke_regenerate_theme ;; # Regenerate Keycloak theme with locales
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
         opal-token)     spoke_opal_token "$@" ;;
@@ -2848,6 +2899,12 @@ module_spoke_help() {
     echo "  sync-secrets           Synchronize frontend secrets with Keycloak"
     echo "  sync-federation-secrets Synchronize usa-idp secrets with Hub"
     echo "  sync-all-secrets       Synchronize secrets for all running spokes"
+    echo ""
+
+    echo -e "${CYAN}Fixes & Maintenance:${NC}"
+    echo "  fix-mappers            Fix missing protocol mappers (ACR/AMR/DIVE attributes)"
+    echo "  fix-client             Reinitialize Keycloak client configuration"
+    echo "  regenerate-theme       Regenerate Keycloak theme with locale support"
     echo ""
 
     echo -e "${CYAN}Policy Management (Phase 4):${NC}"
