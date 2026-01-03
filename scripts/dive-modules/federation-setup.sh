@@ -1096,11 +1096,91 @@ ensure_spoke_client_in_hub() {
         if ! grep -q "^${spoke_secret_var}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null; then
             echo "${spoke_secret_var}=${spoke_client_secret}" >> "${DIVE_ROOT}/.env.hub"
         fi
+        
+        # Add protocol mappers to the new client (CRITICAL for federation)
+        ensure_protocol_mappers_on_hub_federation_client "$spoke_code"
+        
         return 0
     else
         log_error "Failed to create $client_id in Hub"
         return 1
     fi
+}
+
+##
+# Ensure protocol mappers exist on Hub's federation client for a spoke
+# This client (e.g., dive-v3-broker-nzl in USA Hub) issues tokens to the spoke
+# Without these mappers, the spoke won't receive user attributes!
+##
+ensure_protocol_mappers_on_hub_federation_client() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower=$(lower "$spoke_code")
+    local code_upper=$(upper "$spoke_code")
+
+    local client_id="dive-v3-broker-${code_lower}"
+    
+    log_verbose "Adding protocol mappers to ${client_id} in Hub realm..."
+
+    # Get Hub admin token
+    source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
+    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+        log_warn "Cannot add mappers: KEYCLOAK_ADMIN_PASSWORD not set"
+        return 1
+    fi
+
+    docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin --password "$KEYCLOAK_ADMIN_PASSWORD" 2>/dev/null || return 1
+
+    # Get client UUID
+    local client_uuid
+    client_uuid=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \
+        -r "$HUB_REALM" --fields id,clientId 2>/dev/null | jq -r ".[] | select(.clientId==\"${client_id}\") | .id")
+
+    if [ -z "$client_uuid" ]; then
+        log_warn "Client ${client_id} not found in Hub - mappers not created"
+        return 1
+    fi
+
+    # Standard attributes to include in tokens (core DIVE V3 + AMR for MFA)
+    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID" "amr")
+    local created=0
+
+    for attr in "${standard_attrs[@]}"; do
+        local mapper_name="federation-std-${attr}"
+        
+        # Check if mapper exists
+        local existing
+        existing=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get \
+            "clients/${client_uuid}/protocol-mappers/models" -r "$HUB_REALM" --fields id,name 2>/dev/null | \
+            jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
+
+        if [ -n "$existing" ]; then
+            log_verbose "Mapper '${mapper_name}' already exists"
+            continue
+        fi
+
+        # Determine if multivalued
+        local multivalued="false"
+        [[ "$attr" == "acpCOI" || "$attr" == "amr" ]] && multivalued="true"
+
+        # Create mapper
+        docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create \
+            "clients/${client_uuid}/protocol-mappers/models" -r "$HUB_REALM" \
+            -s "name=${mapper_name}" \
+            -s "protocol=openid-connect" \
+            -s "protocolMapper=oidc-usermodel-attribute-mapper" \
+            -s "consentRequired=false" \
+            -s "config.\"userinfo.token.claim\"=true" \
+            -s "config.\"id.token.claim\"=true" \
+            -s "config.\"access.token.claim\"=true" \
+            -s "config.\"claim.name\"=${attr}" \
+            -s "config.\"user.attribute\"=${attr}" \
+            -s "config.\"jsonType.label\"=String" \
+            -s "config.multivalued=${multivalued}" 2>/dev/null && created=$((created + 1))
+    done
+
+    [ $created -gt 0 ] && log_success "Created $created protocol mappers on ${client_id} in Hub"
+    return 0
 }
 
 # =============================================================================
@@ -1325,8 +1405,8 @@ ensure_protocol_mappers_on_spoke_client() {
         return 1
     fi
 
-    # Define standard attribute mappings
-    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID")
+    # Define standard attribute mappings (core DIVE V3 + AMR for MFA)
+    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID" "amr")
 
     # Define localized attribute mappings based on spoke country
     # Format: "source_attribute:claim_name"
@@ -1668,7 +1748,8 @@ setup_claims() {
     local keycloak_container="dive-spoke-${spoke_lower}-keycloak"
     local realm="dive-v3-broker-${spoke_lower}"
 
-    local mappers=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI")
+    # Core DIVE V3 attributes + AMR for MFA propagation
+    local mappers=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI" "amr")
     local created=0
 
     for mapper in "${mappers[@]}"; do
