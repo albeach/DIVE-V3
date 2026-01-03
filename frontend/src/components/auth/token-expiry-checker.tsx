@@ -28,6 +28,7 @@ import { useSessionHeartbeat } from '@/hooks/use-session-heartbeat';
 
 const WARNING_THRESHOLD = 120; // 2 minutes in seconds
 const REFRESH_THRESHOLD = 300; // 5 minutes - attempt refresh when less than this remains
+const AUTO_REFRESH_COOLDOWN = 60000; // 1 minute cooldown between auto-refreshes
 
 export function TokenExpiryChecker() {
     const { data: session, status, update } = useSession();
@@ -41,6 +42,9 @@ export function TokenExpiryChecker() {
     const [hasShownWarning, setHasShownWarning] = useState(false);
     const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const syncManagerRef = useRef(getSessionSyncManager());
+    
+    // CRITICAL: Track last auto-refresh time to prevent infinite loop
+    const lastAutoRefreshRef = useRef<number>(0);
 
     // Function to refresh session
     const refreshSession = useCallback(async () => {
@@ -197,8 +201,13 @@ export function TokenExpiryChecker() {
         }
 
         // Auto-refresh if getting close to expiry (under 5 minutes) and page is visible
-        if (secondsRemaining < REFRESH_THRESHOLD && secondsRemaining > WARNING_THRESHOLD && !hasShownWarning && isPageVisible) {
-            console.log('[TokenExpiry] Auto-refreshing session (under 5 minutes, page visible)');
+        // CRITICAL: Use cooldown to prevent infinite refresh loop
+        const timeSinceLastRefresh = Date.now() - lastAutoRefreshRef.current;
+        const canAutoRefresh = timeSinceLastRefresh > AUTO_REFRESH_COOLDOWN;
+        
+        if (secondsRemaining < REFRESH_THRESHOLD && secondsRemaining > WARNING_THRESHOLD && !hasShownWarning && isPageVisible && canAutoRefresh) {
+            console.log('[TokenExpiry] Auto-refreshing session (under 5 minutes, page visible, cooldown ok)');
+            lastAutoRefreshRef.current = Date.now();
             refreshSession();
         }
 
