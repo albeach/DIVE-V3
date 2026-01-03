@@ -110,15 +110,16 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                 // 1. AuthenticationSession notes (populated by broker flow)
                 // 2. UserSession notes (from previous check)
                 // 3. User attributes (may be stale/empty due to transaction timing)
-                
+
                 List<String> amrMethods = new ArrayList<>();
                 String federatedAmr = null;
                 String federatedAcr = null;
-                
+
                 // Source 1: Check authentication session for incoming IdP claims
                 // The broker flow stores incoming claims in auth session notes
-                var authSession = userSession.getAuthenticatedClientSessionByClient(
-                    realm.getClientByClientId("dive-v3-broker-usa"));
+                var brokerClient = realm.getClientByClientId("dive-v3-broker-usa");
+                var authSession = brokerClient != null ?
+                    userSession.getAuthenticatedClientSessionByClient(brokerClient.getId()) : null;
                 if (authSession != null) {
                     String authSessionAmr = authSession.getNote("amr");
                     String authSessionAcr = authSession.getNote("acr");
@@ -128,7 +129,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                         federatedAcr = authSessionAcr;
                     }
                 }
-                
+
                 // Source 2: Check user session notes (set by previous flows)
                 if (federatedAmr == null) {
                     String sessionAmr = userSession.getNote("FEDERATED_AMR");
@@ -139,7 +140,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                         federatedAcr = sessionAcr;
                     }
                 }
-                
+
                 // Source 3: Check user attributes (may be stale due to transaction timing)
                 if (federatedAmr == null) {
                     List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
@@ -154,7 +155,7 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                         federatedAcr = user.getFirstAttribute("acr");
                     }
                 }
-                
+
                 // Source 4: Check broker session for IdP token claims
                 if (federatedAmr == null) {
                     // Get the IdP token from session
@@ -166,11 +167,11 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                         federatedAcr = idpAcr;
                     }
                 }
-                
+
                 if (federatedAmr != null && !federatedAmr.isEmpty()) {
                     if (federatedAcr == null) federatedAcr = "0";
                     federatedAcr = federatedAcr.replaceAll("\"", "");
-                    
+
                     // Parse AMR for logging
                     if (!federatedAmr.startsWith("[")) {
                         federatedAmr = "[\"" + federatedAmr + "\"]";
@@ -189,12 +190,20 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                     System.out.println("[DIVE AMR] Federated AMR/ACR set in session notes for user: " + user.getUsername());
                     return;
                 }
-                
-                // If we get here, no AMR found from any source - will fall through to credential check
-                System.out.println("[DIVE AMR DEBUG] No federated AMR found from any source, falling through to credential check");
+
+                // CRITICAL FIX (Jan 2, 2026): DO NOT fall through for federated users!
+                // The IdP mapper hasn't run yet, so we don't have the AMR from the source IdP.
+                // If we fall through and check credentials, we'll set AMR=["pwd"] (wrong!).
+                // Instead, return now and let the IdP mapper set the user attribute after this event.
+                // The native oidc-amr-mapper will read from session notes, and the user_amr fallback
+                // mapper will read from user attributes (set by IdP mapper).
+                System.out.println("[DIVE AMR] Federated user detected but no AMR source available yet. " +
+                    "Skipping credential check - IdP mapper will set user.amr attribute.");
+                return;
             }
 
-            // Build AMR array based on credentials validated / present
+            // Build AMR array based on LOCAL credentials validated / present
+            // This only runs for NON-FEDERATED users who authenticate locally
             List<String> amrMethods = new ArrayList<>();
 
             // Password is always required for authentication
