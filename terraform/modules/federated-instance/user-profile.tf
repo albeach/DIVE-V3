@@ -46,7 +46,7 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
   # ACP-240 requires PII minimization. DIVE V3 uses pseudonymous identities
   # with uniqueID as the primary identifier. Email, firstName, lastName are
   # OPTIONAL and should NOT trigger VERIFY_PROFILE required actions.
-  
+
   attribute {
     name         = "email"
     display_name = "$${email}"
@@ -286,6 +286,41 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
         min = "0"  # COI is optional
         max = "50" # Max COI name length
       }
+    }
+  }
+
+  # ============================================
+  # AUTHENTICATION CONTEXT ATTRIBUTES (AMR/ACR)
+  # ============================================
+  # These attributes store authentication method references (AMR) and
+  # authentication context class reference (ACR) for federated users.
+  # Set by the dive-amr-enrichment event listener on login.
+
+  # Authentication Methods Reference (AMR)
+  # Values: pwd (password), otp (TOTP), hwk (WebAuthn)
+  attribute {
+    name         = "amr"
+    display_name = "Authentication Methods"
+    group        = "dive-attributes"
+
+    multi_valued = true
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
+    }
+  }
+
+  # Authentication Context Class Reference (ACR)
+  # Values: 0 (AAL1), 1 (AAL2 - but event listener uses this), 2 (AAL2/3)
+  attribute {
+    name         = "acr"
+    display_name = "Authentication Context"
+    group        = "dive-attributes"
+
+    permissions {
+      view = ["admin"]
+      edit = ["admin"]
     }
   }
 
