@@ -195,7 +195,8 @@ spoke_up() {
     cd "$spoke_dir"
 
     local compose_exit_code=0
-    docker compose up -d || compose_exit_code=$?
+    # Use --build to ensure custom images (like Keycloak with extensions) are rebuilt
+    docker compose up -d --build || compose_exit_code=$?
 
     # Handle transient health check failures gracefully (same as hub)
     if [ $compose_exit_code -ne 0 ]; then
@@ -508,7 +509,8 @@ spoke_deploy() {
         fi
 
         log_step "Starting Docker Compose services..."
-        docker compose up -d 2>&1 | tail -5
+        # Use --build to ensure custom images are rebuilt
+        docker compose up -d --build 2>&1 | tail -5
 
         if [ $? -ne 0 ]; then
             log_error "Failed to start services"

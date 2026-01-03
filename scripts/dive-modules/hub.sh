@@ -517,7 +517,8 @@ hub_up() {
     fi
 
     # Use --env-file to ensure all environment variables are passed to docker compose
-    docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d || {
+    # Use --build to ensure custom images (like Keycloak with extensions) are rebuilt
+    docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d --build || {
         log_error "Failed to start hub services"
         return 1
     }
