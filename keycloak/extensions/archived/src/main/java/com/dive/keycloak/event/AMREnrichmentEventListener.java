@@ -77,6 +77,46 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                 return;
             }
 
+            // CRITICAL FIX (Jan 2, 2026): Check if this is a FEDERATED user
+            // Federated users have AMR set by their home IdP. We should NOT overwrite
+            // their AMR based on local credentials (they don't have local credentials).
+            // Instead, preserve the AMR from their user attribute (set by IdP mapper).
+            boolean isFederatedUser = user.getFederationLink() != null;
+            
+            // Check if user has federated identity providers linked
+            if (!isFederatedUser) {
+                isFederatedUser = session.users().getFederatedIdentitiesStream(realm, user).findAny().isPresent();
+            }
+            
+            // Also check if user has NO local credentials but HAS amr attribute (federated)
+            if (!isFederatedUser) {
+                long credentialCount = user.credentialManager().getStoredCredentialsStream().count();
+                boolean hasAmrAttribute = user.getFirstAttribute("amr") != null;
+                if (credentialCount == 0 && hasAmrAttribute) {
+                    isFederatedUser = true;
+                }
+            }
+            
+            if (isFederatedUser) {
+                // For federated users, use their existing AMR attribute (from IdP)
+                List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
+                if (existingAmrAttr != null && !existingAmrAttr.isEmpty()) {
+                    String federatedAmr = "[\"" + String.join("\",\"", existingAmrAttr) + "\"]";
+                    String federatedAcr = user.getFirstAttribute("acr");
+                    if (federatedAcr == null) federatedAcr = "0";
+                    
+                    System.out.println("[DIVE AMR] Federated user detected - preserving IdP AMR: " + federatedAmr);
+                    userSession.setNote("AUTH_METHODS_REF", federatedAmr);
+                    userSession.setNote("AUTH_CONTEXT_CLASS_REF", federatedAcr);
+                    userSession.setNote("ACR", federatedAcr);
+                    userSession.setNote("acr", federatedAcr);
+                    userSession.setNote("amr", federatedAmr);
+                    userSession.setNote("auth_time", String.valueOf(System.currentTimeMillis() / 1000));
+                    System.out.println("[DIVE AMR] Federated AMR/ACR preserved for user: " + user.getUsername());
+                    return;
+                }
+            }
+
             // Build AMR array based on credentials validated / present
             List<String> amrMethods = new ArrayList<>();
 
