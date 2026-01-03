@@ -1054,89 +1054,6 @@ spoke_sync_secrets() {
 }
 
 ##
-# Sync Keycloak client secret to match running frontend container
-# Fixes "unauthorized_client" errors when container has different secret than Keycloak
-#
-# Usage: ./dive --instance nzl spoke sync-client-secret
-##
-spoke_sync_client_secret() {
-    ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
-
-    print_header
-    echo -e "${BOLD}Syncing Client Secret:${NC} ${code_upper}"
-    echo ""
-    echo "This syncs the Keycloak client secret to match the running frontend container."
-    echo "Use this to fix 'unauthorized_client' / 'Invalid client credentials' errors."
-    echo ""
-
-    # Source federation-setup if available
-    local fed_module="${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
-    if [ -f "$fed_module" ]; then
-        # shellcheck disable=SC1090
-        source "$fed_module" 2>/dev/null || true
-    fi
-
-    # Call the sync function
-    if type -t sync_keycloak_to_frontend_container >/dev/null 2>&1; then
-        sync_keycloak_to_frontend_container "$code_lower"
-    else
-        log_error "sync_keycloak_to_frontend_container function not found"
-        log_info "Trying inline sync..."
-
-        # Inline implementation as fallback
-        local frontend_container="dive-spoke-${code_lower}-frontend"
-
-        # Get secret from running frontend container
-        local container_secret=""
-        container_secret=$(docker exec "$frontend_container" printenv AUTH_KEYCLOAK_SECRET 2>/dev/null | tr -d '\n\r')
-        if [ -z "$container_secret" ]; then
-            container_secret=$(docker exec "$frontend_container" printenv KEYCLOAK_CLIENT_SECRET 2>/dev/null | tr -d '\n\r')
-        fi
-
-        if [ -z "$container_secret" ]; then
-            log_error "Cannot get secret from frontend container"
-            return 1
-        fi
-
-        log_info "Container secret: ${container_secret:0:10}..."
-
-        # Get Keycloak credentials
-        eval "$(get_instance_ports "$code_upper")"
-        local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
-        local kc_password
-        kc_password=$(get_keycloak_password "dive-spoke-${code_lower}-keycloak" 2>/dev/null || true)
-
-        if [ -z "$kc_password" ]; then
-            local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
-            kc_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
-        fi
-
-        # Get admin token and update client
-        local admin_token
-        admin_token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
-            -d "grant_type=password" -d "username=admin" -d "password=${kc_password}" -d "client_id=admin-cli" 2>/dev/null | \
-            jq -r '.access_token // empty')
-
-        local realm_name="dive-v3-broker-${code_lower}"
-        local client_id="dive-v3-broker-${code_lower}"
-        local client_uuid
-        client_uuid=$(curl -sk -H "Authorization: Bearer ${admin_token}" \
-            "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" 2>/dev/null | \
-            jq -r '.[0].id // empty')
-
-        curl -sk -X PUT "https://localhost:${kc_port}/admin/realms/${realm_name}/clients/${client_uuid}" \
-            -H "Authorization: Bearer ${admin_token}" \
-            -H "Content-Type: application/json" \
-            -d "{\"secret\": \"${container_secret}\"}" >/dev/null
-
-        log_success "Keycloak client secret synced to frontend container"
-    fi
-}
-
-##
 # Sync federation IdP secrets (usa-idp in spoke must match Hub's client for spoke)
 # This ensures Spoke→Hub SSO works by syncing the usa-idp client secret
 ##
@@ -1357,8 +1274,9 @@ spoke_seed() {
 
     # Delegate to db module with spoke instance context
     # The db module's cmd_seed handles the actual seeding
+    # CRITICAL: Set BACKEND_CONTAINER to spoke container (not hub)
     source "${DIVE_ROOT}/scripts/dive-modules/db.sh"
-    INSTANCE="$code_lower" cmd_seed "$count" "$code_lower"
+    BACKEND_CONTAINER="$backend_container" INSTANCE="$code_lower" cmd_seed "$count" "$code_lower"
 
     local result=$?
     if [ $result -eq 0 ]; then
@@ -2689,8 +2607,9 @@ module_spoke() {
         audit-status)   spoke_audit_status ;;
         sync-secrets)   spoke_sync_secrets "$@" ;;
         sync-federation-secrets) spoke_sync_federation_secrets "$@" ;;
-        sync-client-secret) spoke_sync_client_secret ;;  # Fix client/container secret mismatch
         sync-all-secrets) spoke_sync_all_secrets ;;
+        # sync-client-secret is an alias for sync-secrets (same functionality)
+        sync-client-secret) spoke_sync_secrets "$@" ;;
         list-countries) spoke_list_countries "$@" ;;
         countries)
             log_warn "Deprecated: Use 'spoke list-countries' instead (removal in v5.0)"
