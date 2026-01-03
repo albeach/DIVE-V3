@@ -105,43 +105,80 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
 
             if (isFederatedUser) {
                 // For federated users, use their existing AMR attribute (from IdP mapper)
-                // BEST PRACTICE: Handle BOTH formats from IdP:
-                // 1. Multi-valued attribute: ["pwd", "otp"] - proper array storage
-                // 2. JSON string: "[\"pwd\",\"otp\"]" - if IdP mapper stored native amr claim as string
-                List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
-                System.out.println("[DIVE AMR DEBUG] existingAmrAttr from user: " + existingAmrAttr);
-
-                if (existingAmrAttr != null && !existingAmrAttr.isEmpty()) {
-                    List<String> amrMethods = new ArrayList<>();
-                    String federatedAmr;
-
-                    // Check if first element looks like a JSON array (IdP stored native amr as string)
-                    String firstVal = existingAmrAttr.get(0);
-                    if (firstVal.startsWith("[") && firstVal.contains("\"")) {
-                        // Parse JSON array string: "[\"pwd\",\"otp\"]"
-                        System.out.println("[DIVE AMR] Parsing JSON array from IdP: " + firstVal);
-                        federatedAmr = firstVal; // Already in correct format
-                        // Extract values for logging
-                        String cleaned = firstVal.replaceAll("[\\[\\]\"]", "");
-                        for (String m : cleaned.split(",")) {
-                            amrMethods.add(m.trim());
-                        }
-                    } else {
-                        // Multi-valued attribute: ["pwd", "otp"]
-                        amrMethods.addAll(existingAmrAttr);
-                        federatedAmr = "[\"" + String.join("\",\"", amrMethods) + "\"]";
+                // CRITICAL FIX: The IdP mapper may not have committed yet when this event fires.
+                // Try multiple sources in order of preference:
+                // 1. AuthenticationSession notes (populated by broker flow)
+                // 2. UserSession notes (from previous check)
+                // 3. User attributes (may be stale/empty due to transaction timing)
+                
+                List<String> amrMethods = new ArrayList<>();
+                String federatedAmr = null;
+                String federatedAcr = null;
+                
+                // Source 1: Check authentication session for incoming IdP claims
+                // The broker flow stores incoming claims in auth session notes
+                var authSession = userSession.getAuthenticatedClientSessionByClient(
+                    realm.getClientByClientId("dive-v3-broker-usa"));
+                if (authSession != null) {
+                    String authSessionAmr = authSession.getNote("amr");
+                    String authSessionAcr = authSession.getNote("acr");
+                    System.out.println("[DIVE AMR DEBUG] authSession amr: " + authSessionAmr + ", acr: " + authSessionAcr);
+                    if (authSessionAmr != null && !authSessionAmr.isEmpty()) {
+                        federatedAmr = authSessionAmr;
+                        federatedAcr = authSessionAcr;
                     }
-
-                    // Get ACR - also handle both formats
-                    String federatedAcr = user.getFirstAttribute("acr");
+                }
+                
+                // Source 2: Check user session notes (set by previous flows)
+                if (federatedAmr == null) {
+                    String sessionAmr = userSession.getNote("FEDERATED_AMR");
+                    String sessionAcr = userSession.getNote("FEDERATED_ACR");
+                    System.out.println("[DIVE AMR DEBUG] userSession FEDERATED_AMR: " + sessionAmr);
+                    if (sessionAmr != null && !sessionAmr.isEmpty()) {
+                        federatedAmr = sessionAmr;
+                        federatedAcr = sessionAcr;
+                    }
+                }
+                
+                // Source 3: Check user attributes (may be stale due to transaction timing)
+                if (federatedAmr == null) {
+                    List<String> existingAmrAttr = user.getAttributeStream("amr").toList();
+                    System.out.println("[DIVE AMR DEBUG] user.attributes.amr: " + existingAmrAttr);
+                    if (existingAmrAttr != null && !existingAmrAttr.isEmpty()) {
+                        String firstVal = existingAmrAttr.get(0);
+                        if (firstVal.startsWith("[") && firstVal.contains("\"")) {
+                            federatedAmr = firstVal;
+                        } else {
+                            federatedAmr = "[\"" + String.join("\",\"", existingAmrAttr) + "\"]";
+                        }
+                        federatedAcr = user.getFirstAttribute("acr");
+                    }
+                }
+                
+                // Source 4: Check broker session for IdP token claims
+                if (federatedAmr == null) {
+                    // Get the IdP token from session
+                    String idpAmr = userSession.getNote("IDP_AMR");
+                    String idpAcr = userSession.getNote("IDP_ACR");
+                    System.out.println("[DIVE AMR DEBUG] IDP_AMR from session: " + idpAmr);
+                    if (idpAmr != null) {
+                        federatedAmr = idpAmr;
+                        federatedAcr = idpAcr;
+                    }
+                }
+                
+                if (federatedAmr != null && !federatedAmr.isEmpty()) {
                     if (federatedAcr == null) federatedAcr = "0";
-                    // Strip quotes if stored as JSON string
                     federatedAcr = federatedAcr.replaceAll("\"", "");
+                    
+                    // Parse AMR for logging
+                    if (!federatedAmr.startsWith("[")) {
+                        federatedAmr = "[\"" + federatedAmr + "\"]";
+                    }
 
                     System.out.println("[DIVE AMR] Federated user detected - preserving IdP AMR: " + federatedAmr + ", ACR: " + federatedAcr);
 
                     // Set session notes so native oidc-amr-mapper works correctly
-                    // This ensures BOTH federated and non-federated users get amr from session
                     userSession.setNote("AUTH_METHODS_REF", federatedAmr);
                     userSession.setNote("AUTH_CONTEXT_CLASS_REF", federatedAcr);
                     userSession.setNote("ACR", federatedAcr);
@@ -152,6 +189,9 @@ public class AMREnrichmentEventListener implements EventListenerProvider {
                     System.out.println("[DIVE AMR] Federated AMR/ACR set in session notes for user: " + user.getUsername());
                     return;
                 }
+                
+                // If we get here, no AMR found from any source - will fall through to credential check
+                System.out.println("[DIVE AMR DEBUG] No federated AMR found from any source, falling through to credential check");
             }
 
             // Build AMR array based on credentials validated / present
