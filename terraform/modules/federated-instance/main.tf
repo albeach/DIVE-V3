@@ -592,6 +592,24 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
   add_to_userinfo     = true
 }
 
+# AMR (Authentication Methods Reference) mapper for MFA verification
+# Critical for AAL2/AAL3 enforcement in OPA policies
+resource "keycloak_openid_user_attribute_protocol_mapper" "federation_amr" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
+  name      = "amr"
+
+  user_attribute      = "amr"
+  claim_name          = "amr"
+  claim_value_type    = "String"
+  multivalued         = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
 # ============================================================================
 # SUPER ADMIN ROLE & USER
 # ============================================================================
