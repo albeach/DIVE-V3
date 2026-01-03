@@ -451,15 +451,28 @@ EOF
     fi
 
     # Step 6: Seed test users and resources
-    log_step "Step 6/7: Seeding test users and 5000 ZTDF resources..."
+    log_step "Step 6/8: Seeding test users and 5000 ZTDF resources..."
     if [ -d "${DIVE_ROOT}/scripts/hub-init" ]; then
         hub_seed 5000 || log_warn "Seeding failed - you can run './dive hub seed' later"
     else
         log_info "Hub seed scripts not found, skipping"
     fi
 
-    # Step 7: Verify deployment
-    log_step "Step 7/7: Verifying deployment..."
+    # Step 7: Sync AMR attributes (CRITICAL for MFA)
+    log_step "Step 7/8: Syncing AMR attributes for MFA users..."
+    local sync_amr_script="${DIVE_ROOT}/scripts/sync-amr-attributes.sh"
+    if [ -f "$sync_amr_script" ]; then
+        if bash "$sync_amr_script" --realm "dive-v3-broker-usa" 2>/dev/null; then
+            log_success "AMR attributes synchronized"
+        else
+            log_warn "AMR sync completed with warnings (non-blocking)"
+        fi
+    else
+        log_warn "sync-amr-attributes.sh not found - skipping AMR sync"
+    fi
+
+    # Step 8: Verify deployment
+    log_step "Step 8/8: Verifying deployment..."
     _hub_verify_deployment || log_warn "Some verification checks failed"
 
     echo ""

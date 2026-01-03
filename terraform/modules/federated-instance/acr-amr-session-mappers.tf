@@ -55,7 +55,7 @@ resource "keycloak_generic_protocol_mapper" "incoming_federation_acr" {
   }
 }
 
-# AMR from user attribute (for federated users)
+# AMR from user attribute (for federated users - fallback)
 # CRITICAL: jsonType.label MUST be "String" for multivalued arrays, NOT "JSON"
 resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_amr" {
   for_each = var.federation_partners
@@ -70,6 +70,30 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_a
   add_to_id_token     = true
   add_to_access_token = true
   add_to_userinfo     = true
+}
+
+# AMR from session note (for MFA-enriched logins)
+# The dive-amr-enrichment event listener sets the "amr" session note on login
+# This mapper reads from that session note to get the ACTUAL authentication methods used
+# CRITICAL FIX (Jan 2, 2026): Without this, MFA methods won't appear in AMR!
+resource "keycloak_generic_protocol_mapper" "incoming_federation_amr_session" {
+  for_each = var.federation_partners
+
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.incoming_federation[each.key].id
+  name            = "amr (session note - MFA enriched)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-usersessionmodel-note-mapper"
+
+  config = {
+    "user.session.note"         = "amr"
+    "claim.name"                = "amr"
+    "id.token.claim"            = "true"
+    "access.token.claim"        = "true"
+    "userinfo.token.claim"      = "true"
+    "introspection.token.claim" = "true"
+    "jsonType.label"            = "String"
+  }
 }
 
 # ============================================================================
