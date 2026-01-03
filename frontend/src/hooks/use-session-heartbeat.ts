@@ -169,13 +169,13 @@ export function useSessionHeartbeat() {
 
             // Check if it's a network error (Failed to fetch, Load failed, NetworkError)
             // "Load failed" is Safari/WebKit-specific, "Failed to fetch" is Chrome/Firefox
-            const isNetworkError = 
-                errorMessage.includes('Failed to fetch') || 
+            const isNetworkError =
+                errorMessage.includes('Failed to fetch') ||
                 errorMessage.includes('Load failed') ||
                 errorMessage.includes('NetworkError') ||
                 errorMessage.includes('fetch failed') ||
                 errorMessage.includes('network');
-            
+
             if (isNetworkError) {
                 console.warn('[Heartbeat] Network error detected (browser-specific):', errorMessage);
                 // Don't retry on network errors during initial load - just fail silently

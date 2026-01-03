@@ -2549,20 +2549,20 @@ spoke_fix_mappers() {
     fi
     local code_lower=$(lower "$code")
     local code_upper=$(upper "$code")
-    
+
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}  Fixing Protocol Mappers for ${code_upper}${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
-    
+
     local instance_dir="${DIVE_ROOT}/instances/${code_lower}"
     local realm="dive-v3-broker-${code_lower}"
     local client_id="dive-v3-broker-${code_lower}"
-    
+
     # Get instance ports - try multiple methods
     local kc_port
-    
+
     # Method 1: Use get_instance_ports from common.sh (SSOT)
     if type get_instance_ports &>/dev/null; then
         local ports_output
@@ -2571,7 +2571,7 @@ spoke_fix_mappers() {
             read -r _ _ _ kc_port _ <<< "$ports_output"
         fi
     fi
-    
+
     # Method 2: Get from running Docker container
     if [ -z "$kc_port" ] || [ "$kc_port" = "8443" ]; then
         local container_port
@@ -2580,20 +2580,20 @@ spoke_fix_mappers() {
             kc_port="$container_port"
         fi
     fi
-    
+
     kc_port="${kc_port:-8443}"
-    
+
     # Get admin password
     local password
     if [ -f "${instance_dir}/.env" ]; then
         password=$(grep "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "${instance_dir}/.env" 2>/dev/null | cut -d= -f2)
     fi
     password="${password:-admin}"
-    
+
     log_info "Keycloak: https://localhost:${kc_port}"
     log_info "Realm: ${realm}"
     log_info "Client: ${client_id}"
-    
+
     # Get admin token
     local token
     token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
@@ -2601,24 +2601,24 @@ spoke_fix_mappers() {
         -d "client_id=admin-cli" \
         -d "username=admin" \
         -d "password=${password}" | jq -r '.access_token')
-    
+
     if [ -z "$token" ] || [ "$token" = "null" ]; then
         log_error "Failed to get Keycloak admin token"
         return 1
     fi
-    
+
     # Get client UUID
     local client_uuid
     client_uuid=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients" \
         -H "Authorization: Bearer $token" | jq -r ".[] | select(.clientId==\"${client_id}\") | .id")
-    
+
     if [ -z "$client_uuid" ]; then
         log_error "Client ${client_id} not found in realm ${realm}"
         return 1
     fi
-    
+
     log_info "Client UUID: ${client_uuid}"
-    
+
     # Define required mappers (core DIVE V3 attributes + AMR for MFA)
     local mappers=(
         '{"name":"clearance","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"clearance","user.attribute":"clearance","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true"}}'
@@ -2628,18 +2628,18 @@ spoke_fix_mappers() {
         '{"name":"amr (user attribute)","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"claim.name":"amr","user.attribute":"amr","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","userinfo.token.claim":"true","multivalued":"true"}}'
         '{"name":"realm roles","protocol":"openid-connect","protocolMapper":"oidc-usermodel-realm-role-mapper","config":{"claim.name":"realm_access.roles","jsonType.label":"String","id.token.claim":"true","access.token.claim":"true","multivalued":"true"}}'
     )
-    
+
     local created=0
     local skipped=0
-    
+
     for mapper_json in "${mappers[@]}"; do
         local mapper_name=$(echo "$mapper_json" | jq -r '.name')
-        
+
         # Check if mapper exists
         local existing
         existing=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
             -H "Authorization: Bearer $token" | jq -r ".[] | select(.name==\"${mapper_name}\") | .id")
-        
+
         if [ -n "$existing" ]; then
             log_verbose "Mapper '${mapper_name}' already exists"
             skipped=$((skipped + 1))
@@ -2653,7 +2653,7 @@ spoke_fix_mappers() {
             created=$((created + 1))
         fi
     done
-    
+
     echo ""
     log_success "Protocol mappers fixed for ${code_upper}"
     log_info "Created: ${created}, Skipped (existing): ${skipped}"

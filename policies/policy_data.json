@@ -377,6 +377,24 @@
       "name": "NZL Keycloak",
       "country": "NZL",
       "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-hrv": {
+      "tenant": "HRV",
+      "name": "HRV Keycloak",
+      "country": "HRV",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-hrv:8443/realms/dive-v3-broker-hrv": {
+      "tenant": "HRV",
+      "name": "HRV Keycloak (Internal)",
+      "country": "HRV",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8448/realms/dive-v3-broker-hrv": {
+      "tenant": "HRV",
+      "name": "HRV Keycloak",
+      "country": "HRV",
+      "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {
@@ -391,6 +409,7 @@
       "EST",
       "FRA",
       "GBR",
+      "HRV",
       "HUN",
       "ITA",
       "LUX",

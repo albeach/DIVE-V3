@@ -387,6 +387,24 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-hrv": {
+      "tenant": "HRV",
+      "name": "HRV Keycloak (Local Dev)",
+      "country": "HRV",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-hrv:8443/realms/dive-v3-broker-hrv": {
+      "tenant": "HRV",
+      "name": "HRV Keycloak (Internal Docker)",
+      "country": "HRV",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
   },
   "_metadata": {
