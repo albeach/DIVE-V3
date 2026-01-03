@@ -58,21 +58,39 @@ resource "keycloak_generic_protocol_mapper" "incoming_federation_acr" {
   }
 }
 
-# AMR from user attribute (PRIMARY for federation clients)
-# CRITICAL: For incoming federation clients, do NOT use native oidc-amr-mapper!
-# The native mapper reads from AUTH_METHODS_REF session notes, which are EMPTY
-# for federated users (they authenticated at the source realm, not here).
-# Instead, use the user attribute mapper to read the amr attribute that was
-# imported from the source token via the IdP attribute mapper.
-resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_amr" {
+# AMR from native session mapper (PRIMARY)
+# Reads from AUTH_METHODS_REF session note set by dive-amr-enrichment event listener
+# This is the BEST PRACTICE approach - native mapper properly handles the JSON array
+resource "keycloak_generic_protocol_mapper" "incoming_federation_amr" {
+  for_each = var.federation_partners
+
+  realm_id        = keycloak_realm.broker.id
+  client_id       = keycloak_openid_client.incoming_federation[each.key].id
+  name            = "amr (native session)"
+  protocol        = "openid-connect"
+  protocol_mapper = "oidc-amr-mapper"
+
+  config = {
+    "id.token.claim"            = "true"
+    "access.token.claim"        = "true"
+    "userinfo.token.claim"      = "true"
+    "introspection.token.claim" = "true"
+    "claim.name"                = "amr"
+  }
+}
+
+# AMR from user attribute (FALLBACK for federation)
+# Outputs to user_amr claim - frontend prioritizes this for federated users
+# CRITICAL: claim_value_type MUST be "String" for multivalued arrays, NOT "JSON"
+resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_amr_fallback" {
   for_each = var.federation_partners
 
   realm_id            = keycloak_realm.broker.id
   client_id           = keycloak_openid_client.incoming_federation[each.key].id
-  name                = "amr"
+  name                = "amr (user attribute fallback)"
   user_attribute      = "amr"
-  claim_name          = "amr"
-  claim_value_type    = "String"
+  claim_name          = "user_amr"
+  claim_value_type    = "String" # CRITICAL: NOT "JSON"!
   multivalued         = true
   add_to_id_token     = true
   add_to_access_token = true
