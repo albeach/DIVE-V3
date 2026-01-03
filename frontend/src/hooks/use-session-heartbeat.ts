@@ -167,10 +167,19 @@ export function useSessionHeartbeat() {
             const errorMessage = err instanceof Error ? err.message : 'Unknown error';
             console.error('[Heartbeat] Failed:', errorMessage, err);
 
-            // Check if it's a network error (Failed to fetch)
-            if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-                console.warn('[Heartbeat] Network error detected - this is usually a CORS or connectivity issue');
+            // Check if it's a network error (Failed to fetch, Load failed, NetworkError)
+            // "Load failed" is Safari/WebKit-specific, "Failed to fetch" is Chrome/Firefox
+            const isNetworkError = 
+                errorMessage.includes('Failed to fetch') || 
+                errorMessage.includes('Load failed') ||
+                errorMessage.includes('NetworkError') ||
+                errorMessage.includes('fetch failed') ||
+                errorMessage.includes('network');
+            
+            if (isNetworkError) {
+                console.warn('[Heartbeat] Network error detected (browser-specific):', errorMessage);
                 // Don't retry on network errors during initial load - just fail silently
+                // These are usually CORS issues, connectivity problems, or the server is restarting
                 setIsLoading(false);
                 setError(null); // Don't show error for network issues
                 return null;
