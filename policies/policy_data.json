@@ -80,7 +80,7 @@
     },
     "https://localhost:8445/realms/dive-v3-broker-bel": {
       "tenant": "BEL",
-      "name": "BEL Keycloak (Local Dev)",
+      "name": "BEL Keycloak",
       "country": "BEL",
       "trust_level": "DEVELOPMENT"
     },
@@ -92,7 +92,7 @@
     },
     "https://localhost:8465/realms/dive-v3-broker-nor": {
       "tenant": "NOR",
-      "name": "NOR Keycloak (Local Dev)",
+      "name": "NOR Keycloak",
       "country": "NOR",
       "trust_level": "DEVELOPMENT"
     },
@@ -110,7 +110,7 @@
     },
     "https://localhost:/realms/dive-v3-broker-bel": {
       "tenant": "BEL",
-      "name": "BEL Keycloak (Local Dev)",
+      "name": "BEL Keycloak",
       "country": "BEL",
       "trust_level": "DEVELOPMENT"
     },
@@ -329,6 +329,54 @@
       "name": "GBR Keycloak",
       "country": "GBR",
       "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-ita": {
+      "tenant": "ITA",
+      "name": "ITA Keycloak",
+      "country": "ITA",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-esp": {
+      "tenant": "ESP",
+      "name": "ESP Keycloak",
+      "country": "ESP",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-esp:8443/realms/dive-v3-broker-esp": {
+      "tenant": "ESP",
+      "name": "ESP Keycloak (Internal)",
+      "country": "ESP",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-bel:8443/realms/dive-v3-broker-bel": {
+      "tenant": "BEL",
+      "name": "BEL Keycloak (Internal)",
+      "country": "BEL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8454/realms/dive-v3-broker-deu": {
+      "tenant": "DEU",
+      "name": "DEU Keycloak",
+      "country": "DEU",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-nzl": {
+      "tenant": "NZL",
+      "name": "NZL Keycloak",
+      "country": "NZL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-nzl:8443/realms/dive-v3-broker-nzl": {
+      "tenant": "NZL",
+      "name": "NZL Keycloak (Internal)",
+      "country": "NZL",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8476/realms/dive-v3-broker-nzl": {
+      "tenant": "NZL",
+      "name": "NZL Keycloak",
+      "country": "NZL",
+      "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {
@@ -349,6 +397,7 @@
       "LVA",
       "NLD",
       "NOR",
+      "NZL",
       "POL",
       "PRT",
       "ROU",

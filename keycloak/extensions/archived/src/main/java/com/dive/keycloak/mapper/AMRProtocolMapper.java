@@ -18,19 +18,26 @@ import java.util.List;
 
 /**
  * DIVE V3 Dynamic AMR Protocol Mapper
- * 
- * Computes AMR (Authentication Methods Reference) dynamically during token generation
- * by inspecting user's configured credentials.
- * 
- * This approach works for ALL grant types (password, authorization_code, refresh, etc.)
- * because it runs during token creation, not as a post-authentication event.
- * 
- * NIST SP 800-63B Compliance:
- * - AAL1 (0): Single factor (password only)
- * - AAL2 (1): Multi-factor (password + OTP/hardware token)
- * - AAL3 (2): Hardware cryptographic authenticator
+ *
+ * CRITICAL FIX (January 2026):
+ * ============================
+ * Keycloak 26's oidc-amr-mapper does NOT work because:
+ * 1. It reads "reference" config from authenticator execution configs
+ * 2. auth-username-password-form is NOT configurable (configurable=false)
+ * 3. Therefore password authentication never adds "pwd" to AMR
+ *
+ * This mapper DERIVES AMR from the ACR claim which IS correctly set by:
+ * - oidc-acr-mapper reading from acr.loa.map realm attribute
+ * - LoA conditional authenticators in the authentication flow
+ *
+ * ACR-to-AMR Mapping (NIST SP 800-63B compliant):
+ * - ACR "1" → AMR ["pwd"]           (AAL1: password only)
+ * - ACR "2" → AMR ["pwd", "otp"]    (AAL2: password + OTP)
+ * - ACR "3" → AMR ["pwd", "hwk"]    (AAL3: password + WebAuthn)
+ *
+ * NOTE: This mapper does NOT override ACR - it only sets AMR based on existing ACR.
  */
-public class AMRProtocolMapper extends AbstractOIDCProtocolMapper 
+public class AMRProtocolMapper extends AbstractOIDCProtocolMapper
         implements OIDCAccessTokenMapper, OIDCIDTokenMapper, UserInfoTokenMapper {
 
     public static final String PROVIDER_ID = "dive-amr-protocol-mapper";
@@ -48,12 +55,14 @@ public class AMRProtocolMapper extends AbstractOIDCProtocolMapper
 
     @Override
     public String getDisplayType() {
-        return "DIVE AMR Mapper";
+        return "DIVE AMR Mapper (ACR-derived)";
     }
 
     @Override
     public String getHelpText() {
-        return "Dynamically computes AMR (Authentication Methods Reference) and ACR (Authentication Context Class Reference) based on user's configured credentials. Works with all grant types.";
+        return "Derives AMR (Authentication Methods Reference) from the ACR claim. " +
+               "ACR=1→[pwd], ACR=2→[pwd,otp], ACR=3→[pwd,hwk]. " +
+               "Use this instead of oidc-amr-mapper when password authenticator reference is not configurable.";
     }
 
     @Override
@@ -74,57 +83,70 @@ public class AMRProtocolMapper extends AbstractOIDCProtocolMapper
         try {
             UserModel user = userSession.getUser();
 
-            // Build AMR array based on user's configured credentials (pwd baseline; hwk if WebAuthn)
-            List<String> amrMethods = new ArrayList<>();
+            // Read ACR from the token (already set by oidc-acr-mapper)
+            // The ACR is set based on the LoA conditional authenticators in the flow
+            Object existingAcr = token.getOtherClaims().get("acr");
+            String acr = existingAcr != null ? existingAcr.toString() : "1";
 
-            // Password is always present for authenticated users
-            amrMethods.add("pwd");
+            // If ACR is not yet set, derive it from session note
+            if (existingAcr == null) {
+                String sessionAcr = userSession.getNote("AUTH_CONTEXT_CLASS_REF");
+                if (sessionAcr != null) {
+                    acr = sessionAcr;
+                } else {
+                    // Fallback: check user's credentials
+                    boolean hasWebAuthn = user != null && user.credentialManager()
+                        .getStoredCredentialsByTypeStream("webauthn")
+                        .findFirst()
+                        .isPresent();
+                    boolean hasOTP = user != null && user.credentialManager()
+                        .getStoredCredentialsByTypeStream("otp")
+                        .findFirst()
+                        .isPresent();
 
-            // Check for WebAuthn credentials (future enhancement)
-            boolean hasWebAuthn = user != null && user.credentialManager()
-                .getStoredCredentialsByTypeStream("webauthn")
-                .findFirst()
-                .isPresent();
-
-            // Elevate to OTP only when the authenticator explicitly marked success
-            boolean otpUsed = false;
-            String otpAuthUser = userSession.getNote("OTP_AUTHENTICATED");
-            if (otpAuthUser != null && otpAuthUser.equalsIgnoreCase("true")) {
-                otpUsed = true;
-                amrMethods.add("otp");
+                    if (hasWebAuthn) {
+                        acr = "3";
+                    } else if (hasOTP) {
+                        acr = "2";
+                    } else {
+                        acr = "1";
+                    }
+                }
             }
 
-            if (hasWebAuthn) {
-                amrMethods.add("hwk");  // Hardware key
+            // Derive AMR from ACR (NIST SP 800-63B mapping)
+            List<String> amrMethods = new ArrayList<>();
+            amrMethods.add("pwd"); // Password is always the baseline
+
+            switch (acr) {
+                case "3":
+                    // AAL3: Hardware cryptographic authenticator (WebAuthn/passkey)
+                    amrMethods.add("hwk");
+                    break;
+                case "2":
+                    // AAL2: OTP/TOTP second factor
+                    amrMethods.add("otp");
+                    break;
+                case "1":
+                case "0":
+                default:
+                    // AAL1: Password only (already have "pwd")
+                    break;
             }
 
             // Set AMR claim as JSON array
             token.setOtherClaims("amr", amrMethods);
 
-            // Calculate ACR based on AMR factors (NIST SP 800-63B)
-            String acr;
-            if (hasWebAuthn) {
-                acr = "2";  // AAL3 - Hardware cryptographic authenticator
-            } else if (otpUsed) {
-                acr = "1";  // AAL2 - OTP used
-            } else {
-                acr = "0";  // AAL1 - Single factor (password only)
-            }
+            // Log for debugging
+            String username = (user != null) ? user.getUsername() : "unknown";
+            System.out.println("[DIVE AMR Mapper] Derived AMR from ACR for user: " + username +
+                             " | acr=" + acr + " → amr=" + amrMethods);
 
-            token.setOtherClaims("acr", acr);
-
-            // Set auth_time from user session
-            if (userSession.getStarted() > 0) {
-                token.setOtherClaims("auth_time", userSession.getStarted() / 1000); // Convert ms to seconds
-            }
-
-            System.out.println("[DIVE AMR Mapper] Set claims for user: " + (user != null ? user.getUsername() : "unknown") +
-                             " | amr=" + amrMethods + " | acr=" + acr + " (AAL" + (Integer.parseInt(acr) + 1) + ")");
         } catch (Exception e) {
             // Fail-secure: do not break token issuance; default to AAL1
-            System.err.println("[DIVE AMR Mapper] Error computing AMR/ACR: " + e.getMessage());
+            System.err.println("[DIVE AMR Mapper] Error deriving AMR from ACR: " + e.getMessage());
+            e.printStackTrace();
             token.setOtherClaims("amr", List.of("pwd"));
-            token.setOtherClaims("acr", "0");
         }
     }
 }

@@ -17,7 +17,7 @@ import * as jwt from 'jsonwebtoken';
 // Configuration
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8081';
 const REALM = 'dive-v3-broker';
-const CLIENT_ID = 'dive-v3-client-broker';
+const CLIENT_ID = 'dive-v3-broker';
 const CLIENT_SECRET = process.env.KC_CLIENT_SECRET || '';
 const TEST_USER = 'admin-dive';
 const TEST_PASSWORD = process.env.TEST_PASSWORD || 'DiveAdmin2025!';

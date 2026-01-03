@@ -141,7 +141,7 @@ module "instance" {
 
 ## Dependencies
 
-- Keycloak provider >= 5.0
+- Keycloak provider >= 5.6.0
 - Terraform >= 1.5.0
 
 ## Related Modules

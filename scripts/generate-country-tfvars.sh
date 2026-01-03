@@ -1,15 +1,16 @@
 #!/usr/local/bin/bash
 # =============================================================================
-# DIVE V3 - NATO Country Terraform Variable Generator
+# DIVE V3 - Country Terraform Variable Generator
 # =============================================================================
-# Generates Terraform tfvars files for any NATO country based on ISO code
+# Generates Terraform tfvars files for NATO countries and Partner Nations
 # Uses centralized NATO countries database for consistent metadata
 #
 # Usage: ./scripts/generate-country-tfvars.sh <COUNTRY_CODE> [--all] [--force]
 #
 # Examples:
 #   ./scripts/generate-country-tfvars.sh GBR          # Generate GBR tfvars
-#   ./scripts/generate-country-tfvars.sh --all        # Generate all 32 NATO tfvars
+#   ./scripts/generate-country-tfvars.sh NZL          # Generate NZL (Partner) tfvars
+#   ./scripts/generate-country-tfvars.sh --all        # Generate all NATO + Partner tfvars
 #   ./scripts/generate-country-tfvars.sh ALB --force  # Regenerate even if exists
 # =============================================================================
 
@@ -73,38 +74,50 @@ mkdir -p "$TFVARS_DIR"
 generate_tfvars() {
     local code="$1"
     local code_lower="${code,,}"
-    
-    # Validate NATO country
-    if ! is_nato_country "$code"; then
+    local is_partner=false
+
+    # Validate country (NATO or Partner Nation)
+    if is_nato_country "$code"; then
+        is_partner=false
+    elif is_partner_nation "$code"; then
+        is_partner=true
+    else
         echo "❌ Unknown country code: $code"
         echo "   Run './dive spoke list-countries' to see valid codes"
+        echo "   Valid Partner Nations: AUS, NZL, JPN, KOR, ISR, UKR"
         return 1
     fi
-    
+
     local tfvars_file="$TFVARS_DIR/${code_lower}.tfvars"
-    
+
     # Check if tfvars exists
     if [ -f "$tfvars_file" ] && [ "$FORCE" != true ]; then
         echo "  ⏭️  $code: tfvars exists (use --force to regenerate)"
         return 0
     fi
-    
-    # Get country data from NATO database
-    local name=$(get_country_name "$code")
-    local flag=$(get_country_flag "$code")
-    local timezone=$(get_country_timezone "$code")
-    
-    # Get port assignments
-    eval "$(get_country_ports "$code")"
-    
+
+    # Get country data from appropriate database
+    local name flag timezone
+    if [ "$is_partner" = true ]; then
+        name=$(get_partner_name "$code")
+        flag=$(get_partner_flag "$code")
+        timezone=$(get_partner_timezone "$code")
+        eval "$(get_partner_ports "$code")"
+    else
+        name=$(get_country_name "$code")
+        flag=$(get_country_flag "$code")
+        timezone=$(get_country_timezone "$code")
+        eval "$(get_country_ports "$code")"
+    fi
+
     # Determine if this is the hub
     local is_hub=false
     if [ "$code" = "$HUB_CODE" ]; then
         is_hub=true
     fi
-    
+
     echo "  ✨ Generating: $name ($code) $flag"
-    
+
     # Generate the tfvars file
     cat > "$tfvars_file" << TFVARS
 # =============================================================================
@@ -142,7 +155,7 @@ idp_url = "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
 # =============================================================================
 # Client Configuration
 # =============================================================================
-client_id     = "dive-v3-client-broker"
+client_id     = "dive-v3-broker"
 # SECURITY: Get this from GCP Secret Manager: dive-v3-keycloak-client-secret
 # gcloud secrets versions access latest --secret=dive-v3-keycloak-client-secret --project=dive25
 client_secret = null  # Set via TF_VAR_client_secret environment variable
@@ -162,7 +175,7 @@ webauthn_rp_id = ""
 # =============================================================================
 # User Configuration
 # =============================================================================
-create_test_users = true
+create_test_users = false  # Users created via ./dive seed or seed-users.sh
 # SECURITY: Get these from GCP Secret Manager
 # gcloud secrets versions access latest --secret=dive-v3-test-user-password --project=dive25
 test_user_password  = null  # Set via TF_VAR_test_user_password
@@ -199,12 +212,17 @@ incoming_federation_secrets = {
 TFVARS
     else
         # Spoke federates to hub
-        local hub_name=$(get_country_name "$HUB_CODE")
+        local hub_name
+        if is_nato_country "$HUB_CODE"; then
+            hub_name=$(get_country_name "$HUB_CODE")
+        else
+            hub_name=$(get_partner_name "$HUB_CODE")
+        fi
         local hub_lower="${HUB_CODE,,}"
         # Get hub ports separately
-        local hub_port_output=$(get_country_ports "$HUB_CODE")
+        local hub_port_output=$(get_any_country_ports "$HUB_CODE")
         local hub_port=$(echo "$hub_port_output" | grep SPOKE_KEYCLOAK_HTTPS_PORT | cut -d= -f2)
-        
+
         cat >> "$tfvars_file" << TFVARS
 federation_partners = {
   ${hub_lower} = {
@@ -254,21 +272,29 @@ TFVARS
 
 if [ "$ALL" = true ]; then
     echo "═══════════════════════════════════════════════════════════════════════"
-    echo "  Generating Terraform tfvars for All 32 NATO Countries"
-    echo "  Hub: $HUB_CODE ($(get_country_name "$HUB_CODE"))"
+    echo "  Generating Terraform tfvars for All NATO + Partner Nations"
+    echo "  Hub: $HUB_CODE ($(get_any_country_name "$HUB_CODE"))"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
-    
+
     generated=0
     failed=0
-    
+    total_countries=$((${#NATO_COUNTRIES[@]} + ${#PARTNER_NATIONS[@]}))
+
+    echo "  NATO Countries (${#NATO_COUNTRIES[@]}):"
     for code in $(echo "${!NATO_COUNTRIES[@]}" | tr ' ' '\n' | sort); do
         generate_tfvars "$code" && generated=$((generated + 1)) || failed=$((failed + 1))
     done
-    
+
+    echo ""
+    echo "  Partner Nations (${#PARTNER_NATIONS[@]}):"
+    for code in $(echo "${!PARTNER_NATIONS[@]}" | tr ' ' '\n' | sort); do
+        generate_tfvars "$code" && generated=$((generated + 1)) || failed=$((failed + 1))
+    done
+
     echo ""
     echo "═══════════════════════════════════════════════════════════════════════"
-    echo "  Summary: Processed ${#NATO_COUNTRIES[@]} countries"
+    echo "  Summary: Processed $total_countries countries"
     echo "  Generated/Updated: $generated tfvars files"
     if [ $failed -gt 0 ]; then
         echo "  Failed: $failed"
@@ -276,13 +302,13 @@ if [ "$ALL" = true ]; then
     echo ""
     echo "  Output directory: $TFVARS_DIR"
     echo "═══════════════════════════════════════════════════════════════════════"
-    
+
 elif [ -n "$COUNTRY_CODE" ]; then
     echo "═══════════════════════════════════════════════════════════════════════"
     echo "  Generating Terraform tfvars: ${COUNTRY_CODE,,}.tfvars"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
-    
+
     if generate_tfvars "$COUNTRY_CODE"; then
         echo ""
         echo "To use this configuration:"

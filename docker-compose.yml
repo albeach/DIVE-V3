@@ -207,7 +207,7 @@ services:
       # Multi-realm migration (Oct 21, 2025): Updated to broker realm with HTTPS
       KEYCLOAK_URL: ${KEYCLOAK_URL:-https://keycloak:8443}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-dive-v3-broker}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run ./dive secrets load first}
       KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-https://keycloak:8443/realms/dive-v3-broker/protocol/openid-connect/certs}
       # Admin credentials for Keycloak Admin API (IdP listing, user management)
@@ -310,10 +310,10 @@ services:
       NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "${NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS:-true}"
       AUTH_SECRET: ${AUTH_SECRET:?Run ./dive secrets load first}
       # Client credentials
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run ./dive secrets load first}
       # Auth.js (NextAuth v5) provider envs
-      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-client-broker}
+      AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker}
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET:?Run ./dive secrets load first}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker}
       # SSL and host configuration

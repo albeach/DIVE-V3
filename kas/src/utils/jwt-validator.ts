@@ -229,7 +229,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
  * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
  * - Backward compatible: Existing tokens from dive-v3-broker still work
  * - Forward compatible: New tokens from dive-v3-broker federation accepted
- * - Dual audience support: dive-v3-client AND dive-v3-client-broker
+ * - Dual audience support: dive-v3-client AND dive-v3-broker
  * 
  * @param token - JWT bearer token from request
  * @returns Decoded and verified token payload
@@ -295,7 +295,7 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Multi-realm: Accept tokens for both clients + Keycloak default audience
         const validAudiences: [string, ...string[]] = [
             'dive-v3-client',         // Legacy client (broker realm)
-            'dive-v3-client-broker',  // Multi-realm broker client (old name - deprecated)
+            'dive-v3-broker',  // Multi-realm broker client (old name - deprecated)
             'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
         ];

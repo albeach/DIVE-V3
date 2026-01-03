@@ -80,7 +80,7 @@ push_instance_secrets() {
     upsert_secret "dive-v3-postgres-${code_lower}" "$postgres_pass"
     upsert_secret "dive-v3-mongodb-${code_lower}" "$mongo_pass"
     upsert_secret "dive-v3-keycloak-${code_lower}" "$keycloak_pass"
-    upsert_secret "dive-v3-client-secret-${code_lower}" "$client_secret"
+    upsert_secret "dive-v3-keycloak-secret-${code_lower}" "$client_secret"
     upsert_secret "dive-v3-auth-secret-${code_lower}" "$auth_secret"
     upsert_secret "dive-v3-jwt-secret-${code_lower}" "$jwt_secret"
     upsert_secret "dive-v3-nextauth-secret-${code_lower}" "$nextauth_secret"

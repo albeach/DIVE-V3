@@ -143,6 +143,32 @@
 # =============================================================================
 
 # =============================================================================
+# VERSION CONSTANTS (SSOT - Single Source of Truth)
+# =============================================================================
+# All version numbers for external dependencies should be defined here.
+# Update ONLY this section when upgrading versions.
+# =============================================================================
+
+# Keycloak Version - Used by Dockerfile, docker-compose, and Terraform
+# Changelog: https://www.keycloak.org/docs/latest/release_notes/index.html
+export KEYCLOAK_VERSION="26.4.7"
+export KEYCLOAK_IMAGE="quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}"
+
+# Node.js Version - Used by frontend/backend Dockerfiles
+export NODE_VERSION="20"
+
+# OPA Version - Use 'latest' to always get newest features and security patches
+# Releases: https://github.com/open-policy-agent/opa/releases
+export OPA_VERSION="latest"
+export OPA_IMAGE="openpolicyagent/opa:${OPA_VERSION}"
+
+# MongoDB Version - Used by docker-compose
+export MONGODB_VERSION="7.0"
+
+# PostgreSQL Version - Used by docker-compose (Keycloak database)
+export POSTGRES_VERSION="15"
+
+# =============================================================================
 # LOAD NATO COUNTRIES DATABASE (SSOT for port offsets)
 # =============================================================================
 # FIXED (Dec 2025): Load NATO database early so get_instance_ports can use it
@@ -187,6 +213,27 @@ export QUIET="${QUIET:-false}"
 
 # Pilot Mode Configuration
 export PILOT_MODE="${DIVE_PILOT_MODE:-false}"
+
+# =============================================================================
+# HUB CONTAINER NAMING (SSOT - Never override during spoke operations!)
+# =============================================================================
+# Hub is a singleton. These names are derived from HUB_PROJECT_NAME.
+# CRITICAL: Do NOT use COMPOSE_PROJECT_NAME for Hub names - it gets set to
+# spoke names during spoke deployment and would pollute Hub detection.
+#
+# Convention: ${HUB_PROJECT_NAME}-<service>
+#   - dive-hub-keycloak
+#   - dive-hub-backend
+#   - dive-hub-frontend
+#   - etc.
+#
+# These are exported so they're available to all modules.
+# Use consistent variable names (HUB_*_CONTAINER pattern).
+export HUB_PROJECT_NAME="${HUB_PROJECT_NAME:-dive-hub}"
+export HUB_KEYCLOAK_CONTAINER="${HUB_PROJECT_NAME}-keycloak"
+export HUB_BACKEND_CONTAINER="${HUB_PROJECT_NAME}-backend"
+export HUB_FRONTEND_CONTAINER="${HUB_PROJECT_NAME}-frontend"
+export HUB_REALM="${HUB_REALM:-dive-v3-broker}"
 
 # Hub API URL - Environment aware
 # - LOCAL/DEV: Use localhost hub
@@ -239,6 +286,31 @@ upper() {
 
 lower() {
     echo "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+##
+# Get Keycloak admin password from container environment (SSOT helper)
+# Handles both modern Keycloak 26+ (KC_BOOTSTRAP_ADMIN_PASSWORD) and legacy
+#
+# Arguments:
+#   $1 - Container name
+#
+# Returns:
+#   Password string on stdout, or empty if not found
+##
+get_keycloak_password() {
+    local container="${1:?Container name required}"
+    local password=""
+
+    # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (Keycloak 26+)
+    password=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+
+    # Fallback to legacy KEYCLOAK_ADMIN_PASSWORD
+    if [ -z "$password" ]; then
+        password=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    fi
+
+    echo "$password"
 }
 
 # Resolve container name based on environment/prefix, with override support.

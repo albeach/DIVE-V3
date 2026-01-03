@@ -232,7 +232,7 @@ services:
   # =============================================================================
 
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.4.7}
     container_name: dive-prod-keycloak
     restart: unless-stopped
     environment:
@@ -339,7 +339,7 @@ services:
       API_URL: https://localhost:4000
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # Secrets
-      KEYCLOAK_CLIENT_ID: dive-v3-client-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-broker
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -412,7 +412,7 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
       NEXTAUTH_SECRET: ${AUTH_SECRET}
       # Auth.js standard environment variables
-      AUTH_KEYCLOAK_ID: dive-v3-client-broker
+      AUTH_KEYCLOAK_ID: dive-v3-broker
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
       # Security

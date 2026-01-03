@@ -34,11 +34,10 @@ fi
 # CONSTANTS
 # =============================================================================
 
-# Container naming - use COMPOSE_PROJECT_NAME for consistency with docker-compose.hub.yml
-# Default: dive-v3 (matches COMPOSE_PROJECT_NAME in .env)
-HUB_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}"
-HUB_KEYCLOAK_CONTAINER="${HUB_PROJECT_NAME}-keycloak"
-HUB_BACKEND_CONTAINER="${HUB_PROJECT_NAME}-backend"
+# Container naming - SSOT defined in common.sh (HUB_*_CONTAINER variables)
+# CRITICAL: Do NOT redefine these here - common.sh is always loaded first
+# and exports HUB_KEYCLOAK_CONTAINER, HUB_BACKEND_CONTAINER, etc.
+# See: scripts/dive-modules/common.sh for authoritative definitions
 HUB_REALM="dive-v3-broker-usa"
 
 # =============================================================================
@@ -659,9 +658,9 @@ sync_hub_to_spoke_secrets() {
     local federation_client_id="dive-v3-broker-usa"
     local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
 
-    # Get spoke admin password
+    # Get spoke admin password (SSOT: try KC_BOOTSTRAP_ADMIN_PASSWORD first)
     local spoke_admin_pass
-    spoke_admin_pass=$(docker exec "$spoke_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    spoke_admin_pass=$(get_keycloak_password "$spoke_kc_container")
     if [ -z "$spoke_admin_pass" ]; then
         log_error "Could not get spoke Keycloak admin password"
         return 1
@@ -697,14 +696,21 @@ sync_hub_to_spoke_secrets() {
     log_verbose "Retrieved ${code_upper} client secret (len: ${#spoke_client_secret})"
 
     # Update Hub's IdP to use spoke's actual client secret
-    source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
-    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-        log_error "KEYCLOAK_ADMIN_PASSWORD not set"
+    # SSOT: Get Hub password from container environment
+    local hub_admin_pass
+    hub_admin_pass=$(get_keycloak_password "${HUB_KEYCLOAK_CONTAINER}")
+    if [ -z "$hub_admin_pass" ]; then
+        # Fallback to .env.hub
+        source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
+        hub_admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
+    fi
+    if [ -z "$hub_admin_pass" ]; then
+        log_error "Could not get Hub Keycloak admin password"
         return 1
     fi
 
     docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 --realm master --user admin --password "$KEYCLOAK_ADMIN_PASSWORD" 2>/dev/null || return 1
+        --server http://localhost:8080 --realm master --user admin --password "$hub_admin_pass" 2>/dev/null || return 1
 
     local idp_alias="${code_lower}-idp"
 
@@ -860,7 +866,7 @@ ensure_hub_idp_client_in_spoke() {
     log_step "Creating Hub IdP client in ${code_upper} spoke..."
 
     local spoke_realm="dive-v3-broker-${code_lower}"
-    local client_id="dive-v3-client-${code_lower}"  # This is what Hub's IdP uses
+    local client_id="dive-v3-broker-${code_lower}"  # This is what Hub's IdP uses
 
     # Get spoke admin password
     local spoke_env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
@@ -1063,6 +1069,8 @@ configure_spoke_usa_idp() {
     local client_id="dive-v3-broker-${code_lower}"
 
     local idp_config
+    # Server-to-server URLs use container names (dive-hub-keycloak is in the certificate SANs)
+    # Browser-facing URLs use localhost for user access
     idp_config=$(cat <<EOF
 {
     "alias": "usa-idp",
@@ -1074,7 +1082,7 @@ configure_spoke_usa_idp() {
         "clientSecret": "${hub_client_secret}",
         "tokenUrl": "https://dive-hub-keycloak:8443/realms/${HUB_REALM}/protocol/openid-connect/token",
         "authorizationUrl": "https://localhost:8443/realms/${HUB_REALM}/protocol/openid-connect/auth?kc_idp_hint=",
-        "logoutUrl": "https://dive-hub-keycloak:8443/realms/${HUB_REALM}/protocol/openid-connect/logout",
+        "logoutUrl": "https://localhost:8443/realms/${HUB_REALM}/protocol/openid-connect/logout",
         "backchannelSupported": "true",
         "useJwksUrl": "true",
         "jwksUrl": "https://dive-hub-keycloak:8443/realms/${HUB_REALM}/protocol/openid-connect/certs",

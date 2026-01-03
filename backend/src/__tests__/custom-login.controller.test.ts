@@ -72,7 +72,7 @@ beforeEach(() => {
     resetRateLimiting();
     // Reset environment variables
     process.env.KEYCLOAK_URL = 'http://localhost:8080';
-    process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-client-broker';
+    process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-broker';
     process.env.KEYCLOAK_CLIENT_SECRET = 'test-secret';
 });
 

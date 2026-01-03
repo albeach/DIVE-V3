@@ -747,6 +747,19 @@ _spoke_apply_terraform() {
         export TF_VAR_enable_mfa=true
         export TF_VAR_webauthn_rp_id="${WEBAUTHN_RP_ID:-localhost}"
 
+        # SSOT Migration: Export cross-border client secret and port config
+        export TF_VAR_cross_border_client_secret="${CROSS_BORDER_CLIENT_SECRET:-${KEYCLOAK_CLIENT_SECRET:-}}"
+
+        # Calculate local development ports from NATO database or port offset
+        if type -t get_country_offset >/dev/null 2>&1 && is_nato_country "$code_upper" 2>/dev/null; then
+            local port_offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
+            export TF_VAR_local_keycloak_port=$((8443 + port_offset))
+            export TF_VAR_local_frontend_port=$((3000 + port_offset))
+        fi
+
+        # Enable Terraform SSOT for init-keycloak.sh and federation-link.sh
+        export USE_TERRAFORM_SSOT=true
+
         # Get Keycloak container name for internal URL
         local kc_container="dive-spoke-${code_lower}-keycloak"
         if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
@@ -891,7 +904,7 @@ _do_secret_sync_attempt() {
 
     # Get current Keycloak client secret
     local realm="dive-v3-broker-${code_lower}"
-    local client_id="dive-v3-client-broker-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
 
     local client_uuid
     client_uuid=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm}/clients?clientId=${client_id}" \
@@ -1059,9 +1072,15 @@ spoke_sync_federation_secrets() {
         return 1
     fi
 
-    # Get Hub admin credentials
-    source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
-    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+    # Get Hub admin credentials (SSOT: try container env first)
+    local hub_admin_pass
+    hub_admin_pass=$(get_keycloak_password "dive-hub-keycloak")
+    if [ -z "$hub_admin_pass" ]; then
+        # Fallback to .env.hub
+        source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
+        hub_admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
+    fi
+    if [ -z "$hub_admin_pass" ]; then
         log_error "Could not get Hub Keycloak admin password"
         return 1
     fi
@@ -1072,7 +1091,7 @@ spoke_sync_federation_secrets() {
         -d "grant_type=password" \
         -d "client_id=admin-cli" \
         -d "username=admin" \
-        -d "password=${KEYCLOAK_ADMIN_PASSWORD}" | jq -r '.access_token')
+        -d "password=${hub_admin_pass}" | jq -r '.access_token')
 
     if [ -z "$hub_token" ] || [ "$hub_token" = "null" ]; then
         log_error "Could not authenticate with Hub Keycloak"
@@ -1099,10 +1118,15 @@ spoke_sync_federation_secrets() {
         return 1
     fi
 
-    # Get spoke admin credentials
-    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+    # Get spoke admin credentials (SSOT: try container env first)
+    local spoke_container="dive-spoke-${code_lower}-keycloak"
     local spoke_admin_pass
-    spoke_admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+    spoke_admin_pass=$(get_keycloak_password "$spoke_container")
+    if [ -z "$spoke_admin_pass" ]; then
+        # Fallback to .env file
+        local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+        spoke_admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+    fi
 
     if [ -z "$spoke_admin_pass" ]; then
         log_error "Could not get $code_upper Keycloak admin password"
@@ -2064,7 +2088,22 @@ spoke_clean() {
 
     log_info "Removed $volume_count volumes"
 
-    # Step 4: Remove instance directory (optional - prompt user)
+    # Step 4: Clear Terraform state for this instance
+    log_step "Clearing Terraform state..."
+    local tf_spoke_dir="${DIVE_ROOT}/terraform/spoke"
+    if [ -d "$tf_spoke_dir/.terraform" ]; then
+        cd "$tf_spoke_dir"
+        if terraform workspace list 2>/dev/null | grep -qE "^\*?\s+${code_lower}$"; then
+            terraform workspace select "$code_lower" >/dev/null 2>&1
+            # Remove all resources from state (without destroying in Keycloak)
+            terraform state list 2>/dev/null | while read -r resource; do
+                terraform state rm "$resource" >/dev/null 2>&1 || true
+            done
+            log_info "Terraform state cleared for ${code_lower}"
+        fi
+    fi
+
+    # Step 5: Remove instance directory (optional - prompt user)
     if [ -d "$spoke_dir" ]; then
         echo ""
         echo -e "${YELLOW}Instance directory found: $spoke_dir${NC}"

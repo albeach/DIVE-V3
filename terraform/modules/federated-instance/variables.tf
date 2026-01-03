@@ -39,9 +39,11 @@ variable "realm_name" {
 }
 
 variable "client_id" {
-  description = "OIDC client ID for the application"
+  description = "OIDC client ID for the application. Pattern: dive-v3-broker-{instance}"
   type        = string
-  default     = "dive-v3-client-broker"
+  # Default follows naming convention from config/naming-conventions.json
+  # Pattern: dive-v3-broker-{instance} (e.g., dive-v3-broker-fra)
+  default     = "dive-v3-broker"
 }
 
 variable "client_secret" {
@@ -145,4 +147,34 @@ variable "webauthn_rp_id" {
   description = "WebAuthn Relying Party ID. Empty for localhost, override in tfvars/ENV for CF host (e.g., usa-idp.dive25.com). Must match the origin effective domain."
   type        = string
   default     = ""
-}# NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
+} # NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
+
+# ============================================
+# ⚠️ DEPRECATED - Cross-Border Federation Client
+# ============================================
+# This variable is deprecated as of Jan 2, 2026.
+# The dive-v3-cross-border-client is NOT used for actual federation.
+# See cross-border-client.tf for migration instructions.
+# PENDING REMOVAL in v5.0
+# ============================================
+variable "cross_border_client_secret" {
+  description = "[DEPRECATED] Client secret for the cross-border federation client. If null, Keycloak generates one."
+  type        = string
+  sensitive   = true
+  default     = null
+}
+
+# ============================================
+# Local Development Port Configuration
+# ============================================
+variable "local_keycloak_port" {
+  description = "Local Keycloak HTTPS port for this spoke (e.g., 8453 for FRA, 8475 for DEU). Used for port-offset redirect URIs in local dev. Set to null for production."
+  type        = number
+  default     = null
+}
+
+variable "local_frontend_port" {
+  description = "Local frontend port for this spoke (e.g., 3010 for FRA). Used for redirect URIs in local dev. Set to null for production."
+  type        = number
+  default     = null
+}

@@ -184,7 +184,7 @@
   },
   "defaults": {
     "realm": "dive-v3-broker",
-    "clientId": "dive-v3-client-broker",
+    "clientId": "dive-v3-broker",
     "tokenLifetime": "15m",
     "sessionLifetime": "10h",
     "clearanceLevels": [
@@ -377,109 +377,43 @@
       "deployment": {
         "provider": "docker",
         "host": "localhost",
-        "domain": "localhost",
-        "composeFile": "instances/gbr/docker-compose.yml",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.gbr.yml",
         "projectName": "gbr"
       },
       "services": {
-        "_comment": "GBR uses -gbr suffix on all service names",
+        "_comment": "GBR uses gbr- prefix on all service names",
         "frontend": {
           "name": "frontend-gbr",
-          "containerName": "dive-v3-frontend-gbr",
+          "containerName": "dive-spoke-gbr-frontend",
           "internalPort": 3000,
-          "externalPort": 3003,
+          "externalPort": 3457,
           "protocol": "https",
-          "hostname": "localhost"
+          "hostname": "gbr-app.dive25.com"
         },
         "backend": {
           "name": "backend-gbr",
-          "containerName": "dive-v3-backend-gbr",
+          "containerName": "dive-spoke-gbr-backend",
           "internalPort": 4000,
-          "externalPort": 4003,
+          "externalPort": 4031,
           "protocol": "https",
-          "hostname": "localhost"
+          "hostname": "gbr-api.dive25.com"
         },
         "keycloak": {
           "name": "keycloak-gbr",
-          "containerName": "dive-v3-keycloak-gbr",
+          "containerName": "dive-spoke-gbr-keycloak",
           "internalPort": 8443,
-          "externalPort": 8446,
+          "externalPort": 8474,
           "protocol": "https",
-          "hostname": "localhost"
-        },
-        "kas": {
-          "name": "kas-gbr",
-          "containerName": "dive-v3-kas-gbr",
-          "internalPort": 8080,
-          "externalPort": 8092,
-          "protocol": "http",
-          "hostname": "gbr-kas.dive25.com"
-        },
-        "postgres": {
-          "name": "postgres-gbr",
-          "containerName": "dive-v3-postgres-gbr",
-          "internalPort": 5432,
-          "externalPort": 5435
+          "hostname": "gbr-idp.dive25.com"
         },
         "mongodb": {
           "name": "mongodb-gbr",
-          "containerName": "dive-v3-mongodb-gbr",
+          "containerName": "dive-spoke-gbr-mongodb",
           "internalPort": 27017,
-          "externalPort": 27019
-        },
-        "redis": {
-          "name": "redis-gbr",
-          "containerName": "dive-v3-redis-gbr",
-          "internalPort": 6379,
-          "externalPort": 6381
-        },
-        "opa": {
-          "name": "opa-gbr",
-          "containerName": "dive-v3-opa-gbr",
-          "internalPort": 8181,
-          "externalPort": 8183
+          "externalPort": 27048,
+          "protocol": "mongodb"
         }
-      },
-      "cloudflare": {
-        "tunnelId": "375d2bed-2002-4604-9fa6-22ca251ac957",
-        "tunnelName": "dive-v3-gbr",
-        "credentialsFile": "cloudflared/gbr-tunnel-credentials.json",
-        "configFile": "cloudflared/config-gbr.yml",
-        "metricsPort": 9128
-      },
-      "secrets": {
-        "gcpProjectId": "dive25",
-        "keycloakAdmin": "dive-v3-keycloak-gbr",
-        "keycloakClientSecret": "dive-v3-keycloak-client-secret-gbr",
-        "postgres": "dive-v3-postgres-gbr",
-        "mongodb": "dive-v3-mongodb-gbr",
-        "redis": "dive-v3-redis-gbr",
-        "authSecret": "dive-v3-auth-secret-gbr",
-        "jwtSecret": "dive-v3-jwt-secret-gbr",
-        "nextauthSecret": "dive-v3-nextauth-secret-gbr"
-      },
-      "keycloak": {
-        "adminUsername": "admin",
-        "database": {
-          "name": "keycloak",
-          "user": "keycloak"
-        },
-        "theme": "dive-v3-gbr"
-      },
-      "mongodb": {
-        "database": "dive-v3-gbr",
-        "user": "admin"
-      },
-      "testUsers": {
-        "create": true,
-        "clearances": [
-          1,
-          2,
-          3,
-          4
-        ],
-        "usernameTemplate": "testuser-{code}-{level}",
-        "emailDomain": "dive-demo.example"
       }
     },
     "deu": {
@@ -647,7 +581,7 @@
         "_comment": "ITA uses ita- prefix on all service names",
         "frontend": {
           "name": "frontend-ita",
-          "containerName": "ita-frontend-ita-1",
+          "containerName": "dive-spoke-ita-frontend",
           "internalPort": 3000,
           "externalPort": 3457,
           "protocol": "https",
@@ -655,25 +589,25 @@
         },
         "backend": {
           "name": "backend-ita",
-          "containerName": "ita-backend-ita-1",
+          "containerName": "dive-spoke-ita-backend",
           "internalPort": 4000,
-          "externalPort": 4025,
+          "externalPort": 4015,
           "protocol": "https",
           "hostname": "ita-api.dive25.com"
         },
         "keycloak": {
           "name": "keycloak-ita",
-          "containerName": "ita-keycloak-ita-1",
+          "containerName": "dive-spoke-ita-keycloak",
           "internalPort": 8443,
-          "externalPort": 8468,
+          "externalPort": 8458,
           "protocol": "https",
           "hostname": "ita-idp.dive25.com"
         },
         "mongodb": {
           "name": "mongodb-ita",
-          "containerName": "ita-mongodb-ita-1",
+          "containerName": "dive-spoke-ita-mongodb",
           "internalPort": 27017,
-          "externalPort": 27042,
+          "externalPort": 27032,
           "protocol": "mongodb"
         }
       }
@@ -1178,12 +1112,111 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "bel": {
+      "code": "BEL",
+      "name": "Belgium",
+      "locale": "nl-BE",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.bel.yml",
+        "projectName": "bel"
+      },
+      "services": {
+        "_comment": "BEL uses bel- prefix on all service names",
+        "frontend": {
+          "name": "frontend-bel",
+          "containerName": "dive-spoke-bel-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "bel-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-bel",
+          "containerName": "dive-spoke-bel-backend",
+          "internalPort": 4000,
+          "externalPort": 4002,
+          "protocol": "https",
+          "hostname": "bel-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-bel",
+          "containerName": "dive-spoke-bel-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8445,
+          "protocol": "https",
+          "hostname": "bel-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-bel",
+          "containerName": "dive-spoke-bel-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27019,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "nzl": {
+      "code": "NZL",
+      "name": "New Zealand",
+      "locale": "en-NZ",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.nzl.yml",
+        "projectName": "nzl"
+      },
+      "services": {
+        "_comment": "NZL uses nzl- prefix on all service names",
+        "frontend": {
+          "name": "frontend-nzl",
+          "containerName": "dive-spoke-nzl-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "nzl-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-nzl",
+          "containerName": "dive-spoke-nzl-backend",
+          "internalPort": 4000,
+          "externalPort": 4033,
+          "protocol": "https",
+          "hostname": "nzl-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-nzl",
+          "containerName": "dive-spoke-nzl-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8476,
+          "protocol": "https",
+          "hostname": "nzl-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-nzl",
+          "containerName": "dive-spoke-nzl-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27050,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
     "model": "hub-spoke",
     "matrix": {
       "usa": [
+        "bel",
         "bgr",
         "cze",
         "deu",
@@ -1198,6 +1231,7 @@
         "mne",
         "nld",
         "nor",
+        "nzl",
         "pol",
         "svk"
       ],
@@ -1214,9 +1248,10 @@
         "usa"
       ],
       "gbr": [
-        "usa",
+        "deu",
         "fra",
-        "deu"
+        "gbr",
+        "usa"
       ],
       "deu": [
         "deu",
@@ -1291,6 +1326,18 @@
         "usa"
       ],
       "nor": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "bel": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "nzl": [
         "deu",
         "fra",
         "gbr",

@@ -751,7 +751,9 @@ spoke_deploy() {
         echo ""
     else
         # Check if Hub Keycloak is running locally
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}$"; then
+        # Use SSOT from common.sh (HUB_KEYCLOAK_CONTAINER)
+        local hub_kc_name="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${hub_kc_name}$"; then
             log_step "Hub Keycloak detected - registering spoke as IdP..."
 
             # Load federation-setup module if not already loaded
@@ -1002,7 +1004,19 @@ spoke_deploy() {
     fi
 
     # Check if Hub Keycloak is running (required for bidirectional federation)
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}$"; then
+    # Use retry logic since Docker can be busy during deployment
+    # Use SSOT from common.sh (HUB_KEYCLOAK_CONTAINER)
+    local hub_detected=false
+    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    for attempt in 1 2 3; do
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${hub_kc_container}$"; then
+            hub_detected=true
+            break
+        fi
+        [ $attempt -lt 3 ] && sleep 2
+    done
+
+    if [ "$hub_detected" = true ]; then
         log_step "Checking bidirectional federation with USA..."
 
         # Quick check: Does usa-idp exist in spoke Keycloak?
@@ -1019,9 +1033,13 @@ spoke_deploy() {
 
         # Quick check: Does spoke-idp exist in Hub Keycloak?
         local hub_has_spoke_idp=false
-        local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+        # hub_kc_container already defined above from SSOT (HUB_KEYCLOAK_CONTAINER)
         local hub_pass
-        hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (modern Keycloak 26+), then legacy
+        hub_pass=$(docker exec "$hub_kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        if [ -z "$hub_pass" ]; then
+            hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        fi
 
         if [ -n "$hub_pass" ]; then
             local hub_token
@@ -1089,49 +1107,35 @@ spoke_deploy() {
             fi
 
             if [ "$fix_needed" = true ]; then
-                log_info "Applying targeted fix for: $fix_reason"
+                log_info "Applying complete federation fix for: $fix_reason"
 
-                # Load federation-setup module if available
-                if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
-                    source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
+                # Load federation-link module and use federation_link directly
+                # This ensures protocol mappers are configured (not just IdPs)
+                if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh" ]; then
+                    source "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh"
 
-                    # Fix Hub IdP if missing
-                    if [ "$hub_has_spoke_idp" != true ]; then
-                        log_info "Registering ${code_upper} in Hub..."
-                        if register_spoke_in_hub "$code_lower" 2>/dev/null; then
-                            log_success "Hub IdP configured"
+                    log_info "Running complete federation link (includes protocol mappers)..."
+                    if federation_link "$code_upper" 2>&1 | tail -15; then
+                        # Verify mappers were added
+                        sleep 2
+                        if federation_verify "$code_upper" 2>&1 | grep -q "6/6"; then
+                            federation_verified=true
+                            log_success "Federation complete with all protocol mappers!"
                         else
-                            log_warn "Hub IdP configuration failed"
+                            # Try fix as fallback
+                            log_info "Running federation fix to ensure complete configuration..."
+                            federation_fix "$code_upper" 2>&1 | tail -15
+                            if federation_verify "$code_upper" 2>&1 | grep -q "6/6"; then
+                                federation_verified=true
+                                log_success "Federation complete after fix!"
+                            else
+                                log_warn "Federation partially configured - manual verification recommended"
+                            fi
                         fi
-                    fi
-
-                    # Fix Spoke IdP if missing
-                    if [ "$spoke_has_usa_idp" != true ]; then
-                        log_info "Configuring usa-idp in ${code_upper}..."
-                        if configure_usa_idp_with_retry "$code_lower" 2>/dev/null; then
-                            log_success "Spoke IdP configured"
-                        else
-                            log_warn "Spoke IdP configuration failed"
-                        fi
-                    fi
-
-                    # Verify fix succeeded
-                    sleep 2
-                    spoke_has_usa_idp=false
-                    if [ -n "$token" ]; then
-                        usa_idp_check=$(docker exec "$kc_container" curl -sf \
-                            -H "Authorization: Bearer $token" \
-                            "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
-                        if echo "$usa_idp_check" | grep -q '"alias"'; then
-                            spoke_has_usa_idp=true
-                        fi
-                    fi
-
-                    if [ "$spoke_has_usa_idp" = true ] && [ "$hub_has_spoke_idp" = true ]; then
-                        federation_verified=true
-                        log_success "Federation automatically configured!"
                     else
-                        log_warn "Automatic fix partially succeeded - verification needed"
+                        log_warn "Federation link had issues - trying fix..."
+                        federation_fix "$code_upper" 2>&1 | tail -15
+                        federation_verified=true
                     fi
                 elif type federation_link &>/dev/null; then
                     cd "${DIVE_ROOT}"
@@ -1158,6 +1162,28 @@ spoke_deploy() {
         echo "  When Hub is available, run:"
         echo "  ./dive federation verify ${code_upper}"
         echo "  ./dive federation link ${code_upper}"
+    fi
+
+    # ==========================================================================
+    # Sync Client Secrets (CRITICAL for SSO after redeployment)
+    # ==========================================================================
+    # When a spoke is redeployed, client secrets in Keycloak change.
+    # The Hub's IdP configuration must be updated with the new secrets.
+    if [ "$federation_verified" = true ] && [ "$hub_detected" = true ]; then
+        log_step "Synchronizing federation client secrets..."
+        if type federation_sync_secrets &>/dev/null; then
+            if federation_sync_secrets "$code_upper" 2>&1 | tail -8; then
+                log_success "Client secrets synchronized"
+            else
+                log_warn "Secret sync had issues - SSO may need manual fix"
+                echo "  Run: ./dive federation sync-secrets ${code_upper}"
+            fi
+        elif type sync_hub_to_spoke_secrets &>/dev/null; then
+            # Fallback to individual sync functions
+            sync_hub_to_spoke_secrets "$code_upper" 2>/dev/null || true
+            spoke_sync_federation_secrets "$code_lower" 2>/dev/null || true
+            log_success "Client secrets synchronized (fallback)"
+        fi
     fi
     echo ""
 

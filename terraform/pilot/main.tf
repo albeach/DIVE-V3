@@ -15,7 +15,7 @@ module "instance" {
 
   # Realm configuration
   realm_name    = "dive-v3-broker"
-  client_id     = "dive-v3-client-broker"
+  client_id     = "dive-v3-broker"
   client_secret = var.client_secret
 
   # Test users

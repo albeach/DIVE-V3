@@ -1,12 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-gbr-2d606e80",
+    "spokeId": "spoke-gbr-c7af6974",
     "instanceCode": "GBR",
-    "name": "United Kingdom",
-    "description": "DIVE V3 Spoke Instance for United Kingdom",
+    "name": "Great Britain",
+    "description": "DIVE V3 Spoke Instance for Great Britain",
     "country": "GBR",
     "organizationType": "government",
-    "contactEmail": "admin@gbr.dive25.com"
+    "contactEmail": "admin@gbr.dive25.com",
+    "registeredSpokeId": "spoke-gbr-3ef4f081"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:gbr",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2026-01-02T03:01:33Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -45,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-31T03:48:16Z",
-    "lastModified": "2025-12-31T03:48:16Z",
+    "createdAt": "2026-01-02T01:32:22Z",
+    "lastModified": "2026-01-02T01:32:22Z",
     "configHash": ""
   }
 }

@@ -22,7 +22,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://usa-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -67,7 +67,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://fra-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -114,7 +114,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -160,7 +160,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -208,7 +208,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://esp-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -251,7 +251,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://lux-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -294,7 +294,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://mne-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -336,7 +336,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://nld-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -379,7 +379,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://cze-idp.dive25.com/realms/dive-v3-broker-cze",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -422,7 +422,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://pol-idp.dive25.com/realms/dive-v3-broker-pol",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -465,7 +465,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://hun-idp.dive25.com/realms/dive-v3-broker-hun",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -508,7 +508,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://ita-idp.dive25.com/realms/dive-v3-broker-ita",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -551,7 +551,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://bgr-idp.dive25.com/realms/dive-v3-broker-bgr",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -594,7 +594,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://est-idp.dive25.com/realms/dive-v3-broker-est",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -637,7 +637,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://svk-idp.dive25.com/realms/dive-v3-broker-svk",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -680,7 +680,7 @@
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://nor-idp.dive25.com/realms/dive-v3-broker-nor",
-        "jwtAudience": "dive-v3-client-broker"
+        "jwtAudience": "dive-v3-broker"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -713,6 +713,92 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "bel-kas",
+      "organization": "Belgium",
+      "countryCode": "BEL",
+      "kasUrl": "https://localhost:10002/api/kas",
+      "internalKasUrl": "http://kas-bel:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://bel-idp.dive25.com/realms/dive-v3-broker-bel",
+        "jwtAudience": "dive-v3-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "BEL"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@bel.dive25.com",
+        "lastVerified": "2026-01-02T05:30:33Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
+    },
+    {
+      "kasId": "nzl-kas",
+      "organization": "",
+      "countryCode": "NZL",
+      "kasUrl": "https://localhost:10033/api/kas",
+      "internalKasUrl": "http://kas-nzl:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://nzl-idp.dive25.com/realms/dive-v3-broker-nzl",
+        "jwtAudience": "dive-v3-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "NZL"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@nzl.dive25.com",
+        "lastVerified": "2026-01-02T17:54:49Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {
@@ -720,6 +806,7 @@
     "defaultTrustLevel": "high",
     "trustMatrix": {
       "usa-kas": [
+        "bel-kas",
         "bgr-kas",
         "cze-kas",
         "deu-kas",
@@ -733,10 +820,12 @@
         "mne-kas",
         "nld-kas",
         "nor-kas",
+        "nzl-kas",
         "pol-kas",
         "svk-kas"
       ],
       "fra-kas": [
+        "bel-kas",
         "bgr-kas",
         "cze-kas",
         "deu-kas",
@@ -749,11 +838,13 @@
         "mne-kas",
         "nld-kas",
         "nor-kas",
+        "nzl-kas",
         "pol-kas",
         "svk-kas",
         "usa-kas"
       ],
       "gbr-kas": [
+        "bel-kas",
         "bgr-kas",
         "cze-kas",
         "deu-kas",
@@ -766,11 +857,13 @@
         "mne-kas",
         "nld-kas",
         "nor-kas",
+        "nzl-kas",
         "pol-kas",
         "svk-kas",
         "usa-kas"
       ],
       "deu-kas": [
+        "bel-kas",
         "bgr-kas",
         "cze-kas",
         "esp-kas",
@@ -783,6 +876,7 @@
         "mne-kas",
         "nld-kas",
         "nor-kas",
+        "nzl-kas",
         "pol-kas",
         "svk-kas",
         "usa-kas"
@@ -858,6 +952,18 @@
         "deu-kas"
       ],
       "nor-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "bel-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "nzl-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",

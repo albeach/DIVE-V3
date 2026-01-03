@@ -1,13 +1,18 @@
 # ============================================
 # Custom Keycloak Image with curl for Admin Operations
 # ============================================
-# Extends official Keycloak 26.0.7 image to add curl utility
+# Extends official Keycloak image to add curl utility
 # Required for: MFA user attribute management scripts
-# 
-# NOTE: Keycloak 26.0.7 uses a minimal base image with NO package managers
+#
+# VERSION SSOT: The default version is defined here but can be overridden
+# at build time via: docker build --build-arg KEYCLOAK_VERSION=26.4.7 ...
+# The authoritative version is in scripts/dive-modules/common.sh
+#
+# NOTE: Keycloak 26.x uses a minimal base image with NO package managers
 # We download a statically-linked curl binary from the official curl project
 
-FROM quay.io/keycloak/keycloak:26.4.2
+ARG KEYCLOAK_VERSION=26.4.7
+FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
 
 USER root
 
@@ -70,24 +75,24 @@ RUN mkdir -p /opt/keycloak/data/import && \
     chmod +x /opt/keycloak/scripts/import-realm.sh
 
 # ============================================
-# v3.0.0 CHANGE: Remove custom SPI providers - Use Native Keycloak 26.4
+# DIVE V3 Custom SPI Providers (v3.1.0 - January 2026)
 # ============================================
-# SSOT Consolidation (December 2025): Custom SPIs REMOVED.
-# 
-# Native Keycloak 26.4 now provides all required AMR/ACR functionality:
-# - oidc-amr-mapper: Maps authentication methods to JWT 'amr' claim
-# - oidc-acr-mapper: Maps authentication context to JWT 'acr' claim
-# - Built-in ACR level configuration per authenticator
-# - Automatic AUTH_METHODS_REF session note tracking
+# CRITICAL FIX: Re-enabled custom AMR mapper (January 2026)
 #
-# Previous custom SPIs (now archived in keycloak/extensions/archived/):
-# - AMREnrichmentEventListener: Replaced by native AMR tracking
-# - AMRProtocolMapper: Replaced by oidc-amr-mapper
-# - DirectGrantOTPAuthenticator: DEPRECATED - Direct Grant is not AAL2 compliant
-# - ConfigureOTPRequiredAction: Replaced by built-in CONFIGURE_TOTP
+# The native oidc-amr-mapper does NOT work in Keycloak 26 because:
+# 1. It reads "reference" config from authenticator execution configs
+# 2. auth-username-password-form has configurable=false (cannot set reference)
+# 3. Therefore "pwd" is never added to AMR, resulting in amr: []
 #
-# Reference: docs/KEYCLOAK_REFACTORING_SESSION_PROMPT.md
-# NO CUSTOM JARS ARE DEPLOYED - Using native Keycloak features only
+# Custom DIVE SPIs provide:
+# - dive-amr-protocol-mapper: Derives AMR from ACR (ACR works correctly)
+#   - ACR "1" → AMR ["pwd"]           (AAL1: password only)
+#   - ACR "2" → AMR ["pwd", "otp"]    (AAL2: password + OTP)
+#   - ACR "3" → AMR ["pwd", "hwk"]    (AAL3: password + WebAuthn)
+# - AMREnrichmentEventListener: Sets session notes for AMR/ACR
+#
+# Reference: HANDOFF_AMR_ACR_FINAL.md
+COPY --chown=1000:1000 extensions/archived/target/dive-keycloak-extensions.jar /opt/keycloak/providers/
 
 # ============================================
 # Certificate Trust Configuration
