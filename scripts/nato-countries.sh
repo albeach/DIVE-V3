@@ -13,7 +13,8 @@
 #   get_country_offset "POL"      # → 22 (for port calculation)
 #   list_nato_countries           # → sorted list of all countries
 #
-# Format: "Full Name|Flag|Primary Color|Secondary Color|Timezone|Join Year"
+# Format: "Full Name|Flag|Primary Color|Secondary Color|Timezone|Join Year|Locale Code"
+# Locale codes use ISO 639-1 (2-letter) format
 # =============================================================================
 
 # Associative array requires Bash 4+
@@ -24,52 +25,53 @@ declare -A NATO_COUNTRIES
 # =============================================================================
 # Sorted alphabetically by ISO 3166-1 alpha-3 code
 # Port offsets assigned 0-31 for deterministic, conflict-free port mapping
+# Locale codes are ISO 639-1 (2-letter): en, de, fr, etc.
 # =============================================================================
 
 NATO_COUNTRIES=(
     # Founding Members (1949) - 12 countries
-    ["BEL"]="Belgium|🇧🇪|#000000|#FDDA24|Europe/Brussels|1949"
-    ["CAN"]="Canada|🇨🇦|#FF0000|#FFFFFF|America/Toronto|1949"
-    ["DNK"]="Denmark|🇩🇰|#C60C30|#FFFFFF|Europe/Copenhagen|1949"
-    ["FRA"]="France|🇫🇷|#002395|#ED2939|Europe/Paris|1949"
-    ["ISL"]="Iceland|🇮🇸|#02529C|#DC1E35|Atlantic/Reykjavik|1949"
-    ["ITA"]="Italy|🇮🇹|#009246|#CE2B37|Europe/Rome|1949"
-    ["LUX"]="Luxembourg|🇱🇺|#00A1DE|#ED2939|Europe/Luxembourg|1949"
-    ["NLD"]="Netherlands|🇳🇱|#AE1C28|#21468B|Europe/Amsterdam|1949"
-    ["NOR"]="Norway|🇳🇴|#BA0C2F|#00205B|Europe/Oslo|1949"
-    ["PRT"]="Portugal|🇵🇹|#006600|#FF0000|Europe/Lisbon|1949"
-    ["GBR"]="United Kingdom|🇬🇧|#012169|#C8102E|Europe/London|1949"
-    ["USA"]="United States|🇺🇸|#002868|#BF0A30|America/New_York|1949"
+    ["BEL"]="Belgium|🇧🇪|#000000|#FDDA24|Europe/Brussels|1949|nl"
+    ["CAN"]="Canada|🇨🇦|#FF0000|#FFFFFF|America/Toronto|1949|en"
+    ["DNK"]="Denmark|🇩🇰|#C60C30|#FFFFFF|Europe/Copenhagen|1949|da"
+    ["FRA"]="France|🇫🇷|#002395|#ED2939|Europe/Paris|1949|fr"
+    ["ISL"]="Iceland|🇮🇸|#02529C|#DC1E35|Atlantic/Reykjavik|1949|is"
+    ["ITA"]="Italy|🇮🇹|#009246|#CE2B37|Europe/Rome|1949|it"
+    ["LUX"]="Luxembourg|🇱🇺|#00A1DE|#ED2939|Europe/Luxembourg|1949|fr"
+    ["NLD"]="Netherlands|🇳🇱|#AE1C28|#21468B|Europe/Amsterdam|1949|nl"
+    ["NOR"]="Norway|🇳🇴|#BA0C2F|#00205B|Europe/Oslo|1949|no"
+    ["PRT"]="Portugal|🇵🇹|#006600|#FF0000|Europe/Lisbon|1949|pt"
+    ["GBR"]="United Kingdom|🇬🇧|#012169|#C8102E|Europe/London|1949|en"
+    ["USA"]="United States|🇺🇸|#002868|#BF0A30|America/New_York|1949|en"
 
     # Cold War Expansion (1952-1982) - 4 countries
-    ["GRC"]="Greece|🇬🇷|#0D5EAF|#FFFFFF|Europe/Athens|1952"
-    ["TUR"]="Turkey|🇹🇷|#E30A17|#FFFFFF|Europe/Istanbul|1952"
-    ["DEU"]="Germany|🇩🇪|#000000|#DD0000|Europe/Berlin|1955"
-    ["ESP"]="Spain|🇪🇸|#AA151B|#F1BF00|Europe/Madrid|1982"
+    ["GRC"]="Greece|🇬🇷|#0D5EAF|#FFFFFF|Europe/Athens|1952|el"
+    ["TUR"]="Turkey|🇹🇷|#E30A17|#FFFFFF|Europe/Istanbul|1952|tr"
+    ["DEU"]="Germany|🇩🇪|#000000|#DD0000|Europe/Berlin|1955|de"
+    ["ESP"]="Spain|🇪🇸|#AA151B|#F1BF00|Europe/Madrid|1982|es"
 
     # Post-Cold War Expansion (1999) - 3 countries
-    ["CZE"]="Czechia|🇨🇿|#11457E|#D7141A|Europe/Prague|1999"
-    ["HUN"]="Hungary|🇭🇺|#CD2A3E|#436F4D|Europe/Budapest|1999"
-    ["POL"]="Poland|🇵🇱|#DC143C|#FFFFFF|Europe/Warsaw|1999"
+    ["CZE"]="Czechia|🇨🇿|#11457E|#D7141A|Europe/Prague|1999|cs"
+    ["HUN"]="Hungary|🇭🇺|#CD2A3E|#436F4D|Europe/Budapest|1999|hu"
+    ["POL"]="Poland|🇵🇱|#DC143C|#FFFFFF|Europe/Warsaw|1999|pl"
 
     # 2004 Expansion (Big Bang) - 7 countries
-    ["BGR"]="Bulgaria|🇧🇬|#00966E|#D62612|Europe/Sofia|2004"
-    ["EST"]="Estonia|🇪🇪|#0072CE|#000000|Europe/Tallinn|2004"
-    ["LVA"]="Latvia|🇱🇻|#9E3039|#FFFFFF|Europe/Riga|2004"
-    ["LTU"]="Lithuania|🇱🇹|#FDB913|#006A44|Europe/Vilnius|2004"
-    ["ROU"]="Romania|🇷🇴|#002B7F|#FCD116|Europe/Bucharest|2004"
-    ["SVK"]="Slovakia|🇸🇰|#0B4EA2|#EE1C25|Europe/Bratislava|2004"
-    ["SVN"]="Slovenia|🇸🇮|#005DA4|#ED1C24|Europe/Ljubljana|2004"
+    ["BGR"]="Bulgaria|🇧🇬|#00966E|#D62612|Europe/Sofia|2004|bg"
+    ["EST"]="Estonia|🇪🇪|#0072CE|#000000|Europe/Tallinn|2004|et"
+    ["LVA"]="Latvia|🇱🇻|#9E3039|#FFFFFF|Europe/Riga|2004|lv"
+    ["LTU"]="Lithuania|🇱🇹|#FDB913|#006A44|Europe/Vilnius|2004|lt"
+    ["ROU"]="Romania|🇷🇴|#002B7F|#FCD116|Europe/Bucharest|2004|ro"
+    ["SVK"]="Slovakia|🇸🇰|#0B4EA2|#EE1C25|Europe/Bratislava|2004|sk"
+    ["SVN"]="Slovenia|🇸🇮|#005DA4|#ED1C24|Europe/Ljubljana|2004|sl"
 
     # 2009-2020 Expansion - 4 countries
-    ["ALB"]="Albania|🇦🇱|#E41E20|#000000|Europe/Tirane|2009"
-    ["HRV"]="Croatia|🇭🇷|#FF0000|#171796|Europe/Zagreb|2009"
-    ["MNE"]="Montenegro|🇲🇪|#C40308|#D4AF37|Europe/Podgorica|2017"
-    ["MKD"]="North Macedonia|🇲🇰|#D20000|#FFE600|Europe/Skopje|2020"
+    ["ALB"]="Albania|🇦🇱|#E41E20|#000000|Europe/Tirane|2009|sq"
+    ["HRV"]="Croatia|🇭🇷|#FF0000|#171796|Europe/Zagreb|2009|hr"
+    ["MNE"]="Montenegro|🇲🇪|#C40308|#D4AF37|Europe/Podgorica|2017|sr"
+    ["MKD"]="North Macedonia|🇲🇰|#D20000|#FFE600|Europe/Skopje|2020|mk"
 
     # Nordic Expansion (2023-2024) - 2 countries
-    ["FIN"]="Finland|🇫🇮|#002F6C|#FFFFFF|Europe/Helsinki|2023"
-    ["SWE"]="Sweden|🇸🇪|#006AA7|#FECC00|Europe/Stockholm|2024"
+    ["FIN"]="Finland|🇫🇮|#002F6C|#FFFFFF|Europe/Helsinki|2023|fi"
+    ["SWE"]="Sweden|🇸🇪|#006AA7|#FECC00|Europe/Stockholm|2024|sv"
 )
 
 # =============================================================================
@@ -198,6 +200,17 @@ get_country_join_year() {
     fi
 }
 
+# Get locale code (ISO 639-1)
+# Usage: get_country_locale "HRV" → "hr"
+get_country_locale() {
+    local code="${1^^}"
+    if [[ -v NATO_COUNTRIES[$code] ]]; then
+        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f7
+    else
+        echo "en"  # Default to English if unknown
+    fi
+}
+
 # Get port offset for country
 # Usage: get_country_offset "GBR" → 31
 get_country_offset() {
@@ -317,12 +330,14 @@ get_country_json() {
     local timezone=$(get_country_timezone "$code")
     local year=$(get_country_join_year "$code")
     local offset=$(get_country_offset "$code")
+    local locale=$(get_country_locale "$code")
 
     cat <<EOF
 {
   "code": "$code",
   "name": "$name",
   "flag": "$flag",
+  "locale": "$locale",
   "colors": {
     "primary": "$primary",
     "secondary": "$secondary"
@@ -413,12 +428,12 @@ check_port_conflicts() {
 # Port offsets 32-39 reserved for partner nations
 
 declare -A PARTNER_NATIONS=(
-    ["AUS"]="Australia|🇦🇺|#002868|#FFFFFF|Australia/Sydney|PARTNER"
-    ["NZL"]="New Zealand|🇳🇿|#00247D|#CC142B|Pacific/Auckland|PARTNER"
-    ["JPN"]="Japan|🇯🇵|#BC002D|#FFFFFF|Asia/Tokyo|PARTNER"
-    ["KOR"]="South Korea|🇰🇷|#003478|#C60C30|Asia/Seoul|PARTNER"
-    ["ISR"]="Israel|🇮🇱|#0038B8|#FFFFFF|Asia/Jerusalem|PARTNER"
-    ["UKR"]="Ukraine|🇺🇦|#0057B7|#FFDD00|Europe/Kyiv|PARTNER"
+    ["AUS"]="Australia|🇦🇺|#002868|#FFFFFF|Australia/Sydney|PARTNER|en"
+    ["NZL"]="New Zealand|🇳🇿|#00247D|#CC142B|Pacific/Auckland|PARTNER|en"
+    ["JPN"]="Japan|🇯🇵|#BC002D|#FFFFFF|Asia/Tokyo|PARTNER|ja"
+    ["KOR"]="South Korea|🇰🇷|#003478|#C60C30|Asia/Seoul|PARTNER|ko"
+    ["ISR"]="Israel|🇮🇱|#0038B8|#FFFFFF|Asia/Jerusalem|PARTNER|he"
+    ["UKR"]="Ukraine|🇺🇦|#0057B7|#FFDD00|Europe/Kyiv|PARTNER|uk"
 )
 
 # Partner nation port offsets (32-39)
@@ -474,6 +489,17 @@ get_partner_timezone() {
     local code="${1^^}"
     if [[ -v PARTNER_NATIONS[$code] ]]; then
         echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f5
+    fi
+}
+
+# Get partner nation locale code (ISO 639-1)
+# Usage: get_partner_locale "NZL" → "en"
+get_partner_locale() {
+    local code="${1^^}"
+    if [[ -v PARTNER_NATIONS[$code] ]]; then
+        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f7
+    else
+        echo "en"  # Default to English
     fi
 }
 
@@ -577,6 +603,19 @@ get_any_country_offset() {
         get_country_offset "$code"
     elif is_partner_nation "$code"; then
         get_partner_offset "$code"
+    fi
+}
+
+# Get country locale code (unified)
+# Usage: get_any_country_locale "HRV" → "hr"
+get_any_country_locale() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        get_country_locale "$code"
+    elif is_partner_nation "$code"; then
+        get_partner_locale "$code"
+    else
+        echo "en"  # Default to English
     fi
 }
 
