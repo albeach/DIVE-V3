@@ -26,10 +26,15 @@ resource "keycloak_realm_events" "mfa_events" {
 
   # Enable event listeners
   # jboss-logging: Standard Keycloak event logging for security monitoring
-  # NOTE: Using native Keycloak oidc-acr-mapper and oidc-amr-mapper for ACR/AMR claims.
-  # These read from the authentication session, populated by authenticators during login.
+  # dive-amr-enrichment: Custom AMR enrichment for MFA methods (CRITICAL for AMR population)
+  #
+  # CRITICAL FIX (Jan 2, 2026): dive-amr-enrichment MUST be enabled!
+  # Native Keycloak authenticators don't reliably set AMR session notes.
+  # The event listener fires on LOGIN and sets AUTH_METHODS_REF based on user credentials.
+  # Without this, AMR will be empty or incomplete for MFA users.
   events_listeners = [
-    "jboss-logging"
+    "jboss-logging",
+    "dive-amr-enrichment"
   ]
 
   # Enable user events for LOGIN tracking
