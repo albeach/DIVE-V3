@@ -1077,10 +1077,10 @@ ensure_spoke_client_in_hub() {
     # CRITICAL: Use GCP Secret Manager as SSOT for federation secrets
     local spoke_client_secret
     local gcp_secret_name="dive-v3-federation-${code_lower}-usa"
-    
+
     # Try to get from GCP first
     spoke_client_secret=$(gcloud secrets versions access latest --secret="${gcp_secret_name}" --project=dive25 2>/dev/null)
-    
+
     if [ -z "$spoke_client_secret" ]; then
         # Create new secret and store in GCP
         spoke_client_secret=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
@@ -1125,40 +1125,40 @@ _sync_federation_client_secret_from_gcp() {
     local spoke_code="${1:?Spoke code required}"
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
-    
+
     local client_id="dive-v3-broker-${code_lower}"
     local gcp_secret_name="dive-v3-federation-${code_lower}-usa"
-    
+
     # Get secret from GCP
     local gcp_secret
     gcp_secret=$(gcloud secrets versions access latest --secret="${gcp_secret_name}" --project=dive25 2>/dev/null)
-    
+
     if [ -z "$gcp_secret" ]; then
         log_warn "No GCP secret found for ${gcp_secret_name}, skipping sync"
         return 0
     fi
-    
+
     # Get client UUID
     source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
     local token
     token=$(curl -sk -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
         -d "grant_type=password&client_id=admin-cli&username=admin&password=${KEYCLOAK_ADMIN_PASSWORD}" | jq -r '.access_token')
-    
+
     local client_uuid
     client_uuid=$(curl -sk "http://localhost:8080/admin/realms/${HUB_REALM}/clients" \
         -H "Authorization: Bearer $token" | jq -r ".[] | select(.clientId==\"${client_id}\") | .id")
-    
+
     if [ -z "$client_uuid" ]; then
         log_warn "Client ${client_id} not found in Hub"
         return 1
     fi
-    
+
     # Update client secret
     curl -sk -X PUT "http://localhost:8080/admin/realms/${HUB_REALM}/clients/${client_uuid}" \
         -H "Authorization: Bearer $token" \
         -H "Content-Type: application/json" \
         -d "{\"id\": \"${client_uuid}\", \"clientId\": \"${client_id}\", \"secret\": \"${gcp_secret}\"}" >/dev/null
-    
+
     log_verbose "Synced GCP secret to Hub client: ${client_id}"
 
 ##
