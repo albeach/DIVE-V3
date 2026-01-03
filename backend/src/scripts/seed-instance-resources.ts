@@ -749,9 +749,10 @@ interface IMongoConnection {
     uri: string;
     user: string;
     password: string;
+    database: string;
 }
 
-async function getMongoDBConnection(config: IInstanceConfig, instanceCode: string): Promise<IMongoConnection> {
+async function getMongoDBConnection(config: IInstanceConfig, instanceCode: string): Promise<IMongoConnection & { database: string }> {
     // Check if MONGODB_URL is set (e.g., when running inside Docker)
     const envMongoUrl = process.env.MONGODB_URL;
     if (envMongoUrl) {
@@ -759,12 +760,14 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
         const urlMatch = envMongoUrl.match(/mongodb:\/\/([^:]+):([^@]+)@([^:/]+):?(\d+)?\/?(.*)/);
         if (urlMatch) {
             const [, user, password, host, port, dbPath] = urlMatch;
+            // CRITICAL: Use database from MONGODB_URL, not config (they can differ!)
             const database = dbPath?.split('?')[0] || config.mongodb.database;
             const uri = `mongodb://${host}:${port || 27017}/${database}`;
             console.log(`   Using MONGODB_URL from environment`);
             console.log(`   MongoDB URI: ${uri}?authSource=admin`);
+            console.log(`   Database: ${database}`);
             console.log(`   Auth User: ${user}, Password length: ${password.length} chars`);
-            return { uri, user, password };
+            return { uri, user, password, database };
         }
     }
 
@@ -784,9 +787,10 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
     // Debug logging
     console.log(`   MongoDB URI: ${uri}?authSource=admin`);
+    console.log(`   Database: ${database}`);
     console.log(`   Auth User: ${user}, Password length: ${password.length} chars`);
 
-    return { uri, user, password };
+    return { uri, user, password, database };
 }
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
@@ -1572,7 +1576,7 @@ async function seedInstance(
     const kasServers = getKASServersForInstance(kasRegistry, instanceCode);
 
     console.log(`\n🌱 Seeding ${instanceCode} (${config.name})`);
-    console.log(`   MongoDB: ${config.mongodb.database} @ port ${config.services.mongodb.externalPort}`);
+    console.log(`   MongoDB: ${mongoConnection.database} @ port ${config.services.mongodb.externalPort}`);
     console.log(`   Secrets: ${gcpAvailable ? '🔐 GCP Secret Manager' : '📁 Environment Variables'}`);
     console.log(`   KAS Servers: ${kasServers.map(k => k.kasId).join(', ')}`);
     console.log(`   Documents: ${options.count}`);
@@ -1649,7 +1653,8 @@ async function seedInstance(
         await client.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(config.mongodb.database);
+        // CRITICAL: Use database from mongoConnection (from MONGODB_URL), not config
+        const db = client.db(mongoConnection.database);
         const collection = db.collection('resources');
 
         // Create indexes
