@@ -2746,7 +2746,10 @@ router.post('/link-idp', requireAdmin, async (req: Request, res: Response): Prom
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
 
     try {
-        const { localInstanceCode, remoteInstanceCode, federationClientId = 'dive-v3-cross-border-client' } = req.body;
+        const { localInstanceCode, remoteInstanceCode } = req.body;
+        // Federation client follows pattern: dive-v3-broker-{source} on target
+        // When local instance federates TO remote, remote has dive-v3-broker-{local}
+        const federationClientId = req.body.federationClientId || `dive-v3-broker-${localInstanceCode.toLowerCase()}`;
 
         if (!localInstanceCode || !remoteInstanceCode) {
             res.status(400).json({

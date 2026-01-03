@@ -33,10 +33,12 @@ variable "idp_url" {
 }
 
 # Client configuration
+# NOTE: client_id is now computed in main.tf as "dive-v3-broker-${instance_code}"
+# This variable is kept for backwards compatibility but its value is ignored
 variable "client_id" {
-  description = "OIDC client ID"
+  description = "OIDC client ID (DEPRECATED - computed in main.tf, this value is ignored)"
   type        = string
-  default     = "dive-v3-broker"
+  default     = null  # No default - value is computed in main.tf
 }
 
 variable "client_secret" {

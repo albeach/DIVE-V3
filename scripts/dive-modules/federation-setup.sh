@@ -1111,9 +1111,9 @@ create_spoke_idp_in_hub() {
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
     local spoke_realm="dive-v3-broker-${code_lower}"
-    # FIXED (Dec 2025): Use cross-border client for Hub→Spoke federation
-    # This client is created by init-keycloak.sh specifically for cross-border auth
-    local spoke_client="dive-v3-cross-border-client"
+    # Hub→Spoke federation uses dive-v3-broker-usa ON the spoke
+    # This is the client the spoke created for the hub (USA) to authenticate
+    local spoke_client="dive-v3-broker-usa"
     local spoke_idp="${code_lower}-idp"
     local spoke_display_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
 
