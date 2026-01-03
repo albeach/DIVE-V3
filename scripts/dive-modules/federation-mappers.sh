@@ -142,7 +142,7 @@ federation_mappers_apply() {
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would apply mappers from: $template_file"
-        log_dry "Would update client: dive-v3-cross-border-client"
+        log_dry "Would update client: dive-v3-broker-${instance_lower}"
         log_dry "Would configure 4 PII-minimized claims"
         return 0
     fi
@@ -178,7 +178,8 @@ federation_mappers_apply() {
     local realm="dive-v3-broker-usa"
     [ "$instance_lower" != "usa" ] && realm="dive-v3-broker-${instance_lower}"
 
-    local client_id="dive-v3-cross-border-client"
+    # Use the instance-specific broker client (not the deprecated cross-border-client)
+    local client_id="dive-v3-broker-${instance_lower}"
 
     # Get client UUID
     local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
@@ -248,7 +249,7 @@ federation_mappers_verify() {
     esac
 
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Would check mappers on client: dive-v3-cross-border-client"
+        log_dry "Would check mappers on client: dive-v3-broker-${instance_lower}"
         log_dry "Would verify 4 required DIVE claims are present"
         log_dry "Would check optional pseudonym fields if present"
         return 0
@@ -285,13 +286,16 @@ federation_mappers_verify() {
     local realm="dive-v3-broker-usa"
     [ "$instance_lower" != "usa" ] && realm="dive-v3-broker-${instance_lower}"
 
+    # Use instance-specific broker client
+    local client_id="dive-v3-broker-${instance_lower}"
+
     # Get client ID
     local client_uuid=$(curl -sk -H "Authorization: Bearer $token" \
-        "https://${keycloak_url}/admin/realms/${realm}/clients?clientId=dive-v3-cross-border-client" 2>/dev/null \
+        "https://${keycloak_url}/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null \
         | jq -r '.[0].id')
 
     if [ "$client_uuid" = "null" ] || [ -z "$client_uuid" ]; then
-        log_error "Client not found: dive-v3-cross-border-client"
+        log_error "Client not found: ${client_id}"
         return 1
     fi
 

@@ -33,17 +33,16 @@ variable "idp_url" {
 
 # Realm configuration
 variable "realm_name" {
-  description = "Name of the broker realm"
+  description = "Name of the broker realm. Pattern: dive-v3-broker-{instance} (e.g., dive-v3-broker-usa)"
   type        = string
-  default     = "dive-v3-broker"
+  # No default - must be explicitly set with instance suffix
 }
 
 variable "client_id" {
-  description = "OIDC client ID for the application. Pattern: dive-v3-broker-{instance}"
+  description = "OIDC client ID for the application. Pattern: dive-v3-broker-{instance} (e.g., dive-v3-broker-fra)"
   type        = string
-  # Default follows naming convention from config/naming-conventions.json
-  # Pattern: dive-v3-broker-{instance} (e.g., dive-v3-broker-fra)
-  default     = "dive-v3-broker"
+  # No default - must be explicitly set with instance suffix
+  # See config/naming-conventions.json for the authoritative pattern
 }
 
 variable "client_secret" {
@@ -148,21 +147,6 @@ variable "webauthn_rp_id" {
   type        = string
   default     = ""
 } # NOTE: incoming_federation_secrets is defined in variables-incoming-secrets.tf
-
-# ============================================
-# ⚠️ DEPRECATED - Cross-Border Federation Client
-# ============================================
-# This variable is deprecated as of Jan 2, 2026.
-# The dive-v3-cross-border-client is NOT used for actual federation.
-# See cross-border-client.tf for migration instructions.
-# PENDING REMOVAL in v5.0
-# ============================================
-variable "cross_border_client_secret" {
-  description = "[DEPRECATED] Client secret for the cross-border federation client. If null, Keycloak generates one."
-  type        = string
-  sensitive   = true
-  default     = null
-}
 
 # ============================================
 # Local Development Port Configuration

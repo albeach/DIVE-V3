@@ -829,7 +829,8 @@ class HubSpokeRegistryService extends EventEmitter {
       localIdpUrl: hubIdpUrl,
       localRealm: hubRealmName,
       remoteKeycloakAdminPassword: spokeKeycloakPassword,
-      federationClientId: 'dive-v3-cross-border-client'
+      // Hub (USA) uses dive-v3-broker-usa on the spoke for federation
+      federationClientId: 'dive-v3-broker-usa'
     });
 
     logger.info('IdP federation auto-linked successfully (BIDIRECTIONAL)', {

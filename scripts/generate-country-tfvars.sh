@@ -155,8 +155,8 @@ idp_url = "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
 # =============================================================================
 # Client Configuration
 # =============================================================================
-client_id     = "dive-v3-broker"
-# SECURITY: Get this from GCP Secret Manager: dive-v3-keycloak-client-secret
+# NOTE: client_id is computed in terraform/spoke/main.tf as dive-v3-broker-{instance}
+# SECURITY: Get client_secret from GCP Secret Manager: dive-v3-keycloak-client-secret
 # gcloud secrets versions access latest --secret=dive-v3-keycloak-client-secret --project=dive25
 client_secret = null  # Set via TF_VAR_client_secret environment variable
 
