@@ -203,11 +203,19 @@ if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
 fi
 
 # =============================================================================
-# Create Roles
+# Create Roles (Hub-specific: super_admin, hub_admin)
 # =============================================================================
 log_step "Creating DIVE roles..."
 
-for role in "dive-admin" "dive-user"; do
+# Role definitions with descriptions
+declare -A ROLE_DESCRIPTIONS=(
+    ["dive-user"]="Standard DIVE user role"
+    ["dive-admin"]="Legacy DIVE administrator (backwards compatibility)"
+    ["super_admin"]="Super administrator with full system access"
+    ["hub_admin"]="Hub administrator - can manage federation, spokes, and policies"
+)
+
+for role in "dive-user" "dive-admin" "super_admin" "hub_admin"; do
     ROLE_EXISTS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/${role}" \
         -H "Authorization: Bearer $TOKEN" -o /dev/null -w "%{http_code}")
 
@@ -215,12 +223,50 @@ for role in "dive-admin" "dive-user"; do
         curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"name\": \"${role}\"}" > /dev/null 2>&1
+            -d "{\"name\": \"${role}\", \"description\": \"${ROLE_DESCRIPTIONS[$role]}\"}" > /dev/null 2>&1
         log_success "Created role: $role"
     else
         log_info "Role exists: $role"
     fi
 done
+
+# =============================================================================
+# Create admin_role Protocol Mapper (for JWT claims)
+# =============================================================================
+log_step "Creating admin_role protocol mapper..."
+
+CLIENT_UUID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
+    -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.clientId == \"${CLIENT_ID}\") | .id")
+
+if [ -n "$CLIENT_UUID" ] && [ "$CLIENT_UUID" != "null" ]; then
+    # Check if admin_role mapper exists
+    MAPPER_EXISTS=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+        -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name == "admin_role") | .name')
+
+    if [ -z "$MAPPER_EXISTS" ]; then
+        curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "name": "admin_role",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-realm-role-mapper",
+                "consentRequired": false,
+                "config": {
+                    "introspection.token.claim": "true",
+                    "multivalued": "true",
+                    "userinfo.token.claim": "true",
+                    "id.token.claim": "true",
+                    "access.token.claim": "true",
+                    "claim.name": "admin_role",
+                    "jsonType.label": "String"
+                }
+            }' > /dev/null 2>&1
+        log_success "Created admin_role protocol mapper"
+    else
+        log_info "admin_role mapper already exists"
+    fi
+fi
 
 # =============================================================================
 # Create Users
@@ -335,8 +381,19 @@ create_user() {
                     -d "[{\"id\": \"${role_id}\", \"name\": \"dive-user\"}]" > /dev/null 2>&1
             fi
 
-            # Assign dive-admin role if admin
+            # Assign admin roles if admin (hub gets hub_admin + dive-admin for backwards compat)
             if [ "$is_admin" == "true" ]; then
+                # Assign hub_admin role (new role for hub administrators)
+                local hub_admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/hub_admin" \
+                    -H "Authorization: Bearer $TOKEN" | jq -r '.id')
+                if [ -n "$hub_admin_role_id" ] && [ "$hub_admin_role_id" != "null" ]; then
+                    curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
+                        -H "Authorization: Bearer $TOKEN" \
+                        -H "Content-Type: application/json" \
+                        -d "[{\"id\": \"${hub_admin_role_id}\", \"name\": \"hub_admin\"}]" > /dev/null 2>&1
+                fi
+
+                # Also assign dive-admin for backwards compatibility
                 local admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" \
                     -H "Authorization: Bearer $TOKEN" | jq -r '.id')
                 if [ -n "$admin_role_id" ] && [ "$admin_role_id" != "null" ]; then

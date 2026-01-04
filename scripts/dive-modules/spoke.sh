@@ -481,7 +481,7 @@ spoke_health() {
         local offset=$(get_country_offset "$code_upper" 2>/dev/null || echo "0")
         keycloak_port=$((8443 + offset))
         backend_port=$((4000 + offset))
-        opa_port=$((9100 + offset))
+        opa_port=$((8181 + offset * 10))
     else
         # Fallback for non-NATO countries
         keycloak_port=8443
@@ -2681,23 +2681,23 @@ spoke_regenerate_theme() {
         return 1
     fi
     local code_upper=$(upper "$code")
-    
+
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}  Regenerating Keycloak Theme for ${code_upper}${NC}"
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
-    
+
     local script="${DIVE_ROOT}/scripts/generate-spoke-theme.sh"
     if [ ! -f "$script" ]; then
         log_error "Theme generator script not found: $script"
         return 1
     fi
-    
+
     # Run the theme generator with --force to regenerate
     bash "$script" "$code_upper" --force
     local result=$?
-    
+
     if [ $result -eq 0 ]; then
         echo ""
         log_success "Theme regenerated for ${code_upper}"
@@ -2707,7 +2707,7 @@ spoke_regenerate_theme() {
     else
         log_error "Failed to regenerate theme for ${code_upper}"
     fi
-    
+
     return $result
 }
 

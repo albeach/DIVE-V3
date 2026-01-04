@@ -1,16 +1,16 @@
 /**
  * DIVE V3 - Policy Bundle Management Page
- * 
+ *
  * Hub administrator page for building, publishing, and monitoring
  * policy bundles across federation spokes.
- * 
+ *
  * Features:
  * - Build policy bundles with scope selection
  * - Publish bundles to OPAL Server
  * - Monitor sync status across all spokes
  * - Force sync for individual or all spokes
  * - OPAL health monitoring
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -27,6 +27,8 @@ import {
   CurrentBundleCard,
   SyncStatusDashboard,
   OPALHealthIndicator,
+  TrustedIssuersList,
+  FederationMatrix,
 } from '@/components/admin/federation';
 import {
   IBundleMetadata,
@@ -40,21 +42,30 @@ import {
   Package,
   RefreshCw,
   AlertTriangle,
-  Server,
-  Activity,
+  Shield,
+  Grid3X3,
+  Boxes,
 } from 'lucide-react';
+
+// Tab types
+type PolicyTab = 'bundles' | 'issuers' | 'matrix';
 
 export default function FederationPoliciesPage() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
 
   // State
+  const [activeTab, setActiveTab] = useState<PolicyTab>('bundles');
   const [currentBundle, setCurrentBundle] = useState<IBundleMetadata | null>(null);
   const [syncStatus, setSyncStatus] = useState<ISyncStatusResponse | null>(null);
   const [opalHealth, setOpalHealth] = useState<IOPALHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Extract user roles for permission checking
+  const user = session?.user as { roles?: string[]; admin_role?: string[] } | undefined;
+  const userRoles = [...(user?.roles || []), ...(user?.admin_role || [])];
 
   // Fetch all data
   const fetchData = useCallback(async (showRefreshing = true) => {
@@ -135,7 +146,7 @@ export default function FederationPoliciesPage() {
     });
 
     const result = await response.json();
-    
+
     if (result.success) {
       // Refresh data after build
       await fetchData();
@@ -152,7 +163,7 @@ export default function FederationPoliciesPage() {
     });
 
     const result = await response.json();
-    
+
     if (result.success) {
       // Refresh data after publish
       await fetchData();
@@ -170,7 +181,7 @@ export default function FederationPoliciesPage() {
     });
 
     const result = await response.json();
-    
+
     // Refresh data after operation
     await fetchData();
 
@@ -257,10 +268,10 @@ export default function FederationPoliciesPage() {
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                  Policy Bundle Management
+                  Federation Policy Management
                 </h1>
                 <p className="text-slate-600 text-sm sm:text-base">
-                  Build, sign, and distribute policy bundles to federation spokes
+                  Manage policy bundles, trusted issuers, and federation trust matrix
                 </p>
               </div>
             </div>
@@ -280,6 +291,43 @@ export default function FederationPoliciesPage() {
               </button>
             </div>
           </div>
+
+          {/* Tabs */}
+          <div className="mt-6 flex gap-2 border-b border-slate-200 -mb-6 -mx-6 px-6">
+            <button
+              onClick={() => setActiveTab('bundles')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'bundles'
+                  ? 'text-purple-600 border-purple-600'
+                  : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Boxes className="w-4 h-4" />
+              Policy Bundles
+            </button>
+            <button
+              onClick={() => setActiveTab('issuers')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'issuers'
+                  ? 'text-purple-600 border-purple-600'
+                  : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Shield className="w-4 h-4" />
+              Trusted Issuers
+            </button>
+            <button
+              onClick={() => setActiveTab('matrix')}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'matrix'
+                  ? 'text-purple-600 border-purple-600'
+                  : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <Grid3X3 className="w-4 h-4" />
+              Trust Matrix
+            </button>
+          </div>
         </motion.div>
 
         {/* Error */}
@@ -296,47 +344,70 @@ export default function FederationPoliciesPage() {
           </motion.div>
         )}
 
-        {/* Main Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-          {/* Left Column: Bundle Builder */}
-          <div className="space-y-6">
-            <PolicyBundleBuilder
-              onBuild={handleBuild}
-              onPublish={handlePublish}
-              onBuildAndPublish={handleBuildAndPublish}
-            />
-          </div>
+        {/* Tab Content */}
+        {activeTab === 'bundles' && (
+          <>
+            {/* Main Grid */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+              {/* Left Column: Bundle Builder */}
+              <div className="space-y-6">
+                <PolicyBundleBuilder
+                  onBuild={handleBuild}
+                  onPublish={handlePublish}
+                  onBuildAndPublish={handleBuildAndPublish}
+                />
+              </div>
 
-          {/* Right Column: Current Bundle + OPAL Health */}
-          <div className="space-y-6">
-            <CurrentBundleCard
-              bundle={currentBundle}
-              loading={refreshing}
-              onRefresh={() => fetchData(true)}
-            />
+              {/* Right Column: Current Bundle + OPAL Health */}
+              <div className="space-y-6">
+                <CurrentBundleCard
+                  bundle={currentBundle}
+                  loading={refreshing}
+                  onRefresh={() => fetchData(true)}
+                />
 
-            <OPALHealthIndicator
-              health={opalHealth}
-              loading={refreshing}
-              onRefresh={() => fetchData(true)}
-            />
-          </div>
-        </div>
+                <OPALHealthIndicator
+                  health={opalHealth}
+                  loading={refreshing}
+                  onRefresh={() => fetchData(true)}
+                />
+              </div>
+            </div>
 
-        {/* Sync Status Dashboard (Full Width) */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <SyncStatusDashboard
-            syncStatus={syncStatus}
-            loading={refreshing}
-            onRefresh={() => fetchData(true)}
-            onForceSync={handleForceSync}
-            onForceSyncAll={handleForceSyncAll}
-          />
-        </motion.div>
+            {/* Sync Status Dashboard (Full Width) */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <SyncStatusDashboard
+                syncStatus={syncStatus}
+                loading={refreshing}
+                onRefresh={() => fetchData(true)}
+                onForceSync={handleForceSync}
+                onForceSyncAll={handleForceSyncAll}
+              />
+            </motion.div>
+          </>
+        )}
+
+        {activeTab === 'issuers' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <TrustedIssuersList userRoles={userRoles} />
+          </motion.div>
+        )}
+
+        {activeTab === 'matrix' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <FederationMatrix userRoles={userRoles} />
+          </motion.div>
+        )}
       </div>
     </PageLayout>
   );

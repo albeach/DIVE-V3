@@ -475,7 +475,8 @@ services:
       OPAL_POLICY_REPO_POLLING_INTERVAL: 30
       # Policy paths to include (relative to repo root)
       OPAL_POLICY_SOURCE_DIRS: base,org,tenant,entrypoints,compat
-      OPAL_DATA_TOPICS_DEFAULT: policy_data
+      # Multiple data topics for real-time policy data distribution (Phase 2)
+      OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs
       OPAL_INLINE_OPA_CONFIG: "false"
       OPAL_LOG_LEVEL: DEBUG
       OPAL_LOG_FORMAT: text
@@ -486,9 +487,43 @@ services:
       UVICORN_SSL_KEYFILE: /certs/key.pem
       OPAL_STATISTICS_ENABLED: "true"
       OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["http://localhost:3000","https://localhost:3000","http://localhost:7002"]'
-      # Data source URL must be reachable by spoke clients (use external URL)
-      # IMPORTANT: dst_path must be a valid OPA data path (not "/") to avoid rego_parse_error
-      OPAL_DATA_CONFIG_SOURCES: '{"config":{"entries":[{"url":"https://host.docker.internal:4000/api/opal/policy-data","topics":["policy_data"],"dst_path":"dive/federation"}]}}'
+      # Data source URLs with multiple topics (Phase 2: Real-Time Policy Data)
+      # Each endpoint serves dynamic data from MongoDB (with file fallback)
+      # - policy_data: Combined policy data (legacy, for compatibility)
+      # - trusted_issuers: Dynamic trusted IdP issuers from MongoDB
+      # - federation_matrix: Dynamic federation trust relationships
+      # - tenant_configs: Per-nation tenant configurations
+      OPAL_DATA_CONFIG_SOURCES: |
+        {
+          "config": {
+            "entries": [
+              {
+                "url": "https://host.docker.internal:4000/api/opal/policy-data",
+                "topics": ["policy_data"],
+                "dst_path": "dive/federation",
+                "config": {"headers": {"Accept": "application/json"}}
+              },
+              {
+                "url": "https://host.docker.internal:4000/api/opal/trusted-issuers",
+                "topics": ["trusted_issuers"],
+                "dst_path": "dive/trusted_issuers",
+                "config": {"headers": {"Accept": "application/json"}}
+              },
+              {
+                "url": "https://host.docker.internal:4000/api/opal/federation-matrix",
+                "topics": ["federation_matrix"],
+                "dst_path": "dive/federation_matrix",
+                "config": {"headers": {"Accept": "application/json"}}
+              },
+              {
+                "url": "https://host.docker.internal:4000/api/opal/tenant-configs",
+                "topics": ["tenant_configs"],
+                "dst_path": "dive/tenant_configs",
+                "config": {"headers": {"Accept": "application/json"}}
+              }
+            ]
+          }
+        }
       # OPAL Authentication - JWT token verification for spoke clients
       OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
     ports:

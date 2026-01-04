@@ -1,0 +1,8 @@
+{
+  "revision": "v1.0.0",
+  "roots": [""],
+  "metadata": {
+    "description": "DIVE V3 Policy Data",
+    "generated_at": "2026-01-03T20:10:00Z"
+  }
+}

@@ -65,7 +65,7 @@ done
 generate_theme() {
     local code="$1"
     local code_lower="${code,,}"
-    
+
     # Validate NATO country
     if ! is_nato_country "$code"; then
         if is_partner_nation "$code"; then
@@ -76,14 +76,14 @@ generate_theme() {
             return 1
         fi
     fi
-    
+
     # Get country data from NATO database
     local name=$(get_country_name "$code")
     local flag=$(get_country_flag "$code")
     local primary=$(get_country_primary_color "$code")
     local secondary=$(get_country_secondary_color "$code")
     local accent="#ffffff"  # White accent works for most flags
-    
+
     # Handle partner nations
     if is_partner_nation "$code"; then
         local partner_data="${PARTNER_NATIONS[$code]}"
@@ -92,10 +92,10 @@ generate_theme() {
         primary=$(echo "$partner_data" | cut -d'|' -f3)
         secondary=$(echo "$partner_data" | cut -d'|' -f4)
     fi
-    
+
     local theme_name="dive-v3-${code_lower}"
     local theme_dir="$THEMES_DIR/$theme_name"
-    
+
     # Check if theme exists
     if [ -d "$theme_dir" ] && [ "$FORCE" != true ]; then
         echo "  ⏭️  $code: Theme exists (use --force to regenerate)"
@@ -103,16 +103,16 @@ generate_theme() {
     fi
 
     echo "  ✨ Generating: $name ($code) $flag"
-    
+
     # Create theme directory structure
     mkdir -p "$theme_dir/login/messages"
     mkdir -p "$theme_dir/login/resources/css"
     mkdir -p "$theme_dir/login/resources/img"
-    
+
     # Convert hex to RGB for rgba() usage
     local primary_rgb=$(hex_to_rgb "$primary")
     local secondary_rgb=$(hex_to_rgb "$secondary")
-    
+
     # Generate theme.properties
     cat > "$theme_dir/login/theme.properties" << PROPS
 # $name Theme - Auto-generated from NATO countries database
@@ -135,7 +135,7 @@ PROPS
  * $name Keycloak Theme
  * Auto-generated from NATO countries database
  * Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
- * 
+ *
  * Primary: $primary
  * Secondary: $secondary
  * Accent: $accent
@@ -256,7 +256,7 @@ CSS
         locale=$(get_partner_locale "$code")
     fi
     locale="${locale:-en}"  # Default to English
-    
+
     # Copy messages from base theme or GBR (English)
     if [ -f "$THEMES_DIR/dive-v3-gbr/login/messages/messages_en.properties" ]; then
         cp "$THEMES_DIR/dive-v3-gbr/login/messages/messages_en.properties" \
@@ -265,11 +265,11 @@ CSS
         cp "$THEMES_DIR/$BASE_THEME/login/messages/messages_en.properties" \
            "$theme_dir/login/messages/"
     fi
-    
+
     # Generate locale-specific messages file if non-English
     if [[ "$locale" != "en" ]]; then
         local locale_file="$theme_dir/login/messages/messages_${locale}.properties"
-        
+
         # Check if locale file exists elsewhere (base theme or translations dir)
         if [ -f "$THEMES_DIR/$BASE_THEME/login/messages/messages_${locale}.properties" ]; then
             cp "$THEMES_DIR/$BASE_THEME/login/messages/messages_${locale}.properties" "$locale_file"
@@ -282,13 +282,13 @@ CSS
             generate_locale_stub "$locale_file" "$locale" "$name"
             echo "     → Generated stub ${locale} translation (needs professional translation)"
         fi
-        
+
         # Update theme.properties to include both locales
         sed -i.bak "s/locales=en/locales=en,${locale}/" "$theme_dir/login/theme.properties" 2>/dev/null || \
             sed -i '' "s/locales=en/locales=en,${locale}/" "$theme_dir/login/theme.properties"
         rm -f "$theme_dir/login/theme.properties.bak"
     fi
-    
+
     # Create placeholder background (copy from GBR if exists, otherwise from base)
     local bg_src=""
     if [ -f "$THEMES_DIR/dive-v3-gbr/login/resources/img/background-gbr.jpg" ]; then
@@ -296,11 +296,11 @@ CSS
     elif [ -f "$THEMES_DIR/$BASE_THEME/login/resources/img/background.jpg" ]; then
         bg_src="$THEMES_DIR/$BASE_THEME/login/resources/img/background.jpg"
     fi
-    
+
     if [ -n "$bg_src" ]; then
         cp "$bg_src" "$theme_dir/login/resources/img/background-${code_lower}.jpg"
     fi
-    
+
     echo "     ✓ Created: $theme_dir"
     return 0
 }
@@ -313,7 +313,7 @@ generate_locale_stub() {
     local locale_file="$1"
     local locale="$2"
     local country_name="$3"
-    
+
     cat > "$locale_file" << EOF
 # ${country_name} - ${locale} locale stub
 # This file contains key translations for Keycloak login pages
@@ -384,15 +384,15 @@ if [ "$ALL" = true ]; then
     echo "  Generating Keycloak Themes for All 32 NATO Countries"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
-    
+
     generated=0
     skipped=0
     failed=0
-    
+
     for code in $(echo "${!NATO_COUNTRIES[@]}" | tr ' ' '\n' | sort); do
         generate_theme "$code" && generated=$((generated + 1)) || failed=$((failed + 1))
     done
-    
+
     echo ""
     echo "═══════════════════════════════════════════════════════════════════════"
     echo "  Summary: Processed ${#NATO_COUNTRIES[@]} countries"
@@ -401,13 +401,13 @@ if [ "$ALL" = true ]; then
         echo "  Failed: $failed"
     fi
     echo "═══════════════════════════════════════════════════════════════════════"
-    
+
 elif [ -n "$COUNTRY_CODE" ]; then
     echo "═══════════════════════════════════════════════════════════════════════"
     echo "  Generating Keycloak Theme: dive-v3-${COUNTRY_CODE,,}"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
-    
+
     if generate_theme "$COUNTRY_CODE"; then
         echo ""
         echo "To apply the theme to a realm:"

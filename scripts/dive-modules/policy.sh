@@ -278,6 +278,278 @@ policy_refresh() {
 }
 
 # =============================================================================
+# DYNAMIC POLICY DATA MANAGEMENT (Phase 2)
+# =============================================================================
+
+policy_add_issuer() {
+    local issuer_url="${1:-}"
+    local tenant="${2:-}"
+    
+    if [ -z "$issuer_url" ] || [ -z "$tenant" ]; then
+        log_error "Usage: ./dive policy add-issuer <issuer_url> <tenant>"
+        echo ""
+        echo "Adds a trusted issuer to the OPAL policy data (MongoDB-backed)."
+        echo ""
+        echo "Arguments:"
+        echo "  issuer_url  Full URL of the OIDC issuer (e.g., https://localhost:8443/realms/dive-v3-broker-fra)"
+        echo "  tenant      Tenant code (e.g., FRA, GBR, DEU)"
+        echo ""
+        echo "Options:"
+        echo "  --name      Human-readable name (default: derived from URL)"
+        echo "  --trust     Trust level: HIGH, MEDIUM, DEVELOPMENT, LOW (default: DEVELOPMENT)"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive policy add-issuer https://fra-idp.dive25.com/realms/dive-v3-broker FRA"
+        echo "  ./dive policy add-issuer https://localhost:8453/realms/dive-v3-broker-fra FRA --trust DEVELOPMENT"
+        return 1
+    fi
+    
+    # Parse optional arguments
+    local name=""
+    local trust_level="DEVELOPMENT"
+    shift 2
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name)
+                name="$2"
+                shift 2
+                ;;
+            --trust)
+                trust_level="${2^^}"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+    
+    # Derive name from URL if not provided
+    if [ -z "$name" ]; then
+        name="${tenant^^} Keycloak"
+    fi
+    
+    # Derive country from tenant
+    local country="${tenant^^}"
+    
+    log_step "Adding trusted issuer: $issuer_url ($tenant)"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would POST to: https://localhost:4000/api/opal/trusted-issuers"
+        log_dry "  issuerUrl: $issuer_url"
+        log_dry "  tenant: $tenant"
+        log_dry "  name: $name"
+        log_dry "  trustLevel: $trust_level"
+        return 0
+    fi
+    
+    # Call API
+    local response=$(curl -s -X POST "https://localhost:4000/api/opal/trusted-issuers" \
+        -H "Content-Type: application/json" \
+        -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
+        -k -d "{
+            \"issuerUrl\": \"$issuer_url\",
+            \"tenant\": \"$tenant\",
+            \"name\": \"$name\",
+            \"country\": \"$country\",
+            \"trustLevel\": \"$trust_level\",
+            \"enabled\": true
+        }" 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        log_success "Trusted issuer added!"
+        echo ""
+        echo "  Issuer URL:  $issuer_url"
+        echo "  Tenant:      $tenant"
+        echo "  Trust Level: $trust_level"
+        echo ""
+        echo "OPAL refresh has been triggered automatically."
+    else
+        log_error "Failed to add issuer"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+policy_remove_issuer() {
+    local issuer_url="${1:-}"
+    
+    if [ -z "$issuer_url" ]; then
+        log_error "Usage: ./dive policy remove-issuer <issuer_url>"
+        echo ""
+        echo "Removes a trusted issuer from OPAL policy data."
+        return 1
+    fi
+    
+    log_step "Removing trusted issuer: $issuer_url"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would DELETE: https://localhost:4000/api/opal/trusted-issuers/<encoded_url>"
+        return 0
+    fi
+    
+    # URL encode the issuer URL
+    local encoded_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$issuer_url', safe=''))" 2>/dev/null || echo "$issuer_url")
+    
+    local response=$(curl -s -X DELETE "https://localhost:4000/api/opal/trusted-issuers/${encoded_url}" \
+        -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
+        -k 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        log_success "Trusted issuer removed!"
+    else
+        log_error "Failed to remove issuer"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+policy_list_issuers() {
+    log_step "Listing trusted issuers..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would GET: https://localhost:4000/api/opal/trusted-issuers"
+        return 0
+    fi
+    
+    local response=$(curl -s "https://localhost:4000/api/opal/trusted-issuers" -k 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        local count=$(echo "$response" | jq -r '.count')
+        echo -e "${BOLD}Trusted Issuers (${count}):${NC}"
+        echo ""
+        
+        echo "$response" | jq -r '.trusted_issuers | to_entries[] | "  [\(.value.trust_level)] \(.value.tenant) - \(.key)"'
+    else
+        log_error "Failed to list issuers"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+policy_add_federation_trust() {
+    local source="${1:-}"
+    local target="${2:-}"
+    
+    if [ -z "$source" ] || [ -z "$target" ]; then
+        log_error "Usage: ./dive policy add-trust <source_country> <target_country>"
+        echo ""
+        echo "Adds a federation trust relationship."
+        echo ""
+        echo "Examples:"
+        echo "  ./dive policy add-trust USA FRA    # USA trusts FRA"
+        echo "  ./dive policy add-trust GBR DEU    # GBR trusts DEU"
+        return 1
+    fi
+    
+    source="${source^^}"
+    target="${target^^}"
+    
+    log_step "Adding federation trust: $source → $target"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would POST to: https://localhost:4000/api/opal/federation-matrix"
+        return 0
+    fi
+    
+    local response=$(curl -s -X POST "https://localhost:4000/api/opal/federation-matrix" \
+        -H "Content-Type: application/json" \
+        -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
+        -k -d "{
+            \"sourceCountry\": \"$source\",
+            \"targetCountry\": \"$target\"
+        }" 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        log_success "Federation trust added: $source now trusts $target"
+    else
+        log_error "Failed to add trust"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+policy_remove_federation_trust() {
+    local source="${1:-}"
+    local target="${2:-}"
+    
+    if [ -z "$source" ] || [ -z "$target" ]; then
+        log_error "Usage: ./dive policy remove-trust <source_country> <target_country>"
+        return 1
+    fi
+    
+    source="${source^^}"
+    target="${target^^}"
+    
+    log_step "Removing federation trust: $source → $target"
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would DELETE: https://localhost:4000/api/opal/federation-matrix/$source/$target"
+        return 0
+    fi
+    
+    local response=$(curl -s -X DELETE "https://localhost:4000/api/opal/federation-matrix/${source}/${target}" \
+        -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
+        -k 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        log_success "Federation trust removed"
+    else
+        log_error "Failed to remove trust"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+policy_show_federation_matrix() {
+    log_step "Showing federation matrix..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would GET: https://localhost:4000/api/opal/federation-matrix"
+        return 0
+    fi
+    
+    local response=$(curl -s "https://localhost:4000/api/opal/federation-matrix" -k 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        local count=$(echo "$response" | jq -r '.count')
+        echo -e "${BOLD}Federation Matrix (${count} nations):${NC}"
+        echo ""
+        
+        echo "$response" | jq -r '.federation_matrix | to_entries[] | "\(.key): \(.value | join(", "))"'
+    else
+        log_error "Failed to get federation matrix"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+policy_force_sync() {
+    log_step "Forcing CDC sync to OPAL..."
+    
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would POST to: https://localhost:4000/api/opal/cdc/force-sync"
+        return 0
+    fi
+    
+    local response=$(curl -s -X POST "https://localhost:4000/api/opal/cdc/force-sync" \
+        -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
+        -k 2>&1)
+    
+    if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+        log_success "All policy data synced to OPAL!"
+        echo ""
+        echo "Results:"
+        echo "$response" | jq -r '.results | to_entries[] | "  \(.key): \(if .value then "✓" else "✗" end)"'
+    else
+        log_error "Force sync failed"
+        echo "Response: $response"
+        return 1
+    fi
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -286,19 +558,31 @@ module_policy() {
     shift || true
     
     case "$action" in
-        build)   policy_build "$@" ;;
-        push)    policy_push "$@" ;;
-        status)  policy_status ;;
-        test)    policy_test "$@" ;;
-        version) policy_version ;;
-        refresh) policy_refresh ;;
-        *)       module_policy_help ;;
+        # Bundle management
+        build)          policy_build "$@" ;;
+        push)           policy_push "$@" ;;
+        status)         policy_status ;;
+        test)           policy_test "$@" ;;
+        version)        policy_version ;;
+        refresh)        policy_refresh ;;
+        
+        # Dynamic policy data (Phase 2)
+        add-issuer)     policy_add_issuer "$@" ;;
+        remove-issuer)  policy_remove_issuer "$@" ;;
+        list-issuers)   policy_list_issuers ;;
+        add-trust)      policy_add_federation_trust "$@" ;;
+        remove-trust)   policy_remove_federation_trust "$@" ;;
+        show-matrix)    policy_show_federation_matrix ;;
+        force-sync)     policy_force_sync ;;
+        
+        *)              module_policy_help ;;
     esac
 }
 
 module_policy_help() {
     echo -e "${BOLD}Policy Commands (Build, Sign, Push via OPAL):${NC}"
     echo ""
+    echo -e "${CYAN}Bundle Management:${NC}"
     echo "  build [--sign] [--scopes]   Build OPA policy bundle"
     echo "  push                        Publish bundle to OPAL Server"
     echo "  status                      Show policy distribution status"
@@ -306,9 +590,21 @@ module_policy_help() {
     echo "  version                     Show current policy version"
     echo "  refresh                     Trigger OPAL policy refresh"
     echo ""
+    echo -e "${CYAN}Dynamic Policy Data (MongoDB-backed):${NC}"
+    echo "  add-issuer <url> <tenant>   Add trusted issuer to OPAL"
+    echo "  remove-issuer <url>         Remove trusted issuer"
+    echo "  list-issuers                List all trusted issuers"
+    echo "  add-trust <from> <to>       Add federation trust relationship"
+    echo "  remove-trust <from> <to>    Remove federation trust"
+    echo "  show-matrix                 Show federation trust matrix"
+    echo "  force-sync                  Force sync all data to OPAL"
+    echo ""
     echo "Examples:"
-    echo "  ./dive policy build --sign            # Build and sign bundle"
-    echo "  ./dive policy push                    # Push to OPAL"
-    echo "  ./dive policy test                    # Run OPA tests"
-    echo "  ./dive policy status                  # Show OPAL status"
+    echo "  ./dive policy build --sign                                          # Build and sign bundle"
+    echo "  ./dive policy push                                                   # Push to OPAL"
+    echo "  ./dive policy add-issuer https://fra-kc.dive25.com/realms/fra FRA   # Add French issuer"
+    echo "  ./dive policy add-trust USA FRA                                      # USA trusts FRA"
+    echo "  ./dive policy list-issuers                                           # Show all issuers"
+    echo "  ./dive policy show-matrix                                            # Show trust matrix"
+    echo "  ./dive policy force-sync                                             # Force OPAL refresh"
 }
