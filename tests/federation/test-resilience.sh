@@ -123,7 +123,7 @@ wait_for_service() {
     local url="$2"
     local max_wait="${3:-60}"
     local waited=0
-    
+
     while [ $waited -lt $max_wait ]; do
         if curl -ks --max-time 5 "$url" >/dev/null 2>&1; then
             return 0
@@ -158,31 +158,31 @@ container_running() {
 
 scenario_hub_keycloak_down() {
     log_scenario "Hub Keycloak Unavailability"
-    
+
     local hub_kc="dive-hub-keycloak"
     local spoke_kc="dive-spoke-${SPOKE_LOWER}-keycloak"
-    
+
     # Pre-check
     if ! container_running "$hub_kc"; then
         scenario_skip "Hub Keycloak not running"
         return
     fi
-    
+
     if ! container_running "$spoke_kc"; then
         scenario_skip "Spoke Keycloak not running"
         return
     fi
-    
+
     # Simulate hub Keycloak failure
     log_step "Stopping Hub Keycloak..."
     stop_container "$hub_kc"
     sleep 3
-    
+
     # Check that spoke Keycloak is still operational
     log_check "Spoke Keycloak still accepts local auth"
     local spoke_port
     spoke_port=$(docker port "$spoke_kc" 8443 2>/dev/null | cut -d: -f2 | head -1)
-    
+
     if [ -n "$spoke_port" ]; then
         # Spoke should still serve its own realm
         if curl -ks --max-time 10 "https://localhost:${spoke_port}/realms/dive-v3-broker-${SPOKE_LOWER}/.well-known/openid-configuration" | grep -q '"issuer"'; then
@@ -193,7 +193,7 @@ scenario_hub_keycloak_down() {
     else
         skip "Port not found"
     fi
-    
+
     # Check that federated auth gracefully degrades
     log_check "Federated auth returns graceful error"
     # This would normally test that attempting to login via usa-idp returns a proper error
@@ -210,11 +210,11 @@ scenario_hub_keycloak_down() {
     else
         skip
     fi
-    
+
     # Restore Hub Keycloak
     log_step "Restoring Hub Keycloak..."
     start_container "$hub_kc"
-    
+
     # Wait for recovery
     log_check "Hub Keycloak recovers within 60s"
     if wait_for_service "Hub KC" "https://localhost:8443/health/ready" 60; then
@@ -224,12 +224,12 @@ scenario_hub_keycloak_down() {
         scenario_fail "Hub Keycloak did not recover"
         return
     fi
-    
+
     # Verify federation still works after recovery
     log_check "Federation operational after recovery"
     local hub_pass
     hub_pass=$(docker exec "$hub_kc" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-    
+
     if [ -n "$hub_pass" ]; then
         local hub_token
         hub_token=$(docker exec "$hub_kc" curl -sf --max-time 10 \
@@ -238,13 +238,13 @@ scenario_hub_keycloak_down() {
             -d "username=admin" \
             -d "password=${hub_pass}" \
             -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token // ""')
-        
+
         if [ -n "$hub_token" ]; then
             local idp_check
             idp_check=$(docker exec "$hub_kc" curl -sf --max-time 10 \
                 -H "Authorization: Bearer $hub_token" \
                 "http://localhost:8080/admin/realms/dive-v3-broker-usa/identity-provider/instances/${SPOKE_LOWER}-idp" 2>/dev/null)
-            
+
             if echo "$idp_check" | grep -q '"alias"'; then
                 pass
             else
@@ -256,7 +256,7 @@ scenario_hub_keycloak_down() {
     else
         skip "No password"
     fi
-    
+
     scenario_pass
 }
 
@@ -266,34 +266,34 @@ scenario_hub_keycloak_down() {
 
 scenario_spoke_opa_down() {
     log_scenario "Spoke OPA Unavailability"
-    
+
     local spoke_opa="dive-spoke-${SPOKE_LOWER}-opa"
     local spoke_backend="dive-spoke-${SPOKE_LOWER}-backend"
-    
+
     if ! container_running "$spoke_opa"; then
         scenario_skip "Spoke OPA not deployed"
         return
     fi
-    
+
     if ! container_running "$spoke_backend"; then
         scenario_skip "Spoke backend not running"
         return
     fi
-    
+
     # Get backend port
     local backend_port
     backend_port=$(docker port "$spoke_backend" 4000 2>/dev/null | cut -d: -f2 | head -1)
-    
+
     if [ -z "$backend_port" ]; then
         scenario_skip "Backend port not found"
         return
     fi
-    
+
     # Stop OPA
     log_step "Stopping Spoke OPA..."
     stop_container "$spoke_opa"
     sleep 3
-    
+
     # Check that backend still responds but authorization fails
     log_check "Backend health endpoint still works"
     if curl -ks --max-time 5 "https://localhost:${backend_port}/health" | grep -q "status"; then
@@ -301,27 +301,27 @@ scenario_spoke_opa_down() {
     else
         fail
     fi
-    
+
     log_check "Protected endpoints return 503 (OPA unavailable)"
     local authz_response
     authz_response=$(curl -ks --max-time 5 -o /dev/null -w "%{http_code}" \
         "https://localhost:${backend_port}/api/resources" 2>/dev/null || echo "000")
-    
+
     # Expect 401 (unauthenticated) or 503 (OPA unavailable) - both are acceptable
     if [ "$authz_response" = "401" ] || [ "$authz_response" = "503" ] || [ "$authz_response" = "500" ]; then
         pass
     else
         fail "Got $authz_response"
     fi
-    
+
     # Restore OPA
     log_step "Restoring Spoke OPA..."
     start_container "$spoke_opa"
-    
+
     log_check "OPA recovers within 30s"
     local opa_port
     opa_port=$(docker port "$spoke_opa" 8181 2>/dev/null | cut -d: -f2 | head -1)
-    
+
     if [ -n "$opa_port" ]; then
         if wait_for_service "OPA" "https://localhost:${opa_port}/health" 30; then
             pass
@@ -331,7 +331,7 @@ scenario_spoke_opa_down() {
     else
         skip "Port not found"
     fi
-    
+
     scenario_pass
 }
 
@@ -341,20 +341,20 @@ scenario_spoke_opa_down() {
 
 scenario_mongodb_down() {
     log_scenario "Hub MongoDB Unavailability"
-    
+
     local hub_mongo="dive-hub-mongodb"
     local hub_backend="dive-hub-backend"
-    
+
     if ! container_running "$hub_mongo"; then
         scenario_skip "Hub MongoDB not running"
         return
     fi
-    
+
     # Stop MongoDB
     log_step "Stopping Hub MongoDB..."
     stop_container "$hub_mongo"
     sleep 3
-    
+
     # Check backend graceful degradation
     log_check "Backend health still responds"
     if curl -ks --max-time 5 "https://localhost:4000/health" >/dev/null 2>&1; then
@@ -362,7 +362,7 @@ scenario_mongodb_down() {
     else
         fail
     fi
-    
+
     log_check "Static policy data fallback works"
     local policy_response
     policy_response=$(curl -ks --max-time 10 "https://localhost:4000/api/opal/policy-data" 2>/dev/null)
@@ -371,11 +371,11 @@ scenario_mongodb_down() {
     else
         skip "Endpoint may require MongoDB"
     fi
-    
+
     # Restore MongoDB
     log_step "Restoring Hub MongoDB..."
     start_container "$hub_mongo"
-    
+
     log_check "MongoDB recovers within 60s"
     local waited=0
     while [ $waited -lt 60 ]; do
@@ -386,11 +386,11 @@ scenario_mongodb_down() {
         sleep 2
         ((waited += 2))
     done
-    
+
     if [ $waited -ge 60 ]; then
         fail "Recovery timeout"
     fi
-    
+
     scenario_pass
 }
 
@@ -400,21 +400,21 @@ scenario_mongodb_down() {
 
 scenario_network_partition() {
     log_scenario "Network Partition (Hub ↔ Spoke)"
-    
+
     local spoke_kc="dive-spoke-${SPOKE_LOWER}-keycloak"
-    
+
     if ! container_running "$spoke_kc"; then
         scenario_skip "Spoke not running"
         return
     fi
-    
+
     # We can't easily simulate network partitioning without Docker network manipulation
     # Instead, we'll test that the spoke can operate independently when hub is unreachable
-    
+
     log_check "Spoke services operate independently"
     local spoke_port
     spoke_port=$(docker port "$spoke_kc" 8443 2>/dev/null | cut -d: -f2 | head -1)
-    
+
     if [ -n "$spoke_port" ]; then
         # Spoke should serve its realm
         if curl -ks --max-time 10 "https://localhost:${spoke_port}/realms/dive-v3-broker-${SPOKE_LOWER}/.well-known/openid-configuration" | grep -q '"issuer"'; then
@@ -425,7 +425,7 @@ scenario_network_partition() {
     else
         skip "Port not found"
     fi
-    
+
     log_check "Local authentication works without Hub"
     # This test would ideally authenticate a local user
     # For now, check that the token endpoint is available
@@ -440,7 +440,7 @@ scenario_network_partition() {
     else
         skip
     fi
-    
+
     scenario_pass
 }
 
@@ -450,29 +450,29 @@ scenario_network_partition() {
 
 scenario_rapid_restart() {
     log_scenario "Rapid Restart Recovery"
-    
+
     local spoke_backend="dive-spoke-${SPOKE_LOWER}-backend"
-    
+
     if ! container_running "$spoke_backend"; then
         scenario_skip "Spoke backend not running"
         return
     fi
-    
+
     local backend_port
     backend_port=$(docker port "$spoke_backend" 4000 2>/dev/null | cut -d: -f2 | head -1)
-    
+
     if [ -z "$backend_port" ]; then
         scenario_skip "Backend port not found"
         return
     fi
-    
+
     # Rapid restart cycle
     log_step "Performing rapid restart (3 cycles)..."
     for i in 1 2 3; do
         docker restart "$spoke_backend" >/dev/null 2>&1 || true
         sleep 2
     done
-    
+
     # Wait for stabilization
     log_check "Backend stabilizes after rapid restarts (90s timeout)"
     if wait_for_service "Backend" "https://localhost:${backend_port}/health" 90; then
@@ -482,7 +482,7 @@ scenario_rapid_restart() {
         scenario_fail "Backend did not recover"
         return
     fi
-    
+
     log_check "Backend fully functional after recovery"
     local health
     health=$(curl -ks --max-time 10 "https://localhost:${backend_port}/health" 2>/dev/null)
@@ -491,7 +491,7 @@ scenario_rapid_restart() {
     else
         fail
     fi
-    
+
     scenario_pass
 }
 
@@ -505,16 +505,16 @@ cleanup() {
         echo -e "${YELLOW}⚠ Cleanup skipped. Some services may be stopped.${NC}"
         return
     fi
-    
+
     echo ""
     echo -e "${CYAN}Restoring all services...${NC}"
-    
+
     # Restart any stopped containers
     docker start dive-hub-keycloak 2>/dev/null || true
     docker start dive-hub-mongodb 2>/dev/null || true
     docker start "dive-spoke-${SPOKE_LOWER}-opa" 2>/dev/null || true
     docker start "dive-spoke-${SPOKE_LOWER}-backend" 2>/dev/null || true
-    
+
     echo -e "${GREEN}✓ Cleanup complete${NC}"
 }
 
@@ -531,10 +531,10 @@ main() {
     echo "  Spoke:      ${SPOKE_CODE}"
     echo "  Scenario:   ${SPECIFIC_SCENARIO:-all}"
     echo "  Cleanup:    $([ "$SKIP_CLEANUP" = true ] && echo 'disabled' || echo 'enabled')"
-    
+
     # Set up cleanup trap
     trap cleanup EXIT
-    
+
     # Run scenarios
     if [ -z "$SPECIFIC_SCENARIO" ]; then
         scenario_hub_keycloak_down
@@ -556,7 +556,7 @@ main() {
                 ;;
         esac
     fi
-    
+
     # Summary
     echo ""
     echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
@@ -567,7 +567,7 @@ main() {
     echo -e "  ${RED}Failed:${NC}  ${SCENARIOS_FAILED}"
     echo -e "  ${YELLOW}Skipped:${NC} ${SCENARIOS_SKIPPED}"
     echo ""
-    
+
     if [ "$SCENARIOS_FAILED" -eq 0 ]; then
         echo -e "${GREEN}✓ All resilience tests passed!${NC}"
         exit 0

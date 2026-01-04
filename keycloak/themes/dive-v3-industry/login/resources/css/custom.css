@@ -2,7 +2,7 @@
  * Industry Keycloak Theme
  * Auto-generated from instance.json
  * Generated: 2025-12-01T01:00:00Z
- * 
+ *
  * Primary: #1E3A8A
  * Secondary: #7C3AED
  * Accent: #3B82F6
@@ -98,12 +98,18 @@
 
 .webauthn-button {
     background: linear-gradient(135deg, #1E3A8A 0%, #7C3AED 100%);
-}/* Passkey/WebAuthn icon coloring */
+}
+
+/* Passkey/WebAuthn icon coloring */
 .passkey-icon {
     color: #3B82F6;
-}/* Footer styling */
+}
+
+/* Footer styling */
 .dive-footer a {
     color: #1E3A8A;
-}.dive-footer a:hover {
+}
+
+.dive-footer a:hover {
     color: #7C3AED;
 }

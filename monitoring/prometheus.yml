@@ -40,7 +40,7 @@ scrape_configs:
   # ---------------------------------------------------------------------------
   # USA INSTANCE (Ports: 3000, 4000, 8080, 8181, 8443, 9000)
   # ---------------------------------------------------------------------------
-  
+
   - job_name: 'usa-backend'
     static_configs:
       - targets: ['host.docker.internal:4000']
@@ -83,7 +83,7 @@ scrape_configs:
   # ---------------------------------------------------------------------------
   # FRA INSTANCE (Backend:4001, OPA:8182, Keycloak:9001, Tunnel:9127)
   # ---------------------------------------------------------------------------
-  
+
   - job_name: 'fra-backend'
     static_configs:
       - targets: ['host.docker.internal:4001']
@@ -126,7 +126,7 @@ scrape_configs:
   # ---------------------------------------------------------------------------
   # GBR INSTANCE (Backend:4002, OPA:8283, Keycloak:9002, Tunnel:9128)
   # ---------------------------------------------------------------------------
-  
+
   - job_name: 'gbr-backend'
     static_configs:
       - targets: ['host.docker.internal:4002']
@@ -170,7 +170,7 @@ scrape_configs:
   # DEU INSTANCE (Remote - 192.168.42.120)
   # Note: Remote instance - may not be reachable from local Prometheus
   # ---------------------------------------------------------------------------
-  
+
   - job_name: 'deu-backend'
     static_configs:
       - targets: ['192.168.42.120:4003']
