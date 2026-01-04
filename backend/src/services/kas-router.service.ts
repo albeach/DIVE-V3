@@ -127,8 +127,8 @@ class KasRouterService {
     // Step 3: Check federation agreement (does origin trust requester?)
     const agreement = await mongoKasRegistryStore.getFederationAgreement(origin);
     if (agreement) {
-      const isTrusted = agreement.trustedKAS.includes(originKasId) || 
-                        origin === requester; // Same-nation is always trusted
+      const isTrusted = agreement.trustedKAS.includes(originKasId) ||
+        origin === requester; // Same-nation is always trusted
 
       if (!isTrusted && origin !== requester) {
         logger.warn('Federation agreement check', {
