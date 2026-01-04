@@ -21,21 +21,21 @@ const router: Router = express.Router();
 
 // Initialize KAS registry store
 mongoKasRegistryStore.initialize().catch((err) => {
-  logger.error('Failed to initialize KAS registry store', { error: err.message });
+    logger.error('Failed to initialize KAS registry store', { error: err.message });
 });
 
 /**
  * Require admin key for management endpoints
  */
 function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-  const adminKey = req.headers['x-admin-key'];
+    const adminKey = req.headers['x-admin-key'];
 
-  if (adminKey !== process.env.FEDERATION_ADMIN_KEY && process.env.NODE_ENV === 'production') {
-    res.status(403).json({ error: 'Admin access required' });
-    return;
-  }
+    if (adminKey !== process.env.FEDERATION_ADMIN_KEY && process.env.NODE_ENV === 'production') {
+        res.status(403).json({ error: 'Admin access required' });
+        return;
+    }
 
-  next();
+    next();
 }
 
 /**
@@ -164,7 +164,7 @@ router.get('/health', (_req: Request, res: Response) => {
  *     description: |
  *       Register a new Key Access Service instance with the federation.
  *       The registration will be in 'pending' status until approved by an admin.
- *       
+ *
  *       **Phase 3**: KAS Auto-Registration API
  *     tags: [KAS, Federation]
  *     requestBody:

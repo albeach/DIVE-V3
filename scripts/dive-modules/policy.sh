@@ -19,7 +19,7 @@ fi
 policy_build() {
     local sign=true
     local scopes=""
-    
+
     # Parse options
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -40,22 +40,22 @@ policy_build() {
                 ;;
         esac
     done
-    
+
     log_step "Building OPA policy bundle..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would POST to: https://localhost:4000/api/opal/bundle/build"
         log_dry "  sign: $sign"
         log_dry "  scopes: ${scopes:-all}"
         return 0
     fi
-    
+
     # Check if backend is running
     if ! curl -kfs --max-time 3 "https://localhost:4000/health" >/dev/null 2>&1; then
         log_error "Backend API not available. Start with './dive up' first."
         return 1
     fi
-    
+
     # Build request payload
     local payload="{\"sign\": $sign, \"includeData\": true, \"compress\": true"
     if [ -n "$scopes" ]; then
@@ -63,12 +63,12 @@ policy_build() {
         payload+="]"
     fi
     payload+="}"
-    
+
     # Call API
     local response=$(curl -s -X POST "https://localhost:4000/api/opal/bundle/build" \
         -H "Content-Type: application/json" \
         -k -d "$payload" 2>&1)
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         local bundleId=$(echo "$response" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
@@ -76,7 +76,7 @@ policy_build() {
         local size=$(echo "$response" | grep -o '"size"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d':' -f2 | tr -d ' ')
         local fileCount=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d':' -f2 | tr -d ' ')
         local signed=$(echo "$response" | grep -o '"signed"[[:space:]]*:[[:space:]]*[a-z]*' | cut -d':' -f2 | tr -d ' ')
-        
+
         log_success "Policy bundle built successfully!"
         echo ""
         echo "  Bundle ID:   $bundleId"
@@ -94,28 +94,28 @@ policy_build() {
 
 policy_push() {
     log_step "Publishing policy bundle to OPAL Server..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would POST to: https://localhost:4000/api/opal/bundle/publish"
         return 0
     fi
-    
+
     # Check if backend is running
     if ! curl -kfs --max-time 3 "https://localhost:4000/health" >/dev/null 2>&1; then
         log_error "Backend API not available. Start with './dive up' first."
         return 1
     fi
-    
+
     # Call API
     local response=$(curl -s -X POST "https://localhost:4000/api/opal/bundle/publish" \
         -H "Content-Type: application/json" \
         -k 2>&1)
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         local bundleId=$(echo "$response" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local txnId=$(echo "$response" | grep -o '"opalTransactionId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        
+
         log_success "Policy bundle published!"
         echo ""
         echo "  Bundle ID:      $bundleId"
@@ -133,17 +133,17 @@ policy_push() {
 policy_status() {
     echo -e "${BOLD}Policy Distribution Status:${NC}"
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would query: https://localhost:4000/api/opal/health"
         log_dry "Would query: https://localhost:4000/api/opal/bundle/current"
         return 0
     fi
-    
+
     # Check OPAL health
     echo -e "${CYAN}OPAL Server:${NC}"
     local opal_health=$(curl -s -k "https://localhost:4000/api/opal/health" 2>&1)
-    
+
     if echo "$opal_health" | grep -q '"healthy"[[:space:]]*:[[:space:]]*true'; then
         echo -e "  Status:   ${GREEN}Healthy${NC}"
         local clients=$(echo "$opal_health" | grep -o '"clientsConnected"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d':' -f2 | tr -d ' ')
@@ -151,19 +151,19 @@ policy_status() {
     else
         echo -e "  Status:   ${YELLOW}Not connected${NC}"
     fi
-    
+
     echo ""
-    
+
     # Check current bundle
     echo -e "${CYAN}Current Bundle:${NC}"
     local bundle=$(curl -s -k "https://localhost:4000/api/opal/bundle/current" 2>&1)
-    
+
     if echo "$bundle" | grep -q '"bundleId"'; then
         local bundleId=$(echo "$bundle" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local version=$(echo "$bundle" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local hash=$(echo "$bundle" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local signedAt=$(echo "$bundle" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        
+
         echo "  Bundle ID: $bundleId"
         echo "  Version:   $version"
         echo "  Hash:      ${hash:0:16}..."
@@ -171,9 +171,9 @@ policy_status() {
     else
         echo -e "  ${YELLOW}No bundle built yet. Run './dive policy build' first.${NC}"
     fi
-    
+
     echo ""
-    
+
     # Check OPA directly
     echo -e "${CYAN}OPA Server:${NC}"
     local opa_health=$(curl -s "http://localhost:8181/health" 2>/dev/null)
@@ -182,7 +182,7 @@ policy_status() {
     else
         echo -e "  Status:   ${RED}Not running${NC}"
     fi
-    
+
     # Check OPAL Server directly
     echo ""
     echo -e "${CYAN}OPAL Server (Direct):${NC}"
@@ -196,22 +196,22 @@ policy_status() {
 
 policy_test() {
     local pattern="${1:-}"
-    
+
     log_step "Running OPA policy tests..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "./bin/opa test policies/ -v"
         return 0
     fi
-    
+
     ensure_dive_root
-    
+
     if [ ! -x "${DIVE_ROOT}/bin/opa" ]; then
         log_error "OPA binary not found at ${DIVE_ROOT}/bin/opa"
         echo "Download from: https://github.com/open-policy-agent/opa/releases"
         return 1
     fi
-    
+
     # Run tests (specific test files to avoid undefined functions)
     cd "${DIVE_ROOT}"
     if [ -n "$pattern" ]; then
@@ -219,35 +219,35 @@ policy_test() {
     else
         ./bin/opa test policies/base policies/tests/guardrails_test.rego policies/tests/bundle_test.rego -v
     fi
-    
+
     local exit_code=$?
-    
+
     if [ $exit_code -eq 0 ]; then
         log_success "All policy tests passed!"
     else
         log_error "Some policy tests failed"
     fi
-    
+
     return $exit_code
 }
 
 policy_version() {
     echo -e "${BOLD}Policy Version Information:${NC}"
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would query OPA for policy metadata"
         return 0
     fi
-    
+
     # Query OPA for guardrails metadata
     local metadata=$(curl -s "http://localhost:8181/v1/data/dive/base/guardrails/metadata" 2>/dev/null)
-    
+
     if [ -n "$metadata" ] && echo "$metadata" | grep -q '"result"'; then
         local package=$(echo "$metadata" | grep -o '"package"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local version=$(echo "$metadata" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local source=$(echo "$metadata" | grep -o '"source"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        
+
         echo "  Guardrails:"
         echo "    Package:  $package"
         echo "    Version:  $version"
@@ -259,14 +259,14 @@ policy_version() {
 
 policy_refresh() {
     log_step "Triggering OPAL policy refresh..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would POST to: https://localhost:4000/api/opal/refresh"
         return 0
     fi
-    
+
     local response=$(curl -s -X POST "https://localhost:4000/api/opal/refresh" -k 2>&1)
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         log_success "Policy refresh triggered"
         echo "Response: $response"
@@ -284,7 +284,7 @@ policy_refresh() {
 policy_add_issuer() {
     local issuer_url="${1:-}"
     local tenant="${2:-}"
-    
+
     if [ -z "$issuer_url" ] || [ -z "$tenant" ]; then
         log_error "Usage: ./dive policy add-issuer <issuer_url> <tenant>"
         echo ""
@@ -303,12 +303,12 @@ policy_add_issuer() {
         echo "  ./dive policy add-issuer https://localhost:8453/realms/dive-v3-broker-fra FRA --trust DEVELOPMENT"
         return 1
     fi
-    
+
     # Parse optional arguments
     local name=""
     local trust_level="DEVELOPMENT"
     shift 2
-    
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --name)
@@ -324,17 +324,17 @@ policy_add_issuer() {
                 ;;
         esac
     done
-    
+
     # Derive name from URL if not provided
     if [ -z "$name" ]; then
         name="${tenant^^} Keycloak"
     fi
-    
+
     # Derive country from tenant
     local country="${tenant^^}"
-    
+
     log_step "Adding trusted issuer: $issuer_url ($tenant)"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would POST to: https://localhost:4000/api/opal/trusted-issuers"
         log_dry "  issuerUrl: $issuer_url"
@@ -343,7 +343,7 @@ policy_add_issuer() {
         log_dry "  trustLevel: $trust_level"
         return 0
     fi
-    
+
     # Call API
     local response=$(curl -s -X POST "https://localhost:4000/api/opal/trusted-issuers" \
         -H "Content-Type: application/json" \
@@ -356,7 +356,7 @@ policy_add_issuer() {
             \"trustLevel\": \"$trust_level\",
             \"enabled\": true
         }" 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         log_success "Trusted issuer added!"
         echo ""
@@ -374,28 +374,28 @@ policy_add_issuer() {
 
 policy_remove_issuer() {
     local issuer_url="${1:-}"
-    
+
     if [ -z "$issuer_url" ]; then
         log_error "Usage: ./dive policy remove-issuer <issuer_url>"
         echo ""
         echo "Removes a trusted issuer from OPAL policy data."
         return 1
     fi
-    
+
     log_step "Removing trusted issuer: $issuer_url"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would DELETE: https://localhost:4000/api/opal/trusted-issuers/<encoded_url>"
         return 0
     fi
-    
+
     # URL encode the issuer URL
     local encoded_url=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$issuer_url', safe=''))" 2>/dev/null || echo "$issuer_url")
-    
+
     local response=$(curl -s -X DELETE "https://localhost:4000/api/opal/trusted-issuers/${encoded_url}" \
         -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
         -k 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         log_success "Trusted issuer removed!"
     else
@@ -407,19 +407,19 @@ policy_remove_issuer() {
 
 policy_list_issuers() {
     log_step "Listing trusted issuers..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would GET: https://localhost:4000/api/opal/trusted-issuers"
         return 0
     fi
-    
+
     local response=$(curl -s "https://localhost:4000/api/opal/trusted-issuers" -k 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         local count=$(echo "$response" | jq -r '.count')
         echo -e "${BOLD}Trusted Issuers (${count}):${NC}"
         echo ""
-        
+
         echo "$response" | jq -r '.trusted_issuers | to_entries[] | "  [\(.value.trust_level)] \(.value.tenant) - \(.key)"'
     else
         log_error "Failed to list issuers"
@@ -431,7 +431,7 @@ policy_list_issuers() {
 policy_add_federation_trust() {
     local source="${1:-}"
     local target="${2:-}"
-    
+
     if [ -z "$source" ] || [ -z "$target" ]; then
         log_error "Usage: ./dive policy add-trust <source_country> <target_country>"
         echo ""
@@ -442,17 +442,17 @@ policy_add_federation_trust() {
         echo "  ./dive policy add-trust GBR DEU    # GBR trusts DEU"
         return 1
     fi
-    
+
     source="${source^^}"
     target="${target^^}"
-    
+
     log_step "Adding federation trust: $source → $target"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would POST to: https://localhost:4000/api/opal/federation-matrix"
         return 0
     fi
-    
+
     local response=$(curl -s -X POST "https://localhost:4000/api/opal/federation-matrix" \
         -H "Content-Type: application/json" \
         -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
@@ -460,7 +460,7 @@ policy_add_federation_trust() {
             \"sourceCountry\": \"$source\",
             \"targetCountry\": \"$target\"
         }" 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         log_success "Federation trust added: $source now trusts $target"
     else
@@ -473,26 +473,26 @@ policy_add_federation_trust() {
 policy_remove_federation_trust() {
     local source="${1:-}"
     local target="${2:-}"
-    
+
     if [ -z "$source" ] || [ -z "$target" ]; then
         log_error "Usage: ./dive policy remove-trust <source_country> <target_country>"
         return 1
     fi
-    
+
     source="${source^^}"
     target="${target^^}"
-    
+
     log_step "Removing federation trust: $source → $target"
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would DELETE: https://localhost:4000/api/opal/federation-matrix/$source/$target"
         return 0
     fi
-    
+
     local response=$(curl -s -X DELETE "https://localhost:4000/api/opal/federation-matrix/${source}/${target}" \
         -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
         -k 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         log_success "Federation trust removed"
     else
@@ -504,19 +504,19 @@ policy_remove_federation_trust() {
 
 policy_show_federation_matrix() {
     log_step "Showing federation matrix..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would GET: https://localhost:4000/api/opal/federation-matrix"
         return 0
     fi
-    
+
     local response=$(curl -s "https://localhost:4000/api/opal/federation-matrix" -k 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         local count=$(echo "$response" | jq -r '.count')
         echo -e "${BOLD}Federation Matrix (${count} nations):${NC}"
         echo ""
-        
+
         echo "$response" | jq -r '.federation_matrix | to_entries[] | "\(.key): \(.value | join(", "))"'
     else
         log_error "Failed to get federation matrix"
@@ -527,16 +527,16 @@ policy_show_federation_matrix() {
 
 policy_force_sync() {
     log_step "Forcing CDC sync to OPAL..."
-    
+
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would POST to: https://localhost:4000/api/opal/cdc/force-sync"
         return 0
     fi
-    
+
     local response=$(curl -s -X POST "https://localhost:4000/api/opal/cdc/force-sync" \
         -H "x-admin-key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
         -k 2>&1)
-    
+
     if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
         log_success "All policy data synced to OPAL!"
         echo ""
@@ -556,7 +556,7 @@ policy_force_sync() {
 module_policy() {
     local action="${1:-help}"
     shift || true
-    
+
     case "$action" in
         # Bundle management
         build)          policy_build "$@" ;;
@@ -565,7 +565,7 @@ module_policy() {
         test)           policy_test "$@" ;;
         version)        policy_version ;;
         refresh)        policy_refresh ;;
-        
+
         # Dynamic policy data (Phase 2)
         add-issuer)     policy_add_issuer "$@" ;;
         remove-issuer)  policy_remove_issuer "$@" ;;
@@ -574,7 +574,7 @@ module_policy() {
         remove-trust)   policy_remove_federation_trust "$@" ;;
         show-matrix)    policy_show_federation_matrix ;;
         force-sync)     policy_force_sync ;;
-        
+
         *)              module_policy_help ;;
     esac
 }

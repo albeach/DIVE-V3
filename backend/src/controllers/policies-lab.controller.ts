@@ -1,15 +1,15 @@
 /**
  * Policies Lab Controller
- * 
+ *
  * HTTP endpoints for policy upload, validation, evaluation, and management.
- * 
+ *
  * API Routes:
  * - POST /api/policies/upload - Upload and validate policy
  * - POST /api/policies/:id/evaluate - Evaluate policy with input
  * - GET /api/policies/:id - Get policy metadata
  * - DELETE /api/policies/:id - Delete policy
  * - GET /api/policies/list - List user's policies
- * 
+ *
  * Date: October 26, 2025
  */
 
@@ -362,7 +362,7 @@ export async function listUserPolicies(req: Request, res: Response, next: NextFu
 
         // Get user's policies
         const userPolicies = await getPoliciesByOwner(uniqueID);
-        
+
         // Also get example policies (system-examples) to show to all users
         const examplePolicies = await getPoliciesByOwner('system-examples');
 
@@ -381,8 +381,8 @@ export async function listUserPolicies(req: Request, res: Response, next: NextFu
             isExample: policy.ownerId === 'system-examples'  // Flag example policies
         }));
 
-        res.status(200).json({ 
-            policies: response, 
+        res.status(200).json({
+            policies: response,
             count: response.length,
             userPolicyCount: userPolicies.length,
             examplePolicyCount: examplePolicies.length
@@ -420,7 +420,7 @@ export async function loadSamplePolicies(req: Request, res: Response, next: Next
 
         // Path to sample policies
         const samplesDir = path.join(process.cwd(), 'policies', 'uploads', 'samples');
-        
+
         // Sample policy definitions
         const samplePolicies = [
             {
@@ -451,7 +451,7 @@ export async function loadSamplePolicies(req: Request, res: Response, next: Next
                 // Check if user already has this policy (by filename)
                 const existingPolicies = await getPoliciesByOwner(uniqueID);
                 const alreadyExists = existingPolicies.some(p => p.filename === sample.filename);
-                
+
                 if (alreadyExists) {
                     logger.debug('Sample policy already exists for user', { userId: uniqueID, filename: sample.filename });
                     continue;
