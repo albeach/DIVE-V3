@@ -19,8 +19,24 @@ import { policyBundleService } from '../services/policy-bundle.service';
 import { opalClient } from '../services/opal-client';
 import { policySyncService } from '../services/policy-sync.service';
 import { hubSpokeRegistry } from '../services/hub-spoke-registry.service';
+import { mongoOpalDataStore } from '../models/trusted-issuer.model';
+import { opalCdcService } from '../services/opal-cdc.service';
+import { requireHubAdmin, logFederationModification } from '../middleware/hub-admin.middleware';
+import { authenticateJWT } from '../middleware/authz.middleware';
 import fs from 'fs';
 import path from 'path';
+
+// Initialize MongoDB OPAL data store and CDC service
+mongoOpalDataStore.initialize().catch((err) => {
+  logger.error('Failed to initialize OPAL data store', { error: err.message });
+});
+
+// Initialize CDC service (with delay to ensure OPAL connection is ready)
+setTimeout(() => {
+  opalCdcService.initialize().catch((err) => {
+    logger.error('Failed to initialize OPAL CDC service', { error: err.message });
+  });
+}, 5000);
 
 const router = Router();
 
@@ -433,6 +449,416 @@ router.post('/data/publish', async (req: Request, res: Response): Promise<void> 
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Publish failed',
+    });
+  }
+});
+
+// ============================================
+// DYNAMIC POLICY DATA ENDPOINTS (Phase 2)
+// MongoDB-backed endpoints for real-time policy data
+// ============================================
+
+/**
+ * GET /api/opal/trusted-issuers
+ * Get all trusted issuers from MongoDB (OPAL-compatible format)
+ */
+router.get('/trusted-issuers', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const issuers = await mongoOpalDataStore.getIssuersForOpal();
+
+    res.json({
+      success: true,
+      trusted_issuers: issuers,
+      count: Object.keys(issuers).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to get trusted issuers', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve trusted issuers',
+    });
+  }
+});
+
+/**
+ * POST /api/opal/trusted-issuers
+ * Add a new trusted issuer (hub_admin only)
+ *
+ * Security: Requires hub_admin or super_admin role
+ * Spoke admins receive 403 Forbidden
+ */
+router.post('/trusted-issuers', authenticateJWT, requireHubAdmin, async (req: Request, res: Response): Promise<void> => {
+  const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+  const authReq = req as any;
+
+  try {
+    const { issuerUrl, tenant, name, country, trustLevel, realm, enabled } = req.body;
+
+    if (!issuerUrl || !tenant || !country) {
+      res.status(400).json({
+        success: false,
+        error: 'issuerUrl, tenant, and country are required',
+      });
+      return;
+    }
+
+    const issuer = await mongoOpalDataStore.addIssuer({
+      issuerUrl,
+      tenant: tenant.toUpperCase(),
+      name: name || issuerUrl,
+      country: country.toUpperCase(),
+      trustLevel: trustLevel || 'DEVELOPMENT',
+      realm,
+      enabled: enabled !== false,
+    });
+
+    // Log the modification for audit
+    logFederationModification({
+      requestId,
+      admin: authReq.user?.uniqueID || 'unknown',
+      action: 'ADD_TRUSTED_ISSUER',
+      target: issuerUrl,
+      details: { tenant, country, trustLevel },
+      outcome: 'success',
+    });
+
+    logger.info('Trusted issuer added via API', { issuerUrl, tenant, admin: authReq.user?.uniqueID });
+
+    // Trigger OPAL refresh to propagate change
+    await opalClient.triggerPolicyRefresh();
+
+    res.status(201).json({
+      success: true,
+      issuer,
+      message: 'Issuer added and OPAL refresh triggered',
+    });
+  } catch (error) {
+    logFederationModification({
+      requestId,
+      admin: authReq.user?.uniqueID || 'unknown',
+      action: 'ADD_TRUSTED_ISSUER',
+      target: req.body.issuerUrl || 'unknown',
+      outcome: 'failure',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    logger.error('Failed to add trusted issuer', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add issuer',
+    });
+  }
+});
+
+/**
+ * DELETE /api/opal/trusted-issuers/:encodedUrl
+ * Remove a trusted issuer (hub_admin only)
+ *
+ * Security: Requires hub_admin or super_admin role
+ */
+router.delete('/trusted-issuers/:encodedUrl', authenticateJWT, requireHubAdmin, async (req: Request, res: Response): Promise<void> => {
+  const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+  const authReq = req as any;
+
+  try {
+    const issuerUrl = decodeURIComponent(req.params.encodedUrl);
+    const removed = await mongoOpalDataStore.removeIssuer(issuerUrl);
+
+    if (removed) {
+      logFederationModification({
+        requestId,
+        admin: authReq.user?.uniqueID || 'unknown',
+        action: 'REMOVE_TRUSTED_ISSUER',
+        target: issuerUrl,
+        outcome: 'success',
+      });
+
+      logger.info('Trusted issuer removed via API', { issuerUrl, admin: authReq.user?.uniqueID });
+      await opalClient.triggerPolicyRefresh();
+
+      res.json({
+        success: true,
+        message: 'Issuer removed and OPAL refresh triggered',
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'Issuer not found',
+      });
+    }
+  } catch (error) {
+    logFederationModification({
+      requestId,
+      admin: authReq.user?.uniqueID || 'unknown',
+      action: 'REMOVE_TRUSTED_ISSUER',
+      target: decodeURIComponent(req.params.encodedUrl),
+      outcome: 'failure',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    logger.error('Failed to remove trusted issuer', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove issuer',
+    });
+  }
+});
+
+/**
+ * GET /api/opal/federation-matrix
+ * Get federation trust matrix from MongoDB
+ */
+router.get('/federation-matrix', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const matrix = await mongoOpalDataStore.getFederationMatrix();
+
+    res.json({
+      success: true,
+      federation_matrix: matrix,
+      count: Object.keys(matrix).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to get federation matrix', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve federation matrix',
+    });
+  }
+});
+
+/**
+ * POST /api/opal/federation-matrix
+ * Add or update federation trust (hub_admin only)
+ *
+ * Security: Requires hub_admin or super_admin role
+ */
+router.post('/federation-matrix', authenticateJWT, requireHubAdmin, async (req: Request, res: Response): Promise<void> => {
+  const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+  const authReq = req as any;
+
+  try {
+    const { sourceCountry, targetCountry, trustedCountries } = req.body;
+
+    if (!sourceCountry) {
+      res.status(400).json({
+        success: false,
+        error: 'sourceCountry is required',
+      });
+      return;
+    }
+
+    if (trustedCountries) {
+      // Set entire trust list
+      await mongoOpalDataStore.setFederationTrust(sourceCountry, trustedCountries);
+
+      logFederationModification({
+        requestId,
+        admin: authReq.user?.uniqueID || 'unknown',
+        action: 'SET_FEDERATION_TRUST',
+        target: sourceCountry,
+        details: { trustedCountries },
+        outcome: 'success',
+      });
+
+      logger.info('Federation matrix updated', { sourceCountry, trustedCountries, admin: authReq.user?.uniqueID });
+    } else if (targetCountry) {
+      // Add single trust relationship
+      await mongoOpalDataStore.addFederationTrust(sourceCountry, targetCountry);
+
+      logFederationModification({
+        requestId,
+        admin: authReq.user?.uniqueID || 'unknown',
+        action: 'ADD_FEDERATION_TRUST',
+        target: `${sourceCountry} -> ${targetCountry}`,
+        outcome: 'success',
+      });
+
+      logger.info('Federation trust added', { sourceCountry, targetCountry, admin: authReq.user?.uniqueID });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: 'Either targetCountry or trustedCountries is required',
+      });
+      return;
+    }
+
+    await opalClient.triggerPolicyRefresh();
+
+    res.json({
+      success: true,
+      message: 'Federation matrix updated and OPAL refresh triggered',
+    });
+  } catch (error) {
+    logFederationModification({
+      requestId,
+      admin: authReq.user?.uniqueID || 'unknown',
+      action: 'UPDATE_FEDERATION_MATRIX',
+      target: req.body.sourceCountry || 'unknown',
+      outcome: 'failure',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    logger.error('Failed to update federation matrix', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update federation matrix',
+    });
+  }
+});
+
+/**
+ * DELETE /api/opal/federation-matrix/:source/:target
+ * Remove a specific federation trust (hub_admin only)
+ *
+ * Security: Requires hub_admin or super_admin role
+ */
+router.delete('/federation-matrix/:source/:target', authenticateJWT, requireHubAdmin, async (req: Request, res: Response): Promise<void> => {
+  const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+  const authReq = req as any;
+
+  try {
+    const { source, target } = req.params;
+    await mongoOpalDataStore.removeFederationTrust(source, target);
+
+    logFederationModification({
+      requestId,
+      admin: authReq.user?.uniqueID || 'unknown',
+      action: 'REMOVE_FEDERATION_TRUST',
+      target: `${source} -> ${target}`,
+      outcome: 'success',
+    });
+
+    logger.info('Federation trust removed', { source, target, admin: authReq.user?.uniqueID });
+    await opalClient.triggerPolicyRefresh();
+
+    res.json({
+      success: true,
+      message: 'Trust relationship removed',
+    });
+  } catch (error) {
+    logFederationModification({
+      requestId,
+      admin: authReq.user?.uniqueID || 'unknown',
+      action: 'REMOVE_FEDERATION_TRUST',
+      target: `${req.params.source} -> ${req.params.target}`,
+      outcome: 'failure',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove trust relationship',
+    });
+  }
+});
+
+/**
+ * GET /api/opal/tenant-configs
+ * Get all tenant configurations from MongoDB
+ */
+router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const configs = await mongoOpalDataStore.getAllTenantConfigs();
+
+    res.json({
+      success: true,
+      tenant_configs: configs,
+      count: Object.keys(configs).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to get tenant configs', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve tenant configs',
+    });
+  }
+});
+
+/**
+ * PUT /api/opal/tenant-configs/:code
+ * Create or update a tenant configuration (admin only)
+ */
+router.put('/tenant-configs/:code', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { code } = req.params;
+    const config = req.body;
+
+    await mongoOpalDataStore.setTenantConfig(code, config);
+    logger.info('Tenant config updated', { code });
+    await opalClient.triggerPolicyRefresh();
+
+    res.json({
+      success: true,
+      message: `Tenant config ${code} updated`,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update tenant config',
+    });
+  }
+});
+
+// ============================================
+// CDC (Change Data Capture) ENDPOINTS
+// ============================================
+
+/**
+ * GET /api/opal/cdc/status
+ * Get CDC service status (admin only)
+ */
+router.get('/cdc/status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const status = opalCdcService.getStatus();
+    res.json({
+      success: true,
+      ...status,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get CDC status',
+    });
+  }
+});
+
+/**
+ * POST /api/opal/cdc/force-sync
+ * Force sync all data to OPAL (admin only)
+ */
+router.post('/cdc/force-sync', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    logger.info('Force syncing all OPAL data via CDC');
+    const result = await opalCdcService.forcePublishAll();
+
+    res.json({
+      success: result.success,
+      results: result.results,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to force sync OPAL data', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to force sync',
     });
   }
 });
@@ -1177,9 +1603,22 @@ router.get('/transactions/export', requireAdmin, async (req: Request, res: Respo
 // ============================================
 
 /**
- * Load trusted issuers from data file
+ * Load trusted issuers from MongoDB (with file fallback)
  */
 async function getTrustedIssuers(): Promise<Record<string, unknown>> {
+  try {
+    // Try MongoDB first
+    const issuers = await mongoOpalDataStore.getIssuersForOpal();
+    if (Object.keys(issuers).length > 0) {
+      return issuers;
+    }
+  } catch (error) {
+    logger.warn('Could not load trusted issuers from MongoDB', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  // Fallback to file
   try {
     const dataPath = path.join(process.env.POLICIES_DIR || '/app/policies', 'data', 'trusted_issuers.json');
     if (fs.existsSync(dataPath)) {
@@ -1195,9 +1634,22 @@ async function getTrustedIssuers(): Promise<Record<string, unknown>> {
 }
 
 /**
- * Load federation matrix from data file
+ * Load federation matrix from MongoDB (with file fallback)
  */
 async function getFederationMatrix(): Promise<Record<string, unknown>> {
+  try {
+    // Try MongoDB first
+    const matrix = await mongoOpalDataStore.getFederationMatrix();
+    if (Object.keys(matrix).length > 0) {
+      return matrix;
+    }
+  } catch (error) {
+    logger.warn('Could not load federation matrix from MongoDB', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  // Fallback to file
   try {
     const dataPath = path.join(process.env.POLICIES_DIR || '/app/policies', 'data', 'federation_matrix.json');
     if (fs.existsSync(dataPath)) {
@@ -1214,6 +1666,7 @@ async function getFederationMatrix(): Promise<Record<string, unknown>> {
 
 /**
  * Load COI membership from data file
+ * (COI membership is generally static, so we keep file-based for now)
  */
 async function getCoiMembership(): Promise<Record<string, unknown>> {
   try {
@@ -1224,6 +1677,20 @@ async function getCoiMembership(): Promise<Record<string, unknown>> {
     }
   } catch (error) {
     logger.warn('Could not load coi_membership.json', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+
+  // Fallback to policies/data.json
+  try {
+    const dataPath = path.join(process.env.POLICIES_DIR || '/app/policies', 'data.json');
+    if (fs.existsSync(dataPath)) {
+      const content = fs.readFileSync(dataPath, 'utf8');
+      const data = JSON.parse(content);
+      return data.coi_members || {};
+    }
+  } catch (error) {
+    logger.warn('Could not load coi_members from data.json', {
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }

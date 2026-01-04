@@ -476,9 +476,7 @@ export async function loadSamplePolicies(req: Request, res: Response, next: Next
                 }
 
                 // Generate policy ID
-                const policyId = `sample-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-                // Save policy source to filesystem
+                const policyId = `sample-${Date.now()}-${Math.random().toString(36).substring(7)}`;                // Save policy source to filesystem
                 const { sizeBytes, hash } = await savePolicySource(uniqueID, policyId, sample.type, content);                // Create policy upload record
                 const policyUpload: IPolicyUpload = {
                     policyId,

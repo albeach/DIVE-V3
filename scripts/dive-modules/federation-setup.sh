@@ -1372,7 +1372,9 @@ create_spoke_idp_in_hub() {
         -s "config.validateSignature=true" \
         -s "config.useJwksUrl=true" \
         -s "config.pkceEnabled=true" \
-        -s "config.pkceMethod=S256" 2>/dev/null; then
+        -s "config.pkceMethod=S256" \
+        -s firstBrokerLoginFlowAlias="" \
+        -s updateProfileFirstLoginMode=off 2>/dev/null; then
         log_success "Created IdP: ${spoke_idp}"
         return 0
     else

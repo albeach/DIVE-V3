@@ -56,6 +56,7 @@ valid_nato_classifications := {
 default_classification_equivalency := {
 	"USA": {
 		"UNCLASSIFIED": "NATO_UNCLASSIFIED",
+		"RESTRICTED": "NATO_RESTRICTED",
 		"FOUO": "NATO_RESTRICTED",
 		"CONFIDENTIAL": "NATO_CONFIDENTIAL",
 		"SECRET": "NATO_SECRET",

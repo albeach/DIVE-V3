@@ -54,6 +54,10 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   sync_mode   = "FORCE"
   trust_email = true
 
+  # First-broker-login settings (FIX: Jan 2026 - Disable account linking prompt)
+  # This provides seamless SSO experience for federated users
+  first_broker_login_flow_alias = ""  # Empty string disables first-broker-login flow
+  
   # Store tokens for later use
   store_token = true
 
@@ -420,10 +424,11 @@ locals {
     k => coalesce(try(v.idp_internal_url, null), v.idp_url)
   }
 
-  # Partner realm path (USA uses base broker; others are suffixed with code)
+  # Partner realm path (all instances use instance-code-suffixed realms for consistency)
+  # FIX (Jan 2026): Changed USA from legacy "dive-v3-broker" to "dive-v3-broker-usa" for consistency
   partner_realm = {
     for k, v in var.federation_partners :
-    k => lower(v.instance_code) == "usa" ? "dive-v3-broker" : "dive-v3-broker-${lower(v.instance_code)}"
+    k => "dive-v3-broker-${lower(v.instance_code)}"
   }
 
   # Whether to disable trust manager for each partner (useful for self-signed local)

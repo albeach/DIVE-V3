@@ -40,115 +40,42 @@ current_tenant := tenant if {
 # ============================================
 # Maps issuer URLs to tenant IDs.
 # In production, this is loaded from OPAL (data.trusted_issuers).
+# The default_trusted_issuers provides fallback for development only.
 
+# DEVELOPMENT FALLBACK ONLY - Production uses OPAL data
 default_trusted_issuers := {
-	# USA Issuers
+	# Production External Issuers
 	"https://usa-idp.dive25.com/realms/dive-v3-broker": {
 		"tenant": "USA",
 		"name": "USA Keycloak",
 		"country": "USA",
 		"trust_level": "HIGH",
 	},
-	"https://login.disa.mil": {
-		"tenant": "USA",
-		"name": "DoD CAC",
-		"country": "USA",
-		"trust_level": "HIGH",
-	},
-	"https://sso.army.mil": {
-		"tenant": "USA",
-		"name": "US Army SSO",
-		"country": "USA",
-		"trust_level": "HIGH",
-	},
-	# France Issuers
 	"https://fra-idp.dive25.com/realms/dive-v3-broker": {
 		"tenant": "FRA",
 		"name": "France Keycloak",
 		"country": "FRA",
 		"trust_level": "HIGH",
 	},
-	"https://authentification.defense.gouv.fr": {
-		"tenant": "FRA",
-		"name": "French MoD SSO",
-		"country": "FRA",
-		"trust_level": "HIGH",
-	},
-	# UK Issuers
 	"https://gbr-idp.dive25.com/realms/dive-v3-broker": {
 		"tenant": "GBR",
 		"name": "UK Keycloak",
 		"country": "GBR",
 		"trust_level": "HIGH",
 	},
-	"https://sso.mod.uk": {
-		"tenant": "GBR",
-		"name": "UK MoD SSO",
-		"country": "GBR",
-		"trust_level": "HIGH",
-	},
-	# Germany Issuers
-	"https://deu-idp.dive25.com/realms/dive-v3-broker": {
+	"https://deu-idp.prosecurity.biz/realms/dive-v3-broker": {
 		"tenant": "DEU",
 		"name": "Germany Keycloak",
 		"country": "DEU",
 		"trust_level": "HIGH",
 	},
-	"https://sso.bundeswehr.de": {
-		"tenant": "DEU",
-		"name": "Bundeswehr SSO",
-		"country": "DEU",
-		"trust_level": "HIGH",
-	},
-	# Local Development - Hub
-	"http://localhost:8443/realms/dive-v3-broker": {
-		"tenant": "USA",
-		"name": "Local Dev Keycloak",
-		"country": "USA",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8443/realms/dive-v3-broker": {
-		"tenant": "USA",
-		"name": "Local Dev Keycloak (HTTPS)",
-		"country": "USA",
-		"trust_level": "DEVELOPMENT",
-	},
-	# Local Development - Spokes (NATO Port Convention)
-	"https://localhost:8444/realms/dive-v3-broker-alb": {
-		"tenant": "ALB",
-		"name": "Albania Keycloak (Local Dev)",
-		"country": "ALB",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8445/realms/dive-v3-broker-bel": {
-		"tenant": "BEL",
-		"name": "Belgium Keycloak (Local Dev)",
-		"country": "BEL",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8450/realms/dive-v3-broker-dnk": {
-		"tenant": "DNK",
-		"name": "Denmark Keycloak (Local Dev)",
-		"country": "DNK",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8465/realms/dive-v3-broker-nor": {
-		"tenant": "NOR",
-		"name": "Norway Keycloak (Local Dev)",
-		"country": "NOR",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8466/realms/dive-v3-broker-pol": {
-		"tenant": "POL",
-		"name": "Poland Keycloak (Local Dev)",
-		"country": "POL",
-		"trust_level": "DEVELOPMENT",
-	},
 }
 
-# Use OPAL-provided data if available
+# PRODUCTION: Use OPAL-provided data (dynamically updated)
+# This is the PRIMARY source - default_trusted_issuers is only fallback
 trusted_issuers := data.trusted_issuers if {
 	data.trusted_issuers
+	count(data.trusted_issuers) > 0
 } else := default_trusted_issuers
 
 # ============================================
@@ -183,24 +110,20 @@ tenant_issuers(tenant) := issuers if {
 # ============================================
 # Defines which tenants can federate with each other.
 # Uses bilateral trust model per ACP-240.
+# PRODUCTION: Loaded from OPAL data for dynamic updates.
 
+# DEVELOPMENT FALLBACK ONLY
 default_federation_matrix := {
-	# Original partners
-	"USA": {"FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"},
-	"FRA": {"USA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"},
-	"GBR": {"USA", "FRA", "DEU", "ALB", "BEL", "DNK", "NOR", "POL"},
-	"DEU": {"USA", "FRA", "GBR", "ALB", "BEL", "DNK", "NOR", "POL"},
-	# NATO Spokes - all can federate with USA and each other
-	"ALB": {"USA", "FRA", "GBR", "DEU", "BEL", "DNK", "NOR", "POL"},
-	"BEL": {"USA", "FRA", "GBR", "DEU", "ALB", "DNK", "NOR", "POL"},
-	"DNK": {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "NOR", "POL"},
-	"NOR": {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "POL"},
-	"POL": {"USA", "FRA", "GBR", "DEU", "ALB", "BEL", "DNK", "NOR"},
+	"USA": {"FRA", "GBR", "DEU"},
+	"FRA": {"USA", "GBR", "DEU"},
+	"GBR": {"USA", "FRA", "DEU"},
+	"DEU": {"USA", "FRA", "GBR"},
 }
 
-# Use OPAL-provided data if available
+# PRODUCTION: Use OPAL-provided data (dynamically updated)
 federation_matrix := data.federation_matrix if {
 	data.federation_matrix
+	count(data.federation_matrix) > 0
 } else := default_federation_matrix
 
 # Check if two tenants can federate

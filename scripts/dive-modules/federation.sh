@@ -286,6 +286,10 @@ _federation_sync_secrets_stub() {
     _load_federation_link && federation_sync_secrets "$@"
 }
 
+_federation_verify_all_stub() {
+    _load_federation_link && federation_verify_all "$@"
+}
+
 # =============================================================================
 # MODULE DISPATCH
 # =============================================================================
@@ -321,6 +325,7 @@ module_federation() {
         link)           _federation_link_stub "$@" ;;
         unlink)         _federation_unlink_stub "$@" ;;
         verify)         _federation_verify_stub "$@" ;;
+        verify-all)     _federation_verify_all_stub "$@" ;;
         fix)            _federation_fix_stub "$@" ;;
         sync-secrets)   _federation_sync_secrets_stub "$@" ;;
         list-idps)      _federation_list_idps_stub "$@" ;;
@@ -360,7 +365,8 @@ module_federation_help() {
     echo -e "${CYAN}IdP Link Commands:${NC} (lazy loaded)"
     echo "  ${GREEN}${BOLD}link${NC} <CODE>         Link IdP for cross-border SSO"
     echo "  ${GREEN}${BOLD}unlink${NC} <CODE>       Remove IdP link"
-    echo "  ${GREEN}${BOLD}verify${NC} <CODE>       Verify bidirectional federation status"
+    echo "  ${GREEN}${BOLD}verify${NC} <CODE>       Verify bidirectional federation (8-point check)"
+    echo "  ${GREEN}${BOLD}verify-all${NC}          Verify all configured spokes (8-point check each)"
     echo "  ${GREEN}${BOLD}fix${NC} <CODE>          Fix misconfigured federation (delete & recreate)"
     echo "  ${GREEN}${BOLD}sync-secrets${NC} <CODE> Sync client secrets bidirectionally (after redeploy)"
     echo "  ${GREEN}${BOLD}list-idps${NC}           List configured IdPs"

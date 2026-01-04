@@ -1,6 +1,6 @@
 /**
  * DIVE V3 Admin Type Definitions
- * 
+ *
  * Consolidated types for admin section components and APIs.
  */
 
@@ -42,13 +42,64 @@ export type ClearanceLevel =
 
 export type AdminRole =
   | 'super_admin'
+  | 'hub_admin'
+  | 'spoke_admin'
   | 'admin'
+  | 'dive-admin'
   | 'security_admin'
   | 'policy_admin'
   | 'user_admin'
   | 'idp_admin'
   | 'auditor'
   | 'operator';
+
+// ============================================
+// Admin Role Constants
+// ============================================
+
+/**
+ * Hub-specific admin roles (can modify federation)
+ */
+export const HUB_ADMIN_ROLES = ['super_admin', 'hub_admin', 'dive-admin', 'admin'] as const;
+
+/**
+ * Spoke-specific admin roles (read-only federation)
+ */
+export const SPOKE_ADMIN_ROLES = ['spoke_admin'] as const;
+
+/**
+ * All roles that grant admin access
+ */
+export const ALL_ADMIN_ROLES = [...HUB_ADMIN_ROLES, ...SPOKE_ADMIN_ROLES] as const;
+
+/**
+ * Check if user has hub admin role (can modify federation)
+ */
+export function hasHubAdminRole(roles: string[]): boolean {
+  return HUB_ADMIN_ROLES.some(role => roles.includes(role));
+}
+
+/**
+ * Check if user has spoke admin role (read-only federation)
+ */
+export function hasSpokeAdminRole(roles: string[]): boolean {
+  return SPOKE_ADMIN_ROLES.some(role => roles.includes(role));
+}
+
+/**
+ * Check if user has any admin role
+ */
+export function hasAnyAdminRole(roles: string[]): boolean {
+  return ALL_ADMIN_ROLES.some(role => roles.includes(role));
+}
+
+/**
+ * Check if user has write access to federation resources
+ * Only hub admins can modify trusted issuers, federation matrix, etc.
+ */
+export function hasFederationWriteAccess(roles: string[]): boolean {
+  return roles.includes('super_admin') || roles.includes('hub_admin');
+}
 
 export interface IUserListParams {
   page?: number;

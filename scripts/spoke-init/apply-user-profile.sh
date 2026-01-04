@@ -117,7 +117,7 @@ echo ""
 if [ "$CODE_UPPER" = "USA" ]; then
     KC_CONTAINER="dive-hub-keycloak"
     KEYCLOAK_PORT="8443"
-    REALM="dive-v3-broker"
+    REALM="dive-v3-broker-usa"
 else
     KC_CONTAINER="dive-spoke-${COUNTRY_CODE}-keycloak"
     # Try to find running container
