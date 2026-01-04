@@ -122,6 +122,87 @@ map_clearance_coi() {
     esac
 }
 
+# =============================================================================
+# OCEAN-THEMED PSEUDONYM GENERATOR (ACP-240 PII Minimization)
+# =============================================================================
+# Deterministic pseudonym generation aligned with frontend implementation
+# (frontend/src/lib/pseudonym-generator.ts)
+#
+# Purpose: Generate human-friendly, privacy-preserving pseudonyms instead of
+# real names or clearance-based identifiers.
+#
+# Properties:
+# - Deterministic: Same uniqueID always generates same pseudonym
+# - Human-friendly: Easy to remember ("Azure Whale", "Golden Dolphin")
+# - Collision-resistant: 36 × 36 = 1,296 unique combinations
+# - Privacy-preserving: No PII exposure in logs, UI, or federation tokens
+#
+# Date: January 3, 2026
+# Compliance: ACP-240 Section 6.2, NIST SP 800-53 (IA-4)
+# =============================================================================
+
+# Ocean-themed adjectives (36 total - matches frontend)
+OCEAN_ADJECTIVES=(
+    "Azure" "Blue" "Cerulean" "Deep" "Electric" "Frosted"
+    "Golden" "Jade" "Midnight" "Pacific" "Royal" "Sapphire"
+    "Teal" "Turquoise" "Coral" "Pearl" "Silver" "Arctic"
+    "Crystalline" "Emerald" "Indigo" "Obsidian" "Platinum" "Violet"
+    "Aquamarine" "Bronze" "Cobalt" "Diamond" "Ebony" "Fuchsia"
+    "Garnet" "Honey" "Ivory" "Jasper" "Kyanite" "Lavender"
+)
+
+# Ocean-themed nouns (36 total - matches frontend)
+OCEAN_NOUNS=(
+    "Whale" "Dolphin" "Orca" "Marlin" "Shark" "Ray"
+    "Reef" "Current" "Wave" "Tide" "Storm" "Breeze"
+    "Kelp" "Anemone" "Starfish" "Octopus" "Nautilus" "Turtle"
+    "Lagoon" "Atoll" "Channel" "Harbor" "Bay" "Strait"
+    "Jellyfish" "Seahorse" "Manta" "Barracuda" "Angelfish" "Clownfish"
+    "Eel" "Grouper" "Lobster" "Manatee" "Narwhal" "Pufferfish"
+)
+
+##
+# Generate deterministic ocean-themed pseudonym from uniqueID
+#
+# Arguments:
+#   $1 - uniqueID (username/UUID)
+#
+# Returns:
+#   Two words (firstName lastName) separated by space
+#   Example: "Azure Whale"
+#
+# Algorithm:
+#   - Hash uniqueID using simple character-based accumulation
+#   - Use hash modulo to select adjective and noun deterministically
+#   - Same uniqueID always produces same pseudonym
+#   - Matches frontend implementation for consistency
+##
+generate_ocean_pseudonym() {
+    local unique_id="$1"
+
+    if [[ -z "$unique_id" ]]; then
+        echo "Unknown User"
+        return 1
+    fi
+
+    # Simple deterministic hash (matches frontend algorithm)
+    local hash=0
+    for (( i=0; i<${#unique_id}; i++ )); do
+        local char_code=$(printf '%d' "'${unique_id:$i:1}")
+        # Equivalent to: hash = ((hash << 5) - hash) + char_code
+        hash=$(( ((hash * 31) + char_code) & 0x7FFFFFFF )) # Keep positive
+    done
+
+    # Select adjective and noun using different hash portions
+    local adj_idx=$((hash % 36))
+    local noun_idx=$(((hash / 256) % 36))  # Use different bits for noun
+
+    local adjective="${OCEAN_ADJECTIVES[$adj_idx]}"
+    local noun="${OCEAN_NOUNS[$noun_idx]}"
+
+    echo "${adjective} ${noun}"
+}
+
 # Explicit lookup tables for clearance/COI so attributes are never blank
 declare -A CLEARANCE_LEVELS=(
     [1]="UNCLASSIFIED"
@@ -235,43 +316,31 @@ else
 fi
 
 # =============================================================================
-# Create Roles
+# Create Roles (Spoke-specific: spoke_admin)
 # =============================================================================
 log_step "Creating roles..."
 
-# Create admin role if not exists
-ADMIN_ROLE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" | jq -r '.name // empty')
+# Role definitions with descriptions
+declare -A ROLE_DESCRIPTIONS=(
+    ["dive-user"]="Standard DIVE user role"
+    ["dive-admin"]="Legacy DIVE administrator (backwards compatibility)"
+    ["spoke_admin"]="Spoke administrator - read-only federation view, local admin"
+)
 
-if [[ -z "$ADMIN_ROLE_EXISTS" ]]; then
-    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{
-            "name": "dive-admin",
-            "description": "DIVE V3 Administrator role with full access to admin console"
-        }' 2>/dev/null
-    log_success "Created role: dive-admin"
-else
-    log_info "Role exists: dive-admin"
-fi
+for role in "dive-user" "dive-admin" "spoke_admin"; do
+    ROLE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/${role}" | jq -r '.name // empty')
 
-# Create user role if not exists
-USER_ROLE_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-user" | jq -r '.name // empty')
-
-if [[ -z "$USER_ROLE_EXISTS" ]]; then
-    kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{
-            "name": "dive-user",
-            "description": "DIVE V3 Standard user role"
-        }' 2>/dev/null
-    log_success "Created role: dive-user"
-else
-    log_info "Role exists: dive-user"
-fi
+    if [[ -z "$ROLE_EXISTS" ]]; then
+        kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\": \"${role}\", \"description\": \"${ROLE_DESCRIPTIONS[$role]}\"}" 2>/dev/null
+        log_success "Created role: $role"
+    else
+        log_info "Role exists: $role"
+    fi
+done
 
 # =============================================================================
 # Create Role Mapper for Client
@@ -308,6 +377,37 @@ if [[ -n "$CLIENT_UUID" && "$CLIENT_UUID" != "null" ]]; then
         log_success "Created role mapper"
     else
         log_info "Role mapper exists"
+    fi
+
+    # Create admin_role protocol mapper (for JWT claims)
+    log_step "Configuring admin_role mapper..."
+
+    ADMIN_ROLE_MAPPER_EXISTS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+        "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" | \
+        jq -r '.[] | select(.name == "admin_role") | .name')
+
+    if [[ -z "$ADMIN_ROLE_MAPPER_EXISTS" ]]; then
+        kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+                "name": "admin_role",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-realm-role-mapper",
+                "consentRequired": false,
+                "config": {
+                    "introspection.token.claim": "true",
+                    "multivalued": "true",
+                    "userinfo.token.claim": "true",
+                    "id.token.claim": "true",
+                    "access.token.claim": "true",
+                    "claim.name": "admin_role",
+                    "jsonType.label": "String"
+                }
+            }' > /dev/null 2>&1
+        log_success "Created admin_role protocol mapper"
+    else
+        log_info "admin_role mapper already exists"
     fi
 
     # Configure native oidc-amr-mapper (reads from authentication session)
@@ -400,7 +500,8 @@ create_user() {
 
         log_info "User exists: ${username} (updating with amr=${amr})"
         # Update attributes on existing user with credential-based AMR
-        local attrs_update="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"], \"amr\": ${amr}"
+        # FIX: Remove -001 suffix for ACP-240 PII minimization (uniqueID = username)
+        local attrs_update="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}\"], \"amr\": ${amr}"
         if [[ -n "$acp_coi_json" ]]; then
             attrs_update="${attrs_update}, \"acpCOI\": ${acp_coi_json}"
         fi
@@ -427,7 +528,8 @@ create_user() {
     fi
 
     # Build attributes JSON
-    local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}-001\"], \"amr\": ${initial_amr}"
+    # FIX: Remove -001 suffix for ACP-240 PII minimization (uniqueID = username)
+    local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}\"], \"amr\": ${initial_amr}"
     if [[ -n "$acp_coi_json" ]]; then
         attrs="${attrs}, \"acpCOI\": ${acp_coi_json}"
     fi
@@ -471,8 +573,20 @@ create_user() {
                 -d "[{\"id\": \"${user_role_id}\", \"name\": \"dive-user\"}]"
         fi
 
-        # Assign dive-admin role if admin
+        # Assign admin roles if admin (spoke gets spoke_admin + dive-admin for backwards compat)
         if [[ "$is_admin" == "true" ]]; then
+            # Assign spoke_admin role (new role for spoke administrators)
+            local spoke_admin_role_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
+                "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/spoke_admin" | jq -r '.id')
+
+            if [[ -n "$spoke_admin_role_id" && "$spoke_admin_role_id" != "null" ]]; then
+                kc_curl -X POST "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
+                    -H "Authorization: Bearer $TOKEN" \
+                    -H "Content-Type: application/json" \
+                    -d "[{\"id\": \"${spoke_admin_role_id}\", \"name\": \"spoke_admin\"}]"
+            fi
+
+            # Also assign dive-admin for backwards compatibility
             local admin_role_id=$(kc_curl -H "Authorization: Bearer $TOKEN" \
                 "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" | jq -r '.id')
 
@@ -507,7 +621,10 @@ echo ""
 
 for level in 1 2 3 4; do
     username="testuser-${CODE_LOWER}-${level}"
-    email="${username}@${CODE_LOWER}.dive25.com"
+    # FIX #3: Make email optional for ACP-240 PII minimization
+    # Email is NOT required for federation (only uniqueID, clearance, COA, COI)
+    # Set to empty string unless user provides real email (future enhancement)
+    email=""
     clearance="${CLEARANCE_LEVELS[$level]}"
     if [[ -z "$clearance" ]]; then
         clearance="$(map_clearance_level "$level")"
@@ -517,13 +634,17 @@ for level in 1 2 3 4; do
         coi="$(map_clearance_coi "$level")"
     fi
 
-    # Determine first/last name based on level
-    case $level in
-        1) first_name="Unclassified"; last_name="User" ;;
-        2) first_name="Confidential"; last_name="Analyst" ;;
-        3) first_name="Secret"; last_name="Officer" ;;
-        4) first_name="TopSecret"; last_name="Director" ;;
-    esac
+    # FIX #2: Generate ocean-themed pseudonym (replaces clearance-based names)
+    # Deterministic: same username always generates same pseudonym
+    # Example: "Azure Whale", "Golden Dolphin", "Cerulean Reef"
+    # Matches frontend pseudonym-generator.ts for consistency
+    read first_name last_name < <(generate_ocean_pseudonym "$username")
+
+    # Fallback if generation fails (should never happen)
+    if [[ -z "$first_name" || -z "$last_name" ]]; then
+        first_name="Ocean"
+        last_name="User"
+    fi
 
     create_user "$username" "$email" "$first_name" "$last_name" "$clearance" "$coi" "$TEST_USER_PASSWORD" "false"
 done
@@ -535,9 +656,19 @@ echo ""
 log_step "Creating admin user..."
 
 admin_username="admin-${CODE_LOWER}"
-admin_email="admin@${CODE_LOWER}.dive25.com"
+# FIX #3: Make email optional for ACP-240 PII minimization
+admin_email=""
 
-create_user "$admin_username" "$admin_email" "Administrator" "${COUNTRY_NAME}" "TOP_SECRET" "NATO-COSMIC,FVEY,FIVE_EYES" "$ADMIN_USER_PASSWORD" "true"
+# FIX #2: Generate ocean-themed pseudonym for admin
+read admin_first_name admin_last_name < <(generate_ocean_pseudonym "$admin_username")
+
+# Fallback if generation fails
+if [[ -z "$admin_first_name" || -z "$admin_last_name" ]]; then
+    admin_first_name="Admin"
+    admin_last_name="${COUNTRY_NAME}"
+fi
+
+create_user "$admin_username" "$admin_email" "$admin_first_name" "$admin_last_name" "TOP_SECRET" "NATO-COSMIC,FVEY,FIVE_EYES" "$ADMIN_USER_PASSWORD" "true"
 
 # =============================================================================
 # Summary

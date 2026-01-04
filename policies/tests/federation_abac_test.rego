@@ -510,9 +510,7 @@ test_deny_federated_search_unauthenticated if {
             "federatedSearch": true
         }
     }
-}
-
-# Test: Allow federated resource from trusted origin
+}# Test: Allow federated resource from trusted origin
 test_allow_federated_resource_trusted_origin if {
     federation.allow_federated_resource with input as {
         "subject": {

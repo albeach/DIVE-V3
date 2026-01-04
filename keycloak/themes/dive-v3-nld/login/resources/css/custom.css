@@ -98,9 +98,7 @@
 
 .webauthn-button {
     background: linear-gradient(135deg, #AE1C28 0%, #21468B 100%);
-}
-
-/* Passkey/WebAuthn icon coloring */
+}/* Passkey/WebAuthn icon coloring */
 .passkey-icon {
     color: #AE1C28;
 }/* Footer styling */

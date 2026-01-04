@@ -22,3 +22,7 @@ export { TokenExpiryBadge } from './TokenExpiryBadge';
 export { OPALServerHealth } from './OPALServerHealth';
 export { OPALClientList } from './OPALClientList';
 export { OPALTransactionLog } from './OPALTransactionLog';
+
+// Federation UI/UX Integration (Jan 2026)
+export { TrustedIssuersList } from './TrustedIssuersList';
+export { FederationMatrix } from './FederationMatrix';

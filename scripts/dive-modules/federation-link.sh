@@ -387,11 +387,11 @@ _federation_link_direct() {
     #   - Trust the spoke's AMR/ACR claims (spoke enforces WebAuthn/OTP)
     #
     # When a Spoke creates an IdP for the Hub (USA):
-    #   - firstBrokerLoginFlowAlias handles new user creation
+    #   - firstBrokerLoginFlowAlias="" to skip profile prompts (trust source IdP)
     #   - postBrokerLoginFlowAlias can be empty (spoke already authenticated)
     #
     # Flow distinction:
-    # - firstBrokerLoginFlowAlias: Handles NEW user creation/linking (use "first broker login")
+    # - firstBrokerLoginFlowAlias: Set to "" to skip profile prompts (federation trusts source IdP)
     # - postBrokerLoginFlowAlias: Runs AFTER login - LEAVE EMPTY to trust spoke MFA
     #
     # trustEmail=true = automatic account creation/linking (no user review prompt)
@@ -422,7 +422,8 @@ _federation_link_direct() {
         \"trustEmail\": true,
         \"storeToken\": true,
         \"linkOnly\": false,
-        \"firstBrokerLoginFlowAlias\": \"first broker login\",
+        \"firstBrokerLoginFlowAlias\": \"\",
+        \"updateProfileFirstLoginMode\": \"off\",
         \"postBrokerLoginFlowAlias\": \"${post_broker_flow}\",
         \"config\": {
             \"clientId\": \"${federation_client_id}\",
@@ -1330,7 +1331,7 @@ federation_verify() {
     # ==========================================================================
     # Check 6: MFA flow binding on IdP (Defect B fix)
     # MFA is enforced via postBrokerLoginFlowAlias (runs AFTER login)
-    # firstBrokerLoginFlowAlias should be "first broker login" for proper user creation
+    # firstBrokerLoginFlowAlias should be "" (empty) to skip profile prompts
     # ==========================================================================
     ((checks_total++))
     echo -n "6. MFA flow binding on ${remote_lower}-idp: "
@@ -1360,6 +1361,77 @@ federation_verify() {
         echo -e "${YELLOW}⚠ SKIP${NC} (no token)"
     fi
 
+    # ==========================================================================
+    # Check 7: firstBrokerLoginFlowAlias is empty (skip profile prompts)
+    # ==========================================================================
+    ((checks_total++))
+    echo -n "7. firstBrokerLoginFlowAlias empty on ${remote_lower}-idp: "
+    if [ -n "$local_token" ]; then
+        local idp_config
+        idp_config=$(docker exec "$local_kc_container" curl -sf --max-time 10 \
+            -H "Authorization: Bearer $local_token" \
+            "http://localhost:8080/admin/realms/${local_realm}/identity-provider/instances/${remote_idp_alias}" 2>/dev/null)
+
+        local first_broker_flow
+        first_broker_flow=$(echo "$idp_config" | jq -r '.firstBrokerLoginFlowAlias // ""' 2>/dev/null)
+
+        if [ -z "$first_broker_flow" ] || [ "$first_broker_flow" = "null" ]; then
+            echo -e "${GREEN}✓ PASS${NC} (empty - skip profile prompts)"
+            ((checks_passed++))
+        else
+            echo -e "${YELLOW}⚠ WARN${NC} (set to '${first_broker_flow}' - may prompt users)"
+        fi
+    else
+        echo -e "${YELLOW}⚠ SKIP${NC} (no token)"
+    fi
+
+    # ==========================================================================
+    # Check 8: Client secrets match between IdP config and target client
+    # ==========================================================================
+    ((checks_total++))
+    echo -n "8. Client secrets in sync: "
+    if [ -n "$local_token" ] && [ -n "$remote_token" ]; then
+        # Get IdP client secret from local
+        local idp_config
+        idp_config=$(docker exec "$local_kc_container" curl -sf --max-time 10 \
+            -H "Authorization: Bearer $local_token" \
+            "http://localhost:8080/admin/realms/${local_realm}/identity-provider/instances/${remote_idp_alias}" 2>/dev/null)
+        local idp_secret
+        idp_secret=$(echo "$idp_config" | jq -r '.config.clientSecret // ""' 2>/dev/null)
+
+        # Get federation client secret from remote
+        local fed_client_id="dive-v3-broker-${local_lower}"
+        local fed_client_uuid
+        fed_client_uuid=$(docker exec "$remote_kc_container" curl -sf \
+            -H "Authorization: Bearer $remote_token" \
+            "http://localhost:8080/admin/realms/${remote_realm}/clients?clientId=${fed_client_id}" 2>/dev/null | \
+            jq -r '.[0].id // ""')
+
+        if [ -n "$fed_client_uuid" ] && [ "$fed_client_uuid" != "" ]; then
+            local client_secret_response
+            client_secret_response=$(docker exec "$remote_kc_container" curl -sf \
+                -H "Authorization: Bearer $remote_token" \
+                "http://localhost:8080/admin/realms/${remote_realm}/clients/${fed_client_uuid}/client-secret" 2>/dev/null)
+            local client_secret
+            client_secret=$(echo "$client_secret_response" | jq -r '.value // ""' 2>/dev/null)
+
+            if [ -n "$idp_secret" ] && [ -n "$client_secret" ]; then
+                if [ "$idp_secret" = "$client_secret" ]; then
+                    echo -e "${GREEN}✓ PASS${NC} (secrets match)"
+                    ((checks_passed++))
+                else
+                    echo -e "${RED}✗ FAIL${NC} (secrets mismatch - run 'federation sync-secrets ${remote_code}')"
+                fi
+            else
+                echo -e "${YELLOW}⚠ SKIP${NC} (could not retrieve secrets)"
+            fi
+        else
+            echo -e "${YELLOW}⚠ SKIP${NC} (client not found)"
+        fi
+    else
+        echo -e "${YELLOW}⚠ SKIP${NC} (no tokens)"
+    fi
+
     # Summary
     echo ""
     echo "================================"
@@ -1367,7 +1439,7 @@ federation_verify() {
 
     if [ $checks_passed -eq $checks_total ]; then
         echo -e "${GREEN}🎉 Bidirectional federation is properly configured!${NC}"
-    elif [ $checks_passed -ge 2 ]; then
+    elif [ $checks_passed -ge 4 ]; then
         echo -e "${YELLOW}⚠️  Partial federation - some checks failed${NC}"
         echo "Run './dive federation fix ${remote_code}' to repair"
     else
@@ -1381,6 +1453,156 @@ federation_verify() {
     fi
 
     [ $checks_passed -eq $checks_total ]
+}
+
+# =============================================================================
+# VERIFY-ALL COMMAND - Run 8-point check on all configured spokes
+# =============================================================================
+
+federation_verify_all() {
+    echo ""
+    echo -e "${BOLD}Federation Verification: All Spokes (8-Point Check)${NC}"
+    echo ""
+
+    local local_instance="${INSTANCE:-USA}"
+    local local_code="${local_instance^^}"
+    local local_lower="${local_instance,,}"
+
+    # Get local Keycloak container
+    local local_kc_container
+    if [ "$local_code" = "USA" ]; then
+        local_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    else
+        local_kc_container="dive-spoke-${local_lower}-keycloak"
+    fi
+
+    # Check if container is running
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${local_kc_container}$"; then
+        log_error "Keycloak container not running: ${local_kc_container}"
+        return 1
+    fi
+
+    # Get admin credentials
+    local local_kc_pass
+    local_kc_pass=$(_get_keycloak_admin_password_ssot "$local_kc_container" "$local_lower")
+    if [ -z "$local_kc_pass" ]; then
+        log_error "Cannot get admin password for ${local_code}"
+        return 1
+    fi
+
+    # Get admin token
+    local local_token
+    local_token=$(docker exec "$local_kc_container" curl -sf --max-time 10 \
+        -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "username=admin" \
+        -d "password=${local_kc_pass}" \
+        -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token // ""')
+
+    if [ -z "$local_token" ]; then
+        log_error "Failed to get admin token for ${local_code}"
+        return 1
+    fi
+
+    # Get list of IdPs (excluding USA if we are USA hub)
+    local local_realm
+    if [ "$local_code" = "USA" ]; then
+        local_realm="dive-v3-broker-usa"
+    else
+        local_realm="dive-v3-broker-${local_lower}"
+    fi
+
+    local idps
+    idps=$(docker exec "$local_kc_container" curl -sf --max-time 10 \
+        -H "Authorization: Bearer $local_token" \
+        "http://localhost:8080/admin/realms/${local_realm}/identity-provider/instances" 2>/dev/null | \
+        jq -r '.[].alias' 2>/dev/null | grep -E '^[a-z]{3}-idp$' | sed 's/-idp$//' | tr '[:lower:]' '[:upper:]')
+
+    if [ -z "$idps" ]; then
+        log_warn "No federation IdPs found in ${local_code}"
+        return 0
+    fi
+
+    # Results tracking
+    local total_spokes=0
+    local passed_spokes=0
+    local failed_spokes=0
+    local partial_spokes=0
+
+    printf "\n%-8s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-10s\n" \
+        "SPOKE" "IdP↓" "IdP↑" "Cli↓" "Cli↑" "Map" "MFA" "FBL" "Sec" "STATUS"
+    echo "───────────────────────────────────────────────────────────────────────────────"
+
+    for spoke in $idps; do
+        ((total_spokes++))
+        local spoke_lower="${spoke,,}"
+        local spoke_kc_container="dive-spoke-${spoke_lower}-keycloak"
+
+        # Check if spoke is running
+        if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${spoke_kc_container}$"; then
+            printf "%-8s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  ${YELLOW}%-10s${NC}\n" \
+                "$spoke" "-" "-" "-" "-" "-" "-" "-" "-" "OFFLINE"
+            ((failed_spokes++))
+            continue
+        fi
+
+        # Run 8-point verification (capture results)
+        local check_results
+        check_results=$(federation_verify "$spoke" 2>&1)
+
+        # Parse check results
+        local c1 c2 c3 c4 c5 c6 c7 c8
+        c1=$(echo "$check_results" | grep "1\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c2=$(echo "$check_results" | grep "2\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c3=$(echo "$check_results" | grep "3\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c4=$(echo "$check_results" | grep "4\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c5=$(echo "$check_results" | grep "5\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c6=$(echo "$check_results" | grep "6\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c7=$(echo "$check_results" | grep "7\." | grep -q "PASS" && echo "✓" || echo "✗")
+        c8=$(echo "$check_results" | grep "8\." | grep -q "PASS" && echo "✓" || echo "✗")
+
+        # Count passed checks
+        local pass_count
+        pass_count=$(echo "$check_results" | grep -c "PASS" || echo "0")
+
+        local status status_color
+        if [ "$pass_count" -eq 8 ]; then
+            status="OK"
+            status_color="${GREEN}"
+            ((passed_spokes++))
+        elif [ "$pass_count" -ge 4 ]; then
+            status="PARTIAL"
+            status_color="${YELLOW}"
+            ((partial_spokes++))
+        else
+            status="FAIL"
+            status_color="${RED}"
+            ((failed_spokes++))
+        fi
+
+        printf "%-8s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  %-6s  ${status_color}%-10s${NC}\n" \
+            "$spoke" "$c1" "$c2" "$c3" "$c4" "$c5" "$c6" "$c7" "$c8" "$status (${pass_count}/8)"
+    done
+
+    echo "───────────────────────────────────────────────────────────────────────────────"
+    echo ""
+    echo "Summary: ${total_spokes} spokes verified"
+    echo -e "  ${GREEN}✓ Passed: ${passed_spokes}${NC}"
+    if [ "$partial_spokes" -gt 0 ]; then
+        echo -e "  ${YELLOW}⚠ Partial: ${partial_spokes}${NC}"
+    fi
+    if [ "$failed_spokes" -gt 0 ]; then
+        echo -e "  ${RED}✗ Failed/Offline: ${failed_spokes}${NC}"
+    fi
+    echo ""
+
+    if [ "$failed_spokes" -eq 0 ] && [ "$partial_spokes" -eq 0 ]; then
+        echo -e "${GREEN}🎉 All federation links fully verified!${NC}"
+        return 0
+    else
+        echo "Run './dive federation fix <CODE>' to repair failed federations"
+        return 1
+    fi
 }
 
 # =============================================================================
@@ -1607,9 +1829,37 @@ federation_sync_secrets() {
         success=false
     fi
 
+    # Direction 3: Validate bidirectional connectivity
+    echo -e "${CYAN}Validating bidirectional connectivity...${NC}"
+    local validation_passed=true
+
+    # Check Hub can reach spoke's OIDC discovery
+    eval "$(get_instance_ports "$spoke_upper")"
+    local spoke_kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+    local spoke_realm="dive-v3-broker-${spoke_lower}"
+    local discovery_url="https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration"
+
+    if curl -sk --max-time 5 "$discovery_url" | grep -q '"issuer"' 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} Hub→Spoke: OIDC discovery reachable at ${spoke_realm}"
+    else
+        echo -e "  ${RED}✗${NC} Hub→Spoke: Cannot reach OIDC discovery at ${discovery_url}"
+        validation_passed=false
+    fi
+
+    # Check Spoke can reach Hub's OIDC discovery
+    local hub_discovery_url="https://localhost:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration"
+    if curl -sk --max-time 5 "$hub_discovery_url" | grep -q '"issuer"' 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} Spoke→Hub: OIDC discovery reachable at dive-v3-broker-usa"
+    else
+        echo -e "  ${RED}✗${NC} Spoke→Hub: Cannot reach OIDC discovery at ${hub_discovery_url}"
+        validation_passed=false
+    fi
+
     echo ""
-    if [ "$success" = true ]; then
-        log_success "Client secrets synchronized for ${spoke_upper} ↔ USA"
+    if [ "$success" = true ] && [ "$validation_passed" = true ]; then
+        log_success "Client secrets synchronized and connectivity validated for ${spoke_upper} ↔ USA"
+    elif [ "$success" = true ]; then
+        log_warn "Secrets synced but connectivity validation failed"
     else
         log_warn "Some secrets could not be synced - federation may need setup first"
     fi

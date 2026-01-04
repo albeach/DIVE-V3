@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { 
-  LayoutDashboard, 
-  Globe2, 
-  Server, 
-  Users, 
-  ShieldCheck, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Globe2,
+  Server,
+  Users,
+  ShieldCheck,
+  FileText,
   Settings,
   LogOut,
   Network,
@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
+import { HUB_ADMIN_ROLES, SPOKE_ADMIN_ROLES, hasHubAdminRole, hasSpokeAdminRole } from '@/types/admin.types';
 
 interface NavItem {
   title: string;
@@ -154,26 +155,45 @@ const spokeNavItems: NavItem[] = [
   }
 ];
 
-// Check if user has hub admin roles
-function isHubAdmin(roles: string[] = []): boolean {
-  const hubRoles = ['hub-super-admin', 'hub-spoke-admin', 'dive-admin', 'admin'];
-  return roles.some(r => hubRoles.includes(r.toLowerCase()));
+/**
+ * Check if user has hub admin roles (can modify federation)
+ * Uses JWT claims via admin_role claim populated by Keycloak protocol mapper
+ */
+function isHubAdmin(roles: string[] = [], adminRoles: string[] = []): boolean {
+  // Check both roles and admin_role claims for backwards compatibility
+  const allRoles = [...new Set([...roles, ...adminRoles])];
+  return hasHubAdminRole(allRoles);
 }
 
-// Check if user has spoke admin roles
-function isSpokeAdmin(roles: string[] = []): boolean {
-  const spokeRoles = ['spoke-admin', 'spoke-operator'];
-  return roles.some(r => spokeRoles.includes(r.toLowerCase()));
+/**
+ * Check if user has spoke admin roles (read-only federation view)
+ * Uses JWT claims via admin_role claim populated by Keycloak protocol mapper
+ */
+function isSpokeAdmin(roles: string[] = [], adminRoles: string[] = []): boolean {
+  // Check both roles and admin_role claims for backwards compatibility
+  const allRoles = [...new Set([...roles, ...adminRoles])];
+  return hasSpokeAdminRole(allRoles);
 }
 
-// Detect if we're running on a spoke instance
-function isOnSpokeInstance(): boolean {
+/**
+ * Detect instance type from session or hostname
+ * Primary: Check session for instance_type claim
+ * Fallback: Check hostname/port for spoke indicators
+ */
+function isOnSpokeInstance(session: any): boolean {
+  // Check session for explicit instance type (populated by Keycloak)
+  const instanceType = session?.user?.instanceType || session?.instanceType;
+  if (instanceType === 'spoke') return true;
+  if (instanceType === 'hub') return false;
+
+  // Fallback to hostname/port detection
   if (typeof window === 'undefined') return false;
   const hostname = window.location.hostname;
   const port = window.location.port;
-  // NZL spoke runs on port 13000, other spokes on different ports
-  const spokePorts = ['13000', '13001', '13002', '13003'];
-  return spokePorts.includes(port) || hostname.includes('spoke') || hostname.includes('nzl');
+  // Spoke instances typically run on different ports or have spoke in hostname
+  const spokePorts = ['13000', '13001', '13002', '13003', '13010', '13020'];
+  const spokeIndicators = ['spoke', 'nzl', 'fra', 'gbr', 'deu', 'can'];
+  return spokePorts.includes(port) || spokeIndicators.some(s => hostname.includes(s));
 }
 
 export function AdminSidebar() {
@@ -182,14 +202,27 @@ export function AdminSidebar() {
   const [pendingCount, setPendingCount] = useState(0);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
-  // Determine user type
-  const userRoles = (session?.user as { roles?: string[] })?.roles || [];
-  const isHub = isHubAdmin(userRoles);
-  const isSpoke = isSpokeAdmin(userRoles);
-  const onSpokeInstance = isOnSpokeInstance();
-  
-  // Use spoke nav if on spoke instance or user has spoke-only roles
-  const useSpokenNav = onSpokeInstance || (isSpoke && !isHub);
+  // Extract roles from session
+  // JWT claims: roles (realm roles), admin_role (explicit admin roles)
+  const user = session?.user as {
+    roles?: string[];
+    admin_role?: string[];
+    instanceType?: string;
+  } | undefined;
+
+  const userRoles = user?.roles || [];
+  const adminRoles = user?.admin_role || [];
+
+  // Determine user type using JWT claims
+  const isHub = isHubAdmin(userRoles, adminRoles);
+  const isSpoke = isSpokeAdmin(userRoles, adminRoles);
+  const onSpokeInstance = isOnSpokeInstance(session);
+
+  // Determine which navigation to show:
+  // 1. If user has hub_admin role, show hub nav (regardless of instance)
+  // 2. If user has spoke_admin role OR is on spoke instance, show spoke nav
+  // 3. Default to hub nav for backwards compatibility
+  const useSpokenNav = (isSpoke && !isHub) || (onSpokeInstance && !isHub);
   const navItems = useSpokenNav ? spokeNavItems : hubNavItems;
 
   // Fetch pending spoke count (only for hub admins)
@@ -216,12 +249,12 @@ export function AdminSidebar() {
   // Auto-expand Federation/Spoke Admin if on relevant page
   useEffect(() => {
     if (pathname.startsWith('/admin/federation')) {
-      setExpandedItems((prev) => 
+      setExpandedItems((prev) =>
         prev.includes('Federation') ? prev : [...prev, 'Federation']
       );
     }
     if (pathname.startsWith('/admin/spoke')) {
-      setExpandedItems((prev) => 
+      setExpandedItems((prev) =>
         prev.includes('Spoke Admin') ? prev : [...prev, 'Spoke Admin']
       );
     }

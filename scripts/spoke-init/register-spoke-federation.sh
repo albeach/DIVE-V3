@@ -294,13 +294,13 @@ log_success "Updated federation-registry.json"
 
 log_info "Checking spoke's TRUSTED_ISSUERS configuration..."
 
-# Hub issuer URLs that must be trusted
-HUB_ISSUERS="https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker"
+# Hub issuer URLs that must be trusted (FIX: Jan 2026 - Updated to dive-v3-broker-usa)
+HUB_ISSUERS="https://localhost:8443/realms/dive-v3-broker-usa,https://keycloak:8443/realms/dive-v3-broker-usa,https://usa-idp.dive25.com/realms/dive-v3-broker-usa"
 
 # Check current TRUSTED_ISSUERS in docker-compose
 CURRENT_ISSUERS=$(grep "TRUSTED_ISSUERS:" "$COMPOSE_FILE" | head -1 | sed 's/.*TRUSTED_ISSUERS: //' || echo "")
 
-if [[ "$CURRENT_ISSUERS" != *"https://localhost:8443/realms/dive-v3-broker"* ]]; then
+if [[ "$CURRENT_ISSUERS" != *"https://localhost:8443/realms/dive-v3-broker-usa"* ]]; then
     log_info "Adding Hub issuers to spoke's TRUSTED_ISSUERS..."
 
     # Update the docker-compose file to include Hub issuers

@@ -1,6 +1,6 @@
 /**
  * Admin API Type Definitions
- * 
+ *
  * Types for super admin operations: IdP management, user management, audit logs
  */
 
@@ -22,10 +22,23 @@ import {
 export const SUPER_ADMIN_ROLE = 'super_admin';
 
 /**
- * All roles that grant admin access
+ * Hub-specific admin roles
+ * - super_admin: Full system access (future use)
+ * - hub_admin: Can manage federation, spokes, trusted issuers, policies
+ */
+export const HUB_ADMIN_ROLES = ['super_admin', 'hub_admin'] as const;
+
+/**
+ * Spoke-specific admin roles
+ * - spoke_admin: Read-only federation view, local admin for spoke instance
+ */
+export const SPOKE_ADMIN_ROLES = ['spoke_admin'] as const;
+
+/**
+ * All roles that grant admin access (includes legacy roles for backwards compatibility)
  * Must match frontend admin layout role check
  */
-export const ADMIN_ROLES = ['super_admin', 'admin', 'dive-admin'] as const;
+export const ADMIN_ROLES = ['super_admin', 'hub_admin', 'spoke_admin', 'admin', 'dive-admin'] as const;
 
 /**
  * Check if user has any admin role
@@ -34,12 +47,41 @@ export const hasAdminRole = (roles: string[]): boolean => {
     return ADMIN_ROLES.some(adminRole => roles.includes(adminRole));
 };
 
+/**
+ * Check if user has hub admin role (can modify federation)
+ */
+export const hasHubAdminRole = (roles: string[]): boolean => {
+    // Also include legacy 'dive-admin' for backwards compatibility on hub
+    const hubRoles = [...HUB_ADMIN_ROLES, 'admin', 'dive-admin'];
+    return hubRoles.some(adminRole => roles.includes(adminRole));
+};
+
+/**
+ * Check if user has spoke admin role (read-only federation)
+ */
+export const hasSpokeAdminRole = (roles: string[]): boolean => {
+    return SPOKE_ADMIN_ROLES.some(adminRole => roles.includes(adminRole));
+};
+
+/**
+ * Check if user has write access to federation resources
+ * Only hub admins and super admins can modify federation
+ */
+export const hasFederationWriteAccess = (roles: string[]): boolean => {
+    return roles.includes('super_admin') || roles.includes('hub_admin');
+};
+
 export interface ISuperAdminUser {
     uniqueID: string;
     roles: string[];
     clearance?: string;
     countryOfAffiliation?: string;
 }
+
+/**
+ * Admin role type for type checking
+ */
+export type AdminRoleType = typeof ADMIN_ROLES[number];
 
 // ============================================
 // IdP Approval Types

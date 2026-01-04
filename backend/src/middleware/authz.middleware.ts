@@ -631,6 +631,28 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',  // Custom domain: dive-v3-broker
             'https://dev-auth.dive25.com/realms/dive-v3-broker',   // Cloudflare Tunnel: dive-v3-broker
 
+            // Hub pattern: dive-v3-broker-{country} for localhost (Phase 3B Hub deployments)
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-usa`,
+            'http://localhost:8081/realms/dive-v3-broker-usa',
+            'https://localhost:8443/realms/dive-v3-broker-usa',
+            'http://localhost:8080/realms/dive-v3-broker-usa',
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-fra`,
+            'http://localhost:8081/realms/dive-v3-broker-fra',
+            'https://localhost:8443/realms/dive-v3-broker-fra',
+            'http://localhost:8080/realms/dive-v3-broker-fra',
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-gbr`,
+            'http://localhost:8081/realms/dive-v3-broker-gbr',
+            'https://localhost:8443/realms/dive-v3-broker-gbr',
+            'http://localhost:8080/realms/dive-v3-broker-gbr',
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-deu`,
+            'http://localhost:8081/realms/dive-v3-broker-deu',
+            'https://localhost:8443/realms/dive-v3-broker-deu',
+            'http://localhost:8080/realms/dive-v3-broker-deu',
+            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-can`,
+            'http://localhost:8081/realms/dive-v3-broker-can',
+            'https://localhost:8443/realms/dive-v3-broker-can',
+            'http://localhost:8080/realms/dive-v3-broker-can',
+
             // Individual IdP realms (for direct login to sub-realms) - legacy pattern dive-v3-{country}
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-usa`,
             'http://localhost:8081/realms/dive-v3-usa',

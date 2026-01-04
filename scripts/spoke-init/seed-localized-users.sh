@@ -128,7 +128,8 @@ create_or_update_user() {
     local user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
 
-    local unique_id="${username}-001"
+    # FIX: Remove -001 suffix for ACP-240 PII minimization (uniqueID = username)
+    local unique_id="${username}"
     # PII Minimization: Use pseudonymized email and names
     local pseudonym=$(echo -n "${username}-${COUNTRY_CODE}" | md5sum | cut -c1-8)
     local email="${pseudonym}@pseudonym.dive25.mil"

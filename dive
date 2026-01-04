@@ -265,6 +265,28 @@ case "$COMMAND" in
                     exit 1
                 fi
                 ;;
+            session-resilience|session|token)
+                # Run session token resilience fix deployment
+                log_info "Deploying Session Token Resilience Fix..."
+                
+                if [ -n "$INSTANCE" ]; then
+                    # Deploy to specific instance
+                    bash "${DIVE_ROOT}/scripts/dive-modules/deploy-session-resilience-fix.sh" "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
+                else
+                    # Deploy to all instances
+                    bash "${DIVE_ROOT}/scripts/dive-modules/deploy-session-resilience-fix.sh" --all
+                fi
+                ;;
+            diagnose-session|session-diagnose)
+                # Run session diagnostics
+                if [ -z "$1" ]; then
+                    log_error "Usage: ./dive fix diagnose-session <user-email>"
+                    log_info "Example: ./dive fix diagnose-session testuser-usa-4@mil"
+                    exit 1
+                fi
+                
+                bash "${DIVE_ROOT}/scripts/diagnose-session-token-flow.sh" "$1"
+                ;;
             all)
                 bash "${DIVE_ROOT}/scripts/fix-federation-issues.sh" "$@"
                 ;;
@@ -275,12 +297,19 @@ case "$COMMAND" in
                 echo "  ./dive fix federation                Fix all federation issues (hub + all spokes)"
                 echo "  ./dive fix hub                       Fix hub logout/redirect issues only"
                 echo "  ./dive --instance ALB fix spoke      Fix specific spoke federation"
-                echo "  ./dive fix all                       Fix all (same as federation)"
+                echo "  ./dive fix session-resilience        Deploy session token resilience fix"
+                echo "  ./dive fix diagnose-session <email>  Diagnose session/token issues for user"
+                echo "  ./dive fix all                       Fix all federation issues"
                 echo ""
-                echo "Fixes:"
+                echo "Federation Fixes:"
                 echo "  1. Logout redirect to internal container name"
                 echo "  2. 'Invalid parameter: redirect_uri' errors"
                 echo "  3. Cross-border IdP not loading"
+                echo ""
+                echo "Session Resilience Fixes:"
+                echo "  - Automatic token refresh in API routes"
+                echo "  - Race condition handling (session callback vs API routes)"
+                echo "  - Improved error messages"
                 echo ""
                 ;;
         esac

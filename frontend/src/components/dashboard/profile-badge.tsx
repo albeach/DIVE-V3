@@ -40,7 +40,9 @@ export function ProfileBadge({ user }: ProfileBadgeProps) {
         {/* Profile Info - Expanded */}
         <div className="flex-1 min-w-0">
           {/* Name (Pseudonym), Status, Clearance, Country - All inline */}
-          {/* ACP-240 Section 6.2: Display ocean pseudonym instead of real name (PII minimization) */}
+          {/* ACP-240 Section 6.2: Display ocean pseudonym from Keycloak token (PII minimization)
+               FIX #4: getPseudonymFromUser() now reads firstName+lastName from token
+               (set by Keycloak with ocean pseudonyms), falling back to uniqueID hash */}
           <div className="flex items-center flex-wrap gap-2 mb-3">
             <h3 className="text-xl font-bold text-gray-900">
               {getPseudonymFromUser(user as any)}

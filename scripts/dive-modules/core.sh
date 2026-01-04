@@ -794,7 +794,8 @@ bootstrap_default_idp() {
         -s enabled=true \
         -s trustEmail=true \
         -s storeToken=false \
-        -s firstBrokerLoginFlowAlias="first broker login" \
+        -s firstBrokerLoginFlowAlias="" \
+        -s updateProfileFirstLoginMode=off \
         -s 'config.useJwksUrl=true' \
         -s 'config.authorizationUrl=https://localhost:8443/realms/master/protocol/openid-connect/auth' \
         -s 'config.tokenUrl=https://localhost:8443/realms/master/protocol/openid-connect/token' \

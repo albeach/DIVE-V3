@@ -84,9 +84,7 @@
 .dive-alert-info {
     border-left-color: #DC143C;
     background: rgba(220, 20, 60, 0.05);
-}
-
-/* OTP/WebAuthn specific styling */
+}/* OTP/WebAuthn specific styling */
 .otp-input:focus {
     border-color: #DC143C;
     box-shadow: 0 0 0 3px rgba(220, 20, 60, 0.15);

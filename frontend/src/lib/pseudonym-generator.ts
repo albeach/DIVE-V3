@@ -25,6 +25,7 @@
 /**
  * Nation-specific ocean prefixes
  * Based on geographic/maritime associations of each nation
+ * Updated: January 3, 2026 - Added NZL, AUS (Pacific partners)
  */
 const NATION_PREFIXES: Record<string, string> = {
     'USA': 'Atlantic',      // Atlantic Ocean (US East Coast)
@@ -36,6 +37,8 @@ const NATION_PREFIXES: Record<string, string> = {
     'ESP': 'Iberian',       // Iberian Peninsula (Spanish coast)
     'POL': 'Vistula',       // Vistula Lagoon (Polish waters)
     'NLD': 'Nordic',        // North Sea/Nordic waters (Dutch coast)
+    'NZL': 'Pacific',       // Pacific Ocean (New Zealand/Oceania)
+    'AUS': 'Southern',      // Southern Ocean (Australia)
     'INDUSTRY': 'Pacific'   // Pacific Ocean (neutral/global)
 };
 
@@ -149,6 +152,7 @@ export function isValidUUID(uniqueID: string): boolean {
 
 /**
  * Get pseudonym from session user object
+ * FIX #4 (Jan 3, 2026): Prefer user.name from Keycloak token (now contains ocean pseudonym)
  * Fallback to email/username if UUID not available (migration period)
  * 
  * @param user - NextAuth session user object
@@ -161,12 +165,46 @@ export function getPseudonymFromUser(
         email?: string;
         name?: string;
         countryOfAffiliation?: string;
+        firstName?: string;
+        lastName?: string;
     },
     options?: {
         includeNation?: boolean; // If true, prefix with nation (e.g., "Baltic Golden Dolphin")
     }
 ): string {
-    // Prefer uniqueID (UUID format)
+    // FIX #4: FIRST check if we have firstName + lastName from Keycloak token
+    // This is now set by the auth.ts profile callback from Keycloak's given_name/family_name
+    if (user.firstName && user.lastName) {
+        const pseudonym = `${user.firstName} ${user.lastName}`;
+        // Validate it looks like ocean pseudonym (Adjective Noun format)
+        if (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(pseudonym)) {
+            if (options?.includeNation && user.countryOfAffiliation) {
+                // Add nation prefix if requested
+                const NATION_PREFIXES: Record<string, string> = {
+                    'USA': 'Atlantic', 'FRA': 'Mediterranean', 'CAN': 'Arctic',
+                    'GBR': 'North', 'DEU': 'Baltic', 'ITA': 'Adriatic',
+                    'ESP': 'Iberian', 'POL': 'Vistula', 'NLD': 'Nordic',
+                    'NZL': 'Pacific', 'AUS': 'Southern',
+                };
+                const prefix = NATION_PREFIXES[user.countryOfAffiliation.toUpperCase()] || 'Atlantic';
+                return `${prefix} ${pseudonym}`;
+            }
+            return pseudonym;
+        }
+    }
+
+    // SECOND: Try user.name from token (set by profile callback)
+    // This is the constructed name from firstName + lastName
+    if (user.name && user.name !== 'Unknown User') {
+        // Check if it's already a valid ocean pseudonym
+        if (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(user.name) || 
+            /^[A-Z][a-z]+ [A-Z][a-z]+ [A-Z][a-z]+$/.test(user.name)) {
+            return user.name; // Already formatted (e.g., "Azure Whale" or "Atlantic Azure Whale")
+        }
+    }
+
+    // FALLBACK: Generate from uniqueID (for backwards compatibility)
+    // This handles migration period where Keycloak may not have ocean pseudonyms yet
     if (user.uniqueID && isValidUUID(user.uniqueID)) {
         if (options?.includeNation && user.countryOfAffiliation) {
             return generatePseudonymWithNation(user.uniqueID, user.countryOfAffiliation);
