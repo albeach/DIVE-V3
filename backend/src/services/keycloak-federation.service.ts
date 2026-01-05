@@ -562,6 +562,10 @@ export class KeycloakFederationService {
       // Assign DIVE scopes to the client
       await this.assignDiveScopesToClient(clientId);
 
+      // CRITICAL: Create protocol mappers to include attributes in tokens
+      // Without these, federation won't work - spoke won't receive user attributes!
+      await this.ensureProtocolMappersForClient(clientId);
+
     } catch (error) {
       logger.error('Failed to ensure federation client', {
         realm: this.realm,
@@ -650,6 +654,119 @@ export class KeycloakFederationService {
         clientId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
+    }
+  }
+
+  /**
+   * Ensure protocol mappers exist on a federation client
+   *
+   * CRITICAL: Without these mappers, the client won't include user attributes in tokens.
+   * This is why spoke federation clients were showing "no mappers" in verification.
+   *
+   * Protocol mappers tell Keycloak which user attributes to include in JWT tokens.
+   * Each DIVE attribute needs its own mapper configured correctly.
+   */
+  private async ensureProtocolMappersForClient(clientId: string): Promise<void> {
+    if (!this.kcAdmin) {
+      throw new Error('Keycloak Admin client not initialized');
+    }
+
+    try {
+      // Get the client UUID
+      const clients = await this.kcAdmin.clients.find({
+        realm: this.realm,
+        clientId: clientId,
+      });
+
+      if (!clients || clients.length === 0) {
+        logger.warn('Client not found when ensuring protocol mappers', {
+          realm: this.realm,
+          clientId,
+        });
+        return;
+      }
+
+      const client = clients[0];
+      const clientUuid = client.id;
+
+      if (!clientUuid) {
+        logger.error('Client UUID is undefined', { clientId });
+        return;
+      }
+
+      // Standard DIVE attributes to include in tokens (including AMR for MFA)
+      const standardAttrs = ['clearance', 'countryOfAffiliation', 'acpCOI', 'uniqueID', 'amr'];
+      let created = 0;
+
+      for (const attr of standardAttrs) {
+        const mapperName = `federation-std-${attr}`;
+
+        // Check if mapper already exists
+        const existingMappers = await this.kcAdmin.clients.listProtocolMappers({
+          id: clientUuid,
+          realm: this.realm,
+        });
+
+        const mapperExists = existingMappers.some((m: any) => m.name === mapperName);
+
+        if (mapperExists) {
+          logger.debug('Protocol mapper already exists', { clientId, mapperName });
+          continue;
+        }
+
+        // Determine if multivalued (acpCOI and amr are arrays)
+        const multivalued = (attr === 'acpCOI' || attr === 'amr');
+
+        // Create the protocol mapper
+        await this.kcAdmin.clients.addProtocolMapper(
+          { id: clientUuid, realm: this.realm },
+          {
+            name: mapperName,
+            protocol: 'openid-connect',
+            protocolMapper: 'oidc-usermodel-attribute-mapper',
+            consentRequired: false,
+            config: {
+              'userinfo.token.claim': 'true',
+              'id.token.claim': 'true',
+              'access.token.claim': 'true',
+              'claim.name': attr,
+              'user.attribute': attr,
+              'jsonType.label': 'String',
+              'multivalued': String(multivalued),
+            },
+          }
+        );
+
+        created++;
+        logger.info('Created protocol mapper', {
+          realm: this.realm,
+          clientId,
+          mapperName,
+          attribute: attr,
+          multivalued,
+        });
+      }
+
+      if (created > 0) {
+        logger.info('Protocol mappers ensured for federation client', {
+          realm: this.realm,
+          clientId,
+          created,
+          total: standardAttrs.length,
+        });
+      } else {
+        logger.debug('All protocol mappers already exist for client', {
+          realm: this.realm,
+          clientId,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to ensure protocol mappers for client', {
+        realm: this.realm,
+        clientId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // Don't throw - non-critical if mappers can't be created
     }
   }
 

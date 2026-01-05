@@ -335,6 +335,20 @@ spoke_deploy() {
     local instance_code="${1:-}"
     local instance_name="${2:-}"
 
+    # Validate instance code is provided
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke deploy CODE [NAME]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke deploy FRA \"France Defence\""
+        echo "  ./dive spoke deploy DEU \"Germany Defence\""
+        echo "  ./dive spoke deploy GBR \"United Kingdom\""
+        echo ""
+        return 1
+    fi
+
     # Load deployment state and logging modules
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh"

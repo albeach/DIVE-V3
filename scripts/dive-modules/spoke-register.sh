@@ -23,8 +23,26 @@ export DIVE_SPOKE_REGISTER_LOADED=1
 # =============================================================================
 
 spoke_register() {
+    local instance_code="${1:-}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke register CODE [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  --poll              Poll for approval status"
+        echo "  --poll-timeout SEC  Polling timeout (default: 600)"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke register FRA"
+        echo "  ./dive spoke register DEU --poll"
+        return 1
+    fi
+
+    shift  # Remove CODE from arguments
+
     ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local config_file="$spoke_dir/config.json"

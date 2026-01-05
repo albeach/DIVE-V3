@@ -1,6 +1,6 @@
 /**
  * Super Admin Dashboard - Complete Revamp
- * 
+ *
  * Comprehensive analytics platform with:
  * - Real-time system metrics
  * - Interactive data visualizations
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
     ];
 
     return (
-        <PageLayout 
+        <PageLayout
             user={session?.user || {}}
             breadcrumbs={[
                 { label: 'Admin', href: '/admin/dashboard' },
@@ -142,7 +142,7 @@ export default function AdminDashboard() {
 
                     {/* Last Refresh Time */}
                     <div className="mt-3 text-xs sm:text-sm text-slate-500">
-                        Last updated: {lastRefresh.toLocaleTimeString()} 
+                        Last updated: {lastRefresh.toLocaleTimeString()}
                         {autoRefresh && <span className="ml-2 text-green-600">(Auto-refresh: 30s)</span>}
                     </div>
                 </div>
@@ -188,8 +188,8 @@ export default function AdminDashboard() {
                 <div className="pb-8">
                     {activeTab === 'overview' && (
                         <>
-                            <SystemOverviewSection 
-                                dateRange={dateRange} 
+                            <SystemOverviewSection
+                                dateRange={dateRange}
                                 refreshTrigger={lastRefresh}
                             />
                         </>
@@ -198,43 +198,43 @@ export default function AdminDashboard() {
                         <FederationDashboard />
                     )}
                     {activeTab === 'authz' && (
-                        <AuthorizationAnalytics 
-                            dateRange={dateRange} 
+                        <AuthorizationAnalytics
+                            dateRange={dateRange}
                             refreshTrigger={lastRefresh}
                         />
                     )}
                     {activeTab === 'security' && (
-                        <SecurityPosture 
-                            dateRange={dateRange} 
+                        <SecurityPosture
+                            dateRange={dateRange}
                             refreshTrigger={lastRefresh}
                         />
                     )}
                     {activeTab === 'threats' && (
-                        <ThreatIntelligence 
-                            dateRange={dateRange} 
+                        <ThreatIntelligence
+                            dateRange={dateRange}
                             refreshTrigger={lastRefresh}
                         />
                     )}
                     {activeTab === 'performance' && (
-                        <PerformanceMetrics 
-                            dateRange={dateRange} 
+                        <PerformanceMetrics
+                            dateRange={dateRange}
                             refreshTrigger={lastRefresh}
                         />
                     )}
                     {activeTab === 'compliance' && (
-                        <ComplianceOverview 
-                            dateRange={dateRange} 
+                        <ComplianceOverview
+                            dateRange={dateRange}
                             refreshTrigger={lastRefresh}
                         />
                     )}
                     {activeTab === 'realtime' && (
-                        <RealTimeActivity 
+                        <RealTimeActivity
                             refreshTrigger={lastRefresh}
                         />
                     )}
                     {activeTab === 'resources' && (
-                        <ResourceAnalytics 
-                            dateRange={dateRange} 
+                        <ResourceAnalytics
+                            dateRange={dateRange}
                             refreshTrigger={lastRefresh}
                         />
                     )}
@@ -244,6 +244,7 @@ export default function AdminDashboard() {
                 <div className="mt-6">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[
+                            { label: 'Clearance Mgmt', icon: '🔑', href: '/admin/clearance-management', gradient: 'from-indigo-600 to-purple-600' },
                             { label: 'Certificates', icon: '🔐', href: '/admin/certificates', gradient: 'from-purple-600 to-indigo-600' },
                             { label: 'Audit Logs', icon: '📋', href: '/admin/logs', gradient: 'from-blue-600 to-purple-600' },
                             { label: 'Manage IdPs', icon: '🔧', href: '/admin/idp', gradient: 'from-green-600 to-teal-600' },
