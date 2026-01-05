@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-fra-d230b369",
+    "spokeId": "spoke-fra-552499ca",
     "instanceCode": "FRA",
     "name": "France Test",
     "description": "DIVE V3 Spoke Instance for France Test",
     "country": "FRA",
     "organizationType": "government",
     "contactEmail": "admin@fra.dive25.com",
-    "registeredSpokeId": "spoke-fra-7fa042a9"
+    "registeredSpokeId": "spoke-fra-e73b78c1"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -34,8 +34,8 @@
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2026-01-04T01:38:26Z",
-    "spokeToken": "0wmKRIFVTFSZKwt2SQ6N9lLuUS5Wl0-BksNO3RGJ6_o"
+    "registeredAt": "2026-01-04T02:41:44Z",
+    "spokeToken": "OrCuGfj-tvv1seoLBv21KAdLmpN2n_7WRHZEk1IMaFI"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +48,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-04T01:37:05Z",
-    "lastModified": "2026-01-04T01:37:05Z",
+    "createdAt": "2026-01-04T02:40:17Z",
+    "lastModified": "2026-01-04T02:40:17Z",
     "configHash": ""
   }
 }

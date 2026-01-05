@@ -295,7 +295,19 @@ spoke_generate_certs() {
 
 spoke_status() {
     ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
+    local instance_code="${1:-}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke status CODE"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke status FRA"
+        echo "  ./dive spoke status DEU"
+        return 1
+    fi
+
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local config_file="$spoke_dir/config.json"
@@ -307,7 +319,7 @@ spoke_status() {
     if [ ! -f "$config_file" ]; then
         echo -e "  Status: ${RED}Not Initialized${NC}"
         echo ""
-        echo "  Run: ./dive spoke init <CODE> <NAME>"
+        echo "  Run: ./dive spoke init $instance_code <NAME>"
         return 0
     fi
 
@@ -452,8 +464,20 @@ spoke_ensure_keycloak_password_in_hub() {
 }
 
 spoke_health() {
+    local instance_code="${1:-}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke health CODE"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke health FRA"
+        echo "  ./dive spoke health DEU"
+        return 1
+    fi
+
     ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
@@ -1232,20 +1256,35 @@ spoke_sync_all_secrets() {
 # Wraps cmd_seed with spoke instance context and validation
 ##
 spoke_seed() {
-    local count="${1:-5000}"
-    local code_lower=$(lower "${INSTANCE:-usa}")
-    local code_upper=$(upper "$code_lower")
+    local instance_code="${1:-}"
+    local count="${2:-5000}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke seed CODE [COUNT]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke seed FRA          # Seed 5000 resources (default)"
+        echo "  ./dive spoke seed DEU 10000    # Seed 10000 resources"
+        echo "  ./dive spoke seed GBR 500      # Seed 500 resources (testing)"
+        echo ""
+        return 1
+    fi
+
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
 
     # INPUT VALIDATION: Count must be a positive integer
     if ! [[ "$count" =~ ^[0-9]+$ ]]; then
         log_error "Count must be a positive integer"
         echo ""
-        echo "Usage: ./dive --instance <code> spoke seed [count]"
+        echo "Usage: ./dive spoke seed $code_upper [count]"
         echo ""
         echo "Examples:"
-        echo "  ./dive --instance pol spoke seed          # Seed 5000 resources (default)"
-        echo "  ./dive --instance fra spoke seed 10000    # Seed 10000 resources"
-        echo "  ./dive --instance est spoke seed 500      # Seed 500 resources (testing)"
+        echo "  ./dive spoke seed $code_upper          # Seed 5000 resources (default)"
+        echo "  ./dive spoke seed $code_upper 10000    # Seed 10000 resources"
+        echo "  ./dive spoke seed $code_upper 500      # Seed 500 resources (testing)"
         echo ""
         return 1
     fi
@@ -1458,8 +1497,20 @@ spoke_heartbeat() {
 # =============================================================================
 
 spoke_verify() {
+    local instance_code="${1:-}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke verify CODE"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke verify FRA"
+        echo "  ./dive spoke verify DEU"
+        return 1
+    fi
+
     ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
@@ -2306,15 +2357,27 @@ EOF
 }
 
 spoke_logs() {
-    local service="${1:-}"
+    local instance_code="${1:-}"
+    local service="${2:-}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke logs CODE [SERVICE]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke logs FRA backend"
+        echo "  ./dive spoke logs DEU keycloak"
+        echo "  ./dive spoke logs GBR postgres"
+        return 1
+    fi
 
     ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
-        log_error "Spoke not found"
+        log_error "Spoke not found: $instance_code"
         return 1
     fi
 
@@ -2757,9 +2820,9 @@ module_spoke() {
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
         opal-token)     spoke_opal_token "$@" ;;
-        status)         spoke_status ;;
-        health)         spoke_health ;;
-        verify)         spoke_verify ;;
+        status)         spoke_status "$@" ;;
+        health)         spoke_health "$@" ;;
+        verify)         spoke_verify "$@" ;;
         sync)           spoke_sync ;;
         heartbeat)      spoke_heartbeat ;;
         policy)         spoke_policy "$@" ;;

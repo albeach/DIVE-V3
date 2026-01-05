@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Complete ACR/AMR/LoA Configuration for USA Hub
 # =============================================================================
@@ -95,11 +95,11 @@ CURRENT_MAPPING=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get rea
 
 if [[ -z "$CURRENT_MAPPING" ]]; then
     log_info "ACR-LoA mapping NOT found, adding..."
-    
+
     # Add ACR-LoA mapping to realm attributes
     docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh update realms/"$REALM_NAME" \
         -s 'attributes."acr.loa.map"={"1":1,"2":2,"3":3}' >/dev/null 2>&1
-    
+
     if [ $? -eq 0 ]; then
         log_success "ACR-LoA mapping configured: {\"1\":1,\"2\":2,\"3\":3}"
     else
@@ -129,7 +129,7 @@ ACR_MAPPER=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients/
 
 if [[ -z "$ACR_MAPPER" ]]; then
     log_info "ACR mapper NOT found, creating..."
-    
+
     # Create ACR mapper (session-based, oidc-acr-mapper)
     docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh create clients/"$CLIENT_UUID"/protocol-mappers/models -r "$REALM_NAME" \
         -s name="acr (session)" \
@@ -139,7 +139,7 @@ if [[ -z "$ACR_MAPPER" ]]; then
         -s 'config."access.token.claim"=true' \
         -s 'config."userinfo.token.claim"=true' \
         -s 'config."introspection.token.claim"=true' >/dev/null 2>&1
-    
+
     if [ $? -eq 0 ]; then
         log_success "ACR protocol mapper created (session-based)"
     else
@@ -161,7 +161,7 @@ AMR_MAPPER=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients/
 
 if [[ -z "$AMR_MAPPER" ]]; then
     log_info "AMR mapper NOT found, creating..."
-    
+
     # Create AMR mapper (user-attribute-based)
     docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh create clients/"$CLIENT_UUID"/protocol-mappers/models -r "$REALM_NAME" \
         -s name="amr (user attribute)" \
@@ -176,7 +176,7 @@ if [[ -z "$AMR_MAPPER" ]]; then
         -s 'config."multivalued"=true' \
         -s 'config."aggregate.attrs"=false' \
         -s 'config."jsonType.label"=String' >/dev/null 2>&1
-    
+
     if [ $? -eq 0 ]; then
         log_success "AMR protocol mapper created (user attribute)"
     else
@@ -198,10 +198,10 @@ ACR_ATTR=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/prof
 
 if [[ -z "$ACR_ATTR" ]]; then
     log_info "ACR attribute NOT in User Profile, adding..."
-    
+
     # Get current profile, add ACR, update
     CURRENT_PROFILE=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/profile -r "$REALM_NAME" 2>/dev/null)
-    
+
     UPDATED_PROFILE=$(echo "$CURRENT_PROFILE" | docker exec -i "$KC_CONTAINER" python3 -c '
 import sys, json
 profile = json.load(sys.stdin)
@@ -215,9 +215,9 @@ profile["attributes"].append({
 })
 print(json.dumps(profile))
 ')
-    
+
     echo "$UPDATED_PROFILE" | docker exec -i "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh update users/profile -r "$REALM_NAME" -f - >/dev/null 2>&1
-    
+
     if [ $? -eq 0 ]; then
         log_success "ACR attribute added to User Profile"
     else
@@ -238,10 +238,10 @@ AMR_ATTR=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/prof
 
 if [[ -z "$AMR_ATTR" ]]; then
     log_info "AMR attribute NOT in User Profile, adding..."
-    
+
     # Get current profile, add AMR, update
     CURRENT_PROFILE=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/profile -r "$REALM_NAME" 2>/dev/null)
-    
+
     UPDATED_PROFILE=$(echo "$CURRENT_PROFILE" | docker exec -i "$KC_CONTAINER" python3 -c '
 import sys, json
 profile = json.load(sys.stdin)
@@ -255,9 +255,9 @@ profile["attributes"].append({
 })
 print(json.dumps(profile))
 ')
-    
+
     echo "$UPDATED_PROFILE" | docker exec -i "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh update users/profile -r "$REALM_NAME" -f - >/dev/null 2>&1
-    
+
     if [ $? -eq 0 ]; then
         log_success "AMR attribute added to User Profile"
     else
@@ -287,24 +287,24 @@ for USER_ID in $USER_IDS; do
     # Get user details
     USER_DATA=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/"$USER_ID" -r "$REALM_NAME" 2>/dev/null)
     USERNAME=$(echo "$USER_DATA" | grep '"username"' | head -1 | cut -d'"' -f4)
-    
+
     # Get clearance from user attributes
     CLEARANCE=$(echo "$USER_DATA" | grep -A5 '"attributes"' | grep -A1 '"clearance"' | grep -v '"clearance"' | sed 's/.*"\(.*\)".*/\1/' | tr -d '[]," ' | head -1)
-    
+
     # Skip if no clearance
     if [[ -z "$CLEARANCE" ]]; then
         continue
     fi
-    
+
     # Determine ACR and AMR based on clearance
     ACR_VALUE="0"
     AMR_VALUE='["pwd"]'
-    
+
     case "$CLEARANCE" in
         TOP_SECRET)
             # Check if user has WebAuthn credentials
             HAS_WEBAUTHN=$(docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/"$USER_ID"/credentials -r "$REALM_NAME" 2>/dev/null | grep -c '"type" : "webauthn"' || echo "0")
-            
+
             if [ "$HAS_WEBAUTHN" -gt 0 ]; then
                 ACR_VALUE="2"  # AAL3
                 AMR_VALUE='["pwd", "hwk"]'
@@ -330,17 +330,17 @@ for USER_ID in $USER_IDS; do
             AMR_VALUE='["pwd"]'
             ;;
     esac
-    
+
     # Update user with ACR and AMR
     docker exec "$KC_CONTAINER" /opt/keycloak/bin/kcadm.sh update users/"$USER_ID" -r "$REALM_NAME" \
         -s "attributes.acr=[\"$ACR_VALUE\"]" \
         -s "attributes.amr=$AMR_VALUE" >/dev/null 2>&1
-    
+
     if [ $? -eq 0 ]; then
         ((UPDATED++))
         log_info "✓ $USERNAME: clearance=$CLEARANCE → acr=$ACR_VALUE, amr=$AMR_VALUE"
     fi
-    
+
     ((PROCESSED++))
 done
 
