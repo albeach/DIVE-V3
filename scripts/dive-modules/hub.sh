@@ -673,16 +673,141 @@ _hub_apply_terraform() {
         return 0
     fi
 
-    log_info "Applying Terraform configuration..."
+    log_info "Applying Terraform configuration (MFA + federation clients)..."
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "cd ${tf_dir} && terraform init && terraform apply -auto-approve"
         return 0
     fi
 
+    # ==========================================================================
+    # Generate Dynamic Federation Partners Configuration
+    # ==========================================================================
+    # Scan instances/ directory for deployed spokes and generate federation_partners
+    # for hub.auto.tfvars. This creates incoming federation clients automatically.
+    # ==========================================================================
+
+    log_step "Scanning for deployed spokes..."
+    local federation_partners_hcl="{\n"
+    local spokes_found=0
+
+    if [ -d "${DIVE_ROOT}/instances" ]; then
+        for spoke_dir in "${DIVE_ROOT}/instances/"*/; do
+            [ ! -d "$spoke_dir" ] && continue
+
+            local spoke_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
+            local config_file="${spoke_dir}config.json"
+
+            # Skip if no config.json (not a valid spoke)
+            [ ! -f "$config_file" ] && continue
+
+            log_verbose "  Found spoke: ${spoke_code}"
+
+            # Extract spoke metadata from config.json
+            local spoke_name=$(jq -r '.name // "Unknown"' "$config_file" 2>/dev/null || echo "Unknown")
+            local spoke_port=$(jq -r '.keycloak_https_port // 8443' "$config_file" 2>/dev/null || echo "8443")
+            local container_name="dive-spoke-${spoke_code,,}-keycloak"
+
+            # Load federation secret from GCP (if available)
+            local federation_secret=""
+            if check_gcloud; then
+                local secret_name="dive-v3-federation-usa-${spoke_code,,}"
+                federation_secret=$(gcloud secrets versions access latest \
+                    --secret="$secret_name" --project=dive25 2>/dev/null || echo "")
+
+                if [ -n "$federation_secret" ]; then
+                    log_verbose "    ✓ Loaded secret from GCP: ${secret_name}"
+                else
+                    log_verbose "    ⚠ No GCP secret found: ${secret_name}"
+                fi
+            fi
+
+            # Generate HCL entry for this spoke
+            federation_partners_hcl+="  \"${spoke_code,,}\" = {\n"
+            federation_partners_hcl+="    instance_code         = \"${spoke_code}\"\n"
+            federation_partners_hcl+="    instance_name         = \"${spoke_name}\"\n"
+            federation_partners_hcl+="    idp_url               = \"https://localhost:${spoke_port}\"\n"
+            federation_partners_hcl+="    idp_internal_url      = \"https://${container_name}:8443\"\n"
+            federation_partners_hcl+="    enabled               = true\n"
+            federation_partners_hcl+="    client_secret         = \"${federation_secret}\"\n"
+            federation_partners_hcl+="    disable_trust_manager = true\n"
+            federation_partners_hcl+="  }\n"
+
+            spokes_found=$((spokes_found + 1))
+        done
+    fi
+
+    federation_partners_hcl+="}"
+
+    log_info "Discovered ${spokes_found} spoke(s) for federation"
+
+    # ==========================================================================
+    # Generate Incoming Federation Secrets Map
+    # ==========================================================================
+    # These are the secrets spokes use to authenticate TO the Hub.
+    # GCP Secret Name: dive-v3-federation-usa-{spoke}
+    # ==========================================================================
+
+    local incoming_secrets_hcl="{\n"
+
+    if check_gcloud && [ $spokes_found -gt 0 ]; then
+        log_step "Loading incoming federation secrets from GCP..."
+
+        for spoke_dir in "${DIVE_ROOT}/instances/"*/; do
+            [ ! -d "$spoke_dir" ] && continue
+            local spoke_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
+            [ ! -f "${spoke_dir}config.json" ] && continue
+
+            local secret_name="dive-v3-federation-usa-${spoke_code,,}"
+            local secret_value=$(gcloud secrets versions access latest \
+                --secret="$secret_name" --project=dive25 2>/dev/null || echo "")
+
+            if [ -n "$secret_value" ]; then
+                incoming_secrets_hcl+="  \"${spoke_code,,}\" = \"${secret_value}\"\n"
+                log_verbose "  ✓ ${spoke_code}: ${secret_name}"
+            fi
+        done
+
+        log_success "Loaded ${spokes_found} federation secret(s)"
+    fi
+
+    incoming_secrets_hcl+="}"
+
+    # ==========================================================================
+    # Write hub.auto.tfvars (Auto-generated Federation Config)
+    # ==========================================================================
+    cat > "${tf_dir}/hub.auto.tfvars" << EOF
+# =============================================================================
+# Auto-generated Hub Federation Configuration
+# =============================================================================
+# Generated by: hub.sh deployment script
+# Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+# Spokes Found: ${spokes_found}
+#
+# This file is regenerated on every 'dive hub deploy' to reflect current
+# spoke registrations from the instances/ directory.
+# =============================================================================
+
+# Federation Partners (Spokes)
+federation_partners = ${federation_partners_hcl}
+
+# Incoming Federation Secrets (from GCP Secret Manager)
+incoming_federation_secrets = ${incoming_secrets_hcl}
+EOF
+
+    log_success "Generated hub.auto.tfvars with ${spokes_found} federation partner(s)"
+
+    # ==========================================================================
+    # Apply Terraform
+    # ==========================================================================
     (
         cd "$tf_dir"
-        [ ! -d ".terraform" ] && terraform init -input=false
+
+        # Initialize if needed
+        if [ ! -d ".terraform" ]; then
+            log_verbose "Initializing Terraform..."
+            terraform init -input=false -upgrade
+        fi
 
         # Export secrets as TF_VAR_ environment variables
         export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}"
@@ -692,6 +817,8 @@ _hub_apply_terraform() {
         export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
         export KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
 
+        # Apply with hub.tfvars + hub.auto.tfvars (auto-loaded)
+        log_verbose "Running terraform apply..."
         terraform apply -var-file=hub.tfvars -input=false -auto-approve
     ) || {
         log_warn "Terraform apply failed"
@@ -699,6 +826,11 @@ _hub_apply_terraform() {
     }
 
     log_success "Terraform configuration applied"
+
+    if [ $spokes_found -gt 0 ]; then
+        log_success "Created incoming federation clients for ${spokes_found} spoke(s)"
+        log_info "Spokes can now federate TO the Hub using dive-v3-broker-{spoke} clients"
+    fi
 
     # Disable Review Profile in First Broker Login flow (best practice for federation)
     _hub_disable_review_profile || log_warn "Could not disable Review Profile"
@@ -1323,7 +1455,7 @@ hub_seed() {
     fi
 
     # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
-    log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
+    log_step "Step 3/5: Seeding ${resource_count} ZTDF encrypted resources..."
     local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
 
     if [ "$DRY_RUN" = true ]; then
@@ -1353,6 +1485,19 @@ hub_seed() {
             echo "  ./dive hub seed ${resource_count}"
             echo ""
             return 1
+        fi
+    fi
+
+    # Step 4: Initialize clearance equivalency mappings (Phase 2: MongoDB SSOT)
+    log_step "Step 4/5: Initializing clearance equivalency mappings (32 NATO countries)..."
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "docker exec ${backend_container} npx tsx src/scripts/initialize-clearance-equivalency.ts"
+    else
+        if ! docker exec "$backend_container" npx tsx src/scripts/initialize-clearance-equivalency.ts 2>&1; then
+            log_warn "Clearance equivalency initialization failed (non-critical)"
+            log_warn "Backend will fall back to static TypeScript mappings"
+        else
+            log_success "Clearance equivalency mappings initialized in MongoDB"
         fi
     fi
 

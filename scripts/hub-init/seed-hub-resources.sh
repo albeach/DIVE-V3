@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Hub Resource Seeding Script
-# 
+#
 # Purpose: Seed sample resources into the Hub MongoDB with proper distribution
 #          across classification levels for ABAC testing
 #
@@ -86,7 +86,7 @@ for (let i = 0; i < resourceCount; i++) {
     const releasability = releasabilityPatterns[i % 5];
     const coi = coiPatterns[i % 4];
     const docType = docTypes[i % 5];
-    
+
     resources.push({
         resourceId: 'usa-' + docType + '-' + String(i).padStart(4, '0'),
         title: docType.charAt(0).toUpperCase() + docType.slice(1) + ' Report ' + i,

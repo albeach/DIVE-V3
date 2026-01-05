@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##
 # Seed users with localized attributes for a NATO spoke
 # Uses country-specific attribute names from nato-attribute-mappings.json

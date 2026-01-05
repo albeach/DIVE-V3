@@ -1,0 +1,320 @@
+/**
+ * Clearance Editor Component
+ *
+ * Edit national clearance mappings for a specific country
+ * Modern 2025 UI with tag input, validation, preview
+ * Phase 3: MongoDB SSOT Admin UI
+ * Date: 2026-01-04
+ */
+
+'use client';
+
+import React, { useState, useEffect } from 'react';
+
+interface ClearanceMapping {
+    standardLevel: string;
+    nationalEquivalents: Record<string, string[]>;
+    mfaRequired: boolean;
+    aalLevel: number;
+}
+
+interface Props {
+    mappings: ClearanceMapping[];
+    countries: string[];
+    onUpdate: () => void;
+}
+
+export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
+    const [selectedCountry, setSelectedCountry] = useState<string>('');
+    const [editedMappings, setEditedMappings] = useState<Record<string, string[]>>({});
+    const [hasChanges, setHasChanges] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    const [newTag, setNewTag] = useState<Record<string, string>>({});
+
+    const levels = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+
+    // Load country mappings when country changes
+    useEffect(() => {
+        if (!selectedCountry) return;
+
+        const countryMappings: Record<string, string[]> = {};
+        mappings.forEach(mapping => {
+            countryMappings[mapping.standardLevel] = mapping.nationalEquivalents[selectedCountry] || [];
+        });
+        setEditedMappings(countryMappings);
+        setHasChanges(false);
+        setError(null);
+        setSuccess(null);
+    }, [selectedCountry, mappings]);
+
+    const addTag = (level: string) => {
+        const tag = newTag[level]?.trim();
+        if (!tag) return;
+
+        const current = editedMappings[level] || [];
+        if (current.includes(tag)) {
+            setError(`"${tag}" already exists for ${level}`);
+            return;
+        }
+
+        setEditedMappings({
+            ...editedMappings,
+            [level]: [...current, tag]
+        });
+        setNewTag({ ...newTag, [level]: '' });
+        setHasChanges(true);
+        setError(null);
+    };
+
+    const removeTag = (level: string, tag: string) => {
+        setEditedMappings({
+            ...editedMappings,
+            [level]: (editedMappings[level] || []).filter(t => t !== tag)
+        });
+        setHasChanges(true);
+    };
+
+    const handleSave = async () => {
+        if (!selectedCountry || !hasChanges) return;
+
+        setSaving(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const response = await fetch(`/api/admin/clearance/countries/${selectedCountry}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mappings: editedMappings })
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || 'Failed to update mappings');
+            }
+
+            setSuccess(`✅ Successfully updated ${selectedCountry} clearance mappings`);
+            setHasChanges(false);
+            onUpdate();
+
+            // Clear success message after 3 seconds
+            setTimeout(() => setSuccess(null), 3000);
+
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to save changes');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleReset = () => {
+        if (!selectedCountry) return;
+
+        const countryMappings: Record<string, string[]> = {};
+        mappings.forEach(mapping => {
+            countryMappings[mapping.standardLevel] = mapping.nationalEquivalents[selectedCountry] || [];
+        });
+        setEditedMappings(countryMappings);
+        setHasChanges(false);
+        setError(null);
+        setSuccess(null);
+    };
+
+    const getLevelInfo = (level: string) => {
+        const mapping = mappings.find(m => m.standardLevel === level);
+        return mapping ? {
+            mfaRequired: mapping.mfaRequired,
+            aalLevel: mapping.aalLevel,
+            acrLevel: mapping.acrLevel
+        } : null;
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Country Selector */}
+            <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            🌍 Select Country to Edit
+                        </label>
+                        <select
+                            value={selectedCountry}
+                            onChange={(e) => setSelectedCountry(e.target.value)}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
+                        >
+                            <option value="">-- Select a country --</option>
+                            {countries.map(country => (
+                                <option key={country} value={country}>
+                                    {country}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {hasChanges && (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg font-medium hover:shadow-lg transition-all duration-200 disabled:opacity-50"
+                            >
+                                {saving ? '💾 Saving...' : '💾 Save Changes'}
+                            </button>
+                            <button
+                                onClick={handleReset}
+                                disabled={saving}
+                                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all duration-200 disabled:opacity-50"
+                            >
+                                ↶ Reset
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Status Messages */}
+                {error && (
+                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                        ⚠️ {error}
+                    </div>
+                )}
+                {success && (
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+                        {success}
+                    </div>
+                )}
+            </div>
+
+            {/* Editor */}
+            {selectedCountry && (
+                <div className="space-y-4">
+                    {levels.map(level => {
+                        const info = getLevelInfo(level);
+                        const tags = editedMappings[level] || [];
+
+                        return (
+                            <div key={level} className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                                {/* Level Header */}
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="text-xl font-bold text-gray-800">
+                                            {level}
+                                        </h3>
+                                        <div className="flex items-center gap-2">
+                                            {info?.mfaRequired && (
+                                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold">
+                                                    🛡️ MFA
+                                                </span>
+                                            )}
+                                            <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs font-semibold">
+                                                AAL{info?.aalLevel}
+                                            </span>
+                                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-semibold">
+                                                ACR{info?.acrLevel}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-sm text-gray-600">
+                                        {tags.length} variant{tags.length !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+
+                                {/* Tags Display */}
+                                <div className="mb-4">
+                                    <div className="flex flex-wrap gap-2">
+                                        {tags.map((tag, index) => (
+                                            <div
+                                                key={index}
+                                                className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-200 group hover:bg-indigo-100 transition-colors"
+                                            >
+                                                <span className="font-medium">{tag}</span>
+                                                <button
+                                                    onClick={() => removeTag(level, tag)}
+                                                    className="text-indigo-600 hover:text-red-600 font-bold"
+                                                    title="Remove"
+                                                >
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {tags.length === 0 && (
+                                            <div className="text-gray-400 italic">
+                                                No mappings defined for {selectedCountry}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Add Tag Input */}
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newTag[level] || ''}
+                                        onChange={(e) => setNewTag({ ...newTag, [level]: e.target.value })}
+                                        onKeyPress={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                addTag(level);
+                                            }
+                                        }}
+                                        placeholder="Add national clearance equivalent..."
+                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                    />
+                                    <button
+                                        onClick={() => addTag(level)}
+                                        className="px-6 py-2 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition-colors"
+                                    >
+                                        ➕ Add
+                                    </button>
+                                </div>
+
+                                <p className="mt-2 text-xs text-gray-500">
+                                    💡 Tip: Press Enter to add. Include variants with/without diacritics.
+                                </p>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Instructions */}
+            {!selectedCountry && (
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-lg border border-indigo-200 p-8 text-center">
+                    <div className="text-6xl mb-4">📝</div>
+                    <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                        Select a Country to Edit
+                    </h3>
+                    <p className="text-gray-600 mb-6">
+                        Choose a country from the dropdown above to edit its clearance mappings.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                        <div className="bg-white rounded-lg p-4 shadow">
+                            <div className="text-2xl mb-2">➕</div>
+                            <h4 className="font-semibold text-gray-800 mb-1">Add Equivalents</h4>
+                            <p className="text-sm text-gray-600">
+                                Type and press Enter or click Add button
+                            </p>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 shadow">
+                            <div className="text-2xl mb-2">✕</div>
+                            <h4 className="font-semibold text-gray-800 mb-1">Remove Equivalents</h4>
+                            <p className="text-sm text-gray-600">
+                                Click the ✕ button on any tag
+                            </p>
+                        </div>
+                        <div className="bg-white rounded-lg p-4 shadow">
+                            <div className="text-2xl mb-2">💾</div>
+                            <h4 className="font-semibold text-gray-800 mb-1">Save Changes</h4>
+                            <p className="text-sm text-gray-600">
+                                Click Save when done editing
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

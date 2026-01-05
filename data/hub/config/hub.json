@@ -1,6 +1,6 @@
 {
   "identity": {
-    "hubId": "hub-01313904",
+    "hubId": "hub-2c9eaca8",
     "name": "DIVE V3 Federation Hub",
     "description": "Central policy management and federation hub",
     "version": "1.0.0"
@@ -36,7 +36,7 @@
     "alertWebhookUrl": ""
   },
   "metadata": {
-    "createdAt": "2026-01-04T01:33:18Z",
-    "lastModified": "2026-01-04T01:33:18Z"
+    "createdAt": "2026-01-05T08:18:29Z",
+    "lastModified": "2026-01-05T08:18:29Z"
   }
 }

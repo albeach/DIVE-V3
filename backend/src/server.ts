@@ -37,6 +37,7 @@ import notificationRoutes from './routes/notifications.routes';
 import notificationCountRoutes from './routes/notifications-count.routes';
 import activityRoutes from './routes/activity.routes';  // User activity endpoints
 import swaggerRoutes from './routes/swagger.routes';  // API Documentation (OpenAPI/Swagger)
+import clearanceManagementRoutes from './routes/clearance-management.routes';  // Phase 3: Clearance management
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
@@ -130,6 +131,7 @@ app.use('/api/policies', policyRoutes);
 app.use('/api/policies-lab', policiesLabRoutes);  // Policies Lab (distinct from /api/policies)
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/clearance', clearanceManagementRoutes);  // Phase 3: Clearance management
 app.use('/api/compliance', complianceRoutes);
 app.use('/api/coi-keys', coiKeysRoutes);
 app.use('/api/auth/otp', otpRoutes);  // OTP enrollment endpoints (must be before /api/auth)

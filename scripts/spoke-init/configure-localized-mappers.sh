@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ##
 # Configure localized attribute mappers for a NATO spoke
 # Maps country-specific attribute names to DIVE V3 standard claims
