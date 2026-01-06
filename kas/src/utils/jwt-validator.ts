@@ -292,12 +292,14 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'https://dev-auth.dive25.com/realms/dive-v3-broker',
         ];
 
-        // Multi-realm: Accept tokens for both clients + Keycloak default audience
+        // Multi-realm: Accept tokens for both clients + Keycloak default audience + backend service accounts
         const validAudiences: [string, ...string[]] = [
             'dive-v3-client',         // Legacy client (broker realm)
             'dive-v3-broker',  // Multi-realm broker client (old name - deprecated)
             'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
+            'kas',                    // Backend service account for KAS calls (Issue B fix)
+            'dive-v3-backend-client', // Backend service account client ID
         ];
 
         // Verify the token with the public key

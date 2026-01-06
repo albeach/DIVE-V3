@@ -301,6 +301,7 @@ create_user() {
 
         # Build AMR array based on credentials AND clearance requirements
         # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
+        # UNCLASSIFIED/RESTRICTED: AAL1 (no MFA required)
         local amr='["pwd"'
         if [ "$clearance" == "TOP_SECRET" ]; then
             # TOP_SECRET: require hwk (WebAuthn) - set if has it OR by requirement
@@ -310,13 +311,28 @@ create_user() {
             [ "$has_otp" == "true" ] && amr="${amr},\"otp\""
             [ "$has_webauthn" == "true" ] && amr="${amr},\"hwk\""
         else
-            # UNCLASSIFIED: only add methods actually configured
+            # UNCLASSIFIED/RESTRICTED: only add methods actually configured (no MFA required)
             [ "$has_otp" == "true" ] && amr="${amr},\"otp\""
             [ "$has_webauthn" == "true" ] && amr="${amr},\"hwk\""
         fi
         amr="${amr}]"
 
+        # Determine AAL level based on clearance
+        local aal_level="1"
+        if [ "$clearance" == "CONFIDENTIAL" ] || [ "$clearance" == "SECRET" ]; then
+            aal_level="2"
+        elif [ "$clearance" == "TOP_SECRET" ]; then
+            aal_level="3"
+        fi
+
+        # Determine dive_roles based on is_admin
+        local dive_roles='["user"]'
+        if [ "$is_admin" == "true" ]; then
+            dive_roles='["user","admin","super_admin"]'
+        fi
+
         # Update existing user with credential-based AMR
+        # FIX: uniqueID = username (no -001 suffix) for ACP-240 PII minimization
         curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
@@ -328,22 +344,37 @@ create_user() {
                 \"attributes\": {
                     \"clearance\": [\"${clearance}\"],
                     \"countryOfAffiliation\": [\"USA\"],
-                    \"uniqueID\": [\"${username}-001\"],
+                    \"uniqueID\": [\"${username}\"],
                     \"acpCOI\": ${coi_json},
-                    \"amr\": ${amr}
+                    \"amr\": ${amr},
+                    \"aal_level\": [\"${aal_level}\"],
+                    \"dive_roles\": ${dive_roles},
+                    \"pilot_user\": [\"true\"],
+                    \"created_by\": [\"seed-script\"]
                 }
             }" > /dev/null 2>&1
-        log_info "Updated: ${username} (${clearance}, amr=${amr})"
+        log_info "Updated: ${username} (${clearance}, AAL${aal_level}, amr=${amr})"
     else
         # Determine initial AMR based on clearance requirements
         # TOP_SECRET gets hwk (will need to configure WebAuthn)
         # CONFIDENTIAL/SECRET start with pwd only (will need to configure TOTP)
         local initial_amr='["pwd"]'
-        if [ "$clearance" == "TOP_SECRET" ]; then
+        local aal_level="1"
+        if [ "$clearance" == "CONFIDENTIAL" ] || [ "$clearance" == "SECRET" ]; then
+            aal_level="2"
+        elif [ "$clearance" == "TOP_SECRET" ]; then
             initial_amr='["pwd","hwk"]'
+            aal_level="3"
+        fi
+
+        # Determine dive_roles based on is_admin
+        local dive_roles='["user"]'
+        if [ "$is_admin" == "true" ]; then
+            dive_roles='["user","admin","super_admin"]'
         fi
 
         # Create new user
+        # FIX: uniqueID = username (no -001 suffix) for ACP-240 PII minimization
         local http_code=$(curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
@@ -354,13 +385,18 @@ create_user() {
                 \"emailVerified\": true,
                 \"firstName\": \"${first_name}\",
                 \"lastName\": \"${last_name}\",
+                \"requiredActions\": [],
                 \"credentials\": [{\"type\": \"password\", \"value\": \"${password}\", \"temporary\": false}],
                 \"attributes\": {
                     \"clearance\": [\"${clearance}\"],
                     \"countryOfAffiliation\": [\"USA\"],
-                    \"uniqueID\": [\"${username}-001\"],
+                    \"uniqueID\": [\"${username}\"],
                     \"acpCOI\": ${coi_json},
-                    \"amr\": ${initial_amr}
+                    \"amr\": ${initial_amr},
+                    \"aal_level\": [\"${aal_level}\"],
+                    \"dive_roles\": ${dive_roles},
+                    \"pilot_user\": [\"true\"],
+                    \"created_by\": [\"seed-script\"]
                 }
             }" -o /dev/null -w "%{http_code}")
 
@@ -411,17 +447,54 @@ create_user() {
 
 log_step "Creating test users..."
 echo ""
-echo "  Creating testuser-usa-{1-4} with clearance levels:"
+echo "  Creating testuser-usa-{1-5} with 5-level clearance system:"
+echo "    Level 1: UNCLASSIFIED (AAL1)"
+echo "    Level 2: RESTRICTED (AAL1)"
+echo "    Level 3: CONFIDENTIAL (AAL2 - MFA)"
+echo "    Level 4: SECRET (AAL2 - MFA)"
+echo "    Level 5: TOP_SECRET (AAL3 - MFA + HW)"
 echo ""
 
-# Test users with escalating clearance
-create_user "testuser-usa-1" "testuser-usa-1@dive.mil" "Unclassified" "User" "UNCLASSIFIED" "" "$TEST_USER_PASSWORD" "false"
-create_user "testuser-usa-2" "testuser-usa-2@dive.mil" "Confidential" "Analyst" "CONFIDENTIAL" "" "$TEST_USER_PASSWORD" "false"
-create_user "testuser-usa-3" "testuser-usa-3@dive.mil" "Secret" "Officer" "SECRET" "NATO" "$TEST_USER_PASSWORD" "false"
-create_user "testuser-usa-4" "testuser-usa-4@dive.mil" "TopSecret" "Director" "TOP_SECRET" "NATO,FVEY" "$TEST_USER_PASSWORD" "false"
+# Ocean-themed pseudonyms for PII minimization (ACP-240 Section 6.2)
+# Format: Adjective + Noun (deterministic based on username hash)
+OCEAN_ADJECTIVES=("Azure" "Blue" "Cerulean" "Deep" "Electric" "Frosted" "Golden" "Jade" "Midnight" "Pacific" "Royal" "Sapphire" "Teal" "Turquoise" "Coral" "Pearl" "Silver" "Arctic")
+OCEAN_NOUNS=("Whale" "Dolphin" "Orca" "Marlin" "Shark" "Ray" "Reef" "Current" "Wave" "Tide" "Storm" "Breeze" "Kelp" "Anemone" "Starfish" "Octopus" "Nautilus" "Turtle")
+
+# Generate deterministic pseudonym from username
+generate_pseudonym() {
+    local username="$1"
+    local hash=$(echo -n "$username" | md5sum | cut -c1-8)
+    local adj_idx=$((16#${hash:0:4} % ${#OCEAN_ADJECTIVES[@]}))
+    local noun_idx=$((16#${hash:4:4} % ${#OCEAN_NOUNS[@]}))
+    echo "${OCEAN_ADJECTIVES[$adj_idx]}:${OCEAN_NOUNS[$noun_idx]}"
+}
+
+# Test users with 5-level clearance system
+# Now with PII minimization: pseudonymized names and emails
+PSEUDO1=$(generate_pseudonym "testuser-usa-1")
+PSEUDO2=$(generate_pseudonym "testuser-usa-2")
+PSEUDO3=$(generate_pseudonym "testuser-usa-3")
+PSEUDO4=$(generate_pseudonym "testuser-usa-4")
+PSEUDO5=$(generate_pseudonym "testuser-usa-5")
+PSEUDO_ADMIN=$(generate_pseudonym "admin-usa")
+
+# Generate pseudonymized emails (hash-based)
+HASH1=$(echo -n "testuser-usa-1-USA" | md5sum | cut -c1-8)
+HASH2=$(echo -n "testuser-usa-2-USA" | md5sum | cut -c1-8)
+HASH3=$(echo -n "testuser-usa-3-USA" | md5sum | cut -c1-8)
+HASH4=$(echo -n "testuser-usa-4-USA" | md5sum | cut -c1-8)
+HASH5=$(echo -n "testuser-usa-5-USA" | md5sum | cut -c1-8)
+HASH_ADMIN=$(echo -n "admin-usa-USA" | md5sum | cut -c1-8)
+
+# Create users with pseudonymized PII
+create_user "testuser-usa-1" "${HASH1}@pseudonym.dive25.mil" "${PSEUDO1%%:*}" "${PSEUDO1##*:}" "UNCLASSIFIED" "" "$TEST_USER_PASSWORD" "false"
+create_user "testuser-usa-2" "${HASH2}@pseudonym.dive25.mil" "${PSEUDO2%%:*}" "${PSEUDO2##*:}" "RESTRICTED" "" "$TEST_USER_PASSWORD" "false"
+create_user "testuser-usa-3" "${HASH3}@pseudonym.dive25.mil" "${PSEUDO3%%:*}" "${PSEUDO3##*:}" "CONFIDENTIAL" "" "$TEST_USER_PASSWORD" "false"
+create_user "testuser-usa-4" "${HASH4}@pseudonym.dive25.mil" "${PSEUDO4%%:*}" "${PSEUDO4##*:}" "SECRET" "NATO" "$TEST_USER_PASSWORD" "false"
+create_user "testuser-usa-5" "${HASH5}@pseudonym.dive25.mil" "${PSEUDO5%%:*}" "${PSEUDO5##*:}" "TOP_SECRET" "NATO,FVEY" "$TEST_USER_PASSWORD" "false"
 
 log_step "Creating admin user..."
-create_user "admin-usa" "admin-usa@dive.mil" "Admin" "User" "TOP_SECRET" "NATO,FVEY" "$ADMIN_USER_PASSWORD" "true"
+create_user "admin-usa" "${HASH_ADMIN}@admin.dive25.mil" "Commander" "Lighthouse" "TOP_SECRET" "NATO,FVEY" "$ADMIN_USER_PASSWORD" "true"
 
 # =============================================================================
 # Verification
@@ -429,24 +502,34 @@ create_user "admin-usa" "admin-usa@dive.mil" "Admin" "User" "TOP_SECRET" "NATO,F
 echo ""
 log_step "Verifying user attributes..."
 
-for user in testuser-usa-1 testuser-usa-2 testuser-usa-3 testuser-usa-4 admin-usa; do
+for user in testuser-usa-1 testuser-usa-2 testuser-usa-3 testuser-usa-4 testuser-usa-5 admin-usa; do
     USER_DATA=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${user}" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0]')
     CLEARANCE=$(echo "$USER_DATA" | jq -r '.attributes.clearance[0] // "MISSING"')
-    echo "  ${user}: clearance=${CLEARANCE}"
+    AAL=$(echo "$USER_DATA" | jq -r '.attributes.aal_level[0] // "?"')
+    PSEUDO_FIRST=$(echo "$USER_DATA" | jq -r '.firstName // "?"')
+    PSEUDO_LAST=$(echo "$USER_DATA" | jq -r '.lastName // "?"')
+    echo "  ${user}: ${CLEARANCE} (AAL${AAL}) → ${PSEUDO_FIRST} ${PSEUDO_LAST}"
 done
 
 echo ""
 log_success "Hub user seeding complete!"
 echo ""
-echo "  Test credentials:"
-echo "    testuser-usa-{1-4}: ${TEST_USER_PASSWORD}"
+echo "  Test credentials (5-level clearance system):"
+echo "    testuser-usa-{1-5}: ${TEST_USER_PASSWORD}"
 echo "    admin-usa: ${ADMIN_USER_PASSWORD}"
 echo ""
-echo "  MFA Requirements (NIST 800-63B):"
-echo "    - UNCLASSIFIED: No MFA required (AAL1)"
-echo "    - CONFIDENTIAL/SECRET: TOTP required (AAL2, amr=[pwd,otp])"
-echo "    - TOP_SECRET: WebAuthn required (AAL3, amr=[pwd,hwk])"
+echo "  Clearance Levels (NIST 800-63B / ACP-240):"
+echo "    Level 1: UNCLASSIFIED - No MFA (AAL1)"
+echo "    Level 2: RESTRICTED   - No MFA (AAL1)"
+echo "    Level 3: CONFIDENTIAL - TOTP required (AAL2)"
+echo "    Level 4: SECRET       - TOTP required (AAL2)"
+echo "    Level 5: TOP_SECRET   - WebAuthn required (AAL3)"
+echo ""
+echo "  PII Minimization (ACP-240 Section 6.2):"
+echo "    - Real names replaced with ocean-themed pseudonyms"
+echo "    - uniqueID = username (no suffix)"
+echo "    - Emails pseudonymized with hash-based addresses"
 echo ""
 echo "  Note: Users must configure TOTP/WebAuthn to access classified resources."
 echo "        AMR claim is populated by Keycloak based on actual auth methods used."

@@ -487,7 +487,6 @@ export async function getResourceByIdFederated(
 
         // Override static config in development mode to use Docker internal URLs
         if (originApiUrl && (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
-            const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
             if (originInstance === 'FRA' && originApiUrl.includes('fra-api.dive25.com')) {
                 originApiUrl = 'https://dive-spoke-fra-backend:4000';
                 logger.info('Overriding static FRA API URL for development', {

@@ -335,17 +335,15 @@ cmd_rollback() {
 }
 
 # =============================================================================
-# NUKE COMMAND (FULLY IDEMPOTENT)
+# NUKE COMMAND (FULLY IDEMPOTENT - ENHANCED FOR 100% CLEANUP)
 # =============================================================================
 
 cmd_nuke() {
-    # #region agent log
-    echo "{\"location\":\"deploy.sh:341\",\"message\":\"cmd_nuke entry\",\"data\":{\"args\":\"$*\"},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
-    # #endregion
     local confirm_flag=false
     local force_flag=false
     local keep_images=false
     local reset_spokes=false
+    local deep_clean=false
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -367,6 +365,10 @@ cmd_nuke() {
                 reset_spokes=true
                 shift
                 ;;
+            --deep|--deep-clean)
+                deep_clean=true
+                shift
+                ;;
             *)
                 shift
                 ;;
@@ -376,43 +378,90 @@ cmd_nuke() {
     ensure_dive_root
     cd "$DIVE_ROOT" || exit 1
 
-    # Count resources to be removed
-    local container_count=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    local volume_count=$(docker volume ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    local network_count=$(docker network ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    # #region agent log
-    echo "{\"location\":\"deploy.sh:371\",\"message\":\"Pre-nuke resource count\",\"data\":{\"containers\":$container_count,\"volumes\":$volume_count,\"networks\":$network_count},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
-    # #endregion
+    # =========================================================================
+    # PHASE 1: COMPREHENSIVE RESOURCE DISCOVERY
+    # =========================================================================
+    # Use multiple patterns to catch ALL possible DIVE-related resources
+
+    # Container patterns: dive-*, spoke-*, *-keycloak, *-mongodb, *-postgres, *-backend, *-frontend
+    local container_patterns="dive|spoke|hub-keycloak|hub-mongodb|hub-postgres|hub-backend|hub-frontend|hub-opa|hub-kas|hub-redis|hub-authzforce|hub-opal"
+    local all_containers=$(docker ps -aq 2>/dev/null)
+    local dive_containers=""
+    for c in $all_containers; do
+        local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+        if echo "$name" | grep -qE "$container_patterns"; then
+            dive_containers="$dive_containers $c"
+        fi
+    done
+    local container_count=$(echo $dive_containers | wc -w | tr -d ' ')
+
+    # Volume patterns: dive-*, hub_*, {3-letter-code}_* (spoke volumes)
+    local volume_patterns="^dive|^hub_|^[a-z]{3}_"
+    local all_volumes=$(docker volume ls -q 2>/dev/null)
+    local dive_volumes=""
+    for v in $all_volumes; do
+        if echo "$v" | grep -qE "$volume_patterns"; then
+            dive_volumes="$dive_volumes $v"
+        fi
+    done
+    local volume_count=$(echo $dive_volumes | wc -w | tr -d ' ')
+
+    # Network patterns: dive-*, hub-*, *-internal, shared-services
+    local network_patterns="dive|hub-|internal|shared-services"
+    local all_networks=$(docker network ls --format '{{.Name}}' 2>/dev/null)
+    local dive_networks=""
+    for n in $all_networks; do
+        # Skip default networks
+        if [[ "$n" == "bridge" || "$n" == "host" || "$n" == "none" || "$n" == "ingress" || "$n" == "docker_gwbridge" ]]; then
+            continue
+        fi
+        if echo "$n" | grep -qE "$network_patterns"; then
+            dive_networks="$dive_networks $n"
+        fi
+    done
+    local network_count=$(echo $dive_networks | wc -w | tr -d ' ')
+
+    # Images
+    local image_count=0
+    if [ "$keep_images" = false ]; then
+        image_count=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E "dive|ghcr.io/opentdf" | wc -l | tr -d ' ')
+    fi
+
+    # Dangling volumes (anonymous volumes)
+    local dangling_count=$(docker volume ls -qf dangling=true 2>/dev/null | wc -l | tr -d ' ')
 
     echo ""
-    echo -e "${RED}⚠️  NUKE: This will destroy ALL DIVE resources${NC}"
+    echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║  ⚠️   NUKE: COMPLETE DESTRUCTION OF ALL DIVE RESOURCES               ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "  Resources to be removed:"
-    echo "    - Containers: ${container_count}"
-    echo "    - Volumes:    ${volume_count}"
-    echo "    - Networks:   ${network_count}"
-    if [ "$keep_images" = false ]; then
-        local image_count=$(docker images -q --filter 'reference=*dive*' 2>/dev/null | wc -l | tr -d ' ')
-        echo "    - Images:     ${image_count}"
-    fi
+    echo "  Resources discovered for removal:"
+    echo "    - Containers (dive/hub/spoke):  ${container_count}"
+    echo "    - Named Volumes:                ${volume_count}"
+    echo "    - Dangling/Anonymous Volumes:   ${dangling_count}"
+    echo "    - Networks:                     ${network_count}"
+    [ "$keep_images" = false ] && echo "    - Images:                       ${image_count}"
     if [ "$reset_spokes" = true ]; then
         local spoke_count=0
         for spoke_dir in "${DIVE_ROOT}/instances"/*; do
             [ -d "$spoke_dir" ] && [ -f "$spoke_dir/config.json" ] && spoke_count=$((spoke_count + 1))
         done
-        echo "    - Spoke Configs: ${spoke_count} (registration data will be cleared)"
+        echo "    - Spoke Configs:                ${spoke_count} (registration data will be cleared)"
+    fi
+    if [ "$deep_clean" = true ]; then
+        echo ""
+        echo -e "    ${YELLOW}--deep mode: Will also remove ALL dangling resources${NC}"
     fi
     echo ""
 
     if [ "$DRY_RUN" = true ]; then
-        log_dry "docker compose -f docker-compose.yml down -v --remove-orphans"
-        log_dry "docker compose -f docker-compose.hub.yml down -v --remove-orphans"
-        log_dry "docker compose -f docker-compose.pilot.yml down -v --remove-orphans"
-        log_dry "docker volume rm (all dive-* volumes)"
-        log_dry "docker network rm dive-shared shared-services"
-        [ "$keep_images" = false ] && log_dry "docker image rm (all dive images)"
-        log_dry "docker system prune -f --volumes"
-        log_dry "rm -rf .dive-checkpoint/"
+        log_dry "Phase 1: Stop all compose projects (dive-hub, spoke instances)"
+        log_dry "Phase 2: Force-remove ${container_count} containers"
+        log_dry "Phase 3: Force-remove ${volume_count} named volumes + ${dangling_count} dangling"
+        log_dry "Phase 4: Force-remove ${network_count} networks"
+        [ "$keep_images" = false ] && log_dry "Phase 5: Remove ${image_count} images"
+        log_dry "Phase 6: docker system prune -f --volumes"
+        log_dry "Phase 7: Cleanup checkpoint directory"
         return 0
     fi
 
@@ -427,117 +476,157 @@ cmd_nuke() {
     fi
 
     log_warn "NUKING EVERYTHING..."
+    echo ""
 
-    # Stop and remove containers from all compose files
-    for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml; do
+    # =========================================================================
+    # PHASE 2: STOP ALL COMPOSE PROJECTS
+    # =========================================================================
+    log_step "Phase 1/7: Stopping all Docker Compose projects..."
+
+    # Main compose files
+    for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml docker-compose.prod.yml; do
         if [ -f "$compose_file" ]; then
-            # Extract project name from compose file (first line with 'name:')
-            local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: //' | tr -d ' ')
+            local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
             if [ -n "$project_name" ]; then
-                docker compose -f "$compose_file" --project-name "$project_name" down -v --remove-orphans 2>/dev/null || true
+                log_verbose "  Stopping project: $project_name"
+                docker compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>/dev/null || true
             else
-                # For compose files without explicit project names, try with default project name
-                docker compose -f "$compose_file" down -v --remove-orphans 2>/dev/null || true
+                docker compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>/dev/null || true
             fi
         fi
     done
 
-    # Remove instance-specific containers
+    # Instance-specific compose files (spokes)
     for instance_dir in instances/*/; do
         if [ -f "${instance_dir}docker-compose.yml" ]; then
-            (cd "$instance_dir" && docker compose down -v --remove-orphans 2>/dev/null) || true
+            log_verbose "  Stopping spoke: $(basename "$instance_dir")"
+            (cd "$instance_dir" && docker compose down -v --remove-orphans --timeout 5 2>/dev/null) || true
         fi
     done
 
-    # CRITICAL: Force remove ALL orphaned dive containers (even if compose file is missing)
-    log_verbose "Force removing all dive-related containers..."
-    local dive_containers=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    local spoke_containers=$(docker ps -aq --filter 'name=spoke' 2>/dev/null | wc -l | tr -d ' ')
-    # #region agent log
-    echo "{\"location\":\"deploy.sh:437\",\"message\":\"Force removing orphaned containers\",\"data\":{\"dive_containers\":$dive_containers,\"spoke_containers\":$spoke_containers},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run2\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
-    # #endregion
-    for container in $(docker ps -aq --filter 'name=dive' 2>/dev/null); do
-        docker rm -f "$container" 2>/dev/null || true
-    done
-    for container in $(docker ps -aq --filter 'name=spoke' 2>/dev/null); do
-        docker rm -f "$container" 2>/dev/null || true
+    # =========================================================================
+    # PHASE 3: FORCE REMOVE ALL CONTAINERS
+    # =========================================================================
+    log_step "Phase 2/7: Force-removing all DIVE containers..."
+
+    local removed_containers=0
+    for c in $dive_containers; do
+        if docker rm -f "$c" 2>/dev/null; then
+            removed_containers=$((removed_containers + 1))
+        fi
     done
 
-    # Remove all dive-related volumes explicitly (including dive-hub_* pattern)
-    for vol in $(docker volume ls -q --filter 'name=dive' 2>/dev/null); do
-        docker volume rm "$vol" 2>/dev/null || true
-    done
-    # Also remove volumes with project-specific prefixes (dive-hub_*, {code}_*)
-    for vol in $(docker volume ls --format '{{.Name}}' | grep -E '^(dive-hub_|[a-z]{3}_)' 2>/dev/null); do
-        docker volume rm "$vol" 2>/dev/null || true
-    done
-
-    # Remove networks via compose (removes project-prefixed networks)
-    for compose_file in docker-compose.yml docker-compose.pilot.yml docker-compose.hub.yml; do
-        if [ -f "$compose_file" ]; then
-            # Extract project name from compose file (first line with 'name:')
-            local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: //' | tr -d ' ')
-            if [ -n "$project_name" ]; then
-                docker compose -f "$compose_file" --project-name "$project_name" down --remove-orphans 2>/dev/null || true
-            else
-                docker compose -f "$compose_file" down --remove-orphans 2>/dev/null || true
+    # Also catch any that weren't in our pattern (by compose project label)
+    for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
+        for c in $(docker ps -aq --filter "label=$label" 2>/dev/null); do
+            if docker rm -f "$c" 2>/dev/null; then
+                removed_containers=$((removed_containers + 1))
             fi
+        done
+    done
+    log_verbose "  Removed $removed_containers containers"
+
+    # =========================================================================
+    # PHASE 4: FORCE REMOVE ALL VOLUMES
+    # =========================================================================
+    log_step "Phase 3/7: Force-removing all DIVE volumes..."
+
+    local removed_volumes=0
+
+    # Named volumes matching our patterns
+    for v in $dive_volumes; do
+        if docker volume rm -f "$v" 2>/dev/null; then
+            removed_volumes=$((removed_volumes + 1))
         fi
     done
 
-    # CRITICAL: Force remove ALL dive-related networks (even orphaned spoke networks)
-    log_verbose "Force removing all dive-related networks..."
-    local dive_networks=$(docker network ls --filter 'name=dive' -q 2>/dev/null | wc -l | tr -d ' ')
-    local spoke_networks=$(docker network ls --format '{{.Name}}' | grep -E '^[a-z]{3}_dive-[a-z]{3}-network$' 2>/dev/null | wc -l | tr -d ' ')
-    # #region agent log
-    echo "{\"location\":\"deploy.sh:454\",\"message\":\"Force removing orphaned networks\",\"data\":{\"dive_networks\":$dive_networks,\"spoke_networks\":$spoke_networks},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run2\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
-    # #endregion
-    for net in $(docker network ls --filter 'name=dive' -q 2>/dev/null); do
-        # Disconnect all containers first
-        for container in $(docker network inspect "$net" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
-            docker network disconnect -f "$net" "$container" 2>/dev/null || true
-        done
-        docker network rm "$net" 2>/dev/null || true
-    done
-
-    # Remove spoke networks (pattern: <code>_dive-<code>-network)
-    for net in $(docker network ls --format '{{.Name}}' | grep -E '^[a-z]{3}_dive-[a-z]{3}-network$' 2>/dev/null); do
-        for container in $(docker network inspect "$net" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
-            docker network disconnect -f "$net" "$container" 2>/dev/null || true
-        done
-        docker network rm "$net" 2>/dev/null || true
-    done
-
-    # Remove external shared networks (only if not in use)
-    for net in dive-shared shared-services; do
-        if docker network inspect "$net" >/dev/null 2>&1; then
-            local container_count=$(docker network inspect "$net" --format='{{len .Containers}}' 2>/dev/null || echo "0")
-            if [ "$container_count" -eq 0 ]; then
-                docker network rm "$net" 2>/dev/null || true
+    # Also remove by label
+    for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
+        for v in $(docker volume ls -q --filter "label=$label" 2>/dev/null); do
+            if docker volume rm -f "$v" 2>/dev/null; then
+                removed_volumes=$((removed_volumes + 1))
             fi
-        fi
+        done
     done
 
-    # Remove dive images unless --keep-images
-    if [ "$keep_images" = false ]; then
-        for img in $(docker images -q --filter 'reference=*dive*' 2>/dev/null); do
-            docker image rm -f "$img" 2>/dev/null || true
+    # Remove dangling/anonymous volumes (deep clean mode or always for safety)
+    if [ "$deep_clean" = true ]; then
+        log_verbose "  Deep clean: removing ALL dangling volumes..."
+        for v in $(docker volume ls -qf dangling=true 2>/dev/null); do
+            if docker volume rm -f "$v" 2>/dev/null; then
+                removed_volumes=$((removed_volumes + 1))
+            fi
         done
     fi
+    log_verbose "  Removed $removed_volumes volumes"
 
-    # Final prune (removes any remaining dangling resources)
+    # =========================================================================
+    # PHASE 5: FORCE REMOVE ALL NETWORKS
+    # =========================================================================
+    log_step "Phase 4/7: Force-removing all DIVE networks..."
+
+    local removed_networks=0
+    for n in $dive_networks; do
+        # Disconnect all containers first
+        for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+            docker network disconnect -f "$n" "$container" 2>/dev/null || true
+        done
+        if docker network rm "$n" 2>/dev/null; then
+            removed_networks=$((removed_networks + 1))
+        fi
+    done
+
+    # Also remove by label
+    for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
+        for n in $(docker network ls -q --filter "label=$label" 2>/dev/null); do
+            docker network rm "$n" 2>/dev/null && removed_networks=$((removed_networks + 1))
+        done
+    done
+    log_verbose "  Removed $removed_networks networks"
+
+    # =========================================================================
+    # PHASE 6: REMOVE IMAGES
+    # =========================================================================
+    if [ "$keep_images" = false ]; then
+        log_step "Phase 5/7: Removing DIVE images..."
+        local removed_images=0
+
+        # Remove by name pattern
+        for pattern in "dive" "ghcr.io/opentdf"; do
+            for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "$pattern" | awk '{print $1}'); do
+                if docker image rm -f "$img" 2>/dev/null; then
+                    removed_images=$((removed_images + 1))
+                fi
+            done
+        done
+
+        # Remove dangling images
+        docker image prune -f 2>/dev/null || true
+        log_verbose "  Removed $removed_images images"
+    else
+        log_step "Phase 5/7: Skipping images (--keep-images)"
+    fi
+
+    # =========================================================================
+    # PHASE 7: SYSTEM PRUNE
+    # =========================================================================
+    log_step "Phase 6/7: Final system prune..."
     docker system prune -f --volumes 2>/dev/null || true
+
+    # =========================================================================
+    # PHASE 8: CLEANUP LOCAL STATE
+    # =========================================================================
+    log_step "Phase 7/7: Cleaning local state..."
 
     # Remove checkpoint directory
     rm -rf "${CHECKPOINT_DIR}"
 
     # Clear spoke registrations if requested
     if [ "$reset_spokes" = true ]; then
-        log_step "Clearing spoke registrations..."
+        log_verbose "  Clearing spoke registrations..."
         if [ -f "${DIVE_ROOT}/scripts/clear-stale-spoke-registration.sh" ]; then
             bash "${DIVE_ROOT}/scripts/clear-stale-spoke-registration.sh" --all 2>/dev/null || log_warn "Could not clear spoke registrations"
         else
-            # Fallback: manually clear registeredSpokeId from all config.json files
             for spoke_dir in "${DIVE_ROOT}/instances"/*; do
                 if [ -f "$spoke_dir/config.json" ]; then
                     local instance_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
@@ -545,28 +634,74 @@ cmd_nuke() {
                         jq 'del(.identity.registeredSpokeId) | .federation.status = "unregistered" | del(.federation.registeredAt)' \
                             "$spoke_dir/config.json" > "$spoke_dir/config.json.tmp" && \
                             mv "$spoke_dir/config.json.tmp" "$spoke_dir/config.json"
-                        log_info "Cleared registration for $instance_code"
+                        log_verbose "  Cleared registration for $instance_code"
                     fi
                     rm -f "$spoke_dir/.federation-registered"
                 fi
             done
         fi
-        log_success "Spoke registrations cleared"
     fi
 
-    # Verify clean state
-    local remaining_containers=$(docker ps -aq --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    local remaining_volumes=$(docker volume ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    local remaining_networks=$(docker network ls -q --filter 'name=dive' 2>/dev/null | wc -l | tr -d ' ')
-    # #region agent log
-    echo "{\"location\":\"deploy.sh:480\",\"message\":\"Post-nuke resource count\",\"data\":{\"containers\":$remaining_containers,\"volumes\":$remaining_volumes,\"networks\":$remaining_networks},\"timestamp\":$(date +%s%3N),\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\"}" >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
-    # #endregion
+    # Clean Terraform state if it exists (optional for full reset)
+    if [ "$deep_clean" = true ]; then
+        log_verbose "  Deep clean: removing Terraform state..."
+        rm -rf "${DIVE_ROOT}/terraform/pilot/.terraform" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/pilot/terraform.tfstate"* 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/pilot/.terraform.lock.hcl" 2>/dev/null || true
+    fi
 
+    # =========================================================================
+    # VERIFICATION
+    # =========================================================================
+    echo ""
+    log_step "Verifying clean state..."
+
+    # Recheck using same discovery logic
+    local final_containers=""
+    for c in $(docker ps -aq 2>/dev/null); do
+        local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+        if echo "$name" | grep -qE "$container_patterns"; then
+            final_containers="$final_containers $c"
+        fi
+    done
+    local remaining_containers=$(echo $final_containers | wc -w | tr -d ' ')
+
+    local final_volumes=""
+    for v in $(docker volume ls -q 2>/dev/null); do
+        if echo "$v" | grep -qE "$volume_patterns"; then
+            final_volumes="$final_volumes $v"
+        fi
+    done
+    local remaining_volumes=$(echo $final_volumes | wc -w | tr -d ' ')
+
+    local final_networks=""
+    for n in $(docker network ls --format '{{.Name}}' 2>/dev/null); do
+        if [[ "$n" == "bridge" || "$n" == "host" || "$n" == "none" || "$n" == "ingress" || "$n" == "docker_gwbridge" ]]; then
+            continue
+        fi
+        if echo "$n" | grep -qE "$network_patterns"; then
+            final_networks="$final_networks $n"
+        fi
+    done
+    local remaining_networks=$(echo $final_networks | wc -w | tr -d ' ')
+
+    echo ""
     if [ "$remaining_containers" -eq 0 ] && [ "$remaining_volumes" -eq 0 ] && [ "$remaining_networks" -eq 0 ]; then
-        log_success "Clean slate achieved ✓"
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║  ✅ CLEAN SLATE ACHIEVED                                             ║${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     else
-        log_warn "Some resources may remain (containers: ${remaining_containers}, volumes: ${remaining_volumes}, networks: ${remaining_networks})"
-        log_info "Run './dive nuke --confirm' again if needed"
+        echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║  ⚠️  PARTIAL CLEANUP - SOME RESOURCES REMAIN                         ║${NC}"
+        echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo "  Remaining:"
+        [ "$remaining_containers" -gt 0 ] && echo "    - Containers: $remaining_containers ($final_containers)"
+        [ "$remaining_volumes" -gt 0 ] && echo "    - Volumes: $remaining_volumes ($final_volumes)"
+        [ "$remaining_networks" -gt 0 ] && echo "    - Networks: $remaining_networks ($final_networks)"
+        echo ""
+        echo "  Run with --deep flag for more aggressive cleanup:"
+        echo "    ./dive nuke --yes --deep"
     fi
 }
 
@@ -612,11 +747,20 @@ module_deploy_help() {
     echo "  --force, -f         Force destruction (skip confirmation)"
     echo "  --keep-images       Don't remove Docker images"
     echo "  --reset-spokes      Clear spoke registration data (fixes stale spokeIds)"
+    echo "  --deep              Deep clean: remove ALL dangling volumes + Terraform state"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./dive nuke --confirm                # Destroy all DIVE resources"
-    echo "  ./dive nuke --confirm --reset-spokes # Also clear spoke registrations"
+    echo "  ./dive nuke --yes                    # Standard nuke (all DIVE resources)"
+    echo "  ./dive nuke --yes --deep             # Deep clean (+ dangling volumes + TF state)"
+    echo "  ./dive nuke --yes --reset-spokes     # Also clear spoke registrations"
     echo "  ./dive checkpoint create             # Save current state"
     echo "  ./dive rollback                      # Restore from latest checkpoint"
-    echo "  ./dive rollback 20251218_120000      # Restore specific checkpoint"
+    echo ""
+    echo -e "${BOLD}Clean Slate Guarantee:${NC}"
+    echo "  The nuke command uses multi-pattern discovery to catch:"
+    echo "    • All containers matching: dive-*, spoke-*, hub-*"
+    echo "    • All volumes matching: dive-*, hub_*, {code}_*"
+    echo "    • All networks matching: dive-*, hub-*, *-internal"
+    echo "    • Compose project labels: dive-hub, dive-v3"
+    echo ""
 }

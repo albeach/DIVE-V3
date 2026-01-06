@@ -3,6 +3,19 @@
 # Seed users with localized attributes for a NATO spoke
 # Uses country-specific attribute names from nato-attribute-mappings.json
 #
+# PILOT STANDARD v2.0 (with RESTRICTED clearance):
+#   - 5 users per instance with predictable naming
+#   - Format: testuser-{code}-{level}
+#   - Level 1-5 corresponds to clearance (higher = more access)
+#   - Single password for all: TestUser2025!Pilot
+#
+# Quick Reference:
+#   testuser-{code}-1 → UNCLASSIFIED  (AAL1)
+#   testuser-{code}-2 → RESTRICTED    (AAL1)
+#   testuser-{code}-3 → CONFIDENTIAL  (AAL2 - MFA)
+#   testuser-{code}-4 → SECRET        (AAL2 - MFA)
+#   testuser-{code}-5 → TOP_SECRET    (AAL3 - MFA + HW)
+#
 # Usage: ./seed-localized-users.sh <COUNTRY_CODE>
 # Example: ./seed-localized-users.sh HUN
 ##
@@ -52,6 +65,7 @@ COUNTRY_LANG=$(jq -r ".countries.${COUNTRY_CODE}.language" "$MAPPINGS_FILE")
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║  Seeding Users with Localized Attributes for ${COUNTRY_NAME}${NC}"
+echo -e "${BOLD}║  Version 2.0 - 5-Level Clearance System with RESTRICTED${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -90,8 +104,9 @@ LOCAL_COUNTRY=$(jq -r ".countries.${COUNTRY_CODE}.attributes | to_entries | .[] 
 LOCAL_UNIQUEID=$(jq -r ".countries.${COUNTRY_CODE}.attributes | to_entries | .[] | select(.value==\"uniqueID\") | .key" "$MAPPINGS_FILE")
 LOCAL_COI=$(jq -r ".countries.${COUNTRY_CODE}.attributes | to_entries | .[] | select(.value==\"acpCOI\") | .key" "$MAPPINGS_FILE")
 
-# Get localized clearance values
+# Get localized clearance values (all 5 levels)
 CLEARANCE_UNCLASS=$(jq -r ".countries.${COUNTRY_CODE}.clearance_values | to_entries | .[] | select(.value==\"UNCLASSIFIED\") | .key" "$MAPPINGS_FILE")
+CLEARANCE_RESTRICT=$(jq -r ".countries.${COUNTRY_CODE}.clearance_values | to_entries | .[] | select(.value==\"RESTRICTED\") | .key" "$MAPPINGS_FILE")
 CLEARANCE_CONF=$(jq -r ".countries.${COUNTRY_CODE}.clearance_values | to_entries | .[] | select(.value==\"CONFIDENTIAL\") | .key" "$MAPPINGS_FILE")
 CLEARANCE_SECRET=$(jq -r ".countries.${COUNTRY_CODE}.clearance_values | to_entries | .[] | select(.value==\"SECRET\") | .key" "$MAPPINGS_FILE")
 CLEARANCE_TS=$(jq -r ".countries.${COUNTRY_CODE}.clearance_values | to_entries | .[] | select(.value==\"TOP_SECRET\") | .key" "$MAPPINGS_FILE")
@@ -102,45 +117,72 @@ echo "  ${LOCAL_COUNTRY} (countryOfAffiliation)"
 echo "  ${LOCAL_UNIQUEID} (uniqueID)"
 echo "  ${LOCAL_COI} (acpCOI)"
 echo ""
-echo "Localized clearance values:"
-echo "  ${CLEARANCE_UNCLASS} = UNCLASSIFIED"
-echo "  ${CLEARANCE_CONF} = CONFIDENTIAL"
-echo "  ${CLEARANCE_SECRET} = SECRET"
-echo "  ${CLEARANCE_TS} = TOP_SECRET"
+echo "Localized clearance values (5-level system):"
+echo "  ${CLEARANCE_UNCLASS} = UNCLASSIFIED (AAL1)"
+echo "  ${CLEARANCE_RESTRICT} = RESTRICTED (AAL1)"
+echo "  ${CLEARANCE_CONF} = CONFIDENTIAL (AAL2 - MFA)"
+echo "  ${CLEARANCE_SECRET} = SECRET (AAL2 - MFA)"
+echo "  ${CLEARANCE_TS} = TOP_SECRET (AAL3 - MFA + HW)"
 echo ""
 
+# Ocean-themed adjectives and nouns for pseudonyms
+OCEAN_ADJECTIVES=("Azure" "Blue" "Cerulean" "Deep" "Electric" "Frosted" "Golden" "Jade" "Midnight" "Pacific" "Royal" "Sapphire" "Teal" "Turquoise" "Coral" "Pearl" "Silver" "Arctic")
+OCEAN_NOUNS=("Whale" "Dolphin" "Orca" "Marlin" "Shark" "Ray" "Reef" "Current" "Wave" "Tide" "Storm" "Breeze" "Kelp" "Anemone" "Starfish" "Octopus" "Nautilus" "Turtle")
+
+# Generate deterministic pseudonym from username
+generate_pseudonym() {
+    local username="$1"
+    local hash=$(echo -n "$username" | md5sum | cut -c1-8)
+    local adj_idx=$((16#${hash:0:4} % ${#OCEAN_ADJECTIVES[@]}))
+    local noun_idx=$((16#${hash:4:4} % ${#OCEAN_NOUNS[@]}))
+    echo "${OCEAN_ADJECTIVES[$adj_idx]} ${OCEAN_NOUNS[$noun_idx]}"
+}
+
 # Define users to create (using indexed array for bash compatibility)
-USERS=("testuser-${COUNTRY_LOWER}-1:${CLEARANCE_UNCLASS}:Unclassified:User"
-       "testuser-${COUNTRY_LOWER}-2:${CLEARANCE_CONF}:Confidential:User"
-       "testuser-${COUNTRY_LOWER}-3:${CLEARANCE_SECRET}:Secret:User"
-       "testuser-${COUNTRY_LOWER}-4:${CLEARANCE_TS}:TopSecret:User"
-       "admin-${COUNTRY_LOWER}:${CLEARANCE_TS}:Admin:User")
+# Updated: 5 users with RESTRICTED as level 2
+USERS=("testuser-${COUNTRY_LOWER}-1:${CLEARANCE_UNCLASS}:1"
+       "testuser-${COUNTRY_LOWER}-2:${CLEARANCE_RESTRICT}:1"
+       "testuser-${COUNTRY_LOWER}-3:${CLEARANCE_CONF}:2"
+       "testuser-${COUNTRY_LOWER}-4:${CLEARANCE_SECRET}:2"
+       "testuser-${COUNTRY_LOWER}-5:${CLEARANCE_TS}:3"
+       "admin-${COUNTRY_LOWER}:${CLEARANCE_TS}:3")
 
 PASSWORD="TestUser2025!Pilot"
 
 create_or_update_user() {
     local username="$1"
     local clearance_val="$2"
-    local firstname="$3"
-    local lastname="${4:-Operator}"
+    local aal_level="$3"
+    local is_admin="${4:-false}"
 
     # Check if user exists
     local user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
 
-    # FIX: Remove -001 suffix for ACP-240 PII minimization (uniqueID = username)
+    # FIX: uniqueID = username (no suffix) for ACP-240 PII minimization
     local unique_id="${username}"
-    # PII Minimization: Use pseudonymized email and names
-    local pseudonym=$(echo -n "${username}-${COUNTRY_CODE}" | md5sum | cut -c1-8)
-    local email="${pseudonym}@pseudonym.dive25.mil"
-    # Use country code prefix for first/last names to minimize PII
-    firstname="${COUNTRY_CODE}-${firstname}"
-    lastname="Operator"
 
-    # Determine AMR based on clearance
+    # PII Minimization: Use pseudonymized email and names
+    local pseudonym=$(generate_pseudonym "${username}")
+    local firstname=$(echo "$pseudonym" | cut -d' ' -f1)
+    local lastname=$(echo "$pseudonym" | cut -d' ' -f2)
+    local hash=$(echo -n "${username}-${COUNTRY_CODE}" | md5sum | cut -c1-8)
+    local email="${hash}@pseudonym.dive25.mil"
+
+    # Determine AMR based on AAL level
     local amr_val='["pwd"]'
-    if [ "$clearance_val" = "$CLEARANCE_TS" ]; then
+    if [ "$aal_level" = "2" ]; then
+        amr_val='["pwd","otp"]'
+    elif [ "$aal_level" = "3" ]; then
         amr_val='["pwd","hwk"]'
+    fi
+
+    # Determine user type and roles
+    local user_type="military"
+    local dive_roles='["user"]'
+    if [ "$is_admin" = "true" ]; then
+        user_type="admin"
+        dive_roles='["user","admin","super_admin"]'
     fi
 
     # Build user JSON with localized attributes
@@ -159,7 +201,12 @@ create_or_update_user() {
         "${LOCAL_COUNTRY}": ["${COUNTRY_CODE}"],
         "${LOCAL_UNIQUEID}": ["${unique_id}"],
         "${LOCAL_COI}": ["NATO"],
-        "amr": ${amr_val}
+        "amr": ${amr_val},
+        "aal_level": ["${aal_level}"],
+        "userType": ["${user_type}"],
+        "dive_roles": ${dive_roles},
+        "pilot_user": ["true"],
+        "created_by": ["seed-script"]
     },
     "credentials": [{
         "type": "password",
@@ -176,14 +223,14 @@ EOF
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "$user_json" > /dev/null
-        log_success "Updated: ${username} (${clearance_val})"
+        log_success "Updated: ${username} (${clearance_val}, AAL${aal_level}) → ${pseudonym}"
     else
         # Create new user
         curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM}/users" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "$user_json" > /dev/null
-        log_success "Created: ${username} (${clearance_val})"
+        log_success "Created: ${username} (${clearance_val}, AAL${aal_level}) → ${pseudonym}"
     fi
 }
 
@@ -191,15 +238,19 @@ echo -e "${BOLD}Creating/updating users with localized attributes...${NC}"
 echo ""
 
 for user_data in "${USERS[@]}"; do
-    IFS=':' read -r username clearance firstname lastname <<< "$user_data"
-    create_or_update_user "$username" "$clearance" "$firstname" "$lastname"
+    IFS=':' read -r username clearance aal_level <<< "$user_data"
+    is_admin="false"
+    if [[ "$username" == admin-* ]]; then
+        is_admin="true"
+    fi
+    create_or_update_user "$username" "$clearance" "$aal_level" "$is_admin"
 done
 
 echo ""
 echo -e "${BOLD}Verifying users...${NC}"
 
 for user_data in "${USERS[@]}"; do
-    IFS=':' read -r username clearance firstname lastname <<< "$user_data"
+    IFS=':' read -r username clearance aal_level <<< "$user_data"
     USER_DATA=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r ".[0].attributes.${LOCAL_CLEARANCE}[0] // \"NOT_SET\"")
     echo "  ${username}: ${LOCAL_CLEARANCE}=${USER_DATA}"
@@ -210,9 +261,10 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║  Users seeded with localized ${COUNTRY_NAME} attributes!${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "Test logins:"
-echo "  testuser-${COUNTRY_LOWER}-1 / ${PASSWORD}  (${CLEARANCE_UNCLASS})"
-echo "  testuser-${COUNTRY_LOWER}-2 / ${PASSWORD}  (${CLEARANCE_CONF})"
-echo "  testuser-${COUNTRY_LOWER}-3 / ${PASSWORD}  (${CLEARANCE_SECRET})"
-echo "  testuser-${COUNTRY_LOWER}-4 / ${PASSWORD}  (${CLEARANCE_TS})"
-echo "  admin-${COUNTRY_LOWER} / ${PASSWORD}  (${CLEARANCE_TS})"
+echo "Test logins (5-level clearance system):"
+echo "  testuser-${COUNTRY_LOWER}-1 / ${PASSWORD}  (${CLEARANCE_UNCLASS} - UNCLASSIFIED, AAL1)"
+echo "  testuser-${COUNTRY_LOWER}-2 / ${PASSWORD}  (${CLEARANCE_RESTRICT} - RESTRICTED, AAL1)"
+echo "  testuser-${COUNTRY_LOWER}-3 / ${PASSWORD}  (${CLEARANCE_CONF} - CONFIDENTIAL, AAL2)"
+echo "  testuser-${COUNTRY_LOWER}-4 / ${PASSWORD}  (${CLEARANCE_SECRET} - SECRET, AAL2)"
+echo "  testuser-${COUNTRY_LOWER}-5 / ${PASSWORD}  (${CLEARANCE_TS} - TOP_SECRET, AAL3)"
+echo "  admin-${COUNTRY_LOWER} / ${PASSWORD}  (${CLEARANCE_TS} - ADMIN, AAL3)"

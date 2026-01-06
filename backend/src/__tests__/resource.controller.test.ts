@@ -1,7 +1,7 @@
 /**
  * Resource Controller Test Suite
  * Target: 85%+ coverage for resource.controller.ts
- * 
+ *
  * Tests ZTDF resource access with:
  * - Clearance-based filtering
  * - ZTDF details retrieval
@@ -24,6 +24,11 @@ import * as ztdfExportService from '../services/ztdf-export.service';
 import * as ztdfUtils from '../utils/ztdf.utils';
 import axios from 'axios';
 
+// Mock the service account token function
+jest.mock('../utils/keycloak-client', () => ({
+    getKASServiceAccountToken: jest.fn().mockResolvedValue('mock-service-account-token'),
+}));
+
 // Mock logger
 jest.mock('../utils/logger', () => ({
     logger: {
@@ -38,6 +43,7 @@ jest.mock('../utils/logger', () => ({
 jest.mock('../services/resource.service');
 jest.mock('../services/ztdf-export.service');
 jest.mock('../utils/ztdf.utils');
+jest.mock('../utils/keycloak-client');
 jest.mock('axios');
 
 describe('Resource Controller', () => {
@@ -362,21 +368,21 @@ describe('Resource Controller', () => {
                 resourceId: 'ztdf-doc',
                 title: 'Test ZTDF Document',
                 ztdf: {
-                    policy: { 
-                        securityLabel: { 
+                    policy: {
+                        securityLabel: {
                             classification: 'SECRET',
                             releasabilityTo: ['USA'],
                             COI: [],
                             displayMarking: 'SECRET//USA'
-                        } 
+                        }
                     },
                     manifest: { version: '1.0' },
-                    payload: { 
-                        encryptedContent: 'data', 
+                    payload: {
+                        encryptedContent: 'data',
                         keyAccessObjects: [{
                             kasUrl: 'https://kas.example.com',
                             wrappedKey: 'key123'
-                        }] 
+                        }]
                     },
                 },
             };
@@ -618,7 +624,7 @@ describe('Resource Controller', () => {
         it('should request key from KAS successfully', async () => {
             // The implementation expects resourceId and kaoId in the body
             mockReq.body = { resourceId: 'ztdf-123', kaoId: 'kao-1' };
-            mockReq.headers = { 
+            mockReq.headers = {
                 'x-request-id': 'test-123',
                 authorization: 'Bearer test-token'
             };
@@ -681,7 +687,7 @@ describe('Resource Controller', () => {
 
         it('should handle missing kaoId in request', async () => {
             mockReq.body = { resourceId: 'ztdf-123' }; // No kaoId
-            mockReq.headers = { 
+            mockReq.headers = {
                 'x-request-id': 'test-123',
                 authorization: 'Bearer test-token'
             };
@@ -700,7 +706,7 @@ describe('Resource Controller', () => {
 
         it('should handle KAS denial', async () => {
             mockReq.body = { resourceId: 'ztdf-123', kaoId: 'kao-1' };
-            mockReq.headers = { 
+            mockReq.headers = {
                 'x-request-id': 'test-123',
                 authorization: 'Bearer test-token'
             };

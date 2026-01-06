@@ -688,7 +688,7 @@ _hub_apply_terraform() {
     # ==========================================================================
 
     log_step "Scanning for deployed spokes..."
-    local federation_partners_hcl="{\n"
+    local federation_partners_hcl=$'{\n'
     local spokes_found=0
 
     if [ -d "${DIVE_ROOT}/instances" ]; then
@@ -722,22 +722,22 @@ _hub_apply_terraform() {
                 fi
             fi
 
-            # Generate HCL entry for this spoke
-            federation_partners_hcl+="  \"${spoke_code,,}\" = {\n"
-            federation_partners_hcl+="    instance_code         = \"${spoke_code}\"\n"
-            federation_partners_hcl+="    instance_name         = \"${spoke_name}\"\n"
-            federation_partners_hcl+="    idp_url               = \"https://localhost:${spoke_port}\"\n"
-            federation_partners_hcl+="    idp_internal_url      = \"https://${container_name}:8443\"\n"
-            federation_partners_hcl+="    enabled               = true\n"
-            federation_partners_hcl+="    client_secret         = \"${federation_secret}\"\n"
-            federation_partners_hcl+="    disable_trust_manager = true\n"
-            federation_partners_hcl+="  }\n"
+            # Generate HCL entry for this spoke (using $'...\n...' for proper newlines)
+            federation_partners_hcl+=$'  \"'${spoke_code,,}$'\" = {\n'
+            federation_partners_hcl+=$'    instance_code         = \"'${spoke_code}$'\"\n'
+            federation_partners_hcl+=$'    instance_name         = \"'${spoke_name}$'\"\n'
+            federation_partners_hcl+=$'    idp_url               = \"https://localhost:'${spoke_port}$'\"\n'
+            federation_partners_hcl+=$'    idp_internal_url      = \"https://'${container_name}$':8443\"\n'
+            federation_partners_hcl+=$'    enabled               = true\n'
+            federation_partners_hcl+=$'    client_secret         = \"'${federation_secret}$'\"\n'
+            federation_partners_hcl+=$'    disable_trust_manager = true\n'
+            federation_partners_hcl+=$'  }\n'
 
             spokes_found=$((spokes_found + 1))
         done
     fi
 
-    federation_partners_hcl+="}"
+    federation_partners_hcl+=$'}'
 
     log_info "Discovered ${spokes_found} spoke(s) for federation"
 
@@ -748,7 +748,7 @@ _hub_apply_terraform() {
     # GCP Secret Name: dive-v3-federation-usa-{spoke}
     # ==========================================================================
 
-    local incoming_secrets_hcl="{\n"
+    local incoming_secrets_hcl=$'{\n'
 
     if check_gcloud && [ $spokes_found -gt 0 ]; then
         log_step "Loading incoming federation secrets from GCP..."
@@ -763,7 +763,7 @@ _hub_apply_terraform() {
                 --secret="$secret_name" --project=dive25 2>/dev/null || echo "")
 
             if [ -n "$secret_value" ]; then
-                incoming_secrets_hcl+="  \"${spoke_code,,}\" = \"${secret_value}\"\n"
+                incoming_secrets_hcl+=$'  \"'${spoke_code,,}$'\" = \"'${secret_value}$'\"\n'
                 log_verbose "  ✓ ${spoke_code}: ${secret_name}"
             fi
         done
@@ -771,7 +771,7 @@ _hub_apply_terraform() {
         log_success "Loaded ${spokes_found} federation secret(s)"
     fi
 
-    incoming_secrets_hcl+="}"
+    incoming_secrets_hcl+=$'}'
 
     # ==========================================================================
     # Write hub.auto.tfvars (Auto-generated Federation Config)

@@ -611,16 +611,72 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_amr" {
 }
 
 # ============================================================================
-# SUPER ADMIN ROLE & USER
+# KEYCLOAK ROLES - COMPREHENSIVE ADMIN ROLE HIERARCHY
 # ============================================================================
+# Role hierarchy for DIVE V3:
+#   - user: Standard user (default for all)
+#   - admin: Instance-level admin (manage users, view config)
+#   - super_admin: Full administrative access including IdP management
+#
+# Keycloak built-in realm-management roles are also assigned:
+#   - manage-users: Create/update/delete users
+#   - manage-realm: Configure realm settings
+#   - manage-identity-providers: Configure federation
+#   - view-realm: Read-only access to realm config
 
+# Standard user role (all authenticated users)
+resource "keycloak_role" "user_role" {
+  realm_id    = keycloak_realm.broker.id
+  name        = "user"
+  description = "Standard user role for coalition personnel"
+}
+
+# Admin role (instance-level administration)
+resource "keycloak_role" "admin_role" {
+  realm_id    = keycloak_realm.broker.id
+  name        = "admin"
+  description = "Administrator role for user and session management"
+}
+
+# Super admin role (full system access)
 resource "keycloak_role" "super_admin" {
   realm_id    = keycloak_realm.broker.id
   name        = "super_admin"
-  description = "Super admin role for DIVE V3 administrative operations"
+  description = "Super admin role for DIVE V3 administrative operations including IdP management"
 }
 
-# Dedicated group to keep super_admin assignment sticky across imports/restores
+# ============================================================================
+# ADMIN GROUPS
+# ============================================================================
+
+# Standard users group
+resource "keycloak_group" "users" {
+  realm_id = keycloak_realm.broker.id
+  name     = "users"
+}
+
+resource "keycloak_group_roles" "users_role" {
+  realm_id = keycloak_realm.broker.id
+  group_id = keycloak_group.users.id
+  role_ids = [keycloak_role.user_role.id]
+}
+
+# Admins group
+resource "keycloak_group" "admins" {
+  realm_id = keycloak_realm.broker.id
+  name     = "admins"
+}
+
+resource "keycloak_group_roles" "admins_role" {
+  realm_id = keycloak_realm.broker.id
+  group_id = keycloak_group.admins.id
+  role_ids = [
+    keycloak_role.user_role.id,
+    keycloak_role.admin_role.id
+  ]
+}
+
+# Super admins group (includes all lower roles)
 resource "keycloak_group" "super_admins" {
   realm_id = keycloak_realm.broker.id
   name     = "super_admins"
@@ -629,23 +685,40 @@ resource "keycloak_group" "super_admins" {
 resource "keycloak_group_roles" "super_admins_role" {
   realm_id = keycloak_realm.broker.id
   group_id = keycloak_group.super_admins.id
-  role_ids = [keycloak_role.super_admin.id]
+  role_ids = [
+    keycloak_role.user_role.id,
+    keycloak_role.admin_role.id,
+    keycloak_role.super_admin.id
+  ]
 }
+
+# ============================================================================
+# ADMIN USERS
+# ============================================================================
 
 locals {
   admin_password = coalesce(var.admin_user_password, var.test_user_password)
+
+  # Ocean-themed pseudonyms for admin users (PII minimization)
+  admin_ocean_adjectives = ["Commander", "Admiral", "Captain", "Navigator", "Helmsman"]
+  admin_ocean_nouns      = ["Lighthouse", "Compass", "Anchor", "Beacon", "Helm"]
 }
 
 # Admin user - only created if create_test_users is true (to avoid conflict with seed-users.sh)
 resource "keycloak_user" "admin_user" {
   count = var.create_test_users ? 1 : 0
 
-  realm_id   = keycloak_realm.broker.id
-  username   = "admin-${lower(var.instance_code)}"
-  enabled    = true
-  email      = "admin-${lower(var.instance_code)}@dive-demo.example"
-  first_name = "Admin"
-  last_name  = upper(var.instance_code)
+  realm_id = keycloak_realm.broker.id
+  username = "admin-${lower(var.instance_code)}"
+  enabled  = true
+
+  # PII Minimization: Pseudonymized email
+  email = "${substr(md5("admin-${lower(var.instance_code)}-${var.instance_code}"), 0, 8)}@admin.dive25.mil"
+
+  # PII Minimization: Ocean-themed pseudonyms for admins
+  # Format: "Commander Lighthouse" style
+  first_name = local.admin_ocean_adjectives[length(var.instance_code) % length(local.admin_ocean_adjectives)]
+  last_name  = local.admin_ocean_nouns[length(var.instance_code) % length(local.admin_ocean_nouns)]
 
   initial_password {
     value     = local.admin_password
@@ -656,31 +729,42 @@ resource "keycloak_user" "admin_user" {
     uniqueID             = "admin-${lower(var.instance_code)}"
     countryOfAffiliation = var.instance_code
     clearance            = "TOP_SECRET"
-    clearance_level      = "4"
-    # Keep admin aligned with L4 users for policy evaluation
+    clearance_level      = "5" # Updated for 5-level system
+    # Keep admin aligned with L5 users for policy evaluation
     acpCOI           = jsonencode(["FVEY", "NATO-COSMIC"])
     organization     = "${var.instance_name} Admin"
     organizationType = "GOV"
     userType         = "admin"
     pilot_user       = "true"
     created_by       = "terraform"
+    aal_level        = "3" # Admin requires AAL3
+    # Role metadata for token mappers
+    dive_roles = jsonencode(["user", "admin", "super_admin"])
   }
 
   lifecycle {
     ignore_changes = [initial_password]
   }
+
+  depends_on = [
+    keycloak_realm_user_profile.dive_attributes
+  ]
 }
 
+# Assign all roles to admin user
 resource "keycloak_user_roles" "admin_user_super_admin" {
   count = var.create_test_users ? 1 : 0
 
   realm_id = keycloak_realm.broker.id
   user_id  = keycloak_user.admin_user[0].id
   role_ids = [
+    keycloak_role.user_role.id,
+    keycloak_role.admin_role.id,
     keycloak_role.super_admin.id,
   ]
 }
 
+# Add admin to super_admins group
 resource "keycloak_group_memberships" "admin_user_super_admin_group" {
   count = var.create_test_users ? 1 : 0
 
@@ -690,6 +774,37 @@ resource "keycloak_group_memberships" "admin_user_super_admin_group" {
   members = [
     keycloak_user.admin_user[0].username,
   ]
+}
+
+# ============================================================================
+# ROLE PROTOCOL MAPPERS - Include roles in tokens
+# ============================================================================
+
+# Map realm roles to tokens for the broker client
+resource "keycloak_openid_user_realm_role_protocol_mapper" "broker_realm_roles" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "realm-roles"
+
+  claim_name          = "realm_roles"
+  multivalued         = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# Map dive_roles attribute to tokens (custom role list)
+resource "keycloak_openid_user_attribute_protocol_mapper" "broker_dive_roles" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+  name      = "dive-roles"
+
+  user_attribute      = "dive_roles"
+  claim_name          = "dive_roles"
+  claim_value_type    = "JSON"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 }
 
 resource "keycloak_openid_user_attribute_protocol_mapper" "federation_organization" {

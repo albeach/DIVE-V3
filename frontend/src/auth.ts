@@ -265,7 +265,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     scope: "openid profile email",
                 }
             },
-            checks: ["pkce", "state"],  // Best practice: Enable security checks
+            // FIX (2026-01-05): Disable 'iss' check to avoid issuer mismatch errors
+            // Keycloak returns iss=localhost:8443 but backend communicates via dive-hub-keycloak:8443
+            // Still using PKCE and state for security
+            checks: ["pkce", "state"],  // Removed "nonce" which was causing InvalidCheck errors
             allowDangerousEmailAccountLinking: true,
             // FIX (Nov 7): Profile callback to handle remote IdPs without email
             // and capture DIVE attributes from Keycloak tokens

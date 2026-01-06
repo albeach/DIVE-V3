@@ -1,11 +1,49 @@
 {
   "description": "NATO Country Localized Attributes → DIVE V3 Standard Mapping",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "dive_v3_standard": {
-    "clearance": "Security clearance level (UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET)",
+    "clearance": "Security clearance level (UNCLASSIFIED, RESTRICTED, CONFIDENTIAL, SECRET, TOP_SECRET)",
     "countryOfAffiliation": "ISO 3166-1 alpha-3 country code",
     "uniqueID": "Unique user identifier",
     "acpCOI": "Communities of Interest (multivalued)"
+  },
+  "clearance_hierarchy": {
+    "description": "Clearance levels in order from lowest to highest access",
+    "levels": [
+      "UNCLASSIFIED",
+      "RESTRICTED",
+      "CONFIDENTIAL",
+      "SECRET",
+      "TOP_SECRET"
+    ],
+    "mfa_requirements": {
+      "UNCLASSIFIED": {
+        "aal": 1,
+        "acr": 0,
+        "mfa": false
+      },
+      "RESTRICTED": {
+        "aal": 1,
+        "acr": 0,
+        "mfa": false
+      },
+      "CONFIDENTIAL": {
+        "aal": 2,
+        "acr": 1,
+        "mfa": true
+      },
+      "SECRET": {
+        "aal": 2,
+        "acr": 1,
+        "mfa": true
+      },
+      "TOP_SECRET": {
+        "aal": 3,
+        "acr": 2,
+        "mfa": true,
+        "hardware_token_recommended": true
+      }
+    }
   },
   "countries": {
     "ALB": {
@@ -19,6 +57,7 @@
       },
       "clearance_values": {
         "I_PAKLASIFIKUAR": "UNCLASSIFIED",
+        "KUFIZUAR": "RESTRICTED",
         "KONFIDENCIAL": "CONFIDENTIAL",
         "SEKRET": "SECRET",
         "TEPER_SEKRET": "TOP_SECRET"
@@ -35,6 +74,7 @@
       },
       "clearance_values": {
         "NIET_GECLASSIFICEERD": "UNCLASSIFIED",
+        "BEPERKTE_VERSPREIDING": "RESTRICTED",
         "VERTROUWELIJK": "CONFIDENTIAL",
         "GEHEIM": "SECRET",
         "ZEER_GEHEIM": "TOP_SECRET"
@@ -51,6 +91,7 @@
       },
       "clearance_values": {
         "НЕКЛАСИФИЦИРАНО": "UNCLASSIFIED",
+        "ОГРАНИЧЕН": "RESTRICTED",
         "ПОВЕРИТЕЛНО": "CONFIDENTIAL",
         "СЕКРЕТНО": "SECRET",
         "СТРОГО_СЕКРЕТНО": "TOP_SECRET"
@@ -73,6 +114,7 @@
       },
       "clearance_values": {
         "NON_CLASSIFIE": "UNCLASSIFIED",
+        "PROTEGE_A": "RESTRICTED",
         "CONFIDENTIEL": "CONFIDENTIAL",
         "SECRET": "SECRET",
         "TRES_SECRET": "TOP_SECRET"
@@ -89,6 +131,7 @@
       },
       "clearance_values": {
         "NEKLASIFICIRANO": "UNCLASSIFIED",
+        "OGRANICENO": "RESTRICTED",
         "POVJERLJIVO": "CONFIDENTIAL",
         "TAJNO": "SECRET",
         "VRLO_TAJNO": "TOP_SECRET"
@@ -105,6 +148,7 @@
       },
       "clearance_values": {
         "NEKLASIFIKOVANO": "UNCLASSIFIED",
+        "OMEZENE_SIRENI": "RESTRICTED",
         "DUVERNE": "CONFIDENTIAL",
         "TAJNE": "SECRET",
         "PRISNE_TAJNE": "TOP_SECRET"
@@ -121,6 +165,7 @@
       },
       "clearance_values": {
         "UKLASSIFICERET": "UNCLASSIFIED",
+        "BEGRAENSET": "RESTRICTED",
         "FORTROLIGT": "CONFIDENTIAL",
         "HEMMELIGT": "SECRET",
         "YDERST_HEMMELIGT": "TOP_SECRET"
@@ -137,6 +182,7 @@
       },
       "clearance_values": {
         "SALASTAMATA": "UNCLASSIFIED",
+        "PIIRATUD": "RESTRICTED",
         "KONFIDENTSIAALNE": "CONFIDENTIAL",
         "SALAJANE": "SECRET",
         "TAIESTI_SALAJANE": "TOP_SECRET"
@@ -153,6 +199,7 @@
       },
       "clearance_values": {
         "LUOKITTELEMATON": "UNCLASSIFIED",
+        "RAJOITETTU": "RESTRICTED",
         "LUOTTAMUKSELLINEN": "CONFIDENTIAL",
         "SALAINEN": "SECRET",
         "ERITTAIN_SALAINEN": "TOP_SECRET"
@@ -169,6 +216,7 @@
       },
       "clearance_values": {
         "NON_PROTEGE": "UNCLASSIFIED",
+        "DIFFUSION_RESTREINTE": "RESTRICTED",
         "CONFIDENTIEL_DEFENSE": "CONFIDENTIAL",
         "SECRET_DEFENSE": "SECRET",
         "TRES_SECRET_DEFENSE": "TOP_SECRET"
@@ -185,6 +233,7 @@
       },
       "clearance_values": {
         "OFFEN": "UNCLASSIFIED",
+        "VS_NUR_DIENSTGEBRAUCH": "RESTRICTED",
         "VS_VERTRAULICH": "CONFIDENTIAL",
         "VS_GEHEIM": "SECRET",
         "STRENG_GEHEIM": "TOP_SECRET"
@@ -201,6 +250,7 @@
       },
       "clearance_values": {
         "ADIAVATHMITO": "UNCLASSIFIED",
+        "PERIORISMENO": "RESTRICTED",
         "EMPISTEFIKO": "CONFIDENTIAL",
         "APORRITO": "SECRET",
         "AKROS_APORRITO": "TOP_SECRET"
@@ -217,6 +267,7 @@
       },
       "clearance_values": {
         "NEM_MINOSITETT": "UNCLASSIFIED",
+        "KORLÁTOZOTT": "RESTRICTED",
         "BIZALMAS": "CONFIDENTIAL",
         "TITKOS": "SECRET",
         "SZIGORUAN_TITKOS": "TOP_SECRET"
@@ -233,6 +284,7 @@
       },
       "clearance_values": {
         "OFLOKAD": "UNCLASSIFIED",
+        "TAKMARKADUR": "RESTRICTED",
         "TRYNDARMAL": "CONFIDENTIAL",
         "LEYNILIGT": "SECRET",
         "ALGJORLEGA_LEYNILIGT": "TOP_SECRET"
@@ -249,6 +301,7 @@
       },
       "clearance_values": {
         "NON_CLASSIFICATO": "UNCLASSIFIED",
+        "DIFFUSIONE_LIMITATA": "RESTRICTED",
         "RISERVATO": "CONFIDENTIAL",
         "SEGRETO": "SECRET",
         "SEGRETISSIMO": "TOP_SECRET"
@@ -265,6 +318,7 @@
       },
       "clearance_values": {
         "NEKLASIFICETS": "UNCLASSIFIED",
+        "IEROBEZOTA": "RESTRICTED",
         "KONFIDENCIALI": "CONFIDENTIAL",
         "SLEPENI": "SECRET",
         "SEVISIKI_SLEPENI": "TOP_SECRET"
@@ -281,6 +335,7 @@
       },
       "clearance_values": {
         "NEISLAPTINTA": "UNCLASSIFIED",
+        "RIBOTO_NAUDOJIMO": "RESTRICTED",
         "KONFIDENCIALU": "CONFIDENTIAL",
         "SLAPTAI": "SECRET",
         "VISIŠKAI_SLAPTAI": "TOP_SECRET"
@@ -297,6 +352,7 @@
       },
       "clearance_values": {
         "NON_CLASSIFIE": "UNCLASSIFIED",
+        "DIFFUSION_RESTREINTE": "RESTRICTED",
         "CONFIDENTIEL": "CONFIDENTIAL",
         "SECRET": "SECRET",
         "TRES_SECRET": "TOP_SECRET"
@@ -313,6 +369,7 @@
       },
       "clearance_values": {
         "NEKLASIFIKOVANO": "UNCLASSIFIED",
+        "OGRANICENO": "RESTRICTED",
         "POVJERLJIVO": "CONFIDENTIAL",
         "TAJNO": "SECRET",
         "STROGO_TAJNO": "TOP_SECRET"
@@ -329,6 +386,7 @@
       },
       "clearance_values": {
         "ONGERUBRICEERD": "UNCLASSIFIED",
+        "BEPERKTE_VERSPREIDING": "RESTRICTED",
         "DEPARTEMENTAAL_VERTROUWELIJK": "CONFIDENTIAL",
         "STAATSGEHEIM_GEHEIM": "SECRET",
         "STAATSGEHEIM_ZEER_GEHEIM": "TOP_SECRET"
@@ -345,6 +403,7 @@
       },
       "clearance_values": {
         "NEKLASIFICIRANO": "UNCLASSIFIED",
+        "OGRANICENO": "RESTRICTED",
         "DOVERLJIVO": "CONFIDENTIAL",
         "TAJNO": "SECRET",
         "STROGO_TAJNO": "TOP_SECRET"
@@ -361,6 +420,7 @@
       },
       "clearance_values": {
         "UGRADERT": "UNCLASSIFIED",
+        "BEGRENSET": "RESTRICTED",
         "FORTROLIG": "CONFIDENTIAL",
         "HEMMELIG": "SECRET",
         "STRENGT_HEMMELIG": "TOP_SECRET"
@@ -377,6 +437,7 @@
       },
       "clearance_values": {
         "JAWNE": "UNCLASSIFIED",
+        "ZASTRZEZONE": "RESTRICTED",
         "POUFNE": "CONFIDENTIAL",
         "TAJNE": "SECRET",
         "SCISLE_TAJNE": "TOP_SECRET"
@@ -393,6 +454,7 @@
       },
       "clearance_values": {
         "NAO_CLASSIFICADO": "UNCLASSIFIED",
+        "DIFUSAO_LIMITADA": "RESTRICTED",
         "CONFIDENCIAL": "CONFIDENTIAL",
         "SECRETO": "SECRET",
         "MUITO_SECRETO": "TOP_SECRET"
@@ -409,6 +471,7 @@
       },
       "clearance_values": {
         "NECLASIFICAT": "UNCLASSIFIED",
+        "DIFUZARE_LIMITATA": "RESTRICTED",
         "SECRET_SERVICIU": "CONFIDENTIAL",
         "SECRET": "SECRET",
         "STRICT_SECRET": "TOP_SECRET"
@@ -425,6 +488,7 @@
       },
       "clearance_values": {
         "NEKLASIFIKOVANE": "UNCLASSIFIED",
+        "OBMEDZENE": "RESTRICTED",
         "DOVERNE": "CONFIDENTIAL",
         "TAJNE": "SECRET",
         "PRISNE_TAJNE": "TOP_SECRET"
@@ -441,6 +505,7 @@
       },
       "clearance_values": {
         "NEOZNACENO": "UNCLASSIFIED",
+        "OMEJENO": "RESTRICTED",
         "ZAUPNO": "CONFIDENTIAL",
         "TAJNO": "SECRET",
         "STROGO_TAJNO": "TOP_SECRET"
@@ -457,7 +522,8 @@
       },
       "clearance_values": {
         "SIN_CLASIFICAR": "UNCLASSIFIED",
-        "DIFUSION_LIMITADA": "CONFIDENTIAL",
+        "DIFUSION_LIMITADA": "RESTRICTED",
+        "CONFIDENCIAL": "CONFIDENTIAL",
         "RESERVADO": "SECRET",
         "SECRETO": "TOP_SECRET"
       }
@@ -473,6 +539,7 @@
       },
       "clearance_values": {
         "OPPEN": "UNCLASSIFIED",
+        "BEGRANSAD": "RESTRICTED",
         "HEMLIG": "CONFIDENTIAL",
         "KVALIFICERAT_HEMLIG": "SECRET",
         "SYNNERLIGEN_HEMLIG": "TOP_SECRET"
@@ -489,6 +556,7 @@
       },
       "clearance_values": {
         "TASNIF_DISI": "UNCLASSIFIED",
+        "OZEL": "RESTRICTED",
         "HIZMETE_OZEL": "CONFIDENTIAL",
         "GIZLI": "SECRET",
         "COK_GIZLI": "TOP_SECRET"
@@ -505,8 +573,9 @@
       },
       "clearance_values": {
         "OFFICIAL": "UNCLASSIFIED",
-        "OFFICIAL_SENSITIVE": "CONFIDENTIAL",
-        "SECRET": "SECRET",
+        "OFFICIAL_SENSITIVE": "RESTRICTED",
+        "SECRET": "CONFIDENTIAL",
+        "UK_SECRET": "SECRET",
         "TOP_SECRET": "TOP_SECRET"
       }
     },
@@ -521,6 +590,7 @@
       },
       "clearance_values": {
         "UNCLASSIFIED": "UNCLASSIFIED",
+        "RESTRICTED": "RESTRICTED",
         "CONFIDENTIAL": "CONFIDENTIAL",
         "SECRET": "SECRET",
         "TOP_SECRET": "TOP_SECRET"
@@ -528,4 +598,3 @@
     }
   }
 }
-

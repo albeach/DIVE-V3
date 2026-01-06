@@ -54,7 +54,7 @@ resource "keycloak_authentication_execution" "simple_post_broker_otp_form" {
 resource "keycloak_authentication_execution_config" "simple_post_broker_otp_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.simple_post_broker_otp_form.id
-  alias        = "Simple Post-Broker OTP ACR AMR - ${var.realm_display_name}"
+  alias        = "Simple Post-Broker OTP ACR AMR - ${local.flow_suffix}"
   config = {
     acr_level = "1"   # AAL2 when OTP succeeds
     reference = "otp" # AMR reference (RFC-8176 compliant)
