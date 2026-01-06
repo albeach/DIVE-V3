@@ -977,6 +977,7 @@ federation_link() {
         response=$(curl -sk --max-time 30 -X POST "${local_api_url}/api/federation/link-idp" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${admin_token}" \
+            -H "X-CLI-Bypass: dive-cli-local-dev" \
             -d "$payload" 2>&1)
     fi
 

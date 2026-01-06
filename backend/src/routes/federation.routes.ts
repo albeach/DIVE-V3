@@ -30,6 +30,7 @@ import { SPManagementService } from '../services/sp-management.service';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
 import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
+import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
 import { getResourcesByQuery } from '../services/resource.service';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -312,11 +313,15 @@ async function requireSpokeToken(req: Request, res: Response, next: NextFunction
 }
 
 /**
- * Require admin role for management endpoints
+ * Legacy requireAdmin - replaced by proper role-based middleware
+ * Kept for reference/rollback only
+ *
+ * Now using:
+ *   - requireAdmin from admin.middleware.ts (checks admin OR super_admin role)
+ *   - requireSuperAdmin from admin.middleware.ts (checks super_admin role only)
  */
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
-    // TODO: Integrate with actual auth middleware
-    // For now, check for admin header or session
+function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): void {
+    // DEPRECATED: Use requireAdmin or requireSuperAdmin from admin.middleware.ts
     const adminKey = req.headers['x-admin-key'];
 
     if (adminKey !== process.env.FEDERATION_ADMIN_KEY && process.env.NODE_ENV === 'production') {
@@ -1146,9 +1151,9 @@ router.get('/sp', requireAdmin, async (req: Request, res: Response): Promise<voi
 
 /**
  * POST /api/federation/sp/:spId/approve
- * Approve a pending SP Client
+ * Approve a pending SP Client (super_admin only)
  */
-router.post('/sp/:spId/approve', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/sp/:spId/approve', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const approvedBy = (req as any).user?.uniqueID || 'admin';
         const sp = await spManagement.approveSP(req.params.spId, true, undefined, approvedBy);
@@ -1184,9 +1189,9 @@ router.post('/sp/:spId/approve', requireAdmin, async (req: Request, res: Respons
 
 /**
  * POST /api/federation/sp/:spId/suspend
- * Suspend an SP Client
+ * Suspend an SP Client (super_admin only)
  */
-router.post('/sp/:spId/suspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/sp/:spId/suspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { reason } = req.body;
         const suspendedBy = (req as any).user?.uniqueID || 'admin';
@@ -1226,9 +1231,9 @@ router.post('/sp/:spId/suspend', requireAdmin, async (req: Request, res: Respons
 
 /**
  * POST /api/federation/sp/:spId/regenerate-secret
- * Regenerate client secret for an SP
+ * Regenerate client secret for an SP (super_admin only)
  */
-router.post('/sp/:spId/regenerate-secret', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/sp/:spId/regenerate-secret', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const result = await spManagement.regenerateClientSecret(req.params.spId);
 
@@ -1421,9 +1426,9 @@ router.get('/spokes/:spokeId', requireAdmin, async (req: Request, res: Response)
 
 /**
  * PATCH /api/federation/spokes/:spokeId/keycloak-password
- * Update spoke's Keycloak admin password (for federation setup)
+ * Update spoke's Keycloak admin password (super_admin only)
  */
-router.patch('/spokes/:spokeId/keycloak-password', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.patch('/spokes/:spokeId/keycloak-password', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { keycloakAdminPassword } = req.body;
 
@@ -1469,9 +1474,9 @@ router.patch('/spokes/:spokeId/keycloak-password', requireAdmin, async (req: Req
 
 /**
  * POST /api/federation/spokes/:spokeId/approve
- * Approve a pending spoke
+ * Approve a pending spoke (super_admin only)
  */
-router.post('/spokes/:spokeId/approve', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/approve', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const parsed = approvalSchema.safeParse(req.body);
 
@@ -1552,9 +1557,9 @@ router.post('/spokes/:spokeId/approve', requireAdmin, async (req: Request, res: 
 
 /**
  * POST /api/federation/spokes/:spokeId/suspend
- * Suspend an approved spoke
+ * Suspend an approved spoke (super_admin only)
  */
-router.post('/spokes/:spokeId/suspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/suspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { reason } = req.body;
 
@@ -1587,13 +1592,13 @@ router.post('/spokes/:spokeId/suspend', requireAdmin, async (req: Request, res: 
 
 /**
  * POST /api/federation/spokes/:spokeId/unsuspend
- * Unsuspend a suspended spoke (reactivate)
+ * Unsuspend a suspended spoke (super_admin only)
  * ADDED (Dec 2025): Provides API to reactivate suspended spokes
  *
  * Body:
  *   - retryFederation: boolean (optional) - Whether to retry bidirectional federation setup
  */
-router.post('/spokes/:spokeId/unsuspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/unsuspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { retryFederation } = req.body;
         const unsuspendedBy = (req as any).user?.uniqueID || 'admin';
@@ -1630,9 +1635,9 @@ router.post('/spokes/:spokeId/unsuspend', requireAdmin, async (req: Request, res
 
 /**
  * POST /api/federation/spokes/:spokeId/revoke
- * Permanently revoke a spoke
+ * Permanently revoke a spoke (super_admin only)
  */
-router.post('/spokes/:spokeId/revoke', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/revoke', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { reason } = req.body;
 
@@ -1663,9 +1668,9 @@ router.post('/spokes/:spokeId/revoke', requireAdmin, async (req: Request, res: R
 
 /**
  * POST /api/federation/spokes/:spokeId/token
- * Generate new token for spoke
+ * Generate new token for spoke (super_admin only)
  */
-router.post('/spokes/:spokeId/token', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/token', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const token = await hubSpokeRegistry.generateSpokeToken(req.params.spokeId);
 
@@ -1688,9 +1693,9 @@ router.post('/spokes/:spokeId/token', requireAdmin, async (req: Request, res: Re
 
 /**
  * POST /api/federation/policy/push
- * Push policy update to all or specific spoke
+ * Push policy update to all or specific spoke (super_admin only)
  */
-router.post('/policy/push', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/policy/push', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { layers, priority = 'normal', description } = req.body;
 
@@ -2483,9 +2488,9 @@ router.get('/cross-instance/cache-stats', requireAdmin, async (_req: Request, re
 
 /**
  * POST /api/federation/cross-instance/cache-clear
- * Clear authorization cache
+ * Clear authorization cache (super_admin only)
  */
-router.post('/cross-instance/cache-clear', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.post('/cross-instance/cache-clear', requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
         const service = await getCrossInstanceService();
         service.clearCache();
@@ -2520,9 +2525,9 @@ const csrSigningSchema = z.object({
 /**
  * POST /api/federation/spokes/:spokeId/sign-csr
  * Sign a Certificate Signing Request (CSR) submitted by a spoke
- * Requires admin access
+ * Requires super_admin access
  */
-router.post('/spokes/:spokeId/sign-csr', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/sign-csr', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const spokeId = req.params.spokeId;
 
@@ -2692,9 +2697,9 @@ router.get('/spokes/:spokeId/certificate', requireAdmin, async (req: Request, re
 
 /**
  * POST /api/federation/spokes/:spokeId/validate-certificate
- * Validate a certificate against the spoke's registered info
+ * Validate a certificate against the spoke's registered info (super_admin only)
  */
-router.post('/spokes/:spokeId/validate-certificate', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/spokes/:spokeId/validate-certificate', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { certificatePEM } = req.body;
 
@@ -2740,9 +2745,9 @@ router.post('/spokes/:spokeId/validate-certificate', requireAdmin, async (req: R
  * Create Identity Provider configuration for cross-border SSO
  * This is called by `dive federation link <CODE>` CLI command
  *
- * Automatically configures Keycloak IdP trust relationship
+ * Automatically configures Keycloak IdP trust relationship (super_admin only)
  */
-router.post('/link-idp', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/link-idp', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
 
     try {
@@ -2999,9 +3004,9 @@ async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> 
 /**
  * DELETE /api/federation/unlink-idp/:alias
  *
- * Remove Identity Provider configuration
+ * Remove Identity Provider configuration (super_admin only)
  */
-router.delete('/unlink-idp/:alias', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.delete('/unlink-idp/:alias', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
     const { alias } = req.params;
 

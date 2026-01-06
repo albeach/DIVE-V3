@@ -16,6 +16,7 @@ import { requestKeyHandler } from '../controllers/resource.controller';
 import { mongoKasRegistryStore, IKasInstance } from '../models/kas-registry.model';
 import { kasRouterService } from '../services/kas-router.service';
 import { logger } from '../utils/logger';
+import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
 
 const router: Router = express.Router();
 
@@ -25,9 +26,13 @@ mongoKasRegistryStore.initialize().catch((err) => {
 });
 
 /**
- * Require admin key for management endpoints
+ * Legacy requireAdmin - replaced by proper role-based middleware
+ * Now using:
+ *   - requireAdmin from admin.middleware.ts (checks admin OR super_admin role)
+ *   - requireSuperAdmin from admin.middleware.ts (checks super_admin role only)
  */
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): void {
+    // DEPRECATED: Use requireAdmin or requireSuperAdmin from admin.middleware.ts
     const adminKey = req.headers['x-admin-key'];
 
     if (adminKey !== process.env.FEDERATION_ADMIN_KEY && process.env.NODE_ENV === 'production') {
@@ -336,9 +341,10 @@ router.get('/registry', async (_req: Request, res: Response): Promise<void> => {
  *     description: Admin endpoint to approve a pending KAS registration
  *     tags: [KAS, Admin]
  *     security:
- *       - AdminKey: []
+ *       - BearerAuth: []
+ *     description: Requires super_admin role
  */
-router.post('/registry/:kasId/approve', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/registry/:kasId/approve', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { kasId } = req.params;
         const approved = await mongoKasRegistryStore.approve(kasId);
@@ -372,8 +378,9 @@ router.post('/registry/:kasId/approve', requireAdmin, async (req: Request, res: 
  *     summary: Suspend a KAS instance
  *     description: Admin endpoint to suspend a KAS instance
  *     tags: [KAS, Admin]
+ *     description: Requires super_admin role
  */
-router.post('/registry/:kasId/suspend', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/registry/:kasId/suspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { kasId } = req.params;
         const { reason } = req.body;
@@ -436,8 +443,9 @@ router.post('/registry/:kasId/heartbeat', async (req: Request, res: Response): P
  *     summary: Remove a KAS instance
  *     description: Admin endpoint to remove a KAS from the registry
  *     tags: [KAS, Admin]
+ *     description: Requires super_admin role
  */
-router.delete('/registry/:kasId', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.delete('/registry/:kasId', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { kasId } = req.params;
         const removed = await mongoKasRegistryStore.remove(kasId);
@@ -588,8 +596,9 @@ router.post('/route', async (req: Request, res: Response): Promise<void> => {
  *     summary: Test connectivity to a KAS instance
  *     description: Pings a KAS instance to verify it's reachable
  *     tags: [KAS, Admin]
+ *     description: Requires super_admin role
  */
-router.post('/test-connectivity/:kasId', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/test-connectivity/:kasId', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const { kasId } = req.params;
         const result = await kasRouterService.testKasConnectivity(kasId);

@@ -23,6 +23,7 @@ import { mongoOpalDataStore } from '../models/trusted-issuer.model';
 import { opalCdcService } from '../services/opal-cdc.service';
 import { requireHubAdmin, logFederationModification } from '../middleware/hub-admin.middleware';
 import { authenticateJWT } from '../middleware/authz.middleware';
+import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
 import fs from 'fs';
 import path from 'path';
 
@@ -71,9 +72,13 @@ async function requireSpokeToken(req: Request, res: Response, next: NextFunction
 }
 
 /**
- * Require admin role for management endpoints
+ * Legacy requireAdmin - replaced by proper role-based middleware
+ * Now using:
+ *   - requireAdmin from admin.middleware.ts (checks admin OR super_admin role)
+ *   - requireSuperAdmin from admin.middleware.ts (checks super_admin role only)
  */
-function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): void {
+  // DEPRECATED: Use requireAdmin or requireSuperAdmin from admin.middleware.ts
   const adminKey = req.headers['x-admin-key'];
 
   if (adminKey !== process.env.FEDERATION_ADMIN_KEY && process.env.NODE_ENV === 'production') {
@@ -791,9 +796,9 @@ router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void
 
 /**
  * PUT /api/opal/tenant-configs/:code
- * Create or update a tenant configuration (admin only)
+ * Create or update a tenant configuration (super_admin only)
  */
-router.put('/tenant-configs/:code', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.put('/tenant-configs/:code', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { code } = req.params;
     const config = req.body;
@@ -840,9 +845,9 @@ router.get('/cdc/status', requireAdmin, async (_req: Request, res: Response): Pr
 
 /**
  * POST /api/opal/cdc/force-sync
- * Force sync all data to OPAL (admin only)
+ * Force sync all data to OPAL (super_admin only)
  */
-router.post('/cdc/force-sync', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.post('/cdc/force-sync', requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     logger.info('Force syncing all OPAL data via CDC');
     const result = await opalCdcService.forcePublishAll();
@@ -1080,9 +1085,9 @@ router.get('/bundle/verify/:hash', async (req: Request, res: Response): Promise<
 
 /**
  * POST /api/opal/force-sync
- * Force sync for a specific spoke or all spokes (admin only)
+ * Force sync for a specific spoke or all spokes (super_admin only)
  */
-router.post('/force-sync', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/force-sync', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { spokeId } = req.body;
 
@@ -1430,9 +1435,9 @@ router.get('/transactions', requireAdmin, async (req: Request, res: Response): P
 
 /**
  * POST /api/opal/clients/:clientId/ping
- * Ping a specific OPAL client (admin only)
+ * Ping a specific OPAL client (super_admin only)
  */
-router.post('/clients/:clientId/ping', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/clients/:clientId/ping', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params;
 
@@ -1460,9 +1465,9 @@ router.post('/clients/:clientId/ping', requireAdmin, async (req: Request, res: R
 
 /**
  * POST /api/opal/clients/:clientId/force-sync
- * Force sync to a specific OPAL client (admin only)
+ * Force sync to a specific OPAL client (super_admin only)
  */
-router.post('/clients/:clientId/force-sync', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/clients/:clientId/force-sync', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params;
     const startTime = Date.now();

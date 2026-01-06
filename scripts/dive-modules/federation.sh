@@ -107,7 +107,8 @@ get_instance_admin_token() {
     code_upper=$(upper "$instance_code")
 
     if [ "$code_upper" = "USA" ]; then
-        get_hub_admin_token
+        # Use super_admin token for Hub (required for backend API auth)
+        get_hub_super_admin_token
     else
         get_spoke_admin_token "$code_upper"
     fi
