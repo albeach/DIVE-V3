@@ -140,9 +140,13 @@ app.post('/request-key', async (req: Request, res: Response) => {
         // Replaced jwt.decode() with verifyToken() for signature verification
         // This prevents forged token attacks on the Key Access Service
         let decodedToken: IKeycloakToken;
+        let isServiceAccountToken = false;
         try {
             // SECURE: Verify JWT signature with JWKS (RS256)
             decodedToken = await verifyToken(keyRequest.bearerToken);
+
+            // Check if this is a service account token (Issue B fix)
+            isServiceAccountToken = decodedToken.aud === 'kas' || decodedToken.aud === 'dive-v3-backend-client';
 
             kasLogger.info('JWT signature verified successfully', {
                 requestId,
@@ -150,7 +154,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 iss: `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`,
                 aud: decodedToken.aud,
                 exp: decodedToken.exp,
-                iat: decodedToken.iat
+                iat: decodedToken.iat,
+                isServiceAccountToken
             });
 
         } catch (error) {
@@ -187,24 +192,62 @@ app.post('/request-key', async (req: Request, res: Response) => {
             return;
         }
 
-        const uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub;
-        const clearance = decodedToken.clearance;
-        const countryOfAffiliation = decodedToken.countryOfAffiliation;
-        const dutyOrg = decodedToken.dutyOrg;        // Gap #4: Organization attribute
-        const orgUnit = decodedToken.orgUnit;        // Gap #4: Organizational unit
+        // Extract user identity - handle both user tokens and service account tokens
+        let uniqueID: string;
+        let clearance: string;
+        let countryOfAffiliation: string;
+        let dutyOrg: string | undefined;
+        let orgUnit: string | undefined;
+        let acpCOI: string[];
 
-        // Parse acpCOI - handle string or array (same fix as upload controller)
-        let acpCOI: string[] = [];
-        if (decodedToken.acpCOI) {
-            if (typeof decodedToken.acpCOI === 'string') {
-                try {
-                    acpCOI = JSON.parse(decodedToken.acpCOI);
-                } catch {
-                    acpCOI = [decodedToken.acpCOI];
+        if (isServiceAccountToken && keyRequest.userIdentity) {
+            // Service account token: extract user identity from request body (Issue B fix)
+            const userIdentity = keyRequest.userIdentity as any;
+            uniqueID = userIdentity.uniqueID || 'service-account-user';
+            clearance = userIdentity.clearance || 'UNCLASSIFIED';
+            countryOfAffiliation = userIdentity.countryOfAffiliation || 'USA';
+            acpCOI = Array.isArray(userIdentity.acpCOI) ? userIdentity.acpCOI : [];
+            dutyOrg = userIdentity.dutyOrg;
+            orgUnit = userIdentity.orgUnit;
+
+            kasLogger.info('Using user identity from service account request', {
+                requestId,
+                uniqueID,
+                clearance,
+                countryOfAffiliation,
+                acpCOI,
+                source: 'service-account'
+            });
+        } else {
+            // Regular user token: extract from JWT claims
+            uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub || 'unknown';
+            clearance = decodedToken.clearance || 'UNCLASSIFIED';
+            countryOfAffiliation = decodedToken.countryOfAffiliation || 'USA';
+            dutyOrg = decodedToken.dutyOrg;        // Gap #4: Organization attribute
+            orgUnit = decodedToken.orgUnit;        // Gap #4: Organizational unit
+
+            // Parse acpCOI - handle string or array (same fix as upload controller)
+            acpCOI = [];
+            if (decodedToken.acpCOI) {
+                if (typeof decodedToken.acpCOI === 'string') {
+                    try {
+                        acpCOI = JSON.parse(decodedToken.acpCOI);
+                    } catch {
+                        acpCOI = [decodedToken.acpCOI];
+                    }
+                } else if (Array.isArray(decodedToken.acpCOI)) {
+                    acpCOI = decodedToken.acpCOI;
                 }
-            } else if (Array.isArray(decodedToken.acpCOI)) {
-                acpCOI = decodedToken.acpCOI;
             }
+
+            kasLogger.info('Using user identity from JWT token', {
+                requestId,
+                uniqueID,
+                clearance,
+                countryOfAffiliation,
+                acpCOI,
+                source: 'user-token'
+            });
         }
 
         kasLogger.info('Token validated', {

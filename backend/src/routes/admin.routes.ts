@@ -1,7 +1,12 @@
 /**
  * Admin Routes
  *
- * All routes require super_admin role (enforced by adminAuthMiddleware)
+ * Role-based access control:
+ * - 'admin' role: User/session management, read-only access to IdPs/federation/audit
+ * - 'super_admin' role: Full access including IdP mutations, federation approval, certificates
+ *
+ * Base authentication via adminAuthMiddleware (requires any admin role)
+ * Critical operations protected by requireSuperAdmin middleware
  *
  * @swagger
  * tags:
@@ -11,6 +16,7 @@
 
 import { Router, Request, Response } from 'express';
 import { adminAuthMiddleware } from '../middleware/admin-auth.middleware';
+import { requireSuperAdmin } from '../middleware/admin.middleware';
 import {
     listIdPsHandler,
     getIdPHandler,
@@ -166,8 +172,10 @@ router.get('/idps/:alias', getIdPHandler);
  *         description: IdP created
  *       400:
  *         description: Invalid configuration
+ *       403:
+ *         description: Requires super_admin role
  */
-router.post('/idps', createIdPHandler);
+router.post('/idps', requireSuperAdmin, createIdPHandler);
 
 /**
  * @swagger
@@ -204,9 +212,11 @@ router.post('/idps', createIdPHandler);
  *         description: IdP deleted
  *       404:
  *         description: IdP not found
+ *       403:
+ *         description: Requires super_admin role
  */
-router.put('/idps/:alias', updateIdPHandler);
-router.delete('/idps/:alias', deleteIdPHandler);
+router.put('/idps/:alias', requireSuperAdmin, updateIdPHandler);
+router.delete('/idps/:alias', requireSuperAdmin, deleteIdPHandler);
 
 /**
  * @swagger
@@ -368,15 +378,15 @@ router.get('/approvals/pending', getPendingApprovalsHandler);
 
 /**
  * POST /api/admin/approvals/:alias/approve
- * Approve pending IdP
+ * Approve pending IdP (super_admin only)
  */
-router.post('/approvals/:alias/approve', approveIdPHandler);
+router.post('/approvals/:alias/approve', requireSuperAdmin, approveIdPHandler);
 
 /**
  * POST /api/admin/approvals/:alias/reject
- * Reject pending IdP
+ * Reject pending IdP (super_admin only)
  */
-router.post('/approvals/:alias/reject', rejectIdPHandler);
+router.post('/approvals/:alias/reject', requireSuperAdmin, rejectIdPHandler);
 
 // ============================================
 // MFA Configuration Routes (Phase 1.5)
@@ -390,9 +400,9 @@ router.get('/idps/:alias/mfa-config', getMFAConfigHandler);
 
 /**
  * PUT /api/admin/idps/:alias/mfa-config
- * Update MFA configuration for realm
+ * Update MFA configuration for realm (super_admin only)
  */
-router.put('/idps/:alias/mfa-config', updateMFAConfigHandler);
+router.put('/idps/:alias/mfa-config', requireSuperAdmin, updateMFAConfigHandler);
 
 /**
  * POST /api/admin/idps/:alias/mfa-config/test
@@ -440,21 +450,21 @@ router.get('/idps/:alias/theme', getThemeHandler);
 
 /**
  * PUT /api/admin/idps/:alias/theme
- * Update theme for IdP
+ * Update theme for IdP (super_admin only)
  */
-router.put('/idps/:alias/theme', updateThemeHandler);
+router.put('/idps/:alias/theme', requireSuperAdmin, updateThemeHandler);
 
 /**
  * POST /api/admin/idps/:alias/theme/upload
- * Upload theme asset (background or logo)
+ * Upload theme asset (super_admin only)
  */
-router.post('/idps/:alias/theme/upload', uploadMiddleware, uploadThemeAssetHandler);
+router.post('/idps/:alias/theme/upload', requireSuperAdmin, uploadMiddleware, uploadThemeAssetHandler);
 
 /**
  * DELETE /api/admin/idps/:alias/theme
- * Delete theme (revert to default)
+ * Delete theme (super_admin only)
  */
-router.delete('/idps/:alias/theme', deleteThemeHandler);
+router.delete('/idps/:alias/theme', requireSuperAdmin, deleteThemeHandler);
 
 /**
  * GET /api/admin/idps/:alias/theme/preview
@@ -480,21 +490,21 @@ router.get('/certificates/health', getCertificateHealth);
 
 /**
  * POST /api/admin/certificates/rotate
- * Trigger certificate rotation
+ * Trigger certificate rotation (super_admin only)
  */
-router.post('/certificates/rotate', rotateCertificate);
+router.post('/certificates/rotate', requireSuperAdmin, rotateCertificate);
 
 /**
  * POST /api/admin/certificates/rotation/complete
- * Complete certificate rotation
+ * Complete certificate rotation (super_admin only)
  */
-router.post('/certificates/rotation/complete', completeRotation);
+router.post('/certificates/rotation/complete', requireSuperAdmin, completeRotation);
 
 /**
  * POST /api/admin/certificates/rotation/rollback
- * Rollback certificate rotation
+ * Rollback certificate rotation (super_admin only)
  */
-router.post('/certificates/rotation/rollback', rollbackRotation);
+router.post('/certificates/rotation/rollback', requireSuperAdmin, rollbackRotation);
 
 /**
  * GET /api/admin/certificates/revocation-list
@@ -504,9 +514,9 @@ router.get('/certificates/revocation-list', getRevocationList);
 
 /**
  * POST /api/admin/certificates/revoke
- * Revoke a certificate
+ * Revoke a certificate (super_admin only)
  */
-router.post('/certificates/revoke', revokeCertificate);
+router.post('/certificates/revoke', requireSuperAdmin, revokeCertificate);
 
 /**
  * GET /api/admin/certificates/revocation-status/:serialNumber
@@ -516,9 +526,9 @@ router.get('/certificates/revocation-status/:serialNumber', checkRevocationStatu
 
 /**
  * POST /api/admin/certificates/revocation-list/update
- * Update CRL
+ * Update CRL (super_admin only)
  */
-router.post('/certificates/revocation-list/update', updateCRL);
+router.post('/certificates/revocation-list/update', requireSuperAdmin, updateCRL);
 
 // ============================================
 // Analytics Routes (Phase 3)
@@ -655,8 +665,8 @@ router.get('/opa/policy', getPolicyHandler);
 
 /**
  * POST /api/admin/opa/policy/toggle-rule
- * Toggle a policy rule on/off
+ * Toggle a policy rule on/off (super_admin only)
  */
-router.post('/opa/policy/toggle-rule', toggleRuleHandler);
+router.post('/opa/policy/toggle-rule', requireSuperAdmin, toggleRuleHandler);
 
 export default router;

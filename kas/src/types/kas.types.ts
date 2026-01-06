@@ -1,6 +1,6 @@
 /**
  * KAS (Key Access Service) Type Definitions
- * 
+ *
  * Implements NATO ACP-240 Key Access Service requirements
  * Reference: ACP240-llms.txt section 5.2 (Hybrid Encryption & Key Management)
  */
@@ -33,6 +33,16 @@ export interface IKASKeyRequest {
 
     /** JWT bearer token (for identity/attributes) */
     bearerToken: string;
+
+    /** Original user identity when using service account token (Issue B fix) */
+    userIdentity?: {
+        uniqueID: string;
+        clearance: string;
+        countryOfAffiliation: string;
+        acpCOI?: string[];
+        dutyOrg?: string;
+        orgUnit?: string;
+    };
 
     /** Request timestamp */
     requestTimestamp: string;

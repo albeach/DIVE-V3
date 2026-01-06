@@ -523,6 +523,52 @@ get_hub_admin_token() {
 }
 
 ##
+# Get super_admin token for Hub DIVE application (not Keycloak master admin)
+# This token can be used to authenticate with backend API endpoints requiring super_admin role
+##
+get_hub_super_admin_token() {
+    ensure_dive_root
+    local admin_user="admin-usa"
+    local admin_pass="DiveV3Admin2026Secure!"  # Reset password (2026-01-05)
+    local client_id="dive-v3-broker-usa"
+
+    # Get client secret from Keycloak
+    local admin_token
+    admin_token=$(get_hub_admin_token) || return 1
+
+    local client_secret
+    client_secret=$(docker exec "$HUB_BACKEND_CONTAINER" curl -s \
+        -H "Authorization: Bearer ${admin_token}" \
+        "http://dive-hub-keycloak:8080/admin/realms/dive-v3-broker-usa/clients" 2>/dev/null \
+        | jq -r '.[] | select(.clientId == "dive-v3-broker-usa") | .id' \
+        | xargs -I {} docker exec "$HUB_BACKEND_CONTAINER" curl -s \
+        -H "Authorization: Bearer ${admin_token}" \
+        "http://dive-hub-keycloak:8080/admin/realms/dive-v3-broker-usa/clients/{}/client-secret" 2>/dev/null \
+        | jq -r '.value')
+
+    if [ -z "$client_secret" ] || [ "$client_secret" = "null" ]; then
+        log_error "Failed to retrieve client secret for ${client_id}"
+        return 1
+    fi
+
+    local token
+    token=$(docker exec "$HUB_BACKEND_CONTAINER" curl -s -X POST \
+        'http://dive-hub-keycloak:8080/realms/dive-v3-broker-usa/protocol/openid-connect/token' \
+        -d "client_id=${client_id}" \
+        -d "client_secret=${client_secret}" \
+        -d "username=${admin_user}" \
+        -d "password=${admin_pass}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
+
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        log_error "Failed to get super_admin token for ${admin_user}"
+        return 1
+    fi
+
+    echo "$token"
+}
+
+##
 # Get spoke Keycloak admin token (with 15-retry logic for resilience)
 ##
 get_spoke_admin_token() {

@@ -2,7 +2,7 @@
 # MFA Direct Grant Flow (ARCHIVED - v3.0.0)
 # ============================================
 # ⚠️ ARCHIVED: This file is kept for reference only.
-# 
+#
 # SSOT CONSOLIDATION (December 2025):
 # - Custom SPIs have been REMOVED from the Docker image
 # - The `direct-grant-otp-setup` authenticator is NO LONGER AVAILABLE
@@ -28,7 +28,7 @@
 resource "keycloak_authentication_flow" "direct_grant_mfa" {
   count       = var.enable_direct_grant_mfa ? 1 : 0
   realm_id    = var.realm_id
-  alias       = "Direct Grant with Conditional MFA - ${var.realm_display_name} DEPRECATED"
+  alias       = "Direct Grant with Conditional MFA - ${local.flow_suffix} DEPRECATED"
   description = "DEPRECATED: Use browser-based flows only. See NATIVE-KEYCLOAK-REFACTORING.md"
 }
 
@@ -55,13 +55,13 @@ resource "keycloak_authentication_execution" "direct_grant_password" {
 }
 
 # Configure ACR for password authentication (AAL1 baseline)
-# This sets ACR="0" (AAL1) for password-only authentication  
+# This sets ACR="0" (AAL1) for password-only authentication
 # Will be upgraded to ACR="1" (AAL2) if OTP is also completed
 resource "keycloak_authentication_execution_config" "direct_grant_password_acr_config" {
   count        = var.enable_direct_grant_mfa ? 1 : 0
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.direct_grant_password[0].id
-  alias        = "Direct Grant Password ACR - ${var.realm_display_name}"
+  alias        = "Direct Grant Password ACR - ${local.flow_suffix}"
   config = {
     acr_level = "0" # AAL1 for password-only
   }
@@ -72,7 +72,7 @@ resource "keycloak_authentication_subflow" "direct_grant_otp_conditional" {
   count             = var.enable_direct_grant_mfa ? 1 : 0
   realm_id          = var.realm_id
   parent_flow_alias = keycloak_authentication_flow.direct_grant_mfa[0].alias
-  alias             = "Conditional OTP - Direct Grant - ${var.realm_display_name}"
+  alias             = "Conditional OTP - Direct Grant - ${local.flow_suffix}"
   requirement       = "CONDITIONAL" # Only enforce if condition (clearance) is met
 
   depends_on = [
@@ -96,7 +96,7 @@ resource "keycloak_authentication_execution_config" "direct_grant_condition_conf
   count        = var.enable_direct_grant_mfa ? 1 : 0
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.direct_grant_condition_user_attribute[0].id
-  alias        = "Direct Grant Clearance Check - ${var.realm_display_name}"
+  alias        = "Direct Grant Clearance Check - ${local.flow_suffix}"
   config = {
     attribute_name  = var.clearance_attribute_name
     attribute_value = var.clearance_attribute_value_regex
@@ -126,7 +126,7 @@ resource "keycloak_authentication_execution_config" "direct_grant_otp_acr_config
   count        = var.enable_direct_grant_mfa ? 1 : 0
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.direct_grant_otp[0].id
-  alias        = "Direct Grant OTP ACR - ${var.realm_display_name}"
+  alias        = "Direct Grant OTP ACR - ${local.flow_suffix}"
   config = {
     acr_level = "1" # Set ACR to "1" (AAL2) when OTP succeeds in Direct Grant
   }
@@ -136,7 +136,7 @@ resource "keycloak_authentication_execution_config" "direct_grant_otp_acr_config
 # Note: Direct Grant flow binding is not available in keycloak_authentication_bindings resource
 # Instead, it must be configured in the realm's authentication settings via the Keycloak provider
 # or manually in the Keycloak Admin Console under Authentication > Bindings
-# 
+#
 # For automated binding, use keycloak_realm's authentication_flow property if available,
 # or configure via Keycloak REST API
 #

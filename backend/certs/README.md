@@ -1,6 +1,6 @@
 # DIVE V3 Certificate Infrastructure
 
-Generated: 2026-01-05T00:36:51.499Z
+Generated: 2026-01-06T00:46:05.781Z
 
 Root CA (self-signed, 10-year)
   └─ Intermediate CA (5-year)

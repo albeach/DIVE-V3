@@ -69,6 +69,20 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
  * Only allows 'super_admin' role
  */
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+    // DEV ONLY: Allow CLI bypass for local development
+    // WARNING: This should NEVER be enabled in production
+    const cliBypass = process.env.NODE_ENV !== 'production' &&
+                      req.headers['x-cli-bypass'] === 'dive-cli-local-dev';
+
+    if (cliBypass) {
+        logger.debug('CLI bypass enabled for super admin endpoint (dev only)', {
+            path: req.path,
+            method: req.method
+        });
+        next();
+        return;
+    }
+
     const user = (req as any).user;
 
     if (!user) {

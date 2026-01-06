@@ -246,7 +246,7 @@ get_all_spoke_hostnames() {
     ensure_dive_root
     local hostnames=""
 
-    # Scan instances directory for spokes
+    # Scan instances directory for ACTUALLY DEPLOYED spokes only
     for instance_dir in "${DIVE_ROOT}/instances"/*/; do
         local code
         code=$(basename "$instance_dir")
@@ -256,14 +256,12 @@ get_all_spoke_hostnames() {
         [ "$code" = "shared" ] && continue
         [ ! -f "$instance_dir/docker-compose.yml" ] && continue
 
-        # Add spoke container hostnames (actual Docker container naming pattern)
+        # Add spoke container hostnames (multiple patterns for compatibility)
+        # Pattern 1: dive-spoke-{code}-* (legacy)
         hostnames="$hostnames dive-spoke-${code}-keycloak dive-spoke-${code}-backend dive-spoke-${code}-frontend"
-        hostnames="$hostnames keycloak-${code} ${code}-keycloak-${code}-1"
-    done
-
-    # Also add standard NATO country spokes for future deployments
-    for code in alb bel bgr can cze dnk est fra deu grc hun isl ita lva ltu lux mne nld mkd nor pol prt rou svk svn esp tur gbr usa; do
-        hostnames="$hostnames dive-spoke-${code}-keycloak dive-spoke-${code}-backend dive-spoke-${code}-frontend"
+        # Pattern 2: {code}-* (new standard)
+        hostnames="$hostnames ${code}-keycloak ${code}-backend ${code}-frontend"
+        # Pattern 3: keycloak-{code} (alternate)
         hostnames="$hostnames keycloak-${code} ${code}-keycloak-${code}-1"
     done
 
@@ -410,23 +408,40 @@ generate_spoke_certificate() {
     fi
 
     # SANs for spoke certificate
-    # CRITICAL: Include the actual Docker container names for server-to-server SSL
+    # CRITICAL: Include BOTH spoke AND hub hostnames for bidirectional SSL
     local hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
-    # Docker container names (used for inter-container communication)
+
+    # Spoke's own Docker container names (for internal spoke communication)
+    # Pattern 1: dive-spoke-{code}-{service}
     hostnames="$hostnames dive-spoke-${code_lower}-keycloak"
     hostnames="$hostnames dive-spoke-${code_lower}-backend"
     hostnames="$hostnames dive-spoke-${code_lower}-frontend"
-    # Legacy naming patterns (for backwards compatibility)
-    hostnames="$hostnames keycloak-${code_lower}"
+    hostnames="$hostnames dive-spoke-${code_lower}-opa"
+    hostnames="$hostnames dive-spoke-${code_lower}-opal-client"
+    hostnames="$hostnames dive-spoke-${code_lower}-mongodb"
+    hostnames="$hostnames dive-spoke-${code_lower}-postgres"
+    hostnames="$hostnames dive-spoke-${code_lower}-redis"
+    hostnames="$hostnames dive-spoke-${code_lower}-kas"
+
+    # Pattern 2: {service}-{code} (for internal references)
+    hostnames="$hostnames keycloak-${code_lower} backend-${code_lower} frontend-${code_lower}"
+    hostnames="$hostnames opa-${code_lower} mongodb-${code_lower} postgres-${code_lower}"
+    hostnames="$hostnames redis-${code_lower} opal-client-${code_lower} kas-${code_lower}"
+
+    # Pattern 3: {code}-{service}-{code}-1 (docker compose pattern)
     hostnames="$hostnames ${code_lower}-keycloak-${code_lower}-1"
-    # Public DNS names
+
+    # Spoke public DNS names
     hostnames="$hostnames ${code_lower}-idp.dive25.com"
     hostnames="$hostnames ${code_lower}-api.dive25.com"
     hostnames="$hostnames ${code_lower}-app.dive25.com"
-    # Additional container name patterns
-    hostnames="$hostnames backend-${code_lower} frontend-${code_lower}"
 
-    log_verbose "Spoke certificate SANs: $hostnames"
+    # HUB container names (critical for spoke → hub SSL connections)
+    hostnames="$hostnames dive-hub-keycloak dive-hub-backend dive-hub-frontend dive-hub-opa dive-hub-opal-server"
+    hostnames="$hostnames hub-keycloak keycloak backend frontend opa opal-server"
+    hostnames="$hostnames hub.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+
+    log_verbose "Spoke certificate SANs (including Hub + all spoke services): $hostnames"
 
     # shellcheck disable=SC2086
     if mkcert -key-file "$certs_dir/key.pem" \
