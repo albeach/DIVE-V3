@@ -137,7 +137,7 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     validator {
       name = "options"
       config = {
-        options = "[\"UNCLASSIFIED\",\"CONFIDENTIAL\",\"SECRET\",\"TOP_SECRET\"]"
+        options = "[\"UNCLASSIFIED\",\"RESTRICTED\",\"CONFIDENTIAL\",\"SECRET\",\"TOP_SECRET\"]"
       }
     }
   }
@@ -350,8 +350,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     validator {
       name = "pattern"
       config = {
-        "pattern"       = "^[1-4]$"
-        "error-message" = "Clearance level must be 1-4"
+        "pattern"       = "^[1-5]$"
+        "error-message" = "Clearance level must be 1-5"
       }
     }
   }

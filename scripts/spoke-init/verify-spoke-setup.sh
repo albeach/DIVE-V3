@@ -131,7 +131,7 @@ verify_spoke() {
         if [[ "$RESOURCE_COUNT" =~ ^[0-9]+$ ]] && [[ "$RESOURCE_COUNT" -gt 0 ]]; then
             log_pass "$RESOURCE_COUNT resources seeded"
         else
-            log_warn "No resources found - run: ./dive --instance ${CODE_LOWER} spoke seed"
+            log_warn "No resources found - run: ./dive spoke seed ${CODE_UPPER}"
             WARNINGS=$((WARNINGS + 1))
         fi
     else

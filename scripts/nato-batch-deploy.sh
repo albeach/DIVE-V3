@@ -98,7 +98,7 @@ fi
 check_spoke_running() {
     local code="$1"
     local code_lower="${code,,}"
-    
+
     # Check if containers are running
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "${code_lower}-keycloak"; then
         return 0
@@ -111,39 +111,39 @@ deploy_spoke() {
     local name=$(get_country_name "$code")
     local flag=$(get_country_flag "$code")
     local code_lower="${code,,}"
-    
+
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  Deploying: $name ($code) $flag${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    
+
     # Check if already running
     if [ "$SKIP_EXISTING" = true ] && check_spoke_running "$code"; then
         echo -e "${YELLOW}  ⏭️  Skipping: $code is already running${NC}"
         return 0
     fi
-    
+
     # Get ports for logging
     eval "$(get_country_ports "$code")"
     echo "  Ports: Frontend=$SPOKE_FRONTEND_PORT, Backend=$SPOKE_BACKEND_PORT, Keycloak=$SPOKE_KEYCLOAK_HTTPS_PORT"
     echo ""
-    
+
     if [ "$DRY_RUN" = true ]; then
         echo -e "${CYAN}  [DRY-RUN] Would execute:${NC}"
         echo "    1. DIVE_PILOT_MODE=false ./dive spoke init $code \"$name\""
         echo "    2. ./dive --instance $code_lower spoke up"
         echo "    3. Wait for Keycloak health check..."
-        echo "    4. ./dive --instance $code_lower spoke init-keycloak"
-        echo "    5. ./dive --instance $code_lower spoke register"
+        echo "    4. ./dive spoke init-keycloak $code_upper"
+        echo "    5. ./dive spoke register $code_upper"
         echo "    6. ./dive hub approve $code"
         return 0
     fi
-    
+
     # Step 1: Initialize spoke
     echo -e "${CYAN}  Step 1/5: Initializing spoke...${NC}"
     local instance_dir="${PROJECT_ROOT}/instances/${code_lower}"
-    
+
     if [ -f "${instance_dir}/config.json" ]; then
         echo "    ✓ Config exists, skipping init"
     else
@@ -152,14 +152,14 @@ deploy_spoke() {
             return 1
         }
     fi
-    
+
     # Step 2: Start services
     echo -e "${CYAN}  Step 2/5: Starting services...${NC}"
     "${PROJECT_ROOT}/dive" --instance "$code_lower" spoke up || {
         echo -e "${RED}    ✗ Failed to start spoke services${NC}"
         return 1
     }
-    
+
     # Step 3: Wait for Keycloak
     echo -e "${CYAN}  Step 3/5: Waiting for Keycloak to be healthy...${NC}"
     local max_wait=120
@@ -174,29 +174,29 @@ deploy_spoke() {
         waited=$((waited + 5))
     done
     echo ""
-    
+
     if [ $waited -ge $max_wait ]; then
         echo -e "${YELLOW}    ⚠ Keycloak health check timed out, continuing anyway...${NC}"
     fi
-    
+
     # Step 4: Initialize Keycloak
     echo -e "${CYAN}  Step 4/5: Initializing Keycloak realm...${NC}"
     "${PROJECT_ROOT}/dive" --instance "$code_lower" spoke init-keycloak || {
         echo -e "${YELLOW}    ⚠ Keycloak init had issues, may need manual intervention${NC}"
     }
-    
+
     # Step 5: Register with hub
     echo -e "${CYAN}  Step 5/5: Registering with hub...${NC}"
     "${PROJECT_ROOT}/dive" --instance "$code_lower" spoke register || {
         echo -e "${YELLOW}    ⚠ Registration had issues, may need manual approval${NC}"
     }
-    
+
     echo ""
     echo -e "${GREEN}  ✓ Deployment complete for $code${NC}"
     echo "    Frontend: https://localhost:${SPOKE_FRONTEND_PORT}"
     echo "    Keycloak: https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
     echo ""
-    
+
     return 0
 }
 
@@ -254,6 +254,6 @@ fi
 echo ""
 echo "  Next steps:"
 echo "    1. Approve pending spokes: ./dive hub spokes list"
-echo "    2. Verify connectivity: ./dive --instance <code> spoke verify"
+echo "    2. Verify connectivity: ./dive spoke verify <CODE>"
 echo "    3. Test federation: ./dive test cross-border --from <code> --to usa"
 echo ""

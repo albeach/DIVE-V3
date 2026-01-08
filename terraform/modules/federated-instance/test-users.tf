@@ -199,7 +199,7 @@ resource "keycloak_user" "pilot_users" {
 
       # Pilot metadata
       pilot_user      = "true"
-      clearance_level = each.key
+      clearance_level = tonumber(each.key)
       created_by      = "terraform"
 
       # AAL level for MFA enforcement

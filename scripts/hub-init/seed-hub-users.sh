@@ -447,7 +447,7 @@ create_user() {
 
 log_step "Creating test users..."
 echo ""
-echo "  Creating testuser-usa-{1-5} with 5-level clearance system:"
+echo "  Creating testuser-usa-1 through testuser-usa-5 with 5-level clearance system:"
 echo "    Level 1: UNCLASSIFIED (AAL1)"
 echo "    Level 2: RESTRICTED (AAL1)"
 echo "    Level 3: CONFIDENTIAL (AAL2 - MFA)"
@@ -487,6 +487,7 @@ HASH5=$(echo -n "testuser-usa-5-USA" | md5sum | cut -c1-8)
 HASH_ADMIN=$(echo -n "admin-usa-USA" | md5sum | cut -c1-8)
 
 # Create users with pseudonymized PII
+
 create_user "testuser-usa-1" "${HASH1}@pseudonym.dive25.mil" "${PSEUDO1%%:*}" "${PSEUDO1##*:}" "UNCLASSIFIED" "" "$TEST_USER_PASSWORD" "false"
 create_user "testuser-usa-2" "${HASH2}@pseudonym.dive25.mil" "${PSEUDO2%%:*}" "${PSEUDO2##*:}" "RESTRICTED" "" "$TEST_USER_PASSWORD" "false"
 create_user "testuser-usa-3" "${HASH3}@pseudonym.dive25.mil" "${PSEUDO3%%:*}" "${PSEUDO3##*:}" "CONFIDENTIAL" "" "$TEST_USER_PASSWORD" "false"

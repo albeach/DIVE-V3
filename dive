@@ -198,6 +198,12 @@ case "$COMMAND" in
         module_certificates "$@"
         ;;
 
+    # Naming conventions (naming.sh)
+    naming)
+        source "${MODULES_DIR}/naming.sh"
+        module_naming "$@"
+        ;;
+
     # Federation setup commands (federation-setup.sh)
     federation-setup|fed-setup)
         source "${MODULES_DIR}/federation-setup.sh"
@@ -268,7 +274,7 @@ case "$COMMAND" in
             session-resilience|session|token)
                 # Run session token resilience fix deployment
                 log_info "Deploying Session Token Resilience Fix..."
-                
+
                 if [ -n "$INSTANCE" ]; then
                     # Deploy to specific instance
                     bash "${DIVE_ROOT}/scripts/dive-modules/deploy-session-resilience-fix.sh" "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
@@ -284,7 +290,7 @@ case "$COMMAND" in
                     log_info "Example: ./dive fix diagnose-session testuser-usa-4@mil"
                     exit 1
                 fi
-                
+
                 bash "${DIVE_ROOT}/scripts/diagnose-session-token-flow.sh" "$1"
                 ;;
             all)

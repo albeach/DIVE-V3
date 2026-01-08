@@ -737,4 +737,4 @@ EOF
     log_info "Credentials saved to: ${CREDS_FILE}"
 fi
 
-log_info "Next: Seed ZTDF resources via: ./dive --instance ${INSTANCE_CODE} spoke seed"
+log_info "Next: Seed ZTDF resources via: ./dive spoke seed ${INSTANCE_CODE}"

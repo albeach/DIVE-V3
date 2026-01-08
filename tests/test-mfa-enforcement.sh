@@ -82,29 +82,29 @@ declare -i failed=0
 
 for user_config in "${TEST_USERS[@]}"; do
     IFS=':' read -r username password clearance expected_mfa <<< "$user_config"
-    
+
     echo -e "${BLUE}Testing:${NC} ${username} (${clearance})"
     echo -e "  Expected MFA: ${expected_mfa}"
-    
+
     # Get user ID
     USER_ID=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/users?username=${username}&exact=true" \
         -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
-    
+
     if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then
         echo -e "  ${RED}✗${NC} User not found"
         failed=$((failed + 1))
         echo ""
         continue
     fi
-    
+
     # Check MFA configuration
     otp_count=$(check_otp_configured "$USER_ID")
     webauthn_count=$(check_webauthn_configured "$USER_ID")
-    
+
     echo -e "  Current MFA state:"
     echo -e "    - OTP credentials: ${otp_count}"
     echo -e "    - WebAuthn credentials: ${webauthn_count}"
-    
+
     # Verify expected state
     case "$expected_mfa" in
         "NO_MFA")
@@ -130,7 +130,7 @@ for user_config in "${TEST_USERS[@]}"; do
             passed=$((passed + 1))
             ;;
     esac
-    
+
     echo ""
 done
 

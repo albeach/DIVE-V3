@@ -832,19 +832,19 @@ EOF
     echo -e "${BOLD}Next Steps:${NC}"
     if [ -n "$tunnel_token" ]; then
         echo "  1. Start services:         cd $spoke_dir && docker compose up -d"
-        echo "  2. Register with hub:      ./dive --instance $code_lower spoke register"
+        echo "  2. Register with hub:      ./dive spoke register $code_upper"
         echo "  3. Wait for hub approval"
         echo "  4. Add SPOKE_OPAL_TOKEN to .env (after approval)"
     else
         echo "  1. Configure DNS/tunnel for your hostnames"
         echo "  2. Start services:         cd $spoke_dir && docker compose up -d"
-        echo "  3. Register with hub:      ./dive --instance $code_lower spoke register"
+        echo "  3. Register with hub:      ./dive spoke register $code_upper"
     fi
     echo ""
 }
 
-# Helper function to create docker-compose.yml
-# Uses GBR-style spoke-in-a-box template with proper port allocations
+# Helper function to create docker-compose.yml from template
+# Uses standardized template with version tracking for drift detection
 _create_spoke_docker_compose() {
     local spoke_dir="$1"
     local code_upper="$2"
@@ -875,7 +875,6 @@ _create_spoke_docker_compose() {
 
     # ==========================================================================
     # Country-specific theming from NATO countries database
-    # Dynamic colors, locale, and timezone for each NATO member
     # ==========================================================================
     local theme_primary=$(get_country_primary_color "$code_upper")
     local theme_secondary=$(get_country_secondary_color "$code_upper")
@@ -891,319 +890,51 @@ _create_spoke_docker_compose() {
 
     log_info "Using theme colors for $code_upper: primary=$theme_primary, secondary=$theme_secondary"
 
-    # Derive hostnames (strip proto/port) or default to localhost
-    local app_host="localhost"
-    local idp_host="localhost"
-
     # Build base URLs for local development
     local app_base_url="https://localhost:${frontend_host_port}"
     local api_base_url="https://localhost:${backend_host_port}"
     local idp_base_url="https://localhost:${keycloak_https_port}"
 
-    cat > "$spoke_dir/docker-compose.yml" << EOF
-# =============================================================================
-# DIVE V3 - ${code_upper} Instance ($instance_name)
-# =============================================================================
-# Spoke instance using extends pattern from base services.
-# Regenerate with: ./dive spoke init ${code_upper} "$instance_name"
-# Spoke ID: $spoke_id
-# =============================================================================
+    # ==========================================================================
+    # Use template file (SSOT for docker-compose structure)
+    # ==========================================================================
+    local template_file="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
 
-name: dive-spoke-${code_lower}
-
-networks:
-  dive-${code_lower}-network:
-    driver: bridge
-  dive-shared:
-    external: true
-
-volumes:
-  ${code_lower}_postgres_data:
-  ${code_lower}_mongodb_data:
-  ${code_lower}_redis_data:
-  ${code_lower}_frontend_modules:
-  ${code_lower}_frontend_next:
-  ${code_lower}_opa_cache:
-  ${code_lower}_opal_cache:
-  ${code_lower}_backend_node_modules:
-  ${code_lower}_backend_logs:
-
-services:
-  postgres-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: postgres-base
-    container_name: dive-spoke-${code_lower}-postgres
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}
-    ports:
-      - "${postgres_host_port}:5432"
-    volumes:
-      - ${code_lower}_postgres_data:/var/lib/postgresql/data
-    networks:
-      - dive-${code_lower}-network
-
-  mongodb-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: mongodb-base
-    container_name: dive-spoke-${code_lower}-mongodb
-    environment:
-      MONGO_INITDB_DATABASE: dive-v3-${code_lower}
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: \${MONGO_PASSWORD_${code_upper}:?set MONGO_PASSWORD_${code_upper}}
-    ports:
-      - "${mongodb_host_port}:27017"
-    volumes:
-      - ${code_lower}_mongodb_data:/data/db
-    networks:
-      - dive-${code_lower}-network
-
-  redis-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: redis-base
-    container_name: dive-spoke-${code_lower}-redis
-    command: >
-      redis-server --requirepass \${REDIS_PASSWORD_${code_upper}:?set REDIS_PASSWORD_${code_upper}}
-    ports:
-      - "${redis_host_port}:6379"
-    volumes:
-      - ${code_lower}_redis_data:/data
-    networks:
-      - dive-${code_lower}-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "\${REDIS_PASSWORD_${code_upper}}", "ping"]
-
-  keycloak-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: keycloak-base
-    container_name: dive-spoke-${code_lower}-keycloak
-    environment:
-      KC_DB_URL: jdbc:postgresql://postgres-${code_lower}:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: \${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}
-      # Use new Keycloak 26+ bootstrap admin password variable
-      KC_BOOTSTRAP_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
-      # Hostname configuration (Keycloak v26+ syntax)
-      # CRITICAL: Keycloak will use KC_HOSTNAME + mapped port to construct issuer URL
-      # For local dev: localhost will resolve to the mapped host port (e.g., 8476)
-      # For production: set to the actual domain (e.g., nzl-idp.dive25.com)
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_STRICT: "false"
-      KC_PROXY_HEADERS: xforwarded
-      KC_HTTP_ENABLED: "true"
-      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
-      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
-      KC_HTTPS_PORT: "8443"
-      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores/mkcert-rootCA.pem
-    ports:
-      - "${keycloak_https_port}:8443"
-      - "${keycloak_http_port}:8080"
-    volumes:
-      - ./certs:/opt/keycloak/certs:ro
-      - ./truststores:/opt/keycloak/conf/truststores:ro
-      - ../../keycloak/themes:/opt/keycloak/themes:ro
-    depends_on:
-      postgres-${code_lower}:
-        condition: service_healthy
-    networks:
-      - dive-${code_lower}-network
-      - dive-shared
-
-  opa-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: opa-base
-    container_name: dive-spoke-${code_lower}-opa
-    ports:
-      - "${opa_host_port}:8181"
-    volumes:
-      - ../../policies:/policies:ro
-      - ./certs:/certs:ro
-    networks:
-      - dive-${code_lower}-network
-
-  opal-client-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: opal-client-base
-    container_name: dive-spoke-${code_lower}-opal-client
-    environment:
-      OPAL_SERVER_URL: \${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}
-      OPAL_CLIENT_TOKEN: \${SPOKE_OPAL_TOKEN:-}
-      OPAL_OPA_URL: https://opa-${code_lower}:8181
-      OPAL_SUBSCRIPTION_ID: \${SPOKE_ID:-spoke-${code_lower}-default}
-      OPAL_POLICY_STORE_URL: https://opa-${code_lower}:8181
-      OPAL_DATA_TOPICS: policy:base,policy:${code_lower},data:federation_matrix,data:trusted_issuers
-    volumes:
-      - ${code_lower}_opal_cache:/var/opal/cache
-      - ./certs:/var/opal/certs:ro
-    depends_on:
-      opa-${code_lower}:
-        condition: service_healthy
-    networks:
-      - dive-${code_lower}-network
-      - dive-shared  # Required to reach Hub OPAL server
-
-  kas-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: kas-base
-    container_name: dive-spoke-${code_lower}-kas
-    environment:
-      KEYCLOAK_URL: https://keycloak-${code_lower}:8443
-      KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      OPA_URL: https://opa-${code_lower}:8181
-      INSTANCE_CODE: ${code_upper}
-    ports:
-      - "${kas_host_port}:8080"
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      keycloak-${code_lower}:
-        condition: service_healthy
-      opa-${code_lower}:
-        condition: service_healthy
-    networks:
-      - dive-${code_lower}-network
-
-  backend-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: backend-base
-    container_name: dive-spoke-${code_lower}-backend
-    environment:
-      INSTANCE_CODE: ${code_upper}
-      INSTANCE_NAME: "$instance_name"
-      MONGODB_URI: mongodb://admin:\${MONGO_PASSWORD_${code_upper}:?set MONGO_PASSWORD_${code_upper}}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
-      MONGODB_URL: mongodb://admin:\${MONGO_PASSWORD_${code_upper}:?set MONGO_PASSWORD_${code_upper}}@mongodb-${code_lower}:27017/dive-v3-${code_lower}?authSource=admin
-      REDIS_URL: redis://:\${REDIS_PASSWORD_${code_upper}:?set REDIS_PASSWORD_${code_upper}}@redis-${code_lower}:6379
-      KEYCLOAK_URL: https://keycloak-${code_lower}:8443
-      KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      KEYCLOAK_ISSUER: https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower}
-      TRUSTED_ISSUERS: https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower},https://keycloak-${code_lower}:8443/realms/dive-v3-broker-${code_lower},https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}
-      KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: \${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:?set KEYCLOAK_ADMIN_PASSWORD_${code_upper}}
-      OPA_URL: https://opa-${code_lower}:8181
-      FEDERATION_ALLOWED_ORIGINS: https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port},https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com
-      CORS_ALLOWED_ORIGINS: https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port},https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com
-      # SECURITY: Trust mkcert CA instead of disabling TLS verification
-      NODE_EXTRA_CA_CERTS: /app/certs/rootCA.pem
-    ports:
-      - "${backend_host_port}:4000"
-    volumes:
-      - ../../backend:/app
-      - ${code_lower}_backend_node_modules:/app/node_modules
-      - ./certs:/app/certs:rw
-      - ./certs:/opt/keycloak/certs:ro
-      - ../../config:/app/config:ro
-      - ${code_lower}_backend_logs:/app/logs
-    depends_on:
-      mongodb-${code_lower}:
-        condition: service_healthy
-      redis-${code_lower}:
-        condition: service_healthy
-      keycloak-${code_lower}:
-        condition: service_healthy
-    networks:
-      - dive-${code_lower}-network
-      - dive-shared
-
-  frontend-${code_lower}:
-    extends:
-      file: ../../docker/base/services.yml
-      service: frontend-base
-    container_name: dive-spoke-${code_lower}-frontend
-    environment:
-      NEXT_PUBLIC_INSTANCE: ${code_upper}
-      NEXT_PUBLIC_INSTANCE_NAME: "${country_name:-$instance_name}"
-      NEXT_PUBLIC_API_URL: https://localhost:${backend_host_port}
-      NEXT_PUBLIC_BACKEND_URL: https://localhost:${backend_host_port}
-      NEXT_PUBLIC_BASE_URL: https://localhost:${frontend_host_port}
-      NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:${keycloak_https_port}
-      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      BACKEND_URL: https://backend-${code_lower}:4000
-      AUTH_SECRET: \${NEXTAUTH_SECRET_${code_upper}:?set NEXTAUTH_SECRET_${code_upper}}
-      AUTH_KEYCLOAK_ID: dive-v3-broker-${code_lower}
-      AUTH_KEYCLOAK_SECRET: \${KEYCLOAK_CLIENT_SECRET_${code_upper}:?set KEYCLOAK_CLIENT_SECRET_${code_upper}}
-      AUTH_KEYCLOAK_ISSUER: https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower}
-      AUTH_TRUST_HOST: "true"
-      # SECURITY: Trust mkcert CA instead of disabling TLS verification
-      NODE_EXTRA_CA_CERTS: /app/certs/rootCA.pem
-      NEXTAUTH_URL: https://localhost:${frontend_host_port}
-      NEXTAUTH_SECRET: \${NEXTAUTH_SECRET_${code_upper}:?set NEXTAUTH_SECRET_${code_upper}}
-      DATABASE_URL: postgresql://keycloak:\${POSTGRES_PASSWORD_${code_upper}:?set POSTGRES_PASSWORD_${code_upper}}@postgres-${code_lower}:5432/keycloak
-      KEYCLOAK_URL: https://keycloak-${code_lower}:8443
-      KEYCLOAK_REALM: dive-v3-broker-${code_lower}
-      KEYCLOAK_CLIENT_ID: dive-v3-broker-${code_lower}
-      KEYCLOAK_CLIENT_SECRET: \${KEYCLOAK_CLIENT_SECRET_${code_upper}:?set KEYCLOAK_CLIENT_SECRET_${code_upper}}
-      AUTH_POST_LOGOUT_REDIRECT: https://${code_lower}-app.dive25.com
-      AUTH_REDIRECT_URI: https://${code_lower}-app.dive25.com/api/auth/callback/keycloak
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: https://${code_lower}-app.dive25.com,https://${code_lower}-api.dive25.com,https://${code_lower}-idp.dive25.com,https://localhost:${frontend_host_port},https://localhost:${backend_host_port},https://localhost:${keycloak_https_port}
-      NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS: "false"
-      NEXT_PUBLIC_THEME_PRIMARY: "${theme_primary}"
-      NEXT_PUBLIC_THEME_SECONDARY: "${theme_secondary}"
-      NEXT_PUBLIC_THEME_ACCENT: "#ffffff"
-      TZ: "${country_timezone:-UTC}"
-    ports:
-      - "${frontend_host_port}:3000"
-    volumes:
-      - ../../frontend:/app
-      - ${code_lower}_frontend_modules:/app/node_modules
-      - ${code_lower}_frontend_next:/app/.next
-      - ./certs:/app/certs:ro
-      - ./certs:/opt/app/certs:ro
-    depends_on:
-      backend-${code_lower}:
-        condition: service_healthy
-    networks:
-      - dive-${code_lower}-network
-EOF
-
-    # Add Cloudflare tunnel service if configured
-    local tunnel_mode="${11:-token}"  # Default to token mode
-
-    if [ -n "$tunnel_token" ]; then
-    cat >> "$spoke_dir/docker-compose.yml" << EOF
-
-  # ==========================================================================
-  # CLOUDFLARE TUNNEL
-  # ==========================================================================
-
-  cloudflared-${code_lower}:
-    image: cloudflare/cloudflared:latest
-EOF
-
-        # Check if we have a credentials file (auto-created tunnel) or token
-        if [ -f "$spoke_dir/cloudflared/credentials.json" ]; then
-            # Credentials file mode (locally-managed tunnel)
-            cat >> "$spoke_dir/docker-compose.yml" << EOF
-    command: tunnel --config /etc/cloudflared/config.yml run
-    volumes:
-      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
-      - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
-EOF
-        else
-            # Token mode (remotely-managed tunnel)
-            cat >> "$spoke_dir/docker-compose.yml" << EOF
-    command: tunnel --no-autoupdate run --token \${TUNNEL_TOKEN}
-    environment:
-      TUNNEL_TOKEN: \${TUNNEL_TOKEN}
-EOF
-        fi
-
-        cat >> "$spoke_dir/docker-compose.yml" << EOF
-    networks:
-      - dive-${code_lower}-network
-    restart: unless-stopped
-EOF
+    if [ ! -f "$template_file" ]; then
+        log_error "Template file not found: $template_file"
+        return 1
     fi
-}
 
+    # Calculate template hash for drift detection
+    local template_hash=$(md5sum "$template_file" | awk '{print $1}')
+    local timestamp=$(date -Iseconds)
+
+    log_info "Generating docker-compose.yml from template (hash: ${template_hash:0:12})"
+
+    # Copy template and replace placeholders
+    cp "$template_file" "$spoke_dir/docker-compose.yml"
+
+    # Replace placeholders using sed
+    sed -i '' "s|{{TEMPLATE_HASH}}|${template_hash}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{TIMESTAMP}}|${timestamp}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{INSTANCE_CODE_UPPER}}|${code_upper}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{INSTANCE_CODE_LOWER}}|${code_lower}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{INSTANCE_NAME}}|${instance_name}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{SPOKE_ID}}|${spoke_id}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{IDP_HOSTNAME}}|${idp_hostname}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{API_URL}}|${api_base_url}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{BASE_URL}}|${app_base_url}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{IDP_URL}}|${idp_url}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{IDP_BASE_URL}}|${idp_base_url}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{KEYCLOAK_HOST_PORT}}|${keycloak_https_port}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{KEYCLOAK_HTTP_PORT}}|${keycloak_http_port}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{BACKEND_HOST_PORT}}|${backend_host_port}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{FRONTEND_HOST_PORT}}|${frontend_host_port}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{OPA_HOST_PORT}}|${opa_host_port}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{KAS_HOST_PORT}}|${kas_host_port}|g" "$spoke_dir/docker-compose.yml"
+
+    log_success "Generated docker-compose.yml from template v2.8.0 (Network fix for Hub federation)"
+}
 # Original spoke_init (backward compatible, calls wizard or direct)
 spoke_init() {
     local instance_code="${1:-}"
@@ -1366,7 +1097,7 @@ _spoke_init_legacy() {
         log_info "Auto-cleaning stale volumes for fresh deployment..."
         # Use compose to clean volumes instead of pattern matching
         if [ -f "${spoke_dir}/docker-compose.yml" ]; then
-            (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="$code_lower" docker compose down -v 2>/dev/null) || true
+            (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}" docker compose down -v 2>/dev/null) || true
         fi
     fi
 

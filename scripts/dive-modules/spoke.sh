@@ -22,152 +22,59 @@ if ! declare -p NATO_COUNTRIES &>/dev/null || [ ${#NATO_COUNTRIES[@]} -eq 0 ]; t
     source "$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh"
 fi
 
-# =============================================================================
-# LAZY LOADING INFRASTRUCTURE
-# =============================================================================
-# Sub-modules are loaded on demand to reduce startup time and improve maintainability
-# Each module is self-contained and can be sourced independently
+# Load all spoke sub-modules (consolidation preparation)
+if [ -z "$DIVE_SPOKE_INIT_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-init.sh"
+    export DIVE_SPOKE_INIT_LOADED=1
+fi
 
-_SPOKE_MODULES_DIR="$(dirname "${BASH_SOURCE[0]}")"
+if [ -z "$DIVE_SPOKE_DEPLOY_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-deploy.sh"
+    export DIVE_SPOKE_DEPLOY_LOADED=1
+fi
 
-# Lazy load KAS module
-_load_spoke_kas() {
-    if [ -z "$DIVE_SPOKE_KAS_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-kas.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-kas.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_REGISTER_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-register.sh"
+    export DIVE_SPOKE_REGISTER_LOADED=1
+fi
 
-# Lazy load Policy module
-_load_spoke_policy() {
-    if [ -z "$DIVE_SPOKE_POLICY_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-policy.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-policy.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_VERIFICATION_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-verification.sh"
+    export DIVE_SPOKE_VERIFICATION_LOADED=1
+fi
 
-# Lazy load Failover module
-_load_spoke_failover() {
-    if [ -z "$DIVE_SPOKE_FAILOVER_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-failover.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-failover.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_COUNTRIES_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-countries.sh"
+    export DIVE_SPOKE_COUNTRIES_LOADED=1
+fi
 
-# Lazy load Countries module
-_load_spoke_countries() {
-    # Ensure NATO countries database is loaded first (associative arrays can't be exported)
-    if ! declare -p NATO_COUNTRIES &>/dev/null || [ ${#NATO_COUNTRIES[@]} -eq 0 ]; then
-        local nato_script="${DIVE_ROOT}/scripts/nato-countries.sh"
-        [ -f "$nato_script" ] && source "$nato_script"
-    fi
-    if [ -z "$DIVE_SPOKE_COUNTRIES_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-countries.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-countries.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_KAS_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-kas.sh"
+    export DIVE_SPOKE_KAS_LOADED=1
+fi
 
-# Lazy load Cloudflare module
-_load_spoke_cloudflare() {
-    if [ -z "$DIVE_SPOKE_CLOUDFLARE_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-cloudflare.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-cloudflare.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_POLICY_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-policy.sh"
+    export DIVE_SPOKE_POLICY_LOADED=1
+fi
 
-# Lazy load Init module (setup wizard, init)
-_load_spoke_init() {
-    if [ -z "$DIVE_SPOKE_INIT_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-init.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-init.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_FAILOVER_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-failover.sh"
+    export DIVE_SPOKE_FAILOVER_LOADED=1
+fi
 
-# Lazy load Fix Hostname module
-_load_spoke_fix_hostname() {
-    if [ -z "$DIVE_SPOKE_FIX_HOSTNAME_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-fix-hostname.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-fix-hostname.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_CLOUDFLARE_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-cloudflare.sh"
+    export DIVE_SPOKE_CLOUDFLARE_LOADED=1
+fi
 
-# Lazy load Deploy module (deploy, up)
-_load_spoke_deploy() {
-    if [ -z "$DIVE_SPOKE_DEPLOY_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-deploy.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-deploy.sh module"
-            return 1
-        }
-    fi
-}
-
-# Lazy load Register module (register, token)
-_load_spoke_register() {
-    if [ -z "$DIVE_SPOKE_REGISTER_LOADED" ]; then
-        source "${_SPOKE_MODULES_DIR}/spoke-register.sh" 2>/dev/null || {
-            log_error "Failed to load spoke-register.sh module"
-            return 1
-        }
-    fi
-}
+if [ -z "$DIVE_SPOKE_FIX_HOSTNAME_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke-fix-hostname.sh"
+    export DIVE_SPOKE_FIX_HOSTNAME_LOADED=1
+fi
 
 # =============================================================================
-# CONFIGURATION
-# =============================================================================
-
-SPOKE_CERT_ALGORITHM="${SPOKE_CERT_ALGORITHM:-rsa}"
-SPOKE_CERT_BITS="${SPOKE_CERT_BITS:-4096}"
-SPOKE_CERT_DAYS="${SPOKE_CERT_DAYS:-365}"
-
-# =============================================================================
-# PORT CALCULATION - DELEGATED TO COMMON.SH (SSOT)
-# =============================================================================
-# This function now delegates to common.sh:get_instance_ports()
-# See: scripts/dive-modules/common.sh for authoritative implementation
-# =============================================================================
-
-_get_spoke_ports() {
-    # Delegate to common.sh (SSOT)
-    get_instance_ports "$@"
-}
-
-# =============================================================================
-# SPOKE INITIALIZATION (Enhanced Interactive Setup)
-# =============================================================================
-
-# =============================================================================
-# CLOUDFLARE TUNNEL AUTO-SETUP (Lazy Loaded)
-# Functions are in spoke-cloudflare.sh and loaded on demand
-# =============================================================================
-
-# Wrapper for lazy-loaded Cloudflare functions
-_ensure_cloudflared() {
-    _load_spoke_cloudflare && _ensure_cloudflared "$@"
-}
-
-_cloudflared_login() {
-    _load_spoke_cloudflare && _cloudflared_login "$@"
-}
-
-_spoke_auto_create_tunnel() {
-    _load_spoke_cloudflare && _spoke_auto_create_tunnel "$@"
-}
-
-# Interactive spoke setup wizard
+# All spoke sub-modules loaded at initialization
 spoke_generate_certs() {
     local algorithm="${1:-$SPOKE_CERT_ALGORITHM}"
     local bits="${2:-$SPOKE_CERT_BITS}"
@@ -441,7 +348,7 @@ spoke_ensure_keycloak_password_in_hub() {
     fi
 
     # Get the spoke ID from the hub
-    local spoke_id=$(./dive --instance "$code_lower" spoke status 2>/dev/null | grep "Spoke ID:" | cut -d: -f2 | tr -d ' ')
+    local spoke_id=$(./dive spoke status "$code_upper" 2>/dev/null | grep "Spoke ID:" | cut -d: -f2 | tr -d ' ')
 
     if [ -z "$spoke_id" ]; then
         log_error "Could not get spoke ID for $code_upper"
@@ -1563,7 +1470,7 @@ spoke_verify() {
     echo ""
 
     # Set compose project
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
     # Check 1: Docker containers running (8 services)
     printf "  %-35s" "1. Docker Containers (8 services):"
@@ -1660,7 +1567,7 @@ spoke_verify() {
             ((checks_passed++))
         elif echo "$opal_logs" | grep -q "403\|Forbidden"; then
             echo -e "${RED}✗ Auth Failed (need OPAL token)${NC}"
-            echo "      Run: ./dive --instance $code_lower spoke opal-token"
+            echo "      Run: ./dive spoke opal-token $code_upper"
             ((checks_failed++))
         elif echo "$opal_logs" | grep -q "Connection refused\|failed to connect"; then
             echo -e "${YELLOW}⚠ Hub Unreachable${NC}"
@@ -1930,7 +1837,7 @@ spoke_reset() {
 
     # Step 1: Stop services and remove volumes
     log_step "Stopping spoke services and removing volumes..."
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     cd "$spoke_dir"
     docker compose down -v 2>&1 | tail -3
 
@@ -2016,7 +1923,7 @@ spoke_teardown() {
 
     # Step 1: Stop and remove containers
     log_step "Stopping and removing containers..."
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     cd "$spoke_dir"
     docker compose down -v --remove-orphans 2>&1 | tail -3
 
@@ -2079,7 +1986,7 @@ spoke_down() {
         return 0
     fi
 
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     cd "$spoke_dir"
 
     # Stop and remove containers (not volumes)
@@ -2122,7 +2029,7 @@ spoke_clean() {
     # Step 1: Stop containers if running
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
         log_step "Stopping spoke services..."
-        export COMPOSE_PROJECT_NAME="$code_lower"
+        export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
         cd "$spoke_dir"
         docker compose down --volumes --remove-orphans 2>/dev/null || true
     fi
@@ -2143,7 +2050,7 @@ spoke_clean() {
 
     # Use compose to clean volumes instead of pattern matching
     if [ -f "${spoke_dir}/docker-compose.yml" ]; then
-        (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="$code_lower" docker compose down -v 2>/dev/null) || true
+        (cd "$spoke_dir" && COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}" docker compose down -v 2>/dev/null) || true
         # Count volumes that were removed (approximate)
         volume_count=$((volume_count + 5))  # Typical spoke has ~5 volumes
     fi
@@ -2191,7 +2098,7 @@ spoke_clean() {
     log_success "Cleanup complete for ${code_upper}"
     echo ""
     echo -e "${CYAN}Next steps:${NC}"
-    echo "  ./dive --instance ${code_lower} spoke deploy ${code_upper} 'Instance Name'"
+    echo "  ./dive spoke deploy ${code_upper} ${code_upper} 'Instance Name'"
     echo ""
 }
 
@@ -2215,7 +2122,7 @@ spoke_init_keycloak() {
     fi
 
     # Ensure services are running (Keycloak + backend needed for docker exec / curl)
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
     # Run the existing init script (idempotent: updates realm theme/frontendUrl/client redirects)
     (cd "${DIVE_ROOT}" && bash "${DIVE_ROOT}/scripts/spoke-init/init-keycloak.sh" "${code_upper}")
@@ -2381,7 +2288,7 @@ spoke_logs() {
         return 1
     fi
 
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     cd "$spoke_dir"
 
     if [ -n "$service" ]; then
@@ -2395,67 +2302,13 @@ spoke_logs() {
 # INIT COMMANDS (Lazy Loaded from spoke-init.sh)
 # =============================================================================
 
-spoke_setup_wizard() { _load_spoke_init && spoke_setup_wizard "$@"; }
-spoke_init() { _load_spoke_init && spoke_init "$@"; }
-_spoke_init_internal() { _load_spoke_init && _spoke_init_internal "$@"; }
-_spoke_init_legacy() { _load_spoke_init && _spoke_init_legacy "$@"; }
+# Init functions are now called directly
 
 # =============================================================================
 # DEPLOY COMMANDS (Lazy Loaded from spoke-deploy.sh)
 # =============================================================================
 
-spoke_up() { _load_spoke_deploy && spoke_up "$@"; }
-spoke_deploy() { _load_spoke_deploy && spoke_deploy "$@"; }
-_spoke_wait_for_services() { _load_spoke_deploy && _spoke_wait_for_services "$@"; }
-
-# =============================================================================
-# REGISTER COMMANDS (Lazy Loaded from spoke-register.sh)
-# =============================================================================
-
-spoke_register() { _load_spoke_register && spoke_register "$@"; }
-_spoke_poll_for_approval() { _load_spoke_register && _spoke_poll_for_approval "$@"; }
-_spoke_configure_token() { _load_spoke_register && _spoke_configure_token "$@"; }
-spoke_opal_token() { _load_spoke_register && spoke_opal_token "$@"; }
-spoke_token_refresh() { _load_spoke_register && spoke_token_refresh "$@"; }
-spoke_register_with_hub() { _load_spoke_register && spoke_register_with_hub "$@"; }
-spoke_register_federation() { _load_spoke_register && spoke_register_federation "$@"; }
-
-# =============================================================================
-# FAILOVER, MAINTENANCE, AUDIT (Lazy Loaded from spoke-failover.sh)
-# =============================================================================
-
-spoke_failover() { _load_spoke_failover && spoke_failover "$@"; }
-spoke_maintenance() { _load_spoke_failover && spoke_maintenance "$@"; }
-spoke_audit_status() { _load_spoke_failover && spoke_audit_status "$@"; }
-
-# =============================================================================
-# POLICY COMMANDS (Lazy Loaded from spoke-policy.sh)
-# =============================================================================
-
-spoke_policy() { _load_spoke_policy && spoke_policy "$@"; }
-
-# =============================================================================
-# NATO COUNTRY MANAGEMENT (Lazy Loaded from spoke-countries.sh)
-# =============================================================================
-
-spoke_list_countries() { _load_spoke_countries && spoke_list_countries "$@"; }
-spoke_show_ports() { _load_spoke_countries && spoke_show_ports "$@"; }
-spoke_country_info() { _load_spoke_countries && spoke_country_info "$@"; }
-spoke_validate_country() { _load_spoke_countries && spoke_validate_country "$@"; }
-spoke_generate_theme() { _load_spoke_countries && spoke_generate_theme "$@"; }
-spoke_batch_deploy() { _load_spoke_countries && spoke_batch_deploy "$@"; }
-spoke_verify_federation() { _load_spoke_countries && spoke_verify_federation "$@"; }
-
-# =============================================================================
-# SPOKE KAS MANAGEMENT (Lazy Loaded from spoke-kas.sh)
-# =============================================================================
-
-spoke_kas() { _load_spoke_kas && spoke_kas "$@"; }
-
-# =============================================================================
-# LOCALIZED ATTRIBUTE COMMANDS (Phase 5 - NATO Interoperability)
-# =============================================================================
-# Configure country-specific attribute names mapped to DIVE V3 standard claims
+# All spoke sub-modules loaded at initialization
 # Supports all 32 NATO countries with localized attribute naming conventions
 # =============================================================================
 
@@ -2605,9 +2458,11 @@ spoke_pki_import() {
 # Creates: clearance, countryOfAffiliation, acpCOI, uniqueID, realm roles mappers
 ##
 spoke_fix_mappers() {
-    local code="${1:-$INSTANCE}"
+    local code="${1:-}"
     if [ -z "$code" ]; then
-        log_error "Usage: ./dive --instance <CODE> spoke fix-mappers"
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke fix-mappers CODE"
         return 1
     fi
     local code_lower=$(lower "$code")
@@ -2738,9 +2593,11 @@ spoke_fix_mappers() {
 # This is the CLI wrapper for generate-spoke-theme.sh
 ##
 spoke_regenerate_theme() {
-    local code="${1:-$INSTANCE}"
+    local code="${1:-}"
     if [ -z "$code" ]; then
-        log_error "Usage: ./dive --instance <CODE> spoke regenerate-theme"
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke regenerate-theme CODE"
         return 1
     fi
     local code_upper=$(upper "$code")
@@ -2766,7 +2623,7 @@ spoke_regenerate_theme() {
         log_success "Theme regenerated for ${code_upper}"
         echo ""
         log_info "To apply the theme, restart the spoke's Keycloak:"
-        echo "  ./dive --instance ${code_upper} spoke restart keycloak"
+        echo "  ./dive --instance ${code_lower} spoke restart keycloak"
     else
         log_error "Failed to regenerate theme for ${code_upper}"
     fi
@@ -2815,8 +2672,8 @@ module_spoke() {
         init-keycloak)  spoke_init_keycloak ;;
         reinit-client)  spoke_reinit_client ;;
         fix-client)     spoke_reinit_client ;;  # Alias for reinit-client
-        fix-mappers)    spoke_fix_mappers ;;    # Fix missing protocol mappers
-        regenerate-theme) spoke_regenerate_theme ;; # Regenerate Keycloak theme with locales
+        fix-mappers)    spoke_fix_mappers "$@" ;;    # Fix missing protocol mappers
+        regenerate-theme) spoke_regenerate_theme "$@" ;; # Regenerate Keycloak theme with locales
         register)       spoke_register "$@" ;;
         token-refresh)  spoke_token_refresh "$@" ;;
         opal-token)     spoke_opal_token "$@" ;;
@@ -2837,6 +2694,15 @@ module_spoke() {
             ;;
         logs)           spoke_logs "$@" ;;
         reset)          spoke_reset ;;
+        check-drift)
+            spoke_check_drift "$@"
+            ;;
+        check-all-drift|check-all)
+            spoke_check_all_drift "$@"
+            ;;
+        update-compose|update)
+            spoke_update_compose "$@"
+            ;;
         teardown)
             log_warn "Deprecated: Use 'spoke clean' for volume cleanup or 'spoke down' to stop services (removal in v5.0)"
             spoke_teardown "$@"
@@ -2876,7 +2742,6 @@ module_spoke() {
 
         # Fix/Migration Commands
         fix-hostname)
-            _load_spoke_fix_hostname || return 1
             if [ "$1" = "--all" ]; then
                 spoke_fix_all_hostnames
             else
@@ -3042,14 +2907,14 @@ module_spoke_help() {
     echo "  1. ./dive spoke init NZL 'New Zealand Defence'"
     echo "  2. Edit instances/nzl/.env (auto-generated with passwords)"
     echo "  3. ./dive spoke up"
-    echo "  4. ./dive --instance nzl spoke register"
+    echo "  4. ./dive spoke register NZL"
     echo "  5. Wait for Hub admin approval"
     echo "  6. Add SPOKE_OPAL_TOKEN to .env"
     echo ""
 
     echo -e "${BOLD}Verification:${NC}"
-    echo "  ./dive --instance nzl spoke verify   # 8-point connectivity test"
-    echo "  ./dive --instance nzl spoke health   # Service health check"
+    echo "  ./dive spoke verify NZL   # 8-point connectivity test"
+    echo "  ./dive spoke health NZL   # Service health check"
     echo ""
 
     echo -e "${BOLD}Cloudflare Tunnel Setup:${NC}"

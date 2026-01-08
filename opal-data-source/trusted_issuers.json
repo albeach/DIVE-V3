@@ -405,6 +405,24 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-nld": {
+      "tenant": "NLD",
+      "name": "NLD Keycloak (Local Dev)",
+      "country": "NLD",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-nld:8443/realms/dive-v3-broker-nld": {
+      "tenant": "NLD",
+      "name": "NLD Keycloak (Internal Docker)",
+      "country": "NLD",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
   },
   "_metadata": {

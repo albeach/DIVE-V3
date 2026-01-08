@@ -1,9 +1,9 @@
 {
   "identity": {
-    "spokeId": "spoke-nld-e824faf6",
+    "spokeId": "spoke-nld-898c48ca",
     "instanceCode": "NLD",
-    "name": "Kingdom of the Netherlands",
-    "description": "DIVE V3 Spoke Instance for Kingdom of the Netherlands",
+    "name": "Netherlands Defence",
+    "description": "DIVE V3 Spoke Instance for Netherlands Defence",
     "country": "NLD",
     "organizationType": "government",
     "contactEmail": "admin@nld.dive25.com"
@@ -16,7 +16,7 @@
     "apiUrl": "https://localhost:4020",
     "idpUrl": "https://dive-spoke-nld-keycloak:8443",
     "idpPublicUrl": "https://localhost:8463",
-    "kasUrl": "https://localhost:9020"
+    "kasUrl": "https://localhost:10020"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nld/certs/spoke.crt",
@@ -45,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-22T01:05:40Z",
-    "lastModified": "2025-12-22T01:05:40Z",
+    "createdAt": "2026-01-06T08:58:41Z",
+    "lastModified": "2026-01-06T08:58:41Z",
     "configHash": ""
   }
 }

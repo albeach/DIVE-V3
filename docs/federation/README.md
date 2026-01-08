@@ -155,19 +155,19 @@ pays: "FR"            →        countryOfAffiliation: "FRA"
 ./dive spoke deploy NZL "New Zealand"
 
 # Register spoke with hub (Phase 3 - includes CSR submission)
-./dive --instance nzl spoke register
+./dive spoke register NZL
 
 # Register and poll for approval (auto-configures token when approved)
-./dive --instance nzl spoke register --poll
+./dive spoke register NZL --poll
 
 # Refresh token before expiry
 ./dive --instance nzl spoke token-refresh
 
 # Check spoke status (includes token and cert info)
-./dive --instance nzl spoke status
+./dive spoke status NZL
 
 # Verify connectivity after approval
-./dive --instance nzl spoke verify
+./dive spoke verify NZL
 ```
 
 #### Hub Commands
@@ -290,7 +290,7 @@ Phase 4 implements hub-controlled policy bundle distribution with:
 
 ```bash
 # Check policy status on spoke
-./dive --instance nzl spoke policy status
+./dive spoke policy NZL status
 # Output:
 #   Hub Policy Version:     2025.12.11-001
 #   Hub Hash:               sha256:abc123...
@@ -299,7 +299,7 @@ Phase 4 implements hub-controlled policy bundle distribution with:
 #   Scopes:                 ["policy:base", "policy:nzl"]
 
 # Force sync from hub
-./dive --instance nzl spoke policy sync
+./dive spoke policy NZL sync
 # Output:
 #   ✓ Fetched latest bundle from hub
 #   ✓ Verified signature
@@ -307,7 +307,7 @@ Phase 4 implements hub-controlled policy bundle distribution with:
 #   Version: 2025.12.11-001
 
 # Verify bundle signature
-./dive --instance nzl spoke policy verify
+./dive spoke policy NZL verify
 # Output:
 #   Bundle Hash:     sha256:abc123...
 #   Signature:       ✓ Valid
@@ -437,7 +437,7 @@ Phase 5 implements resilience and failover capabilities that allow spokes to con
 
 ```bash
 # Check circuit breaker status
-./dive --instance nzl spoke failover status
+./dive spoke failover NZL status
 # Output:
 #   Circuit State:    CLOSED
 #   Hub Healthy:      ✓ Yes
@@ -447,33 +447,33 @@ Phase 5 implements resilience and failover capabilities that allow spokes to con
 #   Uptime:           99.98%
 
 # Force circuit to open (simulate hub outage for testing)
-./dive --instance nzl spoke failover force-open
+./dive spoke failover NZL force-open
 
 # Force circuit to closed (manual recovery)
-./dive --instance nzl spoke failover force-closed
+./dive spoke failover NZL force-closed
 
 # Reset circuit breaker metrics
-./dive --instance nzl spoke failover reset
+./dive spoke failover NZL reset
 ```
 
 ### Maintenance Mode CLI Commands
 
 ```bash
 # Check maintenance status
-./dive --instance nzl spoke maintenance status
+./dive spoke maintenance NZL status
 # Output:
 #   Maintenance Mode: Inactive
 #   Circuit State:    CLOSED
 
 # Enter maintenance mode (blocks all hub requests)
-./dive --instance nzl spoke maintenance enter "Scheduled patching"
+./dive spoke maintenance NZL enter "Scheduled patching"
 # Output:
 #   ✓ Entered maintenance mode
 #   Reason: Scheduled patching
 #   Time: 2025-12-11T14:30:00Z
 
 # Exit maintenance mode
-./dive --instance nzl spoke maintenance exit
+./dive spoke maintenance NZL exit
 # Output:
 #   ✓ Exited maintenance mode
 #   Duration: 45 minutes
@@ -483,7 +483,7 @@ Phase 5 implements resilience and failover capabilities that allow spokes to con
 
 ```bash
 # Check audit queue status
-./dive --instance nzl spoke audit-status
+./dive spoke audit-status NZL
 # Output:
 #   Queue Size:       0
 #   Pending Sync:     0
@@ -589,18 +589,18 @@ Phase 5 implements resilience and failover capabilities that allow spokes to con
 docker stop dive-v3-hub-opal-server-1
 
 # 2. Verify circuit opens
-./dive --instance nzl spoke failover status
+./dive spoke failover NZL status
 # Expected: State: OPEN
 
 # 3. Verify spoke continues operating
-./dive --instance nzl spoke health
+./dive spoke health NZL
 # Expected: All local services healthy
 
 # 4. Restore hub
 docker start dive-v3-hub-opal-server-1
 
 # 5. Verify recovery
-./dive --instance nzl spoke failover status
+./dive spoke failover NZL status
 # Expected: State: CLOSED (after recovery)
 ```
 

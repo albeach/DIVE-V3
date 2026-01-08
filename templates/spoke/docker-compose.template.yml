@@ -1,8 +1,46 @@
 # =============================================================================
 # DIVE V3 Spoke Instance: {{INSTANCE_CODE_UPPER}} ({{INSTANCE_NAME}})
 # =============================================================================
-# Template Generated: {{TIMESTAMP}}
+# Template Version: 2.8.1
+# Template Last Updated: {{TEMPLATE_LAST_UPDATED}}
+# Template Hash: {{TEMPLATE_HASH}}
+# Generated At: {{TIMESTAMP}}
 # Spoke ID: {{SPOKE_ID}}
+# =============================================================================
+#
+# BREAKING CHANGES in 2.5.0:
+# - Unified network naming: 'internal' instead of 'dive-${code}-network'
+# - Simplified volume declarations (no code prefix, relies on project name)
+# - Keycloak 24.0.0 (from 23.0.0)
+# - MongoDB 7.0 (from 6.0)
+# - OPA 0.68.0 (from 0.60.0)
+#
+# FIXES in 2.5.1:
+# - Explicitly mapped MongoDB /data/configdb to named volume (mongodb_config)
+# - Explicitly mapped OPAL client cache to named volume (opal_cache)
+# - Eliminates anonymous Docker volumes created by base images
+#
+# CRITICAL FIX in 2.6.0:
+# - Added container_name directives to all 9 services
+# - Prevents Docker Compose auto-naming with -1 suffix
+# - Ensures SSOT compliance: dive-spoke-{code}-{service}
+# - No more "dive-spoke-pol-keycloak-pol-1" (now "dive-spoke-pol-keycloak")
+#
+# VERSION ALIGNMENT in 2.7.0:
+# - Fixed Redis version: redis:alpine → redis:7-alpine (matches Hub)
+# - Fixed OPA version: openpolicyagent/opa:0.68.0 → openpolicyagent/opa:1.12.1 (latest stable)
+# - Ensures Hub and Spoke use identical base image versions
+# - See DOCKER_IMAGE_VERSION_SSOT.md for complete version matrix
+#
+# NETWORK FIX in 2.8.0:
+# - Backend now on BOTH dive-internal AND dive-shared networks
+# - CRITICAL: dive-shared required for Hub federation and OPAL policy sync
+# - Fixes "getaddrinfo ENOTFOUND hub.dive25.com" errors
+#
+# HUB_URL FIX in 2.8.1:
+# - Changed default HUB_URL from https://hub.dive25.com to https://dive-hub-backend:4000
+# - Uses Docker internal container name for local deployment
+# - External deployments can override with HUB_URL environment variable
 # =============================================================================
 #
 # This is a STANDALONE spoke stack - completely separate from Hub.
@@ -32,19 +70,22 @@
 name: dive-spoke-{{INSTANCE_CODE_LOWER}}
 
 networks:
-  dive-{{INSTANCE_CODE_LOWER}}-network:
+  dive-internal:
     driver: bridge
+  dive-shared:
+    external: true
 
 volumes:
-  {{INSTANCE_CODE_LOWER}}_postgres_data:
-  {{INSTANCE_CODE_LOWER}}_mongodb_data:
-  {{INSTANCE_CODE_LOWER}}_redis_data:
-  {{INSTANCE_CODE_LOWER}}_opal_cache:
-  {{INSTANCE_CODE_LOWER}}_frontend_modules:
-  {{INSTANCE_CODE_LOWER}}_frontend_next:
-  {{INSTANCE_CODE_LOWER}}_backend_node_modules:
-  {{INSTANCE_CODE_LOWER}}_backend_logs:
-  {{INSTANCE_CODE_LOWER}}_kas_logs:
+  postgres_data:
+  mongodb_data:
+  mongodb_config:  # MongoDB config directory (prevent anonymous volume)
+  redis_data:
+  opal_cache:
+  frontend_modules:
+  frontend_next:
+  backend_node_modules:
+  backend_logs:
+  kas_logs:
 
 services:
   # ==========================================================================
@@ -53,14 +94,15 @@ services:
 
   postgres-{{INSTANCE_CODE_LOWER}}:
     image: postgres:15-alpine
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-postgres
     environment:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: keycloak
     volumes:
-      - {{INSTANCE_CODE_LOWER}}_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 10s
@@ -70,14 +112,16 @@ services:
 
   mongodb-{{INSTANCE_CODE_LOWER}}:
     image: mongo:7-jammy
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
     environment:
       MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     volumes:
-      - {{INSTANCE_CODE_LOWER}}_mongodb_data:/data/db
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb  # Prevent anonymous volume creation
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
@@ -86,11 +130,12 @@ services:
     restart: unless-stopped
 
   redis-{{INSTANCE_CODE_LOWER}}:
-    image: redis:alpine
+    image: redis:7-alpine
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-redis
     volumes:
-      - {{INSTANCE_CODE_LOWER}}_redis_data:/data
+      - redis_data:/data
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -106,6 +151,7 @@ services:
     build:
       context: ../../keycloak
       dockerfile: Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-keycloak
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
@@ -146,7 +192,7 @@ services:
       postgres-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
       interval: 30s
@@ -160,7 +206,8 @@ services:
   # ==========================================================================
 
   opa-{{INSTANCE_CODE_LOWER}}:
-    image: openpolicyagent/opa:0.68.0
+    image: openpolicyagent/opa:1.12.1
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
     command: run --server --addr :8181 /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
     ports:
@@ -169,7 +216,7 @@ services:
       - ../../policies:/policies:ro
       - ./cache/policies:/var/opa/cache
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     healthcheck:
       test: ["CMD", "/opa", "eval", "true"]
       interval: 10s
@@ -181,6 +228,7 @@ services:
     build:
       context: ../../docker
       dockerfile: opal-client.Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opal-client
     environment:
       # Hub OPAL Server URL - from environment variable (required)
       OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
@@ -201,13 +249,13 @@ services:
       OPAL_POLICY_STORE_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181/v1/policies
       OPAL_DATA_STORE_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181/v1/data
     volumes:
-      - {{INSTANCE_CODE_LOWER}}_opal_cache:/var/opal/cache
+      - opal_cache:/var/opal/cache
       - ./certs:/var/opal/certs:ro
     depends_on:
       opa-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:
@@ -227,6 +275,7 @@ services:
     build:
       context: ../../backend
       dockerfile: Dockerfile.dev
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-backend
     command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
@@ -257,8 +306,8 @@ services:
       # CORS
       NEXT_PUBLIC_BASE_URL: {{BASE_URL}}
       FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
-      # Hub federation
-      HUB_URL: ${HUB_URL:-https://hub.dive25.com}
+      # Hub federation - use Docker internal container name for local deployment
+      HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
       SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN}
       SPOKE_CONFIG_PATH: /app/config/config.json
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
@@ -267,21 +316,22 @@ services:
       - "{{BACKEND_HOST_PORT}}:4000"
     volumes:
       - ../../backend:/app
-      - {{INSTANCE_CODE_LOWER}}_backend_node_modules:/app/node_modules
+      - backend_node_modules:/app/node_modules
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
       - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ./config.json:/app/config/config.json:ro
       - ../../config:/app/config/shared:ro
       - ./cache:/app/cache
-      - {{INSTANCE_CODE_LOWER}}_backend_logs:/app/logs
+      - backend_logs:/app/logs
     depends_on:
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
       opa-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal      # Internal spoke communication
+      - dive-shared        # CRITICAL: Required for Hub federation and OPAL policy sync
     healthcheck:
       test: ["CMD", "curl", "-sf", "https://localhost:4000/health", "-k"]
       interval: 30s
@@ -297,6 +347,7 @@ services:
     build:
       context: ../../kas
       dockerfile: Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-kas
     environment:
       NODE_ENV: development
       KAS_PORT: 8080
@@ -322,12 +373,12 @@ services:
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     volumes:
       - ./certs:/opt/app/certs:ro
       - ../../certs/mkcert:/opt/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ../../kas/src:/app/src
-      - {{INSTANCE_CODE_LOWER}}_kas_logs:/app/logs
+      - kas_logs:/app/logs
       - ../../config:/app/config:ro
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
@@ -346,6 +397,7 @@ services:
     build:
       context: ../../frontend
       dockerfile: Dockerfile.dev
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-frontend
     # IMPORTANT: Use hash-based detection to reinstall when package.json changes
     # This ensures new dependencies are installed even when node_modules volume exists
     command: ["/bin/sh","-c","rm -f /app/.env.local && if [ ! -f /app/node_modules/.package-hash ] || [ \"$(md5sum /app/package.json | cut -d' ' -f1)\" != \"$(cat /app/node_modules/.package-hash 2>/dev/null)\" ]; then echo 'Package.json changed - reinstalling dependencies...' && npm install && md5sum /app/package.json | cut -d' ' -f1 > /app/node_modules/.package-hash; else echo 'Dependencies up to date'; fi && npm run dev"]
@@ -380,8 +432,8 @@ services:
       - "{{FRONTEND_HOST_PORT}}:3000"
     volumes:
       - ../../frontend:/app
-      - {{INSTANCE_CODE_LOWER}}_frontend_modules:/app/node_modules
-      - {{INSTANCE_CODE_LOWER}}_frontend_next:/app/.next
+      - frontend_modules:/app/node_modules
+      - frontend_next:/app/.next
       - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
       - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
@@ -391,7 +443,7 @@ services:
       backend-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
-      - dive-{{INSTANCE_CODE_LOWER}}-network
+      - dive-internal
     restart: unless-stopped
 
   # ==========================================================================
