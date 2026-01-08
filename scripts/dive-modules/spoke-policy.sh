@@ -42,9 +42,9 @@ spoke_policy_help() {
     echo "  version            Show current policy version"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./dive --instance nzl spoke policy status"
-    echo "  ./dive --instance nzl spoke policy sync"
-    echo "  ./dive --instance nzl spoke policy verify"
+    echo "  ./dive spoke policy NZL status"
+    echo "  ./dive spoke policy NZL sync"
+    echo "  ./dive spoke policy NZL verify"
     echo ""
 }
 

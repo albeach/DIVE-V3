@@ -70,7 +70,7 @@ if [ -z "$FRA_IDP" ]; then
         exit 1
     fi
     echo -e "${GREEN}✓${NC} FRA spoke registered"
-    
+
     # Get IdP again
     FRA_IDP=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM}/identity-provider/instances" \
         -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[] | select(.alias | contains("fra")) | .alias')

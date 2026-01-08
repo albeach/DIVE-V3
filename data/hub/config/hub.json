@@ -1,6 +1,6 @@
 {
   "identity": {
-    "hubId": "hub-08213ca0",
+    "hubId": "hub-0bd2dad7",
     "name": "DIVE V3 Federation Hub",
     "description": "Central policy management and federation hub",
     "version": "1.0.0"
@@ -18,25 +18,5 @@
     "defaultTrustLevel": "development",
     "defaultScopes": ["policy:read", "heartbeat:write"],
     "tokenValidityMs": 86400000
-  },
-  "policy": {
-    "gitRepo": "",
-    "branch": "main",
-    "syncIntervalMs": 60000,
-    "layers": ["base", "coalition", "tenant"]
-  },
-  "security": {
-    "requireMTLS": false,
-    "allowedCipherSuites": ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"],
-    "minTLSVersion": "1.2"
-  },
-  "monitoring": {
-    "metricsEnabled": true,
-    "healthCheckIntervalMs": 30000,
-    "alertWebhookUrl": ""
-  },
-  "metadata": {
-    "createdAt": "2026-01-06T02:52:12Z",
-    "lastModified": "2026-01-06T02:52:12Z"
   }
 }

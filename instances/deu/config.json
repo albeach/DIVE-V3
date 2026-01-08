@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-deu-c465b05e",
+    "spokeId": "spoke-deu-fa1edd55",
     "instanceCode": "DEU",
     "name": "Germany",
     "description": "DIVE V3 Spoke Instance for Germany",
     "country": "DEU",
     "organizationType": "government",
     "contactEmail": "admin@deu.dive25.com",
-    "registeredSpokeId": "spoke-deu-ed3cafb9"
+    "registeredSpokeId": "spoke-deu-e35ee9fc"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -34,7 +34,7 @@
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2026-01-02T04:50:58Z"
+    "registeredAt": "2026-01-06T16:25:22Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -47,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-02T04:47:17Z",
-    "lastModified": "2026-01-02T04:47:17Z",
+    "createdAt": "2026-01-06T16:24:47Z",
+    "lastModified": "2026-01-06T16:24:47Z",
     "configHash": ""
   }
 }

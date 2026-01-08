@@ -20,6 +20,262 @@ fi
 source "${DIVE_ROOT}/scripts/lib/naming-conventions.sh"
 
 # =============================================================================
+# DOCKER RESOURCE NAMING FUNCTIONS (SSOT)
+# =============================================================================
+
+##
+# Get Docker Compose project name for an instance
+# Returns: dive-hub (for hub) or dive-spoke-{code} (for spokes)
+##
+get_docker_project_name() {
+    local instance="${1}"
+
+    if [ -z "$instance" ]; then
+        log_error "Instance code required"
+        return 1
+    fi
+
+    instance=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance" = "hub" ] || [ "$instance" = "usa" ]; then
+        echo "dive-hub"
+    else
+        echo "dive-spoke-${instance}"
+    fi
+}
+
+##
+# Get volume prefix for an instance
+# Hub: postgres_data         -> becomes dive-hub_postgres_data
+# Spoke: postgres_data       -> becomes dive-spoke-{code}_postgres_data
+##
+get_docker_volume_prefix() {
+    local instance="${1}"
+
+    if [ -z "$instance" ]; then
+        log_error "Instance code required"
+        return 1
+    fi
+
+    instance=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance" = "hub" ] || [ "$instance" = "usa" ]; then
+        # Hub volumes: postgres_data -> dive-hub_postgres_data
+        echo "dive-hub_"
+    else
+        # Spoke volumes: postgres_data -> dive-spoke-fra_postgres_data
+        echo "dive-spoke-${instance}_"
+    fi
+}
+
+##
+# Get network prefix for an instance
+# Hub: hub-internal  -> becomes dive-hub_hub-internal
+# Spoke: internal    -> becomes dive-spoke-{code}_internal
+##
+get_docker_network_prefix() {
+    local instance="${1}"
+
+    if [ -z "$instance" ]; then
+        log_error "Instance code required"
+        return 1
+    fi
+
+    instance=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance" = "hub" ] || [ "$instance" = "usa" ]; then
+        echo "dive-hub_"
+    else
+        echo "dive-spoke-${instance}_"
+    fi
+}
+
+##
+# Get container name prefix for an instance
+# Hub: dive-hub-
+# Spoke: dive-spoke-{code}-
+##
+get_docker_container_prefix() {
+    local instance="${1}"
+
+    if [ -z "$instance" ]; then
+        log_error "Instance code required"
+        return 1
+    fi
+
+    instance=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$instance" = "hub" ] || [ "$instance" = "usa" ]; then
+        echo "dive-hub-"
+    else
+        echo "dive-spoke-${instance}-"
+    fi
+}
+
+##
+# List all Docker resources for an instance
+##
+cmd_docker_resources() {
+    local instance="${1:-${INSTANCE}}"
+
+    if [ -z "$instance" ]; then
+        log_error "Instance required. Use --instance <CODE> or provide as argument"
+        return 1
+    fi
+
+    instance=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+
+    local project_name=$(get_docker_project_name "$instance")
+    local volume_prefix=$(get_docker_volume_prefix "$instance")
+    local network_prefix=$(get_docker_network_prefix "$instance")
+    local container_prefix=$(get_docker_container_prefix "$instance")
+
+    echo ""
+    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║     Docker Resources: ${instance^^}${NC}"
+    echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    echo -e "${BOLD}Naming Convention:${NC}"
+    echo "  Project Name:       $project_name"
+    echo "  Volume Prefix:      $volume_prefix"
+    echo "  Network Prefix:     $network_prefix"
+    echo "  Container Prefix:   $container_prefix"
+    echo ""
+
+    echo -e "${BOLD}Active Containers:${NC}"
+    local containers=$(docker ps -a --filter "name=${container_prefix}" --format "{{.Names}}" 2>/dev/null)
+    if [ -n "$containers" ]; then
+        echo "$containers" | while read -r container; do
+            local status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
+            if [ "$status" = "running" ]; then
+                echo "  ✓ $container (running)"
+            else
+                echo "  ✗ $container ($status)"
+            fi
+        done
+    else
+        echo "  (none)"
+    fi
+    echo ""
+
+    echo -e "${BOLD}Volumes:${NC}"
+    local volumes=$(docker volume ls --filter "name=${volume_prefix}" --format "{{.Name}}" 2>/dev/null)
+    if [ -n "$volumes" ]; then
+        echo "$volumes" | while read -r volume; do
+            echo "  • $volume"
+        done
+    else
+        echo "  (none)"
+    fi
+    echo ""
+
+    echo -e "${BOLD}Networks:${NC}"
+    local networks=$(docker network ls --filter "name=${network_prefix}" --format "{{.Name}}" 2>/dev/null)
+    if [ -n "$networks" ]; then
+        echo "$networks" | while read -r network; do
+            echo "  • $network"
+        done
+    else
+        echo "  (none)"
+    fi
+    echo ""
+}
+
+##
+# Validate Docker naming conventions in docker-compose files
+##
+cmd_validate_docker_naming() {
+    echo ""
+    echo -e "${BOLD}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║     Docker Naming Convention Validation${NC}"
+    echo -e "${BOLD}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    local total=0
+    local valid=0
+    local invalid=0
+    local issues=()
+
+    # Check hub
+    log_step "Validating hub (docker-compose.hub.yml)..."
+    total=$((total + 1))
+    local hub_compose="${DIVE_ROOT}/docker-compose.hub.yml"
+    if [ -f "$hub_compose" ]; then
+        local actual_name=$(grep "^name:" "$hub_compose" | head -1 | sed 's/name: *//' | tr -d ' ')
+        if [ "$actual_name" = "dive-hub" ]; then
+            log_success "Hub: ✓ Correct project name (dive-hub)"
+            valid=$((valid + 1))
+        else
+            log_error "Hub: ✗ Incorrect project name (expected: dive-hub, got: $actual_name)"
+            invalid=$((invalid + 1))
+            issues+=("Hub: Expected 'dive-hub', got '$actual_name'")
+        fi
+    else
+        log_error "Hub: docker-compose.hub.yml not found"
+        invalid=$((invalid + 1))
+        issues+=("Hub: docker-compose.hub.yml not found")
+    fi
+
+    # Check spokes
+    for instance_dir in "${DIVE_ROOT}/instances"/*; do
+        if [ ! -d "$instance_dir" ]; then
+            continue
+        fi
+
+        local instance_code=$(basename "$instance_dir" | tr '[:upper:]' '[:lower:]')
+
+        # Skip special directories
+        if [ "$instance_code" = "shared" ] || [ "$instance_code" = "template" ]; then
+            continue
+        fi
+
+        total=$((total + 1))
+
+        local compose_file="${instance_dir}/docker-compose.yml"
+        if [ ! -f "$compose_file" ]; then
+            log_warn "$instance_code: docker-compose.yml not found"
+            invalid=$((invalid + 1))
+            issues+=("$instance_code: Missing docker-compose.yml")
+            continue
+        fi
+
+        local expected_name="dive-spoke-${instance_code}"
+        local actual_name=$(grep "^name:" "$compose_file" | head -1 | sed 's/name: *//' | tr -d ' ')
+
+        if [ "$actual_name" = "$expected_name" ]; then
+            log_success "$instance_code: ✓ Correct project name ($expected_name)"
+            valid=$((valid + 1))
+        else
+            log_error "$instance_code: ✗ Incorrect project name (expected: $expected_name, got: $actual_name)"
+            invalid=$((invalid + 1))
+            issues+=("$instance_code: Expected '$expected_name', got '$actual_name'")
+        fi
+    done
+
+    echo ""
+    echo -e "${BOLD}Validation Summary:${NC}"
+    echo "  Total instances:    $total"
+    echo "  Valid:              $valid"
+    echo "  Invalid:            $invalid"
+
+    if [ "$invalid" -gt 0 ]; then
+        echo ""
+        log_error "Found $invalid instances with naming issues:"
+        for issue in "${issues[@]}"; do
+            echo "  • $issue"
+        done
+        echo ""
+        log_info "Fix these manually or regenerate spoke instances with './dive spoke init'"
+        return 1
+    else
+        echo ""
+        log_success "All instances follow correct Docker naming conventions!"
+        return 0
+    fi
+}
+
+# =============================================================================
 # MODULE COMMANDS
 # =============================================================================
 
@@ -282,11 +538,14 @@ cmd_naming_help() {
     echo ""
     echo -e "${BOLD}DIVE V3 CLI - Naming Conventions Module${NC}"
     echo ""
-    echo "Manages centralized naming conventions for Keycloak realms, clients, and services."
+    echo "Manages centralized naming conventions for Keycloak realms, clients, services,"
+    echo "and Docker resources (volumes, networks, containers)."
     echo ""
     echo -e "${BOLD}Commands:${NC}"
-    echo "  info <CODE>          Show naming conventions for an instance"
-    echo "  validate             Validate all instances follow naming conventions"
+    echo "  info <CODE>          Show Keycloak naming conventions for an instance"
+    echo "  docker <CODE>        Show Docker resource naming for an instance"
+    echo "  validate             Validate all instances follow Keycloak naming conventions"
+    echo "  validate-docker      Validate Docker Compose project names"
     echo "  migrate [options]    Migrate instances to current naming convention"
     echo "  verify               Verify naming conventions are integrated into dive CLI"
     echo "  help                 Show this help"
@@ -296,9 +555,10 @@ cmd_naming_help() {
     echo "  --no-backup          Skip creating backups (not recommended)"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./dive naming info ESP                # Show naming info for Spain"
-    echo "  ./dive --instance fra naming info     # Show naming info for France"
-    echo "  ./dive naming validate                # Validate all instances"
+    echo "  ./dive naming info ESP                # Show Keycloak naming info for Spain"
+    echo "  ./dive --instance fra naming docker   # Show Docker resources for France"
+    echo "  ./dive naming validate                # Validate Keycloak naming conventions"
+    echo "  ./dive naming validate-docker         # Validate Docker Compose project names"
     echo "  ./dive naming migrate --dry-run       # Preview migration"
     echo "  ./dive naming migrate                 # Run migration"
     echo "  ./dive naming verify                  # Verify integration"
@@ -307,6 +567,7 @@ cmd_naming_help() {
     echo "  Config file: config/naming-conventions.json"
     echo "  Library:     scripts/lib/naming-conventions.sh"
     echo "  Migration:   scripts/migrate-naming-convention.sh"
+    echo "  SSOT Doc:    DOCKER_NAMING_SSOT.md"
     echo ""
 }
 
@@ -322,8 +583,14 @@ module_naming() {
         info)
             cmd_naming_info "$@"
             ;;
+        docker|resources)
+            cmd_docker_resources "$@"
+            ;;
         validate)
             cmd_naming_validate "$@"
+            ;;
+        validate-docker)
+            cmd_validate_docker_naming "$@"
             ;;
         migrate)
             cmd_naming_migrate "$@"

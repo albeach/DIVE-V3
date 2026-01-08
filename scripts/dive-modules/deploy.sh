@@ -344,6 +344,8 @@ cmd_nuke() {
     local keep_images=false
     local reset_spokes=false
     local deep_clean=false
+    local target_type="all"  # New: all, hub, spoke, volumes, networks, orphans
+    local target_instance=""  # New: specific spoke instance code
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -369,84 +371,191 @@ cmd_nuke() {
                 deep_clean=true
                 shift
                 ;;
+            hub)
+                target_type="hub"
+                shift
+                ;;
+            spoke)
+                target_type="spoke"
+                # Use INSTANCE from global flag if set
+                target_instance="${INSTANCE:-}"
+                shift
+                ;;
+            volumes)
+                target_type="volumes"
+                shift
+                ;;
+            networks)
+                target_type="networks"
+                shift
+                ;;
+            orphans)
+                target_type="orphans"
+                shift
+                ;;
+            all)
+                target_type="all"
+                shift
+                ;;
             *)
+                # Unknown argument - might be a spoke code
+                if [ "$target_type" = "spoke" ] && [ -z "$target_instance" ]; then
+                    target_instance="$1"
+                fi
                 shift
                 ;;
         esac
     done
 
+    # Validate spoke targeting
+    if [ "$target_type" = "spoke" ] && [ -z "$target_instance" ]; then
+        log_error "Spoke instance required. Use: ./dive nuke spoke <CODE>"
+        return 1
+    fi
+
     ensure_dive_root
     cd "$DIVE_ROOT" || exit 1
 
-    # =========================================================================
-    # PHASE 1: COMPREHENSIVE RESOURCE DISCOVERY
-    # =========================================================================
-    # Use multiple patterns to catch ALL possible DIVE-related resources
+    # Load naming utilities for precise targeting
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/naming.sh" ]; then
+        # shellcheck source=naming.sh disable=SC1091
+        source "${DIVE_ROOT}/scripts/dive-modules/naming.sh"
+    fi
 
-    # Container patterns: dive-*, spoke-*, *-keycloak, *-mongodb, *-postgres, *-backend, *-frontend
-    local container_patterns="dive|spoke|hub-keycloak|hub-mongodb|hub-postgres|hub-backend|hub-frontend|hub-opa|hub-kas|hub-redis|hub-authzforce|hub-opal"
-    local all_containers=$(docker ps -aq 2>/dev/null)
+    # =========================================================================
+    # TARGETED RESOURCE DISCOVERY
+    # =========================================================================
+
+    local container_patterns=""
+    local volume_patterns=""
+    local network_patterns=""
+    local scope_description=""
+
+    case "$target_type" in
+        hub)
+            container_patterns="dive-hub-"
+            volume_patterns="^dive-hub_"
+            network_patterns="^dive-hub_"
+            scope_description="Hub resources only"
+            ;;
+        spoke)
+            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            container_patterns="dive-spoke-${instance_lower}-"
+            volume_patterns="^dive-spoke-${instance_lower}_"
+            network_patterns="^dive-spoke-${instance_lower}_"
+            scope_description="Spoke ${target_instance^^} resources only"
+            ;;
+        volumes)
+            volume_patterns="^dive"
+            scope_description="All DIVE volumes only"
+            ;;
+        networks)
+            network_patterns="^dive"
+            scope_description="All DIVE networks only"
+            ;;
+        orphans)
+            scope_description="Orphaned resources only (dangling volumes, stopped containers)"
+            ;;
+        all)
+            container_patterns="dive|spoke|hub"
+            volume_patterns="^dive|^hub_|^[a-z]{3}_"
+            network_patterns="dive|hub-|internal|shared-services"
+            scope_description="ALL DIVE resources (hub + all spokes)"
+            ;;
+    esac
+
+    # Discover containers
     local dive_containers=""
-    for c in $all_containers; do
-        local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-        if echo "$name" | grep -qE "$container_patterns"; then
-            dive_containers="$dive_containers $c"
-        fi
-    done
-    local container_count=$(echo $dive_containers | wc -w | tr -d ' ')
+    local container_count=0
+    if [ -n "$container_patterns" ] || [ "$target_type" = "orphans" ]; then
+        local all_containers=$(docker ps -aq 2>/dev/null)
+        for c in $all_containers; do
+            local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+            if [ "$target_type" = "orphans" ]; then
+                local status=$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null)
+                if [ "$status" != "running" ]; then
+                    dive_containers="$dive_containers $c"
+                fi
+            elif echo "$name" | grep -qE "$container_patterns"; then
+                dive_containers="$dive_containers $c"
+            fi
+        done
+        container_count=$(echo $dive_containers | wc -w | tr -d ' ')
+    fi
 
-    # Volume patterns: dive-*, hub_*, {3-letter-code}_* (spoke volumes)
-    local volume_patterns="^dive|^hub_|^[a-z]{3}_"
-    local all_volumes=$(docker volume ls -q 2>/dev/null)
+    # Discover volumes
     local dive_volumes=""
-    for v in $all_volumes; do
-        if echo "$v" | grep -qE "$volume_patterns"; then
-            dive_volumes="$dive_volumes $v"
-        fi
-    done
-    local volume_count=$(echo $dive_volumes | wc -w | tr -d ' ')
+    local volume_count=0
+    if [ -n "$volume_patterns" ] || [ "$target_type" = "volumes" ] || [ "$target_type" = "all" ] || [ "$target_type" = "orphans" ]; then
+        local all_volumes=$(docker volume ls -q 2>/dev/null)
+        for v in $all_volumes; do
+            if [ "$target_type" = "orphans" ]; then
+                # Check if dangling
+                if docker volume ls -qf "dangling=true" 2>/dev/null | grep -q "^${v}$"; then
+                    dive_volumes="$dive_volumes $v"
+                fi
+            elif [ -n "$volume_patterns" ] && echo "$v" | grep -qE "$volume_patterns"; then
+                dive_volumes="$dive_volumes $v"
+            fi
+        done
+        volume_count=$(echo $dive_volumes | wc -w | tr -d ' ')
+    fi
 
-    # Network patterns: dive-*, hub-*, *-internal, shared-services
-    local network_patterns="dive|hub-|internal|shared-services"
-    local all_networks=$(docker network ls --format '{{.Name}}' 2>/dev/null)
+    # Discover networks
     local dive_networks=""
-    for n in $all_networks; do
-        # Skip default networks
-        if [[ "$n" == "bridge" || "$n" == "host" || "$n" == "none" || "$n" == "ingress" || "$n" == "docker_gwbridge" ]]; then
-            continue
-        fi
-        if echo "$n" | grep -qE "$network_patterns"; then
-            dive_networks="$dive_networks $n"
-        fi
-    done
-    local network_count=$(echo $dive_networks | wc -w | tr -d ' ')
+    local network_count=0
+    if [ -n "$network_patterns" ] || [ "$target_type" = "networks" ] || [ "$target_type" = "all" ]; then
+        local all_networks=$(docker network ls --format '{{.Name}}' 2>/dev/null)
+        for n in $all_networks; do
+            # Skip default networks
+            if [[ "$n" == "bridge" || "$n" == "host" || "$n" == "none" || "$n" == "ingress" || "$n" == "docker_gwbridge" ]]; then
+                continue
+            fi
+            if [ -n "$network_patterns" ] && echo "$n" | grep -qE "$network_patterns"; then
+                dive_networks="$dive_networks $n"
+            fi
+        done
+        network_count=$(echo $dive_networks | wc -w | tr -d ' ')
+    fi
+
+    # Dangling volumes (for orphans type or all)
+    local dangling_count=0
+    if [ "$target_type" = "orphans" ] || [ "$target_type" = "all" ]; then
+        dangling_count=$(docker volume ls -qf dangling=true 2>/dev/null | wc -l | tr -d ' ')
+    fi
 
     # Images
     local image_count=0
-    if [ "$keep_images" = false ]; then
+    if [ "$keep_images" = false ] && [ "$target_type" = "all" ]; then
         image_count=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E "dive|ghcr.io/opentdf" | wc -l | tr -d ' ')
     fi
 
-    # Dangling volumes (anonymous volumes)
-    local dangling_count=$(docker volume ls -qf dangling=true 2>/dev/null | wc -l | tr -d ' ')
-
     echo ""
     echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║  ⚠️   NUKE: COMPLETE DESTRUCTION OF ALL DIVE RESOURCES               ║${NC}"
+    if [ "$target_type" = "all" ]; then
+        echo -e "${RED}║  ⚠️   NUKE: COMPLETE DESTRUCTION OF ALL DIVE RESOURCES               ║${NC}"
+    else
+        echo -e "${RED}║  ⚠️   NUKE: TARGETED RESOURCE REMOVAL                                 ║${NC}"
+    fi
     echo -e "${RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
+    echo "  Scope: ${CYAN}${scope_description}${NC}"
+    echo ""
     echo "  Resources discovered for removal:"
-    echo "    - Containers (dive/hub/spoke):  ${container_count}"
-    echo "    - Named Volumes:                ${volume_count}"
-    echo "    - Dangling/Anonymous Volumes:   ${dangling_count}"
-    echo "    - Networks:                     ${network_count}"
-    [ "$keep_images" = false ] && echo "    - Images:                       ${image_count}"
-    if [ "$reset_spokes" = true ]; then
+    [ "$container_count" -gt 0 ] && echo "    - Containers:                   ${container_count}"
+    [ "$volume_count" -gt 0 ] && echo "    - Named Volumes:                ${volume_count}"
+    [ "$dangling_count" -gt 0 ] && echo "    - Dangling/Anonymous Volumes:   ${dangling_count}"
+    [ "$network_count" -gt 0 ] && echo "    - Networks:                     ${network_count}"
+    [ "$keep_images" = false ] && [ "$image_count" -gt 0 ] && echo "    - Images:                       ${image_count}"
+
+    if [ "$target_type" = "spoke" ] && [ "$reset_spokes" = true ]; then
+        echo "    - Spoke Config:                 ${target_instance^^} registration data"
+    elif [ "$reset_spokes" = true ]; then
         local spoke_count=0
         for spoke_dir in "${DIVE_ROOT}/instances"/*; do
             [ -d "$spoke_dir" ] && [ -f "$spoke_dir/config.json" ] && spoke_count=$((spoke_count + 1))
         done
-        echo "    - Spoke Configs:                ${spoke_count} (registration data will be cleared)"
+        echo "    - Spoke Configs:                ${spoke_count} (all registration data will be cleared)"
     fi
     if [ "$deep_clean" = true ]; then
         echo ""
@@ -455,54 +564,86 @@ cmd_nuke() {
     echo ""
 
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Phase 1: Stop all compose projects (dive-hub, spoke instances)"
-        log_dry "Phase 2: Force-remove ${container_count} containers"
-        log_dry "Phase 3: Force-remove ${volume_count} named volumes + ${dangling_count} dangling"
-        log_dry "Phase 4: Force-remove ${network_count} networks"
-        [ "$keep_images" = false ] && log_dry "Phase 5: Remove ${image_count} images"
-        log_dry "Phase 6: docker system prune -f --volumes"
-        log_dry "Phase 7: Cleanup checkpoint directory"
+        log_dry "Target: ${target_type}"
+        log_dry "Phase 1: Stop compose projects"
+        [ "$container_count" -gt 0 ] && log_dry "Phase 2: Force-remove ${container_count} containers"
+        [ "$volume_count" -gt 0 ] && log_dry "Phase 3: Force-remove ${volume_count} named volumes"
+        [ "$dangling_count" -gt 0 ] && log_dry "Phase 3b: Remove ${dangling_count} dangling volumes"
+        [ "$network_count" -gt 0 ] && log_dry "Phase 4: Force-remove ${network_count} networks"
+        [ "$image_count" -gt 0 ] && log_dry "Phase 5: Remove ${image_count} images"
+        if [ "$target_type" = "all" ]; then
+            log_dry "Phase 6: docker system prune -f --volumes"
+            log_dry "Phase 7: Cleanup checkpoint directory"
+        fi
         return 0
     fi
 
     # Require confirmation unless --confirm or --force was passed
     if [ "$confirm_flag" != true ]; then
         echo -e "${YELLOW}This action cannot be undone.${NC}"
-        read -r -p "Type 'yes' to confirm destruction: " user_confirm
+        if [ "$target_type" = "all" ]; then
+            read -r -p "Type 'yes' to confirm complete destruction: " user_confirm
+        else
+            read -r -p "Type 'yes' to confirm removal of ${scope_description}: " user_confirm
+        fi
         if [ "$user_confirm" != "yes" ]; then
             log_info "Nuke cancelled"
             return 1
         fi
     fi
 
-    log_warn "NUKING EVERYTHING..."
+    if [ "$target_type" = "all" ]; then
+        log_warn "NUKING EVERYTHING..."
+    else
+        log_warn "Removing ${scope_description}..."
+    fi
     echo ""
 
     # =========================================================================
-    # PHASE 2: STOP ALL COMPOSE PROJECTS
+    # PHASE 2: STOP TARGETED COMPOSE PROJECTS
     # =========================================================================
-    log_step "Phase 1/7: Stopping all Docker Compose projects..."
+    log_step "Phase 1: Stopping Docker Compose projects..."
 
-    # Main compose files
-    for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml docker-compose.prod.yml; do
-        if [ -f "$compose_file" ]; then
-            local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
-            if [ -n "$project_name" ]; then
-                log_verbose "  Stopping project: $project_name"
-                docker compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>/dev/null || true
-            else
-                docker compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>/dev/null || true
+    if [ "$target_type" = "hub" ]; then
+        # Stop only hub
+        if [ -f "docker-compose.hub.yml" ]; then
+            log_verbose "  Stopping hub"
+            docker compose -f docker-compose.hub.yml -p dive-hub down -v --remove-orphans --timeout 5 2>/dev/null || true
+        fi
+    elif [ "$target_type" = "spoke" ]; then
+        # Stop only specific spoke
+        local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+        local instance_dir="instances/${instance_lower}"
+        if [ -f "${instance_dir}/docker-compose.yml" ]; then
+            log_verbose "  Stopping spoke: ${target_instance^^}"
+            (cd "$instance_dir" && docker compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>/dev/null) || true
+        fi
+    elif [ "$target_type" = "all" ]; then
+        # Stop all compose projects
+        # Main compose files
+        for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml docker-compose.prod.yml; do
+            if [ -f "$compose_file" ]; then
+                local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
+                if [ -n "$project_name" ]; then
+                    log_verbose "  Stopping project: $project_name"
+                    docker compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>/dev/null || true
+                else
+                    docker compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>/dev/null || true
+                fi
             fi
-        fi
-    done
+        done
 
-    # Instance-specific compose files (spokes)
-    for instance_dir in instances/*/; do
-        if [ -f "${instance_dir}docker-compose.yml" ]; then
-            log_verbose "  Stopping spoke: $(basename "$instance_dir")"
-            (cd "$instance_dir" && docker compose down -v --remove-orphans --timeout 5 2>/dev/null) || true
-        fi
-    done
+        # Instance-specific compose files (all spokes)
+        for instance_dir in instances/*/; do
+            if [ -f "${instance_dir}docker-compose.yml" ]; then
+                log_verbose "  Stopping spoke: $(basename "$instance_dir")"
+                (cd "$instance_dir" && docker compose down -v --remove-orphans --timeout 5 2>/dev/null) || true
+            fi
+        done
+    else
+        # For volumes/networks/orphans, no compose stop needed
+        log_verbose "  Skipping compose stop (target_type: ${target_type})"
+    fi
 
     # =========================================================================
     # PHASE 3: FORCE REMOVE ALL CONTAINERS

@@ -25,64 +25,33 @@ if [ -z "$DIVE_FEDERATION_SETUP_LOADED" ]; then
     export DIVE_FEDERATION_SETUP_LOADED=1
 fi
 
-# =============================================================================
-# LAZY LOADING INFRASTRUCTURE
-# =============================================================================
+# Load all federation sub-modules (consolidation preparation)
+if [ -z "$DIVE_FEDERATION_LINK_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-link.sh"
+    export DIVE_FEDERATION_LINK_LOADED=1
+fi
 
-# Sub-modules directory
-_FEDERATION_MODULES_DIR="$(dirname "${BASH_SOURCE[0]}")"
+if [ -z "$DIVE_FEDERATION_MAPPERS_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-mappers.sh"
+    export DIVE_FEDERATION_MAPPERS_LOADED=1
+fi
 
-##
-# Lazy load federation-link.sh module
-##
-_load_federation_link() {
-    if [ -z "$DIVE_FEDERATION_LINK_LOADED" ]; then
-        source "${_FEDERATION_MODULES_DIR}/federation-link.sh" 2>/dev/null || {
-            log_error "Failed to load federation-link.sh module"
-            return 1
-        }
-    fi
-    return 0
-}
+if [ -z "$DIVE_FEDERATION_TEST_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-test.sh"
+    export DIVE_FEDERATION_TEST_LOADED=1
+fi
 
-##
-# Lazy load federation-mappers.sh module
-##
-_load_federation_mappers() {
-    if [ -z "$DIVE_FEDERATION_MAPPERS_LOADED" ]; then
-        source "${_FEDERATION_MODULES_DIR}/federation-mappers.sh" 2>/dev/null || {
-            log_error "Failed to load federation-mappers.sh module"
-            return 1
-        }
-    fi
-    return 0
-}
+if [ -z "$DIVE_FEDERATION_DIAGNOSE_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-diagnose.sh"
+    export DIVE_FEDERATION_DIAGNOSE_LOADED=1
+fi
 
-##
-# Lazy load federation-test.sh module
-##
-_load_federation_test() {
-    if [ -z "$DIVE_FEDERATION_TEST_LOADED" ]; then
-        source "${_FEDERATION_MODULES_DIR}/federation-test.sh" 2>/dev/null || {
-            log_error "Failed to load federation-test.sh module"
-            return 1
-        }
-    fi
-    return 0
-}
+if [ -z "$DIVE_FEDERATION_STATE_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-state.sh"
+    export DIVE_FEDERATION_STATE_LOADED=1
+fi
 
-##
-# Lazy load federation-diagnose.sh module
-##
-_load_federation_diagnose() {
-    if [ -z "$DIVE_FEDERATION_DIAGNOSE_LOADED" ]; then
-        source "${_FEDERATION_MODULES_DIR}/federation-diagnose.sh" 2>/dev/null || {
-            log_error "Failed to load federation-diagnose.sh module"
-            return 1
-        }
-    fi
-    return 0
-}
+# All federation sub-modules loaded at initialization
 
 # =============================================================================
 # ADMIN TOKEN HELPERS
@@ -210,7 +179,7 @@ federation_register() {
 }
 
 # NOTE: The following commands have been removed (superseded by spoke commands):
-# - federation_sync_policies -> Use: ./dive --instance <code> spoke policy sync
+# - federation_sync_policies -> Use: ./dive spoke policy <CODE> sync
 # - federation_sync_idps -> Not needed (IdPs configured via federation-setup)
 # - federation_push_audit -> Use: spoke audit queue (automatic sync)
 
@@ -308,7 +277,7 @@ module_federation() {
         # Removed stub commands (superseded):
         sync-policies)
             log_warn "Command 'federation sync-policies' has been removed"
-            echo "Use instead: ./dive --instance <code> spoke policy sync"
+            echo "Use instead: ./dive spoke policy <CODE> sync"
             return 1
             ;;
         sync-idps)
@@ -322,24 +291,24 @@ module_federation() {
             return 1
             ;;
 
-        # Lazy-loaded: federation-link.sh
-        link)           _federation_link_stub "$@" ;;
-        unlink)         _federation_unlink_stub "$@" ;;
-        verify)         _federation_verify_stub "$@" ;;
-        verify-all)     _federation_verify_all_stub "$@" ;;
-        fix)            _federation_fix_stub "$@" ;;
-        sync-secrets)   _federation_sync_secrets_stub "$@" ;;
-        list-idps)      _federation_list_idps_stub "$@" ;;
+        # Federation link management
+        link)           federation_link "$@" ;;
+        unlink)         federation_unlink "$@" ;;
+        verify)         federation_verify "$@" ;;
+        verify-all)     federation_verify_all "$@" ;;
+        fix)            federation_fix "$@" ;;
+        sync-secrets)   federation_sync_secrets "$@" ;;
+        list-idps)      federation_list_idps "$@" ;;
 
-        # Lazy-loaded: federation-mappers.sh
-        mappers)        _federation_mappers_dispatch_stub "$@" ;;
+        # Federation mappers management
+        mappers)        federation_mappers_dispatch "$@" ;;
 
-        # Lazy-loaded: federation-test.sh
-        test)           _federation_test_stub "$@" ;;
-        health|check)   _federation_health_check_stub "$@" ;;
+        # Federation testing
+        test)           federation_test "$@" ;;
+        health|check)   federation_health_check "$@" ;;
 
-        # Lazy-loaded: federation-diagnose.sh
-        diagnose)       _load_federation_diagnose && federation_diagnose "$@" ;;
+        # Federation diagnostics
+        diagnose)       federation_diagnose "$@" ;;
 
         # Help
         *)              module_federation_help ;;
@@ -354,7 +323,7 @@ module_federation_help() {
     echo "  ${CYAN}register${NC} <url>       Register instance with hub"
     echo "  ${CYAN}register-spoke${NC} <CODE> Add spoke to federation registry (federated search)"
     echo ""
-    echo -e "${CYAN}Testing & Diagnostics:${NC} (lazy loaded)"
+    echo -e "${CYAN}Testing & Diagnostics:${NC}"
     echo "  ${CYAN}diagnose${NC} <CODE>      Comprehensive federation diagnostic (8 checks)"
     echo "  ${CYAN}health|check${NC}         Run comprehensive federation health checks"
     echo "  ${CYAN}test${NC} <type>          Run federation integration tests"
@@ -363,7 +332,7 @@ module_federation_help() {
     echo "    ${GRAY}auth${NC}               Test authentication flows and SSO"
     echo "    ${GRAY}full${NC}               Run complete test suite"
     echo ""
-    echo -e "${CYAN}IdP Link Commands:${NC} (lazy loaded)"
+    echo -e "${CYAN}IdP Link Commands:${NC}"
     echo "  ${GREEN}${BOLD}link${NC} <CODE>         Link IdP for cross-border SSO"
     echo "  ${GREEN}${BOLD}unlink${NC} <CODE>       Remove IdP link"
     echo "  ${GREEN}${BOLD}verify${NC} <CODE>       Verify bidirectional federation (8-point check)"
@@ -372,7 +341,7 @@ module_federation_help() {
     echo "  ${GREEN}${BOLD}sync-secrets${NC} <CODE> Sync client secrets bidirectionally (after redeploy)"
     echo "  ${GREEN}${BOLD}list-idps${NC}           List configured IdPs"
     echo ""
-    echo -e "${CYAN}Mapper Commands:${NC} (lazy loaded)"
+    echo -e "${CYAN}Mapper Commands:${NC}"
     echo "  ${GREEN}${BOLD}mappers${NC} <cmd>       Manage NATO nation protocol mappers"
     echo "    ${GRAY}list${NC}               List available nation templates"
     echo "    ${GRAY}show${NC} <nation>      Show nation mapper details"

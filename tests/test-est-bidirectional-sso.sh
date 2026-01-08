@@ -156,7 +156,7 @@ else
     echo -e "${RED}${BOLD}❌ TESTS FAILED - Some federation checks did not pass${NC}"
     echo ""
     echo -e "${YELLOW}Run these commands to diagnose:${NC}"
-    echo -e "  ./dive --instance est spoke health"
+    echo -e "  ./dive spoke health EST"
     echo -e "  ./dive federation verify EST"
     echo -e "  ./dive hub spokes list"
     echo ""

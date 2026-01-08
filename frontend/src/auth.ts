@@ -650,9 +650,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                         acr = String(payload.acr);
                                     }
 
-                                    // AMR: For federated users, prioritize user_amr (from IdP)
-                                    // The user_amr claim contains the AMR array from the federated Spoke's actual authentication.
-                                    // The direct amr claim comes from the Hub's session (empty for SSO cookie reuse).
+                                    // AMR: Priority order for AMR values
+                                    // 1. user_amr (from federated IdP authentication)
+                                    // 2. amr (from direct Keycloak authentication)
+                                    // 3. attributes.amr (from sync-amr-attributes.sh script)
+                                    // 4. Default to ['pwd']
                                     let amr: string[] = ['pwd']; // default fallback
 
                                     // For federated users: use user_amr (from Spoke's authentication)
@@ -672,6 +674,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                                 amr = [amrSource];
                                             }
                                         }
+                                        console.log('[DEBUG H3] AMR after token extraction:', amr);
+                                    } else if (payload.attributes?.amr) {
+                                        // Fallback: Use AMR from user attributes (set by sync-amr-attributes.sh)
+                                        const attrAmr = payload.attributes.amr;
+                                        if (Array.isArray(attrAmr)) {
+                                            amr = attrAmr.map(String);
+                                        } else if (typeof attrAmr === 'string') {
+                                            try {
+                                                const parsed = JSON.parse(attrAmr);
+                                                amr = Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
+                                            } catch {
+                                                amr = [String(attrAmr)];
+                                            }
+                                        }
+                                        console.log('[DIVE] Using AMR from user attributes:', amr);
+                                    } else {
+                                        // Final fallback: Infer AMR from clearance requirements
+                                        // This ensures users get correct AAL even if token AMR is missing
+                                        const clearance = payload.clearance || payload.attributes?.clearance?.[0] || 'UNCLASSIFIED';
+                                        if (clearance === 'TOP_SECRET') {
+                                            amr = ['pwd', 'hwk']; // AAL3 requires WebAuthn
+                                        } else if (clearance === 'CONFIDENTIAL' || clearance === 'SECRET') {
+                                            amr = ['pwd', 'otp']; // AAL2 requires TOTP
+                                        } else {
+                                            amr = ['pwd']; // AAL1 is password only
+                                        }
+                                        console.log('[DIVE] Inferred AMR from clearance:', { clearance, amr });
                                     }
                                     session.user.amr = amr;
 
@@ -687,6 +716,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                                     // Override ACR if Keycloak returned incorrect value
                                     // Keycloak may return acr="1" even with WebAuthn (hwk in AMR)
+                                    const originalAcr = acr;
                                     if (!acr || acr === '0' || acr === '1' || acr === 'aal1') {
                                         if (hasWebAuthn) {
                                             acr = '3'; // AAL3 if hardware key present
@@ -940,6 +970,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             }
         },
         async signIn({ user, account, profile }) {
+            // DEBUG: Hypothesis 4 - Track sign-in event
+            console.log('[DEBUG H4] Sign-in event:', {
+              email: user?.email,
+              provider: account?.provider,
+              hasIdToken: !!account?.id_token,
+              idTokenLength: account?.id_token?.length
+            });
+
             // Multi-realm: Handle federated accounts from broker realm
             // Allow sign-in for all Keycloak accounts (broker creates new users)
             console.log('[DIVE] Sign-in event', {

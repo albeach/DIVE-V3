@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheckIcon, DevicePhoneMobileIcon, KeyIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
@@ -44,25 +44,32 @@ export default function MFASetupPage() {
   }, [status, user, router, requiresAAL3]);
 
   const initiateOTPSetup = async () => {
+    console.log('[DEBUG MFA] Starting OTP setup...');
     setIsLoading(true);
     setError(null);
 
     try {
+      console.log('[DEBUG MFA] Calling /api/auth/otp/setup...');
       const response = await fetch('/api/auth/otp/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
 
+      console.log('[DEBUG MFA] Setup response status:', response.status);
       const data = await response.json();
+      console.log('[DEBUG MFA] Setup response data:', data);
 
       if (response.ok) {
         setOtpSecret(data.secret);
         setQrCodeUrl(data.qrCodeUrl);
         setSetupMethod('otp');
+        console.log('[DEBUG MFA] OTP setup successful');
       } else {
         setError(data.error || 'Failed to initiate OTP setup');
+        console.log('[DEBUG MFA] OTP setup failed:', data.error);
       }
     } catch (err) {
+      console.error('[DEBUG MFA] OTP setup error:', err);
       setError('Network error occurred');
     } finally {
       setIsLoading(false);
@@ -70,8 +77,11 @@ export default function MFASetupPage() {
   };
 
   const verifyOTPSetup = async () => {
+    console.log('[DEBUG MFA] Starting OTP verification...');
+
     if (!otpCode || otpCode.length !== 6) {
       setError('Please enter a valid 6-digit code');
+      console.log('[DEBUG MFA] Invalid OTP code length:', otpCode?.length);
       return;
     }
 
@@ -79,22 +89,34 @@ export default function MFASetupPage() {
     setError(null);
 
     try {
+      console.log('[DEBUG MFA] Calling /api/auth/otp/verify with code:', otpCode.substring(0, 1) + '****');
       const response = await fetch('/api/auth/otp/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: otpCode }),
+        body: JSON.stringify({ code: otpCode, secret: otpSecret }),
       });
 
+      console.log('[DEBUG MFA] Verify response status:', response.status);
       const data = await response.json();
+      console.log('[DEBUG MFA] Verify response data:', data);
 
       if (response.ok) {
-        // Success - refresh session and redirect
-        await update();
-        router.push('/dashboard');
+        console.log('[DEBUG MFA] OTP verification successful, forcing re-auth...');
+
+        // Success - MFA configured, force re-authentication to get updated ACR/AMR
+        console.log('[MFA Setup] TOTP configured successfully, forcing re-authentication for updated ACR/AMR...');
+
+        // Clear current session and redirect to login with callback
+        await signOut({ redirect: false });
+
+        router.push('/login?callbackUrl=/dashboard&mfaConfigured=true');
+
       } else {
         setError(data.error || 'Invalid OTP code');
+        console.log('[DEBUG MFA] OTP verification failed:', data.error);
       }
     } catch (err) {
+      console.error('[DEBUG MFA] OTP verification error:', err);
       setError('Network error occurred');
     } finally {
       setIsLoading(false);

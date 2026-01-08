@@ -69,28 +69,7 @@ json_array_unique() {
 # =============================================================================
 
 cmd_up() {
-    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
-    # If --instance is set to a spoke (not usa), delegate to spoke module
-    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
-
-    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
-        # This is a spoke instance - route to spoke module
-        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke up' instead"
-        log_warn "Support for './dive --instance $instance_lower up' will be removed in v5.0"
-        echo ""
-
-        # Load spoke module and delegate
-        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
-            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
-            spoke_up "$@"
-            return $?
-        else
-            log_error "Spoke module not found - cannot start spoke instance"
-            return 1
-        fi
-    fi
-
-    # HUB STARTUP: Continue with hub logic
+    # HUB STARTUP: Start hub services
     print_header
     check_docker || exit 1
     load_secrets || exit 1
@@ -839,27 +818,7 @@ bootstrap_default_idp() {
 }
 
 cmd_down() {
-    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
-    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
-
-    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
-        # This is a spoke instance - route to spoke module
-        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke down' instead"
-        log_warn "Support for './dive --instance $instance_lower down' will be removed in v5.0"
-        echo ""
-
-        # Load spoke module and delegate
-        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
-            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
-            spoke_down "$@"
-            return $?
-        else
-            log_error "Spoke module not found - cannot stop spoke instance"
-            return 1
-        fi
-    fi
-
-    # HUB SHUTDOWN: Continue with hub logic
+    # HUB SHUTDOWN: Stop hub services
     log_step "Stopping hub containers..."
 
     if [ "$DRY_RUN" = true ]; then
@@ -879,29 +838,7 @@ cmd_down() {
 cmd_restart() {
     local service="${1:-}"
 
-    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
-    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
-
-    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
-        # This is a spoke instance - route to spoke module
-        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke down && ./dive --instance $instance_lower spoke up' instead"
-        log_warn "Support for './dive --instance $instance_lower restart' will be removed in v5.0"
-        echo ""
-
-        # Load spoke module and delegate
-        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
-            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
-            spoke_down "$@"
-            sleep 2
-            spoke_up "$@"
-            return $?
-        else
-            log_error "Spoke module not found - cannot restart spoke instance"
-            return 1
-        fi
-    fi
-
-    # HUB RESTART: Continue with hub logic
+    # HUB RESTART: Restart hub services
     if [ -n "$service" ]; then
         log_step "Restarting hub service: $service..."
         run docker compose restart "$service"
@@ -916,27 +853,7 @@ cmd_logs() {
     local service="${1:-}"
     local lines="${2:-100}"
 
-    # INSTANCE-AWARE ROUTING: Check if this is a spoke instance
-    local instance_lower=$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')
-
-    if [ "$instance_lower" != "usa" ] && [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
-        # This is a spoke instance - route to spoke module
-        log_warn "DEPRECATED: Use './dive --instance $instance_lower spoke logs [service]' instead"
-        log_warn "Support for './dive --instance $instance_lower logs' will be removed in v5.0"
-        echo ""
-
-        # Load spoke module and delegate
-        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" ]; then
-            source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh"
-            spoke_logs "$service"
-            return $?
-        else
-            log_error "Spoke module not found - cannot view spoke logs"
-            return 1
-        fi
-    fi
-
-    # HUB LOGS: Continue with hub logic
+    # HUB LOGS: Show hub container logs
     if [ -n "$service" ]; then
         docker compose logs -f --tail="$lines" "$service"
     else

@@ -145,7 +145,7 @@ federation_diagnose() {
         else
             echo "  ✗ Frontend secret MISMATCH"
             ((issues_found++))
-            echo -e "    ${YELLOW}Fix: ./dive --instance ${code_lower} spoke sync-secrets${NC}"
+            echo -e "    ${YELLOW}Fix: ./dive spoke sync-secrets ${code_upper}${NC}"
         fi
     else
         echo "  ⚠ Could not retrieve Hub client secret"
@@ -186,7 +186,7 @@ federation_diagnose() {
         else
             echo "  ⚠ Spoke not found in federation registry"
             ((issues_found++))
-            echo -e "    ${YELLOW}Fix: ./dive --instance ${code_lower} spoke register${NC}"
+            echo -e "    ${YELLOW}Fix: ./dive spoke register ${code_upper}${NC}"
         fi
     else
         echo "  ⚠ Could not check federation registry"
@@ -243,7 +243,7 @@ federation_diagnose() {
 
         if grep -q "secret MISMATCH" <<< "$(cat)"; then
             echo "3. Sync secrets:"
-            echo "   ./dive --instance ${code_lower} spoke sync-secrets"
+            echo "   ./dive spoke sync-secrets ${code_upper}"
             echo ""
         fi
 
