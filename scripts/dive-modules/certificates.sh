@@ -288,29 +288,27 @@ update_hub_certificate_sans() {
         return 1
     fi
 
-    log_step "Updating Hub certificate with spoke SANs..."
+    log_step "Updating Hub certificate with wildcard SANs..."
 
     mkdir -p "$hub_certs_dir"
 
-    # Build comprehensive SAN list
-    local spoke_hostnames
-    spoke_hostnames=$(get_all_spoke_hostnames)
+    # WILDCARD APPROACH: Support any current or future spoke without regeneration
+    # No hardcoded country lists - uses wildcards for maximum flexibility
 
-    # Standard Hub hostnames - include all container name patterns
-    local base_hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
-    # Docker container names (the actual names as they appear in Docker)
-    local hub_hostnames="dive-hub-keycloak dive-hub-backend dive-hub-frontend dive-hub-opa dive-hub-opal-server"
-    # Legacy/alternate naming patterns for backwards compatibility
+    local base_hostnames="localhost 127.0.0.1 ::1 host.docker.internal *.localhost"
+
+    # Hub-specific hostnames
+    local hub_hostnames="dive-hub-keycloak dive-hub-backend dive-hub-frontend dive-hub-opa dive-hub-opal-server dive-hub-kas"
     hub_hostnames="$hub_hostnames keycloak hub-keycloak backend frontend opa opal-server"
-    # Public DNS names
     hub_hostnames="$hub_hostnames hub.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
-    local service_hostnames=""
 
-    # Combine all hostnames (removing duplicates)
-    local all_hostnames
-    all_hostnames=$(echo "$base_hostnames $hub_hostnames $service_hostnames $spoke_hostnames" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+    # Wildcard patterns for spoke support (any NATO or partner country)
+    local wildcard_patterns="*.dive25.com *.dive25.local"
 
-    log_verbose "Hub certificate SANs: $all_hostnames"
+    # Combine all hostnames
+    local all_hostnames="$base_hostnames $hub_hostnames $wildcard_patterns"
+
+    log_verbose "Hub certificate SANs (wildcard mode): $all_hostnames"
 
     # Backup existing certificate
     if [ -f "$hub_certs_dir/certificate.pem" ]; then
@@ -318,7 +316,7 @@ update_hub_certificate_sans() {
         cp "$hub_certs_dir/key.pem" "$hub_certs_dir/key.pem.bak.$(date +%Y%m%d-%H%M%S)"
     fi
 
-    # Generate certificate with all SANs
+    # Generate certificate with wildcard SANs
     # shellcheck disable=SC2086
     if mkcert -key-file "$hub_certs_dir/key.pem" \
               -cert-file "$hub_certs_dir/certificate.pem" \
@@ -328,10 +326,7 @@ update_hub_certificate_sans() {
 
         local san_count
         san_count=$(echo "$all_hostnames" | wc -w | tr -d ' ')
-        log_success "Hub certificate updated with $san_count SANs"
-
-        # Show a sample of included hostnames
-        log_verbose "Sample SANs: localhost, dive-hub-keycloak, alb-keycloak-alb-1, bel-keycloak-bel-1..."
+        log_success "Hub certificate updated with $san_count SANs (wildcard mode - supports all spokes)"
 
         return 0
     else

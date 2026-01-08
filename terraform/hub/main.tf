@@ -38,7 +38,7 @@ module "instance" {
   login_theme = "dive-v3"
 
   # Test users (Hub gets test users for USA)
-  create_test_users   = true
+  create_test_users   = false  # Disabled - using seed-hub-users.sh instead
   test_user_password  = var.test_user_password
   admin_user_password = var.admin_user_password
 

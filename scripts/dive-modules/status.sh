@@ -1257,7 +1257,7 @@ cmd_diagnostics() {
             if ! echo "$hub_idps" | grep -q "${spoke}-idp"; then
                 warnings_found=$((warnings_found + 1))
                 echo -e "  ${YELLOW}⚠${NC} Spoke $spoke running but not registered with hub"
-                echo -e "    ${GRAY}Fix:${NC} ./dive --instance $spoke spoke register"
+                echo -e "    ${GRAY}Fix:${NC} ./dive spoke register $spoke"
             fi
         done <<< "$spokes_running"
     fi

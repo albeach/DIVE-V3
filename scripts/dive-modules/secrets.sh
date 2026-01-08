@@ -162,6 +162,233 @@ secrets_verify_all() {
 }
 
 # =============================================================================
+# CONTAINER & ENV SYNC FUNCTIONS (from secret-sync.sh & env-sync.sh)
+# =============================================================================
+
+##
+# Sync secrets from container environment to .env file
+# Ensures .env file matches what containers are actually running with
+#
+# Arguments:
+#   $1 - Instance code (e.g., DEU, BGR, USA)
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+sync_container_secrets_to_env() {
+    local instance_code="${1:?Instance code required}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+
+    ensure_dive_root
+
+    local env_file
+    if [ "$code_upper" = "USA" ]; then
+        env_file="${DIVE_ROOT}/.env.hub"
+    else
+        env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    fi
+
+    if [ ! -f "$env_file" ]; then
+        log_error ".env file not found: $env_file"
+        return 1
+    fi
+
+    log_step "Syncing ${code_upper} secrets: Container → .env file"
+
+    # Backup .env
+    cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)"
+
+    # Get container prefix
+    local container_prefix
+    if [ "$code_upper" = "USA" ]; then
+        container_prefix="dive-hub"
+    else
+        container_prefix="dive-spoke-${code_lower}"
+    fi
+
+    # Sync Keycloak admin password
+    local kc_container="${container_prefix}-keycloak"
+    if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        local kc_password
+        kc_password=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+
+        if [ -n "$kc_password" ]; then
+            local var_name="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+            update_env_var "$env_file" "$var_name" "$kc_password"
+            log_success "Synced $var_name"
+        fi
+    fi
+
+    # Sync PostgreSQL password
+    local pg_container="${container_prefix}-postgres"
+    if docker ps --format '{{.Names}}' | grep -q "^${pg_container}$"; then
+        local pg_password
+        pg_password=$(docker exec "$pg_container" printenv POSTGRES_PASSWORD 2>/dev/null)
+
+        if [ -n "$pg_password" ]; then
+            local var_name="POSTGRES_PASSWORD_${code_upper}"
+            update_env_var "$env_file" "$var_name" "$pg_password"
+            log_success "Synced $var_name"
+        fi
+    fi
+
+    # Sync MongoDB password
+    local mongo_container="${container_prefix}-mongodb"
+    if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$"; then
+        local mongo_password
+        mongo_password=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null)
+
+        if [ -n "$mongo_password" ]; then
+            local var_name="MONGO_PASSWORD_${code_upper}"
+            update_env_var "$env_file" "$var_name" "$mongo_password"
+            log_success "Synced $var_name"
+        fi
+    fi
+
+    # Sync additional secrets for spokes
+    if [ "$code_upper" != "USA" ]; then
+        # Sync OPAL client JWT if available
+        local opal_container="${container_prefix}-opal-client"
+        if docker ps --format '{{.Names}}' | grep -q "^${opal_container}$"; then
+            local opal_jwt
+            opal_jwt=$(docker exec "$opal_container" printenv OPAL_CLIENT_JWT 2>/dev/null)
+
+            if [ -n "$opal_jwt" ]; then
+                local var_name="OPAL_CLIENT_JWT_${code_upper}"
+                update_env_var "$env_file" "$var_name" "$opal_jwt"
+                log_success "Synced $var_name"
+            fi
+        fi
+
+        # Sync SPOKE_TOKEN if available
+        local backend_container="${container_prefix}-backend"
+        if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+            local spoke_token
+            spoke_token=$(docker exec "$backend_container" printenv SPOKE_TOKEN 2>/dev/null)
+
+            if [ -n "$spoke_token" ]; then
+                local var_name="SPOKE_TOKEN_${code_upper}"
+                update_env_var "$env_file" "$var_name" "$spoke_token"
+                log_success "Synced $var_name"
+            fi
+        fi
+    fi
+
+    log_success "Container secrets synced to .env file"
+}
+
+##
+# Sync secrets from .env file to container environment
+# Note: This requires container recreation to take effect
+#
+# Arguments:
+#   $1 - Spoke code (e.g., nld, lux)
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+sync_spoke_secrets_to_env() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower
+    code_lower=$(lower "$spoke_code")
+    local code_upper
+    code_upper=$(upper "$spoke_code")
+
+    ensure_dive_root
+
+    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+    local keycloak_container="dive-spoke-${code_lower}-keycloak"
+
+    if [ ! -f "$spoke_env" ]; then
+        log_warn "Spoke .env file not found: $spoke_env"
+        return 1
+    fi
+
+    if ! docker ps --format '{{.Names}}' | grep -q "^${keycloak_container}$"; then
+        log_warn "Keycloak container not running: $keycloak_container"
+        return 1
+    fi
+
+    log_step "Syncing secrets from container to .env file..."
+
+    # Backup .env file
+    cp "$spoke_env" "${spoke_env}.bak.$(date +%Y%m%d-%H%M%S)"
+
+    # Get secrets from container
+    local kc_pass
+    kc_pass=$(docker exec "$keycloak_container" env | grep "^KEYCLOAK_ADMIN_PASSWORD=" | cut -d'=' -f2 | tr -d '\n\r')
+
+    if [ -n "$kc_pass" ]; then
+        local secret_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+        if grep -q "^${secret_var}=" "$spoke_env"; then
+            sed -i.tmp "s|^${secret_var}=.*|${secret_var}=${kc_pass}|" "$spoke_env"
+            rm -f "${spoke_env}.tmp"
+            log_success "Updated $secret_var in .env"
+        else
+            echo "${secret_var}=${kc_pass}" >> "$spoke_env"
+            log_success "Added $secret_var to .env"
+        fi
+    fi
+
+    # Sync additional spoke-specific secrets
+    local backend_container="dive-spoke-${code_lower}-backend"
+    if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+        local spoke_token
+        spoke_token=$(docker exec "$backend_container" env | grep "^SPOKE_TOKEN=" | cut -d'=' -f2 | tr -d '\n\r')
+
+        if [ -n "$spoke_token" ]; then
+            local secret_var="SPOKE_TOKEN_${code_upper}"
+            if grep -q "^${secret_var}=" "$spoke_env"; then
+                sed -i.tmp "s|^${secret_var}=.*|${secret_var}=${spoke_token}|" "$spoke_env"
+                rm -f "${spoke_env}.tmp"
+                log_success "Updated $secret_var in .env"
+            else
+                echo "${secret_var}=${spoke_token}" >> "$spoke_env"
+                log_success "Added $secret_var to .env"
+            fi
+        fi
+    fi
+
+    return 0
+}
+
+##
+# Sync secrets from .env file to container environment
+# Note: This requires container recreation to take effect
+#
+# Arguments:
+#   $1 - Spoke code (e.g., nld, lux)
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+sync_env_to_container() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower
+    code_lower=$(lower "$spoke_code")
+    local code_upper
+    code_upper=$(upper "$spoke_code")
+
+    ensure_dive_root
+
+    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+
+    if [ ! -f "$spoke_env" ]; then
+        log_warn "Spoke .env file not found: $spoke_env"
+        return 1
+    fi
+
+    log_info "Note: Environment variables are loaded at container startup"
+    log_info "To apply changes, recreate containers with: docker compose up -d --force-recreate"
+
+    return 0
+}
+
+# =============================================================================
 # GCP SSOT COMMANDS (PUSH/PULL/SYNC)
 # =============================================================================
 
@@ -374,6 +601,9 @@ module_secrets() {
         push)       secrets_push "$@" ;;
         pull)       secrets_pull "$@" ;;
         sync)       secrets_sync "$@" ;;
+            sync-container) sync_container_secrets_to_env "$@" ;;
+        sync-env)       sync_spoke_secrets_to_env "$@" ;;
+        sync-to-env)    sync_env_to_container "$@" ;;
         *)          module_secrets_help ;;
     esac
 }
@@ -393,6 +623,11 @@ module_secrets_help() {
     echo "  push [instance]        Push .env secrets to GCP (Local → GCP)"
     echo "  pull [instance]        Pull GCP secrets to .env (GCP → Local)"
     echo "  sync [instance] [direction]  Sync secrets (bidirectional/push/pull)"
+    echo ""
+    echo -e "${CYAN}Container & Env Sync:${NC}"
+    echo "  sync-container [instance]  Sync container secrets → .env file"
+    echo "  sync-env [spoke]          Sync spoke secrets from container → .env"
+    echo "  sync-to-env [spoke]       Sync .env → container (requires restart)"
     echo ""
     echo -e "${CYAN}Other:${NC}"
     echo "  lint [--verbose|--fix] Lint codebase for hardcoded secrets"

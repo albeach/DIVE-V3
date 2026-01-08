@@ -41,7 +41,7 @@ spoke_kas_init() {
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
         echo "Usage: ./dive spoke kas init <CODE>"
-        echo "       ./dive --instance POL spoke kas init"
+        echo "       ./dive spoke kas POL init"
         return 1
     fi
 
@@ -142,7 +142,7 @@ spoke_kas_status() {
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
         echo "Usage: ./dive spoke kas status <CODE>"
-        echo "       ./dive --instance POL spoke kas status"
+        echo "       ./dive spoke kas POL status"
         return 1
     fi
 

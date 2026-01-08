@@ -261,7 +261,7 @@ spoke_verify_deployment() {
             else
                 echo "  ❌ Client ${client_id} MISSING frontend redirect URIs!"
                 echo "     This will cause 'Invalid redirect_uri' errors during login."
-                echo "     Fix: ./dive --instance ${code_lower} spoke reinit-client"
+                echo "     Fix: ./dive spoke reinit-client ${code_upper}"
                 failures+=("Client missing frontend redirect URIs")
             fi
         else

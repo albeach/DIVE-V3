@@ -395,10 +395,10 @@ EOF
             echo "     OPAL_CLIENT_JWT=${opal_token:0:50}..."
         fi
         echo "  2. Restart spoke services: ./dive --instance <code> spoke up"
-        echo "  3. Verify connection: ./dive --instance <code> spoke verify"
+        echo "  3. Verify connection: ./dive spoke verify <CODE>"
         echo ""
         echo "  Or auto-configure by running on the spoke:"
-        echo "  ./dive --instance <code> spoke register --poll"
+        echo "  ./dive spoke register <CODE> --poll"
     else
         log_error "Approval failed: $(echo "$response" | jq -r '.error // .message' 2>/dev/null)"
         return 1

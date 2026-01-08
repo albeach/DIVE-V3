@@ -349,6 +349,18 @@
       "name": "HRV Keycloak",
       "country": "HRV",
       "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-nld": {
+      "tenant": "NLD",
+      "name": "NLD Keycloak",
+      "country": "NLD",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-nld:8443/realms/dive-v3-broker-nld": {
+      "tenant": "NLD",
+      "name": "NLD Keycloak (Internal)",
+      "country": "NLD",
+      "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {

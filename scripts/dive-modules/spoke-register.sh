@@ -387,7 +387,7 @@ EOF
         echo ""
         echo "   Next steps:"
         echo "   1. Wait for hub admin approval"
-        echo "   2. Run: ./dive --instance $code_lower spoke register --poll"
+        echo "   2. Run: ./dive spoke register $code_upper --poll"
         echo "      (Or manually configure token after email notification)"
         echo ""
     else
@@ -473,7 +473,7 @@ _spoke_poll_for_approval() {
 
     log_warn "Polling timeout reached ($timeout seconds)"
     echo "  Registration still pending. You can:"
-    echo "  1. Continue polling: ./dive --instance $(basename $spoke_dir) spoke register --poll"
+    echo "  1. Continue polling: ./dive spoke register $(basename $spoke_dir | tr '[:lower:]' '[:upper:]') --poll"
     echo "  2. Contact hub admin for manual approval"
     return 1
 }
@@ -549,7 +549,7 @@ _spoke_configure_token() {
     echo ""
     echo "  Next steps:"
     echo "  1. Start/restart spoke services: ./dive --instance $code_lower spoke up"
-    echo "  2. Verify OPAL connection: ./dive --instance $code_lower spoke verify"
+    echo "  2. Verify OPAL connection: ./dive spoke verify $code_upper"
 }
 
 # =============================================================================
@@ -612,7 +612,7 @@ spoke_token_refresh() {
 
     if [ -z "$current_token" ]; then
         log_error "No token found in $env_file"
-        echo "  Register first: ./dive --instance $code_lower spoke register"
+        echo "  Register first: ./dive spoke register $code_upper"
         return 1
     fi
 

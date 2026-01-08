@@ -135,7 +135,7 @@ spoke_up() {
             else
                 log_warn "Could not provision OPAL token (Hub may not be reachable)"
                 echo "  OPAL client will retry connection after spoke starts"
-                echo "  Run manually: ./dive --instance $code_lower spoke opal-token"
+                echo "  Run manually: ./dive spoke opal-token $code_upper"
             fi
         fi
     fi
@@ -183,7 +183,7 @@ spoke_up() {
         # Secrets already loaded from .env source above
     else
         log_error "No secrets found in GCP or .env for ${code_upper}"
-        log_error "Run: ./dive --instance ${code_lower} spoke init"
+        log_error "Run: ./dive spoke init ${code_upper}"
         return 1
     fi
 
@@ -202,7 +202,8 @@ spoke_up() {
 
     # Force compose project per spoke to avoid cross-stack collisions when a global
     # COMPOSE_PROJECT_NAME is already exported (e.g., hub set to dive-v3).
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    # CRITICAL: Use dive-spoke prefix to match docker-compose.yml name: directive
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
     cd "$spoke_dir"
 
@@ -266,7 +267,7 @@ spoke_up() {
         cd "$spoke_dir"
         if ! spoke_sync_secrets "$instance_code"; then
             log_warn "Secret synchronization failed - may need manual intervention"
-            log_info "Run manually: ./dive --instance $code_lower spoke sync-secrets"
+            log_info "Run manually: ./dive spoke sync-secrets $code_upper"
         else
             log_success "Frontend secrets synchronized"
         fi
@@ -317,13 +318,13 @@ spoke_up() {
                     echo ""
                     echo "  This is NOT a critical error - spoke is running."
                     echo "  To register manually, run:"
-                    echo "    ./dive --instance $code_lower spoke register --poll"
+                    echo "    ./dive spoke register $code_upper --poll"
                     echo ""
                 fi
             fi
         else
             log_info "Hub not running locally - skipping auto-registration"
-            echo "  To register later, run: ./dive --instance $code_lower spoke register"
+            echo "  To register later, run: ./dive spoke register $code_upper"
         fi
 }
 
@@ -473,6 +474,47 @@ spoke_deploy() {
     if [ -f "$spoke_dir/docker-compose.yml" ] && [ -f "$spoke_dir/config.json" ]; then
         log_info "Spoke already initialized at: $spoke_dir"
         echo ""
+
+        # ==========================================================================
+        # CRITICAL: Automatic Drift Detection and Auto-Update
+        # ==========================================================================
+        log_step "Checking template version drift..."
+
+        # Load drift detection module
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke-drift.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/spoke-drift.sh"
+        fi
+
+        # Check for drift
+        if type spoke_check_drift &>/dev/null; then
+            local drift_result
+            spoke_check_drift "$code_upper" 2>&1 | tee /tmp/drift-check.log
+            drift_result=${PIPESTATUS[0]}
+
+            if [ $drift_result -eq 1 ] || [ $drift_result -eq 2 ]; then
+                log_warn "⚠️  Template drift detected - auto-updating to latest version..."
+                echo ""
+
+                # Auto-update to latest template
+                if type spoke_update_compose &>/dev/null; then
+                    spoke_update_compose "$code_upper"
+                    if [ $? -eq 0 ]; then
+                        log_success "✅ Auto-updated to latest template"
+                    else
+                        log_error "Auto-update failed - deployment may use outdated template"
+                    fi
+                else
+                    log_warn "Drift detected but spoke_update_compose not available"
+                fi
+                echo ""
+            else
+                log_success "✅ Template up-to-date (no drift detected)"
+                echo ""
+            fi
+        else
+            log_verbose "Drift detection not available (spoke-drift.sh not loaded)"
+        fi
+
     else
         log_step "Initializing spoke instance..."
 
@@ -520,7 +562,7 @@ spoke_deploy() {
     echo ""
 
     # Check if services are already running
-    export COMPOSE_PROJECT_NAME="$code_lower"
+    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     cd "$spoke_dir"
 
     local running_count=$(docker compose ps -q 2>/dev/null | wc -l | tr -d ' ')
@@ -585,7 +627,7 @@ spoke_deploy() {
             else
                 log_warn "Could not provision OPAL JWT (Hub may not be reachable)"
                 echo "      Run manually after Hub is available:"
-                echo "      ./dive --instance $code_lower spoke opal-token"
+                echo "      ./dive spoke opal-token $code_upper"
             fi
         fi
     else
@@ -627,7 +669,7 @@ spoke_deploy() {
     # ==========================================================================
     # NOTE: ZTDF resource seeding is handled by init-all.sh Step 4/5 (run in Step 5 above)
     #       This is the SSOT for seeding - no duplicate seeding step needed here.
-    #       Manual seeding: ./dive --instance <code> spoke seed [count]
+    #       Manual seeding: ./dive spoke seed <CODE> [count]
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 6/11: Configuring NATO Localization${NC}"
@@ -652,7 +694,7 @@ spoke_deploy() {
                 log_warn "Localization had issues (continuing anyway)"
                 echo ""
                 echo "  You can retry with:"
-                echo "  ./dive --instance $code_lower spoke localize"
+                echo "  ./dive spoke localize $code_upper"
             fi
         else
             log_info "Not a NATO country - skipping localization"
@@ -1303,8 +1345,8 @@ spoke_deploy() {
         echo -e "${GREEN}║                                                                          ║${NC}"
     fi
     echo -e "${GREEN}║  Useful Commands:                                                       ║${NC}"
-    printf "${GREEN}║    ./dive --instance %-3s spoke verify   # Verify connectivity         ║${NC}\n" "$code_lower"
-    printf "${GREEN}║    ./dive --instance %-3s spoke health   # Check service health        ║${NC}\n" "$code_lower"
+    printf "${GREEN}║    ./dive spoke verify %-3s               # Verify connectivity         ║${NC}\n" "$code_upper"
+    printf "${GREEN}║    ./dive spoke health %-3s               # Check service health        ║${NC}\n" "$code_upper"
     printf "${GREEN}║    ./dive federation verify %-3s        # Check bidirectional SSO     ║${NC}\n" "$code_upper"
     echo -e "${GREEN}║                                                                          ║${NC}"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
