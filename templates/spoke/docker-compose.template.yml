@@ -1,7 +1,7 @@
 # =============================================================================
 # DIVE V3 Spoke Instance: {{INSTANCE_CODE_UPPER}} ({{INSTANCE_NAME}})
 # =============================================================================
-# Template Version: 2.8.1
+# Template Version: 2.9.0
 # Template Last Updated: {{TEMPLATE_LAST_UPDATED}}
 # Template Hash: {{TEMPLATE_HASH}}
 # Generated At: {{TIMESTAMP}}
@@ -37,10 +37,10 @@
 # - CRITICAL: dive-shared required for Hub federation and OPAL policy sync
 # - Fixes "getaddrinfo ENOTFOUND hub.dive25.com" errors
 #
-# HUB_URL FIX in 2.8.1:
-# - Changed default HUB_URL from https://hub.dive25.com to https://dive-hub-backend:4000
-# - Uses Docker internal container name for local deployment
-# - External deployments can override with HUB_URL environment variable
+# KEYCLOAK 26.5.0 UPGRADE in 2.9.0:
+# - Updated Keycloak to version 26.5.0 with latest security fixes
+# - Replaced deprecated KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD with KC_ADMIN/KC_ADMIN_PASSWORD
+# - Ensures compatibility with latest Keycloak configuration standards
 # =============================================================================
 #
 # This is a STANDALONE spoke stack - completely separate from Hub.
@@ -159,8 +159,8 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_ADMIN: admin
+      KC_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HOSTNAME: {{IDP_HOSTNAME}}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -172,7 +172,9 @@ services:
       KC_FEATURES: scripts
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
-      # Realm import environment variables (CRITICAL: Must match frontend secrets)
+      # Terraform SSOT: Skip JSON import, Keycloak starts empty
+      SKIP_REALM_IMPORT: "true"
+      # Legacy realm import variables (kept for compatibility, but not used)
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       APP_URL: {{BASE_URL}}
       API_URL: {{API_URL}}
@@ -233,7 +235,7 @@ services:
       # Hub OPAL Server URL - from environment variable (required)
       OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
       # Authentication - token and public key from Hub
-      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:?SPOKE_OPAL_TOKEN required - obtain from Hub}
+      OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
       OPAL_INLINE_OPA_ENABLED: "false"
       OPAL_OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
@@ -308,7 +310,7 @@ services:
       FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
       # Hub federation - use Docker internal container name for local deployment
       HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
-      SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN}
+      SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       SPOKE_CONFIG_PATH: /app/config/config.json
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
       DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
@@ -319,7 +321,7 @@ services:
       - backend_node_modules:/app/node_modules
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
-      - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
       - ./config.json:/app/config/config.json:ro
       - ../../config:/app/config/shared:ro
       - ./cache:/app/cache
@@ -436,7 +438,7 @@ services:
       - frontend_next:/app/.next
       - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
-      - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
     extra_hosts:
       - "localhost:host-gateway"
     depends_on:

@@ -423,6 +423,24 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Local Dev)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-alb:8443/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Internal Docker)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
   },
   "_metadata": {

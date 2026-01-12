@@ -377,8 +377,6 @@ cmd_nuke() {
                 ;;
             spoke)
                 target_type="spoke"
-                # Use INSTANCE from global flag if set
-                target_instance="${INSTANCE:-}"
                 shift
                 ;;
             volumes)
@@ -409,7 +407,19 @@ cmd_nuke() {
 
     # Validate spoke targeting
     if [ "$target_type" = "spoke" ] && [ -z "$target_instance" ]; then
-        log_error "Spoke instance required. Use: ./dive nuke spoke <CODE>"
+        log_error "Spoke instance required. Use: ./dive nuke spoke <CODE> --confirm"
+        return 1
+    fi
+
+    # SAFETY: Require explicit confirmation for destructive operations
+    if [ "$confirm_flag" != true ]; then
+        log_error "NUKE requires explicit confirmation. Use --confirm or --yes"
+        echo ""
+        echo "  Safe usage:"
+        echo "    ./dive nuke hub --confirm           # Nuke Hub only"
+        echo "    ./dive nuke spoke ALB --confirm     # Nuke specific spoke"
+        echo "    ./dive nuke all --confirm           # Nuke everything"
+        echo ""
         return 1
     fi
 
@@ -732,14 +742,36 @@ cmd_nuke() {
         log_step "Phase 5/7: Removing DIVE images..."
         local removed_images=0
 
-        # Remove by name pattern
-        for pattern in "dive" "ghcr.io/opentdf"; do
-            for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "$pattern" | awk '{print $1}'); do
-                if docker image rm -f "$img" 2>/dev/null; then
-                    removed_images=$((removed_images + 1))
-                fi
-            done
-        done
+        # Remove by name pattern (respect target_type)
+        case "$target_type" in
+            spoke)
+                # For spoke targeting, only remove images for that spoke
+                local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+                for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-spoke-${instance_lower}" | awk '{print $1}'); do
+                    if docker image rm -f "$img" 2>/dev/null; then
+                        removed_images=$((removed_images + 1))
+                    fi
+                done
+                ;;
+            hub)
+                # For hub targeting, only remove hub images
+                for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-hub" | awk '{print $1}'); do
+                    if docker image rm -f "$img" 2>/dev/null; then
+                        removed_images=$((removed_images + 1))
+                    fi
+                done
+                ;;
+            all)
+                # For all targeting, remove all DIVE images
+                for pattern in "dive" "ghcr.io/opentdf"; do
+                    for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "$pattern" | awk '{print $1}'); do
+                        if docker image rm -f "$img" 2>/dev/null; then
+                            removed_images=$((removed_images + 1))
+                        fi
+                    done
+                done
+                ;;
+        esac
 
         # Remove dangling images
         docker image prune -f 2>/dev/null || true

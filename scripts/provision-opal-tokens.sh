@@ -69,6 +69,26 @@ request_opal_jwt() {
     echo "$token"
 }
 
+# Get OPAL public key from running Hub OPAL server
+get_opal_public_key() {
+    local container_name="dive-hub-opal-server"
+
+    # Check if OPAL server container is running
+    if ! docker ps -q --filter "name=${container_name}" 2>/dev/null | grep -q .; then
+        log_warn "Hub OPAL server container not running - cannot get public key"
+        return 1
+    fi
+
+    # Extract the public key from the running OPAL server
+    local public_key=$(docker exec "$container_name" cat /opal-keys/opal_private_key.pem.pub 2>/dev/null)
+    if [ -z "$public_key" ]; then
+        log_warn "Could not extract public key from OPAL server container"
+        return 1
+    fi
+
+    echo "$public_key"
+}
+
 # Provision token for a spoke
 provision_spoke() {
     local spoke_code="$1"
@@ -107,15 +127,25 @@ provision_spoke() {
         # Remove existing OPAL token entries
         sed -i.bak '/^SPOKE_OPAL_TOKEN=/d' "$env_file"
         sed -i.bak '/^OPAL_CLIENT_JWT=/d' "$env_file"
+        sed -i.bak '/^OPAL_AUTH_PUBLIC_KEY=/d' "$env_file"
         rm -f "$env_file.bak"
     else
         touch "$env_file"
     fi
 
-    # Add the JWT token
+    # Get the public key from Hub's OPAL server
+    local opal_public_key
+    opal_public_key=$(get_opal_public_key)
+    if [ -z "$opal_public_key" ]; then
+        log_warn "Could not retrieve OPAL public key - using placeholder"
+        opal_public_key="placeholder-public-key-awaiting-hub-approval"
+    fi
+
+    # Add the JWT token and public key
     echo "" >> "$env_file"
     echo "# OPAL Client JWT - obtained from OPAL server $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$env_file"
     echo "SPOKE_OPAL_TOKEN=${jwt}" >> "$env_file"
+    echo "OPAL_AUTH_PUBLIC_KEY=\"${opal_public_key}\"" >> "$env_file"
 
     log_success "Token provisioned for ${spoke_code^^}"
     echo "  Token: ${jwt:0:50}..."

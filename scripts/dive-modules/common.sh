@@ -151,7 +151,7 @@
 
 # Keycloak Version - Used by Dockerfile, docker-compose, and Terraform
 # Changelog: https://www.keycloak.org/docs/latest/release_notes/index.html
-export KEYCLOAK_VERSION="26.4.7"
+export KEYCLOAK_VERSION="26.5.0"
 export KEYCLOAK_IMAGE="quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}"
 
 # Node.js Version - Used by frontend/backend Dockerfiles
@@ -279,6 +279,27 @@ ensure_shared_network() {
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
+##
+# Get Keycloak port for a spoke instance
+#
+# Arguments:
+#   $1 - Instance code (e.g., FRA, USA)
+#
+# Returns:
+#   Keycloak HTTPS port number
+#
+# Uses: get_instance_ports() SSOT for port calculation
+##
+_get_spoke_keycloak_port() {
+    local code="$1"
+    local code_upper="${code^^}"
+
+    # Use the centralized get_instance_ports function
+    eval "$(get_instance_ports "$code_upper")"
+
+    echo "$SPOKE_KEYCLOAK_HTTPS_PORT"
+}
 
 upper() {
     echo "$1" | tr '[:lower:]' '[:upper:]'

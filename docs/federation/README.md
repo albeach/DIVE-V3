@@ -76,7 +76,7 @@ Visual tool for claim normalization:
 YOUR CLAIMS                    DIVE ATTRIBUTES
 ───────────                    ───────────────
 sub: "12345"          →        uniqueID: "12345"
-habilitation: "SECRET" →       clearance: "SECRET"  
+habilitation: "SECRET" →       clearance: "SECRET"
 pays: "FR"            →        countryOfAffiliation: "FRA"
 ```
 

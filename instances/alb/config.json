@@ -1,12 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-alb-2e89d145",
+    "spokeId": "spoke-alb-a84376f0",
     "instanceCode": "ALB",
-    "name": "Albania",
-    "description": "DIVE V3 Spoke Instance for Albania",
+    "name": "Republic of Albania",
+    "description": "DIVE V3 Spoke Instance for Republic of Albania",
     "country": "ALB",
     "organizationType": "government",
-    "contactEmail": "alb-admin@dive25.com"
+    "contactEmail": "admin@alb.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,8 +14,9 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3001",
     "apiUrl": "https://localhost:4001",
-    "idpUrl": "https://localhost:8444",
-    "kasUrl": "https://localhost:9001"
+    "idpUrl": "https://dive-spoke-alb-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8444",
+    "kasUrl": "https://localhost:10001"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/alb/certs/spoke.crt",
@@ -25,13 +26,15 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "approved",
     "requestedScopes": [
       "policy:base",
       "policy:alb",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2026-01-10T04:59:45Z",
+    "approvedAt": "2026-01-10T04:59:45Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -44,8 +47,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-14T00:45:38Z",
-    "lastModified": "2025-12-14T00:45:38Z",
+    "createdAt": "2026-01-10T04:26:29Z",
+    "lastModified": "2026-01-10T04:26:29Z",
     "configHash": ""
   }
 }

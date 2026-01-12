@@ -245,7 +245,7 @@ _federation_mappers_dispatch_stub() {
 
 # federation-test.sh stubs
 _federation_test_stub() {
-    _load_federation_test && federation_test "$@"
+    _load_federation_test && federation_test_module "$@"
 }
 
 _federation_health_check_stub() {
@@ -327,6 +327,7 @@ module_federation_help() {
     echo "  ${CYAN}diagnose${NC} <CODE>      Comprehensive federation diagnostic (8 checks)"
     echo "  ${CYAN}health|check${NC}         Run comprehensive federation health checks"
     echo "  ${CYAN}test${NC} <type>          Run federation integration tests"
+    echo "  ${CYAN}test${NC} bidirectional    Test bidirectional SSO between spokes"
     echo "    ${GRAY}basic${NC}              Test hub APIs and basic connectivity"
     echo "    ${GRAY}connectivity${NC}       Test cross-instance network connectivity"
     echo "    ${GRAY}auth${NC}               Test authentication flows and SSO"

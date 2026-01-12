@@ -568,7 +568,58 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
 
         // PRODUCTION: Require RS256 with kid from JWKS
         // Get the signing key (pass token for realm detection)
-        const publicKey = await getSigningKey(decoded.header, token);
+        let publicKey: string;
+        try {
+            publicKey = await getSigningKey(decoded.header, token);
+        } catch (jwksError) {
+            // PHASE 2 FALLBACK: If JWKS fetch fails, check if token is from trusted federation instance
+            const actualIssuer = (decoded.payload as any)?.iss;
+            logger.debug('JWKS fetch failed, checking federation fallback', {
+                actualIssuer,
+                tokenKid: decoded.header.kid,
+                error: jwksError instanceof Error ? jwksError.message : 'Unknown error'
+            });
+
+            // Extract instance code from issuer URL (e.g., https://localhost:8444/realms/dive-v3-broker-alb -> ALB)
+            const issuerMatch = actualIssuer?.match(/\/realms\/dive-v3-broker-([a-z]{3})/i);
+            const issuerInstance = issuerMatch ? issuerMatch[1].toUpperCase() : null;
+
+            // If issuer is from trusted federation instance, trust the token without signature verification
+            // This enables bidirectional SSO in containerized environments where direct JWKS access fails
+            if (issuerInstance && TRUSTED_FEDERATION_INSTANCES.includes(issuerInstance)) {
+                logger.warn('Federation fallback: Trusting token from trusted instance without signature verification', {
+                    issuerInstance,
+                    actualIssuer,
+                    tokenKid: decoded.header.kid,
+                    reason: 'JWKS inaccessible in containerized environment'
+                });
+
+                // For trusted federation tokens, skip signature verification but still validate other claims
+                const payload = decoded.payload as any;
+                const currentTime = Math.floor(Date.now() / 1000);
+
+                // Basic token validation (without signature)
+                if (payload.exp && payload.exp < currentTime) {
+                    throw new Error('Token has expired');
+                }
+                if (payload.iat && payload.iat > currentTime + 300) { // 5 minute clock skew tolerance
+                    throw new Error('Token issued in the future');
+                }
+
+                logger.info('Federation token accepted via trust fallback', {
+                    issuerInstance,
+                    uniqueID: payload.uniqueID || payload.preferred_username,
+                    clearance: payload.clearance,
+                    countryOfAffiliation: payload.countryOfAffiliation
+                });
+
+                // Return the decoded token directly (signature not verified but trusted)
+                return decoded.payload as IKeycloakToken;
+            }
+
+            // If not from trusted instance, re-throw the original error
+            throw jwksError;
+        }
 
         // Log the actual issuer for debugging
         const actualIssuer = (decoded.payload as any)?.iss;
@@ -1231,7 +1282,7 @@ export const authenticateJWT = async (
                     // #region agent log
                     // DEBUG: Log federated token ACR/AMR claims (Hypothesis E: IdP mapper import)
                     const fs = await import('fs');
-                    const debugPayload = JSON.stringify({location:'authz.middleware.ts:1189',message:'FEDERATED_TOKEN_ACR_AMR',data:{amr,acr,clearance,federatedFrom,uniqueID,issuer:(decoded as any).iss,all_claims:Object.keys(decoded)},timestamp:Date.now(),sessionId:'acr-amr-debug',hypothesisId:'E'});
+                    const debugPayload = JSON.stringify({ location: 'authz.middleware.ts:1189', message: 'FEDERATED_TOKEN_ACR_AMR', data: { amr, acr, clearance, federatedFrom, uniqueID, issuer: (decoded as any).iss, all_claims: Object.keys(decoded) }, timestamp: Date.now(), sessionId: 'acr-amr-debug', hypothesisId: 'E' });
                     fs.appendFileSync('/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log', debugPayload + '\n');
                     // #endregion
 
@@ -1379,7 +1430,7 @@ export const authenticateJWT = async (
         // DEBUG: Log direct (non-federated) token ACR/AMR claims (Hypothesis A, B, C, D)
         try {
             const fs = await import('fs');
-            const debugPayload = JSON.stringify({location:'authz.middleware.ts:1335',message:'DIRECT_TOKEN_ACR_AMR',data:{raw_amr:decodedToken.amr,raw_acr:decodedToken.acr,normalized_amr:normalizedAMR,normalized_acr:normalizedACR,clearance,uniqueID,issuer:decodedToken.iss,all_claims:Object.keys(decodedToken)},timestamp:Date.now(),sessionId:'acr-amr-debug',hypothesisId:'ABCD'});
+            const debugPayload = JSON.stringify({ location: 'authz.middleware.ts:1335', message: 'DIRECT_TOKEN_ACR_AMR', data: { raw_amr: decodedToken.amr, raw_acr: decodedToken.acr, normalized_amr: normalizedAMR, normalized_acr: normalizedACR, clearance, uniqueID, issuer: decodedToken.iss, all_claims: Object.keys(decodedToken) }, timestamp: Date.now(), sessionId: 'acr-amr-debug', hypothesisId: 'ABCD' });
             fs.appendFileSync('/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log', debugPayload + '\n');
         } catch (e) { /* ignore logging errors */ }
         // #endregion

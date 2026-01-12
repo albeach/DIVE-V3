@@ -11,7 +11,7 @@
 # NOTE: Keycloak 26.x uses a minimal base image with NO package managers
 # We download a statically-linked curl binary from the official curl project
 
-ARG KEYCLOAK_VERSION=26.4.7
+ARG KEYCLOAK_VERSION=26.5.0
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
 
 USER root

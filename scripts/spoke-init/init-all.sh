@@ -70,10 +70,25 @@ for SERVICE in "${SERVICES[@]}"; do
     CONTAINER="$(container_name "${SERVICE}")"
     echo -n "  Waiting for ${CONTAINER}... "
 
+    # Show what health check URL we're testing for Keycloak
+    if [[ "$SERVICE" == "keycloak" ]]; then
+        echo ""
+        echo -e "    ${BLUE}ℹ${NC} External access URL: https://localhost:8453/realms/master"
+        echo -e "    ${BLUE}ℹ${NC} Docker health check URL: https://dive-spoke-fra-keycloak:8443/realms/master"
+        echo -n "    Testing container health status... "
+    fi
+
     while ! docker ps --format '{{.Names}} {{.Status}}' | grep -q "${CONTAINER}.*healthy"; do
         if [[ $WAITED -ge $MAX_WAIT ]]; then
             echo -e "${RED}TIMEOUT${NC}"
             echo "  Service ${CONTAINER} did not become healthy within ${MAX_WAIT}s"
+            if [[ "$SERVICE" == "keycloak" ]]; then
+                echo -e "  ${YELLOW}Troubleshooting:${NC}"
+                echo -e "    • Check Keycloak logs: docker logs ${CONTAINER}"
+                echo -e "    • Test external access: curl -k https://localhost:8453/realms/master"
+                echo -e "    • Test Docker health check: docker exec ${CONTAINER} curl -k https://dive-spoke-fra-keycloak:8443/realms/master"
+                echo -e "    • Verify certificates: ls -la instances/${CODE_LOWER}/certs/"
+            fi
             exit 1
         fi
         sleep 5
@@ -81,6 +96,9 @@ for SERVICE in "${SERVICES[@]}"; do
         echo -n "."
     done
     echo -e "${GREEN}✓${NC}"
+    if [[ "$SERVICE" == "keycloak" ]]; then
+        echo -e "    ${GREEN}✓${NC} Keycloak HTTPS health check passed"
+    fi
 done
 
 echo ""

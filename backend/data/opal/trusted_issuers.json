@@ -350,6 +350,42 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Local Dev)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-alb:8443/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Internal Docker)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://localhost:8443/realms/dive-v3-broker-usa": {
+      "tenant": "USA",
+      "name": "USA Hub Keycloak (Local Dev)",
+      "country": "USA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak:8443/realms/dive-v3-broker-usa": {
+      "tenant": "USA",
+      "name": "USA Hub Keycloak (Internal Docker)",
+      "country": "USA",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
   },
   "_metadata": {
@@ -437,6 +473,13 @@
     "tenant": "HRV",
     "name": "HRV Keycloak",
     "country": "HRV",
+    "trust_level": "DEVELOPMENT",
+    "enabled": true
+  },
+  "https://localhost:8444/realms/dive-v3-broker-alb": {
+    "tenant": "ALB",
+    "name": "ALB Keycloak",
+    "country": "ALB",
     "trust_level": "DEVELOPMENT",
     "enabled": true
   }
