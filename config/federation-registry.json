@@ -346,7 +346,7 @@
           "name": "backend-fra",
           "containerName": "dive-spoke-fra-backend",
           "internalPort": 4000,
-          "externalPort": 4010,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "fra-api.dive25.com"
         },
@@ -362,7 +362,7 @@
           "name": "mongodb-fra",
           "containerName": "dive-spoke-fra-mongodb",
           "internalPort": 27017,
-          "externalPort": 27027,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }
@@ -444,7 +444,7 @@
           "name": "backend-deu",
           "containerName": "dive-spoke-deu-backend",
           "internalPort": 4000,
-          "externalPort": 4011,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "deu-api.dive25.com"
         },
@@ -460,7 +460,7 @@
           "name": "mongodb-deu",
           "containerName": "dive-spoke-deu-mongodb",
           "internalPort": 27017,
-          "externalPort": 27028,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }
@@ -994,7 +994,7 @@
           "name": "backend-pol",
           "containerName": "dive-spoke-pol-backend",
           "internalPort": 4000,
-          "externalPort": 4023,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "pol-api.dive25.com"
         },
@@ -1010,7 +1010,7 @@
           "name": "mongodb-pol",
           "containerName": "dive-spoke-pol-mongodb",
           "internalPort": 27017,
-          "externalPort": 27040,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }
@@ -1259,12 +1259,62 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "alb": {
+      "code": "ALB",
+      "name": "Albania",
+      "locale": "sq-AL",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.alb.yml",
+        "projectName": "alb"
+      },
+      "services": {
+        "_comment": "ALB uses alb- prefix on all service names",
+        "frontend": {
+          "name": "frontend-alb",
+          "containerName": "dive-spoke-alb-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "alb-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-alb",
+          "containerName": "dive-spoke-alb-backend",
+          "internalPort": 4000,
+          "externalPort": 4457,
+          "protocol": "https",
+          "hostname": "alb-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-alb",
+          "containerName": "dive-spoke-alb-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8444,
+          "protocol": "https",
+          "hostname": "alb-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-alb",
+          "containerName": "dive-spoke-alb-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27020,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
     "model": "hub-spoke",
     "matrix": {
       "usa": [
+        "alb",
         "bel",
         "bgr",
         "cze",
@@ -1394,6 +1444,12 @@
         "usa"
       ],
       "hrv": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "alb": [
         "deu",
         "fra",
         "gbr",

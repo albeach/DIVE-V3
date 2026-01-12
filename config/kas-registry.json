@@ -842,6 +842,49 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "alb-kas",
+      "organization": "Albania",
+      "countryCode": "ALB",
+      "kasUrl": "https://localhost:10001/api/kas",
+      "internalKasUrl": "http://kas-alb:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://alb-idp.dive25.com/realms/dive-v3-broker-alb",
+        "jwtAudience": "dive-v3-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "ALB"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@alb.dive25.com",
+        "lastVerified": "2026-01-08T03:21:04Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {
@@ -849,6 +892,7 @@
     "defaultTrustLevel": "high",
     "trustMatrix": {
       "usa-kas": [
+        "alb-kas",
         "bel-kas",
         "bgr-kas",
         "cze-kas",
@@ -869,6 +913,7 @@
         "svk-kas"
       ],
       "fra-kas": [
+        "alb-kas",
         "bel-kas",
         "bgr-kas",
         "cze-kas",
@@ -889,6 +934,7 @@
         "usa-kas"
       ],
       "gbr-kas": [
+        "alb-kas",
         "bel-kas",
         "bgr-kas",
         "cze-kas",
@@ -909,6 +955,7 @@
         "usa-kas"
       ],
       "deu-kas": [
+        "alb-kas",
         "bel-kas",
         "bgr-kas",
         "cze-kas",
@@ -1017,6 +1064,12 @@
         "deu-kas"
       ],
       "hrv-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "alb-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",

@@ -210,10 +210,94 @@ case "$COMMAND" in
         module_federation_setup "$@"
         ;;
 
-    # Test commands (test.sh) - Phase 6
+    # Test commands (test.sh) - Phase 4: Testing & Validation
     test)
-        source "${MODULES_DIR}/test.sh"
-        module_test "$@"
+        TEST_TARGET="${1:-help}"
+        shift || true
+        case "$TEST_TARGET" in
+            orchestration|orch)
+                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                orch_test_run_category "$@"
+                ;;
+            multi-instance|multi)
+                source "${MODULES_DIR}/multi-instance-test.sh"
+                case "${1:-help}" in
+                    concurrent)
+                        multi_test_concurrent_all
+                        ;;
+                    staggered)
+                        multi_test_staggered_deployment
+                        ;;
+                    federation)
+                        multi_test_federation_scaling
+                        ;;
+                    load)
+                        multi_load_test
+                        ;;
+                    cleanup)
+                        multi_test_cleanup_all
+                        ;;
+                    *)
+                        echo "Multi-Instance Test Commands:"
+                        echo "  ./dive test multi concurrent     Run concurrent deployment test"
+                        echo "  ./dive test multi staggered      Run staggered deployment test"
+                        echo "  ./dive test multi federation     Test federation scaling"
+                        echo "  ./dive test multi load           Run load testing scenarios"
+                        echo "  ./dive test multi cleanup        Clean up test instances"
+                        ;;
+                esac
+                ;;
+            all)
+                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                orch_test_run_all
+                ;;
+            unit)
+                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                orch_test_run_category "unit"
+                ;;
+            integration)
+                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                orch_test_run_category "integration"
+                ;;
+            resilience)
+                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                orch_test_run_category "resilience"
+                ;;
+            performance)
+                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                orch_test_run_category "performance"
+                ;;
+            *)
+                echo "DIVE V3 Testing Framework - Phase 4"
+                echo "==================================="
+                echo ""
+                echo "Orchestration Tests (Phase 3 Validation):"
+                echo "  ./dive test all                    Run complete test suite"
+                echo "  ./dive test unit                   Run unit tests only"
+                echo "  ./dive test integration            Run integration tests"
+                echo "  ./dive test resilience             Run resilience tests"
+                echo "  ./dive test performance            Run performance tests"
+                echo "  ./dive test orchestration <type>   Run specific orchestration tests"
+                echo ""
+                echo "Multi-Instance Tests (Enterprise Validation):"
+                echo "  ./dive test multi concurrent       Concurrent NATO deployments"
+                echo "  ./dive test multi staggered        Staggered deployment testing"
+                echo "  ./dive test multi federation       Federation scaling tests"
+                echo "  ./dive test multi load             Load testing scenarios"
+                echo "  ./dive test multi cleanup          Clean up test instances"
+                echo ""
+                echo "Test Coverage:"
+                echo "  ✅ Circuit breaker functionality"
+                echo "  ✅ Smart retry algorithms"
+                echo "  ✅ State management integrity"
+                echo "  ✅ Error handling & recovery"
+                echo "  ✅ Checkpoint & rollback"
+                echo "  ✅ Real-time metrics"
+                echo "  ✅ Multi-instance concurrent deployments"
+                echo "  ✅ Federation scaling validation"
+                echo "  ✅ Enterprise load testing"
+                ;;
+        esac
         ;;
 
     # Verify commands - Phase 6

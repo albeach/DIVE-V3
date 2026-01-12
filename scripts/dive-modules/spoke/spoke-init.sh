@@ -632,8 +632,8 @@ NEXTAUTH_SECRET_${code_upper}=$nextauth_secret
 BLACKLIST_REDIS_URL=redis://:${redis_pass}@dive-hub-redis-blacklist:6379
 
 # OPAL/Federation
-# For local Docker networking, use the container name instead of localhost
-HUB_OPAL_URL=https://dive-hub-opal-server:7002
+# Spokes connect to Hub via external host (localhost for local dev)
+HUB_OPAL_URL=https://localhost:7002
 SPOKE_ID=$spoke_id
 SPOKE_OPAL_TOKEN=
 OPAL_LOG_LEVEL=INFO
@@ -928,6 +928,7 @@ _create_spoke_docker_compose() {
     sed -i '' "s|{{IDP_BASE_URL}}|${idp_base_url}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{KEYCLOAK_HOST_PORT}}|${keycloak_https_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{KEYCLOAK_HTTP_PORT}}|${keycloak_http_port}|g" "$spoke_dir/docker-compose.yml"
+    sed -i '' "s|{{SPOKE_KEYCLOAK_HTTPS_PORT}}|${keycloak_https_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{BACKEND_HOST_PORT}}|${backend_host_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{FRONTEND_HOST_PORT}}|${frontend_host_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{OPA_HOST_PORT}}|${opa_host_port}|g" "$spoke_dir/docker-compose.yml"
@@ -1121,6 +1122,273 @@ _spoke_init_legacy() {
     # Call internal init with default contact email
     _spoke_init_internal "$code_upper" "$instance_name" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" \
         "$hub_url" "$contact_email" "" "$postgres_pass" "$mongo_pass" "$keycloak_pass" "$auth_secret" "$client_secret" "false"
+}
+
+# =============================================================================
+# KEYCLOAK INITIALIZATION
+# =============================================================================
+
+spoke_init_keycloak() {
+    ensure_dive_root
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    print_header
+    echo -e "${BOLD}Initializing Keycloak for Spoke:${NC} ${code_upper}"
+    echo ""
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would initialize Keycloak realm and client for $code_upper"
+        return 0
+    fi
+
+    if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
+        log_error "Spoke not deployed: $instance_code"
+        echo ""
+        echo "Deploy first: ./dive spoke deploy $instance_code <name>"
+        return 1
+    fi
+
+    # Get port configuration
+    eval "$(get_instance_ports "$code_upper")"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+
+    # Get admin password
+    local kc_pass=""
+    kc_pass=$(get_keycloak_password "dive-spoke-${code_lower}-keycloak" 2>/dev/null || true)
+
+    if [ -z "$kc_pass" ]; then
+        # Try from .env
+        if [ -f "$spoke_dir/.env" ]; then
+            kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+        fi
+    fi
+
+    if [ -z "$kc_pass" ]; then
+        log_error "Cannot find Keycloak admin password for $code_upper"
+        echo ""
+        echo "Ensure the spoke is properly deployed and .env file exists."
+        return 1
+    fi
+
+    # Wait for Keycloak to be ready
+    echo -e "${CYAN}Waiting for Keycloak to be ready...${NC}"
+    local max_attempts=30
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if curl -kfs "https://localhost:${kc_port}/health/ready" >/dev/null 2>&1; then
+            log_success "Keycloak is ready"
+            echo ""
+            break
+        fi
+
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    if [ $attempt -gt $max_attempts ]; then
+        log_error "Keycloak failed to become ready after $max_attempts attempts"
+        return 1
+    fi
+
+    # Get admin token
+    echo -e "${CYAN}Getting admin token...${NC}"
+    local admin_token
+    admin_token=$(curl -sk -X POST "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${kc_pass}" | jq -r '.access_token // empty')
+
+    if [ -z "$admin_token" ]; then
+        log_error "Failed to get Keycloak admin token"
+        return 1
+    fi
+    log_success "Admin token obtained"
+    echo ""
+
+    # Create realm if it doesn't exist
+    local realm_name="dive-v3-broker-${code_lower}"
+    echo -e "${CYAN}Checking realm: ${realm_name}...${NC}"
+
+    local realm_exists
+    realm_exists=$(curl -sk -H "Authorization: Bearer ${admin_token}" \
+        "https://localhost:${kc_port}/admin/realms/${realm_name}" 2>/dev/null | jq -r '.realm // empty')
+
+    if [ -z "$realm_exists" ]; then
+        echo -e "${CYAN}Creating realm...${NC}"
+        local realm_data=$(cat <<EOF
+{
+    "realm": "${realm_name}",
+    "displayName": "DIVE V3 Broker - ${code_upper}",
+    "enabled": true,
+    "sslRequired": "external",
+    "registrationAllowed": false,
+    "loginWithEmailAllowed": true,
+    "duplicateEmailsAllowed": false,
+    "resetPasswordAllowed": true,
+    "editUsernameAllowed": false,
+    "bruteForceProtected": true
+}
+EOF
+)
+
+        curl -sk -X POST "https://localhost:${kc_port}/admin/realms" \
+            -H "Authorization: Bearer ${admin_token}" \
+            -H "Content-Type: application/json" \
+            -d "$realm_data"
+
+        if [ $? -eq 0 ]; then
+            log_success "Realm created: ${realm_name}"
+        else
+            log_error "Failed to create realm"
+            return 1
+        fi
+    else
+        log_info "Realm already exists: ${realm_name}"
+    fi
+    echo ""
+
+    # Create client
+    local client_id="dive-v3-broker-${code_lower}"
+    echo -e "${CYAN}Checking client: ${client_id}...${NC}"
+
+    local client_exists
+    client_exists=$(curl -sk -H "Authorization: Bearer ${admin_token}" \
+        "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" 2>/dev/null | jq -r '.[0].id // empty')
+
+    if [ -z "$client_exists" ]; then
+        echo -e "${CYAN}Creating client...${NC}"
+
+        # Build redirect URIs
+        local redirect_uris=$(cat <<EOF
+[
+    "https://localhost:3000",
+    "https://localhost:3000/*",
+    "https://localhost:3000/api/auth/callback/keycloak",
+    "https://${code_lower}-app.dive25.com",
+    "https://${code_lower}-app.dive25.com/*",
+    "https://${code_lower}-app.dive25.com/api/auth/callback/keycloak",
+    "*"
+]
+EOF
+)
+
+        local client_data=$(cat <<EOF
+{
+    "clientId": "${client_id}",
+    "name": "DIVE V3 Frontend - ${code_upper}",
+    "description": "Frontend application for DIVE V3 spoke ${code_upper}",
+    "enabled": true,
+    "protocol": "openid-connect",
+    "clientAuthenticatorType": "client-secret",
+    "secret": "CHANGE_THIS_SECRET",
+    "directAccessGrantsEnabled": true,
+    "serviceAccountsEnabled": false,
+    "implicitFlowEnabled": false,
+    "standardFlowEnabled": true,
+    "publicClient": false,
+    "redirectUris": ${redirect_uris},
+    "webOrigins": ["*"],
+    "attributes": {
+        "saml.assertion.signature": "false",
+        "saml.multivalued.roles": "false",
+        "saml.force.post.binding": "false",
+        "saml.encrypt": "false",
+        "saml.server.signature": "false",
+        "saml.server.signature.keyinfo.ext": "false",
+        "exclude.session.state.from.auth.response": "false",
+        "saml_force_name_id_format": "false",
+        "saml.client.signature": "false",
+        "tls.client.certificate.bound.access.tokens": "false",
+        "saml.authnstatement": "false",
+        "display.on.consent.screen": "false",
+        "saml.onetimeuse.condition": "false"
+    }
+}
+EOF
+)
+
+        curl -sk -X POST "https://localhost:${kc_port}/admin/realms/${realm_name}/clients" \
+            -H "Authorization: Bearer ${admin_token}" \
+            -H "Content-Type: application/json" \
+            -d "$client_data"
+
+        if [ $? -eq 0 ]; then
+            log_success "Client created: ${client_id}"
+        else
+            log_error "Failed to create client"
+            return 1
+        fi
+    else
+        log_info "Client already exists: ${client_id}"
+    fi
+
+    # Retrieve actual client secret from Keycloak and update .env file
+    log_step "Retrieving client secret and updating configuration..."
+    _update_spoke_client_secret "$code_upper" "$env_file" "$admin_token" "$realm_name" "$client_id"
+
+    echo ""
+    log_success "Keycloak initialization complete for ${code_upper}!"
+    echo ""
+    echo "Realm: ${realm_name}"
+    echo "Client: ${client_id}"
+    echo "Client Secret: Configured ✓"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Configure protocol mappers: ./dive spoke fix-mappers"
+    echo "  2. Start frontend: ./dive spoke up"
+    echo ""
+}
+
+# =============================================================================
+# CLIENT SECRET RETRIEVAL AND CONFIGURATION
+# =============================================================================
+
+_update_spoke_client_secret() {
+    local code_upper="$1"
+    local env_file="$2"
+    local admin_token="$3"
+    local realm_name="$4"
+    local client_id="$5"
+
+    # Get client UUID from clientId
+    local client_uuid
+    client_uuid=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" \
+        -H "Authorization: Bearer ${admin_token}" 2>/dev/null | jq -r '.[0].id')
+
+    if [ -z "$client_uuid" ] || [ "$client_uuid" = "null" ]; then
+        log_error "Failed to get client UUID for ${client_id}"
+        return 1
+    fi
+
+    # Get actual client secret from Keycloak
+    local actual_secret
+    actual_secret=$(curl -sk "https://localhost:${kc_port}/admin/realms/${realm_name}/clients/${client_uuid}/client-secret" \
+        -H "Authorization: Bearer ${admin_token}" 2>/dev/null | jq -r '.value')
+
+    if [ -z "$actual_secret" ] || [ "$actual_secret" = "null" ]; then
+        log_error "Failed to retrieve client secret for ${client_id}"
+        return 1
+    fi
+
+    # Update .env file with actual secret
+    if [ -f "$env_file" ]; then
+        # Update the instance-specific client secret variable
+        sed -i.tmp "s|^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*|KEYCLOAK_CLIENT_SECRET_${code_upper}=${actual_secret}|" "$env_file"
+        rm -f "${env_file}.tmp"
+
+        log_success "Client secret updated in ${env_file}"
+        log_verbose "Client ID: ${client_id}"
+        log_verbose "Secret: ${actual_secret:0:8}..."
+    else
+        log_error ".env file not found: ${env_file}"
+        return 1
+    fi
 }
 
 # =============================================================================

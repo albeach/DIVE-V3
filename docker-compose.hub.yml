@@ -177,9 +177,14 @@ services:
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # Realm import environment variables (CRITICAL: Must match frontend/backend secrets)
+      KC_ADMIN: admin
+      KC_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Initial admin user creation (Keycloak 26.5.0)
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Bootstrap realm for Terraform provider authentication
+      # SKIP_REALM_IMPORT: "true"  # Commented out: Need minimal realm for TF auth
+      # Legacy realm import variables (kept for compatibility, but not used)
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET required}
       APP_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
@@ -506,19 +511,19 @@ services:
               {
                 "url": "https://host.docker.internal:4000/api/opal/trusted-issuers",
                 "topics": ["trusted_issuers"],
-                "dst_path": "dive/trusted_issuers",
+                "dst_path": "trusted_issuers",
                 "config": {"headers": {"Accept": "application/json"}}
               },
               {
                 "url": "https://host.docker.internal:4000/api/opal/federation-matrix",
                 "topics": ["federation_matrix"],
-                "dst_path": "dive/federation_matrix",
+                "dst_path": "federation_matrix",
                 "config": {"headers": {"Accept": "application/json"}}
               },
               {
                 "url": "https://host.docker.internal:4000/api/opal/tenant-configs",
                 "topics": ["tenant_configs"],
-                "dst_path": "dive/tenant_configs",
+                "dst_path": "tenant_configs",
                 "config": {"headers": {"Accept": "application/json"}}
               }
             ]

@@ -26,11 +26,9 @@
     },
     "https://localhost:8443/realms/dive-v3-broker-usa": {
       "tenant": "USA",
-      "name": "USA Hub (https://localhost:8443)",
+      "name": "USA Hub Keycloak (Local Dev)",
       "country": "USA",
-      "trust_level": "DEVELOPMENT",
-      "realm": "dive-v3-broker-usa",
-      "enabled": true
+      "trust_level": "DEVELOPMENT"
     },
     "https://localhost:8443/realms/dive-v3-broker-fra": {
       "tenant": "FRA",
@@ -58,7 +56,7 @@
     },
     "https://localhost:/realms/dive-v3-broker-alb": {
       "tenant": "ALB",
-      "name": "ALB Keycloak (Local Dev)",
+      "name": "ALB Keycloak",
       "country": "ALB",
       "trust_level": "DEVELOPMENT"
     },
@@ -360,6 +358,24 @@
       "tenant": "NLD",
       "name": "NLD Keycloak (Internal)",
       "country": "NLD",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-alb:8443/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak (Internal)",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8444/realms/dive-v3-broker-alb": {
+      "tenant": "ALB",
+      "name": "ALB Keycloak",
+      "country": "ALB",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:8466/realms/dive-v3-broker-pol": {
+      "tenant": "POL",
+      "name": "POL Keycloak",
+      "country": "POL",
       "trust_level": "DEVELOPMENT"
     }
   },
