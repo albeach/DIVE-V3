@@ -196,8 +196,7 @@ spoke_update_compose() {
     local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
     local idp_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
 
-    # Source spoke-init to use _create_spoke_docker_compose
-    source "${MODULES_DIR}/spoke-init.sh"
+    # _create_spoke_docker_compose function is already loaded from spoke-init.sh
     _create_spoke_docker_compose "$spoke_dir" "$code_upper" "$code_lower" \
         "$instance_name" "$spoke_id" "$idp_hostname" "$api_url" "$base_url" "$idp_url" ""
 
@@ -216,7 +215,7 @@ spoke_update_compose() {
         return 0
     fi
 
-    log_success "✅ Updated ${code_upper} to latest template (v2.5.0)"
+    log_success "✅ Updated ${code_upper} to latest template (v2.8.1)"
     echo ""
     log_warn "⚠️  Restart required to apply changes:"
     echo "   ./dive spoke down ${code_upper}"

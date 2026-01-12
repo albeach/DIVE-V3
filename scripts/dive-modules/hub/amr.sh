@@ -30,7 +30,7 @@ _hub_set_user_amr() {
 
     # Get admin token
     local admin_password
-    admin_password=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+    admin_password=$(docker exec dive-hub-keycloak printenv KC_ADMIN_PASSWORD 2>/dev/null)
 
     local token
     token=$(curl -sk -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \
@@ -79,7 +79,7 @@ _hub_show_user_amr() {
 
     # Get admin token
     local admin_password
-    admin_password=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+    admin_password=$(docker exec dive-hub-keycloak printenv KC_ADMIN_PASSWORD 2>/dev/null)
 
     local token
     token=$(curl -sk -X POST "${keycloak_url}/realms/master/protocol/openid-connect/token" \

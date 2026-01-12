@@ -11,8 +11,13 @@
 
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
+fi
+
+# Load orchestration framework
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration-framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration-framework.sh"
 fi
 
 # Mark this module as loaded
@@ -289,11 +294,13 @@ spoke_up() {
             local hub_registered=false
 
             # Check if already registered with Hub (by checking if we have a registered spoke ID)
+            # NOTE: Even if registeredSpokeId exists, we still need to ensure federation IdPs are created
             if [ -f "$config_file" ] && grep -q '"registeredSpokeId"' "$config_file"; then
-                log_info "Spoke already registered with Hub (skipping auto-registration)"
-                hub_registered=true
+                log_info "Spoke registered with Hub API - ensuring federation IdPs exist..."
+                # Don't set hub_registered=true - we still need to run federation setup
             fi
 
+            # Always attempt federation setup for local development
             if [ "$hub_registered" = false ]; then
                 echo ""
                 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -350,12 +357,97 @@ spoke_deploy() {
         return 1
     fi
 
+    # Normalize inputs
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    instance_code="$code_upper"
+
+    # Check for stale states and clean them up
+    cleanup_stale_states "$instance_code" 2>/dev/null || true
+
+    # Check if deployment already in progress using enhanced state management
+    local current_state
+    current_state=$(get_deployment_state_enhanced "$instance_code" 2>/dev/null || echo "UNKNOWN")
+
+    case "$current_state" in
+        INITIALIZING|DEPLOYING|CONFIGURING|VERIFYING)
+            log_warn "Deployment already in progress (state: $current_state)"
+            echo ""
+            echo "  To force restart, clean the state first:"
+            echo "  rm -f ${DIVE_ROOT}/.dive-state/${code_lower}.state"
+            echo ""
+            echo "  Or use the cleanup command:"
+            echo "  ./dive spoke clean $instance_code"
+            return 1
+            ;;
+        FAILED)
+            log_warn "Previous deployment failed, cleaning up before retry..."
+            cleanup_stale_states "$instance_code" 2>/dev/null || true
+            ;;
+        COMPLETE)
+            log_info "Previous deployment completed successfully"
+            echo ""
+            echo "  To redeploy, clean first: ./dive spoke clean $instance_code"
+            echo "  Or force redeploy: ./dive spoke deploy $instance_code --force"
+            ;;
+    esac
+
+    # Default name if not provided
+    instance_name="${instance_name:-${code_upper} Instance}"
+
+    # Initialize enhanced orchestration with Phase 3 features
+    orch_init_context "$instance_code" "$instance_name"
+    orch_init_metrics "$instance_code"
+
+    # Generate initial dashboard
+
+    # ==========================================================================
+    # CRITICAL: Hub Detection Check
+    # ==========================================================================
+    log_step "🔍 Checking for running Hub infrastructure..."
+
+    # Check if Hub containers are running
+    local hub_containers=$(docker ps -q --filter "name=dive-hub" --format "{{.Names}}" 2>/dev/null | wc -l)
+    if [ "$hub_containers" -eq 0 ]; then
+        log_error "❌ No Hub infrastructure detected!"
+        echo ""
+        echo "🔧 SOLUTION:"
+        echo "   1. Deploy the Hub first: ./dive hub deploy"
+        echo "   2. Wait for Hub to be healthy: ./dive hub status"
+        echo "   3. Then deploy spokes: ./dive spoke deploy $instance_code \"$instance_name\""
+        echo ""
+        echo "💡 Spokes cannot operate without a Hub for federation and OPAL services."
+        return 1
+    fi
+
+    log_success "✅ Hub infrastructure detected ($hub_containers containers running)"
+
+    # Quick Hub health check
+    if ! docker ps -q --filter "name=dive-hub-opal-server" 2>/dev/null | grep -q .; then
+        log_error "❌ Hub OPAL server not running - required for spoke federation!"
+        echo ""
+        echo "🔧 SOLUTION:"
+        echo "   Wait for Hub to fully initialize: ./dive hub status"
+        echo "   Or redeploy Hub: ./dive hub deploy"
+        return 1
+    fi
+
+    log_success "✅ Hub OPAL server available for federation"
+
+    # Configure hostname resolution for Hub connectivity
+    log_step "🔧 Configuring Hub hostname resolution..."
+    _configure_hub_hostname_resolution "$code_lower"
+
     # Load deployment state and logging modules
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh"
     fi
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/logging.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/logging.sh"
+    fi
+    # Load federation setup module (required for bidirectional federation)
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
     fi
 
     # Check if deployment already in progress
@@ -369,8 +461,12 @@ spoke_deploy() {
         return 1
     fi
 
-    # Record start time
-    local start_time=$(date +%s)
+    # Set initial state using enhanced state management
+    set_deployment_state_enhanced "$instance_code" "INITIALIZING" "" "{\"instance_name\":\"$instance_name\"}"
+
+    # Phase 3: Create initial checkpoint
+    local initial_checkpoint
+    initial_checkpoint=$(orch_create_checkpoint "$instance_code" "$CHECKPOINT_CONFIG" "Pre-deployment baseline")
 
     # Create checkpoint before deployment (for rollback)
     create_deployment_checkpoint() {
@@ -402,12 +498,6 @@ spoke_deploy() {
     }
 
     create_deployment_checkpoint "$code_lower"
-
-    # Set initial state and log
-    set_deployment_state "$instance_code" "INITIALIZING" 2>/dev/null || true
-    if type log_operation_start &>/dev/null; then
-        log_operation_start "spoke_deploy" "{\"instance_code\":\"$instance_code\",\"instance_name\":\"$instance_name\"}" 2>/dev/null || true
-    fi
 
     print_header
     echo -e "${BOLD}🚀 DIVE V3 Spoke Deployment${NC}"
@@ -553,61 +643,95 @@ spoke_deploy() {
     echo ""
 
     # ==========================================================================
-    # Step 3: Start spoke services
+    # Step 3: Start spoke services (Enhanced with Environment Sync & Error Handling)
     # ==========================================================================
-    set_deployment_state "$instance_code" "DEPLOYING" 2>/dev/null || true
+    set_deployment_state_enhanced "$instance_code" "DEPLOYING"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 3/11: Starting Spoke Services${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    # Check if services are already running
+    # Load environment synchronization, error handling, and secret validation modules
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-env-sync.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-env-sync.sh"
+    fi
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-error-handling.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-error-handling.sh"
+    fi
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-secret-validation.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-secret-validation.sh"
+    fi
+
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     cd "$spoke_dir"
 
-    local running_count=$(docker compose ps -q 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$running_count" -gt 0 ]; then
-        log_info "Services already running ($running_count containers)"
-        echo ""
+    # Initialize error tracking (using orchestration framework)
+    # Error tracking is now handled by orch_init_context
+
+    # Use enhanced container management instead of simple running check
+    if type spoke_up_enhanced &>/dev/null; then
+        if ! spoke_up_enhanced "$code_lower"; then
+            orch_record_error "CONTAINER_MGMT_FAIL" "$ORCH_SEVERITY_CRITICAL" "Enhanced container management failed" "containers" "Check container logs and configuration" "{\"phase\":\"deployment\"}"
+            if ! orch_should_continue; then
+                # Phase 3: Automatic rollback on critical container failures
+                orch_execute_rollback "$instance_code" "Container management failure" "$ROLLBACK_CONTAINERS"
+                log_error "Stopping deployment due to container management failure"
+                return 1
+            fi
+        fi
     else
-        # Load secrets for instance
-        if ! load_gcp_secrets "$code_lower" 2>/dev/null; then
-            log_warn "Falling back to local defaults for secrets"
-            load_local_defaults
+        # Fallback to original logic if enhanced module not available
+        log_warn "Enhanced container management not available, using fallback"
+
+        local running_count=$(docker compose ps -q 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$running_count" -gt 0 ]; then
+            log_info "Services already running ($running_count containers)"
+            echo ""
+        else
+            # Load and validate secrets for instance with error handling
+            if ! spoke_load_and_validate_secrets "$code_lower"; then
+                orch_record_error "SECRET_LOAD_FAIL" "$ORCH_SEVERITY_HIGH" "Secret loading or validation failed" "secrets" "Check GCP credentials and .env files" "{\"phase\":\"deployment\"}"
+                if ! orch_should_continue; then
+                    log_error "Stopping deployment due to secret validation failure"
+                    return 1
+                fi
+            fi
+
+            log_step "Starting Docker Compose services..."
+            # Use --build to ensure custom images are rebuilt
+            # CRITICAL: Use --env-file to load environment variables
+            if ! docker compose --env-file .env up -d --build 2>&1 | tail -5; then
+                orch_record_error "COMPOSE_START_FAIL" "$ORCH_SEVERITY_HIGH" "Failed to start Docker Compose services" "containers" "Check docker compose configuration and system resources" "{\"phase\":\"deployment\"}"
+                if ! orch_should_continue; then
+                    log_error "Stopping deployment due to container startup failure"
+                    return 1
+                fi
+            else
+                log_success "Services started"
+                echo ""
+            fi
         fi
-
-        log_step "Starting Docker Compose services..."
-        # Use --build to ensure custom images are rebuilt
-        docker compose up -d --build 2>&1 | tail -5
-
-        if [ $? -ne 0 ]; then
-            log_error "Failed to start services"
-            return 1
-        fi
-
-        log_success "Services started"
-        echo ""
     fi
 
     # ==========================================================================
-    # Step 4: Wait for services to be healthy
+    # Step 4: Wait for services to be healthy & verify federation
     # ==========================================================================
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}  STEP 4/11: Waiting for Services to be Healthy${NC}"
+    echo -e "${CYAN}  STEP 4/11: Post-Deployment Verification${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    _spoke_wait_for_services "$code_lower" 120
-    local wait_result=$?
-
-    if [ $wait_result -ne 0 ]; then
-        log_error "Services did not become healthy within timeout"
-        echo ""
-        echo "  Check logs: docker compose -f $spoke_dir/docker-compose.yml logs"
-        return 1
+    if ! spoke_enhanced_post_deployment_verification "$code_lower"; then
+        orch_record_error "VERIFICATION_FAIL" "$ORCH_SEVERITY_MEDIUM" "Post-deployment verification failed" "verification" "Check service logs and federation configuration" "{\"phase\":\"verification\"}"
+        if ! spoke_should_continue_deployment; then
+            log_error "Stopping deployment due to verification failures"
+            echo ""
+            echo "  Check logs: docker compose -f $spoke_dir/docker-compose.yml logs"
+            return 1
+        fi
     fi
 
-    log_success "All core services healthy"
+    log_success "All services healthy and federation verified"
     echo ""
 
     # ==========================================================================
@@ -619,19 +743,34 @@ spoke_deploy() {
         opal_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2)
     fi
 
-    if [ -z "$opal_token" ]; then
-        log_step "Provisioning OPAL client JWT..."
-        if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
-            if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
-                log_success "OPAL JWT provisioned"
-            else
-                log_warn "Could not provision OPAL JWT (Hub may not be reachable)"
-                echo "      Run manually after Hub is available:"
-                echo "      ./dive spoke opal-token $code_upper"
+    # OPAL Token Provisioning (LOCAL/DEV only for auto-approval)
+    if [ -z "$opal_token" ] || [ "$opal_token" = "placeholder-token-awaiting-hub-approval" ]; then
+        # Check if we're in LOCAL/DEV environment for auto-provisioning
+        local env_type="${DIVE_ENV:-local}"
+        if [[ "$env_type" =~ ^(local|dev|development)$ ]]; then
+            log_step "🤖 DEV MODE: Auto-provisioning OPAL client JWT..."
+            if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+                if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
+                    log_success "🎉 OPAL JWT auto-provisioned (DEV mode)"
+                else
+                    log_warn "Auto-provisioning failed (Hub may not be reachable)"
+                    log_info "Falling back to manual provisioning"
+                    echo "      Run: ./dive spoke opal-token $code_upper"
+                fi
             fi
+        else
+            # PRODUCTION: Require manual approval
+            log_warn "🔒 PRODUCTION MODE: OPAL token requires Hub admin approval"
+            log_info "Token will be provisioned after manual Hub approval"
+            echo "      1. Complete spoke registration: ./dive spoke register $code_upper"
+            echo "      2. Wait for Hub admin approval"
+            echo "      3. Provision token: ./dive spoke opal-token $code_upper"
         fi
+    elif [[ "$opal_token" =~ ^placeholder- ]]; then
+        log_info "OPAL token pending federation (placeholder active)"
+        echo "      Run: ./dive spoke register $code_upper && ./dive spoke opal-token $code_upper"
     else
-        log_info "OPAL token already configured"
+        log_success "OPAL token configured - full federation active"
     fi
     echo ""
 
@@ -705,7 +844,7 @@ spoke_deploy() {
     # ==========================================================================
     # Step 7: Configure Federation
     # ==========================================================================
-    set_deployment_state "$instance_code" "CONFIGURING" 2>/dev/null || true
+    set_deployment_state_enhanced "$instance_code" "CONFIGURING"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 7/11: Configuring Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -726,37 +865,14 @@ spoke_deploy() {
 
             log_step "Configuring usa-idp and syncing secrets..."
 
-            # ADDED (Dec 2025): Retry wrapper for federation configuration
-            # This handles transient failures when Keycloak isn't fully ready
-            _with_federation_retry() {
-                local max_attempts=5
-                local delay=5
-                local attempt=1
-
-                while [ $attempt -le $max_attempts ]; do
-                    log_verbose "Federation attempt $attempt/$max_attempts..."
-                    if "$@"; then
-                        return 0
-                    fi
-
-                    if [ $attempt -lt $max_attempts ]; then
-                        log_warn "Federation attempt $attempt/$max_attempts failed, retrying in ${delay}s..."
-                        sleep $delay
-                        delay=$((delay * 2))  # Exponential backoff
-                    fi
-                    attempt=$((attempt + 1))
-                done
-
-                log_error "Federation failed after $max_attempts attempts"
-                return 1
-            }
+            # Phase 3: Smart retry with circuit breaker for federation configuration
 
             # First verify realm exists before federation (pre-requisite)
             log_step "Verifying spoke realm exists before federation..."
             local realm_check_kc="dive-spoke-${code_lower}-keycloak"
             local realm_name="dive-v3-broker-${code_lower}"
             local kc_pass
-            kc_pass=$(docker exec "$realm_check_kc" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+            kc_pass=$(docker exec "$realm_check_kc" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
             if [ -n "$kc_pass" ]; then
                 local realm_token
                 realm_token=$(docker exec "$realm_check_kc" curl -sf \
@@ -786,17 +902,24 @@ spoke_deploy() {
                 fi
             fi
 
-            # Apply retry wrapper to federation configuration
-            if _with_federation_retry configure_spoke_federation "$code_lower"; then
+            # Use smart retry with circuit breaker for federation configuration
+            if orch_execute_with_smart_retry "federation_config" "configure_spoke_federation $code_lower" 3 10; then
                 touch "$fed_marker"
                 log_success "Federation configured successfully!"
+
+                # Phase 3: Create federation checkpoint
+                orch_create_checkpoint "$instance_code" "$CHECKPOINT_FEDERATION" "Post-federation configuration" >/dev/null
 
                 # Restart frontend to pick up new secrets
                 log_step "Restarting frontend to load new secrets..."
                 cd "$spoke_dir"
                 docker compose restart "frontend-${code_lower}" 2>/dev/null || true
             else
-                log_warn "Federation configuration had issues after retries"
+                orch_record_error "FEDERATION_CONFIG_FAIL" "$ORCH_SEVERITY_HIGH" "Federation configuration failed after retries" "federation" "Run './dive federation-setup configure $code_lower' manually" "{\"phase\":\"configuration\"}"
+                if ! orch_should_continue; then
+                    log_error "Stopping deployment due to federation setup failure"
+                    return 1
+                fi
                 echo ""
                 echo "  You may need to run manually:"
                 echo "  ./dive federation-setup configure $code_lower"
@@ -944,7 +1067,7 @@ spoke_deploy() {
     if [ "$kc_ready" = true ]; then
         # Get token and sync client configuration
         local kc_pass
-        kc_pass=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        kc_pass=$(docker exec "$kc_container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
 
         if [ -n "$kc_pass" ]; then
             log_step "Syncing client configuration..."
@@ -1064,7 +1187,7 @@ spoke_deploy() {
     # ==========================================================================
     # Step 11: Verify Bidirectional Federation
     # ==========================================================================
-    set_deployment_state "$instance_code" "VERIFYING" 2>/dev/null || true
+    set_deployment_state_enhanced "$instance_code" "VERIFYING"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 11/11: Verifying Bidirectional Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1112,7 +1235,7 @@ spoke_deploy() {
         # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (modern Keycloak 26+), then legacy
         hub_pass=$(docker exec "$hub_kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
         if [ -z "$hub_pass" ]; then
-            hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+            hub_pass=$(docker exec "$hub_kc_container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
         fi
 
         if [ -n "$hub_pass" ]; then
@@ -1242,21 +1365,27 @@ spoke_deploy() {
     # Sync Client Secrets (CRITICAL for SSO after redeployment)
     # ==========================================================================
     # When a spoke is redeployed, client secrets in Keycloak change.
-    # The Hub's IdP configuration must be updated with the new secrets.
+    # Both the spoke's own NextAuth client secret AND the Hub's IdP configuration must be updated.
+
+    # First, sync the spoke's own client secret for NextAuth
+    log_step "Synchronizing spoke client secret for NextAuth..."
+    _sync_spoke_client_secret "$code_upper" "$env_file" || log_warn "Spoke client secret sync failed"
+
+    # Then sync federation secrets between hub and spoke
     if [ "$federation_verified" = true ] && [ "$hub_detected" = true ]; then
         log_step "Synchronizing federation client secrets..."
         if type federation_sync_secrets &>/dev/null; then
             if federation_sync_secrets "$code_upper" 2>&1 | tail -8; then
-                log_success "Client secrets synchronized"
+                log_success "Federation client secrets synchronized"
             else
-                log_warn "Secret sync had issues - SSO may need manual fix"
+                log_warn "Federation secret sync had issues - SSO may need manual fix"
                 echo "  Run: ./dive federation sync-secrets ${code_upper}"
             fi
         elif type sync_hub_to_spoke_secrets &>/dev/null; then
             # Fallback to individual sync functions
             sync_hub_to_spoke_secrets "$code_upper" 2>/dev/null || true
             spoke_sync_federation_secrets "$code_lower" 2>/dev/null || true
-            log_success "Client secrets synchronized (fallback)"
+            log_success "Federation client secrets synchronized (fallback)"
         fi
     fi
     echo ""
@@ -1287,19 +1416,18 @@ spoke_deploy() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
-    # Set completion state and log
+    # Phase 3: Create final checkpoint and finalize metrics
+    orch_create_checkpoint "$instance_code" "$CHECKPOINT_COMPLETE" "Deployment completion" >/dev/null
+
+    # Finalize metrics collection and generate dashboard
+
+    # Set completion state using enhanced state management
     if [ "$federation_verified" = true ]; then
-        set_deployment_state "$instance_code" "COMPLETE" 2>/dev/null || true
-        if type log_operation_success &>/dev/null; then
-            log_operation_success "spoke_deploy" "Deployment completed successfully" \
-                "{\"instance_code\":\"$instance_code\",\"federation_verified\":true}" "$duration" 2>/dev/null || true
-        fi
+        set_deployment_state_enhanced "$instance_code" "COMPLETE" "" \
+            "{\"federation_verified\":true,\"duration_seconds\":$duration,\"errors_critical\":${ORCH_CONTEXT["errors_critical"]},\"final_checkpoint\":\"$(orch_find_latest_checkpoint "$instance_code")\"}"
     else
-        set_deployment_state "$instance_code" "COMPLETE" "Federation verification incomplete" 2>/dev/null || true
-        if type log_operation_warn &>/dev/null; then
-            log_operation_warn "spoke_deploy" "Deployment completed but federation needs verification" \
-                "{\"instance_code\":\"$instance_code\",\"federation_verified\":false}" 2>/dev/null || true
-        fi
+        set_deployment_state_enhanced "$instance_code" "COMPLETE" "Federation verification incomplete" \
+            "{\"federation_verified\":false,\"duration_seconds\":$duration,\"errors_critical\":${ORCH_CONTEXT["errors_critical"]},\"final_checkpoint\":\"$(orch_find_latest_checkpoint "$instance_code")\"}"
     fi
 
     echo ""
@@ -1352,7 +1480,171 @@ spoke_deploy() {
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
+    # ==========================================================================
+    # SMART DEPLOYMENT: Auto-Federation (DEV mode only)
+    # ==========================================================================
+    local env_type="${DIVE_ENV:-local}"
+    if [[ "$env_type" =~ ^(local|dev|development)$ ]]; then
+        log_step "🤖 DEV MODE: Attempting auto-federation..."
+
+        # Try to auto-register with Hub
+        if type -t spoke_register &>/dev/null; then
+            log_info "Auto-registering spoke with Hub..."
+            # Use non-interactive mode (echo "y" for any prompts)
+            if echo -e "\n\n" | spoke_register "$code_upper" --poll --poll-timeout 60 >/dev/null 2>&1; then
+                log_success "✅ Auto-registered with Hub!"
+                log_success "✅ Federation established!"
+            else
+                log_warn "Auto-registration pending (Hub admin approval required)"
+                echo "      Complete manually: ./dive spoke register $code_upper --poll"
+            fi
+        else
+            log_warn "Registration module not available - skipping auto-federation"
+        fi
+    else
+        log_info "🔒 PRODUCTION MODE: Skipping auto-federation (manual approval required)"
+        echo "      Register manually: ./dive spoke register $code_upper --poll"
+    fi
+
+    # ==========================================================================
+    # SMART DEPLOYMENT: Final OPAL Token Check
+    # ==========================================================================
+    local final_env_file="$spoke_dir/.env"
+    local final_opal_token=""
+    if [ -f "$final_env_file" ]; then
+        final_opal_token=$(grep "^SPOKE_OPAL_TOKEN=" "$final_env_file" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+    fi
+
+    if [[ "$final_opal_token" =~ ^placeholder- ]]; then
+        # Only attempt auto-provisioning in DEV environments
+        local env_type="${DIVE_ENV:-local}"
+        if [[ "$env_type" =~ ^(local|dev|development)$ ]]; then
+            log_step "🤖 DEV MODE: Final OPAL token activation attempt..."
+            # Final attempt to provision token (Hub might be ready now)
+            if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+                if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
+                    log_success "🎉 OPAL token provisioned automatically!"
+                    log_success "✅ Full federation activated - restarting services"
+                    # Restart opal-client with real token
+                    (cd "$spoke_dir" && docker compose restart opal-client-${code_lower} 2>/dev/null || true)
+                    (cd "$spoke_dir" && docker compose restart kas-${code_lower} 2>/dev/null || true)
+                else
+                    log_info "🤖 OPAL token still pending - will auto-activate when Hub is ready"
+                    log_info "   Services started with placeholders for testing"
+                    log_info "   Full functionality available after: ./dive spoke register $code_upper"
+                fi
+            fi
+        else
+            log_info "🔒 PRODUCTION MODE: OPAL token activation requires manual approval"
+            log_info "   Complete federation setup manually:"
+            log_info "   1. ./dive spoke register $code_upper --poll"
+            log_info "   2. ./dive spoke opal-token $code_upper"
+        fi
+    fi
+
+    # Generate error summary if enhanced error handling is available
+    # Generate orchestration error summary
+    orch_generate_error_summary "$instance_code"
+
     return 0
+}
+
+##
+# Show orchestration dashboard for instance
+#
+# Arguments:
+#   $1 - Instance code (optional, defaults to current INSTANCE)
+##
+spoke_dashboard() {
+    local instance_code="${1:-$INSTANCE}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required. Usage: ./dive spoke dashboard <CODE>"
+        return 1
+    fi
+
+    local dashboard_file="${DIVE_ROOT}/logs/orchestration-dashboard-${instance_code}.html"
+
+    if [ ! -f "$dashboard_file" ]; then
+        # Generate dashboard on demand if it doesn't exist
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
+            orch_init_context "$instance_code" "Dashboard Generation"
+        else
+            log_error "Orchestration framework not available"
+            return 1
+        fi
+    fi
+
+    if [ -f "$dashboard_file" ]; then
+        log_info "Opening dashboard: $dashboard_file"
+        if command -v open &>/dev/null; then
+            open "$dashboard_file"
+        elif command -v xdg-open &>/dev/null; then
+            xdg-open "$dashboard_file"
+        else
+            log_info "Dashboard available at: $dashboard_file"
+        fi
+    else
+        log_error "Dashboard not found for instance: $instance_code"
+        return 1
+    fi
+}
+
+# Command: Activate OPAL token after Hub registration
+spoke_activate_opal_token() {
+    local code="${1:-}"
+    local code_lower=$(lower "$code")
+    local code_upper=$(upper "$code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local env_file="$spoke_dir/.env"
+
+    if [ -z "$code" ]; then
+        log_error "Instance code required"
+        echo "Usage: ./dive spoke activate-opal-token <CODE>"
+        return 1
+    fi
+
+    if [ ! -f "$env_file" ]; then
+        log_error "Spoke not deployed: $code_upper"
+        return 1
+    fi
+
+    local current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+
+    if [[ "$current_token" =~ ^placeholder- ]]; then
+        log_step "Activating OPAL token for $code_upper..."
+
+        if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+            if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
+                log_success "🎉 OPAL token activated!"
+                # Restart services with real token
+                (cd "$spoke_dir" && docker compose restart opal-client-${code_lower} 2>/dev/null || true)
+                (cd "$spoke_dir" && docker compose restart kas-${code_lower} 2>/dev/null || true)
+                log_success "Services restarted with real OPAL token"
+                return 0
+            else
+                log_error "Failed to activate OPAL token - Hub may not be available"
+                return 1
+            fi
+        else
+            log_error "OPAL token provisioning script not found"
+            return 1
+        fi
+    else
+        log_info "OPAL token already active for $code_upper"
+        return 0
+    fi
+}
+
+# Helper: Configure Hub hostname resolution for local development
+_configure_hub_hostname_resolution() {
+    local code_lower="$1"
+
+    # Hub connectivity is handled through Docker networks (dive-shared)
+    # Containers communicate using container names, not hostnames
+    # The .env file should already have correct HUB_OPAL_URL and HUB_IDP_URL
+    log_verbose "Hub connectivity configured via dive-shared network"
 }
 
 # Helper: Wait for spoke services to become healthy
@@ -1417,6 +1709,106 @@ _spoke_wait_for_services() {
     done
 
     return 0
+}
+
+# =============================================================================
+# CLIENT SECRET SYNCHRONIZATION
+# =============================================================================
+
+_sync_spoke_client_secret() {
+    local code_upper="$1"
+    local env_file="$2"
+
+    # Note: This function is called after containers are started in deployment
+
+    local code_lower=$(lower "$code_upper")
+    local kc_port=$(_get_spoke_keycloak_port "$code_upper")
+    local realm_name="dive-v3-broker-${code_lower}"
+    local client_id="dive-v3-broker-${code_lower}"
+
+    # Get admin token for Keycloak
+    local admin_token
+    if ! admin_token=$(_get_spoke_admin_token "$code_upper"); then
+        log_warn "Failed to get Keycloak admin token - skipping client secret sync"
+        return 1
+    fi
+
+    # Get client UUID
+    local client_uuid
+    client_uuid=$(docker exec "dive-spoke-${code_lower}-keycloak" curl -sk \
+        "https://localhost:${kc_port}/admin/realms/${realm_name}/clients?clientId=${client_id}" \
+        -H "Authorization: Bearer ${admin_token}" 2>/dev/null | jq -r '.[0].id')
+
+    if [ -z "$client_uuid" ] || [ "$client_uuid" = "null" ]; then
+        log_warn "Failed to get client UUID for ${client_id} - skipping sync"
+        return 1
+    fi
+
+    # Get actual client secret from Keycloak
+    local actual_secret
+    actual_secret=$(docker exec "dive-spoke-${code_lower}-keycloak" curl -sk \
+        "https://localhost:${kc_port}/admin/realms/${realm_name}/clients/${client_uuid}/client-secret" \
+        -H "Authorization: Bearer ${admin_token}" 2>/dev/null | jq -r '.value')
+
+    if [ -z "$actual_secret" ] || [ "$actual_secret" = "null" ]; then
+        log_warn "Failed to retrieve client secret for ${client_id} - skipping sync"
+        return 1
+    fi
+
+    # Check current secret in .env file
+    local current_secret=""
+    if [ -f "$env_file" ]; then
+        current_secret=$(grep "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+    fi
+
+    # Update if different
+    if [ "$current_secret" != "$actual_secret" ]; then
+        log_info "Client secret mismatch - updating ${env_file}"
+        sed -i.tmp "s|^KEYCLOAK_CLIENT_SECRET_${code_upper}=.*|KEYCLOAK_CLIENT_SECRET_${code_upper}=${actual_secret}|" "$env_file"
+        rm -f "${env_file}.tmp"
+        log_success "Client secret updated for ${code_upper}"
+        return 0
+    else
+        log_verbose "Client secret already synchronized for ${code_upper}"
+        return 0
+    fi
+}
+
+_get_spoke_admin_token() {
+    local code_upper="$1"
+    local code_lower=$(lower "$code_upper")
+    local kc_port=$(_get_spoke_keycloak_port "$code_upper")
+
+    # Get Keycloak admin password from .env file
+    local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    local admin_pass=""
+    if [ -f "$env_file" ]; then
+        admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '\n\r"')
+    fi
+
+    if [ -z "$admin_pass" ]; then
+        return 1
+    fi
+
+    # Get admin token
+    local token
+    token=$(docker exec "dive-spoke-${code_lower}-keycloak" curl -sk -X POST \
+        "https://localhost:${kc_port}/realms/master/protocol/openid-connect/token" \
+        -d "grant_type=password&username=admin&password=${admin_pass}&client_id=admin-cli" 2>/dev/null | jq -r '.access_token')
+
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        return 1
+    fi
+
+    echo "$token"
+}
+
+_spoke_containers_running() {
+    local code_upper="$1"
+    local code_lower=$(lower "$code_upper")
+
+    # Check if Keycloak container is running
+    docker ps --format '{{.Names}}' | grep -q "^dive-spoke-${code_lower}-keycloak$"
 }
 
 # =============================================================================

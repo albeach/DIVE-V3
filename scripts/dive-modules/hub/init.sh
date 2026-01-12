@@ -70,7 +70,15 @@ hub_init() {
         _hub_create_config
     fi
 
-    # 5. Verify compose file
+    # 5. Register USA trusted issuer (like spokes do)
+    log_step "Registering USA trusted issuer..."
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would register USA issuer in trusted_issuers.json"
+    else
+        _hub_register_usa_issuer
+    fi
+
+    # 6. Verify compose file
     log_step "Verifying docker-compose.hub.yml..."
     if [ ! -f "$HUB_COMPOSE_FILE" ]; then
         log_error "Hub compose file not found at ${HUB_COMPOSE_FILE}"
@@ -154,4 +162,76 @@ _hub_create_config() {
 EOF
 
     log_success "Hub configuration created: ${config_file}"
+}
+
+_hub_register_usa_issuer() {
+    # Register USA hub issuer in trusted_issuers.json (like spokes do)
+    # This ensures JWT tokens from the USA hub are trusted during authorization
+
+    local realm="dive-v3-broker-usa"
+    local issuer_url="https://localhost:8443/realms/${realm}"
+    local internal_url="https://keycloak:8443/realms/${realm}"
+
+    log_info "Auto-registering USA hub trusted issuer..."
+
+    # Update backend/data/opal/trusted_issuers.json
+    # IMPORTANT: Issuers must be added inside the .trusted_issuers object, not at root level
+    local trusted_issuers_file="${DIVE_ROOT}/backend/data/opal/trusted_issuers.json"
+    if [ -f "$trusted_issuers_file" ]; then
+        local tmp_file="${trusted_issuers_file}.tmp"
+        if jq --arg url "$issuer_url" \
+              --arg internal_url "$internal_url" \
+              --arg tenant "USA" \
+              --arg name "USA Hub Keycloak (Local Dev)" \
+              --arg country "USA" \
+           '.trusted_issuers[$url] = {
+             "tenant": $tenant,
+             "name": $name,
+             "country": $country,
+             "trust_level": "DEVELOPMENT",
+             "enabled": true,
+             "protocol": "oidc",
+             "federation_class": "LOCAL"
+           } | .trusted_issuers[$internal_url] = {
+             "tenant": $tenant,
+             "name": ($tenant + " Hub Keycloak (Internal Docker)"),
+             "country": $country,
+             "trust_level": "DEVELOPMENT",
+             "enabled": true,
+             "protocol": "oidc",
+             "federation_class": "LOCAL"
+           }' "$trusted_issuers_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$trusted_issuers_file"
+            log_verbose "Updated trusted_issuers.json with USA hub issuer"
+        else
+            rm -f "$tmp_file"
+            log_warn "Failed to update trusted_issuers.json"
+        fi
+    else
+        log_warn "trusted_issuers.json not found - will be created during first spoke registration"
+    fi
+
+    # Also register in policies/policy_data.json for OPA fallback
+    local policy_data_file="${DIVE_ROOT}/policies/policy_data.json"
+    if [ -f "$policy_data_file" ]; then
+        local tmp_file="${policy_data_file}.tmp"
+        if jq --arg url "$issuer_url" \
+              --arg tenant "USA" \
+              --arg name "USA Hub Keycloak (Local Dev)" \
+              --arg country "USA" \
+           '.trusted_issuers[$url] = {
+             "tenant": $tenant,
+             "name": $name,
+             "country": $country,
+             "trust_level": "DEVELOPMENT"
+           }' "$policy_data_file" > "$tmp_file" 2>/dev/null; then
+            mv "$tmp_file" "$policy_data_file"
+            log_verbose "Updated policy_data.json with USA hub issuer"
+        else
+            rm -f "$tmp_file"
+            log_warn "Failed to update policy_data.json"
+        fi
+    fi
+
+    log_success "USA hub issuer registered"
 }

@@ -1,25 +1,27 @@
 #!/bin/bash
 # ============================================
-# DIVE V3 - Keycloak Realm Import Script (v3.0.0)
+# DIVE V3 - Keycloak Realm Import Script (v4.0.0 - Terraform SSOT)
 # ============================================
 #
-# SSOT NOTE (December 2025):
-# Terraform is the Single Source of Truth (SSOT) for all Keycloak configuration.
-# This script provides FALLBACK realm initialization for bootstrap scenarios.
+# TRUE SSOT IMPLEMENTATION (January 2026):
+# Terraform is the Single Source of Truth for all Keycloak configuration.
+# JSON realm files are REMOVED from normal operation and kept only for
+# emergency disaster recovery scenarios.
 #
-# BEHAVIOR:
-# - If SKIP_REALM_IMPORT=true: Skip JSON import entirely (Terraform-only mode)
-# - If realm already exists (created by Terraform): Keycloak skips JSON import
-# - If realm doesn't exist: JSON template provides initial bootstrap config
+# NEW BEHAVIOR (v4.0.0):
+# - SKIP_REALM_IMPORT=true by default (set in docker-compose)
+# - Keycloak always starts empty
+# - Terraform creates complete realm configuration from scratch
+# - JSON import only for emergency recovery (SKIP_REALM_IMPORT=false)
 #
-# RECOMMENDED FLOW:
-# 1. Start Keycloak without realm
+# NORMAL FLOW:
+# 1. Keycloak starts empty (no JSON import)
 # 2. Run: ./dive tf apply pilot
-# 3. Terraform creates all configuration
+# 3. Terraform creates complete realm configuration
 #
-# LEGACY FLOW (for quick demo/dev):
-# 1. Start Keycloak with JSON import (fallback bootstrap)
-# 2. Run Terraform to override/update configuration
+# EMERGENCY RECOVERY ONLY:
+# - Set SKIP_REALM_IMPORT=false in docker-compose
+# - JSON files provide minimal bootstrap for recovery scenarios
 #
 # Environment Variables:
 #   SKIP_REALM_IMPORT - Set to "true" to skip JSON import (Terraform-only mode)
@@ -35,28 +37,40 @@
 set -e
 
 # ============================================
-# SSOT Mode: Skip JSON Import if Terraform-Managed
+# TRUE SSOT: Terraform is the Single Source of Truth
 # ============================================
 if [ "${SKIP_REALM_IMPORT:-false}" = "true" ]; then
-    echo "[DIVE] SKIP_REALM_IMPORT=true - Terraform is the SSOT"
-    echo "[DIVE] Skipping JSON realm import - Keycloak will start empty"
-    echo "[DIVE] Run './dive tf apply pilot' to configure via Terraform"
+    echo "[DIVE] Terraform SSOT Mode - Keycloak starts empty"
+    echo "[DIVE] No JSON realm import - all configuration via Terraform"
+    echo "[DIVE] Run './dive tf apply pilot' to configure the realm"
     echo "[DIVE] Starting Keycloak..."
     exec /opt/keycloak/bin/kc.sh "$@"
 fi
 
+# ============================================
+# LEGACY FALLBACK: JSON Import (Emergency Only)
+# ============================================
+echo "[DIVE] ============================================"
+echo "[DIVE] WARNING: Using legacy JSON realm import"
+echo "[DIVE] This should only be used for emergency recovery"
+echo "[DIVE] Normal operation uses Terraform SSOT"
+echo "[DIVE] ============================================"
+
 REALM_TEMPLATE_DIR="/opt/keycloak/realm-templates"
 REALM_IMPORT_DIR="/opt/keycloak/data/import"
-REALM_TEMPLATE="${REALM_TEMPLATE_DIR}/dive-v3-broker.json"
+
+# Check for bootstrap realm first (for Terraform SSOT)
+BOOTSTRAP_REALM="${REALM_TEMPLATE_DIR}/dive-v3-broker-${INSTANCE_CODE}-bootstrap.json"
+if [ -f "${BOOTSTRAP_REALM}" ]; then
+    REALM_TEMPLATE="${BOOTSTRAP_REALM}"
+    echo "[DIVE] Using bootstrap realm for Terraform SSOT: ${BOOTSTRAP_REALM}"
+else
+    REALM_TEMPLATE="${REALM_TEMPLATE_DIR}/dive-v3-broker.json"
+    echo "[DIVE] Using full realm template: ${REALM_TEMPLATE}"
+fi
 
 # Ensure import directory exists
 mkdir -p "${REALM_IMPORT_DIR}"
-
-echo "[DIVE] ============================================"
-echo "[DIVE] NOTE: JSON realm import is FALLBACK only"
-echo "[DIVE] SSOT: Terraform modules in terraform/modules/"
-echo "[DIVE] If realm exists, this import will be skipped"
-echo "[DIVE] ============================================"
 
 # Generate random secret (fallback if openssl not available)
 generate_secret() {
@@ -89,16 +103,19 @@ echo "[DIVE] Instance: ${INSTANCE_CODE}"
 echo "[DIVE] App URL: ${APP_URL}"
 echo "[DIVE] API URL: ${API_URL}"
 
-# Check if template exists
+# Check if template exists (emergency recovery only)
 if [ ! -f "${REALM_TEMPLATE}" ]; then
     echo "[DIVE] WARNING: Realm template not found at ${REALM_TEMPLATE}"
+    echo "[DIVE] This is expected in normal Terraform SSOT operation"
+    echo "[DIVE] For emergency recovery, copy JSON files from archived-ssot-transition/"
     echo "[DIVE] Skipping realm import - Keycloak will start with empty realm"
 else
-    echo "[DIVE] Processing realm template..."
+    echo "[DIVE] EMERGENCY RECOVERY: Processing archived realm template..."
+    echo "[DIVE] WARNING: This should only be used for disaster recovery!"
+    echo "[DIVE] Normal operation uses Terraform SSOT (SKIP_REALM_IMPORT=true)"
 
     # Substitute environment variables in the template
     # Using sed with temp file approach (works on minimal containers)
-    TEMP_FILE="${REALM_IMPORT_DIR}/realm.tmp"
 
     # Read template, substitute variables, write to import location
     sed \
@@ -111,25 +128,20 @@ else
         -e "s|\${USA_IDP_CLIENT_SECRET}|${USA_IDP_CLIENT_SECRET}|g" \
         "${REALM_TEMPLATE}" > "${REALM_IMPORT_DIR}/dive-v3-broker.json"
 
-    echo "[DIVE] Realm template processed successfully"
+    echo "[DIVE] EMERGENCY RECOVERY: Realm template processed"
     echo "[DIVE] Admin password length: ${#ADMIN_PASSWORD} chars"
     echo "[DIVE] Test password length: ${#TEST_USER_PASSWORD} chars"
     echo "[DIVE] Realm file: ${REALM_IMPORT_DIR}/dive-v3-broker.json"
 fi
 
-# Check for instance-specific realm file
-# FIXED (Dec 2025): Preserve instance-specific realm names for consistency
-# Hub uses dive-v3-broker-usa, spokes use dive-v3-broker-{code}
-# This matches docker-compose.hub.yml and backend configuration
-INSTANCE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
-INSTANCE_REALM="${REALM_TEMPLATE_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json"
-TARGET_REALM_NAME="dive-v3-broker-${INSTANCE_LOWER}"
+# Import bootstrap realms for Terraform SSOT
+# Note: Master realm admin user is created via KC_ADMIN/KC_ADMIN_PASSWORD env vars
 
-if [ -f "${INSTANCE_REALM}" ]; then
-    echo "[DIVE] Found instance-specific realm: ${INSTANCE_REALM}"
-    echo "[DIVE] Using realm name: ${TARGET_REALM_NAME}"
-    # Apply environment variable substitution to instance-specific realm
-    # PRESERVE the instance-specific realm name (no normalization)
+INSTANCE_LOWER=$(echo "$INSTANCE_CODE" | tr '[:upper:]' '[:lower:]')
+BOOTSTRAP_REALM="${REALM_TEMPLATE_DIR}/dive-v3-broker-${INSTANCE_LOWER}-bootstrap.json"
+
+if [ -f "${BOOTSTRAP_REALM}" ]; then
+    echo "[DIVE] Importing ${INSTANCE_CODE} realm bootstrap for Terraform SSOT..."
     sed \
         -e "s|\${KEYCLOAK_CLIENT_SECRET}|${KEYCLOAK_CLIENT_SECRET}|g" \
         -e "s|\${ADMIN_PASSWORD}|${ADMIN_PASSWORD}|g" \
@@ -138,23 +150,18 @@ if [ -f "${INSTANCE_REALM}" ]; then
         -e "s|\${API_URL}|${API_URL}|g" \
         -e "s|\${USA_IDP_URL}|${USA_IDP_URL}|g" \
         -e "s|\${USA_IDP_CLIENT_SECRET}|${USA_IDP_CLIENT_SECRET}|g" \
-        "${INSTANCE_REALM}" > "${REALM_IMPORT_DIR}/${TARGET_REALM_NAME}.json"
-    echo "[DIVE] Using instance-specific realm: ${TARGET_REALM_NAME}"
-else
-    # Fallback: Use base template but update realm name to be instance-specific
-    if [ -f "${REALM_IMPORT_DIR}/dive-v3-broker.json" ]; then
-        echo "[DIVE] Updating base realm to instance-specific: ${TARGET_REALM_NAME}"
-        sed \
-            -e "s|\"realm\" *: *\"dive-v3-broker\"|\"realm\": \"${TARGET_REALM_NAME}\"|g" \
-            -e "s|\"id\" *: *\"dive-v3-broker\"|\"id\": \"${TARGET_REALM_NAME}\"|g" \
-            "${REALM_IMPORT_DIR}/dive-v3-broker.json" > "${REALM_IMPORT_DIR}/${TARGET_REALM_NAME}.json"
-        rm -f "${REALM_IMPORT_DIR}/dive-v3-broker.json"
-        echo "[DIVE] Realm renamed to: ${TARGET_REALM_NAME}"
-    fi
+        "${BOOTSTRAP_REALM}" > "${REALM_IMPORT_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json"
+    echo "[DIVE] ${INSTANCE_CODE} realm bootstrap prepared"
 fi
 
-echo "[DIVE] Realm import preparation complete"
-echo "[DIVE] Starting Keycloak with --import-realm..."
-
-# Execute the original Keycloak entrypoint with import-realm flag
-exec /opt/keycloak/bin/kc.sh "$@" --import-realm
+# Check if any realm files were prepared for import
+if [ -f "${REALM_IMPORT_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json" ] || [ -f "${REALM_IMPORT_DIR}/dive-v3-broker.json" ]; then
+    echo "[DIVE] Bootstrap realm import preparation complete"
+    echo "[DIVE] Starting Keycloak with --import-realm..."
+    # Execute the original Keycloak entrypoint with import-realm flag
+    exec /opt/keycloak/bin/kc.sh "$@" --import-realm
+else
+    echo "[DIVE] Terraform SSOT: No realm files found (as expected)"
+    echo "[DIVE] Starting Keycloak empty for Terraform configuration..."
+    exec /opt/keycloak/bin/kc.sh "$@"
+fi

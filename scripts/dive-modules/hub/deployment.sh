@@ -257,7 +257,8 @@ hub_deploy() {
 
 # Docker Compose Variables (no suffix - used by services)
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+KC_ADMIN=admin
+KC_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
 MONGO_PASSWORD=${MONGO_PASSWORD}
 AUTH_SECRET=${AUTH_SECRET}
 KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
@@ -557,7 +558,7 @@ _hub_disable_review_profile() {
 
     # Get admin token
     local admin_password
-    admin_password=$(docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
+    admin_password=$(docker exec dive-hub-keycloak printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
 
     if [ -z "$admin_password" ]; then
         log_warn "Cannot get Keycloak admin password"
