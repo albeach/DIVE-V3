@@ -1322,12 +1322,12 @@ configure_spoke_usa_idp() {
     "config": {
         "clientId": "${client_id}",
         "clientSecret": "${hub_client_secret}",
-        "tokenUrl": "https://dive-hub-keycloak:8443/realms/${HUB_REALM}/protocol/openid-connect/token",
-        "authorizationUrl": "https://localhost:8443/realms/${HUB_REALM}/protocol/openid-connect/auth?kc_idp_hint=",
-        "logoutUrl": "https://localhost:8443/realms/${HUB_REALM}/protocol/openid-connect/logout",
+        "tokenUrl": "https://localhost:${kc_https_port}/realms/${HUB_REALM}/protocol/openid-connect/token",
+        "authorizationUrl": "https://localhost:${kc_https_port}/realms/${HUB_REALM}/protocol/openid-connect/auth?kc_idp_hint=",
+        "logoutUrl": "https://localhost:${kc_https_port}/realms/${HUB_REALM}/protocol/openid-connect/logout",
         "backchannelSupported": "true",
         "useJwksUrl": "true",
-        "jwksUrl": "https://dive-hub-keycloak:8443/realms/${HUB_REALM}/protocol/openid-connect/certs",
+        "jwksUrl": "https://localhost:${kc_https_port}/realms/${HUB_REALM}/protocol/openid-connect/certs",
         "validateSignature": "true",
         "pkceEnabled": "true",
         "pkceMethod": "S256"

@@ -1,6 +1,6 @@
 {
   "identity": {
-    "spokeId": "spoke-pol-a6a0a900",
+    "spokeId": "spoke-pol-2adea99b",
     "instanceCode": "POL",
     "name": "Poland Defence Force",
     "description": "DIVE V3 Spoke Instance for Poland Defence Force",
@@ -45,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-11T00:36:09Z",
-    "lastModified": "2026-01-11T00:36:09Z",
+    "createdAt": "2026-01-13T17:46:09Z",
+    "lastModified": "2026-01-13T17:46:09Z",
     "configHash": ""
   }
 }

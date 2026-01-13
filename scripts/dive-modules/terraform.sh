@@ -11,6 +11,11 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load spoke-secrets module for instance-suffixed secret management
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke/pipeline/spoke-secrets.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/spoke/pipeline/spoke-secrets.sh"
+fi
+
 # =============================================================================
 # TERRAFORM COMMANDS
 # =============================================================================
@@ -218,6 +223,9 @@ terraform_spoke() {
 
     ensure_dive_root
 
+    # Set INSTANCE for secret loading
+    export INSTANCE="$code_lower"
+
     # Check if tfvars exists
     if [ ! -f "$tfvars_file" ]; then
         log_warning "tfvars not found: $tfvars_file"
@@ -257,13 +265,73 @@ terraform_spoke() {
         plan)
             terraform workspace select "$code_lower" 2>/dev/null || terraform workspace new "$code_lower"
             log_step "Planning spoke $code_upper..."
-            load_secrets
+
+            # Load instance-suffixed secrets (use spoke-secrets module if available)
+            if type spoke_secrets_load &>/dev/null; then
+                spoke_secrets_load "$code_upper"
+            else
+                load_secrets
+            fi
+
+            # Export secrets as TF_VAR environment variables with instance suffix
+            local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+            local client_secret_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+
+            if [ -n "${!keycloak_password_var}" ]; then
+                export TF_VAR_keycloak_admin_password="${!keycloak_password_var}"
+                export KEYCLOAK_PASSWORD="${!keycloak_password_var}"
+            fi
+
+            if [ -n "${!client_secret_var}" ]; then
+                export TF_VAR_client_secret="${!client_secret_var}"
+            fi
+
+            export TF_VAR_test_user_password="${!keycloak_password_var:-default}"
+            export TF_VAR_admin_user_password="${!keycloak_password_var:-default}"
+            export KEYCLOAK_USER="admin"
+
             terraform plan -var-file="../countries/${code_lower}.tfvars"
             ;;
         apply)
             terraform workspace select "$code_lower" 2>/dev/null || terraform workspace new "$code_lower"
             log_step "Applying spoke $code_upper..."
-            load_secrets
+
+            # Load instance-suffixed secrets (use spoke-secrets module if available)
+            if type spoke_secrets_load &>/dev/null; then
+                spoke_secrets_load "$code_upper"
+            else
+                load_secrets
+            fi
+
+            # Export secrets as TF_VAR environment variables with instance suffix
+            local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+            local client_secret_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+
+            if [ -n "${!keycloak_password_var}" ]; then
+                export TF_VAR_keycloak_admin_password="${!keycloak_password_var}"
+                export KEYCLOAK_PASSWORD="${!keycloak_password_var}"
+            else
+                log_error "Missing Keycloak admin password for $code_upper"
+                log_error "Expected variable: $keycloak_password_var"
+                return 1
+            fi
+
+            if [ -n "${!client_secret_var}" ]; then
+                export TF_VAR_client_secret="${!client_secret_var}"
+            else
+                log_error "Missing Keycloak client secret for $code_upper"
+                log_error "Expected variable: $client_secret_var"
+                return 1
+            fi
+
+            # Use admin password for test users
+            export TF_VAR_test_user_password="${!keycloak_password_var}"
+            export TF_VAR_admin_user_password="${!keycloak_password_var}"
+
+            # Set Keycloak credentials for provider
+            export KEYCLOAK_USER="admin"
+
+            log_verbose "Terraform environment configured for $code_upper"
             terraform apply -var-file="../countries/${code_lower}.tfvars" -auto-approve
             ;;
         destroy)
@@ -272,7 +340,31 @@ terraform_spoke() {
                 return 1
             }
             log_step "Destroying spoke $code_upper..."
-            load_secrets
+
+            # Load instance-suffixed secrets (use spoke-secrets module if available)
+            if type spoke_secrets_load &>/dev/null; then
+                spoke_secrets_load "$code_upper"
+            else
+                load_secrets
+            fi
+
+            # Export secrets as TF_VAR environment variables with instance suffix
+            local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+            local client_secret_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+
+            if [ -n "${!keycloak_password_var}" ]; then
+                export TF_VAR_keycloak_admin_password="${!keycloak_password_var}"
+                export KEYCLOAK_PASSWORD="${!keycloak_password_var}"
+            fi
+
+            if [ -n "${!client_secret_var}" ]; then
+                export TF_VAR_client_secret="${!client_secret_var}"
+            fi
+
+            export TF_VAR_test_user_password="${!keycloak_password_var:-default}"
+            export TF_VAR_admin_user_password="${!keycloak_password_var:-default}"
+            export KEYCLOAK_USER="admin"
+
             terraform destroy -var-file="../countries/${code_lower}.tfvars" -auto-approve
             ;;
         *)

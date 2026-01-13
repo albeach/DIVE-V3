@@ -183,22 +183,27 @@ spoke_update_compose() {
     cp "${spoke_dir}/docker-compose.yml" "$backup_file"
     log_success "✅ Backup created: $(basename "$backup_file")"
 
-    # Read existing configuration for placeholders
-    local instance_name=$(grep "^# DIVE V3 - ${code_upper} Instance" "${spoke_dir}/docker-compose.yml" | sed "s/.*(\(.*\))/\1/")
-    local spoke_id=$(grep "^# Spoke ID:" "${spoke_dir}/docker-compose.yml" | awk '{print $4}')
+    # Regenerate using the new pipeline compose generator
+    if type spoke_compose_generate &>/dev/null; then
+        # Use new pipeline generator
+        spoke_compose_generate "$code_upper" "$spoke_dir"
+    else
+        # Fallback to legacy generator
+        local instance_name=$(grep "^# DIVE V3 - ${code_upper} Instance" "${spoke_dir}/docker-compose.yml" | sed "s/.*(\(.*\))/\1/")
+        local spoke_id=$(grep "^# Spoke ID:" "${spoke_dir}/docker-compose.yml" | awk '{print $4}')
 
-    # Get port assignments (preserve existing)
-    eval "$(_get_spoke_ports "$code_upper")"
+        # Get port assignments (preserve existing)
+        eval "$(_get_spoke_ports "$code_upper")"
 
-    # Regenerate using the _create_spoke_docker_compose function
-    local idp_hostname="localhost"
-    local api_url="https://localhost:${SPOKE_BACKEND_PORT}"
-    local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
-    local idp_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
+        # Legacy generator
+        local idp_hostname="localhost"
+        local api_url="https://localhost:${SPOKE_BACKEND_PORT}"
+        local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
+        local idp_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
 
-    # _create_spoke_docker_compose function is already loaded from spoke-init.sh
-    _create_spoke_docker_compose "$spoke_dir" "$code_upper" "$code_lower" \
-        "$instance_name" "$spoke_id" "$idp_hostname" "$api_url" "$base_url" "$idp_url" ""
+        _create_spoke_docker_compose "$spoke_dir" "$code_upper" "$code_lower" \
+            "$instance_name" "$spoke_id" "$idp_hostname" "$api_url" "$base_url" "$idp_url" ""
+    fi
 
     # Show diff
     echo ""
@@ -215,7 +220,7 @@ spoke_update_compose() {
         return 0
     fi
 
-    log_success "✅ Updated ${code_upper} to latest template (v2.8.1)"
+    log_success "✅ Updated ${code_upper} to latest template (${template_version})"
     echo ""
     log_warn "⚠️  Restart required to apply changes:"
     echo "   ./dive spoke down ${code_upper}"

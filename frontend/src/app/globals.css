@@ -581,7 +581,7 @@ body {
 }
 
 /* Enhanced button press effect */
-.active\\:scale-\\[0\\.98\\]:active {
+.active:active {
     transform: scale(0.98);
 }
 
@@ -1301,10 +1301,23 @@ body {
     }
 
     /* Disable complex animations for reduced motion */
-    @keyframes gradient-shift,
-    @keyframes shimmer,
-    @keyframes underline-expand {
+    @keyframes gradient-shift {
+        from,
+        to {
+            transform: none;
+            opacity: 1;
+        }
+    }
 
+    @keyframes shimmer {
+        from,
+        to {
+            transform: none;
+            opacity: 1;
+        }
+    }
+
+    @keyframes underline-expand {
         from,
         to {
             transform: none;

@@ -9,6 +9,18 @@
 # Mark deploy module as loaded
 export DIVE_HUB_DEPLOY_LOADED=1
 
+# Load database-backed state management (Sprint 1)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration-state-db.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration-state-db.sh"
+
+    # Enable database backend with dual-write
+    export ORCH_DB_ENABLED=true
+    export ORCH_DB_DUAL_WRITE=true
+    export ORCH_DB_SOURCE_OF_TRUTH=file  # File is still SSOT for Sprint 1
+
+    log_verbose "Database-backed orchestration enabled (dual-write mode)"
+fi
+
 # =============================================================================
 # DEPLOYMENT CONSTANTS (from deployment.sh)
 # =============================================================================
@@ -31,9 +43,23 @@ hub_deploy() {
     ensure_dive_root
     check_docker || return 1
 
+    # Record deployment start in database
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        orch_db_set_state "usa" "INITIALIZING" "Hub deployment started" || true
+        log_verbose "Deployment state logged to database"
+    fi
+
     # Step 1: Initialize
     log_step "Step 1/7: Initializing hub..."
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        orch_db_record_step "usa" "hub_init" "IN_PROGRESS" || true
+    fi
+
     _load_hub_init && hub_init || return 1
+
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        orch_db_record_step "usa" "hub_init" "COMPLETED" || true
+    fi
 
     # Step 2: Load secrets (GCP SSOT)
     log_step "Step 2/7: Loading secrets (GCP SSOT)..."
@@ -101,20 +127,40 @@ EOF
         fi
     fi
 
-    # Check if using Terraform SSOT mode
+    # Check if using Terraform SSOT mode - RESILIENT: Read from docker-compose source of truth
     local terraform_ssot=false
-    if [ "${SKIP_REALM_IMPORT:-false}" = "true" ]; then
+    if _hub_detect_terraform_ssot_mode; then
         terraform_ssot=true
         log_info "Terraform SSOT mode detected - Keycloak starts empty"
     fi
 
     # Step 3: Start services
     log_step "Step 3/7: Starting hub services..."
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        orch_db_set_state "usa" "DEPLOYING" "Starting hub services" || true
+        orch_db_record_step "usa" "hub_up" "IN_PROGRESS" || true
+    fi
+
     _load_hub_services && hub_up || return 1
+
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        orch_db_record_step "usa" "hub_up" "COMPLETED" || true
+    fi
 
     # Step 4: Wait for services
     log_step "Step 4/7: Waiting for services to be healthy..."
     _hub_wait_all_healthy || return 1
+
+    # Step 4.5: Initialize orchestration database (if enabled)
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        log_step "Step 4.5/7: Initializing orchestration database..."
+        if ! orch_db_init_schema; then
+            log_warn "Orchestration database initialization failed, continuing with file-based state"
+            export ORCH_DB_ENABLED=false
+        else
+            log_success "Orchestration database initialized successfully"
+        fi
+    fi
 
     if [ "$terraform_ssot" = true ]; then
         # Terraform SSOT: Apply Terraform FIRST to create admin user and realm
@@ -199,6 +245,22 @@ EOF
 
     echo ""
     log_success "Hub deployment complete!"
+
+    # Record deployment completion in database
+    if [ "$ORCH_DB_ENABLED" = "true" ]; then
+        orch_db_set_state "usa" "COMPLETE" "Hub deployment successful" || true
+
+        # Log deployment metrics
+        local total_time=$(($(date +%s) - ${DEPLOYMENT_START_TIME:-$(date +%s)}))
+        orch_db_record_metric "usa" "deployment_duration" "$total_time" "seconds" || true
+
+        log_success "Deployment logged to database"
+        echo ""
+        echo "View deployment history:"
+        echo "  docker exec dive-hub-postgres psql -U postgres -d orchestration -c \\"
+        echo "    \"SELECT state, timestamp FROM deployment_states WHERE instance_code = 'usa' ORDER BY timestamp DESC LIMIT 5;\""
+    fi
+
     echo ""
     _load_hub_status && hub_status_brief
 }
@@ -484,6 +546,34 @@ _hub_verify_deployment() {
     fi
 
     return $errors
+}
+
+# =============================================================================
+# TERRAFORM SSOT MODE DETECTION - RESILIENT CONFIGURATION PARSING
+# =============================================================================
+
+_hub_detect_terraform_ssot_mode() {
+    # RESILIENT: Parse docker-compose.hub.yml directly to detect SKIP_REALM_IMPORT
+    # This is the source of truth - not dependent on environment variables
+    local compose_file="${DIVE_ROOT}/docker-compose.hub.yml"
+
+    if [ ! -f "$compose_file" ]; then
+        log_warn "docker-compose.hub.yml not found, cannot detect Terraform SSOT mode"
+        return 1
+    fi
+
+    # Parse YAML to find SKIP_REALM_IMPORT under keycloak service
+    # Look for: services: keycloak: environment: SKIP_REALM_IMPORT: "true"
+    local skip_realm_import
+    skip_realm_import=$(grep -A 20 "keycloak:" "$compose_file" | grep -A 10 "environment:" | grep "SKIP_REALM_IMPORT:" | sed 's/.*SKIP_REALM_IMPORT:\s*//' | tr -d '"' | tr -d "'")
+
+    if [ "$skip_realm_import" = "true" ]; then
+        log_debug "Detected SKIP_REALM_IMPORT=true in docker-compose.hub.yml"
+        return 0
+    else
+        log_debug "SKIP_REALM_IMPORT not set to 'true' in docker-compose.hub.yml (found: '$skip_realm_import')"
+        return 1
+    fi
 }
 
 # =============================================================================

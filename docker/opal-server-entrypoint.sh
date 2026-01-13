@@ -2,24 +2,18 @@
 # =============================================================================
 # OPAL Server Entrypoint
 # =============================================================================
-# Loads JWT authentication keys and starts the OPAL server with HTTPS
+# Loads authentication keys and starts the OPAL server
 # =============================================================================
 
 set -e
 
-# Load OPAL JWT authentication keys from mounted files
-# NOTE: OPAL expects PUBLIC key in SSH format (ssh-rsa ...), PRIVATE key in PEM format
+# Load OPAL authentication keys from mounted files (if available)
 if [ -f /opal-keys/opal_private_key.pem ]; then
     export OPAL_AUTH_PRIVATE_KEY="$(cat /opal-keys/opal_private_key.pem)"
-    # Use SSH format for public key (OPAL calls load_ssh_public_key)
-    if [ -f /opal-keys/opal_private_key.pem.pub ]; then
     export OPAL_AUTH_PUBLIC_KEY="$(cat /opal-keys/opal_private_key.pem.pub)"
-        echo "OPAL: Loaded JWT authentication keys (RS256, SSH public key format)"
-    else
-        echo "OPAL: WARNING - Public key not found"
-    fi
+    echo "OPAL: Loaded authentication keys"
 else
-    echo "OPAL: WARNING - No JWT keys found, using master token only"
+    echo "OPAL: Running without authentication (no keys found)"
 fi
 
 echo "OPAL: Starting server..."

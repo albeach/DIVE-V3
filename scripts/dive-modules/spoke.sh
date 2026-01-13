@@ -48,10 +48,10 @@ source "${_SPOKE_MODULES_DIR}/spoke-drift.sh"
 source "${_SPOKE_MODULES_DIR}/spoke-failover.sh"
 source "${_SPOKE_MODULES_DIR}/spoke-fix-hostname.sh"
 source "${_SPOKE_MODULES_DIR}/spoke-verification.sh"
-source "${_SPOKE_MODULES_DIR}/spoke-env-sync.sh"
-source "${_SPOKE_MODULES_DIR}/spoke-error-handling.sh"
-source "${_SPOKE_MODULES_DIR}/spoke-secret-validation.sh"
 source "${_SPOKE_MODULES_DIR}/spoke-federation-health.sh"
+
+# Load new pipeline modules (consolidated architecture)
+source "${_SPOKE_MODULES_DIR}/pipeline/spoke-pipeline.sh" 2>/dev/null || true
 
 # =============================================================================
 # DIRECT LOADING COMPLETE - All functions loaded from sub-modules

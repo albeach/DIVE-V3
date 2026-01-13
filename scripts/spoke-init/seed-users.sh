@@ -6,13 +6,14 @@
 #
 # Users Created:
 #   - testuser-{country}-1  (UNCLASSIFIED)
-#   - testuser-{country}-2  (CONFIDENTIAL)
-#   - testuser-{country}-3  (SECRET)
-#   - testuser-{country}-4  (TOP_SECRET)
+#   - testuser-{country}-2  (RESTRICTED)
+#   - testuser-{country}-3  (CONFIDENTIAL)
+#   - testuser-{country}-4  (SECRET)
+#   - testuser-{country}-5  (TOP_SECRET)
 #   - admin-{country}       (TOP_SECRET + admin role)
 #
 # MFA Requirements (NIST 800-63B):
-#   - UNCLASSIFIED: No MFA required (AAL1)
+#   - UNCLASSIFIED/RESTRICTED: No MFA required (AAL1)
 #   - CONFIDENTIAL/SECRET: TOTP required (AAL2)
 #   - TOP_SECRET: WebAuthn required (AAL3)
 #
@@ -98,16 +99,18 @@ ADMIN_USER_PASSWORD="TestUser2025!SecureAdmin"
 # CLEARANCE LEVEL MAPPING (POSIX-friendly)
 # =============================================================================
 # Level 1 = UNCLASSIFIED
-# Level 2 = CONFIDENTIAL
-# Level 3 = SECRET
-# Level 4 = TOP_SECRET
+# Level 2 = RESTRICTED
+# Level 3 = CONFIDENTIAL
+# Level 4 = SECRET
+# Level 5 = TOP_SECRET
 
 map_clearance_level() {
     case "$1" in
         1) echo "UNCLASSIFIED" ;;
-        2) echo "CONFIDENTIAL" ;;
-        3) echo "SECRET" ;;
-        4) echo "TOP_SECRET" ;;
+        2) echo "RESTRICTED" ;;
+        3) echo "CONFIDENTIAL" ;;
+        4) echo "SECRET" ;;
+        5) echo "TOP_SECRET" ;;
         *) echo "UNCLASSIFIED" ;;
     esac
 }
@@ -116,8 +119,9 @@ map_clearance_coi() {
     case "$1" in
         1) echo "" ;;
         2) echo "" ;;
-        3) echo "NATO" ;;
-        4) echo "NATO-COSMIC,FVEY" ;;
+        3) echo "" ;;
+        4) echo "NATO" ;;
+        5) echo "NATO-COSMIC,FVEY" ;;
         *) echo "" ;;
     esac
 }
@@ -616,10 +620,10 @@ create_user() {
 log_step "Creating test users..."
 
 echo ""
-echo "  Creating testuser-${CODE_LOWER}-{1-4} with clearance levels:"
+echo "  Creating testuser-${CODE_LOWER}-{1-5} with clearance levels:"
 echo ""
 
-for level in 1 2 3 4; do
+for level in 1 2 3 4 5; do
     username="testuser-${CODE_LOWER}-${level}"
     # FIX #3: Make email optional for ACP-240 PII minimization
     # Email is NOT required for federation (only uniqueID, clearance, COA, COI)
@@ -682,9 +686,10 @@ echo -e "${GREEN}║  Test Users Created:                                       
 echo -e "${GREEN}║    Username                    Clearance      Password       ║${NC}"
 echo -e "${GREEN}║    ─────────────────────────────────────────────────────     ║${NC}"
 echo -e "${GREEN}║    testuser-${CODE_LOWER}-1              UNCLASSIFIED   TestUser2025!Pilot  ║${NC}"
-echo -e "${GREEN}║    testuser-${CODE_LOWER}-2              CONFIDENTIAL   TestUser2025!Pilot  ║${NC}"
-echo -e "${GREEN}║    testuser-${CODE_LOWER}-3              SECRET         TestUser2025!Pilot  ║${NC}"
-echo -e "${GREEN}║    testuser-${CODE_LOWER}-4              TOP_SECRET     TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-2              RESTRICTED     TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-3              CONFIDENTIAL   TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-4              SECRET         TestUser2025!Pilot  ║${NC}"
+echo -e "${GREEN}║    testuser-${CODE_LOWER}-5              TOP_SECRET     TestUser2025!Pilot  ║${NC}"
 echo -e "${GREEN}║                                                              ║${NC}"
 echo -e "${GREEN}║  Admin User Created:                                         ║${NC}"
 echo -e "${GREEN}║    admin-${CODE_LOWER}                   TOP_SECRET     TestUser2025!SecureAdmin ║${NC}"
@@ -694,7 +699,7 @@ echo -e "${GREEN}║    - All users: dive-user                                  
 echo -e "${GREEN}║    - Admin: dive-user + dive-admin                           ║${NC}"
 echo -e "${GREEN}║                                                              ║${NC}"
 echo -e "${GREEN}║  MFA Requirements (NIST 800-63B):                            ║${NC}"
-echo -e "${GREEN}║    - UNCLASSIFIED: No MFA (AAL1)                             ║${NC}"
+echo -e "${GREEN}║    - UNCLASSIFIED/RESTRICTED: No MFA (AAL1)                  ║${NC}"
 echo -e "${GREEN}║    - CONFIDENTIAL/SECRET: TOTP (AAL2)                        ║${NC}"
 echo -e "${GREEN}║    - TOP_SECRET: WebAuthn (AAL3)                             ║${NC}"
 echo -e "${GREEN}║                                                              ║${NC}"
@@ -717,9 +722,10 @@ if [[ -d "${INSTANCE_DIR}" ]]; then
 | Username | Clearance | COI |
 |----------|-----------|-----|
 | testuser-${CODE_LOWER}-1 | UNCLASSIFIED | - |
-| testuser-${CODE_LOWER}-2 | CONFIDENTIAL | - |
-| testuser-${CODE_LOWER}-3 | SECRET | NATO |
-| testuser-${CODE_LOWER}-4 | TOP_SECRET | NATO-COSMIC, FVEY |
+| testuser-${CODE_LOWER}-2 | RESTRICTED | - |
+| testuser-${CODE_LOWER}-3 | CONFIDENTIAL | - |
+| testuser-${CODE_LOWER}-4 | SECRET | NATO |
+| testuser-${CODE_LOWER}-5 | TOP_SECRET | NATO-COSMIC, FVEY |
 
 ## Admin User (Password: TestUser2025!SecureAdmin)
 

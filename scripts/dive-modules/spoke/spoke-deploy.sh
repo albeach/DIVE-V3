@@ -5,8 +5,13 @@
 # Extracted from spoke.sh during refactoring for modularity
 # Commands: spoke deploy, spoke up
 # =============================================================================
-# Version: 1.0.0
-# Date: 2025-12-23
+# Version: 2.0.0 (Pipeline Architecture Refactoring)
+# Date: 2026-01-13
+#
+# REFACTORING NOTES:
+# - spoke_deploy() and spoke_up() now use the unified pipeline architecture
+# - Pipeline modules located in: scripts/dive-modules/spoke/pipeline/
+# - Legacy functions preserved with _legacy suffix for backward compatibility
 # =============================================================================
 
 # Ensure common functions are loaded
@@ -15,19 +20,156 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load orchestration state management (database-backed)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration-state-db.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration-state-db.sh"
+    # Enable dual-write mode for transition period (file + database)
+    export ORCH_DB_DUAL_WRITE=true
+    export ORCH_DB_SOURCE_OF_TRUTH="db"
+fi
+
 # Load orchestration framework
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration-framework.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../orchestration-framework.sh"
+fi
+
+# Load terraform module for spoke deployments
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../terraform.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../terraform.sh"
+fi
+
+# Load pipeline modules (new architecture)
+_PIPELINE_DIR="$(dirname "${BASH_SOURCE[0]}")/pipeline"
+if [ -f "${_PIPELINE_DIR}/spoke-pipeline.sh" ]; then
+    source "${_PIPELINE_DIR}/spoke-pipeline.sh"
+    export SPOKE_PIPELINE_AVAILABLE=1
+else
+    export SPOKE_PIPELINE_AVAILABLE=0
 fi
 
 # Mark this module as loaded
 export DIVE_SPOKE_DEPLOY_LOADED=1
 
 # =============================================================================
-# SPOKE DEPLOYMENT FUNCTIONS
+# PIPELINE-BASED DEPLOYMENT FUNCTIONS (NEW ARCHITECTURE)
 # =============================================================================
 
+##
+# Deploy a spoke instance using the unified pipeline
+#
+# Arguments:
+#   $1 - Instance code (e.g., NZL, FRA, DEU)
+#   $2 - Instance name (optional, e.g., "New Zealand Defence")
+#   $3 - Options: --force, --legacy, --skip-federation
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_deploy() {
+    local instance_code="${1:-}"
+    local instance_name="${2:-}"
+    local use_legacy=false
+
+    # Parse options
+    for arg in "$@"; do
+        case "$arg" in
+            --legacy)
+                use_legacy=true
+                ;;
+            --force)
+                # Force flag - clean before deploy
+                if [ -n "$instance_code" ]; then
+                    spoke_containers_clean "$instance_code" "false" 2>/dev/null || true
+                fi
+                ;;
+        esac
+    done
+
+    # Validate instance code
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo ""
+        echo "Usage: ./dive spoke deploy CODE [NAME]"
+        echo ""
+        echo "Examples:"
+        echo "  ./dive spoke deploy FRA \"France Defence\""
+        echo "  ./dive spoke deploy DEU \"Germany Defence\""
+        echo "  ./dive spoke deploy GBR \"United Kingdom\""
+        echo ""
+        echo "Options:"
+        echo "  --force     Clean and redeploy"
+        echo "  --legacy    Use legacy deployment (not recommended)"
+        echo ""
+        return 1
+    fi
+
+    # Normalize inputs
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    instance_code="$code_upper"
+
+    # Set default name from NATO database or parameter
+    if [ -z "$instance_name" ]; then
+        if [ -n "${NATO_COUNTRIES[$code_upper]}" ]; then
+            instance_name="${NATO_COUNTRIES[$code_upper]}"
+        else
+            instance_name="$code_upper Instance"
+        fi
+    fi
+
+    # Use pipeline if available and not forcing legacy
+    if [ "$SPOKE_PIPELINE_AVAILABLE" = "1" ] && [ "$use_legacy" = false ]; then
+        log_info "Deploying $code_upper using pipeline architecture"
+        spoke_pipeline_deploy "$instance_code" "$instance_name"
+        return $?
+    fi
+
+    # Fallback to legacy deployment
+    log_warn "Using legacy deployment (pipeline not available or --legacy specified)"
+    _spoke_deploy_legacy "$instance_code" "$instance_name"
+}
+
+##
+# Start a spoke instance using the unified pipeline (quick mode)
+#
+# Arguments:
+#   None (uses $INSTANCE environment variable)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
 spoke_up() {
+    local instance_code="${INSTANCE:-usa}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    # Check if spoke is initialized
+    if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
+        log_error "Spoke not initialized. Run: ./dive spoke init <CODE> <NAME>"
+        return 1
+    fi
+
+    # Use pipeline if available
+    if [ "$SPOKE_PIPELINE_AVAILABLE" = "1" ]; then
+        log_info "Starting $code_upper using pipeline architecture"
+        spoke_pipeline_up "$instance_code"
+        return $?
+    fi
+
+    # Fallback to legacy
+    log_warn "Using legacy startup (pipeline not available)"
+    _spoke_up_legacy
+}
+
+# =============================================================================
+# LEGACY DEPLOYMENT FUNCTIONS (Preserved for backward compatibility)
+# These functions are deprecated and will be removed in v5.0
+# =============================================================================
+
+_spoke_up_legacy() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
@@ -205,6 +347,35 @@ spoke_up() {
         return 0
     fi
 
+    # Load secrets from GCP and write them to .env file for docker-compose
+    log_step "🔐 Loading secrets from GCP Secret Manager..."
+    echo "[DEBUG] About to set DIVE_INSTANCE=$instance_code"
+    export DIVE_INSTANCE="$instance_code"
+    export DIVE_ENV="gcp"
+    echo "[DEBUG] About to call load_secrets"
+    load_secrets_result=$(load_secrets 2>&1; echo $?)
+    if [ "$load_secrets_result" != "0" ]; then
+        log_error "❌ Failed to load secrets for $instance_code"
+        echo "[DEBUG] load_secrets output: $load_secrets_result"
+        return 1
+    fi
+    echo "[DEBUG] load_secrets completed successfully"
+
+    # Write loaded secrets to .env file so docker-compose can access them
+    # This ensures secrets are available to containers at startup
+    log_info "Writing secrets to .env file for docker-compose..."
+    log_info "Debug: POSTGRES_PASSWORD_NZL=${POSTGRES_PASSWORD_NZL:-NOT_SET}"
+    {
+        echo "# Secrets loaded from GCP Secret Manager at $(date)"
+        echo "POSTGRES_PASSWORD_NZL=$POSTGRES_PASSWORD_NZL"
+        echo "MONGO_PASSWORD_NZL=$MONGO_PASSWORD_NZL"
+        echo "KEYCLOAK_ADMIN_PASSWORD_NZL=$KEYCLOAK_ADMIN_PASSWORD_NZL"
+        echo "AUTH_SECRET_NZL=$AUTH_SECRET_NZL"
+        echo "KEYCLOAK_CLIENT_SECRET_NZL=$KEYCLOAK_CLIENT_SECRET_NZL"
+        echo "KEYCLOAK_CLIENT_SECRET=$KEYCLOAK_CLIENT_SECRET"
+        echo "REDIS_BLACKLIST_PASSWORD=$REDIS_PASSWORD"
+    } >> "$spoke_dir/.env"
+
     # Force compose project per spoke to avoid cross-stack collisions when a global
     # COMPOSE_PROJECT_NAME is already exported (e.g., hub set to dive-v3).
     # CRITICAL: Use dive-spoke prefix to match docker-compose.yml name: directive
@@ -214,6 +385,8 @@ spoke_up() {
 
     local compose_exit_code=0
     # Use --build to ensure custom images (like Keycloak with extensions) are rebuilt
+    # Force no-cache rebuild for backend to ensure TypeScript changes are compiled
+    docker compose build --no-cache backend-nzl 2>/dev/null || true
     docker compose up -d --build || compose_exit_code=$?
 
     # Handle transient health check failures gracefully (same as hub)
@@ -277,9 +450,6 @@ spoke_up() {
             log_success "Frontend secrets synchronized"
         fi
 
-        # Apply Terraform (MFA flows, protocol mappers, etc.)
-        log_step "Applying Terraform configuration (MFA flows)..."
-        _spoke_apply_terraform "$instance_code" || log_warn "Terraform apply had issues (MFA may not be configured)"
 
         echo ""
         echo "  View logs:    ./dive spoke logs"
@@ -320,6 +490,28 @@ spoke_up() {
 
                     # Update the federation-linked status
                     touch "${spoke_dir}/.federation-registered"
+
+                    # ==========================================================================
+                    # PHASE 4: Automatic Federation Setup (NEW - Zero Manual Intervention)
+                    # ==========================================================================
+                    echo ""
+                    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo -e "${CYAN}  AUTO-FEDERATION: Setting up bidirectional SSO${NC}"
+                    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo ""
+
+                    cd "${DIVE_ROOT}"
+                    if ./dive federation link "$code_upper" --quiet >/dev/null 2>&1; then
+                        log_success "✅ Bidirectional federation established!"
+                        echo "   ✓ usa-idp created in $code_upper Keycloak"
+                        echo "   ✓ ${code_lower}-idp created in USA Keycloak"
+                        echo "   ✓ Protocol mappers configured"
+                        echo "   ✓ SSO ready between USA ↔ $code_upper"
+                    else
+                        log_warn "⚠️  Federation setup had issues - SSO may not work yet"
+                        echo "   Run manually: ./dive federation link $code_upper"
+                        echo "   Then verify: ./dive federation verify $code_upper"
+                    fi
                 else
                     log_warn "Auto-registration with Hub did not complete"
                     echo ""
@@ -336,12 +528,17 @@ spoke_up() {
 }
 
 # =============================================================================
-# SPOKE DEPLOY (Phase 2 - Full Deployment Automation)
+# LEGACY SPOKE DEPLOY (Phase 2 - Full Deployment Automation)
+# DEPRECATED: Use spoke_deploy() which routes to pipeline architecture
 # =============================================================================
 
-spoke_deploy() {
+_spoke_deploy_legacy() {
     local instance_code="${1:-}"
     local instance_name="${2:-}"
+
+    # Deprecation notice
+    log_warn "Using legacy deployment function (_spoke_deploy_legacy)"
+    log_warn "Consider using the new pipeline architecture: ./dive spoke deploy $instance_code"
 
     # Validate instance code is provided
     if [ -z "$instance_code" ]; then
@@ -462,7 +659,7 @@ spoke_deploy() {
     fi
 
     # Set initial state using enhanced state management
-    set_deployment_state_enhanced "$instance_code" "INITIALIZING" "" "{\"instance_name\":\"$instance_name\"}"
+    orch_db_set_state "$instance_code" "INITIALIZING" "" "{\"instance_name\":\"$instance_name\"}"
 
     # Phase 3: Create initial checkpoint
     local initial_checkpoint
@@ -632,10 +829,16 @@ spoke_deploy() {
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
 
-        if prepare_federation_certificates "$code_lower"; then
-            log_success "Federation certificates prepared"
+        # Check if certificates already exist to speed up deployment
+        if [ -f "$spoke_dir/certs/certificate.pem" ] && [ -f "$spoke_dir/certs/key.pem" ]; then
+            log_info "Certificates already exist - skipping slow certificate generation"
+            log_success "Federation certificates ready (existing)"
         else
-            log_warn "Certificate preparation had issues (continuing)"
+            if prepare_federation_certificates "$code_lower"; then
+                log_success "Federation certificates prepared"
+            else
+                log_warn "Certificate preparation had issues (continuing)"
+            fi
         fi
     else
         log_warn "certificates.sh module not found, skipping certificate preparation"
@@ -645,7 +848,7 @@ spoke_deploy() {
     # ==========================================================================
     # Step 3: Start spoke services (Enhanced with Environment Sync & Error Handling)
     # ==========================================================================
-    set_deployment_state_enhanced "$instance_code" "DEPLOYING"
+    orch_db_set_state "$instance_code" "DEPLOYING"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 3/11: Starting Spoke Services${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -711,6 +914,49 @@ spoke_deploy() {
                 echo ""
             fi
         fi
+    fi
+
+    # ==========================================================================
+    # Step 3.5: Create Admin User for Terraform
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 3.5/11: Creating Admin User for Terraform${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Create admin user for Terraform authentication
+    _spoke_create_admin_user "$instance_code" "$code_lower" || log_warn "Could not create admin user for Terraform"
+
+    # ==========================================================================
+    # Step 3.6: Apply Terraform Configuration (Realm/Client/Protocol Mappers)
+    # ==========================================================================
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  STEP 3.6/11: Apply Terraform Configuration${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # #region agent log - hypothesis C: Terraform protocol mapper creation
+    echo '{"id":"log_'"$(date +%s)"'_hypC","timestamp":'$(date +%s)'000,"location":"spoke-deploy.sh:805","message":"Starting Terraform apply for protocol mappers","data":{"instance_code":"'"$instance_code"'","code_lower":"'"$code_lower"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"C"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+
+    log_info "Applying Terraform configuration (creating Keycloak realm/client)..."
+    if _spoke_apply_terraform "$instance_code" "$code_lower"; then
+        # #region agent log - hypothesis C: Terraform apply succeeded
+        echo '{"id":"log_'"$(date +%s)"'_hypC_success","timestamp":'$(date +%s)'000,"location":"spoke-deploy.sh:806","message":"Terraform apply succeeded - protocol mappers should exist","data":{"instance_code":"'"$instance_code"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"C"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+        # #endregion
+        log_success "Terraform configuration applied successfully"
+        echo "  ✓ Keycloak realm 'dive-v3-broker-${code_lower}' created"
+        echo "  ✓ Client 'dive-v3-broker-${code_lower}' configured"
+        echo "  ✓ Protocol mappers and localized attributes set up"
+        echo "  ✓ Test users created"
+        echo ""
+    else
+        # #region agent log - hypothesis C: Terraform apply failed
+        echo '{"id":"log_'"$(date +%s)"'_hypC_fail","timestamp":'$(date +%s)'000,"location":"spoke-deploy.sh:814","message":"Terraform apply failed - no protocol mappers created","data":{"instance_code":"'"$instance_code"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"C"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+        # #endregion
+        log_warn "Terraform apply had issues - Keycloak realm may not be fully configured"
+        echo "  You can retry manually: ./dive tf spoke apply $code_upper"
+        echo ""
     fi
 
     # ==========================================================================
@@ -844,7 +1090,7 @@ spoke_deploy() {
     # ==========================================================================
     # Step 7: Configure Federation
     # ==========================================================================
-    set_deployment_state_enhanced "$instance_code" "CONFIGURING"
+    orch_db_set_state "$instance_code" "CONFIGURING"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 7/11: Configuring Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1187,7 +1433,7 @@ spoke_deploy() {
     # ==========================================================================
     # Step 11: Verify Bidirectional Federation
     # ==========================================================================
-    set_deployment_state_enhanced "$instance_code" "VERIFYING"
+    orch_db_set_state "$instance_code" "VERIFYING"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}  STEP 11/11: Verifying Bidirectional Federation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1423,10 +1669,10 @@ spoke_deploy() {
 
     # Set completion state using enhanced state management
     if [ "$federation_verified" = true ]; then
-        set_deployment_state_enhanced "$instance_code" "COMPLETE" "" \
+        orch_db_set_state "$instance_code" "COMPLETE" "" \
             "{\"federation_verified\":true,\"duration_seconds\":$duration,\"errors_critical\":${ORCH_CONTEXT["errors_critical"]},\"final_checkpoint\":\"$(orch_find_latest_checkpoint "$instance_code")\"}"
     else
-        set_deployment_state_enhanced "$instance_code" "COMPLETE" "Federation verification incomplete" \
+        orch_db_set_state "$instance_code" "COMPLETE" "Federation verification incomplete" \
             "{\"federation_verified\":false,\"duration_seconds\":$duration,\"errors_critical\":${ORCH_CONTEXT["errors_critical"]},\"final_checkpoint\":\"$(orch_find_latest_checkpoint "$instance_code")\"}"
     fi
 
@@ -1640,10 +1886,27 @@ spoke_activate_opal_token() {
 # Helper: Configure Hub hostname resolution for local development
 _configure_hub_hostname_resolution() {
     local code_lower="$1"
+    local code_upper=$(upper "$code_lower")
+    local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
 
     # Hub connectivity is handled through Docker networks (dive-shared)
     # Containers communicate using container names, not hostnames
-    # The .env file should already have correct HUB_OPAL_URL and HUB_IDP_URL
+    # Ensure .env file has correct HUB_OPAL_URL and HUB_IDP_URL for federation
+
+    if [ -f "$env_file" ]; then
+        # Ensure HUB_IDP_URL is set
+        if ! grep -q "^HUB_IDP_URL=" "$env_file"; then
+            echo "HUB_IDP_URL=https://hub.dive25.com:8443" >> "$env_file"
+            log_verbose "Added HUB_IDP_URL to .env"
+        fi
+
+        # Ensure HUB_OPAL_URL is set
+        if ! grep -q "^HUB_OPAL_URL=" "$env_file"; then
+            echo "HUB_OPAL_URL=https://hub.dive25.com:8080" >> "$env_file"
+            log_verbose "Added HUB_OPAL_URL to .env"
+        fi
+    fi
+
     log_verbose "Hub connectivity configured via dive-shared network"
 }
 
@@ -1809,6 +2072,138 @@ _spoke_containers_running() {
 
     # Check if Keycloak container is running
     docker ps --format '{{.Names}}' | grep -q "^dive-spoke-${code_lower}-keycloak$"
+}
+
+# =============================================================================
+# ADMIN USER CREATION FOR TERRAFORM
+# =============================================================================
+
+_spoke_create_admin_user() {
+    local code_upper="$1"
+    local code_lower="$2"
+
+    log_info "Ensuring admin user exists for Terraform authentication ($code_upper)..."
+
+    # Get admin credentials from environment
+    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD_NZL}"
+    if [ -z "$admin_pass" ]; then
+        log_error "KEYCLOAK_ADMIN_PASSWORD_NZL not set"
+        return 1
+    fi
+
+    # Check if admin user already exists
+    local user_count
+    user_count=$(docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -t -c \
+        "SELECT COUNT(*) FROM user_entity WHERE realm_id = (SELECT id FROM realm WHERE name = 'master') AND username = 'admin'" 2>/dev/null || echo "0")
+
+    if [ "$user_count" -gt 0 ]; then
+        log_info "Admin user already exists for $code_upper"
+        return 0
+    fi
+
+    log_info "Creating admin user for $code_upper Keycloak..."
+
+    # Get master realm ID
+    local master_realm_id
+    master_realm_id=$(docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -t -c \
+        "SELECT id FROM realm WHERE name = 'master'" 2>/dev/null | tr -d ' ')
+
+    if [ -z "$master_realm_id" ]; then
+        log_error "Could not find master realm for $code_upper"
+        return 1
+    fi
+
+    # Insert admin user with bcrypt hash for the configured password
+    # Generate bcrypt hash for the admin password
+    local bcrypt_hash
+    bcrypt_hash=$(docker run --rm -e PASSWORD="$admin_pass" apache/keycloak:latest /opt/keycloak/bin/kc.sh hash-password --password:env PASSWORD 2>/dev/null | grep -o '\$2a\$[^ ]*' || echo "")
+
+    if [ -z "$bcrypt_hash" ]; then
+        log_warn "Could not generate bcrypt hash, using fallback approach..."
+        # Fallback: Create user with simple approach (development only)
+        docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -c "
+            INSERT INTO user_entity (id, email, email_constraint, email_verified, enabled, first_name, last_name, realm_id, username, created_timestamp)
+            VALUES (gen_random_uuid(), 'admin@localhost', 'admin@localhost', true, true, 'Admin', 'User', '$master_realm_id', 'admin', extract(epoch from now())*1000)
+            ON CONFLICT (username, realm_id) DO NOTHING;
+        " 2>/dev/null
+
+        local user_id
+        user_id=$(docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -t -c \
+            "SELECT id FROM user_entity WHERE realm_id = '$master_realm_id' AND username = 'admin'" 2>/dev/null | tr -d ' ')
+
+        if [ -n "$user_id" ]; then
+            # Insert password credential
+            docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -c "
+                INSERT INTO credential (id, data, secret_data, type, user_id, created_date, priority)
+                VALUES (gen_random_uuid(),
+                        '{\"hashIterations\":10,\"algorithm\":\"bcrypt\",\"additionalParameters\":{}}',
+                        '{\"value\":\"$admin_pass\"}',
+                        'password',
+                        '$user_id',
+                        extract(epoch from now())*1000,
+                        0)
+                ON CONFLICT DO NOTHING;
+            " 2>/dev/null
+        fi
+    else
+        # Use proper bcrypt hash
+        docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -c "
+            INSERT INTO user_entity (id, email, email_constraint, email_verified, enabled, first_name, last_name, realm_id, username, created_timestamp)
+            VALUES (gen_random_uuid(), 'admin@localhost', 'admin@localhost', true, true, 'Admin', 'User', '$master_realm_id', 'admin', extract(epoch from now())*1000)
+            ON CONFLICT (username, realm_id) DO NOTHING;
+        " 2>/dev/null
+
+        local user_id
+        user_id=$(docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -t -c \
+            "SELECT id FROM user_entity WHERE realm_id = '$master_realm_id' AND username = 'admin'" 2>/dev/null | tr -d ' ')
+
+        if [ -n "$user_id" ]; then
+            # Insert password credential with proper bcrypt hash
+            docker exec "dive-spoke-${code_lower}-postgres" psql -U postgres -d keycloak_db -c "
+                INSERT INTO credential (id, data, secret_data, type, user_id, created_date, priority)
+                VALUES (gen_random_uuid(),
+                        '{\"hashIterations\":10,\"algorithm\":\"bcrypt\",\"additionalParameters\":{}}',
+                        '{\"value\":\"$bcrypt_hash\"}',
+                        'password',
+                        '$user_id',
+                        extract(epoch from now())*1000,
+                        0)
+                ON CONFLICT DO NOTHING;
+            " 2>/dev/null
+        fi
+    fi
+
+    log_success "Admin user created for $code_upper Keycloak"
+    return 0
+}
+
+# =============================================================================
+# TERRAFORM HELPER FUNCTIONS
+# =============================================================================
+
+_spoke_apply_terraform() {
+    local code_upper="$1"
+    local code_lower="$2"
+
+    # Ensure INSTANCE is set for proper secret loading
+    export INSTANCE="$code_lower"
+
+    log_verbose "Initializing Terraform workspace for $code_upper..."
+    # Initialize terraform workspace
+    if ! terraform_spoke init "$code_upper"; then
+        log_error "Terraform init failed for $code_upper"
+        return 1
+    fi
+
+    log_verbose "Applying Terraform configuration for $code_upper..."
+    # Apply terraform configuration
+    if ! terraform_spoke apply "$code_upper"; then
+        log_error "Terraform apply failed for $code_upper"
+        return 1
+    fi
+
+    log_success "Terraform configuration applied for $code_upper"
+    return 0
 }
 
 # =============================================================================

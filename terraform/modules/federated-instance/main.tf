@@ -249,8 +249,215 @@ resource "keycloak_openid_client" "broker_client" {
 }
 
 # ============================================================================
+# BACKEND SERVICE ACCOUNT CLIENT
+# ============================================================================
+# Service account client for backend-to-backend authentication (KAS, etc.)
+# Used by backend services to authenticate with Keycloak using client_credentials flow
+# CRITICAL: This client must exist for KAS key request functionality to work
+# NOTE: Always created regardless of create_test_users - needed for backend functionality
+
+resource "keycloak_openid_client" "backend_service_account" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = "dive-v3-backend-client"
+  name      = "Backend Service Account - ${var.instance_name}"
+  enabled   = true
+
+  # Service account settings
+  access_type                  = "CONFIDENTIAL"
+  standard_flow_enabled        = false
+  implicit_flow_enabled        = false
+  direct_access_grants_enabled = false
+  service_accounts_enabled     = true
+
+  # CLIENT SECRET from GCP Secret Manager (same as broker client for simplicity)
+  client_secret = var.client_secret
+
+  # No redirect URIs needed for service accounts
+  valid_redirect_uris = []
+  web_origins         = []
+
+  # Token settings - shorter lifespan for service accounts
+  access_token_lifespan = "300" # 5 minutes
+
+  depends_on = [
+    keycloak_realm.broker,
+    keycloak_openid_client.broker_client
+  ]
+}
+
+# ============================================================================
+# BACKEND SERVICE ACCOUNT USER
+# ============================================================================
+# Keycloak creates a service account user when service_accounts_enabled=true
+# This user represents the service account and can be assigned roles/groups
+
+resource "keycloak_user" "backend_service_account" {
+  count = var.create_test_users ? 1 : 0
+
+  realm_id = keycloak_realm.broker.id
+  username = "service-account-dive-v3-backend-client"
+  enabled  = true
+
+  # Service account user details
+  email      = "backend-service@dive25.mil"
+  first_name = "Backend"
+  last_name  = "Service"
+
+  # Service account attributes
+  attributes = {
+    uniqueID             = "service-account-backend"
+    countryOfAffiliation = var.instance_code
+    clearance            = "TOP_SECRET"
+    clearance_level      = "5"
+    acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
+    organization         = "${var.instance_name} Backend Service"
+    organizationType     = "SYSTEM"
+    userType             = "service_account"
+    pilot_user           = "false"
+    created_by           = "terraform"
+    service_account      = "true"
+  }
+
+  depends_on = [
+    keycloak_realm_user_profile.dive_attributes
+  ]
+}
+
+# Assign backend service account to users group (basic access)
+resource "keycloak_user_groups" "backend_service_account_users" {
+  count = var.create_test_users ? 1 : 0
+
+  realm_id = keycloak_realm.broker.id
+  user_id  = keycloak_user.backend_service_account[0].id
+  group_ids = [
+    keycloak_group.users.id
+  ]
+}
+
+# ============================================================================
 # PROTOCOL MAPPERS - Add custom claims to tokens
 # ============================================================================
+
+# ============================================
+# BACKEND SERVICE ACCOUNT PROTOCOL MAPPERS
+# ============================================
+# The backend service account needs the same claims as the broker client
+# for proper authentication and authorization
+
+# Clearance level mapper for backend client
+resource "keycloak_openid_user_attribute_protocol_mapper" "backend_clearance" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "clearance"
+
+  user_attribute      = "clearance"
+  claim_name          = "clearance"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# Country of affiliation mapper for backend client
+resource "keycloak_openid_user_attribute_protocol_mapper" "backend_country_of_affiliation" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "countryOfAffiliation"
+
+  user_attribute      = "countryOfAffiliation"
+  claim_name          = "countryOfAffiliation"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# Unique ID mapper for backend client
+resource "keycloak_openid_user_attribute_protocol_mapper" "backend_unique_id" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "uniqueID"
+
+  user_attribute      = "uniqueID"
+  claim_name          = "uniqueID"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# ACP COI mapper for backend client
+resource "keycloak_openid_user_attribute_protocol_mapper" "backend_acp_coi" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "acpCOI"
+
+  user_attribute      = "acpCOI"
+  claim_name          = "acpCOI"
+  claim_value_type    = "String"
+  multivalued         = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# Organization mapper for backend client
+resource "keycloak_openid_user_attribute_protocol_mapper" "backend_organization" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "organization"
+
+  user_attribute      = "organization"
+  claim_name          = "organization"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# Organization Type mapper for backend client
+resource "keycloak_openid_user_attribute_protocol_mapper" "backend_organization_type" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "organizationType"
+
+  user_attribute      = "organizationType"
+  claim_name          = "organizationType"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+}
+
+# Realm roles mapper for backend client
+resource "keycloak_openid_user_realm_role_protocol_mapper" "backend_realm_roles" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "realm roles"
+
+  claim_name          = "realm_access.roles"
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
+  multivalued         = true
+}
+
+# Auth time mapper for backend client
+resource "keycloak_openid_user_session_note_protocol_mapper" "backend_auth_time" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.backend_service_account.id
+  name      = "auth_time"
+
+  session_note        = "auth_time"
+  claim_name          = "auth_time"
+  claim_value_type    = "String"
+  add_to_id_token     = true
+  add_to_access_token = true
+}
+
+# ============================================
+# BROKER CLIENT PROTOCOL MAPPERS
+# ============================================
 
 # Clearance level mapper
 resource "keycloak_openid_user_attribute_protocol_mapper" "clearance" {

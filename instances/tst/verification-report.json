@@ -1,0 +1,18 @@
+{
+    "instance": "TST",
+    "status": "warning",
+    "timestamp": "2026-01-13T19:33:30Z",
+    "containers": {"running":8,"unhealthy":1,"stopped":0,"total":9},
+    "checks": {
+        "services": true,
+        "databases": true,
+        "keycloak": true,
+        "federation": true,
+        "api": true
+    },
+    "endpoints": {
+        "frontend": "https://localhost:3063",
+        "backend": "https://localhost:4063",
+        "keycloak": "https://localhost:8506"
+    }
+}

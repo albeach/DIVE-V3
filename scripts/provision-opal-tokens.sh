@@ -79,14 +79,29 @@ get_opal_public_key() {
         return 1
     fi
 
-    # Extract the public key from the running OPAL server
-    local public_key=$(docker exec "$container_name" cat /opal-keys/opal_private_key.pem.pub 2>/dev/null)
-    if [ -z "$public_key" ]; then
+    # Extract the PEM public key from the running OPAL server
+    local pem_key=$(docker exec "$container_name" cat /opal-keys/opal_private_key.pem.pub 2>/dev/null)
+    if [ -z "$pem_key" ]; then
         log_warn "Could not extract public key from OPAL server container"
         return 1
     fi
 
-    echo "$public_key"
+    # Convert PEM to SSH format (required for OPAL client)
+    # OPAL client expects SSH format (ssh-rsa ...) not PEM format
+    # Create temp file for conversion
+    local temp_pem=$(mktemp)
+    echo "$pem_key" > "$temp_pem"
+
+    # Convert using ssh-keygen
+    local ssh_key=$(ssh-keygen -i -m PKCS8 -f "$temp_pem" 2>/dev/null)
+    rm -f "$temp_pem"
+
+    if [ -z "$ssh_key" ]; then
+        log_warn "Could not convert public key from PEM to SSH format"
+        return 1
+    fi
+
+    echo "$ssh_key"
 }
 
 # Provision token for a spoke

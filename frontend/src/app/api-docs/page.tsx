@@ -169,9 +169,15 @@ export default function APIDocsPage() {
   }, []);
 
   // Request interceptor to automatically add JWT token to all Swagger requests
-  const requestInterceptor = (req: { headers: Record<string, string> }) => {
+  const requestInterceptor = async (req: Request): Promise<Request> => {
     if (accessToken) {
-      req.headers['Authorization'] = `Bearer ${accessToken}`;
+      // Clone the request and add authorization header
+      const headers = new Headers(req.headers);
+      headers.set('Authorization', `Bearer ${accessToken}`);
+      return new Request(req.url, {
+        ...req,
+        headers,
+      });
     }
     return req;
   };
@@ -423,7 +429,7 @@ export default function APIDocsPage() {
                 persistAuthorization={true}
                 displayRequestDuration={true}
                 tryItOutEnabled={true}
-                requestInterceptor={requestInterceptor}
+                requestInterceptor={requestInterceptor as any}
                 // Auto-authorize when token is available
                 onComplete={(swaggerUI) => {
                   if (accessToken && swaggerUI && !swaggerInitialized.current) {

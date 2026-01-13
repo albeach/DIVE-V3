@@ -1,7 +1,7 @@
 # Optimized production Dockerfile for Next.js standalone
 # Uses multi-stage build for minimal image size and proper HTTP/2 support
 
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN apk add --no-cache curl && \
     apk cache clean
 

@@ -127,6 +127,7 @@ export class KeycloakFederationService {
         baseUrl: keycloakUrl,
         realmName: 'master',
         requestOptions: {
+          /* @ts-expect-error - httpsAgent is supported by node-fetch */
           httpsAgent, // Accept self-signed certs
         },
       });
@@ -724,7 +725,6 @@ export class KeycloakFederationService {
             name: mapperName,
             protocol: 'openid-connect',
             protocolMapper: 'oidc-usermodel-attribute-mapper',
-            consentRequired: false,
             config: {
               'userinfo.token.claim': 'true',
               'id.token.claim': 'true',
@@ -1489,6 +1489,7 @@ export class KeycloakFederationService {
           baseUrl,
           realmName: 'master',
           requestOptions: {
+            /* @ts-expect-error - httpsAgent is supported by node-fetch */
             httpsAgent, // Accept self-signed certs
           },
         });
@@ -1615,6 +1616,7 @@ export class KeycloakFederationService {
         baseUrl: remoteKeycloakUrl,
         realmName: 'master',
         requestOptions: {
+          /* @ts-expect-error - httpsAgent is supported by node-fetch */
           httpsAgent, // Accept self-signed certs
         },
       });
